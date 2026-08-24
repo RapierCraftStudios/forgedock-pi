@@ -1,9 +1,12 @@
+import { constants } from "node:fs";
 import {
   appendFile,
+  lstat,
   mkdir,
+  open,
   readFile,
+  realpath,
   stat,
-  writeFile,
 } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,9 +29,11 @@ const FORGE_RUNTIME_IGNORE_MARKER = "# ForgeDock generated runtime paths";
 export async function materializeForgeAgents(
   worktreeRoot: string,
 ): Promise<string[]> {
-  await ensureForgeRuntimeIgnored(worktreeRoot);
-  const agentsDir = join(worktreeRoot, ".pi", "agents");
-  await mkdir(agentsDir, { recursive: true, mode: 0o700 });
+  const canonicalRoot = await realpath(worktreeRoot);
+  await ensureForgeRuntimeIgnored(canonicalRoot);
+  await ensureSafeDirectory(join(canonicalRoot, ".pi"), ".pi");
+  const agentsDir = join(canonicalRoot, ".pi", "agents");
+  await ensureSafeDirectory(agentsDir, ".pi/agents");
   const childRuntimePath = fileURLToPath(
     new URL("./child-runtime.ts", import.meta.url),
   );
@@ -78,10 +83,41 @@ export async function materializeForgeAgents(
   const paths: string[] = [];
   for (const file of files) {
     const path = join(agentsDir, `${file.name}.md`);
-    await writeFile(path, file.content, { encoding: "utf8", mode: 0o600 });
+    await writeRuntimeFile(path, file.content);
     paths.push(path);
   }
   return paths;
+}
+
+async function ensureSafeDirectory(path: string, label: string): Promise<void> {
+  let directory = await lstat(path).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    return undefined;
+  });
+  if (!directory) {
+    try {
+      await mkdir(path, { mode: 0o700 });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    }
+    directory = await lstat(path);
+  }
+  if (directory.isSymbolicLink() || !directory.isDirectory())
+    throw new Error(`Forge runtime directory ${label} must be a real directory.`);
+}
+
+async function writeRuntimeFile(path: string, content: string): Promise<void> {
+  const noFollow = constants.O_NOFOLLOW ?? 0;
+  const handle = await open(
+    path,
+    constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | noFollow,
+    0o600,
+  );
+  try {
+    await handle.writeFile(content, "utf8");
+  } finally {
+    await handle.close();
+  }
 }
 
 async function ensureForgeRuntimeIgnored(worktreeRoot: string): Promise<void> {

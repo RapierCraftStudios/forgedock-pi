@@ -255,7 +255,17 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         );
       const trackedRuntime = await runProcess(
         "git",
-        ["-C", root, "ls-files", "-z", "--", ...FORGE_RUNTIME_PATHS],
+        [
+          "-C",
+          root,
+          "ls-tree",
+          "-r",
+          "-z",
+          "--name-only",
+          "HEAD",
+          "--",
+          ...FORGE_RUNTIME_PATHS,
+        ],
         {
           cwd: root,
           timeoutMs: 30_000,
@@ -264,7 +274,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         },
       );
       if (trackedRuntime.exitCode !== 0)
-        throw new Error(`git ls-files failed: ${trackedRuntime.stderr}`);
+        throw new Error(`git ls-tree failed: ${trackedRuntime.stderr}`);
       const trackedRuntimePaths = new Set(
         parseNullDelimitedGitPaths(trackedRuntime.stdout),
       );
@@ -281,6 +291,19 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       );
       if (added.exitCode !== 0)
         throw new Error(`git add failed: ${added.stderr}`);
+
+      const trackedRuntimeUpdated = await runProcess(
+        "git",
+        ["-C", root, "add", "-u", "--", ...FORGE_RUNTIME_PATHS],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (trackedRuntimeUpdated.exitCode !== 0)
+        throw new Error(`git add -u failed: ${trackedRuntimeUpdated.stderr}`);
 
       const staged = await runProcess(
         "git",
