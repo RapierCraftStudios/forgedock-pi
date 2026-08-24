@@ -16,6 +16,7 @@ import {
   FORGE_RUNTIME_PATHS,
   filterForgeRuntimeStatus,
   findUnexpectedForgeRuntimePaths,
+  isTruncatedGitOutput,
   forgeProductStagingArgs,
   forgeTrackedStagingArgs,
   parseGitPathList,
@@ -46,6 +47,10 @@ test("product staging excludes generated Forge files without repository ignore r
     await writeFile(
       generatedPath,
       "extensions:\n  - /machine-specific/pi-subagents/index.ts\n",
+    );
+    await writeFile(
+      join(root, ".pi", "settings.json"),
+      "{\"extensionPath\":\"/machine-specific/pi/index.ts\"}\n",
     );
     await writeFile(join(root, "implementation.ts"), "export const ok = true;\n");
 
@@ -83,9 +88,18 @@ test("product staging excludes generated Forge files without repository ignore r
     await assert.rejects(
       git(root, "show", "HEAD:.pi/agents/forge-work-on.md"),
     );
+    await assert.rejects(git(root, "show", "HEAD:.pi/settings.json"));
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("truncated Git path output fails closed", () => {
+  assert.equal(
+    isTruncatedGitOutput("[output truncated to last 100000 bytes]\npath\0"),
+    true,
+  );
+  assert.equal(isTruncatedGitOutput("implementation.ts\0"), false);
 });
 
 test("runtime-only untracked status entries are not product dirt", () => {
@@ -104,7 +118,11 @@ test("runtime-only untracked status entries are not product dirt", () => {
 test("newly staged Forge runtime paths fail the pre-commit guard", () => {
   assert.deepEqual(
     findUnexpectedForgeRuntimePaths(
-      ["implementation.ts", ".pi/agents/forge-review-security.md", ".pi/forge/run.json"],
+      [
+        "implementation.ts",
+        ".pi/agents/forge-review-security.md",
+        ".pi/forge/run.json",
+      ],
       ["README.md"],
     ),
     [".pi/agents/forge-review-security.md", ".pi/forge/run.json"],

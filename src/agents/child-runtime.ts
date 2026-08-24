@@ -41,6 +41,7 @@ import {
   findUnexpectedForgeRuntimePaths,
   forgeProductStagingArgs,
   forgeTrackedStagingArgs,
+  isTruncatedGitOutput,
   parseGitPathList,
 } from "./commit-staging.ts";
 import {
@@ -292,6 +293,10 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       );
       if (headRuntime.exitCode !== 0)
         throw new Error(`git ls-tree failed: ${headRuntime.stderr}`);
+      if (isTruncatedGitOutput(headRuntime.stdout))
+        throw new Error(
+          "Refusing to commit because the HEAD Forge runtime path list was truncated.",
+        );
       const staged = await runProcess(
         "git",
         ["-C", root, "diff", "--cached", "--name-only", "-z", "--"],
@@ -304,6 +309,10 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       );
       if (staged.exitCode !== 0)
         throw new Error(`git diff --cached failed: ${staged.stderr}`);
+      if (isTruncatedGitOutput(staged.stdout))
+        throw new Error(
+          "Refusing to commit because the staged path list was truncated.",
+        );
       const unexpectedRuntimePaths = findUnexpectedForgeRuntimePaths(
         parseGitPathList(staged.stdout),
         parseGitPathList(headRuntime.stdout),

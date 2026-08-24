@@ -203,7 +203,7 @@ export class GitWorktreeManager {
     await this.assertClean(prepared.worktreePath, signal);
     await this.#git(
       prepared.repositoryRoot,
-      ["worktree", "remove", prepared.worktreePath],
+      ["worktree", "remove", "--force", prepared.worktreePath],
       120_000,
       signal,
     );

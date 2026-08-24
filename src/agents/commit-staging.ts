@@ -2,6 +2,7 @@ export const FORGE_RUNTIME_PATHS = [
   ".pi/agents",
   ".pi/forge",
   ".pi/forge.local.json",
+  ".pi/settings.json",
 ] as const;
 
 /**
@@ -36,6 +37,10 @@ export function forgeProductStagingArgs(): readonly string[] {
 
 export function parseGitPathList(output: string): string[] {
   return output.split("\0").filter((path) => path.length > 0);
+}
+
+export function isTruncatedGitOutput(output: string): boolean {
+  return output.startsWith("[output truncated to last ");
 }
 
 /**
