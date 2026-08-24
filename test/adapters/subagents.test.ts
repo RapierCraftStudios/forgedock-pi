@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import {
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import test from "node:test";
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -16,6 +23,16 @@ import {
   registerForgeAgents,
 } from "../../src/agents/register.ts";
 import { parseForgePolicy } from "../../src/core/policy.ts";
+
+const execFileAsync = promisify(execFile);
+
+async function gitOutput(cwd: string, ...args: string[]): Promise<string> {
+  const result = await execFileAsync("git", args, {
+    cwd,
+    encoding: "utf8",
+  });
+  return result.stdout;
+}
 
 class FakeEventBus {
   readonly listeners = new Map<string, Set<(payload: unknown) => void>>();
@@ -139,6 +156,56 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
     assert.match(workOn, /  - \/.*agents\/child-runtime\.ts/);
     assert.doesNotMatch(workOn, /  - "\/.*"/);
     assert.doesNotMatch(reviewer, /tools: .*subagent/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("materialized runtime agents stay out of commits without repository ignore rules", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-agent-commit-"));
+  try {
+    await gitOutput(root, "init", "-b", "main");
+    await gitOutput(root, "config", "user.name", "ForgeDock Test");
+    await gitOutput(root, "config", "user.email", "forgedock@example.invalid");
+    await writeFile(join(root, "implementation.txt"), "base\n");
+    await gitOutput(root, "add", "implementation.txt");
+    await gitOutput(root, "commit", "-m", "base");
+
+    await materializeForgeAgents(root);
+    await writeFile(join(root, "implementation.txt"), "implementation\n");
+
+    const exclude = await readFile(
+      join(root, ".git", "info", "exclude"),
+      "utf8",
+    );
+    assert.equal(exclude.includes("/.pi/agents/"), true);
+    const status = await gitOutput(
+      root,
+      "status",
+      "--porcelain",
+      "--untracked-files=all",
+    );
+    assert.equal(status.includes(".pi/agents"), false);
+
+    await gitOutput(root, "add", "-A");
+    assert.equal(
+      (await gitOutput(root, "diff", "--cached", "--name-only")).trim(),
+      "implementation.txt",
+    );
+    await gitOutput(root, "commit", "-m", "implementation");
+
+    const committedFiles = await gitOutput(
+      root,
+      "ls-tree",
+      "-r",
+      "--name-only",
+      "HEAD",
+    );
+    assert.equal(committedFiles.includes(".pi/agents/"), false);
+    assert.equal(committedFiles.includes(".pi/forge/"), false);
+    const patch = await gitOutput(root, "show", "--format=", "HEAD");
+    assert.equal(patch.includes("pi-subagents"), false);
+    assert.equal(patch.includes("child-runtime.ts"), false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

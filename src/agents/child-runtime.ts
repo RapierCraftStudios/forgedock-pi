@@ -40,6 +40,12 @@ import {
   FORGE_REVIEW_SECURITY_AGENT,
   registerForgeAgents,
 } from "./register.ts";
+import {
+  FORGE_RUNTIME_GIT_PATHSPECS,
+  FORGE_RUNTIME_PATHS,
+  isForgeRuntimePath,
+  parseNullDelimitedGitPaths,
+} from "./runtime-paths.ts";
 
 const BINDING_ENV = "PI_SUBAGENT_EXTENSION_BINDINGS";
 const BINDING_NAMESPACE = "forgedock.pi/1";
@@ -73,6 +79,9 @@ interface ProcessResult {
   stderr: string;
   timedOut: boolean;
 }
+
+const TRUNCATED_OUTPUT_MARKER = "[output truncated to last";
+const MAX_RUNTIME_STATUS_BYTES = 1_024 * 1_024;
 
 const CheckpointParameters = Type.Object({
   phase: StringEnum(RUN_PHASES),
@@ -247,21 +256,125 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         throw new Error(
           "Cannot create a Forge commit with no worktree changes.",
         );
-      const added = await runProcess("git", ["-C", root, "add", "-A"], {
-        cwd: root,
-        timeoutMs: 30_000,
-        env,
-        ...(signal ? { signal } : {}),
-      });
+      const trackedRuntime = await runProcess(
+        "git",
+        [
+          "-C",
+          root,
+          "ls-tree",
+          "-r",
+          "-z",
+          "--name-only",
+          "HEAD",
+          "--",
+          ...FORGE_RUNTIME_PATHS,
+        ],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (trackedRuntime.exitCode !== 0)
+        throw new Error(`git ls-tree failed: ${trackedRuntime.stderr}`);
+      const trackedRuntimePaths = new Set(
+        parseNullDelimitedGitPaths(trackedRuntime.stdout),
+      );
+
+      const added = await runProcess(
+        "git",
+        ["-C", root, "add", "-A", "--", ".", ...FORGE_RUNTIME_GIT_PATHSPECS],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
       if (added.exitCode !== 0)
         throw new Error(`git add failed: ${added.stderr}`);
+
+      const trackedRuntimeUpdated = await runProcess(
+        "git",
+        ["-C", root, "add", "-u", "--", "."],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (trackedRuntimeUpdated.exitCode !== 0)
+        throw new Error(`git add -u failed: ${trackedRuntimeUpdated.stderr}`);
+
+      const staged = await runProcess(
+        "git",
+        [
+          "-C",
+          root,
+          "diff",
+          "--cached",
+          "--name-only",
+          "-z",
+          "--",
+          ...FORGE_RUNTIME_PATHS,
+        ],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          maxOutputBytes: MAX_RUNTIME_STATUS_BYTES,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (staged.exitCode !== 0)
+        throw new Error(`git diff --cached failed: ${staged.stderr}`);
+      if (staged.stdout.includes(TRUNCATED_OUTPUT_MARKER))
+        throw new Error(
+          "Forge commit refused to validate runtime paths because Git output was truncated.",
+        );
+      const newlyStagedRuntimePaths = [
+        ...new Set(
+          parseNullDelimitedGitPaths(staged.stdout).filter(
+            (path) =>
+              isForgeRuntimePath(path) && !trackedRuntimePaths.has(path),
+          ),
+        ),
+      ];
+      if (newlyStagedRuntimePaths.length > 0) {
+        const reset = await runProcess(
+          "git",
+          ["-C", root, "reset", "--", ...newlyStagedRuntimePaths],
+          {
+            cwd: root,
+            timeoutMs: 30_000,
+            env,
+            ...(signal ? { signal } : {}),
+          },
+        );
+        if (reset.exitCode !== 0)
+          throw new Error(`git reset failed: ${reset.stderr}`);
+        throw new Error(
+          `Forge commit refused newly staged runtime paths: ${newlyStagedRuntimePaths.join(", ")}`,
+        );
+      }
+
       const message =
         params.kind === "implementation"
           ? `forge: implement issue #${binding.issueNumber}`
           : `forge: address review for issue #${binding.issueNumber}`;
       const committed = await runProcess(
         "git",
-        ["-C", root, "commit", "--no-gpg-sign", "-m", message],
+        [
+          "-C",
+          root,
+          "commit",
+          "--no-gpg-sign",
+          "--no-verify",
+          "-m",
+          message,
+        ],
         {
           cwd: root,
           timeoutMs: 120_000,
@@ -1151,6 +1264,7 @@ async function runProcess(
     timeoutMs: number;
     signal?: AbortSignal;
     env: NodeJS.ProcessEnv;
+    maxOutputBytes?: number;
   },
 ): Promise<ProcessResult> {
   return new Promise((resolvePromise, reject) => {
@@ -1167,10 +1281,18 @@ async function runProcess(
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
-      stdout = appendBounded(stdout, chunk);
+      stdout = appendBounded(
+        stdout,
+        chunk,
+        options.maxOutputBytes ?? MAX_OUTPUT_BYTES * 2,
+      );
     });
     child.stderr.on("data", (chunk: string) => {
-      stderr = appendBounded(stderr, chunk);
+      stderr = appendBounded(
+        stderr,
+        chunk,
+        options.maxOutputBytes ?? MAX_OUTPUT_BYTES * 2,
+      );
     });
     const timer = setTimeout(() => {
       timedOut = true;
@@ -1188,8 +1310,12 @@ async function runProcess(
   });
 }
 
-function appendBounded(current: string, chunk: string): string {
-  return truncateTail(current + chunk, MAX_OUTPUT_BYTES * 2);
+function appendBounded(
+  current: string,
+  chunk: string,
+  maxBytes: number,
+): string {
+  return truncateTail(current + chunk, maxBytes);
 }
 
 function truncateTail(value: string, maxBytes: number): string {
