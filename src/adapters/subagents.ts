@@ -4,20 +4,21 @@ import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import {
-  FORGE_REVIEWER_OUTPUT_SCHEMA,
-  FORGE_WORK_ON_OUTPUT_SCHEMA,
-} from "../agents/contracts.ts";
-import {
   FORGE_REVIEW_CORRECTNESS_AGENT,
   FORGE_REVIEW_SECURITY_AGENT,
   FORGE_WORK_ON_AGENT,
-} from "../agents/register.ts";
+  FORGE_BINDING_NAMESPACE,
+} from "../core/agent-protocol.ts";
+import {
+  FORGE_REVIEWER_OUTPUT_SCHEMA,
+  FORGE_WORK_ON_OUTPUT_SCHEMA,
+} from "../core/work-on-contracts.ts";
 import type { ForgePolicy } from "../core/policy.ts";
 
 const RPC_REQUEST = "subagents:rpc:v1:request";
 const RPC_REPLY_PREFIX = "subagents:rpc:v1:reply:";
 const RPC_READY = "subagents:rpc:v1:ready";
-const BINDING_NAMESPACE = "forgedock.pi/1";
+const BINDING_NAMESPACE = FORGE_BINDING_NAMESPACE;
 
 interface RpcReply {
   version: 1;

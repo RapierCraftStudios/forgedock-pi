@@ -6,9 +6,17 @@ import {
   type RuntimeAgentRegistration,
 } from "pi-subagents/agents";
 
-export const FORGE_WORK_ON_AGENT = "forge-work-on";
-export const FORGE_REVIEW_CORRECTNESS_AGENT = "forge-review-correctness";
-export const FORGE_REVIEW_SECURITY_AGENT = "forge-review-security";
+import {
+  FORGE_REVIEW_CORRECTNESS_AGENT,
+  FORGE_REVIEW_SECURITY_AGENT,
+  FORGE_WORK_ON_AGENT,
+} from "../core/agent-protocol.ts";
+
+export {
+  FORGE_REVIEW_CORRECTNESS_AGENT,
+  FORGE_REVIEW_SECURITY_AGENT,
+  FORGE_WORK_ON_AGENT,
+};
 export const FORGE_REVIEW_TOOLS = ["read", "grep", "find", "ls"] as const;
 export const FORGE_WORK_ON_TOOLS = [
   "read",
