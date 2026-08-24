@@ -26,6 +26,7 @@ import {
   isProtectedBranch,
   type ForgePolicy,
 } from "../core/policy.ts";
+import { isLeaseExpired } from "../core/lease.ts";
 import {
   evaluateReviewGate,
   type ReviewFinding,
@@ -59,6 +60,7 @@ export class ForgeWorkOnController {
   readonly #rpc: SubagentsRpcClient;
   readonly #git: GitWorktreeManager;
   readonly #links = new Map<string, ActiveRunLink>();
+  readonly #finalizing = new Set<string>();
   #completionUnsubscribe: (() => void) | undefined;
 
   constructor(pi: ExtensionAPI) {
@@ -77,15 +79,25 @@ export class ForgeWorkOnController {
       const link = [...this.#links.values()].find((candidate) =>
         containsString(payload, candidate.subagentRunId),
       );
-      if (!link || link.status !== "running") return;
-      void this.#finalize(link, ctx).catch((error) => {
-        link.status = "failed";
-        this.#persistLink(link);
-        ctx.ui.notify(
-          `ForgeDock run ${link.forgeRunId} finalization failed: ${errorMessage(error)}`,
-          "error",
-        );
-      });
+      if (
+        !link ||
+        link.status !== "running" ||
+        this.#finalizing.has(link.subagentRunId)
+      )
+        return;
+      this.#finalizing.add(link.subagentRunId);
+      void this.#finalize(link, ctx)
+        .catch((error) => {
+          link.status = "failed";
+          this.#persistLink(link);
+          ctx.ui.notify(
+            `ForgeDock run ${link.forgeRunId} finalization failed: ${errorMessage(error)}`,
+            "error",
+          );
+        })
+        .finally(() => {
+          this.#finalizing.delete(link.subagentRunId);
+        });
     });
   }
 
@@ -370,6 +382,7 @@ export class ForgeWorkOnController {
       ),
     ];
     const currentRun = await store.readRun(link.forgeRunId, ctx.signal);
+    const currentLease = currentRun.lease;
     const checks = verificationForGate(policy, result);
     const findings = result.review.findings as readonly ReviewFinding[];
     const gate = evaluateReviewGate({
@@ -388,7 +401,11 @@ export class ForgeWorkOnController {
       findings,
       checks,
       mergeability: currentPull.mergeability,
-      leaseValid: currentRun.lease?.ownerRunId === link.forgeRunId,
+      leaseValid:
+        currentLease !== undefined &&
+        currentLease.ownerRunId === link.forgeRunId &&
+        !currentLease.takeoverRequired &&
+        !isLeaseExpired(currentLease, new Date()),
       baseBranch: currentPull.baseRef,
       protectedBranches: policy.branches.protected,
       autoMergeAuthorized: canAutoMerge(policy, currentPull.baseRef),

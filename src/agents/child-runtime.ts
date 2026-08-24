@@ -516,6 +516,13 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       "Request a typed, core-validated phase transition in the authoritative GitHub run journal",
     parameters: CheckpointParameters,
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+      if (params.action === "complete") {
+        if (!params.report?.trim())
+          throw new Error(
+            `Complete ${params.phase} checkpoints require a canonical report.`,
+          );
+        validatePhaseReport(params.phase, params.report);
+      }
       const token =
         githubToken ??
         (await resolveGitHubToken(pi, binding.worktreeRoot, signal));
