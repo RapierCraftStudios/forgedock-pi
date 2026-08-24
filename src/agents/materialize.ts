@@ -6,7 +6,7 @@ import {
   open,
   readFile,
   realpath,
-  stat,
+  writeFile,
 } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -106,8 +106,39 @@ async function ensureSafeDirectory(path: string, label: string): Promise<void> {
     throw new Error(`Forge runtime directory ${label} must be a real directory.`);
 }
 
+async function appendRuntimeFile(path: string, content: string): Promise<void> {
+  const noFollow = constants.O_NOFOLLOW ?? 0;
+  if (!noFollow) {
+    await appendFile(path, content, "utf8");
+    return;
+  }
+  const handle = await open(
+    path,
+    constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND | noFollow,
+    0o600,
+  );
+  try {
+    await handle.writeFile(content, "utf8");
+  } finally {
+    await handle.close();
+  }
+}
+
 async function writeRuntimeFile(path: string, content: string): Promise<void> {
   const noFollow = constants.O_NOFOLLOW ?? 0;
+  if (!noFollow) {
+    const metadata = await lstat(path).catch((error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      return undefined;
+    });
+    if (metadata?.isSymbolicLink())
+      throw new Error("Forge runtime file must not be a symbolic link.");
+    const parent = await realpath(dirname(path));
+    if (parent !== dirname(path))
+      throw new Error("Forge runtime directory changed during materialization.");
+    await writeFile(path, content, { encoding: "utf8", mode: 0o600 });
+    return;
+  }
   const handle = await open(
     path,
     constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | noFollow,
@@ -125,7 +156,13 @@ async function ensureForgeRuntimeIgnored(worktreeRoot: string): Promise<void> {
   if (!gitDirectory) return;
 
   const excludePath = join(gitDirectory, "info", "exclude");
-  await mkdir(dirname(excludePath), { recursive: true });
+  await ensureSafeDirectory(dirname(excludePath), ".git/info");
+  const metadata = await lstat(excludePath).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    return undefined;
+  });
+  if (metadata?.isSymbolicLink())
+    throw new Error("Forge Git exclude path must not be a symbolic link.");
   const existing = await readFile(excludePath, "utf8").catch(() => "");
   const lines = new Set(existing.split(/\r?\n/));
   const missingEntries = FORGE_RUNTIME_IGNORE_ENTRIES.filter(
@@ -134,10 +171,9 @@ async function ensureForgeRuntimeIgnored(worktreeRoot: string): Promise<void> {
   if (missingEntries.length === 0) return;
 
   const separator = existing && !existing.endsWith("\n") ? "\n" : "";
-  await appendFile(
+  await appendRuntimeFile(
     excludePath,
     `${separator}${FORGE_RUNTIME_IGNORE_MARKER}\n${missingEntries.join("\n")}\n`,
-    "utf8",
   );
 }
 
@@ -147,22 +183,26 @@ async function resolveGitDirectory(
   const gitPath = join(worktreeRoot, ".git");
   let gitStats;
   try {
-    gitStats = await stat(gitPath);
+    gitStats = await lstat(gitPath);
   } catch {
     return undefined;
   }
-  if (gitStats.isDirectory()) return gitPath;
+  if (gitStats.isDirectory()) return realpath(gitPath);
+  if (gitStats.isSymbolicLink())
+    throw new Error("Forge worktree .git path must not be a symbolic link.");
 
   const gitFile = await readFile(gitPath, "utf8").catch(() => "");
   const match = /^gitdir:\s*(.+)\s*$/im.exec(gitFile);
   if (!match?.[1]) return undefined;
-  const worktreeGitDirectory = resolve(worktreeRoot, match[1]);
+  const worktreeGitDirectory = await realpath(
+    resolve(worktreeRoot, match[1]),
+  );
   const commonDirectory = await readFile(
     join(worktreeGitDirectory, "commondir"),
     "utf8",
   ).catch(() => "");
   return commonDirectory.trim()
-    ? resolve(worktreeGitDirectory, commonDirectory.trim())
+    ? realpath(resolve(worktreeGitDirectory, commonDirectory.trim()))
     : worktreeGitDirectory;
 }
 
