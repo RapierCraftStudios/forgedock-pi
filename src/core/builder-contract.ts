@@ -182,7 +182,9 @@ export function parseBuilderContractReport(
   }
   const section = report.slice(markerIndex);
   const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(section);
-  const candidates = fenced ? [fenced[1] ?? ""] : findJsonObjects(section);
+  const candidates = fenced
+    ? [fenced[1] ?? ""]
+    : [findJsonObject(section) ?? ""];
   for (const candidate of candidates) {
     try {
       const parsed: unknown = JSON.parse(candidate);
@@ -392,13 +394,13 @@ function normalizeContractPathValue(
 }
 
 function normalizeDiffPath(value: string): string {
-  if (typeof value !== "string" || !value.trim()) {
+  if (typeof value !== "string" || !value || !value.trim()) {
     throw new BuilderContractError(
       "invalid-diff-path",
       "Git diff paths must be non-empty strings.",
     );
   }
-  const path = value.trim();
+  const path = value;
   if (
     path.startsWith("/") ||
     path.includes("\\") ||
@@ -445,35 +447,29 @@ function isRecord(value: unknown): value is Record<string, any> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
-function findJsonObjects(section: string): string[] {
-  const candidates: string[] = [];
-  let start = section.indexOf("{");
-  while (start >= 0) {
-    let depth = 0;
-    let quoted = false;
-    let escaped = false;
-    for (let index = start; index < section.length; index += 1) {
-      const character = section[index];
-      if (quoted) {
-        if (escaped) escaped = false;
-        else if (character === "\\") escaped = true;
-        else if (character === '"') quoted = false;
-        continue;
-      }
-      if (character === '"') {
-        quoted = true;
-        continue;
-      }
-      if (character === "{") depth += 1;
-      if (character === "}") {
-        depth -= 1;
-        if (depth === 0) {
-          candidates.push(section.slice(start, index + 1));
-          break;
-        }
-      }
+function findJsonObject(section: string): string | undefined {
+  const start = section.indexOf("{");
+  if (start < 0) return undefined;
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  for (let index = start; index < section.length; index += 1) {
+    const character = section[index];
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') quoted = false;
+      continue;
     }
-    start = section.indexOf("{", start + 1);
+    if (character === '"') {
+      quoted = true;
+      continue;
+    }
+    if (character === "{") depth += 1;
+    if (character === "}") {
+      depth -= 1;
+      if (depth === 0) return section.slice(start, index + 1);
+    }
   }
-  return candidates;
+  return undefined;
 }

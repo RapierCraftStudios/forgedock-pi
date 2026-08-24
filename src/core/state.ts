@@ -549,7 +549,14 @@ function applyContractExtended(state: RunState, event: RunEvent): void {
     );
   }
   const extension = normalizeBuilderContractArtifact(payload.builderContract);
+  const extensionPaths = new Set(
+    extension.allowedPaths.map((entry) => `${entry.kind}:${entry.path}`),
+  );
+  const missingPriorPath = state.builderContract.allowedPaths.find(
+    (entry) => !extensionPaths.has(`${entry.kind}:${entry.path}`),
+  );
   if (
+    missingPriorPath ||
     payload.contractHash !== extension.contractHash ||
     payload.supersedes !== state.builderContract.contractHash ||
     extension.supersedes !== state.builderContract.contractHash ||
@@ -560,7 +567,7 @@ function applyContractExtended(state: RunState, event: RunEvent): void {
   ) {
     throw new StateTransitionError(
       "invalid-contract-extension",
-      "Contract extension must increment revision and supersede the accepted contract with an auditable reason.",
+      "Contract extension must retain all prior paths, increment revision, and supersede the accepted contract with an auditable reason.",
     );
   }
   const previousContract = state.builderContract;

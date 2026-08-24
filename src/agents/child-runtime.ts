@@ -267,6 +267,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       );
       if (status.exitCode !== 0)
         throw new Error(`git status failed: ${status.stderr}`);
+      assertCompleteGitOutput(status.stdout, "worktree status");
       const workingPaths = parsePorcelainStatusPaths(status.stdout);
       if (workingPaths.length === 0)
         throw new Error(
@@ -302,6 +303,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       );
       if (staged.exitCode !== 0)
         throw new Error(`staged diff inspection failed: ${staged.stderr}`);
+      assertCompleteGitOutput(staged.stdout, "staged diff");
       assertBuilderContractPaths(contract, parseGitNameStatusOutput(staged.stdout));
 
       const message =
@@ -457,6 +459,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           "Review preparation requires a clean committed worktree. Run forge_commit again for residual formatting or review-fix changes.",
         );
       }
+      assertCompleteGitOutput(status.stdout, "review-preparation status");
       const contract = await readAcceptedBuilderContract(
         pi,
         binding,
@@ -485,6 +488,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         throw new Error(
           `committed diff inspection failed: ${committedDiff.stderr}`,
         );
+      assertCompleteGitOutput(committedDiff.stdout, "review-preparation diff");
       assertBuilderContractPaths(
         contract,
         parseGitNameStatusOutput(committedDiff.stdout),
@@ -1388,6 +1392,12 @@ async function runProcess(
 
 function appendBounded(current: string, chunk: string): string {
   return truncateTail(current + chunk, MAX_OUTPUT_BYTES * 2);
+}
+
+function assertCompleteGitOutput(output: string, label: string): void {
+  if (output.startsWith("[output truncated to last ")) {
+    throw new Error(`Refusing to validate truncated ${label} output.`);
+  }
 }
 
 function truncateTail(value: string, maxBytes: number): string {

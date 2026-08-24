@@ -39,6 +39,7 @@ test("builder contract hashes normalized exact and directory rules", () => {
   assert.equal(isBuilderPathAllowed(left, "src/core/events.ts"), true);
   assert.equal(isBuilderPathAllowed(left, "test/core/nested.test.ts"), true);
   assert.equal(isBuilderPathAllowed(left, "test/corex/nested.test.ts"), false);
+  assert.equal(isBuilderPathAllowed(left, "src/core/events.ts "), false);
 });
 
 test("contract validation covers additions, deletions, and both rename paths", () => {
