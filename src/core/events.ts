@@ -131,6 +131,7 @@ export type RunEventPayload =
   | PhaseQueuedPayload
   | PhaseStartedPayload
   | PhaseCompletedPayload
+  | ContractExtendedPayload
   | PhaseStoppedPayload
   | EffectRecordedPayload
   | RunCompletedPayload

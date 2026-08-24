@@ -529,10 +529,11 @@ function applyContractExtended(state: RunState, event: RunEvent): void {
       "Contract extensions must target a review attempt.",
     );
   }
+  const attemptNumber = payload.attempt as number;
   const currentAttemptState = assertCurrentAttempt(
     state,
     "review",
-    payload.attempt,
+    attemptNumber,
     ["running"],
   );
   if (!state.builderContract) {
@@ -554,7 +555,8 @@ function applyContractExtended(state: RunState, event: RunEvent): void {
     extension.supersedes !== state.builderContract.contractHash ||
     extension.revision !== state.builderContract.revision + 1 ||
     typeof payload.reason !== "string" ||
-    !payload.reason.trim()
+    !payload.reason.trim() ||
+    extension.reason !== payload.reason
   ) {
     throw new StateTransitionError(
       "invalid-contract-extension",

@@ -11,6 +11,15 @@ export interface BuilderContractPath {
   path: string;
 }
 
+export type BuilderContractPathInput = BuilderContractPath | string;
+
+export interface BuilderContractInput {
+  revision?: number;
+  allowedPaths: readonly BuilderContractPathInput[];
+  supersedes?: string;
+  reason?: string;
+}
+
 export interface BuilderContract {
   schema: typeof BUILDER_CONTRACT_SCHEMA;
   revision: number;
@@ -38,12 +47,7 @@ export class BuilderContractError extends Error {
   }
 }
 
-export function createBuilderContract(input: {
-  revision?: number;
-  allowedPaths: readonly BuilderContractPath[];
-  supersedes?: string;
-  reason?: string;
-}): BuilderContract {
+export function createBuilderContract(input: BuilderContractInput): BuilderContract {
   const revision = input.revision ?? 1;
   if (!Number.isSafeInteger(revision) || revision < 1) {
     throw new BuilderContractError(
@@ -98,7 +102,7 @@ export function normalizeBuilderContract(value: unknown): BuilderContract {
     );
   return createBuilderContract({
     revision: value.revision as number | undefined,
-    allowedPaths: allowedPaths as BuilderContractPath[],
+    allowedPaths: allowedPaths as BuilderContractPathInput[],
     ...(value.supersedes === undefined
       ? {}
       : { supersedes: value.supersedes as string }),
@@ -114,7 +118,7 @@ export function builderContractHash(contract: BuilderContract): string {
 }
 
 export function createBuilderContractArtifact(
-  contract: BuilderContract,
+  contract: BuilderContractInput,
 ): BuilderContractArtifact {
   const normalized = createBuilderContract(contract);
   return { ...normalized, contractHash: builderContractHash(normalized) };
@@ -232,8 +236,9 @@ export function isBuilderPathAllowed(
   contract: BuilderContract,
   path: string,
 ): boolean {
+  const normalizedContract = createBuilderContract(contract);
   const normalized = normalizeDiffPath(path);
-  return contract.allowedPaths.some((entry) => {
+  return normalizedContract.allowedPaths.some((entry) => {
     if (entry.kind === "exact") return entry.path === normalized;
     return (
       normalized === entry.path || normalized.startsWith(`${entry.path}/`)
@@ -253,7 +258,11 @@ export function findBuilderContractViolations(
     } catch {
       normalized = path;
     }
-    if (!isBuilderPathAllowed(contract, path)) violations.add(normalized);
+    try {
+      if (!isBuilderPathAllowed(contract, path)) violations.add(normalized);
+    } catch {
+      violations.add(normalized);
+    }
   }
   return [...violations].sort((left, right) => left.localeCompare(right));
 }
@@ -321,7 +330,18 @@ export function findBuilderContractInEvents(
   return undefined;
 }
 
-function normalizeContractPath(value: BuilderContractPath): BuilderContractPath {
+function normalizeContractPath(
+  value: BuilderContractPathInput,
+): BuilderContractPath {
+  if (typeof value === "string") {
+    const kind: BuilderPathKind = value.trim().endsWith("/**")
+      ? "directory"
+      : "exact";
+    return {
+      kind,
+      path: normalizeContractPathValue(value, kind),
+    };
+  }
   if (!isRecord(value)) {
     throw new BuilderContractError(
       "invalid-path-rule",
@@ -405,7 +425,7 @@ function requireHash(value: string, field: string): string {
   if (typeof value !== "string" || !/^sha256:[a-f0-9]{64}$/.test(value)) {
     throw new BuilderContractError(
       "invalid-hash",
-      `${field} must be a sha256 hash.",
+      `${field} must be a sha256 hash.`,
     );
   }
   return value;
