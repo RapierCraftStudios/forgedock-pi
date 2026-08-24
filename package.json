@@ -1,0 +1,77 @@
+{
+  "name": "forgedock-pi",
+  "version": "0.1.0",
+  "description": "Pi-native GitHub issue orchestration with durable state, nested subagent review, and auditable ForgeDock artifacts",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "github",
+    "subagents",
+    "workflow-orchestration",
+    "forgedock",
+    "code-review",
+    "autonomous-coding"
+  ],
+  "author": "RapierCraft Studios",
+  "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RapierCraftStudios/forgedock-pi.git"
+  },
+  "homepage": "https://github.com/RapierCraftStudios/forgedock-pi#readme",
+  "bugs": {
+    "url": "https://github.com/RapierCraftStudios/forgedock-pi/issues"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src/",
+    "templates/",
+    "DESIGN.md",
+    "CHANGELOG.md",
+    "README.md",
+    "SECURITY.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test \"test/**/*.test.ts\"",
+    "check": "npm run typecheck && npm test"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "pi-subagents": ">=0.56.0",
+    "typebox": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-ai": {
+      "optional": true
+    },
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "@earendil-works/pi-tui": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.84.2",
+    "@types/node": "^24.0.0",
+    "pi-subagents": "^0.56.0",
+    "typebox": "^1.1.38",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,0 +1,11 @@
+node_modules/
+coverage/
+dist/
+*.log
+.env
+.env.*
+.DS_Store
+.pi/forge.local.json
+.pi/forge/
+.forge/cache/
+.forge/worktrees/
