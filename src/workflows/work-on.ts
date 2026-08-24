@@ -20,6 +20,11 @@ import {
   type ForgeWorkOnResult,
 } from "../agents/contracts.ts";
 import { materializeForgeAgents } from "../agents/materialize.ts";
+import {
+  assertBuilderContractPaths,
+  findBuilderContractInEvents,
+  type BuilderContractArtifact,
+} from "../core/builder-contract.ts";
 import { checkPreMergeAuditTrail } from "../core/artifact-protocol.ts";
 import {
   canAutoMerge,
@@ -264,6 +269,15 @@ export class ForgeWorkOnController {
     const projector = new GitHubIssueProjector(transport, link.repository);
     const sessionId = ctx.sessionManager.getSessionId();
 
+    const currentRun = await store.readRun(link.forgeRunId, ctx.signal);
+    const acceptedContract =
+      currentRun.state?.builderContract ??
+      findBuilderContractInEvents(currentRun.events);
+    if (!acceptedContract)
+      throw new Error(
+        "Work-on run has no accepted builder contract; refusing review or merge reconciliation.",
+      );
+
     await this.#git.assertClean(link.prepared.worktreePath, ctx.signal);
     const actualHead = await this.#git.head(
       link.prepared.worktreePath,
@@ -279,11 +293,13 @@ export class ForgeWorkOnController {
       link.prepared.baseSha,
       ctx.signal,
     );
+    assertBuilderContractPaths(acceptedContract, actualFiles);
     if (!sameStrings(actualFiles, result.changedFiles))
       throw new Error(
         "Work-on changed-file result does not match the actual committed diff.",
       );
 
+    const contractHash = acceptedContract.contractHash;
     await appendPhase(
       journal,
       link.forgeRunId,
@@ -292,6 +308,9 @@ export class ForgeWorkOnController {
       1,
       sessionId,
       ctx.signal,
+      undefined,
+      undefined,
+      contractHash,
     );
     await appendPhase(
       journal,
@@ -301,6 +320,9 @@ export class ForgeWorkOnController {
       1,
       sessionId,
       ctx.signal,
+      undefined,
+      undefined,
+      contractHash,
     );
     await this.#git.push(
       link.prepared.worktreePath,
@@ -369,7 +391,6 @@ export class ForgeWorkOnController {
         (domain) => `missing reviewer artifact ${domain}`,
       ),
     ];
-    const currentRun = await store.readRun(link.forgeRunId, ctx.signal);
     const checks = verificationForGate(policy, result);
     const findings = result.review.findings as readonly ReviewFinding[];
     const gate = evaluateReviewGate({
@@ -406,6 +427,8 @@ export class ForgeWorkOnController {
         sessionId,
         ctx.signal,
         gate.reasons.join(" "),
+        undefined,
+        contractHash,
       );
       link.status = "failed";
       this.#persistLink(link);
@@ -441,6 +464,7 @@ export class ForgeWorkOnController {
       ctx.signal,
       undefined,
       [merged.sha],
+      contractHash,
     );
     await postReviewCompletionArtifacts({
       github,
@@ -613,6 +637,7 @@ async function appendPhase(
   signal?: AbortSignal,
   reason?: string,
   evidence?: readonly string[],
+  contractHash?: string,
 ): Promise<void> {
   const type = {
     queue: "phase.queued",
@@ -621,18 +646,25 @@ async function appendPhase(
     block: "phase.blocked",
     "needs-human": "phase.needs-human",
   } as const;
+  const boundContract = contractHash ? { contractHash } : {};
   const payload =
     action === "queue"
       ? {
           phase,
           attempt,
           restartAction: `reconcile and retry parent-owned ${phase}`,
+          ...boundContract,
         }
       : action === "start"
-        ? { phase, attempt, logicalNodeId: `parent-${phase}-${attempt}` }
+        ? {
+            phase,
+            attempt,
+            logicalNodeId: `parent-${phase}-${attempt}`,
+            ...boundContract,
+          }
         : action === "complete"
-          ? { phase, attempt, evidence: evidence ?? [] }
-          : { phase, attempt, reason: reason ?? `${phase} ${action}` };
+          ? { phase, attempt, evidence: evidence ?? [], ...boundContract }
+          : { phase, attempt, reason: reason ?? `${phase} ${action}`, ...boundContract };
   await journal.append({
     runId,
     type: type[action],

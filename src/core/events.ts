@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
+import { type BuilderContractArtifact } from "./builder-contract.ts";
 import { FORGEDOCK_EVENT_SCHEMA } from "./version.ts";
 
 export const RUN_PHASES = [
@@ -42,6 +43,7 @@ export type RunEventType =
   | "phase.blocked"
   | "phase.needs-human"
   | "phase.abandoned"
+  | "contract.extended"
   | "effect.recorded"
   | "run.completed"
   | "run.cancelled";
@@ -64,6 +66,7 @@ export interface PhaseQueuedPayload {
   attempt: number;
   restartAction: string;
   inputArtifactHash?: string;
+  contractHash?: string;
 }
 
 export interface PhaseStartedPayload {
@@ -74,6 +77,7 @@ export interface PhaseStartedPayload {
   worktreePath?: string;
   branch?: string;
   baseSha?: string;
+  contractHash?: string;
 }
 
 export interface PhaseCompletedPayload {
@@ -82,6 +86,17 @@ export interface PhaseCompletedPayload {
   outputArtifactHash?: string;
   commitSha?: string;
   evidence?: readonly string[];
+  contractHash?: string;
+  builderContract?: BuilderContractArtifact;
+}
+
+export interface ContractExtendedPayload {
+  phase: "review";
+  attempt: number;
+  contractHash: string;
+  builderContract: BuilderContractArtifact;
+  supersedes: string;
+  reason: string;
 }
 
 export interface PhaseStoppedPayload {
@@ -307,6 +322,7 @@ const RUN_EVENT_TYPES: ReadonlySet<RunEventType> = new Set([
   "phase.blocked",
   "phase.needs-human",
   "phase.abandoned",
+  "contract.extended",
   "effect.recorded",
   "run.completed",
   "run.cancelled",

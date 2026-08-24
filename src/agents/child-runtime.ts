@@ -24,12 +24,22 @@ import { GitHubIssueProjector } from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
 import {
+  assertBuilderContractPaths,
+  findBuilderContractInEvents,
+  normalizeBuilderContractArtifact,
+  parseBuilderContractReport,
+  parseGitNameStatusOutput,
+  parsePorcelainStatusPaths,
+  type BuilderContractArtifact,
+} from "../core/builder-contract.ts";
+import {
   createRunEvent,
   RUN_PHASES,
   type RunEvent,
   type RunEventType,
   type RunPhase,
 } from "../core/events.ts";
+import type { ReadRunStateResult } from "../adapters/github-state.ts";
 import { applyRunEvent } from "../core/state.ts";
 import {
   FORGE_WORK_ON_OUTPUT_SCHEMA,
@@ -85,10 +95,12 @@ const CheckpointParameters = Type.Object({
     "block",
     "needs-human",
     "abandon",
+    "extend-contract",
   ] as const),
   restartAction: Type.Optional(Type.String({ minLength: 1 })),
   logicalNodeId: Type.Optional(Type.String({ minLength: 1 })),
   inputArtifactHash: Type.Optional(Type.String({ minLength: 1 })),
+  contractHash: Type.Optional(Type.String({ minLength: 7 })),
   outputArtifactHash: Type.Optional(Type.String({ minLength: 1 })),
   commitSha: Type.Optional(Type.String({ minLength: 7 })),
   evidence: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
@@ -231,9 +243,21 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
     async execute(_toolCallId, params, signal) {
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
       const env = safeEnvironment(binding.runId);
+      const contract = await readAcceptedBuilderContract(
+        pi,
+        binding,
+        signal,
+      );
       const status = await runProcess(
         "git",
-        ["-C", root, "status", "--porcelain"],
+        [
+          "-C",
+          root,
+          "status",
+          "--porcelain=v1",
+          "-z",
+          "--untracked-files=all",
+        ],
         {
           cwd: root,
           timeoutMs: 30_000,
@@ -243,10 +267,13 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       );
       if (status.exitCode !== 0)
         throw new Error(`git status failed: ${status.stderr}`);
-      if (!status.stdout.trim())
+      const workingPaths = parsePorcelainStatusPaths(status.stdout);
+      if (workingPaths.length === 0)
         throw new Error(
           "Cannot create a Forge commit with no worktree changes.",
         );
+      assertBuilderContractPaths(contract, workingPaths);
+
       const added = await runProcess("git", ["-C", root, "add", "-A"], {
         cwd: root,
         timeoutMs: 30_000,
@@ -255,6 +282,28 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       });
       if (added.exitCode !== 0)
         throw new Error(`git add failed: ${added.stderr}`);
+      const staged = await runProcess(
+        "git",
+        [
+          "-C",
+          root,
+          "diff",
+          "--cached",
+          "--name-status",
+          "--find-renames",
+          "--find-copies",
+        ],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (staged.exitCode !== 0)
+        throw new Error(`staged diff inspection failed: ${staged.stderr}`);
+      assertBuilderContractPaths(contract, parseGitNameStatusOutput(staged.stdout));
+
       const message =
         params.kind === "implementation"
           ? `forge: implement issue #${binding.issueNumber}`
@@ -273,6 +322,33 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         throw new Error(
           `git commit failed: ${committed.stderr || committed.stdout}`,
         );
+      const committedDiff = await runProcess(
+        "git",
+        [
+          "-C",
+          root,
+          "diff",
+          "--name-status",
+          "--find-renames",
+          "--find-copies",
+          binding.baseSha,
+          "--",
+        ],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (committedDiff.exitCode !== 0)
+        throw new Error(
+          `committed diff inspection failed: ${committedDiff.stderr}`,
+        );
+      assertBuilderContractPaths(
+        contract,
+        parseGitNameStatusOutput(committedDiff.stdout),
+      );
       const head = await runProcess("git", ["-C", root, "rev-parse", "HEAD"], {
         cwd: root,
         timeoutMs: 30_000,
@@ -285,10 +361,15 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         content: [
           {
             type: "text",
-            text: `Created ${params.kind} commit ${head.stdout.trim()}.`,
+            text: `Created ${params.kind} commit ${head.stdout.trim()} under contract ${contract.contractHash}.`,
           },
         ],
-        details: { kind: params.kind, headSha: head.stdout.trim(), message },
+        details: {
+          kind: params.kind,
+          headSha: head.stdout.trim(),
+          contractHash: contract.contractHash,
+          message,
+        },
       };
     },
   });
@@ -376,6 +457,38 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           "Review preparation requires a clean committed worktree. Run forge_commit again for residual formatting or review-fix changes.",
         );
       }
+      const contract = await readAcceptedBuilderContract(
+        pi,
+        binding,
+        signal,
+      );
+      const committedDiff = await runProcess(
+        "git",
+        [
+          "-C",
+          root,
+          "diff",
+          "--name-status",
+          "--find-renames",
+          "--find-copies",
+          binding.baseSha,
+          "--",
+        ],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env: safeEnvironment(binding.runId),
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (committedDiff.exitCode !== 0)
+        throw new Error(
+          `committed diff inspection failed: ${committedDiff.stderr}`,
+        );
+      assertBuilderContractPaths(
+        contract,
+        parseGitNameStatusOutput(committedDiff.stdout),
+      );
       const head = await runProcess("git", ["-C", root, "rev-parse", "HEAD"], {
         cwd: root,
         timeoutMs: 30_000,
@@ -462,6 +575,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           headSha,
           baseSha: pull.baseSha,
           baseRef: pull.baseRef,
+          contractHash: contract.contractHash,
         },
       };
     },
@@ -570,7 +684,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
             leaseEpoch: binding.leaseEpoch,
           },
           idempotencyKey,
-          payload: checkpointPayload(params, binding),
+          payload: checkpointPayload(params, binding, current),
         });
         const nextState = applyRunEvent(current.state, event);
         stateTip = await store.commitRunState({
@@ -743,7 +857,8 @@ function checkpointEventType(
     | "fail"
     | "block"
     | "needs-human"
-    | "abandon",
+    | "abandon"
+    | "extend-contract",
 ): RunEventType {
   const eventTypes: Record<typeof action, RunEventType> = {
     queue: "phase.queued",
@@ -753,6 +868,7 @@ function checkpointEventType(
     block: "phase.blocked",
     "needs-human": "phase.needs-human",
     abandon: "phase.abandoned",
+    "extend-contract": "contract.extended",
   };
   return eventTypes[action];
 }
@@ -768,10 +884,12 @@ function checkpointPayload(
       | "fail"
       | "block"
       | "needs-human"
-      | "abandon";
+      | "abandon"
+      | "extend-contract";
     restartAction?: string;
     logicalNodeId?: string;
     inputArtifactHash?: string;
+    contractHash?: string;
     outputArtifactHash?: string;
     commitSha?: string;
     evidence?: string[];
@@ -779,8 +897,36 @@ function checkpointPayload(
     reason?: string;
   },
   binding: ForgeChildBinding,
+  current: ReadRunStateResult,
 ): Record<string, unknown> {
   const common = { phase: params.phase, attempt: params.attempt };
+  const acceptedHash = current.state?.builderContract?.contractHash;
+  const contractHash = params.contractHash ?? acceptedHash;
+  const requiresBinding =
+    Boolean(current.state?.builderContract) &&
+    !["resolve", "investigate", "plan", "close", "cleanup"].includes(
+      params.phase,
+    );
+  if (requiresBinding && !contractHash) {
+    throw new Error(
+      `Phase ${params.phase} requires the accepted builder contract hash.`,
+    );
+  }
+  if (params.action === "extend-contract") {
+    if (params.phase !== "review" || !current.state?.builderContract) {
+      throw new Error(
+        "Contract extensions are allowed only during a running review with an accepted contract.",
+      );
+    }
+    const builderContract = parseBuilderContractReport(params.report ?? "");
+    return {
+      ...common,
+      contractHash: builderContract.contractHash,
+      builderContract,
+      supersedes: current.state.builderContract.contractHash,
+      reason: params.reason ?? builderContract.reason ?? "authorized review-fix scope extension",
+    };
+  }
   if (params.action === "queue") {
     return {
       ...common,
@@ -790,6 +936,7 @@ function checkpointPayload(
       ...(params.inputArtifactHash
         ? { inputArtifactHash: params.inputArtifactHash }
         : {}),
+      ...(contractHash ? { contractHash } : {}),
     };
   }
   if (params.action === "start") {
@@ -800,9 +947,14 @@ function checkpointPayload(
       worktreePath: binding.worktreeRoot,
       branch: binding.branch,
       baseSha: binding.baseSha,
+      ...(contractHash ? { contractHash } : {}),
     };
   }
   if (params.action === "complete") {
+    const builderContract =
+      params.phase === "plan"
+        ? parseBuilderContractReport(params.report ?? "")
+        : undefined;
     return {
       ...common,
       evidence: params.evidence ?? [],
@@ -811,10 +963,19 @@ function checkpointPayload(
         ? { outputArtifactHash: params.outputArtifactHash }
         : {}),
       ...(params.commitSha ? { commitSha: params.commitSha } : {}),
+      ...(builderContract
+        ? {
+            builderContract,
+            contractHash: builderContract.contractHash,
+          }
+        : contractHash
+          ? { contractHash }
+          : {}),
     };
   }
   return {
     ...common,
+    ...(contractHash ? { contractHash } : {}),
     reason:
       params.reason ??
       `${params.phase} attempt ${params.attempt} ${params.action}`,
@@ -834,7 +995,8 @@ async function projectPhaseReport(
       | "fail"
       | "block"
       | "needs-human"
-      | "abandon";
+      | "abandon"
+      | "extend-contract";
     evidence?: string[];
     report?: string;
     reason?: string;
@@ -849,6 +1011,16 @@ async function projectPhaseReport(
       params.phase === "review")
   )
     return;
+  if (params.action === "extend-contract" && params.report) {
+    parseBuilderContractReport(params.report);
+    await projector.projectEvent({
+      issueNumber: binding.issueNumber,
+      event,
+      markdown: params.report.trim(),
+      ...(signal ? { signal } : {}),
+    });
+    return;
+  }
   if (
     params.phase === "plan" &&
     params.action === "complete" &&
@@ -871,7 +1043,7 @@ async function projectPhaseReport(
     issueNumber: binding.issueNumber,
     event,
     markdown: checkpointMarkdown(params, binding.runId),
-    addLabels: ["fail", "block", "needs-human"].includes(params.action)
+    addLabels: (["fail", "block", "needs-human"] as readonly string[]).includes(params.action)
       ? ["needs-human"]
       : [],
     ...(signal ? { signal } : {}),
@@ -910,7 +1082,8 @@ function checkpointMarkdown(
       | "fail"
       | "block"
       | "needs-human"
-      | "abandon";
+      | "abandon"
+      | "extend-contract";
     evidence?: string[];
     report?: string;
     reason?: string;
@@ -941,7 +1114,8 @@ async function postDerivedPhaseArtifacts(
       | "fail"
       | "block"
       | "needs-human"
-      | "abandon";
+      | "abandon"
+      | "extend-contract";
     commitSha?: string;
     report?: string;
   },
@@ -995,7 +1169,8 @@ function workflowLabelForCheckpoint(params: {
     | "fail"
     | "block"
     | "needs-human"
-    | "abandon";
+    | "abandon"
+    | "extend-contract";
   report?: string;
 }): string | undefined {
   if (params.action === "start") {
@@ -1091,6 +1266,29 @@ async function canonicalizePotentialPath(
 function isPathWithin(root: string, target: string): boolean {
   const child = relative(root, target);
   return child === "" || (!child.startsWith("..") && !isAbsolute(child));
+}
+
+async function readAcceptedBuilderContract(
+  pi: ExtensionAPI,
+  binding: ForgeChildBinding,
+  signal?: AbortSignal,
+): Promise<BuilderContractArtifact> {
+  const token = await resolveGitHubToken(pi, binding.worktreeRoot, signal);
+  const transport = new FetchGitHubTransport({ token });
+  const store = new GitHubStateBranchStore(
+    transport,
+    binding.repository,
+    binding.stateBranch,
+  );
+  const snapshot = await store.readRun(binding.runId, signal);
+  if (snapshot.state?.builderContract) {
+    return normalizeBuilderContractArtifact(snapshot.state.builderContract);
+  }
+  const recovered = findBuilderContractInEvents(snapshot.events);
+  if (recovered) return recovered;
+  throw new Error(
+    "No accepted builder contract is persisted for this run; refusing to commit or prepare review.",
+  );
 }
 
 async function resolveGitHubToken(

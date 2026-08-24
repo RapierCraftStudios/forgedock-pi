@@ -1,9 +1,15 @@
 import {
+  isBuilderContractArtifact,
+  normalizeBuilderContractArtifact,
+  type BuilderContractArtifact,
+} from "./builder-contract.ts";
+import {
   hashRunEvent,
   isRunPhase,
   RUN_PHASES,
   type EffectRecordedPayload,
   type PhaseAttemptStatus,
+  type ContractExtendedPayload,
   type PhaseCompletedPayload,
   type PhaseQueuedPayload,
   type PhaseStartedPayload,
@@ -36,6 +42,7 @@ export interface PhaseAttempt {
   worktreePath?: string;
   branch?: string;
   baseSha?: string;
+  contractHash?: string;
   outputArtifactHash?: string;
   commitSha?: string;
   evidence: readonly string[];
@@ -69,6 +76,8 @@ export interface RunState {
   lease?: RepositoryLease;
   phases: Partial<Record<RunPhase, PhaseState>>;
   effects: Record<string, RecordedEffect>;
+  builderContract?: BuilderContractArtifact;
+  builderContractHistory?: readonly BuilderContractArtifact[];
   idempotencyKeys: Record<string, string>;
   eventIds: Record<string, true>;
   outcome?: "merged" | "closed";
@@ -182,6 +191,17 @@ function cloneState(state: RunState): RunState {
     ...state,
     phases,
     effects: { ...state.effects },
+    ...(state.builderContract
+      ? { builderContract: { ...state.builderContract, allowedPaths: state.builderContract.allowedPaths.map((entry) => ({ ...entry })) } }
+      : {}),
+    ...(state.builderContractHistory
+      ? {
+          builderContractHistory: state.builderContractHistory.map((contract) => ({
+            ...contract,
+            allowedPaths: contract.allowedPaths.map((entry) => ({ ...entry })),
+          })),
+        }
+      : {}),
     idempotencyKeys: { ...state.idempotencyKeys },
     eventIds: { ...state.eventIds },
   };
@@ -347,9 +367,30 @@ function applyLeaseRelease(state: RunState, event: RunEvent): void {
   state.lease = undefined;
 }
 
+function requireBoundContractHash(
+  state: RunState,
+  phase: RunPhase,
+  record: Record<string, unknown>,
+): string | undefined {
+  if (!state.builderContract || phase === "resolve" || phase === "investigate" || phase === "plan" || phase === "close" || phase === "cleanup") {
+    return typeof record.contractHash === "string"
+      ? record.contractHash
+      : undefined;
+  }
+  const contractHash = record.contractHash;
+  if (typeof contractHash !== "string" || contractHash !== state.builderContract.contractHash) {
+    throw new StateTransitionError(
+      "contract-hash-mismatch",
+      `Phase ${phase} must bind accepted builder contract ${state.builderContract.contractHash}.`,
+    );
+  }
+  return contractHash;
+}
+
 function applyPhaseQueued(state: RunState, event: RunEvent): void {
   assertLeaseEpoch(state, event);
   const { record, phase, attempt } = requirePhasePayload(event);
+  const contractHash = requireBoundContractHash(state, phase, record);
   const restartAction = requireString(record, "restartAction");
   const prior = currentAttempt(state, phase);
 
@@ -397,6 +438,7 @@ function applyPhaseQueued(state: RunState, event: RunEvent): void {
     ...(typeof record.inputArtifactHash === "string"
       ? { inputArtifactHash: record.inputArtifactHash }
       : {}),
+    ...(contractHash ? { contractHash } : {}),
   };
   state.phases[phase] = {
     phase,
@@ -408,6 +450,7 @@ function applyPhaseQueued(state: RunState, event: RunEvent): void {
 function applyPhaseStarted(state: RunState, event: RunEvent): void {
   assertLeaseEpoch(state, event);
   const { record, phase, attempt } = requirePhasePayload(event);
+  const contractHash = requireBoundContractHash(state, phase, record);
   const current = assertCurrentAttempt(state, phase, attempt, ["queued"]);
   const started: PhaseAttempt = {
     ...current,
@@ -422,6 +465,7 @@ function applyPhaseStarted(state: RunState, event: RunEvent): void {
       : {}),
     ...(typeof record.branch === "string" ? { branch: record.branch } : {}),
     ...(typeof record.baseSha === "string" ? { baseSha: record.baseSha } : {}),
+    ...(contractHash ? { contractHash } : {}),
   };
   replaceAttempt(state, phase, started);
 }
@@ -429,7 +473,24 @@ function applyPhaseStarted(state: RunState, event: RunEvent): void {
 function applyPhaseCompleted(state: RunState, event: RunEvent): void {
   assertLeaseEpoch(state, event);
   const { record, phase, attempt } = requirePhasePayload(event);
+  const contractHash = requireBoundContractHash(state, phase, record);
   const current = assertCurrentAttempt(state, phase, attempt, ["running"]);
+  let builderContract = state.builderContract;
+  if (phase === "plan") {
+    if (!isBuilderContractArtifact(record.builderContract)) {
+      throw new StateTransitionError(
+        "missing-builder-contract",
+        "Plan completion must persist a schema-valid builder contract artifact.",
+      );
+    }
+    builderContract = normalizeBuilderContractArtifact(record.builderContract);
+    if (record.contractHash !== builderContract.contractHash) {
+      throw new StateTransitionError(
+        "contract-hash-mismatch",
+        "Plan completion contractHash does not match its builder contract artifact.",
+      );
+    }
+  }
   const evidence = Array.isArray(record.evidence)
     ? record.evidence.filter(
         (entry): entry is string => typeof entry === "string",
@@ -440,6 +501,11 @@ function applyPhaseCompleted(state: RunState, event: RunEvent): void {
     status: "completed",
     evidence,
     finishedAt: event.occurredAt,
+    ...(phase === "plan" && builderContract
+      ? { contractHash: builderContract.contractHash }
+      : contractHash
+        ? { contractHash }
+        : {}),
     ...(typeof record.outputArtifactHash === "string"
       ? { outputArtifactHash: record.outputArtifactHash }
       : {}),
@@ -448,11 +514,69 @@ function applyPhaseCompleted(state: RunState, event: RunEvent): void {
       : {}),
   };
   replaceAttempt(state, phase, completed);
+  if (phase === "plan" && builderContract) {
+    state.builderContract = builderContract;
+    state.builderContractHistory = [builderContract];
+  }
+}
+
+function applyContractExtended(state: RunState, event: RunEvent): void {
+  assertLeaseEpoch(state, event);
+  const payload = payloadRecord(event) as Partial<ContractExtendedPayload>;
+  if (payload.phase !== "review" || !Number.isSafeInteger(payload.attempt)) {
+    throw new StateTransitionError(
+      "invalid-contract-extension",
+      "Contract extensions must target a review attempt.",
+    );
+  }
+  const currentAttemptState = assertCurrentAttempt(
+    state,
+    "review",
+    payload.attempt,
+    ["running"],
+  );
+  if (!state.builderContract) {
+    throw new StateTransitionError(
+      "missing-builder-contract",
+      "Cannot extend a missing builder contract.",
+    );
+  }
+  if (!isBuilderContractArtifact(payload.builderContract)) {
+    throw new StateTransitionError(
+      "invalid-contract-extension",
+      "Contract extension must contain a schema-valid builder contract artifact.",
+    );
+  }
+  const extension = normalizeBuilderContractArtifact(payload.builderContract);
+  if (
+    payload.contractHash !== extension.contractHash ||
+    payload.supersedes !== state.builderContract.contractHash ||
+    extension.supersedes !== state.builderContract.contractHash ||
+    extension.revision !== state.builderContract.revision + 1 ||
+    typeof payload.reason !== "string" ||
+    !payload.reason.trim()
+  ) {
+    throw new StateTransitionError(
+      "invalid-contract-extension",
+      "Contract extension must increment revision and supersede the accepted contract with an auditable reason.",
+    );
+  }
+  const previousContract = state.builderContract;
+  state.builderContract = extension;
+  state.builderContractHistory = [
+    ...(state.builderContractHistory ?? (previousContract ? [previousContract] : [])),
+    extension,
+  ];
+  replaceAttempt(state, "review", {
+    ...currentAttemptState,
+    contractHash: extension.contractHash,
+  });
 }
 
 function applyPhaseStopped(state: RunState, event: RunEvent): void {
   assertLeaseEpoch(state, event);
   const { record, phase, attempt } = requirePhasePayload(event);
+  const contractHash = requireBoundContractHash(state, phase, record);
   const current = assertCurrentAttempt(state, phase, attempt, [
     "queued",
     "running",
@@ -471,6 +595,7 @@ function applyPhaseStopped(state: RunState, event: RunEvent): void {
     );
   replaceAttempt(state, phase, {
     ...current,
+    ...(contractHash ? { contractHash } : {}),
     status,
     reason: requireString(record, "reason"),
     finishedAt: event.occurredAt,
@@ -593,6 +718,9 @@ export function applyRunEvent(
     case "phase.needs-human":
     case "phase.abandoned":
       applyPhaseStopped(state, event);
+      break;
+    case "contract.extended":
+      applyContractExtended(state, event);
       break;
     case "effect.recorded":
       applyEffect(state, event);
