@@ -1,6 +1,8 @@
 import { access, mkdir, realpath, rm } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 
+import { filterForgeRuntimeStatus } from "../agents/commit-staging.ts";
+
 export interface ExecOptions {
   cwd?: string;
   timeout?: number;
@@ -145,12 +147,13 @@ export class GitWorktreeManager {
   async assertClean(worktreePath: string, signal?: AbortSignal): Promise<void> {
     const result = await this.#git(
       worktreePath,
-      ["status", "--porcelain"],
+      ["status", "--porcelain", "--untracked-files=all"],
       30_000,
       signal,
     );
-    if (result.stdout.trim())
-      throw new Error(`Worktree is not clean:\n${result.stdout}`);
+    const dirtyProductStatus = filterForgeRuntimeStatus(result.stdout);
+    if (dirtyProductStatus.trim())
+      throw new Error(`Worktree is not clean:\n${dirtyProductStatus}`);
   }
 
   async push(

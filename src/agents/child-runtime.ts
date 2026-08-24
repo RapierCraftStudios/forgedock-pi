@@ -36,6 +36,14 @@ import {
   isForgeWorkOnResult,
 } from "./contracts.ts";
 import {
+  FORGE_RUNTIME_PATHS,
+  filterForgeRuntimeStatus,
+  findUnexpectedForgeRuntimePaths,
+  forgeProductStagingArgs,
+  forgeTrackedStagingArgs,
+  parseGitPathList,
+} from "./commit-staging.ts";
+import {
   FORGE_REVIEW_CORRECTNESS_AGENT,
   FORGE_REVIEW_SECURITY_AGENT,
   registerForgeAgents,
@@ -233,7 +241,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       const env = safeEnvironment(binding.runId);
       const status = await runProcess(
         "git",
-        ["-C", root, "status", "--porcelain"],
+        ["-C", root, "status", "--porcelain", "--untracked-files=all"],
         {
           cwd: root,
           timeoutMs: 30_000,
@@ -243,18 +251,71 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       );
       if (status.exitCode !== 0)
         throw new Error(`git status failed: ${status.stderr}`);
-      if (!status.stdout.trim())
+      if (!filterForgeRuntimeStatus(status.stdout).trim())
         throw new Error(
-          "Cannot create a Forge commit with no worktree changes.",
+          "Cannot create a Forge commit with no implementation changes.",
         );
-      const added = await runProcess("git", ["-C", root, "add", "-A"], {
-        cwd: root,
-        timeoutMs: 30_000,
-        env,
-        ...(signal ? { signal } : {}),
-      });
+      const tracked = await runProcess(
+        "git",
+        ["-C", root, ...forgeTrackedStagingArgs()],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (tracked.exitCode !== 0)
+        throw new Error(`git add --update failed: ${tracked.stderr}`);
+      const added = await runProcess(
+        "git",
+        ["-C", root, ...forgeProductStagingArgs()],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
       if (added.exitCode !== 0)
-        throw new Error(`git add failed: ${added.stderr}`);
+        throw new Error(`git add product paths failed: ${added.stderr}`);
+
+      const headRuntime = await runProcess(
+        "git",
+        ["-C", root, "ls-tree", "-r", "--name-only", "-z", "HEAD", "--", ...FORGE_RUNTIME_PATHS],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (headRuntime.exitCode !== 0)
+        throw new Error(`git ls-tree failed: ${headRuntime.stderr}`);
+      const staged = await runProcess(
+        "git",
+        ["-C", root, "diff", "--cached", "--name-only", "-z", "--"],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (staged.exitCode !== 0)
+        throw new Error(`git diff --cached failed: ${staged.stderr}`);
+      const unexpectedRuntimePaths = findUnexpectedForgeRuntimePaths(
+        parseGitPathList(staged.stdout),
+        parseGitPathList(headRuntime.stdout),
+      );
+      if (unexpectedRuntimePaths.length > 0)
+        throw new Error(
+          `Refusing to commit Forge runtime paths not tracked by HEAD: ${unexpectedRuntimePaths.join(", ")}`,
+        );
+      if (parseGitPathList(staged.stdout).length === 0)
+        throw new Error(
+          "Cannot create a Forge commit: no implementation changes remain after excluding Forge runtime paths.",
+        );
       const message =
         params.kind === "implementation"
           ? `forge: implement issue #${binding.issueNumber}`
@@ -361,7 +422,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
       const status = await runProcess(
         "git",
-        ["-C", root, "status", "--porcelain"],
+        ["-C", root, "status", "--porcelain", "--untracked-files=all"],
         {
           cwd: root,
           timeoutMs: 30_000,
@@ -371,7 +432,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       );
       if (status.exitCode !== 0)
         throw new Error(`git status failed: ${status.stderr}`);
-      if (status.stdout.trim()) {
+      if (filterForgeRuntimeStatus(status.stdout).trim()) {
         throw new Error(
           "Review preparation requires a clean committed worktree. Run forge_commit again for residual formatting or review-fix changes.",
         );
