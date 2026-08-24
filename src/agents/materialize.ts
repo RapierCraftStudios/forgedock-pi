@@ -1,5 +1,11 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import {
+  appendFile,
+  mkdir,
+  readFile,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -13,10 +19,14 @@ import {
   FORGE_WORK_ON_PROMPT,
   FORGE_WORK_ON_TOOLS,
 } from "./register.ts";
+import { FORGE_RUNTIME_IGNORE_ENTRIES } from "./runtime-paths.ts";
+
+const FORGE_RUNTIME_IGNORE_MARKER = "# ForgeDock generated runtime paths";
 
 export async function materializeForgeAgents(
   worktreeRoot: string,
 ): Promise<string[]> {
+  await ensureForgeRuntimeIgnored(worktreeRoot);
   const agentsDir = join(worktreeRoot, ".pi", "agents");
   await mkdir(agentsDir, { recursive: true, mode: 0o700 });
   const childRuntimePath = fileURLToPath(
@@ -72,6 +82,52 @@ export async function materializeForgeAgents(
     paths.push(path);
   }
   return paths;
+}
+
+async function ensureForgeRuntimeIgnored(worktreeRoot: string): Promise<void> {
+  const gitDirectory = await resolveGitDirectory(worktreeRoot);
+  if (!gitDirectory) return;
+
+  const excludePath = join(gitDirectory, "info", "exclude");
+  await mkdir(dirname(excludePath), { recursive: true });
+  const existing = await readFile(excludePath, "utf8").catch(() => "");
+  const lines = new Set(existing.split(/\r?\n/));
+  const missingEntries = FORGE_RUNTIME_IGNORE_ENTRIES.filter(
+    (entry) => !lines.has(entry),
+  );
+  if (missingEntries.length === 0) return;
+
+  const separator = existing && !existing.endsWith("\n") ? "\n" : "";
+  await appendFile(
+    excludePath,
+    `${separator}${FORGE_RUNTIME_IGNORE_MARKER}\n${missingEntries.join("\n")}\n`,
+    "utf8",
+  );
+}
+
+async function resolveGitDirectory(
+  worktreeRoot: string,
+): Promise<string | undefined> {
+  const gitPath = join(worktreeRoot, ".git");
+  let gitStats;
+  try {
+    gitStats = await stat(gitPath);
+  } catch {
+    return undefined;
+  }
+  if (gitStats.isDirectory()) return gitPath;
+
+  const gitFile = await readFile(gitPath, "utf8").catch(() => "");
+  const match = /^gitdir:\s*(.+)\s*$/im.exec(gitFile);
+  if (!match?.[1]) return undefined;
+  const worktreeGitDirectory = resolve(worktreeRoot, match[1]);
+  const commonDirectory = await readFile(
+    join(worktreeGitDirectory, "commondir"),
+    "utf8",
+  ).catch(() => "");
+  return commonDirectory.trim()
+    ? resolve(worktreeGitDirectory, commonDirectory.trim())
+    : worktreeGitDirectory;
 }
 
 function agentFile(input: {

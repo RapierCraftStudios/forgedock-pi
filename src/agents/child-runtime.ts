@@ -40,6 +40,12 @@ import {
   FORGE_REVIEW_SECURITY_AGENT,
   registerForgeAgents,
 } from "./register.ts";
+import {
+  FORGE_RUNTIME_GIT_PATHSPECS,
+  FORGE_RUNTIME_PATHS,
+  isForgeRuntimePath,
+  parseNullDelimitedGitPaths,
+} from "./runtime-paths.ts";
 
 const BINDING_ENV = "PI_SUBAGENT_EXTENSION_BINDINGS";
 const BINDING_NAMESPACE = "forgedock.pi/1";
@@ -247,14 +253,73 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         throw new Error(
           "Cannot create a Forge commit with no worktree changes.",
         );
-      const added = await runProcess("git", ["-C", root, "add", "-A"], {
-        cwd: root,
-        timeoutMs: 30_000,
-        env,
-        ...(signal ? { signal } : {}),
-      });
+      const trackedRuntime = await runProcess(
+        "git",
+        ["-C", root, "ls-files", "-z", "--", ...FORGE_RUNTIME_PATHS],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (trackedRuntime.exitCode !== 0)
+        throw new Error(`git ls-files failed: ${trackedRuntime.stderr}`);
+      const trackedRuntimePaths = new Set(
+        parseNullDelimitedGitPaths(trackedRuntime.stdout),
+      );
+
+      const added = await runProcess(
+        "git",
+        ["-C", root, "add", "-A", "--", ".", ...FORGE_RUNTIME_GIT_PATHSPECS],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
       if (added.exitCode !== 0)
         throw new Error(`git add failed: ${added.stderr}`);
+
+      const staged = await runProcess(
+        "git",
+        ["-C", root, "diff", "--cached", "--name-only", "-z", "--"],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (staged.exitCode !== 0)
+        throw new Error(`git diff --cached failed: ${staged.stderr}`);
+      const newlyStagedRuntimePaths = [
+        ...new Set(
+          parseNullDelimitedGitPaths(staged.stdout).filter(
+            (path) =>
+              isForgeRuntimePath(path) && !trackedRuntimePaths.has(path),
+          ),
+        ),
+      ];
+      if (newlyStagedRuntimePaths.length > 0) {
+        const reset = await runProcess(
+          "git",
+          ["-C", root, "reset", "--", ...FORGE_RUNTIME_PATHS],
+          {
+            cwd: root,
+            timeoutMs: 30_000,
+            env,
+            ...(signal ? { signal } : {}),
+          },
+        );
+        if (reset.exitCode !== 0)
+          throw new Error(`git reset failed: ${reset.stderr}`);
+        throw new Error(
+          `Forge commit refused newly staged runtime paths: ${newlyStagedRuntimePaths.join(", ")}`,
+        );
+      }
+
       const message =
         params.kind === "implementation"
           ? `forge: implement issue #${binding.issueNumber}`
