@@ -10,8 +10,8 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:56260dc3ed13562cf9e95ff317995f4f3debb9979bbc285dfffeb25a415112ff",
+  "sequence": 6,
+  "lastEventHash": "sha256:2561b06a502b8271256e8036babe96361cf210576df2eefc21d515ed59bdc779",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -39,6 +39,15 @@
         "At the frozen base, src/workflows/work-on.ts lines 239-295 handle an empty activeNodes map by resolving currentNodeId through parentNodeFromId and calling #runParentNode; commit 320ad98 introduced this recovery branch, so this fact is preserved for the following investigation rather than treated as a new implementation here."
       ],
       "finishedAt": "2026-08-25T13:24:06.462Z"
+    },
+    "investigate-1": {
+      "nodeId": "investigate-1",
+      "node": "investigate",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/3b627903-4a44-4d72-9cc6-dbbb3724374f/.pi/forge/3b627903-4a44-4d72-9cc6-dbbb3724374f-investigate-1.json"
     }
   },
   "effects": {},
@@ -47,13 +56,15 @@
     "node:resolve-1:queued": "2d049745-20d9-443c-a16b-6c9823ce24c3",
     "node:resolve-1:started": "891edd6a-f0ca-48a7-8d88-05b258c742f0",
     "node:resolve-1:receipt-bound": "135de2ad-7753-42b5-b240-0385f742adc2",
-    "node:resolve-1:completed": "69d22f18-b858-48e8-aede-f685fb2ad1fe"
+    "node:resolve-1:completed": "69d22f18-b858-48e8-aede-f685fb2ad1fe",
+    "node:investigate-1:queued": "9f521c9f-b5e9-45ae-ae94-cd1ddd25948e"
   },
   "eventIds": {
     "df0c4b4f-bd5c-4cdb-b134-a35629eae799": true,
     "2d049745-20d9-443c-a16b-6c9823ce24c3": true,
     "891edd6a-f0ca-48a7-8d88-05b258c742f0": true,
     "135de2ad-7753-42b5-b240-0385f742adc2": true,
-    "69d22f18-b858-48e8-aede-f685fb2ad1fe": true
+    "69d22f18-b858-48e8-aede-f685fb2ad1fe": true,
+    "9f521c9f-b5e9-45ae-ae94-cd1ddd25948e": true
   }
 }
