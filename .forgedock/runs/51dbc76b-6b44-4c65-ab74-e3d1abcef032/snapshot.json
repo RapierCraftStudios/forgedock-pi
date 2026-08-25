@@ -6,8 +6,8 @@
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
   "status": "active",
-  "sequence": 30,
-  "lastEventHash": "sha256:6ef784dbc563786aa22f3a5516b008907a2642efcfd2a15c66f576c4082c3163",
+  "sequence": 31,
+  "lastEventHash": "sha256:0d7ea0adae637d5095c6cee4c19b5302c1dccf86edbf3ca7fbec9dd8b6ee460a",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -166,10 +166,12 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "reconcile and retry parent-owned close",
-          "evidence": []
+          "evidence": [],
+          "logicalNodeId": "parent-close-1",
+          "startedAt": "2026-08-25T04:13:31.187Z"
         }
       ]
     }
@@ -224,7 +226,8 @@
     "effect:pr:26": "5ed8e600-b01e-4daf-a41f-c908b8ba1a6a",
     "effect:pr:26:merge": "35680f39-035a-4dd6-88a0-0c6b7d9ac0e8",
     "phase:merge:1:complete": "40ad3ff2-f1e5-4952-8bbe-f742f78744a6",
-    "phase:close:1:queue": "49eb513f-2875-434f-be16-c2eeaab2dee0"
+    "phase:close:1:queue": "49eb513f-2875-434f-be16-c2eeaab2dee0",
+    "phase:close:1:start": "a0f06217-06c7-42b3-abcd-9914f125bbd5"
   },
   "eventIds": {
     "e08bac51-4ec2-4f4a-a642-248314a3096f": true,
@@ -256,7 +259,8 @@
     "5ed8e600-b01e-4daf-a41f-c908b8ba1a6a": true,
     "35680f39-035a-4dd6-88a0-0c6b7d9ac0e8": true,
     "40ad3ff2-f1e5-4952-8bbe-f742f78744a6": true,
-    "49eb513f-2875-434f-be16-c2eeaab2dee0": true
+    "49eb513f-2875-434f-be16-c2eeaab2dee0": true,
+    "a0f06217-06c7-42b3-abcd-9914f125bbd5": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
