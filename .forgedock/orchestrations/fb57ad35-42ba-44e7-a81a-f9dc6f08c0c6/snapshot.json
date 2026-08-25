@@ -6,14 +6,16 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 1,
-  "lastEventHash": "sha256:779085ee2e2c8551402eec300d30b38dbc6f6169376489d2c0b4ce031da9234c",
+  "sequence": 2,
+  "lastEventHash": "sha256:ea8588c64044f3b63d39f06cd817467bb8664b98dc4763813c8816881cf39dee",
   "lanes": [
     {
       "issueNumber": 49,
       "ordinal": 0,
-      "status": "queued",
-      "refreshes": 0
+      "status": "running",
+      "refreshes": 0,
+      "forgeRunId": "0728ea77-6c26-447c-a00f-eb93c6edf47f",
+      "subagentRunId": "5d0e5f2f-0834-461f-be0d-8d71bb4f703b"
     },
     {
       "issueNumber": 50,
@@ -47,7 +49,8 @@
     }
   ],
   "idempotencyKeys": {
-    "orchestration:create": "51cb150f-e6fa-4e23-9b63-1f0ad940cb55"
+    "orchestration:create": "51cb150f-e6fa-4e23-9b63-1f0ad940cb55",
+    "lane:49:started": "b288cdb5-6ce5-40a9-bc85-8a8ecaa906e7"
   },
   "createdAt": "2026-08-25T17:55:15.729Z"
 }
