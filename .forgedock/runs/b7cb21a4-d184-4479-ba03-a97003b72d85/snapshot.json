@@ -10,8 +10,8 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:fca595591f0251b35bc258aa01685c692488f57c65a85311327941d54ec0a7c4",
+  "sequence": 9,
+  "lastEventHash": "sha256:720dbbc49b96429dd44a038740f8769a4a647c3ddc05f9dcb1bc0b8c0f884b10",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -51,7 +51,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/b7cb21a4-d184-4479-ba03-a97003b72d85/.pi/forge/b7cb21a4-d184-4479-ba03-a97003b72d85-investigate-1.json",
       "subagentRunId": "eb638215-796c-4c0c-9d92-542358a9b515",
@@ -60,7 +60,21 @@
       "startedAt": "2026-08-25T13:10:55.634Z",
       "previousSubagentRunId": "launch:investigate-1:66002489-332a-4207-9206-2e18a0f1471d",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "GitHub issue #45 is open and documents a bounded resolve run that finalized a valid result but was later failed for making no source edits; its acceptance criteria explicitly separate read-only resolve, investigate, and plan nodes from writer nodes.",
+        "src/agents/register.ts:158-183 registers FORGE_WORK_ON_AGENT as acceptanceRole writer with checked default evidence requiring changed-files and tests-added, and enables completionGuard.",
+        "src/agents/materialize.ts:37-49 generates the forge-work-on project agent with acceptanceRole writer; the generated definition has completionGuard true.",
+        "src/adapters/subagents.ts:253-285 routes every bounded node through FORGE_WORK_ON_AGENT and supplies acceptance level none, but the spawn request does not select a read-only agent role or disable the static writer completion guard.",
+        "src/agents/child-runtime.ts:170-180 permits bash only for resolve, investigate, and plan, while src/agents/child-runtime.ts:1049-1057 grants forge_commit only to implement; runtime capabilities therefore already distinguish read-only and writer node classes.",
+        "src/workflows/work-on.ts:174-188 passes provider completion errors into active-node reconciliation, and lines 739-744 plus 817-840 inspect the bound result artifact even during failed completion; this is a partial recovery seam but lacks an integration test for an unrelated acceptance failure and a valid finalized artifact.",
+        "Existing tests cover bounded spawn wording and node tool permissions but do not assert per-node acceptance roles, no-diff read-only completion, changed-file writer completion, or provider-failure artifact reconciliation.",
+        "The frozen worktree has no source diff, and npm test passed all 80 tests while npm run typecheck passed."
+      ],
+      "finishedAt": "2026-08-25T13:16:02.688Z"
     }
   },
   "effects": {},
@@ -72,7 +86,8 @@
     "node:resolve-1:completed": "778adebe-47ee-43d0-b149-4091b7e4a384",
     "node:investigate-1:queued": "8e10aae7-3d6b-4ddc-a0d9-be7d94561aaf",
     "node:investigate-1:started": "635e6e21-d43d-4fb0-aa96-f38a4b7c0fd2",
-    "node:investigate-1:receipt-bound": "4fa6e40d-e984-45f7-8267-41e703c388f0"
+    "node:investigate-1:receipt-bound": "4fa6e40d-e984-45f7-8267-41e703c388f0",
+    "node:investigate-1:completed": "5efb9fc3-bde3-4b33-af0b-c71e7205e9fc"
   },
   "eventIds": {
     "933f0a0d-574b-44fc-9a4f-0a2e9fd26406": true,
@@ -82,6 +97,7 @@
     "778adebe-47ee-43d0-b149-4091b7e4a384": true,
     "8e10aae7-3d6b-4ddc-a0d9-be7d94561aaf": true,
     "635e6e21-d43d-4fb0-aa96-f38a4b7c0fd2": true,
-    "4fa6e40d-e984-45f7-8267-41e703c388f0": true
+    "4fa6e40d-e984-45f7-8267-41e703c388f0": true,
+    "5efb9fc3-bde3-4b33-af0b-c71e7205e9fc": true
   }
 }
