@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 12,
-  "lastEventHash": "sha256:b824ab36022017a2e37d732addf5f9ec47d697859a4eab9d6d7a1752e49ad0b1",
+  "sequence": 13,
+  "lastEventHash": "sha256:3b55bbe00b1bfdff7ad0edd15da516c268661daec86c8c3b1b8c55eb29efac9c",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -74,7 +74,7 @@
       "node": "plan",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/647f8b9f-3eaa-4f3f-9bcb-c777f83f60c1/.pi/forge/647f8b9f-3eaa-4f3f-9bcb-c777f83f60c1-plan-1.json",
       "subagentRunId": "f4bdbdd9-340e-4cb9-a5c3-2f6a44c9d6ed",
@@ -83,7 +83,33 @@
       "startedAt": "2026-08-25T20:07:42.814Z",
       "previousSubagentRunId": "launch:plan-1:453225d4-5324-4b87-a3da-23b294b3679e",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "verificationResults": [],
+      "builderContract": {
+        "schema": "forgedock.builder-path-contract/v1",
+        "revision": 1,
+        "allowedPaths": [
+          "src/ui/commands.ts",
+          "src/workflows/orchestrate.ts",
+          "src/workflows/work-on.ts",
+          "test/ui/commands.test.ts",
+          "test/workflows/orchestrate.test.ts",
+          "test/workflows/work-on.test.ts"
+        ],
+        "contractHash": "1ed196394665b836783815f4a540091274ee930f4581c8eef96c8d67b48eee98"
+      },
+      "outcome": "completed",
+      "evidence": [
+        "Bound read-only plan inspected cancellation control flow at frozen base 1b018483cd94b8324ae7e34eaa07293861f4f491.",
+        "src/ui/commands.ts:164-190 confirms the interactive handler awaits ForgeOrchestrationController.cancel and emits success only after it returns.",
+        "src/workflows/orchestrate.ts:224-268 reads authoritative state, waits for stopOrchestration, then appends orchestration.cancelled and synchronizes the session link; the link remains running while child shutdown is awaited.",
+        "src/workflows/orchestrate.ts:436-594 and 597-628 show pump and heartbeat work are gated only by link.status === running, creating cancellation concurrency hazards before the durable cancellation result updates that status.",
+        "src/workflows/work-on.ts:2104-2117 marks locally active linked runs failed, stops only link.subagentRunId, and discards all stop failures through Promise.allSettled; activeNodes may hold additional current child receipts.",
+        "src/workflows/orchestration-journal.ts:159-184 and 185-273 provide the idempotent orchestration:cancel event and atomic lease-release commit that the controller must reliably reach.",
+        "No dedicated orchestration cancellation or /forge:cancel regression tests are present under test/; .forge/config.json configures GitHub CI for dogfood and no local verification commands."
+      ],
+      "finishedAt": "2026-08-25T20:12:18.620Z"
     }
   },
   "effects": {},
@@ -99,7 +125,8 @@
     "node:investigate-1:completed": "3c8a1876-82a2-4de6-a785-90163ac3ec43",
     "node:plan-1:queued": "fbe5de38-e718-438a-8a68-62a2b62e17ba",
     "node:plan-1:started": "970d8727-d1ae-4dcc-9be6-a319ce7dd09b",
-    "node:plan-1:receipt-bound": "88faf3ab-a88b-4704-9636-2a6f80c35a4c"
+    "node:plan-1:receipt-bound": "88faf3ab-a88b-4704-9636-2a6f80c35a4c",
+    "node:plan-1:completed": "a3027d6a-1852-4a9a-a506-69adfbcf5d41"
   },
   "eventIds": {
     "28127e57-647b-4271-865e-4db189ff5d19": true,
@@ -113,6 +140,7 @@
     "3c8a1876-82a2-4de6-a785-90163ac3ec43": true,
     "fbe5de38-e718-438a-8a68-62a2b62e17ba": true,
     "970d8727-d1ae-4dcc-9be6-a319ce7dd09b": true,
-    "88faf3ab-a88b-4704-9636-2a6f80c35a4c": true
+    "88faf3ab-a88b-4704-9636-2a6f80c35a4c": true,
+    "a3027d6a-1852-4a9a-a506-69adfbcf5d41": true
   }
 }
