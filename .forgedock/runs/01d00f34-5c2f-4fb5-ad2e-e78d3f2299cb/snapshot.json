@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 14,
-  "lastEventHash": "sha256:217ce3d1e2dff4dac8410c27e6a08047bea449fd16759cc84542ccc692e3e349",
+  "sequence": 15,
+  "lastEventHash": "sha256:8a619d0af8ea67c8b09cd7a438d3c5dc1ac14e7cf65d6aaf0f1de16a7c7d5945",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -115,9 +115,13 @@
       "node": "prepare-worktree",
       "attempt": 1,
       "round": 1,
-      "status": "queued",
+      "status": "running",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
-      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/01d00f34-5c2f-4fb5-ad2e-e78d3f2299cb/.pi/forge/01d00f34-5c2f-4fb5-ad2e-e78d3f2299cb-prepare-worktree-1.json"
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/01d00f34-5c2f-4fb5-ad2e-e78d3f2299cb/.pi/forge/01d00f34-5c2f-4fb5-ad2e-e78d3f2299cb-prepare-worktree-1.json",
+      "subagentRunId": "launch:prepare-worktree-1:ec8897df-b7ce-4c6a-8ff6-7360d283028d",
+      "launchNonce": "ec8897df-b7ce-4c6a-8ff6-7360d283028d",
+      "launchIntent": true,
+      "startedAt": "2026-08-25T21:38:51.078Z"
     }
   },
   "effects": {},
@@ -135,7 +139,8 @@
     "node:plan-1:started": "a2b9a0a9-ca85-41d1-941d-a5b77dc4dd9d",
     "node:plan-1:receipt-bound": "f718a297-8e6d-4238-aff8-001da94ed597",
     "node:plan-1:completed": "0d500783-c1b9-41ec-bc09-f1669333c58d",
-    "node:prepare-worktree-1:queued": "53eb374c-d913-4738-ae62-542b8c166ee2"
+    "node:prepare-worktree-1:queued": "53eb374c-d913-4738-ae62-542b8c166ee2",
+    "node:prepare-worktree-1:started": "314d7213-c0f9-4b7f-a6b2-d63ef55742bc"
   },
   "eventIds": {
     "b212ad4a-3bb2-4f46-baa0-50c26cd787a3": true,
@@ -151,6 +156,7 @@
     "a2b9a0a9-ca85-41d1-941d-a5b77dc4dd9d": true,
     "f718a297-8e6d-4238-aff8-001da94ed597": true,
     "0d500783-c1b9-41ec-bc09-f1669333c58d": true,
-    "53eb374c-d913-4738-ae62-542b8c166ee2": true
+    "53eb374c-d913-4738-ae62-542b8c166ee2": true,
+    "314d7213-c0f9-4b7f-a6b2-d63ef55742bc": true
   }
 }
