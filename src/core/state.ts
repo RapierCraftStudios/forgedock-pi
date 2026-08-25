@@ -13,6 +13,13 @@ import {
   type RunPhase,
   validateRunEvent,
 } from "./events.ts";
+import {
+  hashBuilderContract,
+  normalizeBuilderContract,
+  validateBuilderContractRevision,
+  type BuilderContract,
+  type BuilderContractRevision,
+} from "./builder-contract.ts";
 import { type RepositoryLease, validateRepositoryLease } from "./lease.ts";
 
 export const RUN_STATE_SCHEMA = "forgedock.run-state/v1" as const;
@@ -30,6 +37,8 @@ export interface PhaseAttempt {
   status: PhaseAttemptStatus;
   leaseEpoch: number;
   restartAction: string;
+  contractHash?: string;
+  contractRevision?: number;
   inputArtifactHash?: string;
   logicalNodeId?: string;
   subagentRunId?: string;
@@ -47,6 +56,16 @@ export interface PhaseAttempt {
 export interface PhaseState {
   phase: RunPhase;
   attempts: readonly PhaseAttempt[];
+}
+
+export interface AcceptedBuilderContract {
+  contract: BuilderContract;
+  contractHash: string;
+  revision: number;
+  source: "plan" | "review-fix";
+  eventId: string;
+  previousContractHash?: string;
+  reason?: string;
 }
 
 export interface RecordedEffect {
@@ -69,6 +88,8 @@ export interface RunState {
   lease?: RepositoryLease;
   phases: Partial<Record<RunPhase, PhaseState>>;
   effects: Record<string, RecordedEffect>;
+  builderContract?: AcceptedBuilderContract;
+  contractRevisions: readonly BuilderContractRevision[];
   idempotencyKeys: Record<string, string>;
   eventIds: Record<string, true>;
   outcome?: "merged" | "closed";
@@ -182,6 +203,26 @@ function cloneState(state: RunState): RunState {
     ...state,
     phases,
     effects: { ...state.effects },
+    ...(state.builderContract
+      ? {
+          builderContract: {
+            ...state.builderContract,
+            contract: {
+              ...state.builderContract.contract,
+              allowedPaths: state.builderContract.contract.allowedPaths.map(
+                (rule) => ({ ...rule }),
+              ),
+            },
+          },
+        }
+      : {}),
+    contractRevisions: (state.contractRevisions ?? []).map((revision) => ({
+      ...revision,
+      contract: {
+        ...revision.contract,
+        allowedPaths: revision.contract.allowedPaths.map((rule) => ({ ...rule })),
+      },
+    })),
     idempotencyKeys: { ...state.idempotencyKeys },
     eventIds: { ...state.eventIds },
   };
@@ -351,6 +392,7 @@ function applyPhaseQueued(state: RunState, event: RunEvent): void {
   assertLeaseEpoch(state, event);
   const { record, phase, attempt } = requirePhasePayload(event);
   const restartAction = requireString(record, "restartAction");
+  assertContractBinding(state, phase, record);
   const prior = currentAttempt(state, phase);
 
   if (prior) {
@@ -394,6 +436,12 @@ function applyPhaseQueued(state: RunState, event: RunEvent): void {
     leaseEpoch: event.actor.leaseEpoch,
     restartAction,
     evidence: [],
+    ...(typeof record.contractHash === "string"
+      ? { contractHash: record.contractHash }
+      : {}),
+    ...(Number.isSafeInteger(record.contractRevision)
+      ? { contractRevision: record.contractRevision as number }
+      : {}),
     ...(typeof record.inputArtifactHash === "string"
       ? { inputArtifactHash: record.inputArtifactHash }
       : {}),
@@ -405,14 +453,43 @@ function applyPhaseQueued(state: RunState, event: RunEvent): void {
   state.status = "active";
 }
 
+function assertContractBinding(
+  state: RunState,
+  phase: RunPhase,
+  record: Record<string, unknown>,
+): void {
+  if (!state.builderContract) return;
+  if (phase !== "implement" && phase !== "verify" && phase !== "review")
+    return;
+  if (record.contractHash !== state.builderContract.contractHash) {
+    throw new StateTransitionError(
+      "contract-hash-mismatch",
+      `Phase ${phase} must bind accepted builder contract ${state.builderContract.contractHash}.`,
+    );
+  }
+  if (record.contractRevision !== state.builderContract.revision) {
+    throw new StateTransitionError(
+      "contract-revision-mismatch",
+      `Phase ${phase} must bind builder contract revision ${state.builderContract.revision}.`,
+    );
+  }
+}
+
 function applyPhaseStarted(state: RunState, event: RunEvent): void {
   assertLeaseEpoch(state, event);
   const { record, phase, attempt } = requirePhasePayload(event);
   const current = assertCurrentAttempt(state, phase, attempt, ["queued"]);
+  assertContractBinding(state, phase, record);
   const started: PhaseAttempt = {
     ...current,
     status: "running",
     logicalNodeId: requireString(record, "logicalNodeId"),
+    ...(typeof record.contractHash === "string"
+      ? { contractHash: record.contractHash }
+      : {}),
+    ...(Number.isSafeInteger(record.contractRevision)
+      ? { contractRevision: record.contractRevision as number }
+      : {}),
     startedAt: event.occurredAt,
     ...(typeof record.subagentRunId === "string"
       ? { subagentRunId: record.subagentRunId }
@@ -430,6 +507,45 @@ function applyPhaseCompleted(state: RunState, event: RunEvent): void {
   assertLeaseEpoch(state, event);
   const { record, phase, attempt } = requirePhasePayload(event);
   const current = assertCurrentAttempt(state, phase, attempt, ["running"]);
+  if (phase === "plan" && record.builderContract !== undefined) {
+    let contract: BuilderContract;
+    try {
+      contract = normalizeBuilderContract(record.builderContract);
+    } catch (error) {
+      throw new StateTransitionError(
+        "invalid-builder-contract",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+    const contractHash = hashBuilderContract(contract);
+    if (record.contractHash !== contractHash) {
+      throw new StateTransitionError(
+        "contract-hash-mismatch",
+        "Plan builder contract hash does not match the contract artifact.",
+      );
+    }
+    if (record.contractRevision !== contract.revision) {
+      throw new StateTransitionError(
+        "contract-revision-mismatch",
+        "Plan builder contract revision does not match the contract artifact.",
+      );
+    }
+    if (state.builderContract) {
+      throw new StateTransitionError(
+        "contract-already-accepted",
+        "A builder contract is already accepted for this run.",
+      );
+    }
+    state.builderContract = {
+      contract,
+      contractHash,
+      revision: contract.revision,
+      source: "plan",
+      eventId: event.eventId,
+    };
+  } else {
+    assertContractBinding(state, phase, record);
+  }
   const evidence = Array.isArray(record.evidence)
     ? record.evidence.filter(
         (entry): entry is string => typeof entry === "string",
@@ -440,6 +556,12 @@ function applyPhaseCompleted(state: RunState, event: RunEvent): void {
     status: "completed",
     evidence,
     finishedAt: event.occurredAt,
+    ...(typeof record.contractHash === "string"
+      ? { contractHash: record.contractHash }
+      : {}),
+    ...(Number.isSafeInteger(record.contractRevision)
+      ? { contractRevision: record.contractRevision as number }
+      : {}),
     ...(typeof record.outputArtifactHash === "string"
       ? { outputArtifactHash: record.outputArtifactHash }
       : {}),
@@ -481,6 +603,46 @@ function applyPhaseStopped(state: RunState, event: RunEvent): void {
       : status === "blocked"
         ? "blocked"
         : "failed";
+}
+
+function applyContractRevision(state: RunState, event: RunEvent): void {
+  assertLeaseEpoch(state, event);
+  const currentReview = currentAttempt(state, "review");
+  if (!currentReview || currentReview.status !== "running") {
+    throw new StateTransitionError(
+      "contract-revision-phase",
+      "Builder contract revisions are only accepted during a running review phase.",
+    );
+  }
+  if (!state.builderContract) {
+    throw new StateTransitionError(
+      "missing-builder-contract",
+      "Cannot revise a builder contract before plan acceptance.",
+    );
+  }
+  const payload = payloadRecord(event);
+  try {
+    validateBuilderContractRevision(payload, state.builderContract.contract);
+  } catch (error) {
+    throw new StateTransitionError(
+      "invalid-contract-revision",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+  const revision = payload as unknown as BuilderContractRevision;
+  state.builderContract = {
+    contract: revision.contract,
+    contractHash: revision.contractHash,
+    revision: revision.revision,
+    source: "review-fix",
+    eventId: event.eventId,
+    previousContractHash: revision.previousContractHash,
+    reason: revision.reason,
+  };
+  state.contractRevisions = [
+    ...(state.contractRevisions ?? []),
+    revision,
+  ];
 }
 
 function applyEffect(state: RunState, event: RunEvent): void {
@@ -551,6 +713,7 @@ function createInitialState(event: RunEvent): RunState {
     lastEventHash: eventHash,
     phases: {},
     effects: {},
+    contractRevisions: [],
     idempotencyKeys: { [event.idempotencyKey]: event.eventId },
     eventIds: { [event.eventId]: true },
   };
@@ -593,6 +756,9 @@ export function applyRunEvent(
     case "phase.needs-human":
     case "phase.abandoned":
       applyPhaseStopped(state, event);
+      break;
+    case "contract.revised":
+      applyContractRevision(state, event);
       break;
     case "effect.recorded":
       applyEffect(state, event);
@@ -666,3 +832,4 @@ export type {
   PhaseStoppedPayload,
   RunCreatedPayload,
 };
+export type { BuilderContract, BuilderContractRevision } from "./builder-contract.ts";

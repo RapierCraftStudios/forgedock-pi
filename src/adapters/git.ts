@@ -1,6 +1,11 @@
 import { access, mkdir, realpath, rm } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 
+import {
+  assertBuilderContractPaths,
+  type BuilderContract,
+} from "../core/builder-contract.ts";
+
 export interface ExecOptions {
   cwd?: string;
   timeout?: number;
@@ -132,14 +137,52 @@ export class GitWorktreeManager {
   ): Promise<string[]> {
     const result = await this.#git(
       worktreePath,
-      ["diff", "--name-only", `${baseSha}...HEAD`],
+      [
+        "diff",
+        "--name-status",
+        "--find-renames",
+        "-z",
+        `${baseSha}...HEAD",
+        "--",
+      ],
       30_000,
       signal,
     );
-    return result.stdout
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
+    return parseChangedGitPaths(result.stdout);
+  }
+
+  async stagedFiles(
+    worktreePath: string,
+    signal?: AbortSignal,
+  ): Promise<string[]> {
+    const result = await this.#git(
+      worktreePath,
+      ["diff", "--cached", "--name-status", "--find-renames", "-z", "--"],
+      30_000,
+      signal,
+    );
+    return parseChangedGitPaths(result.stdout);
+  }
+
+  async assertChangedFilesWithinContract(
+    worktreePath: string,
+    baseSha: string,
+    contract: BuilderContract,
+    signal?: AbortSignal,
+  ): Promise<string[]> {
+    const paths = await this.changedFiles(worktreePath, baseSha, signal);
+    assertBuilderContractPaths(contract, paths);
+    return paths;
+  }
+
+  async assertStagedFilesWithinContract(
+    worktreePath: string,
+    contract: BuilderContract,
+    signal?: AbortSignal,
+  ): Promise<string[]> {
+    const paths = await this.stagedFiles(worktreePath, signal);
+    assertBuilderContractPaths(contract, paths);
+    return paths;
   }
 
   async assertClean(worktreePath: string, signal?: AbortSignal): Promise<void> {
@@ -237,6 +280,29 @@ async function exists(path: string): Promise<boolean> {
 function assertSafeIdentifier(value: string, field: string): void {
   if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value))
     throw new TypeError(`${field} contains unsafe characters.`);
+}
+
+/**
+ * Parse `git diff --name-status -z` without losing the old side of a rename
+ * or copy. Git emits status, path for ordinary changes and status, old path,
+ * new path for rename/copy records.
+ */
+export function parseChangedGitPaths(output: string): string[] {
+  const tokens = output.split("\0");
+  const paths: string[] = [];
+  for (let index = 0; index < tokens.length; ) {
+    const status = tokens[index++];
+    if (!status) continue;
+    const first = tokens[index++];
+    if (!first) continue;
+    paths.push(first);
+    const kind = status.charAt(0);
+    if (kind === "R" || kind === "C") {
+      const second = tokens[index++];
+      if (second) paths.push(second);
+    }
+  }
+  return [...new Set(paths)].sort((left, right) => left.localeCompare(right));
 }
 
 function isPathWithin(root: string, target: string): boolean {

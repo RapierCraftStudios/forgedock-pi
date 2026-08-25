@@ -10,6 +10,10 @@ import {
 } from "../../src/core/events.ts";
 import { acquireLease, takeoverLease } from "../../src/core/lease.ts";
 import {
+  hashBuilderContract,
+  makeBuilderContractRevision,
+} from "../../src/core/builder-contract.ts";
+import {
   applyRunEvent,
   StateTransitionError,
   type RunState,
@@ -250,6 +254,154 @@ test("terminal runs release their repository lease", () => {
   );
   assert.equal(state.status, "completed");
   assert.equal(state.lease, undefined);
+});
+
+test("accepted builder contracts bind implementation and review checkpoints", () => {
+  const builderContract = {
+    schema: "forgedock.builder-contract/v1" as const,
+    revision: 1,
+    allowedPaths: [{ kind: "exact" as const, path: "src/core/state.ts" }],
+  };
+  const contractHash = hashBuilderContract(builderContract);
+  let state = completeResolve(initializedState());
+  for (const phase of ["investigate", "plan"] as const) {
+    state = applyRunEvent(
+      state,
+      nextEvent(
+        state,
+        "phase.queued",
+        { phase, attempt: 1, restartAction: `run ${phase}` },
+        `${phase}:queue`,
+      ),
+    );
+    state = applyRunEvent(
+      state,
+      nextEvent(
+        state,
+        "phase.started",
+        { phase, attempt: 1, logicalNodeId: `${phase}-1` },
+        `${phase}:start`,
+      ),
+    );
+    state = applyRunEvent(
+      state,
+      nextEvent(
+        state,
+        "phase.completed",
+        {
+          phase,
+          attempt: 1,
+          evidence: [],
+          ...(phase === "plan"
+            ? {
+                contractHash,
+                contractRevision: 1,
+                builderContract,
+              }
+            : {}),
+        },
+        `${phase}:complete`,
+      ),
+    );
+  }
+  assert.equal(state.builderContract?.contractHash, contractHash);
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "phase.queued",
+      {
+        phase: "prepare-worktree",
+        attempt: 1,
+        restartAction: "prepare",
+      },
+      "prepare:queue",
+    ),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "phase.started",
+      { phase: "prepare-worktree", attempt: 1, logicalNodeId: "prepare-1" },
+      "prepare:start",
+    ),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "phase.completed",
+      { phase: "prepare-worktree", attempt: 1, evidence: [] },
+      "prepare:complete",
+    ),
+  );
+  assert.throws(
+    () =>
+      applyRunEvent(
+        state,
+        nextEvent(
+          state,
+          "phase.queued",
+          { phase: "implement", attempt: 1, restartAction: "implement" },
+          "implement:queue",
+        ),
+      ),
+    (error) =>
+      error instanceof StateTransitionError &&
+      error.code === "contract-hash-mismatch",
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "phase.queued",
+      {
+        phase: "implement",
+        attempt: 1,
+        restartAction: "implement",
+        contractHash,
+        contractRevision: 1,
+      },
+      "implement:queue",
+    ),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "phase.started",
+      {
+        phase: "implement",
+        attempt: 1,
+        logicalNodeId: "implement-1",
+        contractHash,
+        contractRevision: 1,
+      },
+      "implement:start",
+    ),
+  );
+  assert.throws(
+    () =>
+      applyRunEvent(
+        state,
+        nextEvent(
+          state,
+          "phase.completed",
+          {
+            phase: "implement",
+            attempt: 1,
+            evidence: [],
+            contractHash: "sha256:wrong",
+            contractRevision: 1,
+          },
+          "implement:complete",
+        ),
+      ),
+    (error) =>
+      error instanceof StateTransitionError &&
+      error.code === "contract-hash-mismatch",
+  );
 });
 
 test("needs-human retry requires a human-authorized newer lease epoch", () => {

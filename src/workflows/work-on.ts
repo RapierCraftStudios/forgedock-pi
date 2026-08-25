@@ -13,6 +13,12 @@ import { GitWorktreeManager, type PreparedWorktree } from "../adapters/git.ts";
 import { GitHubIssueProjector } from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
+import {
+  assertBuilderContractPaths,
+  findLatestBuilderContractArtifact,
+  hashBuilderContract,
+  type BuilderContract,
+} from "../core/builder-contract.ts";
 import { SubagentsRpcClient } from "../adapters/subagents.ts";
 import {
   findForgeWorkOnResult,
@@ -263,6 +269,7 @@ export class ForgeWorkOnController {
     const github = new GitHubWorkflowAdapter(transport, link.repository);
     const projector = new GitHubIssueProjector(transport, link.repository);
     const sessionId = ctx.sessionManager.getSessionId();
+    const currentRun = await store.readRun(link.forgeRunId, ctx.signal);
 
     await this.#git.assertClean(link.prepared.worktreePath, ctx.signal);
     const actualHead = await this.#git.head(
@@ -283,6 +290,19 @@ export class ForgeWorkOnController {
       throw new Error(
         "Work-on changed-file result does not match the actual committed diff.",
       );
+    const issueCommentsBeforePush = await github.getComments(
+      link.issueNumber,
+      ctx.signal,
+    );
+    const builderContract = resolveBuilderContract(
+      currentRun.state?.builderContract?.contract,
+      issueCommentsBeforePush,
+    );
+    if (!builderContract)
+      throw new Error(
+        "Work-on run has no accepted builder contract artifact; refusing push and merge.",
+      );
+    assertBuilderContractPaths(builderContract, actualFiles);
 
     await appendPhase(
       journal,
@@ -369,7 +389,16 @@ export class ForgeWorkOnController {
         (domain) => `missing reviewer artifact ${domain}`,
       ),
     ];
-    const currentRun = await store.readRun(link.forgeRunId, ctx.signal);
+    const recheckedFiles = await this.#git.changedFiles(
+      link.prepared.worktreePath,
+      link.prepared.baseSha,
+      ctx.signal,
+    );
+    if (!sameStrings(recheckedFiles, actualFiles))
+      throw new Error(
+        "Committed diff changed after review preparation; refusing merge.",
+      );
+    assertBuilderContractPaths(builderContract, recheckedFiles);
     const checks = verificationForGate(policy, result);
     const findings = result.review.findings as readonly ReviewFinding[];
     const gate = evaluateReviewGate({
@@ -816,6 +845,22 @@ function renderReviewSummary(
     reviewerDomain(reviewer.reviewer),
   );
   return `<!-- FORGE:REVIEW_SUMMARY -->\n# PR Review Summary: #${pullNumber}\n\n## Review Integrity\n\n**Reviewed commit**: \`${result.review.headSha}\`  \n**Current HEAD**: \`${result.headSha}\`  \n**Status**: ${result.review.headSha === result.headSha ? "CURRENT" : "STALE"}\n\n## Verdict: ${verdict}\n\n## Context-Aware Review\n\n**Domains**: ${domains.join(", ")}  \n**Review passes**: ${result.review.reviewerResults.length}  \n**Dispatch mode**: nested Pi subagents in fresh read-only contexts\n\n## Integration Checks\n\nRequired verification completed before review; merge authority remains parent-controlled.\n\n## Risk Matrix\n\n| Category | Risk | Blocking? | Confidence |\n|----------|------|-----------|------------|\n| Correctness | ${result.review.findings.length ? "Findings reported" : "No finding"} | ${result.review.findings.length ? "Evaluate" : "No"} | High |\n| Security | ${result.review.findings.some((finding) => finding.category === "security") ? "Finding reported" : "None found"} | ${result.review.findings.some((finding) => finding.category === "security") ? "Evaluate" : "No"} | High |\n\n## Findings\n\n${result.review.findings.length ? `${result.review.findings.length} structured finding(s) reported.` : "No confirmed, likely, or possible findings."}\n\n## Automated Checks\n\n${result.verification.map((check) => `- ${check.name}: ${check.status}`).join("\n")}\n\n## Recommendation\n\n${verdict === "APPROVE" ? "Approve for the configured integration branch after the parent rechecks the frozen SHA and audit trail." : "Do not merge until blocking findings are remediated and re-reviewed."}\n\n<!-- REVIEW-FINDINGS-START -->\n${result.review.findings.map((finding) => `<!-- FINDING:${finding.id}|${finding.confidence.toUpperCase()}|${finding.severity.toUpperCase()}|${finding.file}:${finding.line}|${finding.summary.replaceAll("|", "/")} -->`).join("\n")}\n<!-- REVIEW-FINDINGS-END -->`;
+}
+
+function resolveBuilderContract(
+  stateContract: BuilderContract | undefined,
+  issueComments: readonly string[],
+): BuilderContract | undefined {
+  const artifactContract = findLatestBuilderContractArtifact(issueComments);
+  if (stateContract) {
+    const stateHash = hashBuilderContract(stateContract);
+    if (artifactContract && hashBuilderContract(artifactContract) !== stateHash)
+      throw new Error(
+        "Projected builder contract does not match the authoritative run contract.",
+      );
+    return stateContract;
+  }
+  return artifactContract;
 }
 
 function reviewerDomain(reviewer: string): string {

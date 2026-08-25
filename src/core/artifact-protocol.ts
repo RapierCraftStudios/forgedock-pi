@@ -25,6 +25,14 @@ export const PRE_MERGE_ISSUE_MARKERS = [
   "<!-- FORGE:REVIEW_STARTED -->",
 ] as const;
 
+export const BUILDER_CONTRACT_MARKERS = [
+  "<!-- FORGE:CONTRACT:JSON -->",
+  "<!-- FORGE:CONTRACT:JSON:END -->",
+] as const;
+
+export const BUILDER_CONTRACT_REVISION_MARKER =
+  "<!-- FORGE:CONTRACT_REVISION -->" as const;
+
 export const PRE_MERGE_PR_MARKERS = [
   "<!-- FORGE:REVIEW_ROUTE",
   "<!-- FORGE:REVIEW -->",
