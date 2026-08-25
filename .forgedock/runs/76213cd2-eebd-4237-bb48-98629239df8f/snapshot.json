@@ -10,8 +10,8 @@
     "ownerRunId": "c0f52a10-07ba-4b5e-a47d-e39138c05aa2",
     "epoch": 1
   },
-  "sequence": 14,
-  "lastEventHash": "sha256:40047e9fa15ad22ea70df53506d7916977d489a992d235cf64cb2f581694947d",
+  "sequence": 15,
+  "lastEventHash": "sha256:9e3c7633cdafa9d4dbd30913686e7bba292cdccc21c55bfccc008ee709540947",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -109,9 +109,13 @@
       "node": "prepare-worktree",
       "attempt": 1,
       "round": 1,
-      "status": "queued",
+      "status": "running",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
-      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/76213cd2-eebd-4237-bb48-98629239df8f/.pi/forge/76213cd2-eebd-4237-bb48-98629239df8f-prepare-worktree-1.json"
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/76213cd2-eebd-4237-bb48-98629239df8f/.pi/forge/76213cd2-eebd-4237-bb48-98629239df8f-prepare-worktree-1.json",
+      "subagentRunId": "launch:prepare-worktree-1:c7aca43e-3d43-4b2d-970f-c885d61d5ae0",
+      "launchNonce": "c7aca43e-3d43-4b2d-970f-c885d61d5ae0",
+      "launchIntent": true,
+      "startedAt": "2026-08-25T16:21:11.055Z"
     }
   },
   "effects": {},
@@ -129,7 +133,8 @@
     "node:plan-1:started": "bb00fbbc-3ff1-4d3e-a8e4-d6cb4dcbe1a4",
     "node:plan-1:receipt-bound": "a9aee4cf-9a71-4a51-a0c0-3b47e35e67c0",
     "node:plan-1:completed": "f4515f3e-2b3f-43fb-bdf5-6faf27b7e2ee",
-    "node:prepare-worktree-1:queued": "84044f24-041a-4e37-a63d-3780139895c1"
+    "node:prepare-worktree-1:queued": "84044f24-041a-4e37-a63d-3780139895c1",
+    "node:prepare-worktree-1:started": "59ec8604-f68f-49af-af7b-cda02dd6e2f9"
   },
   "eventIds": {
     "d92452d2-d7eb-4247-84c7-2453dfafa617": true,
@@ -145,6 +150,7 @@
     "bb00fbbc-3ff1-4d3e-a8e4-d6cb4dcbe1a4": true,
     "a9aee4cf-9a71-4a51-a0c0-3b47e35e67c0": true,
     "f4515f3e-2b3f-43fb-bdf5-6faf27b7e2ee": true,
-    "84044f24-041a-4e37-a63d-3780139895c1": true
+    "84044f24-041a-4e37-a63d-3780139895c1": true,
+    "59ec8604-f68f-49af-af7b-cda02dd6e2f9": true
   }
 }
