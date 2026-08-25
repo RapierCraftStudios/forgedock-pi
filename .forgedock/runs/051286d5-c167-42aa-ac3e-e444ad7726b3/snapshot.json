@@ -10,14 +10,29 @@
     "ownerRunId": "88697068-2f3e-4339-a599-99e31f17c5b9",
     "epoch": 1
   },
-  "sequence": 1,
-  "lastEventHash": "sha256:87ddc84da425191c47c453140009ea97b749a7fe8107daae40fd55b1291e5afa",
-  "phases": {},
+  "sequence": 2,
+  "lastEventHash": "sha256:7be64aa2eb5941ef10f176635bec390d5e65fe09a0bf2065c8b9cce925fec441",
+  "phases": {
+    "resolve": {
+      "phase": "resolve",
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "queued",
+          "leaseEpoch": 1,
+          "restartAction": "resume resolve attempt 1",
+          "evidence": []
+        }
+      ]
+    }
+  },
   "effects": {},
   "idempotencyKeys": {
-    "run:create": "dd64e839-ce68-4545-9d0f-84fbe1e805dd"
+    "run:create": "dd64e839-ce68-4545-9d0f-84fbe1e805dd",
+    "phase:resolve:1:queue": "30aa300b-4624-4c74-9e9d-3b2d5c90117d"
   },
   "eventIds": {
-    "dd64e839-ce68-4545-9d0f-84fbe1e805dd": true
+    "dd64e839-ce68-4545-9d0f-84fbe1e805dd": true,
+    "30aa300b-4624-4c74-9e9d-3b2d5c90117d": true
   }
 }
