@@ -5,13 +5,13 @@
   "issueNumber": 36,
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "leaseBinding": {
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 11,
-  "lastEventHash": "sha256:13b001011e0b1213910bf0cb30393cea5ddc89a6f536c0bb652e4be9aefd710b",
+  "sequence": 12,
+  "lastEventHash": "sha256:2fc92f47d351dc56c19a460f8bd4170d760bee529f0a4b46c7861f040ad35d55",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -75,9 +75,11 @@
       "node": "close",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "failed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
-      "startedAt": "2026-08-25T13:26:10.924Z"
+      "startedAt": "2026-08-25T13:26:10.924Z",
+      "reason": "Lease expired after its owning Pi session stopped heartbeating; takeover confirmed by operator session 01a03992-a251-78fc-b722-95aa7f4f9589.",
+      "finishedAt": "2026-08-25T16:02:02.498Z"
     }
   },
   "effects": {},
@@ -92,7 +94,8 @@
     "node:investigate-1:receipt-bound": "ce118a1e-c42c-45d8-9b5b-afac6d9ad16b",
     "node:investigate-1:completed": "7dd72d16-0e4c-4913-b7f7-e6da931eb278",
     "node:close-1:queued": "d068c81b-0f0e-45af-bebe-8f499e43a10c",
-    "node:close-1:started": "ee6a0655-b60a-4588-9f3b-e8d213f2d98a"
+    "node:close-1:started": "ee6a0655-b60a-4588-9f3b-e8d213f2d98a",
+    "run:cancelled": "01d2f461-5c36-46c2-a0d1-026fc8f70840"
   },
   "eventIds": {
     "87099038-93e7-477f-a866-f5ecd3967037": true,
@@ -105,6 +108,8 @@
     "ce118a1e-c42c-45d8-9b5b-afac6d9ad16b": true,
     "7dd72d16-0e4c-4913-b7f7-e6da931eb278": true,
     "d068c81b-0f0e-45af-bebe-8f499e43a10c": true,
-    "ee6a0655-b60a-4588-9f3b-e8d213f2d98a": true
-  }
+    "ee6a0655-b60a-4588-9f3b-e8d213f2d98a": true,
+    "01d2f461-5c36-46c2-a0d1-026fc8f70840": true
+  },
+  "cancellationReason": "Lease expired after its owning Pi session stopped heartbeating; takeover confirmed by operator session 01a03992-a251-78fc-b722-95aa7f4f9589."
 }
