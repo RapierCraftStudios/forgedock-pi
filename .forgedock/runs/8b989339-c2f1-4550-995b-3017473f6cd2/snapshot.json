@@ -10,8 +10,8 @@
     "ownerRunId": "c0f52a10-07ba-4b5e-a47d-e39138c05aa2",
     "epoch": 1
   },
-  "sequence": 12,
-  "lastEventHash": "sha256:4262405620f401c5bbcec4b619e7f0dd1ab140e20856b4f8cea66ac6d921721b",
+  "sequence": 13,
+  "lastEventHash": "sha256:6c6e4a2c981d6521ef499c47b3ad94ce4072cbf59e7ff463594fa65d14ad939e",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -71,7 +71,7 @@
       "node": "plan",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/8b989339-c2f1-4550-995b-3017473f6cd2/.pi/forge/8b989339-c2f1-4550-995b-3017473f6cd2-plan-1.json",
       "subagentRunId": "0e253896-cf67-4b4e-9d5c-3db99f6bbb6a",
@@ -80,7 +80,28 @@
       "startedAt": "2026-08-25T16:08:55.385Z",
       "previousSubagentRunId": "launch:plan-1:127823d1-8ef8-4e58-9777-e45a1d89e0a9",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "builderContract": {
+        "schema": "forgedock.builder-path-contract/v1",
+        "revision": 1,
+        "allowedPaths": [
+          "src/adapters/subagents.ts",
+          "src/agents/materialize.ts",
+          "src/agents/register.ts",
+          "test/adapters/subagents.test.ts"
+        ],
+        "contractHash": "fff6fcbe9965bf9091443cfbd886e7d182309345f67b1435236e1d26f66ae3ce"
+      },
+      "outcome": "completed",
+      "evidence": [
+        "At frozen base 03e6133, src/adapters/subagents.ts:270 routes every bounded non-review node to FORGE_WORK_ON_AGENT, whose registration has acceptanceRole writer and completionGuard true.",
+        "src/agents/materialize.ts:188 hardcodes completionGuard: true for every generated agent definition and materializes only four agents.",
+        "src/agents/register.ts defines guarded writer and reviewer registrations but no dedicated FORGE_READ_ONLY_NODE_AGENT on this frozen base, so the issue's later-main fix must be ported as part of this implementation.",
+        "test/adapters/subagents.test.ts covers bounded-node spawning, generated agent files, and runtime registration counts, providing the focused regression-test surface."
+      ],
+      "finishedAt": "2026-08-25T16:12:49.012Z"
     }
   },
   "effects": {},
@@ -96,7 +117,8 @@
     "node:investigate-1:completed": "b0efb46b-bd3a-4ee9-92be-8cc216fae1cb",
     "node:plan-1:queued": "03d77346-cff1-4dfd-8dd4-9d03a13ceff3",
     "node:plan-1:started": "3920d53b-8a36-4d9f-be98-c00fe8863c2b",
-    "node:plan-1:receipt-bound": "7c112ea8-d11f-4620-9dec-fb66e7e84f08"
+    "node:plan-1:receipt-bound": "7c112ea8-d11f-4620-9dec-fb66e7e84f08",
+    "node:plan-1:completed": "637f69d2-1090-49b6-8263-fb5da8c48ff9"
   },
   "eventIds": {
     "e656d1eb-d4fb-461f-950a-aded3700afd9": true,
@@ -110,6 +132,7 @@
     "b0efb46b-bd3a-4ee9-92be-8cc216fae1cb": true,
     "03d77346-cff1-4dfd-8dd4-9d03a13ceff3": true,
     "3920d53b-8a36-4d9f-be98-c00fe8863c2b": true,
-    "7c112ea8-d11f-4620-9dec-fb66e7e84f08": true
+    "7c112ea8-d11f-4620-9dec-fb66e7e84f08": true,
+    "637f69d2-1090-49b6-8263-fb5da8c48ff9": true
   }
 }
