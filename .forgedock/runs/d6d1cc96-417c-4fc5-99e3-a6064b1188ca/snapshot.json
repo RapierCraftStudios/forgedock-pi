@@ -5,13 +5,13 @@
   "issueNumber": 52,
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "blocked",
   "leaseBinding": {
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 24,
-  "lastEventHash": "sha256:1fca1cba659f20768a2512c3d7233c8e5b9a305e7685d5e61a9079c6f3471ca7",
+  "sequence": 25,
+  "lastEventHash": "sha256:d56a3c15fe5a0138dbfdf85d461144d960c24225a384d6fa8fdc8f5fcc9ff5c2",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -168,7 +168,7 @@
       "node": "verify",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "blocked",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/d6d1cc96-417c-4fc5-99e3-a6064b1188ca/.pi/forge/d6d1cc96-417c-4fc5-99e3-a6064b1188ca-verify-1.json",
       "subagentRunId": "68119f48-b53b-42b5-a9df-7ef3efd8a43f",
@@ -177,7 +177,24 @@
       "startedAt": "2026-08-25T21:46:47.850Z",
       "previousSubagentRunId": "launch:verify-1:acb74399-ccfd-4b9a-90c6-9ee5115a03c2",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "verificationResults": [
+        {
+          "name": "local verification",
+          "required": false,
+          "status": "not-configured"
+        }
+      ],
+      "outcome": "failed",
+      "evidence": [
+        "The verify task omitted the completed implementation head and approved forge_verify command names.",
+        "Supervisor confirmed no completed implement-1 artifact or implementation commit exists for this bound run, issue, and branch; the branch identity remains the frozen base SHA.",
+        "Supervisor confirmed verification.commands is {}, so the approved local forge_verify command-name set is explicitly empty and no command was inferred or run.",
+        "forge_diff reported eight changed files, all within the accepted builder contract, but immutable implementation identity could not be established; verification failed closed before evaluating those changes."
+      ],
+      "reason": "Missing completed implement-1 artifact and immutable implementation head for this verify attempt.",
+      "finishedAt": "2026-08-25T21:48:20.251Z"
     }
   },
   "effects": {},
@@ -205,7 +222,8 @@
     "node:implement-1:completed": "ec516d58-b8cd-44c5-b603-676958c59b6c",
     "node:verify-1:queued": "83b272e8-e2d4-4785-83bf-ddc5b2e69c22",
     "node:verify-1:started": "4a1a9ed2-d391-4ee5-ac86-81d6461baf32",
-    "node:verify-1:receipt-bound": "5ec27998-4eb1-41b3-823d-7ed3505209ae"
+    "node:verify-1:receipt-bound": "5ec27998-4eb1-41b3-823d-7ed3505209ae",
+    "node:verify-1:blocked": "f3f96898-eb81-4944-991e-9eabe62dedbe"
   },
   "eventIds": {
     "d170fe65-a4bc-4853-b400-9293cdbfe1a8": true,
@@ -231,6 +249,7 @@
     "ec516d58-b8cd-44c5-b603-676958c59b6c": true,
     "83b272e8-e2d4-4785-83bf-ddc5b2e69c22": true,
     "4a1a9ed2-d391-4ee5-ac86-81d6461baf32": true,
-    "5ec27998-4eb1-41b3-823d-7ed3505209ae": true
+    "5ec27998-4eb1-41b3-823d-7ed3505209ae": true,
+    "f3f96898-eb81-4944-991e-9eabe62dedbe": true
   }
 }
