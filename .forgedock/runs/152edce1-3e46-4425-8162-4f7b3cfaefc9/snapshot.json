@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 41,
-  "lastEventHash": "sha256:a5b0fe78cb7cec2a53e364736608c44daabfe56a57e923af028920d081d7ffe3",
+  "sequence": 42,
+  "lastEventHash": "sha256:809910d8f37b60d2036a3d08afbad7cfdb7bd791117f7cbb7487fb9bafc7b384",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -353,7 +353,9 @@
       "node": "ci",
       "attempt": 1,
       "round": 1,
-      "status": "queued"
+      "status": "running",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "startedAt": "2026-08-25T19:10:06.842Z"
     }
   },
   "effects": {},
@@ -398,7 +400,8 @@
     "node:review-join-1:queued": "b78fcf0c-7420-4416-a5fa-894135f734f4",
     "node:review-join-1:started": "5bd66c8b-fd47-4518-9251-a9aa5536dd1d",
     "node:review-join-1:complete": "d1394c6c-61dc-461b-b6d2-b08d6eadcda5",
-    "node:ci-1:queued": "ef7af836-9ff7-4bb6-8f6c-7e1b59db0953"
+    "node:ci-1:queued": "ef7af836-9ff7-4bb6-8f6c-7e1b59db0953",
+    "node:ci-1:started": "4131ad15-c9d3-43b5-a19d-fb331299808d"
   },
   "eventIds": {
     "e54b6411-60d6-4281-8801-6488bc2a6398": true,
@@ -441,6 +444,7 @@
     "b78fcf0c-7420-4416-a5fa-894135f734f4": true,
     "5bd66c8b-fd47-4518-9251-a9aa5536dd1d": true,
     "d1394c6c-61dc-461b-b6d2-b08d6eadcda5": true,
-    "ef7af836-9ff7-4bb6-8f6c-7e1b59db0953": true
+    "ef7af836-9ff7-4bb6-8f6c-7e1b59db0953": true,
+    "4131ad15-c9d3-43b5-a19d-fb331299808d": true
   }
 }
