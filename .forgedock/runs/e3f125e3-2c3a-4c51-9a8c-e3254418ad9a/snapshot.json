@@ -10,8 +10,8 @@
     "ownerRunId": "fd616696-4975-49a6-9d2a-9a782a49ed27",
     "epoch": 1
   },
-  "sequence": 26,
-  "lastEventHash": "sha256:bca7fc3cdfe3b6955b13b50700781c817d50be1edcec06757e83550fd634342f",
+  "sequence": 27,
+  "lastEventHash": "sha256:38cfa7b1a4416ace19f7672d45196ee6197bdb47e59bdd44f856ae29c2400f54",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -182,9 +182,13 @@
       "node": "prepare-pr",
       "attempt": 1,
       "round": 1,
-      "status": "queued",
+      "status": "running",
       "baseSha": "86fff740db2e1ab31fc651fc80ea00ec7c5bdcbd",
-      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a/.pi/forge/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a-prepare-pr-1.json"
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a/.pi/forge/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a-prepare-pr-1.json",
+      "subagentRunId": "launch:prepare-pr-1:e100a489-3e94-4ebc-b348-dcb7af25a53a",
+      "launchNonce": "e100a489-3e94-4ebc-b348-dcb7af25a53a",
+      "launchIntent": true,
+      "startedAt": "2026-08-25T09:13:51.421Z"
     }
   },
   "effects": {},
@@ -214,7 +218,8 @@
     "node:verify-1:started": "0804ca76-861a-4a28-b746-f43d1c88a385",
     "node:verify-1:receipt-bound": "abf850d8-9b3b-43b7-abb1-aaf46c1ca53f",
     "node:verify-1:completed": "e3ba5621-4250-4f3e-9b6f-1129bd5ea18b",
-    "node:prepare-pr-1:queued": "d7106797-60f1-4aef-939a-7754c16ec6db"
+    "node:prepare-pr-1:queued": "d7106797-60f1-4aef-939a-7754c16ec6db",
+    "node:prepare-pr-1:started": "2fbc4d00-29b0-4c4d-ae66-8d20bb9b0014"
   },
   "eventIds": {
     "a99b16b3-5107-4924-8a10-6bae25957c57": true,
@@ -242,6 +247,7 @@
     "0804ca76-861a-4a28-b746-f43d1c88a385": true,
     "abf850d8-9b3b-43b7-abb1-aaf46c1ca53f": true,
     "e3ba5621-4250-4f3e-9b6f-1129bd5ea18b": true,
-    "d7106797-60f1-4aef-939a-7754c16ec6db": true
+    "d7106797-60f1-4aef-939a-7754c16ec6db": true,
+    "2fbc4d00-29b0-4c4d-ae66-8d20bb9b0014": true
   }
 }
