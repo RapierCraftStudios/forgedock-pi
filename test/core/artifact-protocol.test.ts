@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  acceptanceGatePassed,
   assertWorkflowLabel,
+  checkCurrentReviewAuditTrail,
   checkPostMergeAuditTrail,
   checkPreMergeAuditTrail,
   POST_MERGE_ISSUE_MARKERS,
@@ -14,6 +16,35 @@ import {
 function comments(markers: readonly string[]): string[] {
   return markers.map((marker) => `${marker}\nbody`);
 }
+
+test("acceptance gate passes only for completed checks or explicit policy exemption", () => {
+  assert.equal(
+    acceptanceGatePassed({ checks: [], policyExempt: false }),
+    false,
+  );
+  assert.equal(
+    acceptanceGatePassed({ checks: [{ status: "unknown" }], policyExempt: false }),
+    false,
+  );
+  assert.equal(
+    acceptanceGatePassed({ checks: [{ status: "passed" }], policyExempt: false }),
+    true,
+  );
+  assert.equal(
+    acceptanceGatePassed({
+      checks: [
+        { status: "passed", required: true },
+        { status: "failed", required: false },
+      ],
+      policyExempt: false,
+    }),
+    true,
+  );
+  assert.equal(
+    acceptanceGatePassed({ checks: [], policyExempt: true }),
+    true,
+  );
+});
 
 test("pre-merge audit requires every canonical issue, PR, and reviewer marker", () => {
   const complete = checkPreMergeAuditTrail({
@@ -42,6 +73,44 @@ test("pre-merge audit requires every canonical issue, PR, and reviewer marker", 
     PRE_MERGE_PR_MARKERS.length,
   );
   assert.deepEqual(missing.missingReviewerDomains, ["correctness", "security"]);
+});
+
+test("current review audit rejects stale heads, rounds, and missing domains", () => {
+  const reviewer = (domain: string, round: number, head: string) =>
+    `<!-- FORGE:REVIEW-INSTANCE run=run-1 domain=${domain} round=${round} head=${head} -->\n<!-- FORGE:REVIEW-AGENT:${domain} -->`;
+  const summary = (round: number, head: string) =>
+    `<!-- FORGE:REVIEW-SUMMARY-INSTANCE run=run-1 round=${round} head=${head} -->\n<!-- FORGE:REVIEW_SUMMARY -->`;
+  const current = checkCurrentReviewAuditTrail({
+    pullRequestComments: [
+      reviewer("correctness", 1, "old-head"),
+      reviewer("security", 1, "old-head"),
+      summary(1, "old-head"),
+      reviewer("correctness", 2, "new-head"),
+      reviewer("security", 2, "new-head"),
+      summary(2, "new-head"),
+    ],
+    expectedRunId: "run-1",
+    expectedHeadSha: "new-head",
+    expectedRound: 2,
+    requiredReviewerDomains: ["correctness", "security"],
+  });
+  assert.equal(current.valid, true);
+
+  const incomplete = checkCurrentReviewAuditTrail({
+    pullRequestComments: [
+      reviewer("correctness", 1, "old-head"),
+      reviewer("security", 1, "old-head"),
+      summary(1, "old-head"),
+      reviewer("correctness", 2, "new-head"),
+    ],
+    expectedRunId: "run-1",
+    expectedHeadSha: "new-head",
+    expectedRound: 2,
+    requiredReviewerDomains: ["correctness", "security"],
+  });
+  assert.equal(incomplete.valid, false);
+  assert.deepEqual(incomplete.missingReviewerDomains, ["security"]);
+  assert.equal(incomplete.missingSummary, true);
 });
 
 test("post-merge audit requires trajectory, card, and decision record", () => {

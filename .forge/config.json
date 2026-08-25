@@ -11,8 +11,7 @@
   },
   "branches": {
     "integration": [
-      "staging",
-      "milestone/*"
+      "dogfood"
     ],
     "protected": [
       "main"
@@ -23,7 +22,7 @@
     "github": {
       "required": true,
       "requiredBranches": [
-        "main"
+        "dogfood"
       ],
       "waitTimeoutMs": 1800000,
       "pollIntervalMs": 10000
@@ -35,10 +34,10 @@
       "forge-review-correctness",
       "forge-review-security"
     ],
-    "maxRounds": 3
+    "maxRounds": 1
   },
   "orchestration": {
-    "maxConcurrent": 8,
+    "maxConcurrent": 16,
     "maxIssues": 20
   },
   "subagents": {

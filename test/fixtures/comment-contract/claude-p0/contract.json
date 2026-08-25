@@ -1,0 +1,37 @@
+{
+  "reference": {
+    "issue": 2935,
+    "pullRequest": 2939,
+    "purpose": "Golden P0 shape for a deliberately trivial Claude-driven change"
+  },
+  "issueArtifacts": [
+    { "name": "run claim", "markers": ["<!-- FORGEDOCK-RUN:", "## ForgeDock Pi run started"] },
+    { "name": "investigation", "markers": ["<!-- FORGE:INVESTIGATOR -->", "## Investigation Report", "### Root Cause", "### Evidence", "### Acceptance Checks", "<!-- INVESTIGATION:COMPLETE -->"] },
+    { "name": "routing", "markers": ["<!-- FORGE:FAST_PATH -->", "**Complexity**:", "**Task type**:"] },
+    { "name": "builder contract", "markers": ["<!-- FORGE:CONTRACT -->", "## Builder Contract", "### Allowed Paths", "### Forbidden Changes", "### Acceptance Mapping"] },
+    { "name": "context", "markers": ["<!-- FORGE:CONTEXT -->", "## Implementation Context", "### CI Surface", "### Hazards", "<!-- FORGE:CONTEXT:COMPLETE -->"] },
+    { "name": "architecture", "markers": ["<!-- FORGE:ARCHITECT -->", "## Architecture Plan", "<!-- FORGE:ARCHITECT:COMPLETE -->"] },
+    { "name": "implementation", "markers": ["<!-- FORGE:BUILDER -->", "## Implementation Complete", "Commit SHA", "### Changed Files", "### Acceptance Status", "<!-- FORGE:BUILDER:COMPLETE -->"] },
+    { "name": "verification", "markers": ["<!-- FORGE:LOCAL_VERIFICATION -->", "Local Implementation Readiness", "Checked head", "<!-- FORGE:IMPLEMENTATION_READY_FOR_CI -->"] },
+    { "name": "review started", "markers": ["<!-- FORGE:REVIEW_STARTED -->", "## Review Started", "Frozen head", "Domains"] },
+    { "name": "acceptance", "markers": ["<!-- FORGE:ACCEPTANCE_GATE -->", "<!-- FORGE:ACCEPTANCE_GATE:COMPLETE -->"] },
+    { "name": "review checkpoint", "markers": ["review-checkpoint", "<!-- FORGE:CHECKPOINT -->"] },
+    { "name": "close evidence", "markers": ["close-evidence", "Exact evidence:", "Reviewed head:", "Merge commit", "Issue close read-back: passed"] },
+    { "name": "trajectory", "markers": ["<!-- FORGE:TRAJECTORY -->", "Pipeline Trajectory", "Cleanup", "Close", "<!-- FORGE:CARD:"] }
+  ],
+  "pullRequestArtifacts": [
+    { "name": "review route", "markers": ["<!-- FORGE:REVIEW_ROUTE"] },
+    { "name": "correctness review", "markers": ["domain=correctness", "<!-- FORGE:REVIEW-AGENT:correctness -->", "Reviewed head"] },
+    { "name": "security review", "markers": ["domain=security", "<!-- FORGE:REVIEW-AGENT:security -->", "Reviewed head"] },
+    { "name": "joined summary", "markers": ["<!-- FORGE:REVIEW-SUMMARY-INSTANCE", "<!-- FORGE:REVIEW_SUMMARY -->", "Frozen head", "Panel outcome"] },
+    { "name": "final decision", "markers": ["<!-- FORGE:FINAL-REVIEW-DECISION", "<!-- FORGE:FINAL_REVIEW_DECISION -->"] },
+    { "name": "decision record", "markers": ["<!-- FORGE:DECISION_RECORD -->", "Graph Decision Record"] }
+  ],
+  "prohibitedPatterns": [
+    "COMPLEXITY_BAND: STANDARD",
+    "Task type: Bug Fix",
+    "quality_gate\\\": \\\"pass",
+    "- Verification: ",
+    "| ✅ Gate passed |  |"
+  ]
+}

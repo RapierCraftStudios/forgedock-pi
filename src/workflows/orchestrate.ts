@@ -62,6 +62,7 @@ export class ForgeOrchestrationController {
   readonly #pumping = new Set<string>();
   readonly #pumpPending = new Set<string>();
   readonly #heartbeating = new Set<string>();
+  readonly #lifecycleQueues = new Map<string, Promise<void>>();
   #lifecycleUnsubscribe: (() => void) | undefined;
   #heartbeatTimer: NodeJS.Timeout | undefined;
   #ctx: ExtensionContext | undefined;
@@ -80,12 +81,7 @@ export class ForgeOrchestrationController {
     this.#lifecycleUnsubscribe?.();
     this.#lifecycleUnsubscribe = this.#workOn.onLifecycle((event) => {
       if (!event.orchestrationId) return;
-      void this.#handleLifecycle(event, ctx).catch((error) => {
-        ctx.ui.notify(
-          `ForgeDock orchestration ${event.orchestrationId} reconciliation failed: ${errorMessage(error)}`,
-          "error",
-        );
-      });
+      void this.#enqueueLifecycle(event, ctx);
     });
     if (!this.#heartbeatTimer) {
       this.#heartbeatTimer = setInterval(() => {
@@ -120,6 +116,7 @@ export class ForgeOrchestrationController {
     this.#heartbeatTimer = undefined;
     this.#heartbeating.clear();
     this.#pumpPending.clear();
+    this.#lifecycleQueues.clear();
     this.#ctx = undefined;
   }
 
@@ -319,6 +316,28 @@ export class ForgeOrchestrationController {
     }
   }
 
+  async #enqueueLifecycle(
+    event: WorkOnLifecycleEvent,
+    ctx: ExtensionContext,
+  ): Promise<void> {
+    const orchestrationId = event.orchestrationId;
+    if (!orchestrationId) return;
+    const prior = this.#lifecycleQueues.get(orchestrationId) ?? Promise.resolve();
+    const next = prior
+      .catch(() => undefined)
+      .then(() => this.#handleLifecycle(event, ctx))
+      .catch((error) => {
+        ctx.ui.notify(
+          `ForgeDock orchestration ${orchestrationId} reconciliation failed: ${errorMessage(error)}`,
+          "error",
+        );
+      });
+    this.#lifecycleQueues.set(orchestrationId, next);
+    await next;
+    if (this.#lifecycleQueues.get(orchestrationId) === next)
+      this.#lifecycleQueues.delete(orchestrationId);
+  }
+
   async #handleLifecycle(
     event: WorkOnLifecycleEvent,
     ctx: ExtensionContext,
@@ -332,6 +351,8 @@ export class ForgeOrchestrationController {
       (candidate) => candidate.issueNumber === event.issueNumber,
     );
     if (!lane || isTerminalLane(lane)) return;
+    if (lane.forgeRunId && event.forgeRunId !== lane.forgeRunId) return;
+    if (lane.subagentRunId && event.subagentRunId !== lane.subagentRunId) return;
     const journal = current.journal;
     if (event.status === "ready") {
       await journal.append({
@@ -361,18 +382,29 @@ export class ForgeOrchestrationController {
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
     } else if (event.status === "completed") {
-      await journal.append({
-        orchestrationId,
-        type: "lane.merged",
-        payload: {
-          issueNumber: event.issueNumber,
-          pullNumber: requiredNumber(event.pullNumber, "pullNumber"),
-          headSha: required(event.headSha, "headSha"),
-        },
-        idempotencyKey: `lane:${event.issueNumber}:merged`,
-        message: `Complete issue ${event.issueNumber} integration`,
-        ...(ctx.signal ? { signal: ctx.signal } : {}),
-      });
+      if (event.outcome === "closed") {
+        await journal.append({
+          orchestrationId,
+          type: "lane.closed",
+          payload: { issueNumber: event.issueNumber, reason: "Closed without code after invalid/decomposed investigation." },
+          idempotencyKey: `lane:${event.issueNumber}:closed`,
+          message: `Close issue ${event.issueNumber} without code`,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+      } else {
+        await journal.append({
+          orchestrationId,
+          type: "lane.merged",
+          payload: {
+            issueNumber: event.issueNumber,
+            pullNumber: requiredNumber(event.pullNumber, "pullNumber"),
+            headSha: required(event.headSha, "headSha"),
+          },
+          idempotencyKey: `lane:${event.issueNumber}:merged`,
+          message: `Complete issue ${event.issueNumber} integration`,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+      }
     } else if (
       event.status === "blocked" ||
       event.status === "needs-human" ||
@@ -439,14 +471,25 @@ export class ForgeOrchestrationController {
                 },
               );
             } catch (error) {
-              if (isRetryableSetupError(error)) {
+              const recovered = this.#workOn.listRuns().find(
+                (run) =>
+                  run.orchestrationId === link.orchestrationId &&
+                  run.issueNumber === lane.issueNumber &&
+                  Object.keys(run.activeNodes).length > 0,
+              );
+              if (recovered) {
+                result = {
+                  runId: recovered.forgeRunId,
+                  subagentRunId: recovered.subagentRunId,
+                };
+              } else if (isRetryableSetupError(error)) {
                 ctx.ui.notify(
                   `ForgeDock orchestration ${link.orchestrationId} is paused before issue #${lane.issueNumber}: ${normalizeReason(errorMessage(error), "Repository setup is incomplete.")} Run /forge:init, then it will resume the queued lanes.`,
                   "warning",
                 );
                 return;
-              }
-              await current.journal.append({
+              } else {
+                await current.journal.append({
                 orchestrationId: link.orchestrationId,
                 type: "lane.failed",
                 payload: {
@@ -458,11 +501,12 @@ export class ForgeOrchestrationController {
                 },
                 idempotencyKey: `lane:${lane.issueNumber}:launch-failed`,
                 message: `Fail issue ${lane.issueNumber} launch`,
-                ...(ctx.signal ? { signal: ctx.signal } : {}),
-              });
-              progress = true;
-              current = await this.#read(link, ctx.signal);
-              continue;
+                  ...(ctx.signal ? { signal: ctx.signal } : {}),
+                });
+                progress = true;
+                current = await this.#read(link, ctx.signal);
+                continue;
+              }
             }
           }
           try {

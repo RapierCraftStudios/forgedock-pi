@@ -107,7 +107,7 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
   assert.equal(receipt.runId, "async-run-1");
   const spawn = bus.requests.at(-1) as {
     method: string;
-    params: Record<string, unknown>;
+    params: Record<string, unknown> & { task: string };
   };
   assert.equal(spawn.method, "spawn");
   assert.equal(spawn.params.agent, FORGE_WORK_ON_AGENT);
@@ -116,9 +116,63 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
   const serialized = JSON.stringify(spawn.params);
   assert.match(serialized, /forge-review-correctness/);
   assert.match(serialized, /forge-review-security/);
+  assert.match(spawn.params.task, /async:\s*false/);
+  assert.match(spawn.params.task, /const results = await runs\.all/);
+  assert.match(spawn.params.task, /return results/);
+  assert.match(
+    spawn.params.task,
+    /do not continue until both results have returned/i,
+  );
   assert.match(serialized, /forgedock\.pi\/1/);
   assert.match(serialized, /Reviewer remediation is pre-authorized/);
   assert.doesNotMatch(serialized, /gh auth token/);
+});
+
+test("RPC dedicated reviewer launch uses the registered reviewer and reviewer schema", async () => {
+  const { pi, bus } = fakePi();
+  const client = new SubagentsRpcClient(pi);
+  await client.spawnReviewNode({
+    runId: "run-review",
+    issueNumber: 10,
+    repository: "owner/repo",
+    worktreeRoot: "/tmp/worktree",
+    branch: "forge/10",
+    baseBranch: "staging",
+    baseSha: "abcdef1234567890",
+    reviewHeadSha: "fedcba9876543210",
+    leaseEpoch: 1,
+    policy,
+    issueContext: "untrusted issue text",
+    node: { nodeId: "review-security-1", node: "review-security", attempt: 1 },
+  });
+  const spawn = bus.requests.at(-1) as { params: { agent: string; task: string; outputSchema: { properties: { schema: { const: string } } } } };
+  assert.equal(spawn.params.agent, "forge-review-security");
+  assert.equal(spawn.params.outputSchema.properties.schema.const, "forgedock.reviewer-result/v1");
+  assert.match(spawn.params.task, /Frozen review head SHA: fedcba9876543210/);
+  assert.doesNotMatch(spawn.params.task, /runs\.all/);
+});
+
+test("RPC bounded node launch delegates one node without child checkpoints", async () => {
+  const { pi, bus } = fakePi();
+  const client = new SubagentsRpcClient(pi);
+  await client.spawnNode({
+    runId: "run-node",
+    issueNumber: 9,
+    repository: "owner/repo",
+    worktreeRoot: "/tmp/worktree",
+    branch: "forge/9",
+    baseBranch: "staging",
+    baseSha: "abcdef1234567890",
+    leaseEpoch: 1,
+    policy,
+    issueContext: "untrusted issue text",
+    node: { nodeId: "investigate-1", node: "investigate", attempt: 1 },
+  });
+  const spawn = bus.requests.at(-1) as { params: { task: string; outputSchema: { properties: { schema: { const: string } } } } };
+  assert.equal(spawn.params.outputSchema.properties.schema.const, "forgedock.node-result/v1");
+  assert.match(spawn.params.task, /Execute exactly one ForgeDock node: investigate/);
+  assert.match(spawn.params.task, /do not call forge_checkpoint/i);
+  assert.doesNotMatch(spawn.params.task, /Process resolve, investigate, plan/i);
 });
 
 test("RPC work-on treats GitHub-only verification as valid", async () => {
@@ -184,7 +238,9 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
       join(root, ".pi", "agents", `${FORGE_REFRESH_REVIEW_AGENT}.md`),
       "utf8",
     );
-    assert.match(workOn, /tools: .*subagent/);
+    assert.doesNotMatch(workOn, /tools: .*subagent/);
+    assert.doesNotMatch(workOn, /forge_finalize_work_on/);
+    assert.match(workOn, /^async: true$/m);
     assert.match(workOn, /maxSubagentDepth: 2/);
     assert.match(workOn, /^extensions:/m);
     assert.doesNotMatch(workOn, /subagentOnlyExtensions:/);
@@ -192,6 +248,7 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
     assert.match(workOn, /  - \/.*agents\/child-runtime\.ts/);
     assert.doesNotMatch(workOn, /  - "\/.*"/);
     assert.doesNotMatch(reviewer, /tools: .*subagent/);
+    assert.match(reviewer, /^async: false$/m);
     assert.match(refresh, /tools: .*subagent/);
     assert.match(refresh, /forge_refresh_base/);
     assert.match(refresh, /maxSubagentDepth: 2/);
@@ -224,8 +281,10 @@ test("RPC resume revives a transiently failed work-on session", async () => {
   });
 });
 
-test("runtime Forge hierarchy enables only work-on recursion", () => {
-  assert.equal(FORGE_WORK_ON_TOOLS.includes("subagent"), true);
+test("runtime Forge hierarchy keeps bounded work-on least-authority", () => {
+  assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("subagent"), false);
+  assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_finalize_work_on"), false);
+  assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_checkpoint"), false);
   assert.equal(
     (FORGE_REVIEW_TOOLS as readonly string[]).includes("subagent"),
     false,

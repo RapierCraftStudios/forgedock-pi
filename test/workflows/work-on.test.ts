@@ -2,13 +2,24 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  finalReviewDecisionMarker,
   findingPriority,
   isTransientProviderFailure,
   lineWithinTolerance,
   parseAsyncCompletion,
   reviewFindingMarker,
+  reviewInstanceMarker,
+  reviewSummaryInstanceMarker,
+  reviewSupersessionMarker,
   similarFindingTitle,
 } from "../../src/workflows/work-on.ts";
+
+test("final review decisions have one run-round-head identity", () => {
+  assert.equal(
+    finalReviewDecisionMarker("run-1", 2, "abcdef1234567890"),
+    "<!-- FORGE:FINAL-REVIEW-DECISION run=run-1 round=2 head=abcdef1234567890 -->",
+  );
+});
 
 test("review-finding metadata follows legacy severity and dedup rules", () => {
   assert.equal(findingPriority("critical"), "priority:P0");
@@ -27,6 +38,27 @@ test("review-finding metadata follows legacy severity and dedup rules", () => {
       "forge_diff reviewer input truncation does not fail closed",
     ),
     true,
+  );
+});
+
+test("review instance markers bind run, domain, round, and full head", () => {
+  assert.equal(
+    reviewInstanceMarker("run-1", "security", 2, "abcdef1234567890"),
+    "<!-- FORGE:REVIEW-INSTANCE run=run-1 domain=security round=2 head=abcdef1234567890 -->",
+  );
+});
+
+test("joined review summary identity is round and head specific", () => {
+  assert.equal(
+    reviewSummaryInstanceMarker("run-1", 2, "abcdef1234567890"),
+    "<!-- FORGE:REVIEW-SUMMARY-INSTANCE run=run-1 round=2 head=abcdef1234567890 -->",
+  );
+});
+
+test("new review rounds have explicit supersession identities", () => {
+  assert.equal(
+    reviewSupersessionMarker("run-1", "security", 2, "new-head"),
+    "<!-- FORGE:REVIEW-SUPERSESSION run=run-1 domain=security round=2 head=new-head -->",
   );
 });
 
