@@ -5,7 +5,16 @@ import {
 } from "../core/events.ts";
 import { acquireLease, type RepositoryLease } from "../core/lease.ts";
 import { applyRunEvent, type RunState } from "../core/state.ts";
-import type { GitHubStateBranchStore } from "../adapters/github-state.ts";
+import type {
+  CommitRunStateInput,
+  ReadRunStateResult,
+} from "../adapters/github-state.ts";
+
+export interface RunJournalStore {
+  ensureBranch(now?: Date, signal?: AbortSignal): Promise<string>;
+  readRun(runId: string, signal?: AbortSignal): Promise<ReadRunStateResult>;
+  commitRunState(input: CommitRunStateInput): Promise<string>;
+}
 
 export interface InitializeRunInput {
   runId: string;
@@ -27,9 +36,9 @@ export interface JournalSnapshot {
 }
 
 export class RunJournal {
-  readonly #store: GitHubStateBranchStore;
+  readonly #store: RunJournalStore;
 
-  constructor(store: GitHubStateBranchStore) {
+  constructor(store: RunJournalStore) {
     this.#store = store;
   }
 

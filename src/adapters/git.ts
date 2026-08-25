@@ -197,6 +197,9 @@ export class GitWorktreeManager {
     prepared: PreparedWorktree,
     signal?: AbortSignal,
   ): Promise<void> {
+    // Cleanup is a retryable boundary. A prior attempt may have removed the
+    // worktree before the process crashed, so absence is already success.
+    if (!(await exists(prepared.worktreePath))) return;
     await this.assertClean(prepared.worktreePath, signal);
     await this.#git(
       prepared.repositoryRoot,

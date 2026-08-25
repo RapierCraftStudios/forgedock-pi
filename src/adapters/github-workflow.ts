@@ -115,7 +115,10 @@ export class GitHubWorkflowAdapter {
     signal?: AbortSignal;
   }): Promise<GitHubPullRequestData> {
     const existing = await this.findPullRequest(input.head, input.signal);
-    if (existing && existing.state === "open") return existing;
+    // A retry may resume after merge but before close/cleanup. The merged PR
+    // is still the authoritative review identity and must not be replaced by
+    // a second PR for the same branch.
+    if (existing && (existing.state === "open" || existing.merged)) return existing;
     const path = `${this.#apiRoot}/pulls`;
     const response = await this.#transport.request<PullApiResponse>({
       method: "POST",

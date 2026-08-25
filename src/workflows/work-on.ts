@@ -13,13 +13,22 @@ import { GitWorktreeManager, type PreparedWorktree } from "../adapters/git.ts";
 import { GitHubIssueProjector } from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
-import { SubagentsRpcClient } from "../adapters/subagents.ts";
+import {
+  SubagentsRpcClient,
+  type SubagentSpawnReceipt,
+  type SubagentsPing,
+  type WorkOnLaunchInput,
+} from "../adapters/subagents.ts";
 import {
   findForgeWorkOnResult,
   type ForgeReviewerResult,
   type ForgeWorkOnResult,
 } from "../agents/contracts.ts";
 import { materializeForgeAgents } from "../agents/materialize.ts";
+import {
+  isLeaseExpired,
+  type RepositoryLease,
+} from "../core/lease.ts";
 import { checkPreMergeAuditTrail } from "../core/artifact-protocol.ts";
 import {
   canAutoMerge,
@@ -31,7 +40,7 @@ import {
   type ReviewFinding,
   type VerificationResult,
 } from "../core/review.ts";
-import { RunJournal } from "./journal.ts";
+import { RunJournal, type RunJournalStore } from "./journal.ts";
 
 const RUN_LINK_ENTRY = "forgedock-run-link/v1";
 
@@ -54,19 +63,105 @@ export interface StartIssueResult {
   branch: string;
 }
 
+export interface ForgeWorkOnRpc {
+  ping(timeoutMs?: number): Promise<SubagentsPing>;
+  spawnWorkOn(input: WorkOnLaunchInput): Promise<SubagentSpawnReceipt>;
+  status(runId: string): Promise<unknown>;
+  onAsyncComplete(handler: (payload: unknown) => void): () => void;
+}
+
+export type ForgeWorkOnGit = Pick<
+  GitWorktreeManager,
+  | "resolveRepositoryRoot"
+  | "prepare"
+  | "cleanup"
+  | "assertClean"
+  | "head"
+  | "changedFiles"
+  | "push"
+  | "deleteRemoteBranch"
+>;
+
+export type ForgeWorkOnGitHub = Pick<
+  GitHubWorkflowAdapter,
+  | "getIssue"
+  | "createPullRequest"
+  | "getPullRequest"
+  | "mergePullRequest"
+  | "getComments"
+  | "postPullArtifact"
+  | "closeIssue"
+>;
+
+export type ForgeWorkOnProjector = Pick<
+  GitHubIssueProjector,
+  | "projectEvent"
+  | "postArtifact"
+  | "appendToLatestComment"
+  | "setWorkflowLabel"
+>;
+
+export interface ForgeWorkOnServices {
+  github: ForgeWorkOnGitHub;
+  store: RunJournalStore;
+  projector: ForgeWorkOnProjector;
+}
+
+export interface ForgeWorkOnDependencies {
+  rpc?: ForgeWorkOnRpc;
+  git?: ForgeWorkOnGit;
+  loadPolicy?: typeof loadForgePolicy;
+  resolveGitHubToken?: typeof resolveGitHubToken;
+  createServices?: (input: {
+    token: string;
+    repository: string;
+    stateBranch: string;
+  }) => ForgeWorkOnServices;
+}
+
 export class ForgeWorkOnController {
   readonly #pi: ExtensionAPI;
-  readonly #rpc: SubagentsRpcClient;
-  readonly #git: GitWorktreeManager;
+  readonly #rpc: ForgeWorkOnRpc;
+  readonly #git: ForgeWorkOnGit;
+  readonly #loadPolicy: typeof loadForgePolicy;
+  readonly #resolveGitHubToken: typeof resolveGitHubToken;
+  readonly #createServices: NonNullable<
+    ForgeWorkOnDependencies["createServices"]
+  >;
   readonly #links = new Map<string, ActiveRunLink>();
+  readonly #finalizing = new Set<string>();
   #completionUnsubscribe: (() => void) | undefined;
 
-  constructor(pi: ExtensionAPI) {
+  constructor(
+    pi: ExtensionAPI,
+    dependencies: ForgeWorkOnDependencies = {},
+  ) {
     this.#pi = pi;
-    this.#rpc = new SubagentsRpcClient(pi);
-    this.#git = new GitWorktreeManager({
-      exec: (command, args, options) => pi.exec(command, [...args], options),
-    });
+    this.#rpc =
+      dependencies.rpc ??
+      (new SubagentsRpcClient(pi) as unknown as ForgeWorkOnRpc);
+    this.#git =
+      dependencies.git ??
+      new GitWorktreeManager({
+        exec: (command, args, options) => pi.exec(command, [...args], options),
+      });
+    this.#loadPolicy = dependencies.loadPolicy ?? loadForgePolicy;
+    this.#resolveGitHubToken =
+      dependencies.resolveGitHubToken ?? resolveGitHubToken;
+    this.#createServices =
+      dependencies.createServices ??
+      ((input) => {
+        const transport = new FetchGitHubTransport({ token: input.token });
+        return {
+          github: new GitHubWorkflowAdapter(transport, input.repository),
+          store: new GitHubStateBranchStore(
+            transport,
+            input.repository,
+            input.stateBranch,
+          ),
+          projector: new GitHubIssueProjector(transport, input.repository),
+        };
+      });
   }
 
   async attach(ctx: ExtensionContext): Promise<void> {
@@ -77,21 +172,32 @@ export class ForgeWorkOnController {
       const link = [...this.#links.values()].find((candidate) =>
         containsString(payload, candidate.subagentRunId),
       );
-      if (!link || link.status !== "running") return;
-      void this.#finalize(link, ctx).catch((error) => {
-        link.status = "failed";
-        this.#persistLink(link);
-        ctx.ui.notify(
-          `ForgeDock run ${link.forgeRunId} finalization failed: ${errorMessage(error)}`,
-          "error",
-        );
-      });
+      if (
+        !link ||
+        link.status !== "running" ||
+        this.#finalizing.has(link.subagentRunId)
+      )
+        return;
+      this.#finalizing.add(link.subagentRunId);
+      void this.#finalize(link, ctx)
+        .catch((error) => {
+          link.status = "failed";
+          this.#persistLink(link);
+          ctx.ui.notify(
+            `ForgeDock run ${link.forgeRunId} finalization failed: ${errorMessage(error)}`,
+            "error",
+          );
+        })
+        .finally(() => {
+          this.#finalizing.delete(link.subagentRunId);
+        });
     });
   }
 
   dispose(): void {
     this.#completionUnsubscribe?.();
     this.#completionUnsubscribe = undefined;
+    this.#finalizing.clear();
   }
 
   async startIssue(
@@ -104,27 +210,27 @@ export class ForgeWorkOnController {
       ctx.cwd,
       ctx.signal,
     );
-    const { policy } = await loadForgePolicy(repositoryRoot);
+    const { policy } = await this.#loadPolicy(repositoryRoot);
     const integrationBranch = chooseIntegrationBranch(policy);
     if (isProtectedBranch(policy, integrationBranch))
       throw new Error(`Integration branch ${integrationBranch} is protected.`);
-    const token = await resolveGitHubToken(
+    const token = await this.#resolveGitHubToken(
       this.#pi,
       repositoryRoot,
       ctx.signal,
     );
-    const transport = new FetchGitHubTransport({ token });
-    const github = new GitHubWorkflowAdapter(transport, policy.repository.name);
+    const services = this.#createServices({
+      token,
+      repository: policy.repository.name,
+      stateBranch: policy.state.branch,
+    });
+    const { github } = services;
     const issue = await github.getIssue(issueNumber, ctx.signal);
     if (issue.state !== "open")
       throw new Error(`Issue #${issueNumber} is not open.`);
 
     const runId = randomUUID();
-    const store = new GitHubStateBranchStore(
-      transport,
-      policy.repository.name,
-      policy.state.branch,
-    );
+    const { store, projector } = services;
     await store.ensureBranch(new Date(), ctx.signal);
     const preflight = await store.readRun(runId, ctx.signal);
     if (preflight.lease) {
@@ -153,10 +259,6 @@ export class ForgeWorkOnController {
         leaseSeconds: policy.state.leaseSeconds,
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
-      const projector = new GitHubIssueProjector(
-        transport,
-        policy.repository.name,
-      );
       const createdEvent = initialized.events[0];
       if (!createdEvent)
         throw new Error("Run initialization did not produce a genesis event.");
@@ -247,21 +349,19 @@ export class ForgeWorkOnController {
       return;
     }
 
-    const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
-    const token = await resolveGitHubToken(
+    const { policy } = await this.#loadPolicy(link.prepared.repositoryRoot);
+    const token = await this.#resolveGitHubToken(
       this.#pi,
       link.prepared.repositoryRoot,
       ctx.signal,
     );
-    const transport = new FetchGitHubTransport({ token });
-    const store = new GitHubStateBranchStore(
-      transport,
-      link.repository,
-      link.stateBranch,
-    );
+    const services = this.#createServices({
+      token,
+      repository: link.repository,
+      stateBranch: link.stateBranch,
+    });
+    const { store, github, projector } = services;
     const journal = new RunJournal(store);
-    const github = new GitHubWorkflowAdapter(transport, link.repository);
-    const projector = new GitHubIssueProjector(transport, link.repository);
     const sessionId = ctx.sessionManager.getSessionId();
 
     await this.#git.assertClean(link.prepared.worktreePath, ctx.signal);
@@ -369,7 +469,7 @@ export class ForgeWorkOnController {
         (domain) => `missing reviewer artifact ${domain}`,
       ),
     ];
-    const currentRun = await store.readRun(link.forgeRunId, ctx.signal);
+    let currentRun = await store.readRun(link.forgeRunId, ctx.signal);
     const checks = verificationForGate(policy, result);
     const findings = result.review.findings as readonly ReviewFinding[];
     const gate = evaluateReviewGate({
@@ -388,7 +488,7 @@ export class ForgeWorkOnController {
       findings,
       checks,
       mergeability: currentPull.mergeability,
-      leaseValid: currentRun.lease?.ownerRunId === link.forgeRunId,
+      leaseValid: leaseOwnsRun(currentRun.lease, link.forgeRunId),
       baseBranch: currentPull.baseRef,
       protectedBranches: policy.branches.protected,
       autoMergeAuthorized: canAutoMerge(policy, currentPull.baseRef),
@@ -413,6 +513,28 @@ export class ForgeWorkOnController {
         `ForgeDock PR #${pull.number} not merged: ${gate.reasons.join(" ")}`,
         "warning",
       );
+      return;
+    }
+
+    // Re-read the authoritative lease immediately before the external merge.
+    // Review and projection can take long enough for a lease to expire.
+    currentRun = await store.readRun(link.forgeRunId, ctx.signal);
+    if (!leaseOwnsRun(currentRun.lease, link.forgeRunId)) {
+      const reason =
+        "Repository lease expired, requires takeover, or no longer belongs to this run immediately before merge.";
+      await appendPhase(
+        journal,
+        link.forgeRunId,
+        "merge",
+        "block",
+        1,
+        sessionId,
+        ctx.signal,
+        reason,
+      );
+      link.status = "failed";
+      this.#persistLink(link);
+      ctx.ui.notify(`ForgeDock PR #${pull.number} not merged: ${reason}`, "warning");
       return;
     }
 
@@ -665,8 +787,8 @@ async function appendEffect(
 }
 
 async function postReviewCompletionArtifacts(input: {
-  github: GitHubWorkflowAdapter;
-  projector: GitHubIssueProjector;
+  github: ForgeWorkOnGitHub;
+  projector: ForgeWorkOnProjector;
   link: ActiveRunLink;
   result: ForgeWorkOnResult;
   pullNumber: number;
@@ -710,7 +832,7 @@ async function postReviewCompletionArtifacts(input: {
 }
 
 async function postTerminalIssueArtifacts(input: {
-  projector: GitHubIssueProjector;
+  projector: ForgeWorkOnProjector;
   link: ActiveRunLink;
   result: ForgeWorkOnResult;
   pullNumber: number;
@@ -758,7 +880,7 @@ async function postTerminalIssueArtifacts(input: {
 }
 
 async function publishReviewArtifacts(
-  github: GitHubWorkflowAdapter,
+  github: ForgeWorkOnGitHub,
   pullNumber: number,
   result: ForgeWorkOnResult,
   signal?: AbortSignal,
@@ -838,10 +960,10 @@ function verificationForGate(
 }
 
 async function resolveMergeability(
-  github: GitHubWorkflowAdapter,
+  github: ForgeWorkOnGitHub,
   pullNumber: number,
   signal?: AbortSignal,
-): Promise<Awaited<ReturnType<GitHubWorkflowAdapter["getPullRequest"]>>> {
+): Promise<Awaited<ReturnType<ForgeWorkOnGitHub["getPullRequest"]>>> {
   let pull = await github.getPullRequest(pullNumber, signal);
   for (
     let attempt = 0;
@@ -919,6 +1041,18 @@ function assertResultIdentity(
     result.baseSha !== link.prepared.baseSha
   )
     throw new Error("Work-on result branch/base identity mismatch.");
+}
+
+function leaseOwnsRun(
+  lease: RepositoryLease | undefined,
+  runId: string,
+): boolean {
+  return Boolean(
+    lease &&
+      lease.ownerRunId === runId &&
+      !lease.takeoverRequired &&
+      !isLeaseExpired(lease, new Date()),
+  );
 }
 
 function digest(value: string): string {

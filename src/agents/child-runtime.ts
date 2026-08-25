@@ -19,7 +19,10 @@ import {
   type SubagentCapabilityCeilingHandle,
 } from "pi-subagents/capability-ceiling";
 
-import { FetchGitHubTransport } from "../adapters/github-api.ts";
+import {
+  FetchGitHubTransport,
+  type GitHubTransport,
+} from "../adapters/github-api.ts";
 import { GitHubIssueProjector } from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
@@ -30,6 +33,7 @@ import {
   type RunEventType,
   type RunPhase,
 } from "../core/events.ts";
+import { isLeaseExpired } from "../core/lease.ts";
 import { applyRunEvent } from "../core/state.ts";
 import {
   FORGE_WORK_ON_OUTPUT_SCHEMA,
@@ -57,7 +61,7 @@ interface BoundVerificationCommand {
   timeoutMs: number;
 }
 
-interface ForgeChildBinding {
+export interface ForgeChildBinding {
   runId: string;
   resultPath: string;
   repository: string;
@@ -70,6 +74,30 @@ interface ForgeChildBinding {
   baseSha: string;
   maxReviewRounds: number;
   verificationCommands: Readonly<Record<string, BoundVerificationCommand>>;
+}
+
+export interface ForgeChildRuntimeServices {
+  github: Pick<
+    GitHubWorkflowAdapter,
+    "getIssue" | "createPullRequest" | "postPullArtifact"
+  >;
+  store: Pick<GitHubStateBranchStore, "readRun" | "commitRunState">;
+  projector: Pick<
+    GitHubIssueProjector,
+    | "projectEvent"
+    | "postArtifact"
+    | "appendToLatestComment"
+    | "setWorkflowLabel"
+  >;
+}
+
+export interface ForgeChildRuntimeDependencies {
+  createTransport?: (token: string) => GitHubTransport;
+  createServices?: (input: {
+    binding: ForgeChildBinding;
+    transport: GitHubTransport;
+  }) => ForgeChildRuntimeServices;
+  now?: () => Date;
 }
 
 interface ProcessResult {
@@ -126,12 +154,38 @@ const FinalizeWorkOnParameters = Type.Object({
   value: Type.Unsafe(FORGE_WORK_ON_OUTPUT_SCHEMA),
 });
 
-export default function forgeChildRuntime(pi: ExtensionAPI): void {
+export default function forgeChildRuntime(
+  pi: ExtensionAPI,
+  dependencies: ForgeChildRuntimeDependencies = {},
+): void {
   const binding = readBinding();
   const agentRegistrations = registerForgeAgents(pi);
   let ceiling: SubagentCapabilityCeilingHandle | undefined;
   let canonicalRoot: string | undefined;
   let githubToken: string | undefined;
+  let services: ForgeChildRuntimeServices | undefined;
+
+  const resolveServices = async (
+    signal?: AbortSignal,
+  ): Promise<ForgeChildRuntimeServices> => {
+    if (services) return services;
+    const token =
+      githubToken ??
+      (await resolveGitHubToken(pi, binding.worktreeRoot, signal));
+    githubToken = token;
+    const transport =
+      dependencies.createTransport?.(token) ?? new FetchGitHubTransport({ token });
+    services = dependencies.createServices?.({ binding, transport }) ?? {
+      github: new GitHubWorkflowAdapter(transport, binding.repository),
+      store: new GitHubStateBranchStore(
+        transport,
+        binding.repository,
+        binding.stateBranch,
+      ),
+      projector: new GitHubIssueProjector(transport, binding.repository),
+    };
+    return services;
+  };
 
   pi.on("session_start", async (_event, ctx) => {
     canonicalRoot = await realpath(binding.worktreeRoot);
@@ -512,14 +566,9 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           `Bound branch push failed: ${push.stderr || push.stdout}`,
         );
 
-      const token =
-        githubToken ??
-        (await resolveGitHubToken(pi, binding.worktreeRoot, signal));
-      githubToken = token;
-      const transport = new FetchGitHubTransport({ token });
-      const github = new GitHubWorkflowAdapter(transport, binding.repository);
-      const issue = await github.getIssue(binding.issueNumber, signal);
-      const pull = await github.createPullRequest({
+      const runtime = await resolveServices(signal);
+      const issue = await runtime.github.getIssue(binding.issueNumber, signal);
+      const pull = await runtime.github.createPullRequest({
         title: issue.title,
         body: `## Summary\n\nImplements #${binding.issueNumber} through ForgeDock Pi run \`${binding.runId}\`.\n\n## Testing\n\nRequired checks passed before review.\n\nCloses #${binding.issueNumber}\n\n**Reviewed head**: \`${headSha}\``,
         head: binding.branch,
@@ -531,19 +580,13 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           `Created PR head ${pull.headSha} does not match frozen review head ${headSha}.`,
         );
 
-      const store = new GitHubStateBranchStore(
-        transport,
-        binding.repository,
-        binding.stateBranch,
-      );
-      const current = await store.readRun(binding.runId, signal);
+      const current = await runtime.store.readRun(binding.runId, signal);
       const event = current.events.at(-1);
       if (!event)
         throw new Error(
           "Cannot post review-started artifact without a run event.",
         );
-      const projector = new GitHubIssueProjector(transport, binding.repository);
-      await projector.postArtifact({
+      await runtime.projector.postArtifact({
         issueNumber: binding.issueNumber,
         runId: binding.runId,
         eventId: event.eventId,
@@ -551,12 +594,12 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         markdown: `PR #${pull.number} created targeting \`${binding.baseBranch}\`. The isolated review route is active for the required domains at commit \`${headSha}\`.\n\nReview will verify the builder contract, acceptance evidence, changed behavior, and absence of security/regression findings before merge.\n\n<!-- FORGE:REVIEW_STARTED -->`,
         ...(signal ? { signal } : {}),
       });
-      await projector.setWorkflowLabel(
+      await runtime.projector.setWorkflowLabel(
         binding.issueNumber,
         "workflow:in-review",
         signal,
       );
-      await github.postPullArtifact({
+      await runtime.github.postPullArtifact({
         pullNumber: pull.number,
         marker: `<!-- FORGE:REVIEW_ROUTE mode=single-pr spec=review-pr.md sha=${headSha.slice(0, 7)} -->`,
         body: `Review domains: correctness, security.\nTarget: ${binding.baseBranch}.`,
@@ -629,17 +672,16 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       "Request a typed, core-validated phase transition in the authoritative GitHub run journal",
     parameters: CheckpointParameters,
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-      const token =
-        githubToken ??
-        (await resolveGitHubToken(pi, binding.worktreeRoot, signal));
-      githubToken = token;
-      const transport = new FetchGitHubTransport({ token });
-      const store = new GitHubStateBranchStore(
-        transport,
-        binding.repository,
-        binding.stateBranch,
-      );
-      const current = await store.readRun(binding.runId, signal);
+      if (params.action === "complete") {
+        if (!params.report)
+          throw new Error(
+            `Phase ${params.phase} complete requires a ForgeDock report.`,
+          );
+        validatePhaseReport(params.phase, params.report);
+        if (params.phase === "plan") splitPlanReport(params.report);
+      }
+      const runtime = await resolveServices(signal);
+      const current = await runtime.store.readRun(binding.runId, signal);
       if (!current.state || !current.lease)
         throw new Error(
           `Authoritative run ${binding.runId} is not initialized.`,
@@ -650,6 +692,14 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       ) {
         throw new Error(
           `Bound lease epoch ${binding.leaseEpoch} no longer owns run ${binding.runId}.`,
+        );
+      }
+      if (
+        current.lease.takeoverRequired ||
+        isLeaseExpired(current.lease, dependencies.now?.() ?? new Date())
+      ) {
+        throw new Error(
+          `Lease for run ${binding.runId} is expired or requires takeover; checkpoint is blocked.`,
         );
       }
       const idempotencyKey = `phase:${params.phase}:${params.attempt}:${params.action}`;
@@ -686,7 +736,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           payload: checkpointPayload(params, binding),
         });
         const nextState = applyRunEvent(current.state, event);
-        stateTip = await store.commitRunState({
+        stateTip = await runtime.store.commitRunState({
           expectedTip: current.tip,
           events: [...current.events, event],
           state: nextState,
@@ -698,22 +748,24 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       }
 
       if (params.action !== "queue") {
-        const projector = new GitHubIssueProjector(
-          transport,
-          binding.repository,
-        );
         if (params.action !== "start") {
-          await projectPhaseReport(projector, event, params, binding, signal);
+          await projectPhaseReport(
+            runtime.projector,
+            event,
+            params,
+            binding,
+            signal,
+          );
         }
         const workflowLabel = workflowLabelForCheckpoint(params);
         if (workflowLabel)
-          await projector.setWorkflowLabel(
+          await runtime.projector.setWorkflowLabel(
             binding.issueNumber,
             workflowLabel,
             signal,
           );
         await postDerivedPhaseArtifacts(
-          projector,
+          runtime.projector,
           event,
           params,
           binding,
@@ -935,7 +987,7 @@ function checkpointPayload(
 }
 
 async function projectPhaseReport(
-  projector: GitHubIssueProjector,
+  projector: ForgeChildRuntimeServices["projector"],
   event: RunEvent,
   params: {
     phase: RunPhase;
@@ -1042,7 +1094,7 @@ function checkpointMarkdown(
 }
 
 async function postDerivedPhaseArtifacts(
-  projector: GitHubIssueProjector,
+  projector: ForgeChildRuntimeServices["projector"],
   event: RunEvent,
   params: {
     phase: RunPhase;
@@ -1145,13 +1197,18 @@ function validatePhaseReport(phase: RunPhase, report: string): void {
       "<!-- FORGE:CONTRACT -->",
       "## Builder Contract",
       "<!-- FORGE:CONTEXT -->",
+      "## Implementation Context",
       "<!-- FORGE:CONTEXT:COMPLETE -->",
       "<!-- FORGE:ARCHITECT -->",
+      "## Implementation Plan",
       "<!-- FORGE:ARCHITECT:COMPLETE -->",
     ],
     implement: [
       "<!-- FORGE:BUILDER -->",
       "## Implementation Complete",
+      "### Branch",
+      "### Commits",
+      "### Files Changed",
       "### Approach",
       "### Changes",
       "### Acceptance Criteria Status",
@@ -1159,6 +1216,7 @@ function validatePhaseReport(phase: RunPhase, report: string): void {
     ],
     verify: [
       "<!-- FORGE:ACCEPTANCE_GATE -->",
+      "## Acceptance Gate — PASSED",
       "<!-- FORGE:ACCEPTANCE_GATE:PASSED -->",
     ],
   };
