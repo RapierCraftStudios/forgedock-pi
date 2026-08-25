@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 9,
-  "lastEventHash": "sha256:94b871a06884263996fa4160f1c4ed7d78a3296bbc1f3cf09437e18100887d57",
+  "sequence": 10,
+  "lastEventHash": "sha256:e0814966864f52b2751b64f28c9c4e60540cce01c92c7765f246d11e10c5e17e",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -66,6 +66,15 @@
         "The only `pending:` occurrence in the repository is the initial placeholder in src/workflows/work-on.ts; no test contains `pending:`, leaving this crash/restart boundary uncovered."
       ],
       "finishedAt": "2026-08-25T18:02:32.315Z"
+    },
+    "plan-1": {
+      "nodeId": "plan-1",
+      "node": "plan",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/dbd13ca3-392c-4bd6-ac07-3c925e9b3c7c/.pi/forge/dbd13ca3-392c-4bd6-ac07-3c925e9b3c7c-plan-1.json"
     }
   },
   "effects": {},
@@ -78,7 +87,8 @@
     "node:investigate-1:queued": "c03bffee-7fb9-4d7f-b89c-4bb04434f1a4",
     "node:investigate-1:started": "cd9d4d15-0357-4d3c-b711-bbe75a79cbd6",
     "node:investigate-1:receipt-bound": "9e109074-332b-4472-9862-db2b22071bbf",
-    "node:investigate-1:completed": "675099c0-b5a8-4b20-8237-fc06c761b41a"
+    "node:investigate-1:completed": "675099c0-b5a8-4b20-8237-fc06c761b41a",
+    "node:plan-1:queued": "9468ef4e-c867-4338-8612-e036c9f9b88b"
   },
   "eventIds": {
     "1cd4340a-93f7-40fe-93bc-bfe9ddbe6f4f": true,
@@ -89,6 +99,7 @@
     "c03bffee-7fb9-4d7f-b89c-4bb04434f1a4": true,
     "cd9d4d15-0357-4d3c-b711-bbe75a79cbd6": true,
     "9e109074-332b-4472-9862-db2b22071bbf": true,
-    "675099c0-b5a8-4b20-8237-fc06c761b41a": true
+    "675099c0-b5a8-4b20-8237-fc06c761b41a": true,
+    "9468ef4e-c867-4338-8612-e036c9f9b88b": true
   }
 }
