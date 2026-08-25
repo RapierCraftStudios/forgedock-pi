@@ -10,15 +10,15 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 4,
-  "lastEventHash": "sha256:dffe81cf0aab1183cba683be2bb01c27595fe084a16a3273ebd39c9c22a611d3",
+  "sequence": 5,
+  "lastEventHash": "sha256:5954531fe6be532bfff8cffd0a34925df8fae7c5c772d82b036d6342069f31dd",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/b6427efb-a068-4513-bf8c-c9ee68c74920/.pi/forge/b6427efb-a068-4513-bf8c-c9ee68c74920-resolve-1.json",
       "subagentRunId": "573a37cc-20a4-4d97-88f2-29facd79a49e",
@@ -27,7 +27,19 @@
       "startedAt": "2026-08-25T21:25:15.392Z",
       "previousSubagentRunId": "launch:resolve-1:8676508a-1590-40d0-9c2c-24be674b7cd2",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "round": 1,
+      "headSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "Supplied issue context identifies issue #59 with a non-empty review-finding title and actionable acceptance criteria.",
+        "Issue labels include review-finding and needs-validation, indicating an unresolved work item intended for validation.",
+        "The parent durably queued and started resolve-1 for this issue, establishing this run as the active owner rather than a conflicting run.",
+        "Repository .forge/config.json names dogfood as the integration branch and main, not dogfood, as protected.",
+        "This read-only resolve node made no source or Git changes; head remains the frozen base SHA 1b018483cd94b8324ae7e34eaa07293861f4f491."
+      ],
+      "finishedAt": "2026-08-25T21:26:09.504Z"
     }
   },
   "effects": {},
@@ -35,12 +47,14 @@
     "run:create": "90383783-2625-4070-a1a6-75834c4a6be2",
     "node:resolve-1:queued": "fbae5467-85d6-4ab3-a798-17af41b12822",
     "node:resolve-1:started": "9b91b557-3996-42fb-b3ad-6f4ed57bae8c",
-    "node:resolve-1:receipt-bound": "6a2bfa72-3d3a-49f0-b3ff-a641ef3f1426"
+    "node:resolve-1:receipt-bound": "6a2bfa72-3d3a-49f0-b3ff-a641ef3f1426",
+    "node:resolve-1:completed": "da97f333-637b-4e40-93df-d64daad16088"
   },
   "eventIds": {
     "90383783-2625-4070-a1a6-75834c4a6be2": true,
     "fbae5467-85d6-4ab3-a798-17af41b12822": true,
     "9b91b557-3996-42fb-b3ad-6f4ed57bae8c": true,
-    "6a2bfa72-3d3a-49f0-b3ff-a641ef3f1426": true
+    "6a2bfa72-3d3a-49f0-b3ff-a641ef3f1426": true,
+    "da97f333-637b-4e40-93df-d64daad16088": true
   }
 }
