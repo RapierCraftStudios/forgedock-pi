@@ -28,6 +28,7 @@ import {
   canAutoMerge,
   type ForgePolicy,
 } from "../core/policy.ts";
+import { isLeaseExpired, type RepositoryLease } from "../core/lease.ts";
 import {
   evaluateReviewGate,
   type ReviewFinding,
@@ -108,7 +109,8 @@ export class ForgeWorkOnFinalizer {
     await this.#pullRequestStage(state, ctx);
     const approved = await this.#auditStage(state, ctx);
     if (!approved) return;
-    await this.#mergeStage(state, ctx);
+    const merged = await this.#mergeStage(state, ctx);
+    if (!merged) return;
     await this.#closeStage(state, ctx);
     await this.#cleanupStage(state, ctx);
     await this.#terminalStage(state, ctx);
@@ -137,7 +139,9 @@ export class ForgeWorkOnFinalizer {
     result: ForgeWorkOnResult,
     ctx: ExtensionContext,
   ): Promise<FinalizationContext> {
-    const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
+    const policy =
+      link.policy ??
+      (await loadForgePolicy(link.prepared.repositoryRoot)).policy;
     const token = await resolveGitHubToken(
       this.#host.pi,
       link.prepared.repositoryRoot,
@@ -258,6 +262,7 @@ export class ForgeWorkOnFinalizer {
       state.github,
       currentPull.number,
       state.result,
+      state.link.forgeRunId,
       ctx.signal,
     );
     const issueComments = await state.github.getComments(
@@ -272,6 +277,7 @@ export class ForgeWorkOnFinalizer {
       issueComments,
       pullRequestComments: pullComments,
       requiredReviewerDomains: state.policy.review.required.map(reviewerDomain),
+      runId: state.link.forgeRunId,
     });
     const auditFailures = [
       ...audit.missingIssueMarkers.map(
@@ -283,7 +289,13 @@ export class ForgeWorkOnFinalizer {
       ...audit.missingReviewerDomains.map(
         (domain) => `missing reviewer artifact ${domain}`,
       ),
+      ...reviewEvidenceFailures(state),
     ];
+    if (currentPull.baseRef !== state.link.prepared.baseBranch) {
+      auditFailures.push(
+        `pull request base ${currentPull.baseRef} does not match bound base ${state.link.prepared.baseBranch}`,
+      );
+    }
     state.currentRun = await state.store.readRun(
       state.link.forgeRunId,
       ctx.signal,
@@ -306,7 +318,7 @@ export class ForgeWorkOnFinalizer {
       findings,
       checks,
       mergeability: currentPull.mergeability,
-      leaseValid: state.currentRun.lease?.ownerRunId === state.link.forgeRunId,
+      leaseValid: isCurrentLeaseValid(state.currentRun.lease, state.link),
       baseBranch: currentPull.baseRef,
       protectedBranches: state.policy.branches.protected,
       autoMergeAuthorized: canAutoMerge(state.policy, currentPull.baseRef),
@@ -337,11 +349,48 @@ export class ForgeWorkOnFinalizer {
   async #mergeStage(
     state: FinalizationContext,
     ctx: ExtensionContext,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const pull = requireStageValue(state.pull, "pull request");
     const gate = requireStageValue(state.gate, "review gate");
     if (!isFinalizationMergeApproved(gate))
       throw new Error("Merge stage requires an approved review gate.");
+    const liveRun = await state.store.readRun(
+      state.link.forgeRunId,
+      ctx.signal,
+    );
+    const livePull = await state.github.getPullRequest(pull.number, ctx.signal);
+    const liveReasons: string[] = [];
+    if (!isCurrentLeaseValid(liveRun.lease, state.link))
+      liveReasons.push("the repository lease is no longer valid");
+    if (livePull.headSha !== state.result.review.headSha)
+      liveReasons.push("the reviewed pull request head is stale");
+    if (livePull.baseSha !== state.result.baseSha)
+      liveReasons.push("the reviewed pull request base is stale");
+    if (livePull.baseRef !== state.link.prepared.baseBranch)
+      liveReasons.push("the pull request base branch changed");
+    if (livePull.mergeability !== "mergeable")
+      liveReasons.push(`pull request mergeability is ${livePull.mergeability}`);
+    if (liveReasons.length > 0) {
+      await appendPhase(
+        state.journal,
+        state.link.forgeRunId,
+        "merge",
+        "block",
+        1,
+        state.sessionId,
+        ctx.signal,
+        liveReasons.join("; "),
+      );
+      state.link.status = "failed";
+      this.#host.persistLink(state.link);
+      ctx.ui.notify(
+        `ForgeDock PR #${pull.number} not merged: ${liveReasons.join("; ")}`,
+        "warning",
+      );
+      return false;
+    }
+    state.currentRun = liveRun;
+    state.currentPull = livePull;
     const merged = await state.github.mergePullRequest({
       pullNumber: pull.number,
       expectedHeadSha: state.result.review.headSha,
@@ -378,6 +427,7 @@ export class ForgeWorkOnFinalizer {
       mergedSha: merged.sha,
       signal: ctx.signal,
     });
+    return true;
   }
 
   async #closeStage(
@@ -633,6 +683,7 @@ async function postReviewCompletionArtifacts(input: {
     pullNumber: input.pullNumber,
     marker: "<!-- FORGE:DECISION_RECORD -->",
     body: `## Graph Decision Record — Issue #${input.link.issueNumber} / PR #${input.pullNumber}\n\n\`\`\`json\n${JSON.stringify(decision, null, 2)}\n\`\`\``,
+    runId: input.link.forgeRunId,
     ...(input.signal ? { signal: input.signal } : {}),
   });
 }
@@ -689,6 +740,7 @@ async function publishReviewArtifacts(
   github: GitHubWorkflowAdapter,
   pullNumber: number,
   result: ForgeWorkOnResult,
+  runId: string,
   signal?: AbortSignal,
 ): Promise<void> {
   for (const reviewer of result.review.reviewerResults) {
@@ -697,6 +749,7 @@ async function publishReviewArtifacts(
       pullNumber,
       marker: `<!-- FORGE:REVIEW-AGENT:${domain} -->`,
       body: renderReviewerArtifact(reviewer, domain),
+      runId,
       ...(signal ? { signal } : {}),
     });
   }
@@ -704,6 +757,7 @@ async function publishReviewArtifacts(
     pullNumber,
     marker: "<!-- FORGE:REVIEW -->",
     body: renderReviewSummary(pullNumber, result),
+    runId,
     ...(signal ? { signal } : {}),
   });
 }
@@ -748,6 +802,80 @@ function renderReviewSummary(
 
 function reviewerDomain(reviewer: string): string {
   return reviewer.replace(/^forge-review-/, "").replace(/\s*\(.+\)$/, "");
+}
+
+function reviewEvidenceFailures(state: FinalizationContext): string[] {
+  const failures: string[] = [];
+  const seenReviewers = new Set<string>();
+  for (const reviewer of state.result.review.reviewerResults) {
+    if (seenReviewers.has(reviewer.reviewer))
+      failures.push(`duplicate reviewer result ${reviewer.reviewer}`);
+    seenReviewers.add(reviewer.reviewer);
+    if (reviewer.runId !== state.link.forgeRunId)
+      failures.push(`reviewer ${reviewer.reviewer} belongs to another run`);
+    if (reviewer.headSha !== state.result.review.headSha)
+      failures.push(`reviewer ${reviewer.reviewer} reviewed a stale head`);
+    if (reviewer.verdict !== "pass")
+      failures.push(`reviewer ${reviewer.reviewer} did not return pass`);
+    if (!state.result.review.completedReviewers.includes(reviewer.reviewer))
+      failures.push(`reviewer ${reviewer.reviewer} is absent from completedReviewers`);
+    for (const finding of reviewer.findings) {
+      if (
+        finding.reviewer !== reviewer.reviewer ||
+        finding.runId !== state.link.forgeRunId ||
+        finding.headSha !== state.result.review.headSha
+      ) {
+        failures.push(`finding ${finding.id} has invalid reviewer provenance`);
+      }
+    }
+  }
+  for (const reviewer of state.policy.review.required) {
+    const result = state.result.review.reviewerResults.find(
+      (candidate) => candidate.reviewer === reviewer,
+    );
+    if (!result || result.verdict !== "pass")
+      failures.push(`required reviewer ${reviewer} lacks a passing result`);
+  }
+  for (const reviewer of state.result.review.completedReviewers) {
+    if (!seenReviewers.has(reviewer))
+      failures.push(`completed reviewer ${reviewer} has no structured result`);
+  }
+
+  const nestedFindings = state.result.review.reviewerResults.flatMap(
+    (reviewer) => reviewer.findings,
+  );
+  const aggregate = state.result.review.findings;
+  const nestedKeys = nestedFindings.map(findingKey).sort();
+  const aggregateKeys = aggregate.map(findingKey).sort();
+  if (nestedKeys.join("\0") !== aggregateKeys.join("\0"))
+    failures.push("aggregate review findings do not match nested reviewer findings");
+  return failures;
+}
+
+function findingKey(finding: ReviewFinding): string {
+  return JSON.stringify([
+    finding.id,
+    finding.reviewer,
+    finding.runId,
+    finding.headSha,
+    finding.confidence,
+    finding.severity,
+    finding.category,
+    finding.file,
+    finding.line,
+    finding.summary,
+    [...finding.evidence],
+  ]);
+}
+
+function isCurrentLeaseValid(
+  lease: RepositoryLease | undefined,
+  link: ActiveRunLink,
+): boolean {
+  if (!lease || lease.ownerRunId !== link.forgeRunId) return false;
+  if (link.leaseEpoch !== undefined && lease.epoch !== link.leaseEpoch)
+    return false;
+  return !lease.takeoverRequired && !isLeaseExpired(lease, new Date());
 }
 
 function verificationForGate(

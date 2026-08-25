@@ -44,6 +44,33 @@ test("pre-merge audit requires every canonical issue, PR, and reviewer marker", 
   assert.deepEqual(missing.missingReviewerDomains, ["correctness", "security"]);
 });
 
+test("pre-merge audit can scope markers to the current run", () => {
+  const runId = "run-current";
+  const currentMarker = `<!-- FORGEDOCK-RUN:${runId} -->`;
+  const complete = checkPreMergeAuditTrail({
+    issueComments: comments(PRE_MERGE_ISSUE_MARKERS).map(
+      (body) => `${currentMarker}\n${body}`,
+    ),
+    pullRequestComments: [
+      ...comments(PRE_MERGE_PR_MARKERS).map(
+        (body) => `${currentMarker}\n${body}`,
+      ),
+      `${currentMarker}\n<!-- FORGE:REVIEW-AGENT:correctness -->`,
+      `${currentMarker}\n<!-- FORGE:REVIEW-AGENT:security -->`,
+    ],
+    requiredReviewerDomains: ["correctness", "security"],
+    runId,
+  });
+  assert.equal(complete.valid, true);
+  const stale = checkPreMergeAuditTrail({
+    issueComments: comments(PRE_MERGE_ISSUE_MARKERS),
+    pullRequestComments: comments(PRE_MERGE_PR_MARKERS),
+    requiredReviewerDomains: ["correctness", "security"],
+    runId,
+  });
+  assert.equal(stale.valid, false);
+});
+
 test("post-merge audit requires trajectory, card, and decision record", () => {
   assert.equal(
     checkPostMergeAuditTrail({

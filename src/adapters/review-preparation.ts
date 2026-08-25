@@ -133,6 +133,7 @@ export class ReviewPreparationService {
       pullNumber: pull.number,
       marker: `<!-- FORGE:REVIEW_ROUTE mode=single-pr spec=review-pr.md sha=${headSha.slice(0, 7)} -->`,
       body: `Review domains: correctness, security.\nTarget: ${binding.baseBranch}.`,
+      runId: binding.runId,
       ...(signal ? { signal } : {}),
     });
     return {

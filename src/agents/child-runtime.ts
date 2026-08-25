@@ -1,5 +1,5 @@
-import { mkdir, realpath, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { realpath } from "node:fs/promises";
+import { resolve } from "node:path";
 
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -29,7 +29,7 @@ import {
   checkpointPayload,
   workflowLabelForCheckpoint,
 } from "../adapters/checkpoint-service.ts";
-import { createRunEvent, RUN_PHASES, type RunEvent } from "../core/events.ts";
+import { createRunEvent, type RunEvent } from "../core/events.ts";
 import { applyRunEvent } from "../core/state.ts";
 import {
   FORGE_WORK_ON_OUTPUT_SCHEMA,
@@ -39,6 +39,7 @@ import {
   checkToolPath,
   isPathWithin,
   resolveBoundWorktreeRoot,
+  writeBoundResult,
 } from "./child-containment.ts";
 import {
   FORGE_REVIEW_CORRECTNESS_AGENT,
@@ -54,6 +55,15 @@ import {
 
 const BINDING_ENV = "PI_SUBAGENT_EXTENSION_BINDINGS";
 const BINDING_NAMESPACE = "forgedock.pi/1";
+const CHILD_RUN_PHASES = [
+  "resolve",
+  "investigate",
+  "plan",
+  "prepare-worktree",
+  "implement",
+  "verify",
+  "review",
+] as const;
 
 interface BoundVerificationCommand {
   argv: readonly string[];
@@ -77,7 +87,7 @@ interface ForgeChildBinding {
 }
 
 const CheckpointParameters = Type.Object({
-  phase: StringEnum(RUN_PHASES),
+  phase: StringEnum(CHILD_RUN_PHASES),
   attempt: Type.Integer({ minimum: 1 }),
   action: StringEnum([
     "queue",
@@ -490,16 +500,10 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       }
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
       const resultPath = resolve(binding.resultPath);
-      if (!isPathWithin(join(root, ".pi", "forge"), resultPath)) {
-        throw new Error(
-          "Bound result path is outside the protected Forge result directory.",
-        );
-      }
-      await mkdir(dirname(resultPath), { recursive: true, mode: 0o700 });
-      await writeFile(
+      await writeBoundResult(
+        root,
         resultPath,
         `${JSON.stringify(params.value, null, 2)}\n`,
-        { encoding: "utf8", mode: 0o600 },
       );
       return {
         content: [
@@ -520,6 +524,8 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       "Request a typed, core-validated phase transition in the authoritative GitHub run journal",
     parameters: CheckpointParameters,
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+      if (!(CHILD_RUN_PHASES as readonly string[]).includes(params.phase))
+        throw new Error(`Child checkpoints cannot target phase ${params.phase}.`);
       const token =
         githubToken ??
         (await resolveGitHubToken(

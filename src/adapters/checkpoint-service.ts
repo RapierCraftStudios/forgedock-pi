@@ -246,6 +246,7 @@ export function validatePhaseReport(phase: RunPhase, report: string): void {
     ],
     verify: [
       "<!-- FORGE:ACCEPTANCE_GATE -->",
+      "## Acceptance Gate — PASSED",
       "<!-- FORGE:ACCEPTANCE_GATE:PASSED -->",
     ],
   };

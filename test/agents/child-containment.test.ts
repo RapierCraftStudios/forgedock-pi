@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -8,6 +8,7 @@ import {
   checkToolPath,
   isPathWithin,
   resolveBoundWorktreeRoot,
+  writeBoundResult,
 } from "../../src/agents/child-containment.ts";
 
 test("child containment accepts worktree paths and denies control directories", async () => {
@@ -32,6 +33,27 @@ test("child containment accepts worktree paths and denies control directories", 
     );
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("bound result writes reject symlink escapes", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-result-root-"));
+  const outside = await mkdtemp(join(tmpdir(), "forgedock-result-outside-"));
+  try {
+    const resultPath = join(root, ".pi", "forge", "result.json");
+    await writeBoundResult(root, resultPath, "safe");
+    assert.equal(await readFile(resultPath, "utf8"), "safe");
+    const escaped = join(root, ".pi", "forge", "escaped.json");
+    await symlink(join(outside, "target.json"), escaped);
+    await assert.rejects(
+      writeBoundResult(root, escaped, "unsafe"),
+      /must not be a symbolic link/,
+    );
+  } finally {
+    await Promise.all([
+      rm(root, { recursive: true, force: true }),
+      rm(outside, { recursive: true, force: true }),
+    ]);
   }
 });
 

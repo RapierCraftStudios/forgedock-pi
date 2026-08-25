@@ -134,6 +134,8 @@ export async function runProcess(
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    let settled = false;
+    let escalationTimer: NodeJS.Timeout | undefined;
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
@@ -153,14 +155,33 @@ export async function runProcess(
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill("SIGTERM");
+      escalationTimer = setTimeout(() => {
+        if (settled) return;
+        child.kill("SIGKILL");
+        settled = true;
+        resolvePromise({
+          exitCode: null,
+          signal: "SIGKILL",
+          stdout,
+          stderr,
+          timedOut,
+        });
+      }, 5_000);
+      escalationTimer.unref();
     }, options.timeoutMs);
     timer.unref();
     child.once("error", (error) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
+      if (escalationTimer) clearTimeout(escalationTimer);
       reject(error);
     });
     child.once("close", (exitCode, signal) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
+      if (escalationTimer) clearTimeout(escalationTimer);
       resolvePromise({ exitCode, signal, stdout, stderr, timedOut });
     });
   });

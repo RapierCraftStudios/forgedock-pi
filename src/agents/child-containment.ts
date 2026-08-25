@@ -1,4 +1,5 @@
-import { realpath } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, mkdir, open, realpath, writeFile } from "node:fs/promises";
 import {
   basename,
   dirname,
@@ -83,4 +84,54 @@ export async function canonicalizePotentialPath(
 export function isPathWithin(root: string, target: string): boolean {
   const child = relative(root, target);
   return child === "" || (!child.startsWith("..") && !isAbsolute(child));
+}
+
+/**
+ * Writes the child result without following a runtime-directory or result-file
+ * symlink. The result is deliberately confined to the generated `.pi/forge`
+ * directory, which is not part of the model's editable surface.
+ */
+export async function writeBoundResult(
+  worktreeRoot: string,
+  resultPath: string,
+  content: string,
+): Promise<void> {
+  const protectedRoot = resolve(worktreeRoot, ".pi", "forge");
+  const target = resolve(resultPath);
+  if (!isPathWithin(protectedRoot, target))
+    throw new Error("Bound result path is outside the protected Forge result directory.");
+
+  await mkdir(protectedRoot, { recursive: true, mode: 0o700 });
+  const rootMetadata = await lstat(protectedRoot);
+  if (rootMetadata.isSymbolicLink() || !rootMetadata.isDirectory())
+    throw new Error("Forge result directory must be a real directory.");
+  if ((await realpath(protectedRoot)) !== protectedRoot)
+    throw new Error("Forge result directory must not resolve through a symlink.");
+
+  const parent = dirname(target);
+  await mkdir(parent, { recursive: true, mode: 0o700 });
+  if ((await realpath(parent)) !== parent || !isPathWithin(protectedRoot, parent))
+    throw new Error("Forge result parent must remain inside the protected directory.");
+  const metadata = await lstat(target).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    return undefined;
+  });
+  if (metadata?.isSymbolicLink())
+    throw new Error("Forge result path must not be a symbolic link.");
+
+  const noFollow = constants.O_NOFOLLOW ?? 0;
+  if (!noFollow) {
+    await writeFile(target, content, { encoding: "utf8", mode: 0o600 });
+    return;
+  }
+  const handle = await open(
+    target,
+    constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | noFollow,
+    0o600,
+  );
+  try {
+    await handle.writeFile(content, "utf8");
+  } finally {
+    await handle.close();
+  }
 }

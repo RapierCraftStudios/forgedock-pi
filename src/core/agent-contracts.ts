@@ -273,7 +273,12 @@ export function isForgeWorkOnResult(
   )
     return false;
   return (
-    result.review.reviewerResults.every(isReviewerResult) &&
+    result.review.reviewerResults.every(
+      (reviewer) =>
+        isReviewerResult(reviewer) &&
+        reviewer.runId === result.runId &&
+        reviewer.headSha === result.review?.headSha,
+    ) &&
     result.review.findings.every(isFindingResult)
   );
 }
@@ -303,13 +308,18 @@ function isVerificationResult(value: unknown): boolean {
     status?: unknown;
     exitCode?: unknown;
   };
-  return (
-    typeof result.name === "string" &&
-    ["passed", "failed", "skipped", "unknown"].includes(
+  if (
+    typeof result.name !== "string" ||
+    !["passed", "failed", "skipped", "unknown"].includes(
       String(result.status),
-    ) &&
-    (result.exitCode === undefined || Number.isInteger(result.exitCode))
-  );
+    ) ||
+    (result.exitCode !== undefined && !Number.isInteger(result.exitCode))
+  )
+    return false;
+  if (result.exitCode === undefined) return true;
+  if (result.status === "passed") return result.exitCode === 0;
+  if (result.status === "failed") return result.exitCode !== 0;
+  return true;
 }
 
 function isFindingResult(value: unknown): value is ForgeReviewFindingResult {

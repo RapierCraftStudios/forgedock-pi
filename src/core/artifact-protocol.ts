@@ -53,9 +53,16 @@ export function checkPreMergeAuditTrail(input: {
   issueComments: readonly string[];
   pullRequestComments: readonly string[];
   requiredReviewerDomains: readonly string[];
+  runId?: string;
 }): AuditTrailCheck {
-  const issueBody = input.issueComments.join("\n");
-  const pullBody = input.pullRequestComments.join("\n");
+  const scopedComments = (comments: readonly string[]): readonly string[] =>
+    input.runId
+      ? comments.filter((comment) =>
+          comment.includes(`<!-- FORGEDOCK-RUN:${input.runId} -->`),
+        )
+      : comments;
+  const issueBody = scopedComments(input.issueComments).join("\n");
+  const pullBody = scopedComments(input.pullRequestComments).join("\n");
   const missingIssueMarkers = PRE_MERGE_ISSUE_MARKERS.filter(
     (marker) => !issueBody.includes(marker),
   );

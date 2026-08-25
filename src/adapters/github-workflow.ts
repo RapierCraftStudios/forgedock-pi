@@ -201,6 +201,7 @@ export class GitHubWorkflowAdapter {
     pullNumber: number;
     marker: string;
     body: string;
+    runId?: string;
     signal?: AbortSignal;
   }): Promise<number> {
     assertNumber(input.pullNumber, "pull request");
@@ -213,7 +214,9 @@ export class GitHubWorkflowAdapter {
     const response = await this.#transport.request<CommentApiResponse>({
       method: "POST",
       path,
-      body: { body: `${input.marker}\n${input.body.trim()}\n` },
+      body: {
+        body: `${input.marker}\n${input.runId ? `<!-- FORGEDOCK-RUN:${input.runId} -->\n` : ""}${input.body.trim()}\n`,
+      },
       ...(input.signal ? { signal: input.signal } : {}),
     });
     const comment = requireGitHubSuccess(response, path, [201]);

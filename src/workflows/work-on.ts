@@ -15,6 +15,7 @@ import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
 import { SubagentsRpcClient } from "../adapters/subagents.ts";
 import { materializeForgeAgents } from "../agents/materialize.ts";
+import { findForgeWorkOnResult } from "../core/agent-contracts.ts";
 import { isProtectedBranch, type ForgePolicy } from "../core/policy.ts";
 import { ForgeWorkOnFinalizer } from "./finalization.ts";
 import { RunJournal } from "./journal.ts";
@@ -30,6 +31,7 @@ export class ForgeWorkOnController {
   readonly #git: GitWorktreeManager;
   readonly #finalizer: ForgeWorkOnFinalizer;
   readonly #links = new Map<string, ActiveRunLink>();
+  readonly #finalizing = new Set<string>();
   #completionUnsubscribe: (() => void) | undefined;
 
   constructor(pi: ExtensionAPI) {
@@ -55,20 +57,46 @@ export class ForgeWorkOnController {
         containsString(payload, candidate.subagentRunId),
       );
       if (!link || link.status !== "running") return;
-      void this.#finalizer.run(link, ctx).catch((error) => {
-        link.status = "failed";
-        this.#persistLink(link);
-        ctx.ui.notify(
-          `ForgeDock run ${link.forgeRunId} finalization failed: ${errorMessage(error)}`,
-          "error",
-        );
-      });
+      void this.#finalizeLink(link, ctx);
     });
+    for (const link of this.#links.values()) {
+      if (link.status !== "running") continue;
+      void this.#reconcileRestoredLink(link, ctx);
+    }
   }
 
   dispose(): void {
     this.#completionUnsubscribe?.();
     this.#completionUnsubscribe = undefined;
+    this.#finalizing.clear();
+  }
+
+  async #reconcileRestoredLink(
+    link: ActiveRunLink,
+    ctx: ExtensionContext,
+  ): Promise<void> {
+    const payload = await this.#rpc.status(link.subagentRunId).catch(() => undefined);
+    if (findForgeWorkOnResult(payload)) await this.#finalizeLink(link, ctx);
+  }
+
+  async #finalizeLink(
+    link: ActiveRunLink,
+    ctx: ExtensionContext,
+  ): Promise<void> {
+    if (this.#finalizing.has(link.subagentRunId)) return;
+    this.#finalizing.add(link.subagentRunId);
+    try {
+      await this.#finalizer.run(link, ctx);
+    } catch (error) {
+      link.status = "failed";
+      this.#persistLink(link);
+      ctx.ui.notify(
+        `ForgeDock run ${link.forgeRunId} finalization failed: ${errorMessage(error)}`,
+        "error",
+      );
+    } finally {
+      this.#finalizing.delete(link.subagentRunId);
+    }
   }
 
   async startIssue(
@@ -117,10 +145,11 @@ export class ForgeWorkOnController {
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
 
+    const journal = new RunJournal(store);
+    let initialized: Awaited<ReturnType<RunJournal["initialize"]>> | undefined;
     try {
       await materializeForgeAgents(prepared.worktreePath);
-      const journal = new RunJournal(store);
-      const initialized = await journal.initialize({
+      initialized = await journal.initialize({
         runId,
         repository: policy.repository.name,
         issueNumber,
@@ -172,6 +201,8 @@ export class ForgeWorkOnController {
         repository: policy.repository.name,
         stateBranch: policy.state.branch,
         resultPath: receipt.resultPath,
+        leaseEpoch: initialized.lease?.epoch,
+        policy,
         prepared,
         status: "running",
       };
@@ -186,6 +217,35 @@ export class ForgeWorkOnController {
         branch: prepared.branch,
       };
     } catch (error) {
+      if (initialized?.lease) {
+        await journal
+          .append({
+            runId,
+            type: "run.cancelled",
+            payload: {
+              reason: `Work-on launch failed: ${errorMessage(error)}`,
+            },
+            idempotencyKey: "run:cancelled:launch-failure",
+            sessionId: ctx.sessionManager.getSessionId(),
+            message: `Cancel failed ForgeDock launch ${runId}`,
+            ...(ctx.signal ? { signal: ctx.signal } : {}),
+          })
+          .then(() =>
+            journal.append({
+              runId,
+              type: "lease.released",
+              payload: {
+                ownerRunId: runId,
+                epoch: initialized?.lease?.epoch ?? 1,
+              },
+              idempotencyKey: "lease:release:launch-failure",
+              sessionId: ctx.sessionManager.getSessionId(),
+              message: `Release failed ForgeDock launch ${runId}`,
+              ...(ctx.signal ? { signal: ctx.signal } : {}),
+            }),
+          )
+          .catch(() => undefined);
+      }
       await this.#git.cleanup(prepared, ctx.signal).catch(() => undefined);
       throw error;
     }

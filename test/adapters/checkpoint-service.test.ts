@@ -52,8 +52,8 @@ test("checkpoint service preserves typed event payloads and workflow labels", ()
 
 test("checkpoint report validation remains fail-closed for missing markers", () => {
   assert.throws(
-    () => validatePhaseReport("verify", "## Acceptance Gate — PASSED"),
-    /FORGE:ACCEPTANCE_GATE/,
+    () => validatePhaseReport("verify", "<!-- FORGE:ACCEPTANCE_GATE -->\n<!-- FORGE:ACCEPTANCE_GATE:PASSED -->"),
+    /Acceptance Gate — PASSED/,
   );
   assert.doesNotThrow(() =>
     validatePhaseReport(
