@@ -10,8 +10,8 @@
     "ownerRunId": "5da43cdf-2ff6-479c-9bf8-d2241bbd78fe",
     "epoch": 1
   },
-  "sequence": 14,
-  "lastEventHash": "sha256:6d4bc0e1d8458306e93583c1abbee3e3ad962491671257905f318945587e1d04",
+  "sequence": 15,
+  "lastEventHash": "sha256:4a3d04dee265053081a0508b5b83ed3691aa9a094c17822c68172ca2ce57ee98",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -100,9 +100,13 @@
       "node": "prepare-worktree",
       "attempt": 1,
       "round": 1,
-      "status": "queued",
+      "status": "running",
       "baseSha": "4819168331da2a25f500a1d1436f231db8211f2b",
-      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/cf8c009e-f7be-4f7c-9720-75a31f977341/.pi/forge/cf8c009e-f7be-4f7c-9720-75a31f977341-prepare-worktree-1.json"
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/cf8c009e-f7be-4f7c-9720-75a31f977341/.pi/forge/cf8c009e-f7be-4f7c-9720-75a31f977341-prepare-worktree-1.json",
+      "subagentRunId": "launch:prepare-worktree-1:7beeda89-0cab-4c48-b9b1-330cb4a8f82b",
+      "launchNonce": "7beeda89-0cab-4c48-b9b1-330cb4a8f82b",
+      "launchIntent": true,
+      "startedAt": "2026-08-25T08:18:02.951Z"
     }
   },
   "effects": {},
@@ -120,7 +124,8 @@
     "node:plan-1:started": "6a759b11-c804-4aa9-aaed-aa36a112b965",
     "node:plan-1:receipt-bound": "02d02cb3-ef14-417f-b98c-cd1f17817cd8",
     "node:plan-1:completed": "42fec860-d6d4-4cba-8fb7-99d2461d83af",
-    "node:prepare-worktree-1:queued": "94870547-d9fe-4836-b9c3-a6748541b77d"
+    "node:prepare-worktree-1:queued": "94870547-d9fe-4836-b9c3-a6748541b77d",
+    "node:prepare-worktree-1:started": "e5af42f9-8779-465f-8d85-483db9c1874c"
   },
   "eventIds": {
     "3158194d-5ea4-46c8-b6f5-500304af5913": true,
@@ -136,6 +141,7 @@
     "6a759b11-c804-4aa9-aaed-aa36a112b965": true,
     "02d02cb3-ef14-417f-b98c-cd1f17817cd8": true,
     "42fec860-d6d4-4cba-8fb7-99d2461d83af": true,
-    "94870547-d9fe-4836-b9c3-a6748541b77d": true
+    "94870547-d9fe-4836-b9c3-a6748541b77d": true,
+    "e5af42f9-8779-465f-8d85-483db9c1874c": true
   }
 }
