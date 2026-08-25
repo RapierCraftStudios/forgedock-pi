@@ -5,13 +5,13 @@
   "issueNumber": 52,
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "needs-human",
   "leaseBinding": {
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 45,
-  "lastEventHash": "sha256:ad0d87dca95e5d040b7d3698c5d0a9487f8bfcee422f99b411a79ad274fa3d70",
+  "sequence": 46,
+  "lastEventHash": "sha256:d4926027aaaedbadc29319349177c9dd3e0741afbd0ae45a834594b7f96616be",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -394,9 +394,17 @@
       "node": "decision",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "needs-human",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
-      "startedAt": "2026-08-25T20:01:26.545Z"
+      "startedAt": "2026-08-25T20:01:26.545Z",
+      "headSha": "d923c7380dbec377a759cfd6a1189e379bc958cd",
+      "evidence": [
+        "decision:changes-requested",
+        "decision-comment:5416016193",
+        "Blocking confirmed findings remain: SEC-001."
+      ],
+      "reason": "Blocking confirmed findings remain: SEC-001.",
+      "finishedAt": "2026-08-25T20:01:45.284Z"
     }
   },
   "effects": {},
@@ -445,7 +453,8 @@
     "node:ci-1:started": "d954a807-8ce1-4855-b53a-667357af9d8a",
     "node:ci-1:complete": "b96ea61d-3e2a-4395-871f-0e5ab8cb9caf",
     "node:decision-1:queued": "4d376c37-b09c-4f02-9b36-b71bb344bf6d",
-    "node:decision-1:started": "c2213f57-df32-44ac-b7db-eb92e71870ab"
+    "node:decision-1:started": "c2213f57-df32-44ac-b7db-eb92e71870ab",
+    "node:decision-1:needs-human": "e3412644-9ad4-423f-9451-1851522e9e81"
   },
   "eventIds": {
     "ba49bd33-cd25-4d3a-8106-d3166e61f8e2": true,
@@ -492,6 +501,7 @@
     "d954a807-8ce1-4855-b53a-667357af9d8a": true,
     "b96ea61d-3e2a-4395-871f-0e5ab8cb9caf": true,
     "4d376c37-b09c-4f02-9b36-b71bb344bf6d": true,
-    "c2213f57-df32-44ac-b7db-eb92e71870ab": true
+    "c2213f57-df32-44ac-b7db-eb92e71870ab": true,
+    "e3412644-9ad4-423f-9451-1851522e9e81": true
   }
 }
