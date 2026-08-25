@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 12,
-  "lastEventHash": "sha256:0f3221344e97d71ea36ac65d0241566c6e2277f8f9b7fe670e48050c363edf66",
+  "sequence": 13,
+  "lastEventHash": "sha256:fd4a7cac33718060446ed90351f1c19291b3c1a94a246469f342691ab15b1193",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -72,7 +72,7 @@
       "node": "plan",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/152edce1-3e46-4425-8162-4f7b3cfaefc9/.pi/forge/152edce1-3e46-4425-8162-4f7b3cfaefc9-plan-1.json",
       "subagentRunId": "a603a618-0497-4cad-89ad-8cc9e771f9f6",
@@ -81,7 +81,30 @@
       "startedAt": "2026-08-25T18:52:26.020Z",
       "previousSubagentRunId": "launch:plan-1:26e235db-783c-4a80-b01e-a85ab0c6386e",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "builderContract": {
+        "schema": "forgedock.builder-path-contract/v1",
+        "revision": 1,
+        "allowedPaths": [
+          "src/adapters/git.ts",
+          "src/adapters/subagents.ts",
+          "src/agents/materialize.ts",
+          "src/agents/register.ts",
+          "test/adapters/subagents.test.ts"
+        ],
+        "contractHash": "e812a223dcaf6438882a1b2d0e20d7a7b2b0d0f459d0eb54244d4f23a2799cf5"
+      },
+      "outcome": "completed",
+      "evidence": [
+        "Read-only inspection found every bounded non-review node currently launches FORGE_WORK_ON_AGENT in src/adapters/subagents.ts:270, so the frozen dogfood base lacks the dedicated read-only routing described by issue #49.",
+        "src/agents/register.ts:169-184 registers the bounded work-on agent as acceptanceRole writer with completionGuard true; no FORGE_READ_ONLY_NODE_AGENT is present on the frozen base.",
+        "src/agents/materialize.ts:166-188 accepts acceptanceRole but hardcodes completionGuard: true, preventing generated definitions from expressing a disabled guard.",
+        "test/adapters/subagents.test.ts currently asserts only the writer bounded launch and four materialized agents, leaving read-only phase routing and guard configuration uncovered.",
+        "src/adapters/git.ts:319-335 explicitly removes each generated agent definition during runtime cleanup, so a new materialized read-only definition must be added to that cleanup allowlist."
+      ],
+      "finishedAt": "2026-08-25T18:56:11.270Z"
     }
   },
   "effects": {},
@@ -97,7 +120,8 @@
     "node:investigate-1:completed": "74e87438-f74b-4391-9179-a3f1dc46dc4a",
     "node:plan-1:queued": "853230d5-398a-43ba-b0f1-71b745446adc",
     "node:plan-1:started": "fea1de0a-2310-4293-9fbf-76464d57f904",
-    "node:plan-1:receipt-bound": "4c927727-d60a-4031-b6b7-cf03974bd89e"
+    "node:plan-1:receipt-bound": "4c927727-d60a-4031-b6b7-cf03974bd89e",
+    "node:plan-1:completed": "aa60d9c4-6fd2-4181-b1e9-f232af02c842"
   },
   "eventIds": {
     "e54b6411-60d6-4281-8801-6488bc2a6398": true,
@@ -111,6 +135,7 @@
     "74e87438-f74b-4391-9179-a3f1dc46dc4a": true,
     "853230d5-398a-43ba-b0f1-71b745446adc": true,
     "fea1de0a-2310-4293-9fbf-76464d57f904": true,
-    "4c927727-d60a-4031-b6b7-cf03974bd89e": true
+    "4c927727-d60a-4031-b6b7-cf03974bd89e": true,
+    "aa60d9c4-6fd2-4181-b1e9-f232af02c842": true
   }
 }
