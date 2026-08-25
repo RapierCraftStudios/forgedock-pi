@@ -10,15 +10,15 @@
     "ownerRunId": "5da43cdf-2ff6-479c-9bf8-d2241bbd78fe",
     "epoch": 1
   },
-  "sequence": 4,
-  "lastEventHash": "sha256:a5dd628e79509133abbe3bdd568ba68ba72e3c3fe226b1c6c4d2633bf7445729",
+  "sequence": 5,
+  "lastEventHash": "sha256:a4674d048474e793faf663d12b48886261e146c950de5b6c79c0d2efc53bfab6",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "4819168331da2a25f500a1d1436f231db8211f2b",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/cf8c009e-f7be-4f7c-9720-75a31f977341/.pi/forge/cf8c009e-f7be-4f7c-9720-75a31f977341-resolve-1.json",
       "subagentRunId": "170b93ee-c221-4861-995c-b6625ad4b51c",
@@ -27,7 +27,18 @@
       "startedAt": "2026-08-25T07:59:25.943Z",
       "previousSubagentRunId": "launch:resolve-1:84a1a1fa-b5a9-4980-9017-6f4c4d072353",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "round": 1,
+      "headSha": "4819168331da2a25f500a1d1436f231db8211f2b",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "GitHub issue #15 is open and supplies four concrete acceptance criteria: deduplicated review-finding issue persistence, non-blocking versus blocking verdict semantics, deterministic decision/audit records, and focused regression tests.",
+        "The tracked .forge/config.json policy identifies dogfood as the integration branch, main as protected, and this repository-scoped change as eligible for isolated implementation.",
+        "The assigned branch is forge/issue-15-cf8c009e at the frozen base SHA 4819168331da2a25f500a1d1436f231db8211f2b; the working tree has no diff against that SHA.",
+        "The frozen tree contains the affected finding-publication, review-gate, review-summary, and final-decision surfaces in src/workflows/work-on.ts and src/core/review.ts, with focused coverage in test/workflows/review-findings.test.ts and test/core/review.test.ts."
+      ],
+      "finishedAt": "2026-08-25T08:01:36.646Z"
     }
   },
   "effects": {},
@@ -35,12 +46,14 @@
     "run:create": "3158194d-5ea4-46c8-b6f5-500304af5913",
     "node:resolve-1:queued": "c37dc3eb-80d3-404f-be5f-0f76a910eca0",
     "node:resolve-1:started": "16af3310-949d-4506-96f9-b3ccb1434419",
-    "node:resolve-1:receipt-bound": "28f9f913-a76e-48e8-8eda-b106c2cecd6e"
+    "node:resolve-1:receipt-bound": "28f9f913-a76e-48e8-8eda-b106c2cecd6e",
+    "node:resolve-1:completed": "c19def9f-2ed7-4bd2-8cb0-59d1bfbc201b"
   },
   "eventIds": {
     "3158194d-5ea4-46c8-b6f5-500304af5913": true,
     "c37dc3eb-80d3-404f-be5f-0f76a910eca0": true,
     "16af3310-949d-4506-96f9-b3ccb1434419": true,
-    "28f9f913-a76e-48e8-8eda-b106c2cecd6e": true
+    "28f9f913-a76e-48e8-8eda-b106c2cecd6e": true,
+    "c19def9f-2ed7-4bd2-8cb0-59d1bfbc201b": true
   }
 }
