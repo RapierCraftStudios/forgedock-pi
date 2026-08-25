@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 9,
-  "lastEventHash": "sha256:edeb56b3c1e9c8bed4e2c682a2b089e05dfade1f7a0f4694ade2d6b04b678652",
+  "sequence": 10,
+  "lastEventHash": "sha256:9e3c301c41bcfd8220d8ed46b369688f21ccbabbaa57066ab25b6991a4f29257",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -66,6 +66,13 @@
         "`test/adapters/git.test.ts:39-113` covers successful and idempotent cleanup with host-owned files only; there is no permission/foreign-owner regression coverage."
       ],
       "finishedAt": "2026-08-25T18:10:12.390Z"
+    },
+    "close-1": {
+      "nodeId": "close-1",
+      "node": "close",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued"
     }
   },
   "effects": {},
@@ -78,7 +85,8 @@
     "node:investigate-1:queued": "f001b97e-e72b-4c5e-8a6e-176333e85818",
     "node:investigate-1:started": "59a20c87-f8e9-4c46-beb6-8e6dbaa38811",
     "node:investigate-1:receipt-bound": "beff0643-a87c-4975-8c0d-05b8718d3126",
-    "node:investigate-1:completed": "610cd852-007b-4100-95f3-d9811af8382e"
+    "node:investigate-1:completed": "610cd852-007b-4100-95f3-d9811af8382e",
+    "node:close-1:queued": "49998a51-c457-4059-8d50-def4af5abc65"
   },
   "eventIds": {
     "95971218-41e1-4ae2-ba0d-26c8315f8e4e": true,
@@ -89,6 +97,7 @@
     "f001b97e-e72b-4c5e-8a6e-176333e85818": true,
     "59a20c87-f8e9-4c46-beb6-8e6dbaa38811": true,
     "beff0643-a87c-4975-8c0d-05b8718d3126": true,
-    "610cd852-007b-4100-95f3-d9811af8382e": true
+    "610cd852-007b-4100-95f3-d9811af8382e": true,
+    "49998a51-c457-4059-8d50-def4af5abc65": true
   }
 }
