@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:83b2e9b5b7c0d3f55c04f424e1ac9bc6ec8568c3c76d42a739a4744c32c27eb6",
+  "sequence": 6,
+  "lastEventHash": "sha256:89cb0f53618897cb2729fa7befb6a27d08fb4e5d46618fbd05524c6f064dd0cf",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -39,6 +39,15 @@
         "src/ui/commands.ts contains the reported /forge:cancel handler, confirming the issue targets this repository's implemented command surface."
       ],
       "finishedAt": "2026-08-25T18:00:52.787Z"
+    },
+    "investigate-1": {
+      "nodeId": "investigate-1",
+      "node": "investigate",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/3d9748a8-b536-470c-8c5b-7704fdbf969a/.pi/forge/3d9748a8-b536-470c-8c5b-7704fdbf969a-investigate-1.json"
     }
   },
   "effects": {},
@@ -47,13 +56,15 @@
     "node:resolve-1:queued": "2baf007b-23b0-4e47-a5a2-c9762aa5a3b1",
     "node:resolve-1:started": "f5a68f32-147a-4ab0-81e9-d9921a3b4957",
     "node:resolve-1:receipt-bound": "4e53aa11-204d-45e4-bd25-85bed0bf35ca",
-    "node:resolve-1:completed": "c5c5b95a-b41f-401f-adde-b4075dbfa9b0"
+    "node:resolve-1:completed": "c5c5b95a-b41f-401f-adde-b4075dbfa9b0",
+    "node:investigate-1:queued": "7a0f8561-b978-4fcb-a833-4409f43ba947"
   },
   "eventIds": {
     "5658c076-9cc2-4ce6-adda-0b20f4e315c6": true,
     "2baf007b-23b0-4e47-a5a2-c9762aa5a3b1": true,
     "f5a68f32-147a-4ab0-81e9-d9921a3b4957": true,
     "4e53aa11-204d-45e4-bd25-85bed0bf35ca": true,
-    "c5c5b95a-b41f-401f-adde-b4075dbfa9b0": true
+    "c5c5b95a-b41f-401f-adde-b4075dbfa9b0": true,
+    "7a0f8561-b978-4fcb-a833-4409f43ba947": true
   }
 }
