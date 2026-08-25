@@ -10,8 +10,8 @@
     "ownerRunId": "c0f52a10-07ba-4b5e-a47d-e39138c05aa2",
     "epoch": 1
   },
-  "sequence": 12,
-  "lastEventHash": "sha256:7c0f4e53617b47b3b9ea1ffb9658faabe49bb5d95bf5581cb334325cfe65e5c9",
+  "sequence": 13,
+  "lastEventHash": "sha256:b87cee4d6defc3bdc4d81dc8cd5488690605b87a1c8912dd098b65dd01c1e1c7",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -69,7 +69,7 @@
       "node": "plan",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/140cccbe-c0c2-478e-a44e-a17c0126dde7/.pi/forge/140cccbe-c0c2-478e-a44e-a17c0126dde7-plan-1.json",
       "subagentRunId": "ccfc9880-b3ad-4110-8c54-4ca79fbe7f59",
@@ -78,7 +78,30 @@
       "startedAt": "2026-08-25T16:10:01.051Z",
       "previousSubagentRunId": "launch:plan-1:fa7ea2e7-bd30-48a0-9bf5-d05b38e87d50",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "builderContract": {
+        "schema": "forgedock.builder-path-contract/v1",
+        "revision": 1,
+        "allowedPaths": [
+          "src/workflows/orchestrate.ts",
+          "src/workflows/work-on.ts",
+          "test/core/orchestration.test.ts",
+          "test/workflows/work-on.test.ts"
+        ],
+        "contractHash": "a1dbe32be7368b20e2815692cc72c009b18ca26b40fe30397a5834eed99250b8"
+      },
+      "outcome": "completed",
+      "evidence": [
+        "src/workflows/work-on.ts:641-667 creates and persists an ActiveRunLink with subagentRunId pending:<runId> before dispatching resolve-1.",
+        "src/workflows/work-on.ts:1715-1931 already models durable node launch intents as launch: sentinels and binds a real provider receipt after spawn, so the pending placeholder is a distinct pre-dispatch state.",
+        "src/workflows/work-on.ts:225-322 reconciles links with no activeNodes by calling provider status unless isLaunchSentinel returns true; isLaunchSentinel at lines 3692-3694 recognizes only launch:, not pending:.",
+        "src/workflows/orchestrate.ts:448-528 accepts any matching listRuns entry and writes its subagentRunId directly into lane.started without rejecting internal sentinels.",
+        "test/workflows/work-on.test.ts covers launch: reconciliation but has no pending: initialization regression; test/core/orchestration.test.ts covers lane receipt rebinding but not receipt validity.",
+        "No files were modified because plan is a read-only node; command execution was unavailable by contract."
+      ],
+      "finishedAt": "2026-08-25T16:13:49.089Z"
     }
   },
   "effects": {},
@@ -94,7 +117,8 @@
     "node:investigate-1:completed": "7f279ef1-907a-46ea-9709-e613aaddb8d1",
     "node:plan-1:queued": "234ab317-0dbb-48ac-8822-b1ea9e96fd11",
     "node:plan-1:started": "74f224c9-e9b6-44ef-9080-20c72316c72d",
-    "node:plan-1:receipt-bound": "55242106-1b2d-4e1a-ac2a-35b081a98721"
+    "node:plan-1:receipt-bound": "55242106-1b2d-4e1a-ac2a-35b081a98721",
+    "node:plan-1:completed": "a981a479-0195-4f02-9dbf-798b95249dea"
   },
   "eventIds": {
     "b4bb38a3-184b-4668-a8ee-ff93cc336fe2": true,
@@ -108,6 +132,7 @@
     "7f279ef1-907a-46ea-9709-e613aaddb8d1": true,
     "234ab317-0dbb-48ac-8822-b1ea9e96fd11": true,
     "74f224c9-e9b6-44ef-9080-20c72316c72d": true,
-    "55242106-1b2d-4e1a-ac2a-35b081a98721": true
+    "55242106-1b2d-4e1a-ac2a-35b081a98721": true,
+    "a981a479-0195-4f02-9dbf-798b95249dea": true
   }
 }
