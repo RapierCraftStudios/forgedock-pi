@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:ac3d451cc5d7c9c4425f5f43c48be293bb9df1dcc09e3ffc8e2c32f8a7da8ebd",
+  "sequence": 6,
+  "lastEventHash": "sha256:845db3842f630db544b4442c85910d47e3f01d4a97204ef9ed2448d025bbc58c",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -38,6 +38,15 @@
         "The bound repository policy at .forge/config.json uses schema forgedock.config/v1, configures dogfood as an integration branch, and protects main."
       ],
       "finishedAt": "2026-08-25T18:06:18.499Z"
+    },
+    "investigate-1": {
+      "nodeId": "investigate-1",
+      "node": "investigate",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/24cb4b26-0b7d-4d67-a8ac-67eed4b33462/.pi/forge/24cb4b26-0b7d-4d67-a8ac-67eed4b33462-investigate-1.json"
     }
   },
   "effects": {},
@@ -46,13 +55,15 @@
     "node:resolve-1:queued": "c1beba19-5085-406a-9ea6-e7d1e6b8401a",
     "node:resolve-1:started": "1133d71e-394b-477e-bb51-3086248c9d50",
     "node:resolve-1:receipt-bound": "fc34b975-04b3-44f2-a204-c23a74cfded1",
-    "node:resolve-1:completed": "f9984056-4d7b-4fac-91f5-b15c708f0d08"
+    "node:resolve-1:completed": "f9984056-4d7b-4fac-91f5-b15c708f0d08",
+    "node:investigate-1:queued": "f001b97e-e72b-4c5e-8a6e-176333e85818"
   },
   "eventIds": {
     "95971218-41e1-4ae2-ba0d-26c8315f8e4e": true,
     "c1beba19-5085-406a-9ea6-e7d1e6b8401a": true,
     "1133d71e-394b-477e-bb51-3086248c9d50": true,
     "fc34b975-04b3-44f2-a204-c23a74cfded1": true,
-    "f9984056-4d7b-4fac-91f5-b15c708f0d08": true
+    "f9984056-4d7b-4fac-91f5-b15c708f0d08": true,
+    "f001b97e-e72b-4c5e-8a6e-176333e85818": true
   }
 }
