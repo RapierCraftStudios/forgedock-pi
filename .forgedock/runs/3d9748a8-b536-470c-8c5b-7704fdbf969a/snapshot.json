@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 13,
-  "lastEventHash": "sha256:e282b71030cbf99a364467e6ad7b9bc794e040559b8ccb81429ffda49e96cd23",
+  "sequence": 14,
+  "lastEventHash": "sha256:2b78e09e4a50e17e146f1be8e60e7e723968cd3ceff2f782a473bf9e62e1e7fd",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -107,6 +107,15 @@
         "src/ui/commands.ts:164-190 currently emits success only after cancel resolves and has no command-specific actionable error notification."
       ],
       "finishedAt": "2026-08-25T18:10:25.257Z"
+    },
+    "prepare-worktree-1": {
+      "nodeId": "prepare-worktree-1",
+      "node": "prepare-worktree",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/3d9748a8-b536-470c-8c5b-7704fdbf969a/.pi/forge/3d9748a8-b536-470c-8c5b-7704fdbf969a-prepare-worktree-1.json"
     }
   },
   "effects": {},
@@ -123,7 +132,8 @@
     "node:plan-1:queued": "52fdd0d6-f857-44f1-971b-6c0ec8121dbd",
     "node:plan-1:started": "4b43b6c5-58f0-4527-9d38-a7eec84de925",
     "node:plan-1:receipt-bound": "8d7873f0-f323-42b4-82f1-6fb51adc825a",
-    "node:plan-1:completed": "d34c1acb-834e-4fb2-9824-e8d0bf7da110"
+    "node:plan-1:completed": "d34c1acb-834e-4fb2-9824-e8d0bf7da110",
+    "node:prepare-worktree-1:queued": "37a380d9-452c-464f-a0e4-e6142fdc2c3d"
   },
   "eventIds": {
     "5658c076-9cc2-4ce6-adda-0b20f4e315c6": true,
@@ -138,6 +148,7 @@
     "52fdd0d6-f857-44f1-971b-6c0ec8121dbd": true,
     "4b43b6c5-58f0-4527-9d38-a7eec84de925": true,
     "8d7873f0-f323-42b4-82f1-6fb51adc825a": true,
-    "d34c1acb-834e-4fb2-9824-e8d0bf7da110": true
+    "d34c1acb-834e-4fb2-9824-e8d0bf7da110": true,
+    "37a380d9-452c-464f-a0e4-e6142fdc2c3d": true
   }
 }
