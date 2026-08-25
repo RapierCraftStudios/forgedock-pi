@@ -102,6 +102,9 @@ function normalizeRule(value: unknown, index: number): BuilderPathRule {
     if (value.endsWith("/**")) {
       kind = "directory";
       path = value.slice(0, -3);
+    } else if (value.endsWith("/")) {
+      kind = "directory";
+      path = value.slice(0, -1);
     } else {
       kind = "exact";
       path = value;
@@ -110,9 +113,13 @@ function normalizeRule(value: unknown, index: number): BuilderPathRule {
     const record = value as Record<string, unknown>;
     kind = record.kind;
     path = record.path;
-    if (kind === undefined && typeof path === "string" && path.endsWith("/**")) {
+    if (
+      kind === undefined &&
+      typeof path === "string" &&
+      (path.endsWith("/**") || path.endsWith("/"))
+    ) {
       kind = "directory";
-      path = path.slice(0, -3);
+      path = path.endsWith("/**") ? path.slice(0, -3) : path.slice(0, -1);
     }
   }
   if (kind !== "exact" && kind !== "directory")
@@ -126,6 +133,7 @@ function normalizeRule(value: unknown, index: number): BuilderPathRule {
       `allowedPaths[${index}].path must be a string.`,
     );
   if (kind === "directory" && path.endsWith("/**")) path = path.slice(0, -3);
+  if (kind === "directory" && path.endsWith("/")) path = path.slice(0, -1);
   if (kind === "exact" && path.endsWith("/**"))
     throw new BuilderContractValidationError(
       "invalid-rule",

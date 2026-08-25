@@ -294,12 +294,17 @@ export function parseChangedGitPaths(output: string): string[] {
     const status = tokens[index++];
     if (!status) continue;
     const first = tokens[index++];
-    if (!first) continue;
+    if (!first)
+      throw new Error(`Malformed NUL-delimited Git status record: ${status}.`);
     paths.push(first);
     const kind = status.charAt(0);
     if (kind === "R" || kind === "C") {
       const second = tokens[index++];
-      if (second) paths.push(second);
+      if (!second)
+        throw new Error(
+          `Malformed Git rename/copy record without a destination: ${status}.`,
+        );
+      paths.push(second);
     }
   }
   return [...new Set(paths)].sort((left, right) => left.localeCompare(right));

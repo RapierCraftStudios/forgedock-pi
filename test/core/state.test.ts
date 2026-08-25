@@ -9,10 +9,7 @@ import {
   type RunEventPayload,
 } from "../../src/core/events.ts";
 import { acquireLease, takeoverLease } from "../../src/core/lease.ts";
-import {
-  hashBuilderContract,
-  makeBuilderContractRevision,
-} from "../../src/core/builder-contract.ts";
+import { hashBuilderContract } from "../../src/core/builder-contract.ts";
 import {
   applyRunEvent,
   StateTransitionError,
