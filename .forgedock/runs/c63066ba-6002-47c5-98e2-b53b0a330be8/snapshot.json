@@ -5,13 +5,13 @@
   "issueNumber": 32,
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "leaseBinding": {
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:f7840cb3b6afb4e439d3746f7333d3ff89c132eeaeb9804edbcdf27acbced243",
+  "sequence": 6,
+  "lastEventHash": "sha256:3e8cf89b6dc0f9f3be493c2706f7971097639c0c338abb95bf890b94d4fb09f1",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -49,13 +49,16 @@
     "node:resolve-1:queued": "7aaad409-17eb-43da-a9c0-6f1ee640eaa1",
     "node:resolve-1:started": "cb90872d-e8eb-460a-b1ae-e76c71e58deb",
     "node:resolve-1:receipt-bound": "ab401843-8d8a-483d-aebe-2dc6eece188a",
-    "node:resolve-1:completed": "c5f145f9-9e8a-465f-9d50-62f5d857bea2"
+    "node:resolve-1:completed": "c5f145f9-9e8a-465f-9d50-62f5d857bea2",
+    "run:cancelled": "7cc87b84-6dd3-4450-b88e-fa210b6dd64e"
   },
   "eventIds": {
     "3657ebd1-2b0d-4785-b61e-b9139b658304": true,
     "7aaad409-17eb-43da-a9c0-6f1ee640eaa1": true,
     "cb90872d-e8eb-460a-b1ae-e76c71e58deb": true,
     "ab401843-8d8a-483d-aebe-2dc6eece188a": true,
-    "c5f145f9-9e8a-465f-9d50-62f5d857bea2": true
-  }
+    "c5f145f9-9e8a-465f-9d50-62f5d857bea2": true,
+    "7cc87b84-6dd3-4450-b88e-fa210b6dd64e": true
+  },
+  "cancellationReason": "Lease expired after its owning Pi session stopped heartbeating; takeover confirmed by operator session 01a03992-a251-78fc-b722-95aa7f4f9589."
 }
