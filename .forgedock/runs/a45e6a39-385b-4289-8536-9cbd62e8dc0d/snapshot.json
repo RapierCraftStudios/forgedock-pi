@@ -10,15 +10,15 @@
     "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
     "epoch": 1
   },
-  "sequence": 4,
-  "lastEventHash": "sha256:ba4ef741dd88ad63c92bc092cf2b1a604bac1a588ab3cf91508adc45fcaedf6a",
+  "sequence": 5,
+  "lastEventHash": "sha256:fd5454702d58f0299926f1994085bc22dfe0422674f1afafcaa544c2bfacad65",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/a45e6a39-385b-4289-8536-9cbd62e8dc0d/.pi/forge/a45e6a39-385b-4289-8536-9cbd62e8dc0d-resolve-1.json",
       "subagentRunId": "c7db148e-ecd6-436a-b058-aee4573668d6",
@@ -27,7 +27,18 @@
       "startedAt": "2026-08-25T16:44:58.936Z",
       "previousSubagentRunId": "launch:resolve-1:ca3c7fdc-7af6-4543-9a9d-ba84789fd375",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "round": 1,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "Issue #51 has a non-empty supplied title and is already labeled workflow:investigating.",
+        "src/workflows/work-on.ts checks that an issue is open before preparing the worktree and dispatching resolve-1; this bound resolve node was dispatched through that path.",
+        ".forge/config.json names dogfood as the sole integration branch and protects only main, so the bound base branch is policy-eligible.",
+        "This read-only resolve node made no source or Git changes; head remains the frozen base SHA."
+      ],
+      "finishedAt": "2026-08-25T16:46:03.961Z"
     }
   },
   "effects": {},
@@ -35,12 +46,14 @@
     "run:create": "cc7da491-7462-4048-8eb8-70c6f11fbdd7",
     "node:resolve-1:queued": "77c2f382-7abe-477c-9368-5c816025e4f4",
     "node:resolve-1:started": "fc5dad27-0a45-4b2c-90fa-14c31ec2bc2a",
-    "node:resolve-1:receipt-bound": "9ebdc94b-755c-4fbd-8a6c-622291536847"
+    "node:resolve-1:receipt-bound": "9ebdc94b-755c-4fbd-8a6c-622291536847",
+    "node:resolve-1:completed": "cfe80aeb-e617-4991-a72e-62b942a14d04"
   },
   "eventIds": {
     "cc7da491-7462-4048-8eb8-70c6f11fbdd7": true,
     "77c2f382-7abe-477c-9368-5c816025e4f4": true,
     "fc5dad27-0a45-4b2c-90fa-14c31ec2bc2a": true,
-    "9ebdc94b-755c-4fbd-8a6c-622291536847": true
+    "9ebdc94b-755c-4fbd-8a6c-622291536847": true,
+    "cfe80aeb-e617-4991-a72e-62b942a14d04": true
   }
 }
