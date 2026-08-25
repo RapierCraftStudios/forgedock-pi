@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 20,
   "leaseEpoch": 1,
-  "sequence": 42,
-  "lastEventHash": "sha256:ace710fc3f6ed362a1e197e5ecbd62e4d2dd76006bc0d04630557f1e65232b2f",
+  "sequence": 43,
+  "lastEventHash": "sha256:8f6700f75bb0985634f1ec62ff5b84dcb37d205c9419af10883135f90160e4a9",
   "lanes": [
     {
       "issueNumber": 50,
@@ -28,10 +28,11 @@
     {
       "issueNumber": 52,
       "ordinal": 2,
-      "status": "running",
+      "status": "blocked",
       "refreshes": 0,
       "forgeRunId": "d6d1cc96-417c-4fc5-99e3-a6064b1188ca",
-      "subagentRunId": "181ff6da-6db1-4479-b05a-36285c311034"
+      "subagentRunId": "181ff6da-6db1-4479-b05a-36285c311034",
+      "reason": "Missing completed implement-1 artifact and immutable implementation head for this verify attempt."
     },
     {
       "issueNumber": 53,
@@ -117,7 +118,8 @@
     "lease:heartbeat:2026-08-25T21:45:49.683Z": "7eaeb4de-bdab-44c1-8c4d-298cc690d76e",
     "lease:heartbeat:2026-08-25T21:46:49.699Z": "f8c5e5e4-8226-49f2-a11c-0af032320696",
     "lease:heartbeat:2026-08-25T21:47:49.761Z": "a68510aa-75ca-4262-bca3-6d19eda9a6fa",
-    "lane:60:needs-human": "ca0b672a-f0d9-41c5-8fa0-45b9fdc816cb"
+    "lane:60:needs-human": "ca0b672a-f0d9-41c5-8fa0-45b9fdc816cb",
+    "lane:52:blocked": "d70ee2e1-f81d-4568-83fb-6dcfad3bd873"
   },
   "createdAt": "2026-08-25T21:21:25.482Z"
 }
