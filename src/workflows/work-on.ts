@@ -784,6 +784,7 @@ export class ForgeWorkOnController {
             subagentRunId: activeNode.subagentRunId,
             resultPath: activeNode.resultPath,
             baseSha: durableNode.baseSha ?? link.prepared.baseSha,
+            ...(durableNode.headSha ? { headSha: durableNode.headSha } : {}),
           },
           idempotencyKey: `node:${nodeId}:promote-running`,
           sessionId: ctx.sessionManager.getSessionId(),
@@ -806,6 +807,7 @@ export class ForgeWorkOnController {
             launchReceipt: true,
             transportRetries: durableNode.transportRetries ?? 0,
             baseSha: durableNode.baseSha ?? link.prepared.baseSha,
+            ...(durableNode.headSha ? { headSha: durableNode.headSha } : {}),
           },
           idempotencyKey: `node:${nodeId}:receipt-bound-recovery`,
           sessionId: ctx.sessionManager.getSessionId(),
@@ -876,6 +878,13 @@ export class ForgeWorkOnController {
     if (nodeResult.node !== expectedNode)
       throw new Error(
         `Node result ${nodeResult.node} does not match bound node ${expectedNode}.`,
+      );
+    if (
+      expectedNode === "verify" &&
+      (!durableNode.headSha || nodeResult.headSha !== durableNode.headSha)
+    )
+      throw new Error(
+        `Verify result head ${nodeResult.headSha} does not match durable implementation head ${durableNode.headSha ?? "missing"}.`,
       );
     const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
     const token = await resolveGitHubToken(this.#pi, link.prepared.repositoryRoot, ctx.signal);
@@ -1742,6 +1751,7 @@ export class ForgeWorkOnController {
         attempt: node.attempt,
         ...(node.round ? { round: node.round } : {}),
         baseSha: link.prepared.baseSha,
+        ...(node.headSha ? { headSha: node.headSha } : {}),
         resultPath,
       },
       idempotencyKey: `node:${node.nodeId}:queued`,
@@ -1802,6 +1812,7 @@ export class ForgeWorkOnController {
         launchNonce: launchIntent.launchNonce,
         launchIntent: true,
         baseSha: link.prepared.baseSha,
+        ...(node.headSha ? { headSha: node.headSha } : {}),
       },
       idempotencyKey: `node:${node.nodeId}:started`,
       sessionId: ctx.sessionManager.getSessionId(),
@@ -1920,6 +1931,7 @@ export class ForgeWorkOnController {
         launchReceipt: true,
         transportRetries: 0,
         baseSha: link.prepared.baseSha,
+        ...(node.headSha ? { headSha: node.headSha } : {}),
       },
       idempotencyKey: `node:${node.nodeId}:receipt-bound`,
       sessionId: ctx.sessionManager.getSessionId(),

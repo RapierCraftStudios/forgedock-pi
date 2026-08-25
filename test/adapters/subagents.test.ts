@@ -208,6 +208,109 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
   assert.doesNotMatch(spawn.params.task, /Process resolve, investigate, plan/i);
 });
 
+test("RPC bounded verify launch binds its head and complete approved command inventory", async () => {
+  const { pi, bus } = fakePi();
+  const client = new SubagentsRpcClient(pi);
+  const verifyPolicy = parseForgePolicy({
+    schema: "forgedock.config/v1",
+    repository: { provider: "github", name: "owner/repo" },
+    state: {
+      branch: "forgedock/state/v1",
+      leaseSeconds: 300,
+      heartbeatSeconds: 60,
+    },
+    branches: {
+      integration: ["staging"],
+      protected: ["main"],
+      autoMergeIntegration: true,
+    },
+    verification: {
+      commands: {
+        test: { argv: ["npm", "test"], required: true, timeoutMs: 600_000 },
+        lint: { argv: ["npm", "run", "lint"], required: false, timeoutMs: 60_000 },
+      },
+    },
+    review: { required: ["correctness", "security"], maxRounds: 3 },
+    subagents: { maxConcurrent: 2, maxDepth: 2 },
+  });
+  await client.spawnNode({
+    runId: "run-verify",
+    issueNumber: 9,
+    repository: "owner/repo",
+    worktreeRoot: "/tmp/worktree",
+    branch: "forge/9",
+    baseBranch: "staging",
+    baseSha: "abcdef1234567890",
+    leaseEpoch: 1,
+    policy: verifyPolicy,
+    issueContext: "untrusted issue text",
+    node: {
+      nodeId: "verify-1",
+      node: "verify",
+      attempt: 1,
+      headSha: "fedcba9876543210",
+    },
+  });
+  const spawn = bus.requests.at(-1) as {
+    params: {
+      task: string;
+      extensionBindings: Record<string, { nodeHeadSha?: string }>;
+    };
+  };
+  assert.match(spawn.params.task, /Frozen implementation head SHA: fedcba9876543210/);
+  assert.match(spawn.params.task, /test \(required\)/);
+  assert.match(spawn.params.task, /lint \(optional\)/);
+  assert.doesNotMatch(spawn.params.task, /npm run lint/);
+  assert.equal(
+    spawn.params.extensionBindings["forgedock.pi/1"]?.nodeHeadSha,
+    "fedcba9876543210",
+  );
+});
+
+test("RPC bounded verify launch explicitly handles an empty approved command set", async () => {
+  const { pi, bus } = fakePi();
+  const client = new SubagentsRpcClient(pi);
+  const noCommandsPolicy = parseForgePolicy({
+    schema: "forgedock.config/v1",
+    repository: { provider: "github", name: "owner/repo" },
+    state: {
+      branch: "forgedock/state/v1",
+      leaseSeconds: 300,
+      heartbeatSeconds: 60,
+    },
+    branches: {
+      integration: ["staging"],
+      protected: ["main"],
+      autoMergeIntegration: true,
+    },
+    verification: { commands: {} },
+    review: { required: ["correctness", "security"], maxRounds: 3 },
+    subagents: { maxConcurrent: 2, maxDepth: 2 },
+  });
+  await client.spawnNode({
+    runId: "run-verify-empty",
+    issueNumber: 9,
+    repository: "owner/repo",
+    worktreeRoot: "/tmp/worktree",
+    branch: "forge/9",
+    baseBranch: "staging",
+    baseSha: "abcdef1234567890",
+    leaseEpoch: 1,
+    policy: noCommandsPolicy,
+    issueContext: "untrusted issue text",
+    node: {
+      nodeId: "verify-1",
+      node: "verify",
+      attempt: 1,
+      headSha: "fedcba9876543210",
+    },
+  });
+  const spawn = bus.requests.at(-1) as { params: { task: string } };
+  assert.match(spawn.params.task, /Approved forge_verify command names: none/);
+  assert.match(spawn.params.task, /do not guess command names/i);
+  assert.match(spawn.params.task, /not-configured/);
+});
+
 test("RPC bounded implementation remediation retains the guarded writer", async () => {
   const { pi, bus } = fakePi();
   const client = new SubagentsRpcClient(pi);

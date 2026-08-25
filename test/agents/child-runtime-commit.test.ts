@@ -8,9 +8,11 @@ import test from "node:test";
 
 import {
   allowedNodeTools,
+  assertBoundNodeResultHead,
   isForgeRuntimePath,
   parseGitStatusPaths,
 } from "../../src/agents/child-runtime.ts";
+import type { ForgeNodeResult } from "../../src/agents/contracts.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -42,6 +44,53 @@ test("every bounded non-review node can persist its trusted result", () => {
     false,
   );
   assert.equal(allowedNodeTools("review-security").has("forge_diff"), true);
+});
+
+test("bounded verify finalization rejects stale result and artifact heads", () => {
+  const result: ForgeNodeResult = {
+    schema: "forgedock.node-result/v1",
+    runId: "run-1",
+    issueNumber: 52,
+    nodeId: "verify-1",
+    node: "verify",
+    status: "completed",
+    branch: "forge/52",
+    baseSha: "base123456789",
+    headSha: "head123456789",
+    changedFiles: [],
+    verification: [],
+    evidence: ["no local commands configured"],
+    artifact: {
+      schema: "forgedock.phase-artifact/v1",
+      phase: "verify",
+      headSha: "head123456789",
+      checks: [
+        {
+          name: "local verification",
+          required: false,
+          status: "not-configured",
+          evidence: "No local commands configured.",
+        },
+      ],
+      readiness: "ready-for-ci",
+      reason: "Local verification is not configured.",
+    },
+  };
+  assert.doesNotThrow(() =>
+    assertBoundNodeResultHead("verify", "head123456789", result),
+  );
+  assert.throws(
+    () => assertBoundNodeResultHead("verify", "other12345678", result),
+    /result head SHA does not match/i,
+  );
+  assert.throws(
+    () =>
+      assertBoundNodeResultHead("verify", "head123456789", {
+        ...result,
+        artifact: { ...result.artifact!, headSha: "other12345678" },
+      } as ForgeNodeResult),
+    /artifact head SHA does not match/i,
+  );
 });
 
 test("commit path staging excludes ignored Forge runtime content", async () => {

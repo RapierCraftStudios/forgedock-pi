@@ -414,7 +414,12 @@ test("resume intent is durable before a provider continuation receipt", () => {
     nextEvent(
       state,
       "node.queued",
-      { nodeId: "verify-1", node: "verify", attempt: 1 },
+      {
+        nodeId: "verify-1",
+        node: "verify",
+        attempt: 1,
+        headSha: "implementation-head",
+      },
       "verify:queue",
     ),
   );
@@ -428,6 +433,7 @@ test("resume intent is durable before a provider continuation receipt", () => {
         node: "verify",
         attempt: 1,
         subagentRunId: "child-old",
+        headSha: "implementation-head",
       },
       "verify:start",
     ),
@@ -447,6 +453,7 @@ test("resume intent is durable before a provider continuation receipt", () => {
         launchNonce: "nonce",
         launchIntent: true,
         transportRetries: 1,
+        headSha: "implementation-head",
       },
       "verify:resume:intent",
     ),
@@ -470,12 +477,14 @@ test("resume intent is durable before a provider continuation receipt", () => {
         launchNonce: "nonce",
         launchReceipt: true,
         transportRetries: 1,
+        headSha: "implementation-head",
       },
       "verify:resume:receipt",
     ),
   );
   assert.equal(state.nodes["verify-1"]?.subagentRunId, "child-new");
   assert.equal(state.nodes["verify-1"]?.transportRetries, 1);
+  assert.equal(state.nodes["verify-1"]?.headSha, "implementation-head");
 });
 
 test("hash chain and idempotency conflicts fail closed", () => {

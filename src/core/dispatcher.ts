@@ -147,15 +147,14 @@ export function chooseNextExecutableNode(
           ))
       )
         return undefined;
+      const headSha = headForNode(nodes, node, nextRound);
       return {
         nodeId: `${node}-${nextRound}`,
         node,
         attempt: nextRound,
         round: nextRound,
         status: "queued",
-        ...(latest.get("prepare-pr")?.headSha
-          ? { headSha: latest.get("prepare-pr")?.headSha }
-          : {}),
+        ...(headSha ? { headSha } : {}),
       };
     }
     return undefined;
@@ -204,17 +203,53 @@ export function chooseNextExecutableNode(
         correctness.headSha !== security.headSha)
     )
       return undefined;
-    const frozenHead =
-      latest.get("prepare-pr")?.headSha ?? latest.get("verify")?.headSha;
+    const attempt = (record?.attempt ?? 0) + 1;
+    const frozenHead = headForNode(nodes, node, attempt);
     return {
-      nodeId: `${node}-${(record?.attempt ?? 0) + 1}`,
+      nodeId: `${node}-${attempt}`,
       node,
-      attempt: (record?.attempt ?? 0) + 1,
+      attempt,
       round: (record?.round ?? record?.attempt ?? 0) + 1,
       status: "queued",
       ...(frozenHead ? { headSha: frozenHead } : {}),
     };
   }
+  return undefined;
+}
+
+function headForNode(
+  records: readonly WorkflowNodeRecord[],
+  node: WorkflowNode,
+  attempt: number,
+): string | undefined {
+  const completedHead = (source: WorkflowNode, sourceAttempt?: number) =>
+    [...records]
+      .reverse()
+      .find(
+        (record) =>
+          record.node === source &&
+          (sourceAttempt === undefined || record.attempt === sourceAttempt) &&
+          record.status === "completed" &&
+          Boolean(record.headSha),
+      )?.headSha;
+
+  if (node === "verify") return completedHead("implement", attempt);
+  if (node === "prepare-pr") return completedHead("verify", attempt);
+  if (node === "implement" && attempt > 1)
+    return completedHead("prepare-pr", attempt - 1);
+  if (
+    [
+      "review-correctness",
+      "review-security",
+      "review-join",
+      "ci",
+      "decision",
+      "merge",
+      "close",
+      "cleanup",
+    ].includes(node)
+  )
+    return completedHead("prepare-pr");
   return undefined;
 }
 

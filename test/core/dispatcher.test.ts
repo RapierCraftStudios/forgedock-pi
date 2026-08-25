@@ -41,6 +41,59 @@ test("dispatcher selects exactly one bounded node and gates review join on same 
   );
 });
 
+test("verify is bound to the matching completed implementation head", () => {
+  const initial: WorkflowNodeRecord[] = [
+    completed("resolve"),
+    completed("investigate"),
+    completed("plan"),
+    completed("prepare-worktree"),
+    completed("implement", "implement-1", "implementation111"),
+  ];
+  assert.deepEqual(
+    chooseNextExecutableNode({ nodes: initial }),
+    {
+      nodeId: "verify-1",
+      node: "verify",
+      attempt: 1,
+      round: 1,
+      status: "queued",
+      headSha: "implementation111",
+    },
+  );
+});
+
+test("remediation verify uses the new implementation head, not the prior review head", () => {
+  const records: WorkflowNodeRecord[] = [
+    completed("resolve"),
+    completed("investigate"),
+    completed("plan"),
+    completed("prepare-worktree"),
+    completed("implement", "implement-1", "implementation111"),
+    completed("verify", "verify-1", "implementation111"),
+    completed("prepare-pr", "prepare-pr-1", "reviewed1111111"),
+    completed("review-correctness", "review-correctness-1", "reviewed1111111"),
+    completed("review-security", "review-security-1", "reviewed1111111"),
+    completed("review-join", "review-join-1", "reviewed1111111"),
+    completed("ci", "ci-1", "reviewed1111111"),
+    {
+      ...completed("decision", "decision-1", "reviewed1111111"),
+      outcome: "remediation-required",
+      round: 1,
+    },
+    {
+      nodeId: "implement-2",
+      node: "implement",
+      attempt: 2,
+      round: 2,
+      status: "completed",
+      headSha: "implementation222",
+    },
+  ];
+  const next = chooseNextExecutableNode({ nodes: records, maxReviewRounds: 2 });
+  assert.equal(next?.nodeId, "verify-2");
+  assert.equal(next?.headSha, "implementation222");
+});
+
 test("both reviewer nodes become independently runnable at the frozen PR head", () => {
   const records: WorkflowNodeRecord[] = [
     completed("resolve"),

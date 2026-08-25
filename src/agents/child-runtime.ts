@@ -37,6 +37,7 @@ import {
   isForgeNodeResult,
   isForgeReviewerResult,
   isForgeWorkOnResult,
+  type ForgeNodeResult,
 } from "./contracts.ts";
 import {
   FORGE_REVIEW_CORRECTNESS_AGENT,
@@ -71,6 +72,7 @@ interface ForgeChildBinding {
   nodeId?: string;
   node?: string;
   nodeAttempt?: number;
+  nodeHeadSha?: string;
   reviewHeadSha?: string;
   refresh: boolean;
   previousReviewRounds?: number;
@@ -742,6 +744,11 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         params.value.baseSha !== binding.baseSha
       )
         throw new Error("Final node result identity does not match its binding.");
+      assertBoundNodeResultHead(
+        binding.node,
+        binding.nodeHeadSha,
+        params.value,
+      );
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
       const resultPath = resolve(binding.resultPath);
       if (!isPathWithin(join(root, ".pi", "forge"), resultPath))
@@ -1003,6 +1010,11 @@ function readBinding(): ForgeChildBinding {
     (typeof value.reviewHeadSha !== "string" || !value.reviewHeadSha.trim())
   )
     throw new Error("Reviewer bindings require reviewHeadSha.");
+  if (
+    node === "verify" &&
+    (typeof value.nodeHeadSha !== "string" || !value.nodeHeadSha.trim())
+  )
+    throw new Error("Verify bindings require nodeHeadSha.");
   const refresh = value.refresh === true;
   const previousReviewRounds = value.previousReviewRounds;
   if (
@@ -1034,6 +1046,9 @@ function readBinding(): ForgeChildBinding {
           nodeId: value.nodeId as string,
           node,
           nodeAttempt: value.nodeAttempt as number,
+          ...(typeof value.nodeHeadSha === "string"
+            ? { nodeHeadSha: value.nodeHeadSha }
+            : {}),
           ...(typeof value.reviewHeadSha === "string"
             ? { reviewHeadSha: value.reviewHeadSha }
             : {}),
@@ -1044,6 +1059,23 @@ function readBinding(): ForgeChildBinding {
       ? { previousReviewRounds: previousReviewRounds as number }
       : {}),
   };
+}
+
+export function assertBoundNodeResultHead(
+  node: string | undefined,
+  boundHeadSha: string | undefined,
+  result: ForgeNodeResult,
+): void {
+  if (node !== "verify") return;
+  if (!boundHeadSha)
+    throw new Error("Verify node result has no bound implementation head SHA.");
+  if (result.headSha !== boundHeadSha)
+    throw new Error("Final verify node result head SHA does not match its binding.");
+  if (
+    result.artifact?.phase === "verify" &&
+    result.artifact.headSha !== boundHeadSha
+  )
+    throw new Error("Final verify artifact head SHA does not match its binding.");
 }
 
 export function allowedNodeTools(node: string | undefined): ReadonlySet<string> {

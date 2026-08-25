@@ -222,6 +222,9 @@ export class SubagentsRpcClient {
             nodeId: input.node.nodeId,
             node: input.node.node,
             nodeAttempt: input.node.attempt,
+            ...(input.node.headSha
+              ? { nodeHeadSha: input.node.headSha }
+              : {}),
           }
         : {}),
     };
@@ -257,7 +260,11 @@ export class SubagentsRpcClient {
           `Run ID: ${input.runId}`,
           `Assigned worktree: ${input.worktreeRoot}`,
           `Branch: ${input.branch}`,
+          `Integration base: ${input.baseBranch}`,
           `Frozen base SHA: ${input.baseSha}`,
+          ...(input.node.node === "verify"
+            ? [verifyNodeTask(input.node.headSha, input.policy.verification.commands)]
+            : []),
           "The parent has already durably queued and started this node. Execute only this node, then return one schema-valid forgedock.node-result/v1 value. Do not process any other phase, do not call forge_checkpoint, do not launch subagents, and do not merge, close, or clean up.",
           boundedShellGuidance(input.node.node),
           "For every non-review node, return artifact as a forgedock.phase-artifact/v1 object whose phase matches this node. Supply typed facts only; never author Markdown or markers. Investigation must include actual taskType, complexity, evidence, decomposition, skipped phases, and acceptance checks. Plan must include allowed paths, forbidden changes, invariants, context, hazards, steps, and criterion mapping. Implementation must include the real commit SHA and changed-file statistics. Verification must name every check and use passed, failed, skipped, pending, unknown, not-configured, or policy-exempt truthfully. For prepare-pr, call forge_prepare_review and return the exact PR/head/domains. The trusted parent validates the object and deterministically renders GitHub Markdown. Review nodes return only the typed reviewer result.",
@@ -505,6 +512,26 @@ function findRunId(value: unknown): string | undefined {
   if (details && typeof details === "object" && !Array.isArray(details))
     return findRunId(details);
   return undefined;
+}
+
+function verifyNodeTask(
+  headSha: string | undefined,
+  commands: ForgePolicy["verification"]["commands"],
+): string {
+  if (!headSha)
+    throw new SubagentRpcError(
+      "missing-verify-head",
+      "A bounded verify node requires its completed implementation head SHA.",
+    );
+  const approved = Object.entries(commands).map(
+    ([name, command]) => `${name} (${command.required ? "required" : "optional"})`,
+  );
+  return [
+    `Frozen implementation head SHA: ${headSha}. Return this exact SHA as the node result and verify artifact headSha.`,
+    approved.length
+      ? `Approved forge_verify command names (complete set): ${approved.join(", ")}. Run every required name; optional names may be run when applicable. Report every configured check truthfully, including skipped optional checks.`
+      : "Approved forge_verify command names: none. Local verification is not configured; do not guess command names, call forge_verify, or ask the supervisor for names. Report local verification as not-configured.",
+  ].join("\n");
 }
 
 function boundedShellGuidance(node: WorkflowNode): string {
