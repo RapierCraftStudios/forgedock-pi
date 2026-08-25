@@ -10,8 +10,8 @@
     "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
     "epoch": 1
   },
-  "sequence": 13,
-  "lastEventHash": "sha256:c813fd25ce96738eca2794bd100ae3654e6a960cd2e7590053e77affcee45e2b",
+  "sequence": 14,
+  "lastEventHash": "sha256:969620c19796c1097e87a1c1f5b8069b2493e7032a0adf824e0693f257a6b1d7",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -105,6 +105,15 @@
         "package.json and .github/workflows/ci.yml define npm run check (typecheck plus tests) on Node.js 22 and 24."
       ],
       "finishedAt": "2026-08-25T16:55:56.131Z"
+    },
+    "prepare-worktree-1": {
+      "nodeId": "prepare-worktree-1",
+      "node": "prepare-worktree",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/a45e6a39-385b-4289-8536-9cbd62e8dc0d/.pi/forge/a45e6a39-385b-4289-8536-9cbd62e8dc0d-prepare-worktree-1.json"
     }
   },
   "effects": {},
@@ -121,7 +130,8 @@
     "node:plan-1:queued": "6529e4f5-d48f-4570-994d-4609a0060655",
     "node:plan-1:started": "61551b86-0cd2-452c-91e2-872c94fae3a3",
     "node:plan-1:receipt-bound": "865be8be-79d3-4e2c-9752-5bc000bfe268",
-    "node:plan-1:completed": "23d44595-66e3-4d3f-a226-1421efe8afe0"
+    "node:plan-1:completed": "23d44595-66e3-4d3f-a226-1421efe8afe0",
+    "node:prepare-worktree-1:queued": "57438473-56df-4854-b4df-da55c309bfdb"
   },
   "eventIds": {
     "cc7da491-7462-4048-8eb8-70c6f11fbdd7": true,
@@ -136,6 +146,7 @@
     "6529e4f5-d48f-4570-994d-4609a0060655": true,
     "61551b86-0cd2-452c-91e2-872c94fae3a3": true,
     "865be8be-79d3-4e2c-9752-5bc000bfe268": true,
-    "23d44595-66e3-4d3f-a226-1421efe8afe0": true
+    "23d44595-66e3-4d3f-a226-1421efe8afe0": true,
+    "57438473-56df-4854-b4df-da55c309bfdb": true
   }
 }
