@@ -10,8 +10,8 @@
     "ownerRunId": "dd680e3c-d22e-4841-9e2e-5042551e056a",
     "epoch": 1
   },
-  "sequence": 47,
-  "lastEventHash": "sha256:57a7772ff402c8f22aa285d2f71045094a665a113f5464f157cd45feefc0cfc8",
+  "sequence": 48,
+  "lastEventHash": "sha256:7ad33a9aa3104b74923748850f6c02895ff9bfc84393f4ede9f6abc10595821a",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -375,7 +375,9 @@
       "node": "merge",
       "attempt": 1,
       "round": 1,
-      "status": "queued"
+      "status": "running",
+      "baseSha": "320ad98f894e872dcb4ddc50cc90237722ab736c",
+      "startedAt": "2026-08-25T10:32:12.132Z"
     }
   },
   "effects": {},
@@ -426,7 +428,8 @@
     "node:decision-1:queued": "f4a421f8-741f-4f41-b74e-178cb6d97774",
     "node:decision-1:started": "56741a4c-575f-4b23-b5b8-0d6840ca138a",
     "node:decision-1:complete": "f974d273-2c65-48f1-90e5-bfc1e5fd0dfc",
-    "node:merge-1:queued": "9eda5d52-4a78-4611-9961-f0b18506cf1f"
+    "node:merge-1:queued": "9eda5d52-4a78-4611-9961-f0b18506cf1f",
+    "node:merge-1:started": "95c15236-ed25-4192-848a-cba5fc40d15f"
   },
   "eventIds": {
     "f09b50df-0043-4493-aea7-a52e7e099b6f": true,
@@ -475,6 +478,7 @@
     "f4a421f8-741f-4f41-b74e-178cb6d97774": true,
     "56741a4c-575f-4b23-b5b8-0d6840ca138a": true,
     "f974d273-2c65-48f1-90e5-bfc1e5fd0dfc": true,
-    "9eda5d52-4a78-4611-9961-f0b18506cf1f": true
+    "9eda5d52-4a78-4611-9961-f0b18506cf1f": true,
+    "95c15236-ed25-4192-848a-cba5fc40d15f": true
   }
 }
