@@ -10,8 +10,8 @@
     "ownerRunId": "88697068-2f3e-4339-a599-99e31f17c5b9",
     "epoch": 1
   },
-  "sequence": 10,
-  "lastEventHash": "sha256:14509b054e2780a9a70c46e9b18b0a244881039810dd33718d9006efdcca9142",
+  "sequence": 11,
+  "lastEventHash": "sha256:7b6299549ddcd323e02bf3f97e1bc2920e9f0900fa749741693fcffce484360f",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -66,6 +66,18 @@
           "finishedAt": "2026-08-25T04:32:30.938Z"
         }
       ]
+    },
+    "prepare-worktree": {
+      "phase": "prepare-worktree",
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "queued",
+          "leaseEpoch": 1,
+          "restartAction": "resume prepare-worktree attempt 1",
+          "evidence": []
+        }
+      ]
     }
   },
   "effects": {},
@@ -79,7 +91,8 @@
     "phase:investigate:1:complete": "c24094e6-bc43-4d08-ac91-27f30cf85919",
     "phase:plan:1:queue": "60077211-f98c-4aba-90f0-f3407a105614",
     "phase:plan:1:start": "32b2de3f-fb5a-4131-8648-b94de180842e",
-    "phase:plan:1:complete": "6240e52f-cadc-476a-935e-613ee8b10539"
+    "phase:plan:1:complete": "6240e52f-cadc-476a-935e-613ee8b10539",
+    "phase:prepare-worktree:1:queue": "2b2e3a23-192a-4874-9098-dc9a995d74d5"
   },
   "eventIds": {
     "dd64e839-ce68-4545-9d0f-84fbe1e805dd": true,
@@ -91,6 +104,7 @@
     "c24094e6-bc43-4d08-ac91-27f30cf85919": true,
     "60077211-f98c-4aba-90f0-f3407a105614": true,
     "32b2de3f-fb5a-4131-8648-b94de180842e": true,
-    "6240e52f-cadc-476a-935e-613ee8b10539": true
+    "6240e52f-cadc-476a-935e-613ee8b10539": true,
+    "2b2e3a23-192a-4874-9098-dc9a995d74d5": true
   }
 }
