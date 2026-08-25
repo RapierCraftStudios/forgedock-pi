@@ -10,8 +10,8 @@
     "ownerRunId": "dd680e3c-d22e-4841-9e2e-5042551e056a",
     "epoch": 1
   },
-  "sequence": 25,
-  "lastEventHash": "sha256:20104b7364f36560bf6de67504128bcf4c35e6892d0527fa14109a912bf59fa7",
+  "sequence": 26,
+  "lastEventHash": "sha256:d2083416b645f50725bae5ce4a52bda88ea541d9055207cf853219138515a0f1",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -182,6 +182,15 @@
         "No configured GitHub CI result is available during verify-1; parent-owned GitHub CI remains required for the prepared review head."
       ],
       "finishedAt": "2026-08-25T10:26:00.719Z"
+    },
+    "prepare-pr-1": {
+      "nodeId": "prepare-pr-1",
+      "node": "prepare-pr",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "320ad98f894e872dcb4ddc50cc90237722ab736c",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/4f3e8e17-3743-4a53-a0c7-db71ce9535b9/.pi/forge/4f3e8e17-3743-4a53-a0c7-db71ce9535b9-prepare-pr-1.json"
     }
   },
   "effects": {},
@@ -210,7 +219,8 @@
     "node:verify-1:queued": "079bcbe2-a18c-4f9e-8d5e-19b7de00b822",
     "node:verify-1:started": "19d0994e-b981-442a-a7ea-f51a0bb06ff4",
     "node:verify-1:receipt-bound": "231d9ccc-5de4-4c46-829e-3f96195d3bd7",
-    "node:verify-1:completed": "73c9f8da-9b88-4d8b-b96a-049db88b8cbf"
+    "node:verify-1:completed": "73c9f8da-9b88-4d8b-b96a-049db88b8cbf",
+    "node:prepare-pr-1:queued": "72a0b2e0-ffc9-4b8b-8a11-6df0a497402e"
   },
   "eventIds": {
     "f09b50df-0043-4493-aea7-a52e7e099b6f": true,
@@ -237,6 +247,7 @@
     "079bcbe2-a18c-4f9e-8d5e-19b7de00b822": true,
     "19d0994e-b981-442a-a7ea-f51a0bb06ff4": true,
     "231d9ccc-5de4-4c46-829e-3f96195d3bd7": true,
-    "73c9f8da-9b88-4d8b-b96a-049db88b8cbf": true
+    "73c9f8da-9b88-4d8b-b96a-049db88b8cbf": true,
+    "72a0b2e0-ffc9-4b8b-8a11-6df0a497402e": true
   }
 }
