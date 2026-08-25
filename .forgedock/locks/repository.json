@@ -5,7 +5,7 @@
   "ownerSessionId": "01a037ea-6d15-724a-8efc-8c2eebdfc4d2",
   "epoch": 1,
   "acquiredAt": "2026-08-25T07:58:58.072Z",
-  "lastHeartbeatAt": "2026-08-25T08:29:05.010Z",
-  "expiresAt": "2026-08-25T09:29:05.010Z",
+  "lastHeartbeatAt": "2026-08-25T08:30:05.015Z",
+  "expiresAt": "2026-08-25T09:30:05.015Z",
   "takeoverRequired": false
 }
