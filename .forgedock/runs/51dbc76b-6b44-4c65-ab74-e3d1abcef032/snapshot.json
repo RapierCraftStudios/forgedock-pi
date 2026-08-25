@@ -1,0 +1,32 @@
+{
+  "schema": "forgedock.run-state/v1",
+  "runId": "51dbc76b-6b44-4c65-ab74-e3d1abcef032",
+  "repository": "RapierCraftStudios/forgedock-pi",
+  "issueNumber": 25,
+  "integrationBranch": "dogfood",
+  "protectedBranch": "main",
+  "status": "active",
+  "sequence": 2,
+  "lastEventHash": "sha256:b7dba38ebb56c0f2fafbe99a1be7bc572aed57417df750615640923a8da3e72d",
+  "phases": {},
+  "effects": {},
+  "idempotencyKeys": {
+    "run:create": "e08bac51-4ec2-4f4a-a642-248314a3096f",
+    "lease:acquire:1": "3d56c08a-02a1-4716-9304-a4d81ab12446"
+  },
+  "eventIds": {
+    "e08bac51-4ec2-4f4a-a642-248314a3096f": true,
+    "3d56c08a-02a1-4716-9304-a4d81ab12446": true
+  },
+  "lease": {
+    "schema": "forgedock.repository-lease/v1",
+    "repository": "RapierCraftStudios/forgedock-pi",
+    "ownerRunId": "51dbc76b-6b44-4c65-ab74-e3d1abcef032",
+    "ownerSessionId": "01a03713-7d2a-7dab-ab82-a772bc5d490b",
+    "epoch": 1,
+    "acquiredAt": "2026-08-25T04:00:24.691Z",
+    "lastHeartbeatAt": "2026-08-25T04:00:24.691Z",
+    "expiresAt": "2026-08-25T05:00:24.691Z",
+    "takeoverRequired": false
+  }
+}
