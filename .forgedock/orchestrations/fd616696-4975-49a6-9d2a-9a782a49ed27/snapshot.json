@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 27,
-  "lastEventHash": "sha256:496721527f01c7c53a795f8e25488a1d286437ccb8f71013774c87555efe94e3",
+  "sequence": 28,
+  "lastEventHash": "sha256:0fee039d80673491aaa11915f6a875c6b83f68e19092e35be8d083349623feca",
   "lanes": [
     {
       "issueNumber": 30,
@@ -45,7 +45,8 @@
     "lease:heartbeat:2026-08-25T09:16:49.083Z": "517cbc5c-4e12-457c-92f2-686f896eac11",
     "lease:heartbeat:2026-08-25T09:17:49.084Z": "4d6f73ad-c989-431e-b500-5a2b535360ec",
     "lease:heartbeat:2026-08-25T09:18:49.089Z": "e1864d9b-b26b-44b4-b35a-dfb596177a72",
-    "lease:heartbeat:2026-08-25T09:19:49.097Z": "2b1e4032-b807-4799-8e61-ba65c33641dc"
+    "lease:heartbeat:2026-08-25T09:19:49.097Z": "2b1e4032-b807-4799-8e61-ba65c33641dc",
+    "lease:heartbeat:2026-08-25T09:20:49.100Z": "42390ec0-383b-49c2-8c7e-54667d4516aa"
   },
   "createdAt": "2026-08-25T08:54:48.122Z"
 }
