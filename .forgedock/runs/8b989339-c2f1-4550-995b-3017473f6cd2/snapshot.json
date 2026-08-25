@@ -10,8 +10,8 @@
     "ownerRunId": "c0f52a10-07ba-4b5e-a47d-e39138c05aa2",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:98c45f8370ff00dc49d1ce8de6b260e23422feb71617402fb63dd23b55f8c466",
+  "sequence": 9,
+  "lastEventHash": "sha256:c6e80d416e8207c2c2705f0edce956004849168ec4f16bf79eff218fe1741018",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -45,7 +45,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/8b989339-c2f1-4550-995b-3017473f6cd2/.pi/forge/8b989339-c2f1-4550-995b-3017473f6cd2-investigate-1.json",
       "subagentRunId": "955a5ceb-ac86-465d-9e31-727a22f451a8",
@@ -54,7 +54,17 @@
       "startedAt": "2026-08-25T16:05:38.383Z",
       "previousSubagentRunId": "launch:investigate-1:6efad6a5-22dc-4e0a-b463-5bb435b01ee4",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "`src/adapters/subagents.ts:270` assigns `FORGE_WORK_ON_AGENT` to every bounded non-review spawn; there is no role-specific agent selection in this frozen base.",
+        "`src/agents/register.ts:158-183` registers `forge-work-on` as `acceptanceRole: \"writer\"` with changed-file acceptance evidence and `completionGuard: true`, so read-only bounded nodes inherit writer completion enforcement.",
+        "`src/agents/materialize.ts:164-188` accepts an acceptance role but hardcodes `completionGuard: true` in every generated agent file; its agent list contains no dedicated bounded read-only node.",
+        "`test/adapters/subagents.test.ts:173-201` checks the bounded investigate task and schema but does not assert the selected agent, acceptance role, completion guard, or successful zero-diff completion."
+      ],
+      "finishedAt": "2026-08-25T16:08:39.468Z"
     }
   },
   "effects": {},
@@ -66,7 +76,8 @@
     "node:resolve-1:completed": "43360fd2-8fb1-4516-a886-281d02cfb411",
     "node:investigate-1:queued": "7fab0587-153c-476d-a5e5-68d770a51b5e",
     "node:investigate-1:started": "0a013f8c-92e0-4645-af85-b5a67199e558",
-    "node:investigate-1:receipt-bound": "0c05c270-cf72-4152-b12f-f8c444501409"
+    "node:investigate-1:receipt-bound": "0c05c270-cf72-4152-b12f-f8c444501409",
+    "node:investigate-1:completed": "b0efb46b-bd3a-4ee9-92be-8cc216fae1cb"
   },
   "eventIds": {
     "e656d1eb-d4fb-461f-950a-aded3700afd9": true,
@@ -76,6 +87,7 @@
     "43360fd2-8fb1-4516-a886-281d02cfb411": true,
     "7fab0587-153c-476d-a5e5-68d770a51b5e": true,
     "0a013f8c-92e0-4645-af85-b5a67199e558": true,
-    "0c05c270-cf72-4152-b12f-f8c444501409": true
+    "0c05c270-cf72-4152-b12f-f8c444501409": true,
+    "b0efb46b-bd3a-4ee9-92be-8cc216fae1cb": true
   }
 }
