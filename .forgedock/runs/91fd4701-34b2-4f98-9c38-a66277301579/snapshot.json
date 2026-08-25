@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 12,
-  "lastEventHash": "sha256:02934eb4d05add0fc614273f783804438fe7ca49a51c1343bf9422b766f1ae08",
+  "sequence": 13,
+  "lastEventHash": "sha256:5a53e0ed2696db70f1ac36979d99707b212b164f3789382d6984fb85ee15cd00",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -73,7 +73,7 @@
       "node": "plan",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/91fd4701-34b2-4f98-9c38-a66277301579/.pi/forge/91fd4701-34b2-4f98-9c38-a66277301579-plan-1.json",
       "subagentRunId": "d24fcce7-d312-4265-b093-a95a0dad4674",
@@ -82,7 +82,34 @@
       "startedAt": "2026-08-25T19:33:15.000Z",
       "previousSubagentRunId": "launch:plan-1:f9fc4671-331b-4521-94ac-82e813eddf4d",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "verificationResults": [],
+      "builderContract": {
+        "schema": "forgedock.builder-path-contract/v1",
+        "revision": 1,
+        "allowedPaths": [
+          "src/adapters/subagents.ts",
+          "src/agents/child-runtime.ts",
+          "src/core/dispatcher.ts",
+          "src/workflows/work-on.ts",
+          "test/adapters/subagents.test.ts",
+          "test/agents/child-runtime-commit.test.ts",
+          "test/core/dispatcher.test.ts",
+          "test/core/state.test.ts",
+          "test/workflows/work-on.test.ts"
+        ],
+        "contractHash": "fd31040d4e4795c3277b2f498554d808eabbabe53c7aecf147a25516efac7fee"
+      },
+      "outcome": "completed",
+      "evidence": [
+        "src/core/dispatcher.ts currently derives a new node head only from prepare-pr or verify, so the first verify node is queued without the completed implementation head and remediation verification can inherit the prior prepared head.",
+        "src/workflows/work-on.ts omits node.headSha from node.queued, node.started, and receipt-bound node.resumed payloads even though its launch input forwards the node record.",
+        "src/adapters/subagents.ts accepts node.headSha but omits it from bounded extension bindings and bounded task text; the bounded task also omits the validated verification command-name set.",
+        "src/agents/child-runtime.ts authorizes forge_verify from the bound verificationCommands map and rejects unknown names, confirming that policy names are opaque to a read-only verifier unless dispatch supplies them.",
+        "DESIGN.md defines verify as operator-approved named checks with fail-closed malformed or unknown results, and package.json exposes npm run check as the repository CI surface."
+      ],
+      "finishedAt": "2026-08-25T19:44:41.317Z"
     }
   },
   "effects": {},
@@ -98,7 +125,8 @@
     "node:investigate-1:completed": "4c47288f-628c-4ef8-a579-251084b965a3",
     "node:plan-1:queued": "ffa93ac4-0582-466e-98df-e389416dad01",
     "node:plan-1:started": "b02fd87d-b8e6-4b35-bb6c-70042fa054bc",
-    "node:plan-1:receipt-bound": "99f63fc3-3850-406d-b569-037e4a0ec108"
+    "node:plan-1:receipt-bound": "99f63fc3-3850-406d-b569-037e4a0ec108",
+    "node:plan-1:completed": "e30532af-cf80-4e59-b45e-e94be5909ef2"
   },
   "eventIds": {
     "ba49bd33-cd25-4d3a-8106-d3166e61f8e2": true,
@@ -112,6 +140,7 @@
     "4c47288f-628c-4ef8-a579-251084b965a3": true,
     "ffa93ac4-0582-466e-98df-e389416dad01": true,
     "b02fd87d-b8e6-4b35-bb6c-70042fa054bc": true,
-    "99f63fc3-3850-406d-b569-037e4a0ec108": true
+    "99f63fc3-3850-406d-b569-037e4a0ec108": true,
+    "e30532af-cf80-4e59-b45e-e94be5909ef2": true
   }
 }
