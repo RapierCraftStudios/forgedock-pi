@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 28,
-  "lastEventHash": "sha256:3a3b2ab141302dac7f28333ea3f4170a55e17e9594909b77d66ac679a8b32089",
+  "sequence": 29,
+  "lastEventHash": "sha256:cb86eaa4e105a178c671b66243ddc2efc07565b9041cc84bc067eeb2f25e0823",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -192,7 +192,7 @@
       "node": "prepare-pr",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/152edce1-3e46-4425-8162-4f7b3cfaefc9/.pi/forge/152edce1-3e46-4425-8162-4f7b3cfaefc9-prepare-pr-1.json",
       "subagentRunId": "7b51d791-4c64-4e3c-a8e7-950d4f7076ea",
@@ -201,7 +201,15 @@
       "startedAt": "2026-08-25T19:04:14.733Z",
       "previousSubagentRunId": "launch:prepare-pr-1:e53e59d9-bea2-49a9-9b68-d3dd01b257f1",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "ebedb10cd436f825d18549833e1d0c62f773c3ce",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "forge_prepare_review pushed the clean bound branch and prepared PR #57 at frozen head ebedb10cd436f825d18549833e1d0c62f773c3ce.",
+        "PR #57 targets the bound integration base dogfood and activates correctness and security review domains."
+      ],
+      "finishedAt": "2026-08-25T19:05:42.960Z"
     }
   },
   "effects": {},
@@ -233,7 +241,8 @@
     "node:verify-1:completed": "2e9cf5c4-e1b2-47da-ba4f-9fb3bcfe87b0",
     "node:prepare-pr-1:queued": "8a239ede-4836-40c1-9900-6f91b8343d04",
     "node:prepare-pr-1:started": "8a73626d-a7f6-406f-9e3b-2ae2818f2f0f",
-    "node:prepare-pr-1:receipt-bound": "4dada3b1-c33e-4d67-bddd-4e5853d1a0cb"
+    "node:prepare-pr-1:receipt-bound": "4dada3b1-c33e-4d67-bddd-4e5853d1a0cb",
+    "node:prepare-pr-1:completed": "a15e9321-ec31-4cd7-80f4-74098c8bc7f9"
   },
   "eventIds": {
     "e54b6411-60d6-4281-8801-6488bc2a6398": true,
@@ -263,6 +272,7 @@
     "2e9cf5c4-e1b2-47da-ba4f-9fb3bcfe87b0": true,
     "8a239ede-4836-40c1-9900-6f91b8343d04": true,
     "8a73626d-a7f6-406f-9e3b-2ae2818f2f0f": true,
-    "4dada3b1-c33e-4d67-bddd-4e5853d1a0cb": true
+    "4dada3b1-c33e-4d67-bddd-4e5853d1a0cb": true,
+    "a15e9321-ec31-4cd7-80f4-74098c8bc7f9": true
   }
 }
