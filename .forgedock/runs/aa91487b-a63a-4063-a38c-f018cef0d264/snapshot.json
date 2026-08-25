@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 37,
-  "lastEventHash": "sha256:f3be425e745f977f91889afdde8a11bc23b715ab317e3b861984ddeda9a306eb",
+  "sequence": 38,
+  "lastEventHash": "sha256:2e5fc81956e40ee6f62957d9effe7a614fed2be68fc8a78dcddde86c1e03d657",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -290,6 +290,13 @@
         "comment:5415391404"
       ],
       "finishedAt": "2026-08-25T19:10:55.200Z"
+    },
+    "review-join-1": {
+      "nodeId": "review-join-1",
+      "node": "review-join",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued"
     }
   },
   "effects": {},
@@ -330,7 +337,8 @@
     "node:review-security-1:started": "d9c1d51b-d344-4886-bd7f-1113fedb4b06",
     "node:review-security-1:receipt-bound": "c12ab33b-b933-4b66-aa95-a19cf31e0476",
     "node:review-correctness-1:artifact-published": "8dea1959-0a14-4eda-8292-d68e9ba36f8a",
-    "node:review-security-1:artifact-published": "b03fedf9-4920-41b0-aa40-b8bc2f38f94a"
+    "node:review-security-1:artifact-published": "b03fedf9-4920-41b0-aa40-b8bc2f38f94a",
+    "node:review-join-1:queued": "0c085bfd-ed94-4bff-a687-04708cbb508b"
   },
   "eventIds": {
     "30e6ac91-cb34-47e5-ba6f-432ab5cf60ea": true,
@@ -369,6 +377,7 @@
     "d9c1d51b-d344-4886-bd7f-1113fedb4b06": true,
     "c12ab33b-b933-4b66-aa95-a19cf31e0476": true,
     "8dea1959-0a14-4eda-8292-d68e9ba36f8a": true,
-    "b03fedf9-4920-41b0-aa40-b8bc2f38f94a": true
+    "b03fedf9-4920-41b0-aa40-b8bc2f38f94a": true,
+    "0c085bfd-ed94-4bff-a687-04708cbb508b": true
   }
 }
