@@ -10,8 +10,8 @@
     "ownerRunId": "dd680e3c-d22e-4841-9e2e-5042551e056a",
     "epoch": 1
   },
-  "sequence": 36,
-  "lastEventHash": "sha256:7515bc9c8110ff528de1f36ffff3433aea2f3ef243112a12255a87f0c61b94f9",
+  "sequence": 37,
+  "lastEventHash": "sha256:74182f75d1a34fe93fd6a499e00446e30494dc81becf7c4f25fa7bf2abafa32f",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -250,7 +250,7 @@
       "node": "review-security",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "320ad98f894e872dcb4ddc50cc90237722ab736c",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/4f3e8e17-3743-4a53-a0c7-db71ce9535b9/.pi/forge/4f3e8e17-3743-4a53-a0c7-db71ce9535b9-review-security-1.json",
       "subagentRunId": "db78633f-4059-49f0-a83d-d6a2de2e5a97",
@@ -259,7 +259,29 @@
       "startedAt": "2026-08-25T10:28:55.009Z",
       "previousSubagentRunId": "launch:review-security-1:a4aa001a-9d8d-45f7-8b75-722d1147689a",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "e6c258b8d23e35b58d8f2e6d3fde8c0901d18810",
+      "reviewerResult": {
+        "schema": "forgedock.reviewer-result/v1",
+        "runId": "4f3e8e17-3743-4a53-a0c7-db71ce9535b9",
+        "reviewer": "forge-review-security",
+        "headSha": "e6c258b8d23e35b58d8f2e6d3fde8c0901d18810",
+        "verdict": "pass",
+        "findings": [],
+        "filesReviewed": [
+          "test/agents/child-runtime-commit.test.ts",
+          "src/agents/child-runtime.ts"
+        ],
+        "limitations": [
+          "The frozen patch changes only test assertions; no production behavior is introduced or changed by this patch."
+        ]
+      },
+      "publishedCommentId": 5409105406,
+      "evidence": [
+        "pr:42",
+        "comment:5409105406"
+      ],
+      "finishedAt": "2026-08-25T10:29:46.002Z"
     }
   },
   "effects": {},
@@ -299,7 +321,8 @@
     "node:review-security-1:queued": "4f89bb5a-dec9-49a5-8403-c9897b567f78",
     "node:review-security-1:started": "9364d0cb-8755-432e-a019-9e50d4ff07b0",
     "node:review-security-1:receipt-bound": "9b7ea9e6-cfe9-4eef-9d55-2ab99002f3de",
-    "node:review-correctness-1:artifact-published": "e2bcc863-8025-43a5-a760-c85c893aafd8"
+    "node:review-correctness-1:artifact-published": "e2bcc863-8025-43a5-a760-c85c893aafd8",
+    "node:review-security-1:artifact-published": "32bb7ed7-4c7c-42d8-904a-eac069534720"
   },
   "eventIds": {
     "f09b50df-0043-4493-aea7-a52e7e099b6f": true,
@@ -337,6 +360,7 @@
     "4f89bb5a-dec9-49a5-8403-c9897b567f78": true,
     "9364d0cb-8755-432e-a019-9e50d4ff07b0": true,
     "9b7ea9e6-cfe9-4eef-9d55-2ab99002f3de": true,
-    "e2bcc863-8025-43a5-a760-c85c893aafd8": true
+    "e2bcc863-8025-43a5-a760-c85c893aafd8": true,
+    "32bb7ed7-4c7c-42d8-904a-eac069534720": true
   }
 }
