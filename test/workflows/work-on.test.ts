@@ -34,6 +34,14 @@ test("normal matching provider receipts are inspected instead of escalated", () 
     }),
     "needs-human",
   );
+  assert.equal(
+    reconcileLaunchState({
+      durableStatus: "queued",
+      activeRunId: "launch:resolve-1:nonce",
+      resultArtifactPresent: false,
+    }),
+    "needs-human",
+  );
 });
 
 test("final review decisions have one run-round-head identity", () => {

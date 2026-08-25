@@ -279,11 +279,19 @@ export class ForgeWorkOnController {
         this.#persistLink(link);
         await this.#finalize(link, ctx);
       } catch (error) {
-        if (link.status === "running" || link.status === "refreshing")
-          continue;
-        link.status = "failed";
+        const reason = errorMessage(error);
+        const hasDispatcherLaunch =
+          Boolean(link.currentNodeId) ||
+          Object.keys(link.activeNodes).length > 0 ||
+          isLaunchSentinel(link.subagentRunId);
+        link.status = hasDispatcherLaunch ? "needs-human" : "failed";
         this.#persistLink(link);
-        this.#emitLifecycle(link, { reason: errorMessage(error) });
+        this.#emitLifecycle(link, {
+          reason: hasDispatcherLaunch
+            ? `Dispatcher reconciliation failed closed: ${reason}`
+            : reason,
+          ...(link.currentNodeId ? { nodeId: link.currentNodeId } : {}),
+        });
       }
     }
   }
