@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:a07ceb03141e7bcecc2966c2bbc8ea7c75879301c94620a6731652f7b6f58a57",
+  "sequence": 6,
+  "lastEventHash": "sha256:1490f90ff3fcf1bf9440e3ff8d9013cf4484b0cdcc019112ae12f50270ed679b",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -39,6 +39,15 @@
         "Read-only source inspection found completionGuard: true on read-only runtime agent registrations and found agent materialization hardcodes completionGuard: true, making the report actionable for investigation."
       ],
       "finishedAt": "2026-08-25T18:49:07.717Z"
+    },
+    "investigate-1": {
+      "nodeId": "investigate-1",
+      "node": "investigate",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/152edce1-3e46-4425-8162-4f7b3cfaefc9/.pi/forge/152edce1-3e46-4425-8162-4f7b3cfaefc9-investigate-1.json"
     }
   },
   "effects": {},
@@ -47,13 +56,15 @@
     "node:resolve-1:queued": "64288c97-8d5a-4948-a3cd-6442f9675290",
     "node:resolve-1:started": "bbf45eb8-22fc-418b-a0d0-471b90ae18d0",
     "node:resolve-1:receipt-bound": "2f6c4c8e-ffe2-4572-93ad-02c48707f643",
-    "node:resolve-1:completed": "85713fde-ebb9-4abd-b71a-2c278470d517"
+    "node:resolve-1:completed": "85713fde-ebb9-4abd-b71a-2c278470d517",
+    "node:investigate-1:queued": "93be0e94-5466-4107-a528-476d1cc7350d"
   },
   "eventIds": {
     "e54b6411-60d6-4281-8801-6488bc2a6398": true,
     "64288c97-8d5a-4948-a3cd-6442f9675290": true,
     "bbf45eb8-22fc-418b-a0d0-471b90ae18d0": true,
     "2f6c4c8e-ffe2-4572-93ad-02c48707f643": true,
-    "85713fde-ebb9-4abd-b71a-2c278470d517": true
+    "85713fde-ebb9-4abd-b71a-2c278470d517": true,
+    "93be0e94-5466-4107-a528-476d1cc7350d": true
   }
 }
