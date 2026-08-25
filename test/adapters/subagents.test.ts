@@ -189,6 +189,8 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
   assert.match(spawn.params.task, /Execute exactly one ForgeDock node: investigate/);
   assert.match(spawn.params.task, /do not call forge_checkpoint/i);
   assert.match(spawn.params.task, /forge_finalize_node/);
+  assert.match(spawn.params.task, /gh issue view/);
+  assert.match(spawn.params.task, /GET-only gh api/);
   assert.doesNotMatch(spawn.params.task, /Process resolve, investigate, plan/i);
 });
 
@@ -302,6 +304,7 @@ test("RPC resume revives a transiently failed work-on session", async () => {
 });
 
 test("runtime Forge hierarchy keeps bounded work-on least-authority", () => {
+  assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("bash"), true);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("subagent"), false);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_finalize_work_on"), false);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_checkpoint"), false);

@@ -19,6 +19,7 @@ export const FORGE_REVIEW_TOOLS = [
 ] as const;
 export const FORGE_WORK_ON_TOOLS = [
   "read",
+  "bash",
   "edit",
   "write",
   "grep",

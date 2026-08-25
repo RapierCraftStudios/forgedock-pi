@@ -169,10 +169,16 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
 
   pi.on("tool_call", async (event, ctx) => {
     if (event.toolName === "bash") {
-      return {
-        block: true,
-        reason: "Raw bash is disabled in Forge work-on children.",
-      };
+      if (
+        binding.node !== "resolve" &&
+        binding.node !== "investigate" &&
+        binding.node !== "plan"
+      )
+        return {
+          block: true,
+          reason: `bash is available only to read-only resolve, investigate, and plan nodes; current node is ${binding.node ?? "legacy"}.`,
+        };
+      return;
     }
     if (event.toolName.startsWith("forge_") || event.toolName === "subagent") {
       const allowed = allowedNodeTools(binding.node);
