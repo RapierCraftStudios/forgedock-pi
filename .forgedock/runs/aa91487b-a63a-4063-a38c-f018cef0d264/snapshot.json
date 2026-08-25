@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 13,
-  "lastEventHash": "sha256:bf513e63dd48b8fe92c6a2f1cf9a9776bc13cc2943fb964386f5776e2ebd3f46",
+  "sequence": 14,
+  "lastEventHash": "sha256:cf0934f02446a880ac3f64f4c17dc3300a028fc6c4fc18a53a16f8e85db0915e",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -103,6 +103,15 @@
         "src/core/state.ts requires ordinary `node.resumed` events to start from a running node and replace the current subagent run ID, explaining the observed invalid second transition instead of making a duplicate callback harmless."
       ],
       "finishedAt": "2026-08-25T18:58:28.776Z"
+    },
+    "prepare-worktree-1": {
+      "nodeId": "prepare-worktree-1",
+      "node": "prepare-worktree",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/aa91487b-a63a-4063-a38c-f018cef0d264/.pi/forge/aa91487b-a63a-4063-a38c-f018cef0d264-prepare-worktree-1.json"
     }
   },
   "effects": {},
@@ -119,7 +128,8 @@
     "node:plan-1:queued": "0eb9dcbb-23bb-49da-aa3a-3dae4c1f7f9c",
     "node:plan-1:started": "ce107b49-d533-41c3-9ff0-c9d240c6ea43",
     "node:plan-1:receipt-bound": "8c934743-3e74-4385-a32f-a5c1e0d81a9b",
-    "node:plan-1:completed": "ee9cea1d-266e-4286-8a8b-cbf17929b727"
+    "node:plan-1:completed": "ee9cea1d-266e-4286-8a8b-cbf17929b727",
+    "node:prepare-worktree-1:queued": "f0b093a9-0bad-4835-90d0-db0e51e7b4bd"
   },
   "eventIds": {
     "30e6ac91-cb34-47e5-ba6f-432ab5cf60ea": true,
@@ -134,6 +144,7 @@
     "0eb9dcbb-23bb-49da-aa3a-3dae4c1f7f9c": true,
     "ce107b49-d533-41c3-9ff0-c9d240c6ea43": true,
     "8c934743-3e74-4385-a32f-a5c1e0d81a9b": true,
-    "ee9cea1d-266e-4286-8a8b-cbf17929b727": true
+    "ee9cea1d-266e-4286-8a8b-cbf17929b727": true,
+    "f0b093a9-0bad-4835-90d0-db0e51e7b4bd": true
   }
 }
