@@ -271,8 +271,8 @@ export class SubagentsRpcClient {
             : []),
           "The parent has already durably queued and started this node. Execute only this node, then return one schema-valid forgedock.node-result/v1 value. Do not process any other phase, do not call forge_checkpoint, do not launch subagents, and do not merge, close, or clean up.",
           ["resolve", "investigate", "plan"].includes(input.node.node)
-            ? "Use bash when needed for ordinary read-only GitHub and repository inspection, including gh issue view, gh pr view, gh run view, and GET-only gh api calls. Do not perform GitHub writes, git writes, or shell-based source edits."
-            : "Do not use bash in this node.",
+            ? "This is a read-only node. Use only read, grep, find, and ls against the assigned worktree plus the supplied issue context. Shell execution, source edits, Git writes, and GitHub writes are unavailable."
+            : "Shell execution is unavailable in this node.",
           input.node.node === "resolve"
             ? "The resolve artifact contract is exact: { schema: 'forgedock.phase-artifact/v1', phase: 'resolve', issueNumber: positive integer, title: non-empty string, eligible: boolean, baseBranch: non-empty string, evidence: string[] }. Investigation fields are not a substitute for these fields."
             : "Use the phase-specific artifact branch in the supplied output schema.",

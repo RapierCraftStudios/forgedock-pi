@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -195,8 +195,8 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
   assert.match(spawn.params.task, /Execute exactly one ForgeDock node: investigate/);
   assert.match(spawn.params.task, /do not call forge_checkpoint/i);
   assert.match(spawn.params.task, /forge_finalize_node/);
-  assert.match(spawn.params.task, /gh issue view/);
-  assert.match(spawn.params.task, /GET-only gh api/);
+  assert.match(spawn.params.task, /read-only node/);
+  assert.match(spawn.params.task, /Shell execution.*unavailable/);
   assert.doesNotMatch(spawn.params.task, /Process resolve, investigate, plan/i);
   await client.spawnNode({
     runId: "run-resolve",
@@ -348,6 +348,56 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
   }
 });
 
+test("runtime materialization rejects a pre-existing .pi symlink", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-agents-link-"));
+  const external = await mkdtemp(join(tmpdir(), "forgedock-agents-external-"));
+  const sentinel = join(external, "sentinel.txt");
+  try {
+    await writeFile(sentinel, "external\n");
+    await symlink(external, join(root, ".pi"), "dir");
+    await assert.rejects(
+      materializeForgeAgents(root),
+      /no-follow|ELOOP|ENOTDIR|symbolic link|secure/i,
+    );
+    assert.equal(await readFile(sentinel, "utf8"), "external\n");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(external, { recursive: true, force: true });
+  }
+});
+
+test("runtime materialization rejects a replacement final-file symlink", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-agents-replacement-"));
+  const external = await mkdtemp(join(tmpdir(), "forgedock-agents-target-"));
+  const target = join(external, "agent.md");
+  try {
+    await writeFile(target, "external\n");
+    await mkdir(join(root, ".pi", "agents"), { recursive: true });
+    await symlink(target, join(root, ".pi", "agents", "forge-work-on.md"));
+    await assert.rejects(materializeForgeAgents(root));
+    assert.equal(await readFile(target, "utf8"), "external\n");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(external, { recursive: true, force: true });
+  }
+});
+
+test("runtime materialization rejects a pre-existing .pi/forge symlink", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-forge-link-"));
+  const external = await mkdtemp(join(tmpdir(), "forgedock-forge-target-"));
+  const sentinel = join(external, "sentinel.txt");
+  try {
+    await writeFile(sentinel, "external\n");
+    await mkdir(join(root, ".pi", "agents"), { recursive: true });
+    await symlink(external, join(root, ".pi", "forge"), "dir");
+    await assert.rejects(materializeForgeAgents(root));
+    assert.equal(await readFile(sentinel, "utf8"), "external\n");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(external, { recursive: true, force: true });
+  }
+});
+
 test("RPC resume revives a transiently failed work-on session", async () => {
   const { pi, bus } = fakePi();
   const client = new SubagentsRpcClient(pi);
@@ -368,12 +418,18 @@ test("RPC resume revives a transiently failed work-on session", async () => {
 });
 
 test("runtime Forge hierarchy keeps bounded work-on least-authority", () => {
-  assert.equal((FORGE_READ_ONLY_NODE_TOOLS as readonly string[]).includes("edit"), false);
+  assert.equal(
+    (FORGE_READ_ONLY_NODE_TOOLS as readonly string[]).includes("edit"),
+    false,
+  );
   assert.equal(boundedNodeAgent("resolve"), FORGE_READ_ONLY_NODE_AGENT);
   assert.equal(boundedNodeAgent("investigate"), FORGE_READ_ONLY_NODE_AGENT);
   assert.equal(boundedNodeAgent("plan"), FORGE_READ_ONLY_NODE_AGENT);
   assert.equal(boundedNodeAgent("implement"), FORGE_WORK_ON_AGENT);
-  assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("bash"), true);
+  assert.equal(
+    (FORGE_WORK_ON_TOOLS as readonly string[]).includes("bash"),
+    false,
+  );
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("subagent"), false);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_finalize_work_on"), false);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_checkpoint"), false);

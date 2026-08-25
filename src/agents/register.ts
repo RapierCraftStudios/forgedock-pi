@@ -32,7 +32,6 @@ export const FORGE_READ_ONLY_NODE_TOOLS = [
 ] as const;
 export const FORGE_WORK_ON_TOOLS = [
   "read",
-  "bash",
   "edit",
   "write",
   "grep",

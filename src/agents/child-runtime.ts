@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -82,12 +83,23 @@ interface ForgeChildBinding {
   previousReviewRounds?: number;
 }
 
-interface ProcessResult {
+export interface ProcessResult {
   exitCode: number | null;
   signal: NodeJS.Signals | null;
   stdout: string;
   stderr: string;
+  stdoutTruncated: boolean;
+  stderrTruncated: boolean;
   timedOut: boolean;
+}
+
+export class ForgeOutputLimitError extends Error {
+  readonly code = "forgedock-output-truncated";
+
+  constructor(operation: string) {
+    super(`${operation} exceeded the trusted output limit; refusing to consume incomplete security evidence.`);
+    this.name = "ForgeOutputLimitError";
+  }
 }
 
 const CheckpointParameters = Type.Object({
@@ -148,12 +160,26 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
   const agentRegistrations = registerForgeAgents(pi);
   let ceiling: SubagentCapabilityCeilingHandle | undefined;
   let canonicalRoot: string | undefined;
+  let caseInsensitivePaths: boolean | undefined;
   let githubToken: string | undefined;
   let refreshPushLeaseSha: string | undefined;
+  let reviewDiffCoverage:
+    | { headSha: string; sha256: string; bytes: number }
+    | undefined;
 
   pi.on("session_start", async (_event, ctx) => {
     canonicalRoot = await realpath(binding.worktreeRoot);
-    if (!isPathWithin(canonicalRoot, await realpath(ctx.cwd))) {
+    caseInsensitivePaths = await checkoutIgnoresCase(
+      canonicalRoot,
+      binding.runId,
+    );
+    if (
+      !isPathWithin(
+        canonicalRoot,
+        await realpath(ctx.cwd),
+        caseInsensitivePaths,
+      )
+    ) {
       throw new Error(
         `Forge child cwd ${ctx.cwd} is outside bound worktree ${canonicalRoot}.`,
       );
@@ -174,18 +200,8 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
   });
 
   pi.on("tool_call", async (event, ctx) => {
-    if (event.toolName === "bash") {
-      if (
-        binding.node !== "resolve" &&
-        binding.node !== "investigate" &&
-        binding.node !== "plan"
-      )
-        return {
-          block: true,
-          reason: `bash is available only to read-only resolve, investigate, and plan nodes; current node is ${binding.node ?? "legacy"}.`,
-        };
-      return;
-    }
+    const denial = boundedToolDenial(binding.node, event.toolName);
+    if (denial) return { block: true, reason: denial };
     if (event.toolName.startsWith("forge_") || event.toolName === "subagent") {
       const allowed = allowedNodeTools(binding.node);
       if (!allowed.has(event.toolName)) return { block: true, reason: `${event.toolName} is not allowed for bounded node ${binding.node ?? "legacy"}.` };
@@ -198,15 +214,17 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
     const pathValue = toolPath(event.input);
     if (!pathValue) return;
     const target = await canonicalizePotentialPath(ctx.cwd, pathValue);
-    if (!isPathWithin(root, target)) {
+    const ignoreCase =
+      caseInsensitivePaths ?? (await checkoutIgnoresCase(root, binding.runId));
+    if (!isPathWithin(root, target, ignoreCase)) {
       return {
         block: true,
         reason: `${event.toolName} path is outside the assigned Forge worktree.`,
       };
     }
     if (
-      isPathWithin(join(root, ".pi"), target) ||
-      isPathWithin(join(root, ".git"), target)
+      isPathWithin(join(root, ".pi"), target, ignoreCase) ||
+      isPathWithin(join(root, ".git"), target, ignoreCase)
     ) {
       return {
         block: true,
@@ -238,7 +256,11 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           ...(signal ? { signal } : {}),
         },
       );
-      const refreshStatus = nonRuntimeStatus(status.stdout);
+      assertCompleteProcessOutput(status, "Refresh worktree path listing");
+      const refreshStatus = nonRuntimeStatus(
+        status.stdout,
+        caseInsensitivePaths ?? (await checkoutIgnoresCase(root, binding.runId)),
+      );
       if (status.exitCode !== 0 || refreshStatus)
         throw new Error(
           `Base refresh requires a clean worktree: ${status.stderr || refreshStatus}`,
@@ -355,9 +377,41 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           : params.mode === "stat"
             ? ["--stat"]
             : ["--no-ext-diff", "--unified=80"];
+      const reviewerHead = binding.node?.startsWith("review-")
+        ? binding.reviewHeadSha
+        : undefined;
+      if (binding.node?.startsWith("review-") && !reviewerHead)
+        throw new Error("Reviewer diff requires an exact frozen head SHA.");
+      if (reviewerHead && params.mode !== "patch")
+        throw new Error("Reviewer diff coverage requires the complete patch mode.");
+      if (reviewerHead) {
+        const actualHead = await runProcess(
+          "git",
+          ["-C", root, "rev-parse", "HEAD"],
+          {
+            cwd: root,
+            timeoutMs: 30_000,
+            env: safeEnvironment(binding.runId),
+            ...(signal ? { signal } : {}),
+          },
+        );
+        assertCompleteProcessOutput(actualHead, "review HEAD resolution");
+        if (actualHead.exitCode !== 0 || actualHead.stdout.trim() !== reviewerHead)
+          throw new Error(
+            `Reviewer diff is bound to ${reviewerHead}, found ${actualHead.stdout.trim() || "unknown"}.`,
+          );
+      }
       const result = await runProcess(
         "git",
-        ["-C", root, "diff", ...modeArgs, binding.baseSha, "--"],
+        [
+          "-C",
+          root,
+          "diff",
+          ...modeArgs,
+          binding.baseSha,
+          ...(reviewerHead ? [reviewerHead] : []),
+          "--",
+        ],
         {
           cwd: root,
           timeoutMs: 60_000,
@@ -369,17 +423,32 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         throw new Error(
           `git diff failed (${String(result.exitCode)}): ${result.stderr}`,
         );
+      assertCompleteReviewDiff(result, MAX_OUTPUT_BYTES);
+      const headSha = reviewerHead ?? await gitHead(root, binding.runId, signal);
+      const patchSha256 = createHash("sha256").update(result.stdout).digest("hex");
+      if (reviewerHead)
+        reviewDiffCoverage = {
+          headSha: reviewerHead,
+          sha256: patchSha256,
+          bytes: Buffer.byteLength(result.stdout),
+        };
       return {
         content: [
           {
             type: "text",
-            text: truncateTail(result.stdout, MAX_OUTPUT_BYTES) || "No diff.",
+            text: result.stdout || "No diff.",
           },
         ],
         details: {
           mode: params.mode,
           baseSha: binding.baseSha,
+          headSha,
           exitCode: result.exitCode,
+          coverage: {
+            complete: true,
+            bytes: Buffer.byteLength(result.stdout),
+            sha256: patchSha256,
+          },
         },
       };
     },
@@ -394,16 +463,11 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
     async execute(_toolCallId, params, signal) {
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
       const env = safeEnvironment(binding.runId);
+      const ignoreCase =
+        caseInsensitivePaths ?? (await checkoutIgnoresCase(root, binding.runId));
       const status = await runProcess(
         "git",
-        [
-          "-C",
-          root,
-          "status",
-          "--porcelain=v1",
-          "--untracked-files=all",
-          "-z",
-        ],
+        ["-C", root, "status", "--porcelain=v1", "--untracked-files=all", "-z"],
         {
           cwd: root,
           timeoutMs: 30_000,
@@ -411,18 +475,19 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           ...(signal ? { signal } : {}),
         },
       );
+      assertCompleteProcessOutput(status, "Git worktree path listing");
       if (status.exitCode !== 0)
         throw new Error(`git status failed: ${status.stderr}`);
       const changedPaths = parseGitStatusPaths(status.stdout);
-      const runtimePaths = changedPaths.filter(isForgeRuntimePath);
+      const runtimePaths = changedPaths.filter((path) =>
+        isForgeRuntimePath(path, ignoreCase),
+      );
       if (runtimePaths.length > 0)
         throw new Error(
           `Refusing to commit Forge runtime paths: ${runtimePaths.join(", ")}.`,
         );
       if (changedPaths.length === 0)
-        throw new Error(
-          "Cannot create a Forge commit with no worktree changes.",
-        );
+        throw new Error("Cannot create a Forge commit with no worktree changes.");
       if (binding.node === "implement" && !binding.builderContract)
         throw new Error(
           "Implementation commit refused without an accepted builder contract.",
@@ -439,8 +504,8 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           ...(signal ? { signal } : {}),
         },
       );
-      if (added.exitCode !== 0)
-        throw new Error(`git add failed: ${added.stderr}`);
+      assertCompleteProcessOutput(added, "Git staging");
+      if (added.exitCode !== 0) throw new Error(`git add failed: ${added.stderr}`);
       const staged = await runProcess(
         "git",
         [
@@ -460,10 +525,11 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           ...(signal ? { signal } : {}),
         },
       );
+      assertCompleteProcessOutput(staged, "Git staged path listing");
       if (staged.exitCode !== 0)
         throw new Error(`staged-path validation failed: ${staged.stderr}`);
       const stagedPaths = parseChangedGitPaths(staged.stdout);
-      if (stagedPaths.some(isForgeRuntimePath))
+      if (stagedPaths.some((path) => isForgeRuntimePath(path, ignoreCase)))
         throw new Error("Refusing to commit staged Forge runtime paths.");
       if (stagedPaths.length === 0)
         throw new Error(
@@ -471,34 +537,75 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         );
       if (binding.builderContract)
         assertBuilderContractPaths(binding.builderContract, stagedPaths);
-      const message =
-        params.kind === "implementation"
-          ? `forge: implement issue #${binding.issueNumber}`
-          : `forge: address review for issue #${binding.issueNumber}`;
-      const committed = await runProcess(
-        "git",
-        ["-C", root, "commit", "--no-gpg-sign", "-m", message],
-        {
-          cwd: root,
-          timeoutMs: 120_000,
-          env,
-          ...(signal ? { signal } : {}),
-        },
-      );
-      if (committed.exitCode !== 0)
-        throw new Error(
-          `git commit failed: ${committed.stderr || committed.stdout}`,
-        );
-      const head = await runProcess("git", ["-C", root, "rev-parse", "HEAD"], {
+      const preCommitHead = await gitHead(root, binding.runId, signal);
+      const stagedTreeResult = await runProcess("git", ["-C", root, "write-tree"], {
         cwd: root,
         timeoutMs: 30_000,
         env,
         ...(signal ? { signal } : {}),
       });
-      if (head.exitCode !== 0 || !head.stdout.trim())
-        throw new Error(`Unable to resolve committed HEAD: ${head.stderr}`);
+      assertCompleteProcessOutput(stagedTreeResult, "Git staged tree resolution");
+      if (stagedTreeResult.exitCode !== 0 || !stagedTreeResult.stdout.trim())
+        throw new Error(`Unable to resolve staged tree: ${stagedTreeResult.stderr}`);
+      const stagedTree = stagedTreeResult.stdout.trim();
+      const message =
+        params.kind === "implementation"
+          ? `forge: implement issue #${binding.issueNumber}`
+          : `forge: address review for issue #${binding.issueNumber}`;
+      const hooksPath = mkdtempSync(join(tmpdir(), "forgedock-empty-hooks-"));
+      let committed: ProcessResult;
+      try {
+        committed = await runProcess(
+          "git",
+          forgeCommitArguments(root, hooksPath, message),
+          {
+            cwd: root,
+            timeoutMs: 120_000,
+            env,
+            ...(signal ? { signal } : {}),
+          },
+        );
+      } finally {
+        rmSync(hooksPath, { recursive: true, force: true });
+      }
+      assertCompleteProcessOutput(committed, "Git commit");
+      if (committed.exitCode !== 0)
+        throw new Error(`git commit failed: ${committed.stderr || committed.stdout}`);
+      const headSha = await gitHead(root, binding.runId, signal);
+      const tree = await runProcess(
+        "git",
+        ["-C", root, "show", "-s", "--format=%T", headSha],
+        { cwd: root, timeoutMs: 30_000, env, ...(signal ? { signal } : {}) },
+      );
+      const parent = await runProcess(
+        "git",
+        ["-C", root, "rev-parse", `${headSha}^`],
+        { cwd: root, timeoutMs: 30_000, env, ...(signal ? { signal } : {}) },
+      );
+      const committedPathsResult = await runProcess(
+        "git",
+        ["-C", root, "diff", "--name-only", "-z", preCommitHead, headSha, "--"],
+        { cwd: root, timeoutMs: 30_000, env, ...(signal ? { signal } : {}) },
+      );
+      assertCompleteProcessOutput(tree, "Committed tree resolution");
+      assertCompleteProcessOutput(parent, "Commit parent resolution");
+      assertCompleteProcessOutput(committedPathsResult, "Committed path listing");
+      if (tree.exitCode !== 0 || parent.exitCode !== 0 || committedPathsResult.exitCode !== 0)
+        throw new Error("Unable to revalidate the Forge-owned commit.");
+      const committedPaths = committedPathsResult.stdout
+        .split("\0")
+        .filter(Boolean);
+      assertCommittedTree({
+        preCommitHead,
+        actualParent: parent.stdout.trim(),
+        stagedTree,
+        committedTree: tree.stdout.trim(),
+        stagedPaths,
+        committedPaths,
+        ignoreCase,
+      });
       if (binding.builderContract) {
-        const committedPaths = await runProcess(
+        const contractPaths = await runProcess(
           "git",
           [
             "-C",
@@ -508,7 +615,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
             "--find-renames",
             "-z",
             binding.baseSha,
-            head.stdout.trim(),
+            headSha,
             "--",
           ],
           {
@@ -518,21 +625,29 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
             ...(signal ? { signal } : {}),
           },
         );
-        if (committedPaths.exitCode !== 0)
-          throw new Error(`git committed diff failed: ${committedPaths.stderr}`);
+        assertCompleteProcessOutput(
+          contractPaths,
+          "Builder contract committed path listing",
+        );
+        if (contractPaths.exitCode !== 0)
+          throw new Error(
+            `Unable to validate committed builder contract paths: ${contractPaths.stderr}`,
+          );
         assertBuilderContractPaths(
           binding.builderContract,
-          parseChangedGitPaths(committedPaths.stdout),
+          parseChangedGitPaths(contractPaths.stdout),
         );
       }
       return {
-        content: [
-          {
-            type: "text",
-            text: `Created ${params.kind} commit ${head.stdout.trim()}.`,
-          },
-        ],
-        details: { kind: params.kind, headSha: head.stdout.trim(), message },
+        content: [{ type: "text", text: `Created ${params.kind} commit ${headSha}.` }],
+        details: {
+          kind: params.kind,
+          headSha,
+          message,
+          treeSha: stagedTree,
+          committedPaths,
+          hooksDisabled: true,
+        },
       };
     },
   });
@@ -613,9 +728,15 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           ...(signal ? { signal } : {}),
         },
       );
+      assertCompleteProcessOutput(status, "Review worktree path listing");
       if (status.exitCode !== 0)
         throw new Error(`git status failed: ${status.stderr}`);
-      if (nonRuntimeStatus(status.stdout)) {
+      if (
+        nonRuntimeStatus(
+          status.stdout,
+          caseInsensitivePaths ?? (await checkoutIgnoresCase(root, binding.runId)),
+        )
+      ) {
         throw new Error(
           "Review preparation requires a clean committed worktree. Run forge_commit again for residual formatting or review-fix changes.",
         );
@@ -765,6 +886,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         );
       if (!isForgeReviewerResult(params.value))
         throw new Error("Final reviewer result failed schema validation.");
+      assertReviewerDiffCoverage(reviewDiffCoverage, binding.reviewHeadSha);
       const expectedReviewer = binding.node === "review-security"
         ? "security"
         : "correctness";
@@ -1499,12 +1621,29 @@ function validatePhaseReport(phase: RunPhase, report: string): void {
   }
 }
 
+const READ_ONLY_NODES = new Set(["resolve", "investigate", "plan"]);
+
+export function boundedToolDenial(
+  node: string | undefined,
+  toolName: string,
+): string | undefined {
+  if (toolName === "bash")
+    return "Shell execution is disabled for bounded ForgeDock nodes; use trusted typed tools only.";
+  if (READ_ONLY_NODES.has(node ?? "") && (toolName === "write" || toolName === "edit"))
+    return `${toolName} is not allowed for read-only ${node} nodes.`;
+  return undefined;
+}
+
 function normalizeRepositoryPath(value: string): string {
   return value.replaceAll("\\", "/").replace(/^\.\/+/, "");
 }
 
-export function isForgeRuntimePath(value: string): boolean {
-  const path = normalizeRepositoryPath(value);
+export function isForgeRuntimePath(
+  value: string,
+  caseInsensitive = false,
+): boolean {
+  const normalized = normalizeRepositoryPath(value);
+  const path = caseInsensitive ? normalized.toLocaleLowerCase("en-US") : normalized;
   return (
     path === ".pi" ||
     path.startsWith(".pi/") ||
@@ -1537,19 +1676,85 @@ export function parseGitStatusPaths(output: string): string[] {
   return [...new Set(paths)];
 }
 
-function nonRuntimeStatus(output: string): string {
+export function forgeCommitArguments(
+  root: string,
+  hooksPath: string,
+  message: string,
+): string[] {
+  return [
+    "-C",
+    root,
+    "-c",
+    `core.hooksPath=${hooksPath}`,
+    "commit",
+    "--no-verify",
+    "--no-gpg-sign",
+    "-m",
+    message,
+  ];
+}
+
+export function assertCommittedTree(input: {
+  preCommitHead: string;
+  actualParent: string;
+  stagedTree: string;
+  committedTree: string;
+  stagedPaths: readonly string[];
+  committedPaths: readonly string[];
+  ignoreCase?: boolean;
+}): void {
+  if (input.actualParent !== input.preCommitHead)
+    throw new Error("Committed parent changed after staged-path validation.");
+  if (input.committedTree !== input.stagedTree)
+    throw new Error("Committed tree differs from the validated staged tree.");
+  const normalize = (path: string) => {
+    const value = normalizeRepositoryPath(path);
+    return input.ignoreCase ? value.toLocaleLowerCase("en-US") : value;
+  };
+  const staged = [...new Set(input.stagedPaths.map(normalize))].sort();
+  const committed = [...new Set(input.committedPaths.map(normalize))].sort();
+  if (
+    staged.length !== committed.length ||
+    staged.some((path, index) => path !== committed[index])
+  )
+    throw new Error("Committed paths differ from the validated staged paths.");
+  if (committed.some((path) => isForgeRuntimePath(path, input.ignoreCase)))
+    throw new Error("Committed tree contains Forge runtime paths.");
+}
+
+function nonRuntimeStatus(output: string, caseInsensitive = false): string {
   return output
     .split("\n")
     .filter((line) => {
       if (!line.trim()) return false;
       const path = line.length > 3 ? line.slice(3).trim() : line.trim();
-      return !(
-        line.startsWith("??") &&
-        (path === ".pi" || path.startsWith(".pi/"))
-      );
+      return !(line.startsWith("??") && isForgeRuntimePath(path, caseInsensitive));
     })
     .join("\n")
     .trim();
+}
+
+async function checkoutIgnoresCase(
+  root: string,
+  runId: string,
+): Promise<boolean> {
+  const result = await runProcess(
+    "git",
+    ["-C", root, "config", "--bool", "core.ignorecase"],
+    {
+      cwd: root,
+      timeoutMs: 30_000,
+      env: safeEnvironment(runId),
+    },
+  );
+  assertCompleteProcessOutput(result, "Git case-sensitivity detection");
+  if (result.exitCode === 1 && !result.stdout.trim()) return false;
+  if (result.exitCode !== 0)
+    throw new Error(`Unable to read Git case-sensitivity contract: ${result.stderr}`);
+  const value = result.stdout.trim();
+  if (value !== "true" && value !== "false")
+    throw new Error(`Invalid core.ignorecase value: ${value || "empty"}.`);
+  return value === "true";
 }
 
 async function resolveGitHubToken(
@@ -1602,6 +1807,57 @@ function safeEnvironment(runId: string): NodeJS.ProcessEnv {
   return env;
 }
 
+export function assertCompleteProcessOutput(
+  result: Pick<ProcessResult, "stdoutTruncated" | "stderrTruncated">,
+  operation: string,
+): void {
+  if (result.stdoutTruncated || result.stderrTruncated)
+    throw new ForgeOutputLimitError(operation);
+}
+
+export function assertCompleteReviewDiff(
+  result: Pick<ProcessResult, "stdout" | "stdoutTruncated" | "stderrTruncated">,
+  maxBytes = MAX_OUTPUT_BYTES,
+): void {
+  assertCompleteProcessOutput(result, "Forge review diff");
+  if (Buffer.byteLength(result.stdout) > maxBytes)
+    throw new ForgeOutputLimitError("Forge review diff");
+}
+
+export function assertReviewerDiffCoverage(
+  coverage: { headSha: string; sha256: string; bytes: number } | undefined,
+  expectedHeadSha: string | undefined,
+): void {
+  if (
+    !coverage ||
+    !expectedHeadSha ||
+    coverage.headSha !== expectedHeadSha ||
+    !/^[a-f0-9]{64}$/.test(coverage.sha256) ||
+    !Number.isSafeInteger(coverage.bytes) ||
+    coverage.bytes < 0
+  )
+    throw new Error(
+      "Reviewer finalization requires complete forge_diff coverage for the exact frozen head SHA.",
+    );
+}
+
+async function gitHead(
+  root: string,
+  runId: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const result = await runProcess("git", ["-C", root, "rev-parse", "HEAD"], {
+    cwd: root,
+    timeoutMs: 30_000,
+    env: safeEnvironment(runId),
+    ...(signal ? { signal } : {}),
+  });
+  assertCompleteProcessOutput(result, "Git HEAD resolution");
+  if (result.exitCode !== 0 || !result.stdout.trim())
+    throw new Error(`Unable to resolve HEAD: ${result.stderr}`);
+  return result.stdout.trim();
+}
+
 async function runProcess(
   program: string,
   args: readonly string[],
@@ -1622,14 +1878,20 @@ async function runProcess(
     });
     let stdout = "";
     let stderr = "";
+    let stdoutTruncated = false;
+    let stderrTruncated = false;
     let timedOut = false;
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
-      stdout = appendBounded(stdout, chunk);
+      const next = appendBounded(stdout, chunk, MAX_OUTPUT_BYTES * 2);
+      stdout = next.value;
+      stdoutTruncated ||= next.truncated;
     });
     child.stderr.on("data", (chunk: string) => {
-      stderr = appendBounded(stderr, chunk);
+      const next = appendBounded(stderr, chunk, MAX_OUTPUT_BYTES * 2);
+      stderr = next.value;
+      stderrTruncated ||= next.truncated;
     });
     const timer = setTimeout(() => {
       timedOut = true;
@@ -1642,13 +1904,29 @@ async function runProcess(
     });
     child.once("close", (exitCode, signal) => {
       clearTimeout(timer);
-      resolvePromise({ exitCode, signal, stdout, stderr, timedOut });
+      resolvePromise({
+        exitCode,
+        signal,
+        stdout,
+        stderr,
+        stdoutTruncated,
+        stderrTruncated,
+        timedOut,
+      });
     });
   });
 }
 
-function appendBounded(current: string, chunk: string): string {
-  return truncateTail(current + chunk, MAX_OUTPUT_BYTES * 2);
+export function appendBounded(
+  current: string,
+  chunk: string,
+  maxBytes: number,
+): { value: string; truncated: boolean } {
+  const combined = current + chunk;
+  return {
+    value: truncateTail(combined, maxBytes),
+    truncated: Buffer.byteLength(combined) > maxBytes,
+  };
 }
 
 function truncateTail(value: string, maxBytes: number): string {

@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -116,6 +123,71 @@ test("worktree manager creates an issue branch from integration and cleans it sa
       { encoding: "utf8" },
     );
     assert.equal(localBranch.stdout.trim(), "");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("local exclude update rejects a pre-existing metadata-parent symlink", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-git-parent-link-"));
+  const origin = join(root, "origin.git");
+  const seed = join(root, "seed");
+  const clone = join(root, "clone");
+  const external = join(root, "external-info");
+  try {
+    await execFileAsync("git", ["init", "--bare", origin]);
+    await execFileAsync("git", ["init", "-b", "main", seed]);
+    await git(seed, "config", "user.name", "Test");
+    await git(seed, "config", "user.email", "test@example.invalid");
+    await writeFile(join(seed, "app.txt"), "base\n");
+    await git(seed, "add", "app.txt");
+    await git(seed, "commit", "-m", "initial");
+    await git(seed, "remote", "add", "origin", origin);
+    await git(seed, "push", "origin", "main");
+    await execFileAsync("git", ["clone", origin, clone]);
+
+    const externalExclude = join(external, "exclude");
+    await mkdir(external, { recursive: true });
+    await writeFile(externalExclude, "external\n");
+    const infoPath = join(clone, ".git", "info");
+    await rm(infoPath, { recursive: true, force: true });
+    await symlink(external, infoPath, "dir");
+
+    const manager = new GitWorktreeManager(executor);
+    await assert.rejects(manager.ensureRuntimeIgnored(clone));
+    assert.equal(await readFile(externalExclude, "utf8"), "external\n");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("local exclude update rejects a replacement final-file symlink", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-git-file-link-"));
+  const origin = join(root, "origin.git");
+  const seed = join(root, "seed");
+  const clone = join(root, "clone");
+  const external = join(root, "external-exclude");
+  try {
+    await execFileAsync("git", ["init", "--bare", origin]);
+    await execFileAsync("git", ["init", "-b", "main", seed]);
+    await git(seed, "config", "user.name", "Test");
+    await git(seed, "config", "user.email", "test@example.invalid");
+    await writeFile(join(seed, "app.txt"), "base\n");
+    await git(seed, "add", "app.txt");
+    await git(seed, "commit", "-m", "initial");
+    await git(seed, "remote", "add", "origin", origin);
+    await git(seed, "push", "origin", "main");
+    await execFileAsync("git", ["clone", origin, clone]);
+
+    const manager = new GitWorktreeManager(executor);
+    await manager.ensureRuntimeIgnored(clone);
+    const excludePath = join(clone, ".git", "info", "exclude");
+    await writeFile(external, "external\n");
+    await rm(excludePath, { force: true });
+    await symlink(external, excludePath, "file");
+
+    await assert.rejects(manager.ensureRuntimeIgnored(clone));
+    assert.equal(await readFile(external, "utf8"), "external\n");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

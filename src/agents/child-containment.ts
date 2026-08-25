@@ -31,7 +31,17 @@ export async function canonicalizePotentialPath(
   }
 }
 
-export function isPathWithin(root: string, target: string): boolean {
-  const child = relative(root, target);
+export function isPathWithin(
+  root: string,
+  target: string,
+  caseInsensitive = false,
+): boolean {
+  const comparableRoot = caseInsensitive
+    ? resolve(root).toLocaleLowerCase("en-US")
+    : resolve(root);
+  const comparableTarget = caseInsensitive
+    ? resolve(target).toLocaleLowerCase("en-US")
+    : resolve(target);
+  const child = relative(comparableRoot, comparableTarget);
   return child === "" || (!child.startsWith("..") && !isAbsolute(child));
 }
