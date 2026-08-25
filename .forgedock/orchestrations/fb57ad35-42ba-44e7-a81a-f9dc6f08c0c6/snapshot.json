@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 37,
-  "lastEventHash": "sha256:a1d143ad0404ef02d2f5369ada3a5e9c41af956ac8e9e0681714a3550dbe0571",
+  "sequence": 38,
+  "lastEventHash": "sha256:174bd6177b52c4b3bada3cdabba3ce36bd9bee9f376fdeb472512e364526ad03",
   "lanes": [
     {
       "issueNumber": 49,
@@ -21,10 +21,11 @@
     {
       "issueNumber": 50,
       "ordinal": 1,
-      "status": "running",
+      "status": "needs-human",
       "refreshes": 0,
       "forgeRunId": "4d0cac12-19d8-465f-b913-006f21cd4335",
-      "subagentRunId": "28bc8373-2eee-4f7b-846c-768b4a6fb947"
+      "subagentRunId": "28bc8373-2eee-4f7b-846c-768b4a6fb947",
+      "reason": "Dispatcher reconciliation failed closed: Terminal runs reject further mutations."
     },
     {
       "issueNumber": 51,
@@ -99,7 +100,8 @@
     "lease:heartbeat:2026-08-25T18:28:04.294Z": "135b9b3a-aebd-4134-a106-53118673d742",
     "lane:52:failed": "3ef3a4c1-e5c0-479a-8175-c03e5e2a98a5",
     "lease:heartbeat:2026-08-25T18:39:14.323Z": "cb386bf2-5e0b-4df9-8dcc-e5eda805c862",
-    "lease:heartbeat:2026-08-25T18:42:39.329Z": "f5feff8e-0d49-45b8-b32d-3138574aaf4d"
+    "lease:heartbeat:2026-08-25T18:42:39.329Z": "f5feff8e-0d49-45b8-b32d-3138574aaf4d",
+    "lane:50:needs-human": "869155fd-8edb-48a0-959c-1c7e0164d6b1"
   },
   "createdAt": "2026-08-25T17:55:15.729Z"
 }
