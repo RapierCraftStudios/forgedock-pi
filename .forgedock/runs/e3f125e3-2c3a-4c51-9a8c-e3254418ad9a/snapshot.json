@@ -10,8 +10,8 @@
     "ownerRunId": "fd616696-4975-49a6-9d2a-9a782a49ed27",
     "epoch": 1
   },
-  "sequence": 18,
-  "lastEventHash": "sha256:5846b0a34801654f8653bd4cf9f2563c07695cef83bdc96274a23c7ec9483872",
+  "sequence": 19,
+  "lastEventHash": "sha256:88e0256c57e1afe928756b56b66497c3202ec1fdc2f01f37c94f955e81308683",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -125,9 +125,13 @@
       "node": "implement",
       "attempt": 1,
       "round": 1,
-      "status": "queued",
+      "status": "running",
       "baseSha": "86fff740db2e1ab31fc651fc80ea00ec7c5bdcbd",
-      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a/.pi/forge/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a-implement-1.json"
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a/.pi/forge/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a-implement-1.json",
+      "subagentRunId": "launch:implement-1:8673dc23-c9a9-4034-9b87-c8b3440c5769",
+      "launchNonce": "8673dc23-c9a9-4034-9b87-c8b3440c5769",
+      "launchIntent": true,
+      "startedAt": "2026-08-25T09:06:12.227Z"
     }
   },
   "effects": {},
@@ -149,7 +153,8 @@
     "node:prepare-worktree-1:started": "8a857b1a-91f5-41ca-bab8-3ae361f14ecb",
     "node:prepare-worktree-1:receipt-bound": "aa918360-5fad-4832-97b5-2076460cca67",
     "node:prepare-worktree-1:completed": "fbc2fd5c-1560-4405-915d-895153c3a0a6",
-    "node:implement-1:queued": "129cab71-e10d-43e6-96ec-b0531edd3437"
+    "node:implement-1:queued": "129cab71-e10d-43e6-96ec-b0531edd3437",
+    "node:implement-1:started": "50d1e8fe-8b95-4e67-8901-6b7d483ed5ef"
   },
   "eventIds": {
     "a99b16b3-5107-4924-8a10-6bae25957c57": true,
@@ -169,6 +174,7 @@
     "8a857b1a-91f5-41ca-bab8-3ae361f14ecb": true,
     "aa918360-5fad-4832-97b5-2076460cca67": true,
     "fbc2fd5c-1560-4405-915d-895153c3a0a6": true,
-    "129cab71-e10d-43e6-96ec-b0531edd3437": true
+    "129cab71-e10d-43e6-96ec-b0531edd3437": true,
+    "50d1e8fe-8b95-4e67-8901-6b7d483ed5ef": true
   }
 }
