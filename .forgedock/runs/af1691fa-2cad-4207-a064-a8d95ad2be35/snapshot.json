@@ -5,13 +5,13 @@
   "issueNumber": 14,
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "failed",
   "leaseBinding": {
     "ownerRunId": "5da43cdf-2ff6-479c-9bf8-d2241bbd78fe",
     "epoch": 1
   },
-  "sequence": 28,
-  "lastEventHash": "sha256:866f59972277dc0cd74bf2d0bec6e5bd64af54372f0cfa202b5cf2fbbbc8f25d",
+  "sequence": 29,
+  "lastEventHash": "sha256:758da5891f4a67b38566c8522d4bab46ca930c5137d277124eeeebe27868426c",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -185,7 +185,7 @@
       "node": "prepare-pr",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "failed",
       "baseSha": "4819168331da2a25f500a1d1436f231db8211f2b",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/af1691fa-2cad-4207-a064-a8d95ad2be35/.pi/forge/af1691fa-2cad-4207-a064-a8d95ad2be35-prepare-pr-1.json",
       "subagentRunId": "fcca08e7-f4bb-4d56-8ad5-ccdfa8da0feb",
@@ -194,7 +194,9 @@
       "startedAt": "2026-08-25T08:39:14.230Z",
       "previousSubagentRunId": "launch:prepare-pr-1:e8a02774-5c55-4482-927b-6f382e6e6495",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "reason": "forge-work-on:",
+      "finishedAt": "2026-08-25T08:41:48.542Z"
     }
   },
   "effects": {},
@@ -226,7 +228,8 @@
     "node:verify-1:completed": "2743d4c3-ad17-4aa7-b662-636a42fbe2f7",
     "node:prepare-pr-1:queued": "f552a093-d72e-49bc-a3d7-a924362827f5",
     "node:prepare-pr-1:started": "34cf548c-e89a-4590-9234-bb545aac7113",
-    "node:prepare-pr-1:receipt-bound": "f81439a7-7eef-4720-89f2-42b468881ad9"
+    "node:prepare-pr-1:receipt-bound": "f81439a7-7eef-4720-89f2-42b468881ad9",
+    "node:prepare-pr-1:failed": "42de7c19-5323-43a1-a365-249e27d4f80f"
   },
   "eventIds": {
     "8f4a2c50-a4a2-43e9-8677-7fe5092204e5": true,
@@ -256,6 +259,7 @@
     "2743d4c3-ad17-4aa7-b662-636a42fbe2f7": true,
     "f552a093-d72e-49bc-a3d7-a924362827f5": true,
     "34cf548c-e89a-4590-9234-bb545aac7113": true,
-    "f81439a7-7eef-4720-89f2-42b468881ad9": true
+    "f81439a7-7eef-4720-89f2-42b468881ad9": true,
+    "42de7c19-5323-43a1-a365-249e27d4f80f": true
   }
 }
