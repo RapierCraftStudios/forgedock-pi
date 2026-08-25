@@ -10,8 +10,8 @@
     "ownerRunId": "5da43cdf-2ff6-479c-9bf8-d2241bbd78fe",
     "epoch": 1
   },
-  "sequence": 15,
-  "lastEventHash": "sha256:4a3d04dee265053081a0508b5b83ed3691aa9a094c17822c68172ca2ce57ee98",
+  "sequence": 16,
+  "lastEventHash": "sha256:bdca3dc3f5671190ad3eebc437cebff6ccff3c3c122300f2399b6f4b29344432",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -103,10 +103,13 @@
       "status": "running",
       "baseSha": "4819168331da2a25f500a1d1436f231db8211f2b",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/cf8c009e-f7be-4f7c-9720-75a31f977341/.pi/forge/cf8c009e-f7be-4f7c-9720-75a31f977341-prepare-worktree-1.json",
-      "subagentRunId": "launch:prepare-worktree-1:7beeda89-0cab-4c48-b9b1-330cb4a8f82b",
+      "subagentRunId": "e9dbc192-c1e4-4efe-98a2-697fa80e07bc",
       "launchNonce": "7beeda89-0cab-4c48-b9b1-330cb4a8f82b",
       "launchIntent": true,
-      "startedAt": "2026-08-25T08:18:02.951Z"
+      "startedAt": "2026-08-25T08:18:02.951Z",
+      "previousSubagentRunId": "launch:prepare-worktree-1:7beeda89-0cab-4c48-b9b1-330cb4a8f82b",
+      "transportRetries": 0,
+      "launchReceipt": true
     }
   },
   "effects": {},
@@ -125,7 +128,8 @@
     "node:plan-1:receipt-bound": "02d02cb3-ef14-417f-b98c-cd1f17817cd8",
     "node:plan-1:completed": "42fec860-d6d4-4cba-8fb7-99d2461d83af",
     "node:prepare-worktree-1:queued": "94870547-d9fe-4836-b9c3-a6748541b77d",
-    "node:prepare-worktree-1:started": "e5af42f9-8779-465f-8d85-483db9c1874c"
+    "node:prepare-worktree-1:started": "e5af42f9-8779-465f-8d85-483db9c1874c",
+    "node:prepare-worktree-1:receipt-bound": "fd705856-d6dd-4b16-887b-7308683f7b8f"
   },
   "eventIds": {
     "3158194d-5ea4-46c8-b6f5-500304af5913": true,
@@ -142,6 +146,7 @@
     "02d02cb3-ef14-417f-b98c-cd1f17817cd8": true,
     "42fec860-d6d4-4cba-8fb7-99d2461d83af": true,
     "94870547-d9fe-4836-b9c3-a6748541b77d": true,
-    "e5af42f9-8779-465f-8d85-483db9c1874c": true
+    "e5af42f9-8779-465f-8d85-483db9c1874c": true,
+    "fd705856-d6dd-4b16-887b-7308683f7b8f": true
   }
 }
