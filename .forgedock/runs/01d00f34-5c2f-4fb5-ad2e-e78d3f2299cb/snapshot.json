@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 9,
-  "lastEventHash": "sha256:cad0fbd056835eb826303a0eb0e6c69fd6e0e42ec32e23bf37455fd55b3bd26e",
+  "sequence": 10,
+  "lastEventHash": "sha256:0380019907a7a49c072a7ce951a8c3e6719ffa9887d641cf7c618e81c918470a",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -68,6 +68,15 @@
         "src/adapters/subagents.ts:188-225 does not include an expected node-head binding for bounded verify or prepare-pr launches; searches found no nodeHeadSha, headForNode, or assertBoundNodeResultHead implementation on this frozen base."
       ],
       "finishedAt": "2026-08-25T21:33:46.892Z"
+    },
+    "plan-1": {
+      "nodeId": "plan-1",
+      "node": "plan",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/01d00f34-5c2f-4fb5-ad2e-e78d3f2299cb/.pi/forge/01d00f34-5c2f-4fb5-ad2e-e78d3f2299cb-plan-1.json"
     }
   },
   "effects": {},
@@ -80,7 +89,8 @@
     "node:investigate-1:queued": "5677fdf1-4540-43f8-a1bb-6d37180b4e6e",
     "node:investigate-1:started": "d164cc05-3ff6-4e1a-844b-24ec541c892c",
     "node:investigate-1:receipt-bound": "76061c35-6ec8-42bd-a0ff-5a92e62484c1",
-    "node:investigate-1:completed": "a5eb186f-c984-4461-84d5-6cd96e786074"
+    "node:investigate-1:completed": "a5eb186f-c984-4461-84d5-6cd96e786074",
+    "node:plan-1:queued": "008e2664-374d-40df-961c-bab12f851999"
   },
   "eventIds": {
     "b212ad4a-3bb2-4f46-baa0-50c26cd787a3": true,
@@ -91,6 +101,7 @@
     "5677fdf1-4540-43f8-a1bb-6d37180b4e6e": true,
     "d164cc05-3ff6-4e1a-844b-24ec541c892c": true,
     "76061c35-6ec8-42bd-a0ff-5a92e62484c1": true,
-    "a5eb186f-c984-4461-84d5-6cd96e786074": true
+    "a5eb186f-c984-4461-84d5-6cd96e786074": true,
+    "008e2664-374d-40df-961c-bab12f851999": true
   }
 }
