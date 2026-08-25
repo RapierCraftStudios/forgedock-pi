@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:7ed85616058d7b7659374b5fd1ea44391215a007250dc71bad224da0127e3c32",
+  "sequence": 9,
+  "lastEventHash": "sha256:63639e96ce173916bf023221b3f4a57e72ab9902fdef98de0e5b00ccec2e37a5",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -46,7 +46,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/b6427efb-a068-4513-bf8c-c9ee68c74920/.pi/forge/b6427efb-a068-4513-bf8c-c9ee68c74920-investigate-1.json",
       "subagentRunId": "e748b4fa-2931-46f7-af72-57556c72b2b5",
@@ -55,7 +55,19 @@
       "startedAt": "2026-08-25T21:26:46.152Z",
       "previousSubagentRunId": "launch:investigate-1:e41241be-e0ac-4cfd-a101-642be3b0aadd",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "src/agents/register.ts:22-31 defines FORGE_READ_ONLY_NODE_TOOLS with filesystem readers and Forge lifecycle tools, but no bash or dedicated Git/GitHub history reader.",
+        "src/adapters/subagents.ts:510-515 tells resolve, investigate, and plan workers that shell and GitHub access are unavailable and limits them to read, grep, find, and ls.",
+        "src/workflows/work-on.ts:636-639 serializes only issue title, body, and labels into issueContext, so comments, linked pull requests, and repository history are not supplied by the parent.",
+        "src/core/comment-contract.ts:38-55 requires investigation artifacts to provide non-empty history, while plan context also carries history and CI information.",
+        "src/agents/child-runtime.ts:171-181 still contains a bash guard that explicitly permits bash only for resolve, investigate, and plan, demonstrating inconsistent capability wiring: the runtime permits a tool the read-only agent registration never exposes.",
+        "test/adapters/subagents.test.ts:201-208 and 361-385 assert shell unavailability and bash exclusion, but do not demonstrate an evidence-backed investigation using issue comments or Git history."
+      ],
+      "finishedAt": "2026-08-25T21:29:46.096Z"
     }
   },
   "effects": {},
@@ -67,7 +79,8 @@
     "node:resolve-1:completed": "da97f333-637b-4e40-93df-d64daad16088",
     "node:investigate-1:queued": "5376f636-6696-4ced-81ef-825f0a7e081c",
     "node:investigate-1:started": "c2d31363-f114-4caf-98b0-aca1ab743504",
-    "node:investigate-1:receipt-bound": "0244abf7-cdbb-4f44-bc32-d78d2302106e"
+    "node:investigate-1:receipt-bound": "0244abf7-cdbb-4f44-bc32-d78d2302106e",
+    "node:investigate-1:completed": "1831f7a4-9831-4772-a0f7-aeb160e2e748"
   },
   "eventIds": {
     "90383783-2625-4070-a1a6-75834c4a6be2": true,
@@ -77,6 +90,7 @@
     "da97f333-637b-4e40-93df-d64daad16088": true,
     "5376f636-6696-4ced-81ef-825f0a7e081c": true,
     "c2d31363-f114-4caf-98b0-aca1ab743504": true,
-    "0244abf7-cdbb-4f44-bc32-d78d2302106e": true
+    "0244abf7-cdbb-4f44-bc32-d78d2302106e": true,
+    "1831f7a4-9831-4772-a0f7-aeb160e2e748": true
   }
 }
