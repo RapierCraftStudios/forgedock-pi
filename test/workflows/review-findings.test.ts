@@ -68,6 +68,7 @@ const link: ActiveRunLink = {
   providerRetries: 0,
   remediationAttempts: 0,
   findingIssueMap: {},
+  activeNodes: {},
 };
 
 const result: ForgeWorkOnResult = {

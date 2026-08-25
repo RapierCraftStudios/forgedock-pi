@@ -378,6 +378,15 @@ export class GitHubWorkflowAdapter {
     issueOrPullNumber: number,
     signal?: AbortSignal,
   ): Promise<string[]> {
+    return (await this.#getCommentRecords(issueOrPullNumber, signal)).map(
+      (comment) => comment.body,
+    );
+  }
+
+  async #getCommentRecords(
+    issueOrPullNumber: number,
+    signal?: AbortSignal,
+  ): Promise<CommentApiResponse[]> {
     assertNumber(issueOrPullNumber, "issue or pull request");
     const path = `${this.#apiRoot}/issues/${issueOrPullNumber}/comments?per_page=100`;
     const response = await this.#transport.request<CommentApiResponse[]>({
@@ -385,9 +394,7 @@ export class GitHubWorkflowAdapter {
       path,
       ...(signal ? { signal } : {}),
     });
-    return requireGitHubSuccess(response, path, [200]).map(
-      (comment) => comment.body,
-    );
+    return requireGitHubSuccess(response, path, [200]);
   }
 
   async postPullArtifact(input: {
@@ -397,11 +404,14 @@ export class GitHubWorkflowAdapter {
     signal?: AbortSignal;
   }): Promise<number> {
     assertNumber(input.pullNumber, "pull request");
-    const existing = await this.getComments(input.pullNumber, input.signal);
-    const existingIndex = existing.findIndex((body) =>
-      body.includes(input.marker),
+    const existing = await this.#getCommentRecords(
+      input.pullNumber,
+      input.signal,
     );
-    if (existingIndex >= 0) return existingIndex + 1;
+    const existingComment = existing.find((comment) =>
+      comment.body.includes(input.marker),
+    );
+    if (existingComment) return existingComment.id;
     const path = `${this.#apiRoot}/issues/${input.pullNumber}/comments`;
     const response = await this.#transport.request<CommentApiResponse>({
       method: "POST",
@@ -410,8 +420,16 @@ export class GitHubWorkflowAdapter {
       ...(input.signal ? { signal: input.signal } : {}),
     });
     const comment = requireGitHubSuccess(response, path, [201]);
-    const readBack = await this.getComments(input.pullNumber, input.signal);
-    if (!readBack.some((body) => body.includes(input.marker))) {
+    const readBack = await this.#getCommentRecords(
+      input.pullNumber,
+      input.signal,
+    );
+    if (
+      !readBack.some(
+        (candidate) =>
+          candidate.id === comment.id && candidate.body.includes(input.marker),
+      )
+    ) {
       throw new GitHubApiError(422, path, {
         message: `Pull request artifact read-back missing ${input.marker}`,
       });

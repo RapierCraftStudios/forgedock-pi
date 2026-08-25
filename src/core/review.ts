@@ -1,5 +1,6 @@
 export const REVIEW_DECISIONS = [
   "approved",
+  "approved-with-follow-ups",
   "changes-requested",
   "blocked",
   "needs-human",
@@ -41,10 +42,19 @@ export interface ReviewFinding {
   evidence: readonly string[];
 }
 
+export type VerificationStatus =
+  | "passed"
+  | "failed"
+  | "skipped"
+  | "pending"
+  | "unknown"
+  | "not-configured"
+  | "policy-exempt";
+
 export interface VerificationResult {
   name: string;
   required: boolean;
-  status: "passed" | "failed" | "skipped" | "unknown";
+  status: VerificationStatus;
   exitCode?: number;
 }
 
@@ -64,11 +74,17 @@ export interface ReviewGateInput {
   malformedResults?: readonly string[];
 }
 
-export interface ReviewGateResult {
-  decision: ReviewDecision;
-  blockingFindingIds: readonly string[];
-  reasons: readonly string[];
+export interface FinalReviewDecision {
+  readonly headSha: string;
+  readonly baseSha: string;
+  readonly decision: ReviewDecision;
+  readonly blockingFindingIds: readonly string[];
+  readonly followUpFindingIds: readonly string[];
+  readonly checkResults: readonly VerificationResult[];
+  readonly reasons: readonly string[];
 }
+
+export type ReviewGateResult = FinalReviewDecision;
 
 const CRITICAL_DOMAINS: ReadonlySet<FindingCategory> = new Set([
   "security",
@@ -126,18 +142,34 @@ export function evaluateReviewGate(input: ReviewGateInput): ReviewGateResult {
       `Required review panel incomplete: ${missingReviewers.join(", ")}.`,
     );
 
+  if (input.checks.length === 0)
+    blocked.push("No verification results were recorded for the reviewed head.");
+
   for (const check of input.checks) {
-    if (!check.required) continue;
-    if (check.status === "failed")
+    if (!check.required || check.status === "passed") continue;
+    if (check.status === "failed") {
       changes.push(`Required check ${check.name} failed.`);
-    if (check.status === "unknown")
-      blocked.push(`Required check ${check.name} returned an unknown result.`);
-    if (check.status === "skipped")
-      blocked.push(`Required check ${check.name} was skipped.`);
+      continue;
+    }
+    blocked.push(
+      check.status === "skipped"
+        ? `Required check ${check.name} was skipped.`
+        : check.status === "pending"
+          ? `Required check ${check.name} is pending.`
+          : check.status === "not-configured"
+            ? `Required check ${check.name} is not configured.`
+            : check.status === "policy-exempt"
+              ? `Required check ${check.name} cannot be policy-exempt.`
+              : `Required check ${check.name} returned an unknown result.`,
+    );
   }
 
   const blockingFindingIds = input.findings
     .filter(findingBlocksMerge)
+    .map((finding) => finding.id);
+  const blockingFindingSet = new Set(blockingFindingIds);
+  const followUpFindingIds = input.findings
+    .filter((finding) => !blockingFindingSet.has(finding.id))
     .map((finding) => finding.id);
   if (blockingFindingIds.length > 0) {
     changes.push(
@@ -152,17 +184,57 @@ export function evaluateReviewGate(input: ReviewGateInput): ReviewGateResult {
   }
 
   if (blocked.length > 0) {
-    return { decision: "blocked", blockingFindingIds, reasons: blocked };
+    return createFinalReviewDecision(
+      input,
+      "blocked",
+      blockingFindingIds,
+      followUpFindingIds,
+      blocked,
+    );
   }
   if (changes.length > 0) {
-    return {
-      decision: "changes-requested",
+    return createFinalReviewDecision(
+      input,
+      "changes-requested",
       blockingFindingIds,
-      reasons: changes,
-    };
+      followUpFindingIds,
+      changes,
+    );
   }
   if (human.length > 0) {
-    return { decision: "needs-human", blockingFindingIds, reasons: human };
+    return createFinalReviewDecision(
+      input,
+      "needs-human",
+      blockingFindingIds,
+      followUpFindingIds,
+      human,
+    );
   }
-  return { decision: "approved", blockingFindingIds, reasons: [] };
+  return createFinalReviewDecision(
+    input,
+    followUpFindingIds.length > 0 ? "approved-with-follow-ups" : "approved",
+    blockingFindingIds,
+    followUpFindingIds,
+    [],
+  );
+}
+
+function createFinalReviewDecision(
+  input: ReviewGateInput,
+  decision: ReviewDecision,
+  blockingFindingIds: readonly string[],
+  followUpFindingIds: readonly string[],
+  reasons: readonly string[],
+): FinalReviewDecision {
+  return Object.freeze({
+    headSha: input.identity.headSha,
+    baseSha: input.identity.baseSha,
+    decision,
+    blockingFindingIds: Object.freeze([...blockingFindingIds]),
+    followUpFindingIds: Object.freeze([...followUpFindingIds]),
+    checkResults: Object.freeze(
+      input.checks.map((check) => Object.freeze({ ...check })),
+    ),
+    reasons: Object.freeze([...reasons]),
+  });
 }

@@ -43,6 +43,7 @@ export async function materializeForgeAgents(
         prompt: FORGE_WORK_ON_PROMPT,
         maxDepth: FORGE_WORK_ON_MAX_DEPTH,
         acceptanceRole: "writer",
+        async: true,
         extensions: [subagentsExtensionPath, childRuntimePath],
         timeoutMs: FORGE_WORK_ON_TIMEOUT_MS,
       }),
@@ -57,6 +58,7 @@ export async function materializeForgeAgents(
         prompt: FORGE_REFRESH_REVIEW_PROMPT,
         maxDepth: FORGE_WORK_ON_MAX_DEPTH,
         acceptanceRole: "writer",
+        async: true,
         extensions: [subagentsExtensionPath, childRuntimePath],
         timeoutMs: FORGE_WORK_ON_TIMEOUT_MS,
       }),
@@ -70,6 +72,7 @@ export async function materializeForgeAgents(
         prompt: FORGE_REVIEW_CORRECTNESS_PROMPT,
         maxDepth: 1,
         acceptanceRole: "read-only",
+        async: false,
         timeoutMs: FORGE_REVIEW_TIMEOUT_MS,
       }),
     },
@@ -83,6 +86,7 @@ export async function materializeForgeAgents(
         prompt: FORGE_REVIEW_SECURITY_PROMPT,
         maxDepth: 1,
         acceptanceRole: "read-only",
+        async: false,
         timeoutMs: FORGE_REVIEW_TIMEOUT_MS,
       }),
     },
@@ -161,6 +165,7 @@ function agentFile(input: {
   prompt: string;
   maxDepth: number;
   acceptanceRole: "read-only" | "writer";
+  async: boolean;
   extensions?: readonly string[];
   timeoutMs?: number;
 }): string {
@@ -174,7 +179,7 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 defaultContext: fresh
-async: true
+async: ${input.async}
 tools: ${input.tools.join(", ")}
 acceptanceRole: ${input.acceptanceRole}
 maxSubagentDepth: ${input.maxDepth}

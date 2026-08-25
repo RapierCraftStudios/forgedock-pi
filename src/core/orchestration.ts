@@ -14,6 +14,7 @@ export type OrchestrationLaneStatus =
   | "refreshing"
   | "integrating"
   | "merged"
+  | "closed"
   | "blocked"
   | "needs-human"
   | "failed";
@@ -64,6 +65,7 @@ export type OrchestrationEventType =
   | "lane.refreshing"
   | "lane.integrating"
   | "lane.merged"
+  | "lane.closed"
   | "lane.blocked"
   | "lane.needs-human"
   | "lane.failed"
@@ -251,12 +253,12 @@ export function aggregateOrchestrationStatus(
   if (lanes.some((lane) => lane.status === "needs-human"))
     return "needs-human";
   if (lanes.some((lane) => lane.status === "blocked")) return "blocked";
-  if (lanes.every((lane) => lane.status === "merged")) return "completed";
+  if (lanes.every((lane) => lane.status === "merged" || lane.status === "closed")) return "completed";
   return "running";
 }
 
 export function isTerminalLane(lane: OrchestrationLane): boolean {
-  return ["merged", "blocked", "needs-human", "failed"].includes(
+  return ["merged", "closed", "blocked", "needs-human", "failed"].includes(
     lane.status,
   );
 }
@@ -335,6 +337,7 @@ function applyLaneEvent(
     refreshing: ["ready", "integrating"],
     integrating: ["ready"],
     merged: ["integrating"],
+    closed: ["running", "ready", "integrating"],
     blocked: ["queued", "running", "ready", "refreshing", "integrating"],
     "needs-human": [
       "queued",
@@ -372,6 +375,9 @@ function applyLaneEvent(
     next.status = "merged";
     next.pullNumber = positiveInteger(event.payload.pullNumber, "pullNumber");
     next.headSha = payloadString(event, "headSha");
+  } else if (transition === "closed") {
+    next.status = "closed";
+    next.reason = payloadString(event, "reason");
   } else {
     next.status = transition as "blocked" | "needs-human" | "failed";
     next.reason = payloadString(event, "reason");

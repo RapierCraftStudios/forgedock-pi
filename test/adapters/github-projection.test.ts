@@ -104,6 +104,43 @@ test("issue projection is marker-idempotent and only adds missing labels", async
   assert.equal(transport.labels.has("bug"), true);
 });
 
+test("logical issue artifacts are idempotent by revision and supersede older revisions", async () => {
+  const transport = new ProjectionTransport();
+  const projector = new GitHubIssueProjector(transport, "owner/repo");
+  const first = await projector.postArtifact({
+    issueNumber: 42,
+    runId: "run-1",
+    eventId: "head-a",
+    artifactKey: "review-started",
+    markdown: "Review A",
+  });
+  const repeated = await projector.postArtifact({
+    issueNumber: 42,
+    runId: "run-1",
+    eventId: "head-a",
+    artifactKey: "review-started",
+    markdown: "Review A",
+  });
+  const second = await projector.postArtifact({
+    issueNumber: 42,
+    runId: "run-1",
+    eventId: "head-b",
+    artifactKey: "review-started",
+    markdown: "Review B",
+  });
+  assert.equal(first, repeated);
+  assert.notEqual(first, second);
+  assert.equal(transport.commentPosts, 2);
+  assert.match(
+    transport.comments[1]?.body ?? "",
+    /FORGEDOCK-ARTIFACT-IDENTITY run=run-1 key=review-started/,
+  );
+  assert.match(
+    transport.comments[1]?.body ?? "",
+    /FORGEDOCK-SUPERSEDES comment=1/,
+  );
+});
+
 test("comment append is idempotent when the marker is already present", async () => {
   const transport = new ProjectionTransport();
   transport.comments.push({

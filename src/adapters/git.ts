@@ -221,8 +221,7 @@ export class GitWorktreeManager {
       })
       .join("\n")
       .trim();
-    if (meaningful)
-      throw new Error(`Worktree is not clean:\n${meaningful}`);
+    if (meaningful) throw new Error(`Worktree is not clean:\n${meaningful}`);
   }
 
   async push(
@@ -269,22 +268,35 @@ export class GitWorktreeManager {
     prepared: PreparedWorktree,
     signal?: AbortSignal,
   ): Promise<void> {
-    await cleanupForgeRuntime(prepared.worktreePath);
-    await this.assertClean(prepared.worktreePath, signal);
-    await this.#git(
-      prepared.repositoryRoot,
-      ["worktree", "remove", prepared.worktreePath],
-      120_000,
-      signal,
-    );
+    // Cleanup is a retryable owned effect. A crash may happen after Git has
+    // removed either the worktree or the branch, so absence is success.
+    const worktreePresent = await exists(prepared.worktreePath);
+    if (worktreePresent) {
+      await cleanupForgeRuntime(prepared.worktreePath);
+      await this.assertClean(prepared.worktreePath, signal);
+      try {
+        await this.#git(
+          prepared.repositoryRoot,
+          ["worktree", "remove", prepared.worktreePath],
+          120_000,
+          signal,
+        );
+      } catch (error) {
+        if (!isAlreadyAbsent(error)) throw error;
+      }
+    }
     if (await exists(prepared.worktreePath))
-      await rm(prepared.worktreePath, { recursive: true });
-    await this.#git(
-      prepared.repositoryRoot,
-      ["branch", "-D", prepared.branch],
-      30_000,
-      signal,
-    );
+      await rm(prepared.worktreePath, { recursive: true, force: true });
+    try {
+      await this.#git(
+        prepared.repositoryRoot,
+        ["branch", "-D", prepared.branch],
+        30_000,
+        signal,
+      );
+    } catch (error) {
+      if (!isAlreadyAbsent(error)) throw error;
+    }
   }
 
   async #git(
@@ -320,6 +332,13 @@ async function cleanupForgeRuntime(worktreePath: string): Promise<void> {
   await rm(forgeDir, { recursive: true, force: true });
   await rmdir(agentsDir).catch(() => undefined);
   await rmdir(piDir).catch(() => undefined);
+}
+
+function isAlreadyAbsent(error: unknown): boolean {
+  if (!(error instanceof GitOperationError)) return false;
+  return /does not exist|not found|is not a working tree|is not a branch|not a valid branch name/i.test(
+    `${error.result.stderr}\n${error.result.stdout}`,
+  );
 }
 
 async function exists(path: string): Promise<boolean> {

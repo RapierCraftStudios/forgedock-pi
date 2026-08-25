@@ -1,3 +1,9 @@
+import {
+  FORGE_PHASE_ARTIFACT_SCHEMA,
+  isPhaseArtifact,
+  type PhaseArtifact,
+} from "../core/comment-contract.ts";
+
 export type ForgeFindingCategory =
   | "security"
   | "data-loss"
@@ -31,6 +37,37 @@ export interface ForgeReviewerResult {
   findings: readonly ForgeReviewFindingResult[];
   filesReviewed: readonly string[];
   limitations: readonly string[];
+}
+
+export interface ForgeNodeResult {
+  schema: "forgedock.node-result/v1";
+  runId: string;
+  issueNumber: number;
+  nodeId: string;
+  node: string;
+  status: "completed" | "blocked" | "needs-human" | "failed";
+  outcome?:
+    | "confirmed"
+    | "invalid"
+    | "decomposed"
+    | "completed"
+    | "awaiting-merge"
+    | "merged"
+    | "needs-human"
+    | "failed";
+  branch: string;
+  baseSha: string;
+  headSha: string;
+  changedFiles: readonly string[];
+  verification: readonly {
+    name: string;
+    status: "passed" | "failed" | "skipped" | "unknown";
+    exitCode?: number;
+  }[];
+  evidence: readonly string[];
+  artifact?: PhaseArtifact;
+  reviewerResult?: ForgeReviewerResult;
+  blocker?: string;
 }
 
 export interface ForgeWorkOnResult {
@@ -125,6 +162,160 @@ export const FORGE_REVIEWER_OUTPUT_SCHEMA = {
     limitations: { type: "array", items: { type: "string", minLength: 1 } },
   },
 } as const;
+
+export const FORGE_NODE_OUTPUT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "schema",
+    "runId",
+    "issueNumber",
+    "nodeId",
+    "node",
+    "status",
+    "branch",
+    "baseSha",
+    "headSha",
+    "changedFiles",
+    "verification",
+    "evidence",
+  ],
+  properties: {
+    schema: { type: "string", const: "forgedock.node-result/v1" },
+    runId: { type: "string", minLength: 1 },
+    issueNumber: { type: "integer", minimum: 1 },
+    nodeId: { type: "string", minLength: 1 },
+    node: { type: "string", minLength: 1 },
+    status: {
+      type: "string",
+      enum: ["completed", "blocked", "needs-human", "failed"],
+    },
+    outcome: {
+      type: "string",
+      enum: [
+        "confirmed",
+        "invalid",
+        "decomposed",
+        "completed",
+        "awaiting-merge",
+        "merged",
+        "needs-human",
+        "failed",
+      ],
+    },
+    branch: { type: "string", minLength: 1 },
+    baseSha: { type: "string", minLength: 7 },
+    headSha: { type: "string", minLength: 7 },
+    changedFiles: { type: "array", items: { type: "string", minLength: 1 } },
+    verification: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["name", "status"],
+        properties: {
+          name: { type: "string", minLength: 1 },
+          status: {
+            type: "string",
+            enum: ["passed", "failed", "skipped", "unknown"],
+          },
+          exitCode: { type: "integer" },
+        },
+      },
+    },
+    evidence: { type: "array", items: { type: "string", minLength: 1 } },
+    artifact: FORGE_PHASE_ARTIFACT_SCHEMA,
+    reviewerResult: FORGE_REVIEWER_OUTPUT_SCHEMA,
+    blocker: { type: "string", minLength: 1 },
+  },
+} as const;
+
+export function isForgeNodeResult(value: unknown): value is ForgeNodeResult {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const result = value as Partial<ForgeNodeResult>;
+  return (
+    result.schema === "forgedock.node-result/v1" &&
+    typeof result.runId === "string" &&
+    Number.isSafeInteger(result.issueNumber) &&
+    typeof result.nodeId === "string" &&
+    typeof result.node === "string" &&
+    ["completed", "blocked", "needs-human", "failed"].includes(
+      result.status as string,
+    ) &&
+    typeof result.branch === "string" &&
+    typeof result.baseSha === "string" &&
+    typeof result.headSha === "string" &&
+    isStringArray(result.changedFiles) &&
+    isStringArray(result.evidence) &&
+    Array.isArray(result.verification) &&
+    result.verification.every(isVerificationResult) &&
+    (result.status !== "completed" ||
+      result.reviewerResult !== undefined ||
+      isPhaseArtifact(result.artifact)) &&
+    (!result.artifact ||
+      (isPhaseArtifact(result.artifact) && result.artifact.phase === result.node))
+  );
+}
+
+export function isForgeReviewerResult(
+  value: unknown,
+): value is ForgeReviewerResult {
+  return isReviewerResult(value);
+}
+
+export function findForgeReviewerResult(
+  value: unknown,
+): ForgeReviewerResult | undefined {
+  if (isReviewerResult(value)) return value;
+  if (typeof value === "string" && value.length <= 1024 * 1024) {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (parsed !== value) return findForgeReviewerResult(parsed);
+    } catch {
+      return undefined;
+    }
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const found = findForgeReviewerResult(entry);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  if (!value || typeof value !== "object") return undefined;
+  for (const entry of Object.values(value as Record<string, unknown>)) {
+    const found = findForgeReviewerResult(entry);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+export function findForgeNodeResult(
+  value: unknown,
+): ForgeNodeResult | undefined {
+  if (isForgeNodeResult(value)) return value;
+  if (typeof value === "string" && value.length <= 1024 * 1024) {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      if (parsed !== value) return findForgeNodeResult(parsed);
+    } catch {
+      return undefined;
+    }
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const found = findForgeNodeResult(entry);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  if (!value || typeof value !== "object") return undefined;
+  for (const entry of Object.values(value as Record<string, unknown>)) {
+    const found = findForgeNodeResult(entry);
+    if (found) return found;
+  }
+  return undefined;
+}
 
 export const FORGE_WORK_ON_OUTPUT_SCHEMA = {
   type: "object",

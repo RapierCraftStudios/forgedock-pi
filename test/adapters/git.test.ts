@@ -96,6 +96,8 @@ test("worktree manager creates an issue branch from integration and cleans it sa
     );
     assert.equal(remoteBranch.stdout.trim(), "");
     await manager.cleanup(prepared);
+    // Retry after the first cleanup has already removed both owned resources.
+    await manager.cleanup(prepared);
     await assert.rejects(
       readFile(join(prepared.worktreePath, "app.txt"), "utf8"),
     );

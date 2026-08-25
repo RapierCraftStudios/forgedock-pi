@@ -64,6 +64,7 @@ interface ForgeChildBinding {
   baseSha: string;
   maxReviewRounds: number;
   verificationCommands: Readonly<Record<string, BoundVerificationCommand>>;
+  node?: string;
   refresh: boolean;
   previousReviewRounds?: number;
 }
@@ -157,6 +158,10 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         block: true,
         reason: "Raw bash is disabled in Forge work-on children.",
       };
+    }
+    if (event.toolName.startsWith("forge_") || event.toolName === "subagent") {
+      const allowed = allowedNodeTools(binding.node);
+      if (!allowed.has(event.toolName)) return { block: true, reason: `${event.toolName} is not allowed for bounded node ${binding.node ?? "legacy"}.` };
     }
     if (
       !["read", "write", "edit", "grep", "find", "ls"].includes(event.toolName)
@@ -894,11 +899,21 @@ function readBinding(): ForgeChildBinding {
     baseSha: value.baseSha as string,
     maxReviewRounds: value.maxReviewRounds as number,
     verificationCommands,
+    ...(typeof value.node === "string" ? { node: value.node } : {}),
     refresh,
     ...(refresh
       ? { previousReviewRounds: previousReviewRounds as number }
       : {}),
   };
+}
+
+function allowedNodeTools(node: string | undefined): ReadonlySet<string> {
+  if (!node) return new Set(["forge_refresh_base", "forge_verify", "forge_diff", "forge_commit", "forge_prepare_review", "forge_finalize_work_on"]);
+  const common = ["forge_diff"];
+  if (node === "implement") return new Set([...common, "forge_commit"]);
+  if (node === "verify") return new Set([...common, "forge_verify"]);
+  if (node === "prepare-pr") return new Set(["forge_prepare_review"]);
+  return new Set(common);
 }
 
 function validateBoundCommand(
@@ -1157,7 +1172,7 @@ async function postDerivedPhaseArtifacts(
       runId: binding.runId,
       eventId: event.eventId,
       artifactKey: "fast-path",
-      markdown: `<!-- FORGE:FAST_PATH -->\n## Fast-Path Classification\n\n**COMPLEXITY_BAND**: STANDARD\n**Task type**: Bug Fix\n**Rationale**: Full Pi-native work-on pipeline selected from the confirmed investigation.\n**Phases skipped**: none — full pipeline`,
+      markdown: `<!-- FORGE:FAST_PATH -->\n## Legacy Routing Classification\n\n**Complexity**: NOT RECORDED\n**Task type**: NOT RECORDED\n**Rationale**: This in-flight legacy checkpoint supplied raw Markdown rather than a typed routing artifact. No classification is inferred.\n**Phases skipped**: NOT RECORDED`,
       ...(signal ? { signal } : {}),
     });
   }

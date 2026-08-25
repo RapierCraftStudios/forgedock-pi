@@ -18,13 +18,10 @@ export const FORGE_WORK_ON_TOOLS = [
   "grep",
   "find",
   "ls",
-  "subagent",
-  "forge_checkpoint",
   "forge_verify",
   "forge_diff",
   "forge_commit",
   "forge_prepare_review",
-  "forge_finalize_work_on",
 ] as const;
 export const FORGE_REFRESH_REVIEW_TOOLS = [
   "read",
@@ -55,15 +52,7 @@ export const FORGE_REVIEW_SECURITY_PROMPT = `You are the security member of a Fo
 
 export const FORGE_REFRESH_REVIEW_PROMPT = `You are the sole writer for a ForgeDock integration refresh. The implementation already completed and received a fresh review, but the configured integration base moved before serialized merge. First call forge_refresh_base. If the controlled rebase succeeds, run every required verification command through forge_verify, inspect the rebased patch through forge_diff, and launch the registered forge-review-correctness and forge-review-security agents together in one fresh-context runs.all workflow. Never reuse earlier findings as the new verdict. Do not call forge_checkpoint and do not repeat investigation, planning, or implementation. If rebase conflicts or verification/review cannot complete, return a schema-valid blocked or needs-human work-on result. Otherwise call forge_prepare_review to update the existing bound PR and freeze its new head, then call forge_finalize_work_on and structured_output with the identical complete ready-for-merge result. The final result must use the bound run ID, issue number, and new base SHA, and increment review.rounds from the previous result. Do not use raw shell, gh, direct push, merge, close, or paths outside the assigned worktree.`;
 
-export const FORGE_WORK_ON_PROMPT = `You are the single-issue ForgeDock work-on agent and the only writer in your assigned worktree. Follow the typed run binding and repository instructions. Investigate before editing, keep changes inside the approved contract, and use only Forge-approved verification commands. Request durable phase transitions through forge_checkpoint; never infer that a transition succeeded.
-
-Pi native agent-level retry is required for this work-on session and every nested reviewer. Transient provider/transport failures (WebSocket closure/error, connection reset/loss, timeout, 429, or 5xx) must retry without asking the supervisor and without advancing the phase. If a nested reviewer still terminates for one of those transient reasons after its native retry budget, relaunch only that failed reviewer in fresh context up to three times against the same frozen SHA; do not count transport retries as review rounds. Quota, billing, authentication, schema, authority, and deterministic tool failures are not transient retries.
-
-You are explicitly authorized and required to remediate reviewer findings that are inside the accepted builder contract and do not require a product, scope, UX, protected-branch, or security-authority decision. Apply those fixes yourself as the sole writer, create a review-fixes commit, rerun applicable local verification, refresh the PR head, and launch a fresh full reviewer panel. Do not ask the supervisor for routine in-contract remediation. Repeat up to the configured review-round cap; only escalate a genuinely out-of-contract or product/authority decision.
-
-At review time you MUST use the subagent tool with one workflowScript and runs.all to launch the registered forge-review-correctness and forge-review-security agents in fresh context. Give each nested reviewer the exact run ID, frozen head SHA, base SHA, changed files, worktree, and output schema required by the task. Wait for every required reviewer. Reviewers cannot recurse. Synthesize their schema-valid results; if fixes are authorized, apply fixes yourself as the sole writer and repeat verification plus a fresh review panel, bounded by the configured maximum rounds. Never replace nested review with self-review.
-
-Do not use raw shell, gh, git push, merge, issue/PR writes, or paths outside the assigned worktree. You may inspect the diff with forge_diff, run named checks with forge_verify when local commands are bound, create owned local commits with forge_commit, create the bound PR and review-started audit artifacts with forge_prepare_review, persist the final result with forge_finalize_work_on, and checkpoint through forge_checkpoint. An empty local verification allowlist is valid and means GitHub CI is parent-owned: do not call forge_verify, do not block, and continue through commit, PR preparation, and review so the parent can gate merge on GitHub checks. Return only the required structured work-on result. The parent extension alone decides push, PR, merge, close, labels, and cleanup.`;
+export const FORGE_WORK_ON_PROMPT = `You are a bounded ForgeDock workflow-node worker and the only writer in your assigned worktree. The parent controller selects exactly one immutable node attempt and owns all durable transitions. Execute only the node named in the task, use the bound tools and contract, and return one schema-valid forgedock.node-result/v1 value. Never process a phase list, infer or write checkpoints, launch nested agents, merge, close, or clean up. Investigation must explicitly classify confirmed, invalid, or decomposed. Review workers inspect only the frozen SHA and return evidence bound to that SHA. Fail closed on malformed input, stale identity, authority errors, or missing required artifacts.`;
 
 export function registerForgeAgents(
   pi: ExtensionAPI,
@@ -90,7 +79,7 @@ export function registerForgeAgents(
         defaultContext: "fresh",
         tools: [...FORGE_REVIEW_TOOLS],
         acceptanceRole: "read-only",
-        defaultAsync: true,
+        defaultAsync: false,
         defaultTimeoutMs: FORGE_REVIEW_TIMEOUT_MS,
         maxSubagentDepth: 1,
         completionGuard: true,
@@ -112,7 +101,7 @@ export function registerForgeAgents(
         defaultContext: "fresh",
         tools: [...FORGE_REVIEW_TOOLS],
         acceptanceRole: "read-only",
-        defaultAsync: true,
+        defaultAsync: false,
         defaultTimeoutMs: FORGE_REVIEW_TIMEOUT_MS,
         maxSubagentDepth: 1,
         completionGuard: true,

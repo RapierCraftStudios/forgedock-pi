@@ -149,6 +149,264 @@ test("state reducer enforces ordered phase transitions", () => {
   assert.equal(investigating.phases.investigate?.attempts[0]?.status, "queued");
 });
 
+test("parent-owned node events are durable and independently joinable", () => {
+  let state = initializedState();
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.queued",
+      {
+        nodeId: "review-correctness-1",
+        node: "review-correctness",
+        attempt: 1,
+      },
+      "node:correctness:queue",
+    ),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.started",
+      {
+        nodeId: "review-correctness-1",
+        node: "review-correctness",
+        attempt: 1,
+        subagentRunId: "child-c",
+        baseSha: "base",
+      },
+      "node:correctness:start",
+    ),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.resumed",
+      {
+        nodeId: "review-correctness-1",
+        node: "review-correctness",
+        attempt: 1,
+        previousSubagentRunId: "child-c",
+        subagentRunId: "child-c-resumed",
+        transportRetries: 1,
+        reason: "WebSocket error",
+      },
+      "node:correctness:resume:1",
+    ),
+  );
+  assert.equal(state.nodes["review-correctness-1"]?.status, "running");
+  assert.equal(
+    state.nodes["review-correctness-1"]?.subagentRunId,
+    "child-c-resumed",
+  );
+  assert.equal(state.nodes["review-correctness-1"]?.transportRetries, 1);
+  assert.equal(state.nodes["review-correctness-1"]?.status, "running");
+  assert.equal(
+    state.nodes["review-correctness-1"]?.subagentRunId,
+    "child-c-resumed",
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "reviewer.artifact-published",
+      {
+        nodeId: "review-correctness-1",
+        node: "review-correctness",
+        attempt: 1,
+        headSha: "head",
+        publishedCommentId: 101,
+      },
+      "node:correctness:artifact",
+    ),
+  );
+  assert.equal(state.nodes["review-correctness-1"]?.publishedCommentId, 101);
+  assert.throws(
+    () =>
+      applyRunEvent(
+        state,
+        nextEvent(
+          state,
+          "node.completed",
+          {
+            nodeId: "review-correctness-1",
+            node: "review-correctness",
+            attempt: 1,
+          },
+          "node:correctness:duplicate",
+        ),
+      ),
+    (error) =>
+      error instanceof StateTransitionError &&
+      error.code === "illegal-node-transition",
+  );
+});
+
+test("cleanup node permits terminal completion and post-terminal mutations are rejected", () => {
+  let state = initializedState();
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.queued",
+      { nodeId: "cleanup-1", node: "cleanup", attempt: 1 },
+      "cleanup:queue",
+    ),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.started",
+      { nodeId: "cleanup-1", node: "cleanup", attempt: 1 },
+      "cleanup:start",
+    ),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.completed",
+      { nodeId: "cleanup-1", node: "cleanup", attempt: 1, outcome: "closed" },
+      "cleanup:complete",
+    ),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(state, "run.completed", { outcome: "closed" }, "run:complete"),
+  );
+  assert.equal(state.status, "completed");
+  assert.throws(
+    () =>
+      applyRunEvent(
+        state,
+        nextEvent(
+          state,
+          "node.queued",
+          { nodeId: "late-1", node: "resolve", attempt: 1 },
+          "late:queue",
+        ),
+      ),
+    (error) =>
+      error instanceof StateTransitionError && error.code === "terminal-run",
+  );
+  const epoch = state.lease?.epoch;
+  assert.ok(epoch);
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "lease.released",
+      { ownerRunId: runId, epoch },
+      "lease:release",
+      epoch,
+    ),
+  );
+  assert.equal(state.lease, undefined);
+});
+
+test("merged completion requires a pull number", () => {
+  let state = initializedState();
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.queued",
+      { nodeId: "cleanup-1", node: "cleanup", attempt: 1 },
+      "cleanup:queue",
+    ),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.started",
+      { nodeId: "cleanup-1", node: "cleanup", attempt: 1 },
+      "cleanup:start",
+    ),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.completed",
+      { nodeId: "cleanup-1", node: "cleanup", attempt: 1 },
+      "cleanup:complete",
+    ),
+  );
+  assert.throws(
+    () =>
+      applyRunEvent(
+        state,
+        nextEvent(
+          state,
+          "run.completed",
+          { outcome: "merged" },
+          "run:complete",
+        ),
+      ),
+    (error) =>
+      error instanceof StateTransitionError &&
+      error.code === "missing-pull-number",
+  );
+});
+
+test("the immutable final review decision is retained on its decision node", () => {
+  let state = initializedState();
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.queued",
+      { nodeId: "decision-1", node: "decision", attempt: 1 },
+      "decision:queue",
+    ),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.started",
+      { nodeId: "decision-1", node: "decision", attempt: 1 },
+      "decision:start",
+    ),
+  );
+  const finalReviewDecision = {
+    headSha: "head",
+    baseSha: "base",
+    decision: "approved" as const,
+    blockingFindingIds: [],
+    followUpFindingIds: [],
+    checkResults: [
+      { name: "github:check", required: true, status: "passed" as const },
+    ],
+    reasons: [],
+  };
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.completed",
+      {
+        nodeId: "decision-1",
+        node: "decision",
+        attempt: 1,
+        headSha: "head",
+        baseSha: "base",
+        outcome: "awaiting-merge",
+        finalReviewDecision,
+      },
+      "decision:complete",
+    ),
+  );
+  assert.deepEqual(
+    state.nodes["decision-1"]?.finalReviewDecision,
+    finalReviewDecision,
+  );
+});
+
 test("hash chain and idempotency conflicts fail closed", () => {
   const state = initializedState();
   const valid = nextEvent(
@@ -234,7 +492,12 @@ test("terminal runs release their repository lease", () => {
   }
   state = applyRunEvent(
     state,
-    nextEvent(state, "run.completed", { outcome: "merged" }, "run:complete"),
+    nextEvent(
+      state,
+      "run.completed",
+      { outcome: "merged", pullNumber: 42 },
+      "run:complete",
+    ),
   );
   const epoch = state.lease?.epoch;
   assert.ok(epoch);
