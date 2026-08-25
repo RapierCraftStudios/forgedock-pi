@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 12,
-  "lastEventHash": "sha256:45796a4959e6202c14455601899a22155353b3c65eb11e0da608b3acf9cbf792",
+  "sequence": 13,
+  "lastEventHash": "sha256:bb81ab18be9840b96ecffe50fc37dd762fec5eea797e9944e42ec5dba7ac8da9",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -75,7 +75,7 @@
       "node": "plan",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/1d590b89-383d-442f-90d6-a93aa0a146e7/.pi/forge/1d590b89-383d-442f-90d6-a93aa0a146e7-plan-1.json",
       "subagentRunId": "d065ac9b-af51-4ed1-ad61-ed8b7f378d7a",
@@ -84,7 +84,32 @@
       "startedAt": "2026-08-25T18:05:10.907Z",
       "previousSubagentRunId": "launch:plan-1:b59bfe9e-7ecb-43e0-99a6-2b2b4b6748ca",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "builderContract": {
+        "schema": "forgedock.builder-path-contract/v1",
+        "revision": 1,
+        "allowedPaths": [
+          "src/adapters/subagents.ts",
+          "src/core/dispatcher.ts",
+          "src/workflows/work-on.ts",
+          "test/adapters/subagents.test.ts",
+          "test/core/dispatcher.test.ts",
+          "test/core/state.test.ts",
+          "test/workflows/work-on.test.ts"
+        ],
+        "contractHash": "3b20383a7f23f6aa9adf1d0cffd812993c5877980244261007ce21ad74eadefb"
+      },
+      "outcome": "completed",
+      "evidence": [
+        "src/core/dispatcher.ts:158-214 derives the next node head from prepare-pr or verify, so first-round verify lacks the completed implementation head and remediation verify can inherit an older prepared head.",
+        "src/workflows/work-on.ts:1740-1810 records baseSha in bounded node queued/started events but does not put node.headSha into the durable launch payload.",
+        "src/adapters/subagents.ts:185-296 binds all policy verificationCommands to the child runtime, while the bounded task text reports only the frozen base SHA and no approved command names or implementation head.",
+        "src/agents/child-runtime.ts:490-504 rejects any forge_verify name absent from the bound policy, making undisclosed names impossible for a read-only verifier to discover safely.",
+        "DESIGN.md:217-220 requires durable state to include the current commit and verification evidence; DESIGN.md:233 and 263-280 require named policy-approved verification and fail-closed handling."
+      ],
+      "finishedAt": "2026-08-25T18:08:51.053Z"
     }
   },
   "effects": {},
@@ -100,7 +125,8 @@
     "node:investigate-1:completed": "9996224c-2106-44c1-a174-77c6b81ca60f",
     "node:plan-1:queued": "c6fad64b-fc87-4789-b032-b0d81f0d3e5e",
     "node:plan-1:started": "a71101a0-0a14-4561-958e-f8798258117b",
-    "node:plan-1:receipt-bound": "ab2e5598-433d-45b9-a743-8a481b52884c"
+    "node:plan-1:receipt-bound": "ab2e5598-433d-45b9-a743-8a481b52884c",
+    "node:plan-1:completed": "3b23be71-6f33-4de5-84f3-67d9d351669f"
   },
   "eventIds": {
     "8420132c-2a1a-43b2-ad05-5a4473cc10d2": true,
@@ -114,6 +140,7 @@
     "9996224c-2106-44c1-a174-77c6b81ca60f": true,
     "c6fad64b-fc87-4789-b032-b0d81f0d3e5e": true,
     "a71101a0-0a14-4561-958e-f8798258117b": true,
-    "ab2e5598-433d-45b9-a743-8a481b52884c": true
+    "ab2e5598-433d-45b9-a743-8a481b52884c": true,
+    "3b23be71-6f33-4de5-84f3-67d9d351669f": true
   }
 }
