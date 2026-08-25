@@ -2,33 +2,43 @@
   "schema": "forgedock.config/v1",
   "repository": {
     "provider": "github",
-    "name": "owner/repository"
+    "name": "RapierCraftStudios/forgedock-pi"
   },
   "state": {
     "branch": "forgedock/state/v1",
-    "leaseSeconds": 300,
+    "leaseSeconds": 3600,
     "heartbeatSeconds": 60
   },
   "branches": {
-    "integration": ["staging", "milestone/*"],
-    "protected": ["main"],
+    "integration": [
+      "staging",
+      "milestone/*"
+    ],
+    "protected": [
+      "main"
+    ],
     "autoMergeIntegration": true
   },
   "verification": {
     "github": {
       "required": true,
-      "requiredBranches": ["main"],
+      "requiredBranches": [
+        "main"
+      ],
       "waitTimeoutMs": 1800000,
       "pollIntervalMs": 10000
     },
     "commands": {}
   },
   "review": {
-    "required": ["forge-review-correctness", "forge-review-security"],
+    "required": [
+      "forge-review-correctness",
+      "forge-review-security"
+    ],
     "maxRounds": 3
   },
   "orchestration": {
-    "maxConcurrent": 2,
+    "maxConcurrent": 8,
     "maxIssues": 20
   },
   "subagents": {

@@ -1,5 +1,13 @@
-import { access, mkdir, realpath, rm } from "node:fs/promises";
-import { dirname, join, relative, resolve } from "node:path";
+import {
+  access,
+  appendFile,
+  mkdir,
+  readFile,
+  realpath,
+  rm,
+  rmdir,
+} from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 export interface ExecOptions {
   cwd?: string;
@@ -50,6 +58,37 @@ export class GitWorktreeManager {
 
   constructor(executor: CommandExecutor) {
     this.#executor = executor;
+  }
+
+  async ensureRuntimeIgnored(
+    repositoryRoot: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const result = await this.#git(
+      repositoryRoot,
+      ["rev-parse", "--git-path", "info/exclude"],
+      30_000,
+      signal,
+    );
+    const rawExcludePath = result.stdout.trim();
+    const excludePath = isAbsolute(rawExcludePath)
+      ? rawExcludePath
+      : resolve(repositoryRoot, rawExcludePath);
+    if (!rawExcludePath)
+      throw new Error("Unable to resolve Git's local exclude file.");
+    const existing = await readFile(excludePath, "utf8").catch(() => "");
+    if (
+      existing
+        .split("\n")
+        .map((line) => line.trim())
+        .includes(".pi/")
+    )
+      return;
+    await appendFile(
+      excludePath,
+      `${existing && !existing.endsWith("\n") ? "\n" : ""}.pi/\n`,
+      "utf8",
+    );
   }
 
   async resolveRepositoryRoot(
@@ -119,6 +158,27 @@ export class GitWorktreeManager {
     };
   }
 
+  async remoteBaseSha(
+    repositoryRoot: string,
+    baseBranch: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    await this.#git(
+      repositoryRoot,
+      ["fetch", "--no-tags", "origin", baseBranch],
+      120_000,
+      signal,
+    );
+    return (
+      await this.#git(
+        repositoryRoot,
+        ["rev-parse", `origin/${baseBranch}^{commit}`],
+        30_000,
+        signal,
+      )
+    ).stdout.trim();
+  }
+
   async head(worktreePath: string, signal?: AbortSignal): Promise<string> {
     return (
       await this.#git(worktreePath, ["rev-parse", "HEAD"], 30_000, signal)
@@ -149,8 +209,20 @@ export class GitWorktreeManager {
       30_000,
       signal,
     );
-    if (result.stdout.trim())
-      throw new Error(`Worktree is not clean:\n${result.stdout}`);
+    const meaningful = result.stdout
+      .split("\n")
+      .filter((line) => {
+        if (!line.trim()) return false;
+        const path = line.length > 3 ? line.slice(3).trim() : line.trim();
+        return !(
+          line.startsWith("??") &&
+          (path === ".pi" || path.startsWith(".pi/"))
+        );
+      })
+      .join("\n")
+      .trim();
+    if (meaningful)
+      throw new Error(`Worktree is not clean:\n${meaningful}`);
   }
 
   async push(
@@ -197,6 +269,7 @@ export class GitWorktreeManager {
     prepared: PreparedWorktree,
     signal?: AbortSignal,
   ): Promise<void> {
+    await cleanupForgeRuntime(prepared.worktreePath);
     await this.assertClean(prepared.worktreePath, signal);
     await this.#git(
       prepared.repositoryRoot,
@@ -206,6 +279,12 @@ export class GitWorktreeManager {
     );
     if (await exists(prepared.worktreePath))
       await rm(prepared.worktreePath, { recursive: true });
+    await this.#git(
+      prepared.repositoryRoot,
+      ["branch", "-D", prepared.branch],
+      30_000,
+      signal,
+    );
   }
 
   async #git(
@@ -223,6 +302,24 @@ export class GitWorktreeManager {
       throw new GitOperationError(`git ${args.join(" ")}`, result);
     return result;
   }
+}
+
+async function cleanupForgeRuntime(worktreePath: string): Promise<void> {
+  const piDir = join(worktreePath, ".pi");
+  const agentsDir = join(piDir, "agents");
+  const forgeDir = join(piDir, "forge");
+  if (await exists(join(forgeDir, "generated-settings")))
+    await rm(join(piDir, "settings.json"), { force: true });
+  for (const name of [
+    "forge-work-on.md",
+    "forge-refresh-review.md",
+    "forge-review-correctness.md",
+    "forge-review-security.md",
+  ])
+    await rm(join(agentsDir, name), { force: true });
+  await rm(forgeDir, { recursive: true, force: true });
+  await rmdir(agentsDir).catch(() => undefined);
+  await rmdir(piDir).catch(() => undefined);
 }
 
 async function exists(path: string): Promise<boolean> {

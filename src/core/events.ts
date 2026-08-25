@@ -57,6 +57,8 @@ export interface RunCreatedPayload {
   issueNumber: number;
   integrationBranch: string;
   protectedBranch: string;
+  orchestrationRunId?: string;
+  leaseEpoch?: number;
 }
 
 export interface PhaseQueuedPayload {

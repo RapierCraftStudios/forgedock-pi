@@ -32,6 +32,15 @@ class ProjectionTransport implements GitHubTransport {
       status = 201;
       data = comment;
     } else if (
+      request.method === "PATCH" &&
+      request.path.includes("/issues/comments/")
+    ) {
+      const id = Number(request.path.split("/").at(-1));
+      const comment = this.comments.find((entry) => entry.id === id);
+      if (!comment) throw new Error(`Missing comment ${id}`);
+      comment.body = (request.body as { body: string }).body;
+      data = comment;
+    } else if (
       request.method === "GET" &&
       /\/issues\/\d+$/.test(request.path)
     ) {
@@ -93,4 +102,24 @@ test("issue projection is marker-idempotent and only adds missing labels", async
   assert.equal(transport.labels.has("workflow:investigating"), false);
   assert.equal(transport.labels.has("workflow:merged"), true);
   assert.equal(transport.labels.has("bug"), true);
+});
+
+test("comment append is idempotent when the marker is already present", async () => {
+  const transport = new ProjectionTransport();
+  transport.comments.push({
+    id: 1,
+    body: "<!-- FORGE:BUILDER -->\nImplementation\n\n<!-- FORGE:BUILDER:COMPLETE -->\n",
+  });
+  const projector = new GitHubIssueProjector(transport, "owner/repo");
+  const id = await projector.appendToLatestComment({
+    issueNumber: 42,
+    marker: "<!-- FORGE:BUILDER -->",
+    append: "<!-- FORGE:BUILDER:COMPLETE -->",
+    skipIfContains: "<!-- FORGE:BUILDER:COMPLETE -->",
+  });
+  assert.equal(id, 1);
+  assert.equal(
+    transport.comments[0]?.body.match(/FORGE:BUILDER:COMPLETE/g)?.length,
+    1,
+  );
 });

@@ -24,13 +24,12 @@ import { GitHubIssueProjector } from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
 import {
-  createRunEvent,
   RUN_PHASES,
   type RunEvent,
   type RunEventType,
   type RunPhase,
 } from "../core/events.ts";
-import { applyRunEvent } from "../core/state.ts";
+import { RunJournal } from "../workflows/journal.ts";
 import {
   FORGE_WORK_ON_OUTPUT_SCHEMA,
   isForgeWorkOnResult,
@@ -57,6 +56,7 @@ interface ForgeChildBinding {
   repository: string;
   issueNumber: number;
   leaseEpoch: number;
+  leaseOwnerRunId: string;
   stateBranch: string;
   worktreeRoot: string;
   branch: string;
@@ -64,6 +64,8 @@ interface ForgeChildBinding {
   baseSha: string;
   maxReviewRounds: number;
   verificationCommands: Readonly<Record<string, BoundVerificationCommand>>;
+  refresh: boolean;
+  previousReviewRounds?: number;
 }
 
 interface ProcessResult {
@@ -103,6 +105,8 @@ const VerifyParameters = Type.Object({
   }),
 });
 
+const RefreshBaseParameters = Type.Object({});
+
 const DiffParameters = Type.Object({
   mode: StringEnum(["patch", "name-only", "stat"] as const),
 });
@@ -123,6 +127,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
   let ceiling: SubagentCapabilityCeilingHandle | undefined;
   let canonicalRoot: string | undefined;
   let githubToken: string | undefined;
+  let refreshPushLeaseSha: string | undefined;
 
   pi.on("session_start", async (_event, ctx) => {
     canonicalRoot = await realpath(binding.worktreeRoot);
@@ -176,6 +181,132 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         reason: `${event.toolName} cannot access Forge runtime or Git control files.`,
       };
     }
+  });
+
+  pi.registerTool({
+    name: "forge_refresh_base",
+    label: "Forge Refresh Base",
+    description:
+      "Rebase the owned clean branch onto the bound latest integration SHA using a guarded remote-branch lease",
+    parameters: RefreshBaseParameters,
+    async execute(_toolCallId, _params, signal) {
+      if (!binding.refresh)
+        throw new Error(
+          "forge_refresh_base is only available to a bound refresh-review run.",
+        );
+      const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const env = safeEnvironment(binding.runId);
+      const status = await runProcess(
+        "git",
+        ["-C", root, "status", "--porcelain"],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      const refreshStatus = nonRuntimeStatus(status.stdout);
+      if (status.exitCode !== 0 || refreshStatus)
+        throw new Error(
+          `Base refresh requires a clean worktree: ${status.stderr || refreshStatus}`,
+        );
+      const fetched = await runProcess(
+        "git",
+        [
+          "-C",
+          root,
+          "fetch",
+          "--no-tags",
+          "origin",
+          binding.baseBranch,
+          binding.branch,
+        ],
+        {
+          cwd: root,
+          timeoutMs: 120_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (fetched.exitCode !== 0)
+        throw new Error(`Unable to fetch refresh refs: ${fetched.stderr}`);
+      const base = await runProcess(
+        "git",
+        ["-C", root, "rev-parse", `origin/${binding.baseBranch}^{commit}`],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      const actualBaseSha = base.stdout.trim();
+      if (base.exitCode !== 0 || actualBaseSha !== binding.baseSha)
+        throw new Error(
+          `Bound refresh base ${binding.baseSha} changed to ${actualBaseSha || "unknown"}; restart refresh with a new binding.`,
+        );
+      const remote = await runProcess(
+        "git",
+        ["-C", root, "rev-parse", `origin/${binding.branch}^{commit}`],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (remote.exitCode !== 0 || !remote.stdout.trim())
+        throw new Error(
+          "Cannot refresh a lane without the existing owned remote branch.",
+        );
+      refreshPushLeaseSha = remote.stdout.trim();
+      const rebased = await runProcess(
+        "git",
+        ["-C", root, "rebase", binding.baseSha],
+        {
+          cwd: root,
+          timeoutMs: 120_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (rebased.exitCode !== 0) {
+        await runProcess("git", ["-C", root, "rebase", "--abort"], {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+        });
+        throw new Error(
+          `Controlled rebase failed and was aborted: ${rebased.stderr || rebased.stdout}`,
+        );
+      }
+      const head = await runProcess(
+        "git",
+        ["-C", root, "rev-parse", "HEAD"],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (head.exitCode !== 0 || !head.stdout.trim())
+        throw new Error(`Unable to resolve refreshed HEAD: ${head.stderr}`);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Rebased the owned lane onto ${binding.baseSha}; refreshed HEAD is ${head.stdout.trim()}.`,
+          },
+        ],
+        details: {
+          baseSha: binding.baseSha,
+          headSha: head.stdout.trim(),
+          remoteLeaseSha: refreshPushLeaseSha,
+        },
+      };
+    },
   });
 
   pi.registerTool({
@@ -233,7 +364,14 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       const env = safeEnvironment(binding.runId);
       const status = await runProcess(
         "git",
-        ["-C", root, "status", "--porcelain"],
+        [
+          "-C",
+          root,
+          "status",
+          "--porcelain=v1",
+          "--untracked-files=all",
+          "-z",
+        ],
         {
           cwd: root,
           timeoutMs: 30_000,
@@ -243,18 +381,47 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       );
       if (status.exitCode !== 0)
         throw new Error(`git status failed: ${status.stderr}`);
-      if (!status.stdout.trim())
+      const changedPaths = parseGitStatusPaths(status.stdout);
+      const runtimePaths = changedPaths.filter(isForgeRuntimePath);
+      if (runtimePaths.length > 0)
+        throw new Error(
+          `Refusing to commit Forge runtime paths: ${runtimePaths.join(", ")}.`,
+        );
+      if (changedPaths.length === 0)
         throw new Error(
           "Cannot create a Forge commit with no worktree changes.",
         );
-      const added = await runProcess("git", ["-C", root, "add", "-A"], {
-        cwd: root,
-        timeoutMs: 30_000,
-        env,
-        ...(signal ? { signal } : {}),
-      });
+      const added = await runProcess(
+        "git",
+        ["-C", root, "add", "-A", "--", ...changedPaths],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
       if (added.exitCode !== 0)
         throw new Error(`git add failed: ${added.stderr}`);
+      const staged = await runProcess(
+        "git",
+        ["-C", root, "diff", "--cached", "--name-only", "-z", "--"],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (staged.exitCode !== 0)
+        throw new Error(`staged-path validation failed: ${staged.stderr}`);
+      const stagedPaths = parseNullSeparatedPaths(staged.stdout);
+      if (stagedPaths.some(isForgeRuntimePath))
+        throw new Error("Refusing to commit staged Forge runtime paths.");
+      if (stagedPaths.length === 0)
+        throw new Error(
+          "Cannot create a Forge commit with no validated implementation changes.",
+        );
       const message =
         params.kind === "implementation"
           ? `forge: implement issue #${binding.issueNumber}`
@@ -371,7 +538,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       );
       if (status.exitCode !== 0)
         throw new Error(`git status failed: ${status.stderr}`);
-      if (status.stdout.trim()) {
+      if (nonRuntimeStatus(status.stdout)) {
         throw new Error(
           "Review preparation requires a clean committed worktree. Run forge_commit again for residual formatting or review-fix changes.",
         );
@@ -385,15 +552,28 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       const headSha = head.stdout.trim();
       if (head.exitCode !== 0 || !headSha)
         throw new Error(`Unable to resolve review HEAD: ${head.stderr}`);
-      const push = await pi.exec(
-        "git",
-        ["-C", root, "push", "--set-upstream", "origin", binding.branch],
-        {
-          cwd: root,
-          timeout: 120_000,
-          ...(signal ? { signal } : {}),
-        },
-      );
+      if (binding.refresh && !refreshPushLeaseSha)
+        throw new Error(
+          "Refreshed review cannot push before forge_refresh_base establishes the remote branch lease.",
+        );
+      const pushArgs = [
+        "-C",
+        root,
+        "push",
+        "--set-upstream",
+        ...(binding.refresh
+          ? [
+              `--force-with-lease=refs/heads/${binding.branch}:${refreshPushLeaseSha}`,
+            ]
+          : []),
+        "origin",
+        binding.branch,
+      ];
+      const push = await pi.exec("git", pushArgs, {
+        cwd: root,
+        timeout: 120_000,
+        ...(signal ? { signal } : {}),
+      });
       if (push.code !== 0)
         throw new Error(
           `Bound branch push failed: ${push.stderr || push.stdout}`,
@@ -484,6 +664,19 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           "Final work-on result identity does not match the bound run.",
         );
       }
+      if (
+        binding.refresh &&
+        params.value.review.rounds !==
+          (binding.previousReviewRounds ?? 0) + 1
+      ) {
+        throw new Error(
+          "Refreshed work-on result must increment the prior review round exactly once.",
+        );
+      }
+      if (params.value.baseSha !== binding.baseSha)
+        throw new Error(
+          "Final work-on result base SHA does not match the bound base.",
+        );
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
       const resultPath = resolve(binding.resultPath);
       if (!isPathWithin(join(root, ".pi", "forge"), resultPath)) {
@@ -516,6 +709,10 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       "Request a typed, core-validated phase transition in the authoritative GitHub run journal",
     parameters: CheckpointParameters,
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+      if (binding.refresh)
+        throw new Error(
+          "Refresh-review runs cannot mutate the original phase journal.",
+        );
       const token =
         githubToken ??
         (await resolveGitHubToken(pi, binding.worktreeRoot, signal));
@@ -533,56 +730,35 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         );
       if (
         current.lease.epoch !== binding.leaseEpoch ||
-        current.lease.ownerRunId !== binding.runId
+        current.lease.ownerRunId !== binding.leaseOwnerRunId
       ) {
         throw new Error(
-          `Bound lease epoch ${binding.leaseEpoch} no longer owns run ${binding.runId}.`,
+          `Bound lease epoch ${binding.leaseEpoch} no longer authorizes run ${binding.runId}.`,
         );
       }
       const idempotencyKey = `phase:${params.phase}:${params.attempt}:${params.action}`;
       const priorEventId = current.state.idempotencyKeys[idempotencyKey];
-      let event: RunEvent;
-      let sequence: number;
-      let stateTip = current.tip;
-      let idempotent = false;
-
-      if (priorEventId) {
-        const priorEvent = current.events.find(
-          (candidate) => candidate.eventId === priorEventId,
+      const journal = new RunJournal(store);
+      const snapshot = await journal.append({
+        runId: binding.runId,
+        type: checkpointEventType(params.action),
+        payload: checkpointPayload(params, binding),
+        idempotencyKey,
+        sessionId: ctx.sessionManager.getSessionId(),
+        message: `Checkpoint ${binding.runId} ${params.phase} ${params.action}`,
+        ...(signal ? { signal } : {}),
+      });
+      const eventId = snapshot.state.idempotencyKeys[idempotencyKey];
+      const event = snapshot.events.find(
+        (candidate) => candidate.eventId === eventId,
+      );
+      if (!event)
+        throw new Error(
+          `Checkpoint event ${String(eventId)} is missing from the journal.`,
         );
-        if (!priorEvent)
-          throw new Error(
-            `Checkpoint event ${priorEventId} is missing from the journal.`,
-          );
-        event = priorEvent;
-        sequence = current.state.sequence;
-        idempotent = true;
-      } else {
-        event = createRunEvent({
-          runId: binding.runId,
-          repository: binding.repository,
-          sequence: current.state.sequence + 1,
-          previousEventHash: current.state.lastEventHash,
-          type: checkpointEventType(params.action),
-          actor: {
-            kind: "extension",
-            sessionId: ctx.sessionManager.getSessionId(),
-            leaseEpoch: binding.leaseEpoch,
-          },
-          idempotencyKey,
-          payload: checkpointPayload(params, binding),
-        });
-        const nextState = applyRunEvent(current.state, event);
-        stateTip = await store.commitRunState({
-          expectedTip: current.tip,
-          events: [...current.events, event],
-          state: nextState,
-          lease: current.lease,
-          message: `Checkpoint ${binding.runId} ${params.phase} ${params.action}`,
-          ...(signal ? { signal } : {}),
-        });
-        sequence = nextState.sequence;
-      }
+      const sequence = snapshot.state.sequence;
+      const stateTip = snapshot.tip;
+      const idempotent = priorEventId !== undefined;
 
       if (params.action !== "queue") {
         const projector = new GitHubIssueProjector(
@@ -656,6 +832,7 @@ function readBinding(): ForgeChildBinding {
     "runId",
     "resultPath",
     "repository",
+    "leaseOwnerRunId",
     "stateBranch",
     "worktreeRoot",
     "branch",
@@ -691,12 +868,25 @@ function readBinding(): ForgeChildBinding {
     validateBoundCommand(name, commandValue);
     verificationCommands[name] = commandValue;
   }
+  const refresh = value.refresh === true;
+  const previousReviewRounds = value.previousReviewRounds;
+  if (
+    refresh &&
+    (!Number.isSafeInteger(previousReviewRounds) ||
+      (previousReviewRounds as number) < 1 ||
+      (previousReviewRounds as number) >= (value.maxReviewRounds as number))
+  ) {
+    throw new Error(
+      "Refresh binding previousReviewRounds must allow one additional review round.",
+    );
+  }
   return {
     runId: value.runId as string,
     resultPath: value.resultPath as string,
     repository: value.repository as string,
     issueNumber: value.issueNumber as number,
     leaseEpoch: value.leaseEpoch as number,
+    leaseOwnerRunId: value.leaseOwnerRunId as string,
     stateBranch: value.stateBranch as string,
     worktreeRoot: value.worktreeRoot as string,
     branch: value.branch as string,
@@ -704,6 +894,10 @@ function readBinding(): ForgeChildBinding {
     baseSha: value.baseSha as string,
     maxReviewRounds: value.maxReviewRounds as number,
     verificationCommands,
+    refresh,
+    ...(refresh
+      ? { previousReviewRounds: previousReviewRounds as number }
+      : {}),
   };
 }
 
@@ -980,7 +1174,7 @@ async function postDerivedPhaseArtifacts(
       runId: binding.runId,
       eventId: event.eventId,
       artifactKey: "build-checkpoint",
-      markdown: `<!-- FORGE:CHECKPOINT -->\n${JSON.stringify({ phase: "BUILD", status: "COMPLETE", next_phase: "REVIEW", timestamp: event.occurredAt, commit: params.commitSha ?? null, acceptance_gate: "PASSED" })}`,
+      markdown: `<!-- FORGE:CHECKPOINT -->\n${JSON.stringify({ phase: "BUILD", status: "COMPLETE", next_phase: "REVIEW", timestamp: event.occurredAt, commit: params.commitSha ?? null, local_verification: "COMPLETE", github_ci: "PENDING_PARENT_GATE" })}`,
       ...(signal ? { signal } : {}),
     });
   }
@@ -1045,8 +1239,8 @@ function validatePhaseReport(phase: RunPhase, report: string): void {
       "### Testing Checklist",
     ],
     verify: [
-      "<!-- FORGE:ACCEPTANCE_GATE -->",
-      "<!-- FORGE:ACCEPTANCE_GATE:PASSED -->",
+      "<!-- FORGE:LOCAL_VERIFICATION -->",
+      "<!-- FORGE:IMPLEMENTATION_READY_FOR_CI -->",
     ],
   };
   const missing = (requiredByPhase[phase] ?? []).filter(
@@ -1057,6 +1251,66 @@ function validatePhaseReport(phase: RunPhase, report: string): void {
       `Phase ${phase} report is missing canonical ForgeDock fields: ${missing.join(", ")}.`,
     );
   }
+}
+
+function normalizeRepositoryPath(value: string): string {
+  return value.replaceAll("\\", "/").replace(/^\.\/+/, "");
+}
+
+export function isForgeRuntimePath(value: string): boolean {
+  const path = normalizeRepositoryPath(value);
+  return (
+    path === ".pi" ||
+    path.startsWith(".pi/") ||
+    path === ".forge/cache" ||
+    path.startsWith(".forge/cache/") ||
+    path === ".forge/worktrees" ||
+    path.startsWith(".forge/worktrees/")
+  );
+}
+
+function parseNullSeparatedPaths(output: string): string[] {
+  return output
+    .split("\0")
+    .filter(Boolean)
+    .map(normalizeRepositoryPath);
+}
+
+export function parseGitStatusPaths(output: string): string[] {
+  const records = output.split("\0").filter(Boolean);
+  const paths: string[] = [];
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    if (!record) continue;
+    const path = record.length >= 3 ? record.slice(3) : record;
+    if (path) paths.push(normalizeRepositoryPath(path));
+    if (
+      (record[0] === "R" ||
+        record[0] === "C" ||
+        record[1] === "R" ||
+        record[1] === "C") &&
+      records[index + 1]
+    ) {
+      paths.push(normalizeRepositoryPath(records[index + 1] as string));
+      index += 1;
+    }
+  }
+  return [...new Set(paths)];
+}
+
+function nonRuntimeStatus(output: string): string {
+  return output
+    .split("\n")
+    .filter((line) => {
+      if (!line.trim()) return false;
+      const path = line.length > 3 ? line.slice(3).trim() : line.trim();
+      return !(
+        line.startsWith("??") &&
+        (path === ".pi" || path.startsWith(".pi/"))
+      );
+    })
+    .join("\n")
+    .trim();
 }
 
 function toolPath(input: unknown): string | undefined {

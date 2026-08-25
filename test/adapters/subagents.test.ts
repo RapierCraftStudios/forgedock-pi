@@ -10,6 +10,8 @@ import { SubagentsRpcClient } from "../../src/adapters/subagents.ts";
 import { materializeForgeAgents } from "../../src/agents/materialize.ts";
 import {
   FORGE_REVIEW_TOOLS,
+  FORGE_REFRESH_REVIEW_AGENT,
+  FORGE_REFRESH_REVIEW_TOOLS,
   FORGE_WORK_ON_AGENT,
   FORGE_WORK_ON_MAX_DEPTH,
   FORGE_WORK_ON_TOOLS,
@@ -105,30 +107,81 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
   assert.equal(receipt.runId, "async-run-1");
   const spawn = bus.requests.at(-1) as {
     method: string;
-    params: { workflowScript: string };
+    params: Record<string, unknown>;
   };
   assert.equal(spawn.method, "spawn");
+  assert.equal(spawn.params.agent, FORGE_WORK_ON_AGENT);
+  assert.equal(spawn.params.async, true);
+  assert.equal(spawn.params.workflowScript, undefined);
+  const serialized = JSON.stringify(spawn.params);
+  assert.match(serialized, /forge-review-correctness/);
+  assert.match(serialized, /forge-review-security/);
+  assert.match(serialized, /forgedock\.pi\/1/);
+  assert.match(serialized, /Reviewer remediation is pre-authorized/);
+  assert.doesNotMatch(serialized, /gh auth token/);
+});
+
+test("RPC work-on treats GitHub-only verification as valid", async () => {
+  const { pi, bus } = fakePi();
+  const client = new SubagentsRpcClient(pi);
+  const githubOnlyPolicy = parseForgePolicy({
+    schema: "forgedock.config/v1",
+    repository: { provider: "github", name: "owner/repo" },
+    state: {
+      branch: "forgedock/state/v1",
+      leaseSeconds: 300,
+      heartbeatSeconds: 60,
+    },
+    branches: {
+      integration: ["staging"],
+      protected: ["main"],
+      autoMergeIntegration: true,
+    },
+    verification: {
+      github: { required: true, waitTimeoutMs: 60_000, pollIntervalMs: 1_000 },
+      commands: {},
+    },
+    review: { required: ["correctness", "security"], maxRounds: 3 },
+    subagents: { maxConcurrent: 2, maxDepth: 2 },
+  });
+  await client.spawnWorkOn({
+    runId: "run-github-ci",
+    issueNumber: 7,
+    repository: "owner/repo",
+    worktreeRoot: "/tmp/worktree",
+    branch: "forge/7",
+    baseBranch: "staging",
+    baseSha: "abcdef1234567890",
+    leaseEpoch: 1,
+    policy: githubOnlyPolicy,
+    issueContext: "Issue body",
+  });
+  const spawn = bus.requests.at(-1) as {
+    params: { task: string; workflowScript?: string };
+  };
+  assert.equal(spawn.params.workflowScript, undefined);
   assert.match(
-    spawn.params.workflowScript,
-    new RegExp(`agent\\":\\"${FORGE_WORK_ON_AGENT}`),
+    spawn.params.task,
+    /No local verification commands are configured\. This is valid/,
   );
-  assert.match(spawn.params.workflowScript, /forge-review-correctness/);
-  assert.match(spawn.params.workflowScript, /forge-review-security/);
-  assert.match(spawn.params.workflowScript, /forgedock\.pi\/1/);
-  assert.doesNotMatch(spawn.params.workflowScript, /gh auth token/);
+  assert.match(spawn.params.task, /parent enforce GitHub-configured CI/);
 });
 
 test("materialized project agents preserve nested work-on hierarchy for async runners", async () => {
   const root = await mkdtemp(join(tmpdir(), "forgedock-agents-"));
   try {
     const paths = await materializeForgeAgents(root);
-    assert.equal(paths.length, 3);
+    assert.equal(paths.length, 4);
     const workOn = await readFile(
       join(root, ".pi", "agents", "forge-work-on.md"),
       "utf8",
     );
     const reviewer = await readFile(
       join(root, ".pi", "agents", "forge-review-security.md"),
+      "utf8",
+    );
+    const refresh = await readFile(
+      join(root, ".pi", "agents", `${FORGE_REFRESH_REVIEW_AGENT}.md`),
       "utf8",
     );
     assert.match(workOn, /tools: .*subagent/);
@@ -139,9 +192,36 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
     assert.match(workOn, /  - \/.*agents\/child-runtime\.ts/);
     assert.doesNotMatch(workOn, /  - "\/.*"/);
     assert.doesNotMatch(reviewer, /tools: .*subagent/);
+    assert.match(refresh, /tools: .*subagent/);
+    assert.match(refresh, /forge_refresh_base/);
+    assert.match(refresh, /maxSubagentDepth: 2/);
+    const settings = JSON.parse(
+      await readFile(join(root, ".pi", "settings.json"), "utf8"),
+    ) as { retry: { enabled: boolean; maxRetries: number } };
+    assert.equal(settings.retry.enabled, true);
+    assert.equal(settings.retry.maxRetries, 5);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("RPC resume revives a transiently failed work-on session", async () => {
+  const { pi, bus } = fakePi();
+  const client = new SubagentsRpcClient(pi);
+  const receipt = await client.resume(
+    "failed-workflow",
+    "Continue from durable checkpoints.",
+  );
+  assert.equal(receipt.runId, "async-run-1");
+  const request = bus.requests.at(-1) as {
+    method: string;
+    params: { id: string; message: string };
+  };
+  assert.equal(request.method, "resume");
+  assert.deepEqual(request.params, {
+    id: "failed-workflow",
+    message: "Continue from durable checkpoints.",
+  });
 });
 
 test("runtime Forge hierarchy enables only work-on recursion", () => {
@@ -150,10 +230,14 @@ test("runtime Forge hierarchy enables only work-on recursion", () => {
     (FORGE_REVIEW_TOOLS as readonly string[]).includes("subagent"),
     false,
   );
+  assert.equal(
+    (FORGE_REFRESH_REVIEW_TOOLS as readonly string[]).includes("subagent"),
+    true,
+  );
   assert.equal(FORGE_WORK_ON_MAX_DEPTH, 2);
 
   const { pi } = fakePi();
   const registrations = registerForgeAgents(pi);
-  assert.equal(registrations.length, 3);
+  assert.equal(registrations.length, 4);
   for (const registration of registrations) registration.dispose();
 });

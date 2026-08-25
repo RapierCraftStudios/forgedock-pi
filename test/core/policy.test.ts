@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   applyLocalOverrides,
   canAutoMerge,
+  isGitHubCiRequired,
   isProtectedBranch,
   parseForgePolicy,
   PolicyValidationError,
@@ -23,6 +24,12 @@ const rawPolicy = {
     autoMergeIntegration: true,
   },
   verification: {
+    github: {
+      required: true,
+      requiredBranches: ["main"],
+      waitTimeoutMs: 1_800_000,
+      pollIntervalMs: 10_000,
+    },
     commands: {
       test: { argv: ["npm", "test"], required: true, timeoutMs: 600_000 },
     },
@@ -37,6 +44,8 @@ test("tracked policy enables only non-protected integration auto-merge", () => {
   assert.equal(canAutoMerge(policy, "milestone/auth"), true);
   assert.equal(canAutoMerge(policy, "main"), false);
   assert.equal(isProtectedBranch(policy, "main"), true);
+  assert.equal(isGitHubCiRequired(policy, "main"), true);
+  assert.equal(isGitHubCiRequired(policy, "staging"), false);
 });
 
 test("local overrides can only tighten tracked policy", () => {

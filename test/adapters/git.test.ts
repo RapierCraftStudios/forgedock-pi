@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -64,6 +64,11 @@ test("worktree manager creates an issue branch from integration and cleans it sa
     await execFileAsync("git", ["clone", origin, clone]);
 
     const manager = new GitWorktreeManager(executor);
+    await manager.ensureRuntimeIgnored(clone);
+    assert.match(
+      await readFile(join(clone, ".git", "info", "exclude"), "utf8"),
+      /^\.pi\/$/m,
+    );
     const prepared = await manager.prepare(clone, {
       runId: "run-1234",
       issueNumber: 7,
@@ -73,6 +78,13 @@ test("worktree manager creates an issue branch from integration and cleans it sa
     assert.equal(
       await readFile(join(prepared.worktreePath, "app.txt"), "utf8"),
       "base\n",
+    );
+    await mkdir(join(prepared.worktreePath, ".pi", "agents"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(prepared.worktreePath, ".pi", "agents", "runtime.md"),
+      "generated runtime\n",
     );
     await manager.assertClean(prepared.worktreePath);
     await manager.push(prepared.worktreePath, prepared.branch);
@@ -87,6 +99,12 @@ test("worktree manager creates an issue branch from integration and cleans it sa
     await assert.rejects(
       readFile(join(prepared.worktreePath, "app.txt"), "utf8"),
     );
+    const localBranch = await execFileAsync(
+      "git",
+      ["-C", clone, "branch", "--list", prepared.branch],
+      { encoding: "utf8" },
+    );
+    assert.equal(localBranch.stdout.trim(), "");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

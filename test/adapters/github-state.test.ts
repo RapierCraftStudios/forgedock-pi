@@ -145,7 +145,7 @@ test("state append uses a non-force compare-and-set ref update", async () => {
       events,
       state,
       lease,
-      message: "Checkpoint run-1",
+      message: "Fail issue #2 launch",
     }),
     "commit-2",
   );
@@ -158,6 +158,10 @@ test("state append uses a non-force compare-and-set ref update", async () => {
       request.method === "POST" && request.path.endsWith("/git/commits"),
   );
   assert.deepEqual((commit?.body as { parents: string[] }).parents, ["tip-1"]);
+  assert.equal(
+    (commit?.body as { message: string }).message,
+    "Fail issue 2 launch",
+  );
 });
 
 test("non-fast-forward state update becomes a CAS conflict", async () => {

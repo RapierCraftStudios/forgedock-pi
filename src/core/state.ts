@@ -56,6 +56,11 @@ export interface RecordedEffect {
   eventId: string;
 }
 
+export interface RunLeaseBinding {
+  ownerRunId: string;
+  epoch: number;
+}
+
 export interface RunState {
   schema: typeof RUN_STATE_SCHEMA;
   runId: string;
@@ -67,6 +72,7 @@ export interface RunState {
   sequence: number;
   lastEventHash: string;
   lease?: RepositoryLease;
+  leaseBinding?: RunLeaseBinding;
   phases: Partial<Record<RunPhase, PhaseState>>;
   effects: Record<string, RecordedEffect>;
   idempotencyKeys: Record<string, string>;
@@ -222,21 +228,23 @@ function assertEnvelopeContinuation(state: RunState, event: RunEvent): void {
 }
 
 function assertLeaseEpoch(state: RunState, event: RunEvent): void {
-  if (!state.lease)
+  const epoch = state.lease?.epoch ?? state.leaseBinding?.epoch;
+  const ownerRunId = state.lease?.ownerRunId ?? state.leaseBinding?.ownerRunId;
+  if (epoch === undefined || ownerRunId === undefined)
     throw new StateTransitionError(
       "missing-lease",
-      `${event.type} requires an active repository lease.`,
+      `${event.type} requires active repository lease authority.`,
     );
-  if (event.actor.leaseEpoch !== state.lease.epoch) {
+  if (event.actor.leaseEpoch !== epoch) {
     throw new StateTransitionError(
       "stale-lease-epoch",
-      `Event lease epoch ${event.actor.leaseEpoch} does not match ${state.lease.epoch}.`,
+      `Event lease epoch ${event.actor.leaseEpoch} does not match ${epoch}.`,
     );
   }
-  if (event.runId !== state.lease.ownerRunId) {
+  if (state.lease && event.runId !== ownerRunId) {
     throw new StateTransitionError(
       "lease-owner-mismatch",
-      "Event run does not own the repository lease.",
+      "Standalone event run does not own the repository lease.",
     );
   }
 }
@@ -273,6 +281,11 @@ function replaceAttempt(
 }
 
 function applyLeaseEvent(state: RunState, event: RunEvent): void {
+  if (state.leaseBinding)
+    throw new StateTransitionError(
+      "bound-run-lease-mutation",
+      "An orchestration-bound child cannot mutate the repository lease.",
+    );
   const lease = payloadRecord(event).lease;
   validateRepositoryLease(lease);
   if (
@@ -327,6 +340,11 @@ function applyLeaseEvent(state: RunState, event: RunEvent): void {
 }
 
 function applyLeaseRelease(state: RunState, event: RunEvent): void {
+  if (state.leaseBinding)
+    throw new StateTransitionError(
+      "bound-run-lease-release",
+      "An orchestration-bound child cannot release the repository lease.",
+    );
   assertLeaseEpoch(state, event);
   if (state.status !== "completed" && state.status !== "cancelled") {
     throw new StateTransitionError(
@@ -538,6 +556,13 @@ function createInitialState(event: RunEvent): RunState {
   const issueNumber = requirePositiveInteger(payload, "issueNumber");
   const integrationBranch = requireString(payload, "integrationBranch");
   const protectedBranch = requireString(payload, "protectedBranch");
+  const orchestrationRunId =
+    typeof payload.orchestrationRunId === "string"
+      ? requireString(payload, "orchestrationRunId")
+      : undefined;
+  const leaseEpoch = orchestrationRunId
+    ? requirePositiveInteger(payload, "leaseEpoch")
+    : undefined;
   const eventHash = hashRunEvent(event);
   return {
     schema: RUN_STATE_SCHEMA,
@@ -547,6 +572,9 @@ function createInitialState(event: RunEvent): RunState {
     integrationBranch,
     protectedBranch,
     status: "active",
+    ...(orchestrationRunId && leaseEpoch
+      ? { leaseBinding: { ownerRunId: orchestrationRunId, epoch: leaseEpoch } }
+      : {}),
     sequence: event.sequence,
     lastEventHash: eventHash,
     phases: {},

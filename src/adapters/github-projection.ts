@@ -133,13 +133,16 @@ export class GitHubIssueProjector {
     signal?: AbortSignal;
   }): Promise<number> {
     const comments = await this.#listComments(input.issueNumber, input.signal);
-    const target = comments
-      .filter((comment) => comment.body.includes(input.marker))
-      .filter(
-        (comment) =>
-          !input.skipIfContains || !comment.body.includes(input.skipIfContains),
-      )
-      .at(-1);
+    const matching = comments.filter((comment) =>
+      comment.body.includes(input.marker),
+    );
+    if (input.skipIfContains) {
+      const alreadyUpdated = matching.find((comment) =>
+        comment.body.includes(input.skipIfContains as string),
+      );
+      if (alreadyUpdated) return alreadyUpdated.id;
+    }
+    const target = matching.at(-1);
     if (!target)
       throw new Error(`No comment found for marker ${input.marker}.`);
     const path = `${this.#apiRoot}/issues/comments/${target.id}`;
