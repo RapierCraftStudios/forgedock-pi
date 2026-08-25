@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 20,
-  "lastEventHash": "sha256:23097594c0257e103bb502f31779337580d009a3c078514835040094be72d63c",
+  "sequence": 21,
+  "lastEventHash": "sha256:202b898bbcdcf67aff6f29a49fb8ed919eaae5ac8ed51ee566562b85d5b2494c",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -132,7 +132,7 @@
       "node": "implement",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/bbc39a72-07c4-4977-85a8-4473d856f301/.pi/forge/bbc39a72-07c4-4977-85a8-4473d856f301-implement-1.json",
       "subagentRunId": "929550fb-4712-4d04-8908-96a8ac3aeb3c",
@@ -141,7 +141,18 @@
       "startedAt": "2026-08-25T21:37:38.359Z",
       "previousSubagentRunId": "launch:implement-1:226c7a93-3185-40ac-a35c-d5ed80d2a5b9",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "1bc24423636e5394b4f99e6d2270f1c256bd3cd3",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "Commit 1bc24423636e5394b4f99e6d2270f1c256bd3cd3 was created by forge_commit on the bound branch.",
+        "The runtime bash hook now calls an exact predicate that returns true only for node=implement and denies missing or unknown identities.",
+        "Regression coverage asserts implement is allowed while all bounded non-implementation nodes, reviewer nodes, unknown, and undefined identities are denied.",
+        "TypeScript typecheck passed and the test run passed all 82 tests with zero failures.",
+        "The committed worktree is clean and changes are limited to the two allowed paths."
+      ],
+      "finishedAt": "2026-08-25T21:39:45.387Z"
     }
   },
   "effects": {},
@@ -165,7 +176,8 @@
     "node:prepare-worktree-1:completed": "7bf638b8-0854-4642-bce9-007a65cb7f8f",
     "node:implement-1:queued": "3fd57e97-4e3e-40f9-bc44-d7c8dcbb9cfd",
     "node:implement-1:started": "7cbf0e1f-5601-4577-9f0a-aecc93b83b07",
-    "node:implement-1:receipt-bound": "6583778d-0e7f-427b-a5f4-138a59880206"
+    "node:implement-1:receipt-bound": "6583778d-0e7f-427b-a5f4-138a59880206",
+    "node:implement-1:completed": "15f9fcdc-f3f5-49d4-bb59-2d70c6020300"
   },
   "eventIds": {
     "7b5d2931-7497-4d47-b405-55ab5d7a6899": true,
@@ -187,6 +199,7 @@
     "7bf638b8-0854-4642-bce9-007a65cb7f8f": true,
     "3fd57e97-4e3e-40f9-bc44-d7c8dcbb9cfd": true,
     "7cbf0e1f-5601-4577-9f0a-aecc93b83b07": true,
-    "6583778d-0e7f-427b-a5f4-138a59880206": true
+    "6583778d-0e7f-427b-a5f4-138a59880206": true,
+    "15f9fcdc-f3f5-49d4-bb59-2d70c6020300": true
   }
 }
