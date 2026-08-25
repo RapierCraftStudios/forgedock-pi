@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 16,
-  "lastEventHash": "sha256:a11899059876936f6780ee8d93248bbe07e6b238b9f7c1289cd134a0cd07ac8b",
+  "sequence": 17,
+  "lastEventHash": "sha256:8d7a71f39779c1c4f39205005381ad8b44e1017447b7259f53e1b45c534f5f86",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -115,7 +115,7 @@
       "node": "prepare-worktree",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/01d00f34-5c2f-4fb5-ad2e-e78d3f2299cb/.pi/forge/01d00f34-5c2f-4fb5-ad2e-e78d3f2299cb-prepare-worktree-1.json",
       "subagentRunId": "df5fa4fc-1835-4e73-8ad3-44855e9e1819",
@@ -124,7 +124,16 @@
       "startedAt": "2026-08-25T21:38:51.078Z",
       "previousSubagentRunId": "launch:prepare-worktree-1:ec8897df-b7ce-4c6a-8ff6-7360d283028d",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "Assigned worktree is accessible at /home/dev/Projects/forgedock-pi/.forge/worktrees/01d00f34-5c2f-4fb5-ad2e-e78d3f2299cb.",
+        "forge_diff against frozen base reported no changed files.",
+        "Worktree root contains the expected repository sources and runtime directories."
+      ],
+      "finishedAt": "2026-08-25T21:39:31.055Z"
     }
   },
   "effects": {},
@@ -144,7 +153,8 @@
     "node:plan-1:completed": "0d500783-c1b9-41ec-bc09-f1669333c58d",
     "node:prepare-worktree-1:queued": "53eb374c-d913-4738-ae62-542b8c166ee2",
     "node:prepare-worktree-1:started": "314d7213-c0f9-4b7f-a6b2-d63ef55742bc",
-    "node:prepare-worktree-1:receipt-bound": "b3c2681c-fe54-46eb-88b9-d9838aeb732a"
+    "node:prepare-worktree-1:receipt-bound": "b3c2681c-fe54-46eb-88b9-d9838aeb732a",
+    "node:prepare-worktree-1:completed": "2725f823-d41c-4591-a748-5481bad698fe"
   },
   "eventIds": {
     "b212ad4a-3bb2-4f46-baa0-50c26cd787a3": true,
@@ -162,6 +172,7 @@
     "0d500783-c1b9-41ec-bc09-f1669333c58d": true,
     "53eb374c-d913-4738-ae62-542b8c166ee2": true,
     "314d7213-c0f9-4b7f-a6b2-d63ef55742bc": true,
-    "b3c2681c-fe54-46eb-88b9-d9838aeb732a": true
+    "b3c2681c-fe54-46eb-88b9-d9838aeb732a": true,
+    "2725f823-d41c-4591-a748-5481bad698fe": true
   }
 }
