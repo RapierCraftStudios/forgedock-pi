@@ -6,13 +6,13 @@
   "status": "running",
   "maxConcurrent": 2,
   "leaseEpoch": 1,
-  "sequence": 30,
-  "lastEventHash": "sha256:581db173182dc2695764d55c4e5faf41f913571a330dbcf0debf9c159b3c9d4d",
+  "sequence": 31,
+  "lastEventHash": "sha256:e2b1108095044f01db3c0ffa0688c7a87c93520a1aa4d52787f5a34901087503",
   "lanes": [
     {
       "issueNumber": 49,
       "ordinal": 0,
-      "status": "ready",
+      "status": "integrating",
       "refreshes": 0,
       "forgeRunId": "152edce1-3e46-4425-8162-4f7b3cfaefc9",
       "subagentRunId": "launch:review-security-1:1d1fd0a9-9b2f-4fa7-bb9e-b1f5c1e5e0f1",
@@ -77,7 +77,8 @@
     "lane:49:ready:0": "410b409e-c293-42ef-8f12-9c2af50dccd8",
     "lease:heartbeat:2026-08-25T19:16:39.011Z": "5a86eabb-fcb9-4e25-8613-0faa734b1aa7",
     "lane:51:launch-failed": "f81016e6-2d00-4b9c-ba9f-b6a354ef1478",
-    "lease:heartbeat:2026-08-25T19:20:49.045Z": "7a656e70-0dd8-4f45-80fe-05f4733337eb"
+    "lease:heartbeat:2026-08-25T19:20:49.045Z": "7a656e70-0dd8-4f45-80fe-05f4733337eb",
+    "lane:49:integrate:0": "0752ef3f-4532-4e53-81b8-eeea1a8e210f"
   },
   "createdAt": "2026-08-25T18:47:20.196Z"
 }
