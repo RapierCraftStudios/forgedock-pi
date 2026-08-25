@@ -5,13 +5,13 @@
   "issueNumber": 60,
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "needs-human",
   "leaseBinding": {
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 45,
-  "lastEventHash": "sha256:a65f91f7f39893a6418677011b640e2da5335fa4eb420fa1fc3d8e8dcfa46857",
+  "sequence": 46,
+  "lastEventHash": "sha256:0934c0476e2719fd6d3eb8ce4a2eae290d7dba630409a0439e55ac7e852b272b",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -375,9 +375,17 @@
       "node": "decision",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "needs-human",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
-      "startedAt": "2026-08-25T21:47:53.462Z"
+      "startedAt": "2026-08-25T21:47:53.462Z",
+      "headSha": "1bc24423636e5394b4f99e6d2270f1c256bd3cd3",
+      "evidence": [
+        "decision:changes-requested",
+        "decision-comment:5417265082",
+        "Blocking confirmed findings remain: correctness-1."
+      ],
+      "reason": "Blocking confirmed findings remain: correctness-1.",
+      "finishedAt": "2026-08-25T21:48:12.210Z"
     }
   },
   "effects": {},
@@ -426,7 +434,8 @@
     "node:ci-1:started": "1d701a11-99be-4d1c-8187-a8ba5566137f",
     "node:ci-1:complete": "f0ae8c90-b99c-4745-bdd3-4d7b53b137e2",
     "node:decision-1:queued": "e9e67104-259b-4fc9-8e8c-d3e8c0892903",
-    "node:decision-1:started": "fa839c8f-fcd7-4f40-ac5b-c6424cfeec0b"
+    "node:decision-1:started": "fa839c8f-fcd7-4f40-ac5b-c6424cfeec0b",
+    "node:decision-1:needs-human": "342a3892-86ef-4e13-b35f-d77ff3ca16b5"
   },
   "eventIds": {
     "7b5d2931-7497-4d47-b405-55ab5d7a6899": true,
@@ -473,6 +482,7 @@
     "1d701a11-99be-4d1c-8187-a8ba5566137f": true,
     "f0ae8c90-b99c-4745-bdd3-4d7b53b137e2": true,
     "e9e67104-259b-4fc9-8e8c-d3e8c0892903": true,
-    "fa839c8f-fcd7-4f40-ac5b-c6424cfeec0b": true
+    "fa839c8f-fcd7-4f40-ac5b-c6424cfeec0b": true,
+    "342a3892-86ef-4e13-b35f-d77ff3ca16b5": true
   }
 }
