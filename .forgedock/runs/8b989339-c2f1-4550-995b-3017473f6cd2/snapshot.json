@@ -10,8 +10,8 @@
     "ownerRunId": "c0f52a10-07ba-4b5e-a47d-e39138c05aa2",
     "epoch": 1
   },
-  "sequence": 13,
-  "lastEventHash": "sha256:6c6e4a2c981d6521ef499c47b3ad94ce4072cbf59e7ff463594fa65d14ad939e",
+  "sequence": 14,
+  "lastEventHash": "sha256:f7a9453b3772b446ea8d6155cb961d3fc955c61e8f2fc57d558421958c0a34f8",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -102,6 +102,15 @@
         "test/adapters/subagents.test.ts covers bounded-node spawning, generated agent files, and runtime registration counts, providing the focused regression-test surface."
       ],
       "finishedAt": "2026-08-25T16:12:49.012Z"
+    },
+    "prepare-worktree-1": {
+      "nodeId": "prepare-worktree-1",
+      "node": "prepare-worktree",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/8b989339-c2f1-4550-995b-3017473f6cd2/.pi/forge/8b989339-c2f1-4550-995b-3017473f6cd2-prepare-worktree-1.json"
     }
   },
   "effects": {},
@@ -118,7 +127,8 @@
     "node:plan-1:queued": "03d77346-cff1-4dfd-8dd4-9d03a13ceff3",
     "node:plan-1:started": "3920d53b-8a36-4d9f-be98-c00fe8863c2b",
     "node:plan-1:receipt-bound": "7c112ea8-d11f-4620-9dec-fb66e7e84f08",
-    "node:plan-1:completed": "637f69d2-1090-49b6-8263-fb5da8c48ff9"
+    "node:plan-1:completed": "637f69d2-1090-49b6-8263-fb5da8c48ff9",
+    "node:prepare-worktree-1:queued": "7e3f8045-e9eb-415d-9744-1eb90484dda7"
   },
   "eventIds": {
     "e656d1eb-d4fb-461f-950a-aded3700afd9": true,
@@ -133,6 +143,7 @@
     "03d77346-cff1-4dfd-8dd4-9d03a13ceff3": true,
     "3920d53b-8a36-4d9f-be98-c00fe8863c2b": true,
     "7c112ea8-d11f-4620-9dec-fb66e7e84f08": true,
-    "637f69d2-1090-49b6-8263-fb5da8c48ff9": true
+    "637f69d2-1090-49b6-8263-fb5da8c48ff9": true,
+    "7e3f8045-e9eb-415d-9744-1eb90484dda7": true
   }
 }
