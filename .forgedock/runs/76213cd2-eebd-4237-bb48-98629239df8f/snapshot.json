@@ -10,8 +10,8 @@
     "ownerRunId": "c0f52a10-07ba-4b5e-a47d-e39138c05aa2",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:d8e2d8585bf0e93b75cd36ce94c8164d2552550e94c209f57c01200a9f083de7",
+  "sequence": 9,
+  "lastEventHash": "sha256:2707e5ba1bb03ba0067ffcf492d90adf60aacd5afd61b93b632196d689c3aa0f",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -45,7 +45,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/76213cd2-eebd-4237-bb48-98629239df8f/.pi/forge/76213cd2-eebd-4237-bb48-98629239df8f-investigate-1.json",
       "subagentRunId": "b03686d6-1e0b-4dfd-b2d9-8d7b113edb29",
@@ -54,7 +54,20 @@
       "startedAt": "2026-08-25T16:06:04.571Z",
       "previousSubagentRunId": "launch:investigate-1:c7965b2d-9c17-4b87-8fa0-55c8a3c4f48a",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "src/workflows/work-on.ts:1889-1907 persists and exposes the real provider run ID in activeNodes/#links before the authoritative node.resumed receipt-binding append at lines 1909-1928 completes.",
+        "src/workflows/work-on.ts:151-188 handles async completion without a per-node reconciliation/binding lock; once the real ID is exposed, a fast child completion can enter #reconcileNode concurrently with the launch path.",
+        "src/workflows/work-on.ts:739-815 detects the durable sentinel versus active real run ID and performs a second receipt bind using idempotency key node:<nodeId>:receipt-bound-recovery, while the launch path uses node:<nodeId>:receipt-bound; the distinct keys do not deduplicate the same logical receipt.",
+        "src/core/state.ts:575-620 requires node.resumed to start from running, and src/core/state.ts:632-659 additionally requires previousSubagentRunId to match the current durable run ID; a competing reconciliation can bind and complete the node before the launch append retries, yielding the reported cannot transition to running failure.",
+        "src/workflows/journal.ts:121-160 deduplicates only an exact idempotencyKey, so the direct and recovery receipt-binding keys are independently applied during CAS retries.",
+        "test/workflows/work-on.test.ts:27-54 covers only static reconcileLaunchState outcomes and does not exercise the provider-reply/async-completion interleaving or duplicate receipt binding described by the issue.",
+        "The supplied durable run evidence shows both a successful bind and failures immediately after node.started on the same build, which matches this timing-dependent source path."
+      ],
+      "finishedAt": "2026-08-25T16:10:15.583Z"
     }
   },
   "effects": {},
@@ -66,7 +79,8 @@
     "node:resolve-1:completed": "e7d6be24-ae39-4b87-a82d-687a7e059115",
     "node:investigate-1:queued": "461285cc-2725-4a69-8958-e42e86d54293",
     "node:investigate-1:started": "339a6926-685a-48e9-a71f-48c6193f5f07",
-    "node:investigate-1:receipt-bound": "ef12a0ac-6784-42cd-92f4-a1ac8f93632f"
+    "node:investigate-1:receipt-bound": "ef12a0ac-6784-42cd-92f4-a1ac8f93632f",
+    "node:investigate-1:completed": "4196f00d-d7c5-4872-a84d-85ddba3ae3e4"
   },
   "eventIds": {
     "d92452d2-d7eb-4247-84c7-2453dfafa617": true,
@@ -76,6 +90,7 @@
     "e7d6be24-ae39-4b87-a82d-687a7e059115": true,
     "461285cc-2725-4a69-8958-e42e86d54293": true,
     "339a6926-685a-48e9-a71f-48c6193f5f07": true,
-    "ef12a0ac-6784-42cd-92f4-a1ac8f93632f": true
+    "ef12a0ac-6784-42cd-92f4-a1ac8f93632f": true,
+    "4196f00d-d7c5-4872-a84d-85ddba3ae3e4": true
   }
 }
