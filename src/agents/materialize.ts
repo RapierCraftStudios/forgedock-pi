@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  FORGE_READ_ONLY_NODE_AGENT,
+  FORGE_READ_ONLY_NODE_TOOLS,
   FORGE_REVIEW_CORRECTNESS_AGENT,
   FORGE_REVIEW_CORRECTNESS_PROMPT,
   FORGE_REVIEW_SECURITY_AGENT,
@@ -34,6 +36,21 @@ export async function materializeForgeAgents(
   );
   const files = [
     {
+      name: FORGE_READ_ONLY_NODE_AGENT,
+      content: agentFile({
+        name: FORGE_READ_ONLY_NODE_AGENT,
+        description: "Execute a bounded ForgeDock node without source edits",
+        tools: FORGE_READ_ONLY_NODE_TOOLS,
+        prompt: FORGE_WORK_ON_PROMPT,
+        maxDepth: 1,
+        acceptanceRole: "read-only",
+        completionGuard: false,
+        async: true,
+        extensions: [childRuntimePath],
+        timeoutMs: FORGE_WORK_ON_TIMEOUT_MS,
+      }),
+    },
+    {
       name: FORGE_WORK_ON_AGENT,
       content: agentFile({
         name: FORGE_WORK_ON_AGENT,
@@ -43,6 +60,7 @@ export async function materializeForgeAgents(
         prompt: FORGE_WORK_ON_PROMPT,
         maxDepth: FORGE_WORK_ON_MAX_DEPTH,
         acceptanceRole: "writer",
+        completionGuard: true,
         async: true,
         extensions: [subagentsExtensionPath, childRuntimePath],
         timeoutMs: FORGE_WORK_ON_TIMEOUT_MS,
@@ -58,6 +76,7 @@ export async function materializeForgeAgents(
         prompt: FORGE_REFRESH_REVIEW_PROMPT,
         maxDepth: FORGE_WORK_ON_MAX_DEPTH,
         acceptanceRole: "writer",
+        completionGuard: true,
         async: true,
         extensions: [subagentsExtensionPath, childRuntimePath],
         timeoutMs: FORGE_WORK_ON_TIMEOUT_MS,
@@ -72,6 +91,7 @@ export async function materializeForgeAgents(
         prompt: FORGE_REVIEW_CORRECTNESS_PROMPT,
         maxDepth: 1,
         acceptanceRole: "read-only",
+        completionGuard: true,
         async: false,
         extensions: [childRuntimePath],
         timeoutMs: FORGE_REVIEW_TIMEOUT_MS,
@@ -87,6 +107,7 @@ export async function materializeForgeAgents(
         prompt: FORGE_REVIEW_SECURITY_PROMPT,
         maxDepth: 1,
         acceptanceRole: "read-only",
+        completionGuard: true,
         async: false,
         extensions: [childRuntimePath],
         timeoutMs: FORGE_REVIEW_TIMEOUT_MS,
@@ -167,6 +188,7 @@ function agentFile(input: {
   prompt: string;
   maxDepth: number;
   acceptanceRole: "read-only" | "writer";
+  completionGuard: boolean;
   async: boolean;
   extensions?: readonly string[];
   timeoutMs?: number;
@@ -185,7 +207,7 @@ async: ${input.async}
 tools: ${input.tools.join(", ")}
 acceptanceRole: ${input.acceptanceRole}
 maxSubagentDepth: ${input.maxDepth}
-completionGuard: true
+completionGuard: ${input.completionGuard}
 ${input.timeoutMs ? `timeoutMs: ${input.timeoutMs}\n` : ""}${extensionBlock}---
 
 ${input.prompt}
