@@ -25,6 +25,7 @@ import {
 } from "../agents/contracts.ts";
 import { materializeForgeAgents } from "../agents/materialize.ts";
 import {
+  ACCEPTANCE_GATE_SUCCESS_MARKER,
   acceptanceGatePassed,
   checkCurrentReviewAuditTrail,
   checkPreMergeAuditTrail,
@@ -67,6 +68,7 @@ interface ActiveNodeRunLink {
   nodeId: string;
   subagentRunId: string;
   resultPath: string;
+  launchNonce?: string;
 }
 
 export interface ActiveRunLink {
@@ -235,6 +237,15 @@ export class ForgeWorkOnController {
         const activeNodes = Object.values(link.activeNodes);
         if (activeNodes.length > 0) {
           for (const activeNode of activeNodes) {
+            if (isLaunchSentinel(activeNode.subagentRunId)) {
+              await this.#reconcileNode(
+                link,
+                ctx,
+                "No provider receipt is durably discoverable for this launch intent.",
+                activeNode,
+              );
+              continue;
+            }
             const payload = await this.#rpc.status(activeNode.subagentRunId);
             const completion = parseAsyncCompletion(payload);
             if (
@@ -567,7 +578,12 @@ export class ForgeWorkOnController {
       const store = new GitHubStateBranchStore(new FetchGitHubTransport({ token }), link.repository, link.stateBranch);
       await this.#runParentNode(
         link,
-        { nodeId, node: parentNode, attempt: nodeAttempt(nodeId) },
+        {
+          nodeId,
+          node: parentNode,
+          attempt: nodeAttempt(nodeId),
+          round: nodeAttempt(nodeId),
+        },
         policy,
         store,
         ctx,
@@ -576,6 +592,101 @@ export class ForgeWorkOnController {
     }
     if (!activeNode)
       throw new Error(`Node ${nodeId} has no active subagent correlation.`);
+    const recoveryToken = await resolveGitHubToken(
+      this.#pi,
+      link.prepared.repositoryRoot,
+      ctx.signal,
+    );
+    const recoveryStore = new GitHubStateBranchStore(
+      new FetchGitHubTransport({ token: recoveryToken }),
+      link.repository,
+      link.stateBranch,
+    );
+    const recoverySnapshot = await recoveryStore.readRun(link.forgeRunId, ctx.signal);
+    const durableNode = recoverySnapshot.state?.nodes[nodeId];
+    if (!durableNode)
+      throw new Error(`Node ${nodeId} has no durable state during reconciliation.`);
+    const resultText = await readFile(activeNode.resultPath, "utf8").catch(
+      () => "",
+    );
+    const recoveryAction = reconcileLaunchState({
+      durableStatus: durableNode.status,
+      durableRunId: durableNode.subagentRunId,
+      activeRunId: activeNode.subagentRunId,
+      resultArtifactPresent: resultText.trim().length > 0,
+    });
+    if (recoveryAction === "needs-human") {
+      const reason = failure ?? "Ambiguous in-flight provider launch; refusing duplicate spawn.";
+      await new RunJournal(recoveryStore).append({
+        runId: link.forgeRunId,
+        type: "node.needs-human",
+        payload: {
+          nodeId,
+          node: durableNode.node,
+          attempt: durableNode.attempt,
+          ...(durableNode.round ? { round: durableNode.round } : {}),
+          subagentRunId: durableNode.subagentRunId,
+          resultPath: durableNode.resultPath ?? activeNode.resultPath,
+          ...(durableNode.launchNonce ? { launchNonce: durableNode.launchNonce } : {}),
+          reason,
+        },
+        idempotencyKey: `node:${nodeId}:ambiguous-launch`,
+        sessionId: ctx.sessionManager.getSessionId(),
+        message: `Fail closed ambiguous launch for ForgeDock node ${nodeId}`,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      link.status = "needs-human";
+      this.#persistLink(link);
+      this.#emitLifecycle(link, { reason, nodeId });
+      return;
+    }
+    if (
+      recoveryAction === "promote-running" ||
+      recoveryAction === "bind-receipt"
+    ) {
+      const journal = new RunJournal(recoveryStore);
+      if (recoveryAction === "promote-running") {
+        await journal.append({
+          runId: link.forgeRunId,
+          type: "node.started",
+          payload: {
+            nodeId,
+            node: durableNode.node,
+            attempt: durableNode.attempt,
+            ...(durableNode.round ? { round: durableNode.round } : {}),
+            subagentRunId: activeNode.subagentRunId,
+            resultPath: activeNode.resultPath,
+            baseSha: durableNode.baseSha ?? link.prepared.baseSha,
+          },
+          idempotencyKey: `node:${nodeId}:promote-running`,
+          sessionId: ctx.sessionManager.getSessionId(),
+          message: `Promote queued ForgeDock node ${nodeId} before completion`,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+      } else {
+        await journal.append({
+          runId: link.forgeRunId,
+          type: "node.resumed",
+          payload: {
+            nodeId,
+            node: durableNode.node,
+            attempt: durableNode.attempt,
+            ...(durableNode.round ? { round: durableNode.round } : {}),
+            previousSubagentRunId: durableNode.subagentRunId,
+            subagentRunId: activeNode.subagentRunId,
+            resultPath: activeNode.resultPath,
+            ...(durableNode.launchNonce ? { launchNonce: durableNode.launchNonce } : {}),
+            launchReceipt: true,
+            transportRetries: durableNode.transportRetries ?? 0,
+            baseSha: durableNode.baseSha ?? link.prepared.baseSha,
+          },
+          idempotencyKey: `node:${nodeId}:receipt-bound-recovery`,
+          sessionId: ctx.sessionManager.getSessionId(),
+          message: `Bind recovered provider receipt for ForgeDock node ${nodeId}`,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+      }
+    }
     const reviewerResult = nodeId.startsWith("review-")
       ? await this.#loadReviewerResult(link, activeNode)
       : undefined;
@@ -704,6 +815,7 @@ export class ForgeWorkOnController {
         nodeId: nodeResult.nodeId,
         node: nodeResult.node,
         attempt: nodeAttempt(nodeResult.nodeId),
+        round: nodeAttempt(nodeResult.nodeId),
         headSha: nodeResult.headSha,
         baseSha: nodeResult.baseSha,
         outcome: nodeResult.outcome,
@@ -770,6 +882,7 @@ export class ForgeWorkOnController {
           nodeId: nodeResult.nodeId,
           node: nodeResult.node,
           attempt: nodeAttempt(nodeResult.nodeId),
+          round: nodeAttempt(nodeResult.nodeId),
           headSha: reviewer.headSha,
           baseSha: nodeResult.baseSha,
           publishedCommentId,
@@ -799,6 +912,7 @@ export class ForgeWorkOnController {
           nodeId: nodeResult.nodeId,
           node: nodeResult.node,
           attempt: nodeAttempt(nodeResult.nodeId),
+          round: nodeAttempt(nodeResult.nodeId),
           headSha: reviewer.headSha,
           baseSha: nodeResult.baseSha,
           reviewerResult: reviewer,
@@ -898,7 +1012,7 @@ export class ForgeWorkOnController {
   }
 
   async #loadNodeResult(
-    link: ActiveRunLink,
+    _link: ActiveRunLink,
     activeNode: ActiveNodeRunLink,
   ): Promise<ForgeNodeResult | undefined> {
     const payload = await this.#rpc
@@ -966,14 +1080,19 @@ export class ForgeWorkOnController {
 
   async #runParentNode(
     link: ActiveRunLink,
-    node: { nodeId: string; node: import("../core/dispatcher.ts").WorkflowNode; attempt: number; headSha?: string },
+    node: { nodeId: string; node: import("../core/dispatcher.ts").WorkflowNode; attempt: number; round?: number; headSha?: string },
     policy: ForgePolicy,
     store: GitHubStateBranchStore,
     ctx: ExtensionContext,
   ): Promise<void> {
     const journal = new RunJournal(store);
     const sessionId = ctx.sessionManager.getSessionId();
-    const common = { nodeId: node.nodeId, node: node.node, attempt: node.attempt };
+    const common = {
+      nodeId: node.nodeId,
+      node: node.node,
+      attempt: node.attempt,
+      round: node.round ?? node.attempt,
+    };
     const initial = await store.readRun(link.forgeRunId, ctx.signal);
     if (!initial.state) throw new Error(`Run ${link.forgeRunId} state is missing for parent node.`);
     const prior = initial.state.nodes[node.nodeId];
@@ -1067,6 +1186,21 @@ export class ForgeWorkOnController {
         checks: ci.checks,
         policyExempt: !isGitHubCiRequired(policy, pull.baseRef),
       });
+      const gateTitle = ciPassed
+        ? githubVerification === "policy-exempt"
+          ? "EXEMPT BY POLICY"
+          : "PASSED"
+        : ci.timedOut
+          ? "PENDING"
+          : "BLOCKED";
+      await projector.postArtifact({
+        issueNumber: link.issueNumber,
+        runId: link.forgeRunId,
+        eventId: `node-${node.nodeId}`,
+        artifactKey: "acceptance-gate",
+        markdown: `<!-- FORGE:ACCEPTANCE_GATE -->\n## GitHub CI — ${gateTitle}\n\n**Reviewed head**: \`${ci.headSha}\`\n**Target branch**: \`${pull.baseRef}\`\n\n${renderVerificationEvidence(verificationResults)}\n\n${ciPassed ? ACCEPTANCE_GATE_SUCCESS_MARKER : "<!-- FORGE:ACCEPTANCE_GATE:BLOCKED -->"}`,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
       if (!ciPassed) {
         const reason = ci.timedOut
           ? "Required GitHub CI did not finish before the configured timeout."
@@ -1089,16 +1223,6 @@ export class ForgeWorkOnController {
         });
         return;
       }
-      const gateTitle =
-        githubVerification === "policy-exempt" ? "EXEMPT BY POLICY" : "PASSED";
-      await projector.postArtifact({
-        issueNumber: link.issueNumber,
-        runId: link.forgeRunId,
-        eventId: `node-${node.nodeId}`,
-        artifactKey: "acceptance-gate",
-        markdown: `<!-- FORGE:ACCEPTANCE_GATE -->\n## GitHub CI — ${gateTitle}\n\n**Reviewed head**: \`${ci.headSha}\`\n**Target branch**: \`${pull.baseRef}\`\n\n${renderVerificationEvidence(verificationResults)}\n\n<!-- FORGE:ACCEPTANCE_GATE:PASSED -->`,
-        ...(ctx.signal ? { signal: ctx.signal } : {}),
-      });
     } else if (node.node === "decision") {
       if (!pull) throw new Error("Decision requires a prepared pull request.");
       const aggregate = await this.#aggregateFromState(link, current.state);
@@ -1382,7 +1506,7 @@ export class ForgeWorkOnController {
 
   async #dispatchNode(
     link: ActiveRunLink,
-    node: { nodeId: string; node: import("../core/dispatcher.ts").WorkflowNode; attempt: number; headSha?: string },
+    node: { nodeId: string; node: import("../core/dispatcher.ts").WorkflowNode; attempt: number; round?: number; headSha?: string },
     policy: ForgePolicy,
     store: GitHubStateBranchStore,
     ctx: ExtensionContext,
@@ -1408,6 +1532,7 @@ export class ForgeWorkOnController {
         nodeId: node.nodeId,
         node: node.node,
         attempt: node.attempt,
+        ...(node.round ? { round: node.round } : {}),
         baseSha: link.prepared.baseSha,
         resultPath,
       },
@@ -1429,6 +1554,7 @@ export class ForgeWorkOnController {
         nodeId: node.nodeId,
         subagentRunId: queuedNode.subagentRunId,
         resultPath: queuedNode.resultPath ?? resultPath,
+        ...(queuedNode.launchNonce ? { launchNonce: queuedNode.launchNonce } : {}),
       };
       link.activeNodes[existing.subagentRunId] = existing;
       link.subagentRunId = existing.subagentRunId;
@@ -1439,6 +1565,41 @@ export class ForgeWorkOnController {
       this.#persistLink(link);
       return;
     }
+    const launchIntent = createNodeLaunchIntent(node.nodeId, resultPath);
+    const sentinel = launchIntent.sentinelRunId;
+    // The launch intent is durable before the provider call. A restart seeing
+    // this sentinel must recover an artifact or fail closed, never spawn again.
+    link.activeNodes[sentinel] = {
+      nodeId: node.nodeId,
+      subagentRunId: sentinel,
+      resultPath,
+      launchNonce: launchIntent.launchNonce,
+    };
+    link.subagentRunId = sentinel;
+    link.resultPath = resultPath;
+    link.nodeResultPath = resultPath;
+    link.currentNodeId = node.nodeId;
+    link.status = "running";
+    this.#persistLink(link);
+    await journal.append({
+      runId: link.forgeRunId,
+      type: "node.started",
+      payload: {
+        nodeId: node.nodeId,
+        node: node.node,
+        attempt: node.attempt,
+        ...(node.round ? { round: node.round } : {}),
+        subagentRunId: sentinel,
+        resultPath,
+        launchNonce: launchIntent.launchNonce,
+        launchIntent: true,
+        baseSha: link.prepared.baseSha,
+      },
+      idempotencyKey: `node:${node.nodeId}:started`,
+      sessionId: ctx.sessionManager.getSessionId(),
+      message: `Record launch intent for ForgeDock node ${node.nodeId}`,
+      ...(ctx.signal ? { signal: ctx.signal } : {}),
+    });
     const launchInput = {
       runId: link.forgeRunId,
       issueNumber: link.issueNumber,
@@ -1458,18 +1619,48 @@ export class ForgeWorkOnController {
         ? { reviewHeadSha: node.headSha ?? link.reviewHeadSha ?? link.prepared.baseSha }
         : {}),
     };
-    const receipt = node.node === "review-correctness" || node.node === "review-security"
-      ? await this.#rpc.spawnReviewNode(launchInput as typeof launchInput & { node: { nodeId: string; node: "review-correctness" | "review-security"; attempt: number; headSha?: string } })
-      : await this.#rpc.spawnNode(launchInput);
+    let receipt;
+    try {
+      receipt = node.node === "review-correctness" || node.node === "review-security"
+        ? await this.#rpc.spawnReviewNode(launchInput as typeof launchInput & { node: { nodeId: string; node: "review-correctness" | "review-security"; attempt: number; headSha?: string } })
+        : await this.#rpc.spawnNode(launchInput);
+    } catch (error) {
+      const reason = `Provider launch is ambiguous after durable intent: ${errorMessage(error)}`;
+      await journal.append({
+        runId: link.forgeRunId,
+        type: "node.needs-human",
+        payload: {
+          nodeId: node.nodeId,
+          node: node.node,
+          attempt: node.attempt,
+          ...(node.round ? { round: node.round } : {}),
+          subagentRunId: sentinel,
+          resultPath,
+          launchNonce: launchIntent.launchNonce,
+          launchIntent: true,
+          reason,
+        },
+        idempotencyKey: `node:${node.nodeId}:launch-ambiguous`,
+        sessionId: ctx.sessionManager.getSessionId(),
+        message: `Fail closed ambiguous launch for ForgeDock node ${node.nodeId}`,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      link.status = "needs-human";
+      this.#persistLink(link);
+      this.#emitLifecycle(link, { reason, nodeId: node.nodeId });
+      return;
+    }
     const reviewerNode =
       node.node === "review-correctness" || node.node === "review-security";
-    // Persist the child receipt in the session link before the authoritative
-    // CAS. If the process crashes here, restart can correlate the child and
-    // retry the same node.started event without spawning a duplicate.
+    // Persist the receipt before binding it in the authoritative event log.
+    // A crash here leaves the real ID in the session link and restart binds it;
+    // the durable sentinel prevents a second provider spawn.
+    delete link.activeNodes[sentinel];
     link.activeNodes[receipt.runId] = {
       nodeId: node.nodeId,
       subagentRunId: receipt.runId,
       resultPath: receipt.resultPath,
+      launchNonce: launchIntent.launchNonce,
     };
     if (!reviewerNode) {
       this.#links.delete(link.subagentRunId);
@@ -1480,45 +1671,27 @@ export class ForgeWorkOnController {
     }
     link.status = "running";
     this.#persistLink(link);
-    const startPayload = {
-      nodeId: node.nodeId,
-      node: node.node,
-      attempt: node.attempt,
-      subagentRunId: receipt.runId,
-      resultPath: receipt.resultPath,
-      baseSha: link.prepared.baseSha,
-    };
-    try {
-      await journal.append({
-        runId: link.forgeRunId,
-        type: "node.started",
-        payload: startPayload,
-        idempotencyKey: `node:${node.nodeId}:started`,
-        sessionId: ctx.sessionManager.getSessionId(),
-        message: `Start ForgeDock node ${node.nodeId}`,
-        ...(ctx.signal ? { signal: ctx.signal } : {}),
-      });
-    } catch (error) {
-      const fresh = await store.readRun(link.forgeRunId, ctx.signal);
-      const durable = fresh.state?.nodes[node.nodeId];
-      if (durable?.status === "running" && durable.subagentRunId === receipt.runId)
-        return;
-      if (durable?.status === "queued") {
-        await journal.append({
-          runId: link.forgeRunId,
-          type: "node.started",
-          payload: startPayload,
-          idempotencyKey: `node:${node.nodeId}:started`,
-          sessionId: ctx.sessionManager.getSessionId(),
-          message: `Retry start ForgeDock node ${node.nodeId} after launch CAS conflict`,
-          ...(ctx.signal ? { signal: ctx.signal } : {}),
-        });
-      } else {
-        throw new Error(
-          `Child launch receipt for ${node.nodeId} is ambiguous after durable start failure: ${errorMessage(error)}`,
-        );
-      }
-    }
+    await journal.append({
+      runId: link.forgeRunId,
+      type: "node.resumed",
+      payload: {
+        nodeId: node.nodeId,
+        node: node.node,
+        attempt: node.attempt,
+        ...(node.round ? { round: node.round } : {}),
+        previousSubagentRunId: sentinel,
+        subagentRunId: receipt.runId,
+        resultPath: receipt.resultPath,
+        launchNonce: launchIntent.launchNonce,
+        launchReceipt: true,
+        transportRetries: 0,
+        baseSha: link.prepared.baseSha,
+      },
+      idempotencyKey: `node:${node.nodeId}:receipt-bound`,
+      sessionId: ctx.sessionManager.getSessionId(),
+      message: `Bind provider receipt for ForgeDock node ${node.nodeId}`,
+      ...(ctx.signal ? { signal: ctx.signal } : {}),
+    });
     link.providerRetries = 0;
     link.status = "running";
     this.#persistLink(link);
@@ -2076,7 +2249,7 @@ export class ForgeWorkOnController {
       runId: link.forgeRunId,
       eventId: `github-ci-${result.review.headSha}`,
       artifactKey: "acceptance-gate",
-      markdown: `<!-- FORGE:ACCEPTANCE_GATE -->\n## GitHub CI — ${githubTitle}\n\n**Reviewed head**: \`${result.review.headSha}\`\n**Target branch**: \`${currentPull.baseRef}\`\n\n${renderVerificationEvidence(githubChecks)}\n\n<!-- FORGE:ACCEPTANCE_GATE:${acceptancePassed ? "PASSED" : "COMPLETE"} -->`,
+      markdown: `<!-- FORGE:ACCEPTANCE_GATE -->\n## GitHub CI — ${githubTitle}\n\n**Reviewed head**: \`${result.review.headSha}\`\n**Target branch**: \`${currentPull.baseRef}\`\n\n${renderVerificationEvidence(githubChecks)}\n\n${acceptancePassed ? ACCEPTANCE_GATE_SUCCESS_MARKER : "<!-- FORGE:ACCEPTANCE_GATE:BLOCKED -->"}`,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
     const refreshedAudit = checkPreMergeAuditTrail({
@@ -3192,8 +3365,58 @@ function nodeAttempt(id: string): number {
   return Number.isSafeInteger(value) && value > 0 ? value : 1;
 }
 
-function linkResultPath(worktreeRoot: string, runId: string, nodeId: string): string {
+export function linkResultPath(worktreeRoot: string, runId: string, nodeId: string): string {
   return join(worktreeRoot, ".pi", "forge", `${runId}-${nodeId}.json`);
+}
+
+export interface NodeLaunchIntent {
+  nodeId: string;
+  resultPath: string;
+  launchNonce: string;
+  sentinelRunId: string;
+}
+
+/** Build the durable pre-spawn identity used by launch and restart recovery. */
+export function createNodeLaunchIntent(
+  nodeId: string,
+  resultPath: string,
+  launchNonce = randomUUID(),
+): NodeLaunchIntent {
+  if (!nodeId || !resultPath || !launchNonce)
+    throw new TypeError("Node launch intent requires nodeId, resultPath, and nonce.");
+  return {
+    nodeId,
+    resultPath,
+    launchNonce,
+    sentinelRunId: `launch:${nodeId}:${launchNonce}`,
+  };
+}
+
+export function isLaunchSentinel(runId: string): boolean {
+  return runId.startsWith("launch:");
+}
+
+export type LaunchRecoveryAction = "bind-receipt" | "promote-running" | "recover-artifact" | "needs-human";
+
+/** Reconciliation seam shared by restart recovery and live completion handling. */
+export function reconcileLaunchState(input: {
+  durableStatus: "queued" | "running" | "completed" | "failed" | "blocked" | "needs-human";
+  durableRunId?: string;
+  activeRunId: string;
+  resultArtifactPresent: boolean;
+}): LaunchRecoveryAction {
+  if (input.durableStatus === "queued" && !isLaunchSentinel(input.activeRunId))
+    return "promote-running";
+  if (
+    input.durableStatus === "running" &&
+    input.durableRunId &&
+    input.durableRunId !== input.activeRunId &&
+    !isLaunchSentinel(input.activeRunId)
+  )
+    return "bind-receipt";
+  if (input.resultArtifactPresent) return "recover-artifact";
+  if (isLaunchSentinel(input.activeRunId)) return "needs-human";
+  return "needs-human";
 }
 
 function extractJsonObject(text: string): string {

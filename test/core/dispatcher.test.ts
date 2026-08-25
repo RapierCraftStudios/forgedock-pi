@@ -120,6 +120,39 @@ test("investigation invalid and decomposed outcomes route to close without imple
   }
 });
 
+test("decision remediation advances one immutable fresh round and then exhausts at policy max", () => {
+  const prefix: WorkflowNodeRecord[] = [
+    completed("resolve"),
+    completed("investigate"),
+    completed("plan"),
+    completed("prepare-worktree"),
+    completed("implement"),
+    completed("verify"),
+    completed("prepare-pr"),
+    completed("review-correctness"),
+    completed("review-security"),
+    completed("review-join"),
+    completed("ci"),
+    {
+      ...completed("decision"),
+      outcome: "remediation-required",
+      round: 1,
+    },
+  ];
+  let records = prefix;
+  for (const node of ["implement", "verify", "prepare-pr"] as const) {
+    const next = chooseNextExecutableNode({ nodes: records, maxReviewRounds: 2 });
+    assert.equal(next?.node, node);
+    assert.equal(next?.nodeId, `${node}-2`);
+    assert.equal(next?.round, 2);
+    records = [...records, { ...next!, status: "completed" }];
+  }
+  assert.equal(
+    chooseNextExecutableNode({ nodes: prefix, maxReviewRounds: 1 }),
+    undefined,
+  );
+});
+
 test("remediation attempts keep immutable node identities", () => {
   const records: WorkflowNodeRecord[] = [
     completed("implement", "implement-1", "abcdef1234567"),

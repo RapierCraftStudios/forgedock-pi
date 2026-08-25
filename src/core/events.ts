@@ -108,11 +108,15 @@ export interface NodeEventPayload {
   nodeId: string;
   node: string;
   attempt: number;
+  round?: number;
   headSha?: string;
   baseSha?: string;
   subagentRunId?: string;
   previousSubagentRunId?: string;
   resultPath?: string;
+  launchNonce?: string;
+  launchIntent?: boolean;
+  launchReceipt?: boolean;
   transportRetries?: number;
   reviewerResult?: unknown;
   publishedCommentId?: number;
