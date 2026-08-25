@@ -5,13 +5,13 @@
   "issueNumber": 63,
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "blocked",
   "leaseBinding": {
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 24,
-  "lastEventHash": "sha256:74e06540804645bff907d6ce80a25bd68497a5ad280b00118aadb20507557316",
+  "sequence": 25,
+  "lastEventHash": "sha256:6b12b245fd90276cbb1bf91e9f3ef4cb40f327bfb74d64ab7bab13b08fafbec7",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -166,7 +166,7 @@
       "node": "verify",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "blocked",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/01d00f34-5c2f-4fb5-ad2e-e78d3f2299cb/.pi/forge/01d00f34-5c2f-4fb5-ad2e-e78d3f2299cb-verify-1.json",
       "subagentRunId": "6e99278d-42f3-4db3-bf4b-ae424f49299a",
@@ -175,7 +175,23 @@
       "startedAt": "2026-08-25T21:49:11.154Z",
       "previousSubagentRunId": "launch:verify-1:d7d40743-afad-4e98-82b7-5dff98e6e2ed",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "verificationResults": [
+        {
+          "name": "local verification",
+          "required": false,
+          "status": "not-configured"
+        }
+      ],
+      "outcome": "needs-human",
+      "evidence": [
+        "Supervisor confirmed that issue #63 run 01d00f34-5c2f-4fb5-ad2e-e78d3f2299cb has no completed implement-1 artifact or commit SHA; the branch remains at frozen base 1b018483cd94b8324ae7e34eaa07293861f4f491.",
+        "Verification policy contains no approved local commands (verification.commands is {}).",
+        "A stale SHA supplied for issue #51 was rejected and not substituted for this run."
+      ],
+      "reason": "No completed implement-1 artifact or trusted implementation commit SHA exists for issue #63 run 01d00f34-5c2f-4fb5-ad2e-e78d3f2299cb; verification cannot proceed or attest readiness.",
+      "finishedAt": "2026-08-25T21:51:33.540Z"
     }
   },
   "effects": {},
@@ -203,7 +219,8 @@
     "node:implement-1:completed": "1d9faff4-ea89-4e50-a6d0-5a6bd773f43b",
     "node:verify-1:queued": "f170b857-f098-49e3-a742-b2fd1bc5828b",
     "node:verify-1:started": "157afa6b-61ac-4bd7-a803-f7a0fd460c5a",
-    "node:verify-1:receipt-bound": "45b0af5c-0edd-4c92-8155-2cbfe3057ee0"
+    "node:verify-1:receipt-bound": "45b0af5c-0edd-4c92-8155-2cbfe3057ee0",
+    "node:verify-1:blocked": "300545bb-445f-4354-a11c-23005d99a37a"
   },
   "eventIds": {
     "b212ad4a-3bb2-4f46-baa0-50c26cd787a3": true,
@@ -229,6 +246,7 @@
     "1d9faff4-ea89-4e50-a6d0-5a6bd773f43b": true,
     "f170b857-f098-49e3-a742-b2fd1bc5828b": true,
     "157afa6b-61ac-4bd7-a803-f7a0fd460c5a": true,
-    "45b0af5c-0edd-4c92-8155-2cbfe3057ee0": true
+    "45b0af5c-0edd-4c92-8155-2cbfe3057ee0": true,
+    "300545bb-445f-4354-a11c-23005d99a37a": true
   }
 }
