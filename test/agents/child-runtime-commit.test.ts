@@ -9,6 +9,7 @@ import test from "node:test";
 import {
   allowedNodeTools,
   isForgeRuntimePath,
+  isImplementationBashAllowed,
   parseGitStatusPaths,
 } from "../../src/agents/child-runtime.ts";
 
@@ -42,6 +43,28 @@ test("every bounded non-review node can persist its trusted result", () => {
     false,
   );
   assert.equal(allowedNodeTools("review-security").has("forge_diff"), true);
+});
+
+test("bash authorization is limited to bounded implementation nodes", () => {
+  assert.equal(isImplementationBashAllowed("implement"), true);
+
+  for (const node of [
+    "resolve",
+    "investigate",
+    "plan",
+    "prepare-worktree",
+    "verify",
+    "prepare-pr",
+    "review-correctness",
+    "review-security",
+    "unknown",
+    undefined,
+  ])
+    assert.equal(
+      isImplementationBashAllowed(node),
+      false,
+      `${node ?? "missing"} must not be authorized to use bash`,
+    );
 });
 
 test("commit path staging excludes ignored Forge runtime content", async () => {

@@ -169,14 +169,10 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
 
   pi.on("tool_call", async (event, ctx) => {
     if (event.toolName === "bash") {
-      if (
-        binding.node !== "resolve" &&
-        binding.node !== "investigate" &&
-        binding.node !== "plan"
-      )
+      if (!isImplementationBashAllowed(binding.node))
         return {
           block: true,
-          reason: `bash is available only to read-only resolve, investigate, and plan nodes; current node is ${binding.node ?? "legacy"}.`,
+          reason: `bash is available only to bounded implementation nodes; current node is ${binding.node ?? "legacy"}.`,
         };
       return;
     }
@@ -1044,6 +1040,12 @@ function readBinding(): ForgeChildBinding {
       ? { previousReviewRounds: previousReviewRounds as number }
       : {}),
   };
+}
+
+export function isImplementationBashAllowed(
+  node: string | undefined,
+): boolean {
+  return node === "implement";
 }
 
 export function allowedNodeTools(node: string | undefined): ReadonlySet<string> {
