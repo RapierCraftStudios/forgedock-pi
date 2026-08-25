@@ -10,15 +10,15 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 4,
-  "lastEventHash": "sha256:abf1c13a1bce9da3eb1a43a0c4d17948708330be3869b6d7d7eda3ca4321b17a",
+  "sequence": 5,
+  "lastEventHash": "sha256:ac3d451cc5d7c9c4425f5f43c48be293bb9df1dcc09e3ffc8e2c32f8a7da8ebd",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/24cb4b26-0b7d-4d67-a8ac-67eed4b33462/.pi/forge/24cb4b26-0b7d-4d67-a8ac-67eed4b33462-resolve-1.json",
       "subagentRunId": "bf5e02cd-8a35-4396-bc27-a1593becdfb8",
@@ -27,7 +27,17 @@
       "startedAt": "2026-08-25T18:01:46.695Z",
       "previousSubagentRunId": "launch:resolve-1:634a09d9-bb4b-4039-9f8b-fc5e0465c722",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "round": 1,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "Issue #54 has a non-empty bug title and supplies version, reproduction, expected behavior, sanitized failure evidence, and impact.",
+        "The supplied issue context contains no closed, terminal, duplicate, or active-ownership indicator that would make the issue ineligible.",
+        "The bound repository policy at .forge/config.json uses schema forgedock.config/v1, configures dogfood as an integration branch, and protects main."
+      ],
+      "finishedAt": "2026-08-25T18:06:18.499Z"
     }
   },
   "effects": {},
@@ -35,12 +45,14 @@
     "run:create": "95971218-41e1-4ae2-ba0d-26c8315f8e4e",
     "node:resolve-1:queued": "c1beba19-5085-406a-9ea6-e7d1e6b8401a",
     "node:resolve-1:started": "1133d71e-394b-477e-bb51-3086248c9d50",
-    "node:resolve-1:receipt-bound": "fc34b975-04b3-44f2-a204-c23a74cfded1"
+    "node:resolve-1:receipt-bound": "fc34b975-04b3-44f2-a204-c23a74cfded1",
+    "node:resolve-1:completed": "f9984056-4d7b-4fac-91f5-b15c708f0d08"
   },
   "eventIds": {
     "95971218-41e1-4ae2-ba0d-26c8315f8e4e": true,
     "c1beba19-5085-406a-9ea6-e7d1e6b8401a": true,
     "1133d71e-394b-477e-bb51-3086248c9d50": true,
-    "fc34b975-04b3-44f2-a204-c23a74cfded1": true
+    "fc34b975-04b3-44f2-a204-c23a74cfded1": true,
+    "f9984056-4d7b-4fac-91f5-b15c708f0d08": true
   }
 }
