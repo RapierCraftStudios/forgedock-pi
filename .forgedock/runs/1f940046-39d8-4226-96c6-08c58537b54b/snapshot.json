@@ -10,8 +10,8 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:bda6c5839282f0a81b0152d932d3cfabb328d641d7c7f58adff403c697cf13c1",
+  "sequence": 9,
+  "lastEventHash": "sha256:eb240824b892316d7cec9129d58d5acb3ea8012bcc932e85e684ca25c93ce47a",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -48,7 +48,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/1f940046-39d8-4226-96c6-08c58537b54b/.pi/forge/1f940046-39d8-4226-96c6-08c58537b54b-investigate-1.json",
       "subagentRunId": "262654ad-9271-45a0-9b65-11e95f7341d2",
@@ -57,7 +57,21 @@
       "startedAt": "2026-08-25T13:16:35.931Z",
       "previousSubagentRunId": "launch:investigate-1:c42887fd-8bcd-48f1-bb99-ffe1e7bf27c1",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "Frozen base 03e6133becc50ba8509b976743ea76ffeaab2c4d is the current HEAD and the assigned worktree remained clean throughout investigation.",
+        "Issue 39 is open and carries review finding SECURITY-002 describing the read-only guard gap; the current integration base has no remediation for that finding.",
+        "At src/agents/child-runtime.ts lines 183-209, node-specific capability filtering applies only to forge_* and subagent tools, while the generic write/edit path handling checks only worktree containment and .pi or .git exclusion.",
+        "A runtime probe using an in-worktree source path returned undefined, meaning no block response, for write and edit on resolve, investigate, and plan; the same probe returned undefined for implement as expected for a writer node.",
+        "src/agents/register.ts lines 21-34 places read, bash, edit, and write in one FORGE_WORK_ON_TOOLS registration shared by all bounded non-review nodes.",
+        "src/agents/child-runtime.ts lines 171-181 return immediately for bash on resolve, investigate, and plan, so raw shell mutation is an adjacent bypass of the path guard; commit 4819168 changed raw bash from globally denied to this read-only-node allow path.",
+        "src/workflows/work-on.ts lines 1730-1755 and 1837-1852 dispatch sequential nodes against the same prepared worktree, with a clean assertion only for reviewer nodes; src/agents/child-runtime.ts lines 410-422 stages every non-runtime changed path for forge_commit.",
+        "The baseline npm run typecheck and npm test focused runtime and staging checks passed without changing the worktree."
+      ],
+      "finishedAt": "2026-08-25T13:25:21.891Z"
     }
   },
   "effects": {},
@@ -69,7 +83,8 @@
     "node:resolve-1:completed": "050b701e-bfae-4106-b519-789845fa8d2e",
     "node:investigate-1:queued": "82fdd419-6d48-4b18-844d-fb5567708cb7",
     "node:investigate-1:started": "9f981000-c580-4b6b-9c76-b3acd1c2f7ca",
-    "node:investigate-1:receipt-bound": "b31ee4ac-4d15-4ea7-91fd-0b43cc835154"
+    "node:investigate-1:receipt-bound": "b31ee4ac-4d15-4ea7-91fd-0b43cc835154",
+    "node:investigate-1:completed": "6268ed5e-6c74-41b9-ac0b-205bf0a6927e"
   },
   "eventIds": {
     "fc911d56-c8ae-4402-8e04-c3f18fa5eb5e": true,
@@ -79,6 +94,7 @@
     "050b701e-bfae-4106-b519-789845fa8d2e": true,
     "82fdd419-6d48-4b18-844d-fb5567708cb7": true,
     "9f981000-c580-4b6b-9c76-b3acd1c2f7ca": true,
-    "b31ee4ac-4d15-4ea7-91fd-0b43cc835154": true
+    "b31ee4ac-4d15-4ea7-91fd-0b43cc835154": true,
+    "6268ed5e-6c74-41b9-ac0b-205bf0a6927e": true
   }
 }
