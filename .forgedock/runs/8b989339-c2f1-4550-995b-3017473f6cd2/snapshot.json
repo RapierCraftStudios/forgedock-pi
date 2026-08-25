@@ -10,8 +10,8 @@
     "ownerRunId": "c0f52a10-07ba-4b5e-a47d-e39138c05aa2",
     "epoch": 1
   },
-  "sequence": 9,
-  "lastEventHash": "sha256:c6e80d416e8207c2c2705f0edce956004849168ec4f16bf79eff218fe1741018",
+  "sequence": 10,
+  "lastEventHash": "sha256:d6e41fff2e52d6f18c16b3a92e7c87a1a7c7b0f841594a796e4071afa5d427ce",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -65,6 +65,15 @@
         "`test/adapters/subagents.test.ts:173-201` checks the bounded investigate task and schema but does not assert the selected agent, acceptance role, completion guard, or successful zero-diff completion."
       ],
       "finishedAt": "2026-08-25T16:08:39.468Z"
+    },
+    "plan-1": {
+      "nodeId": "plan-1",
+      "node": "plan",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/8b989339-c2f1-4550-995b-3017473f6cd2/.pi/forge/8b989339-c2f1-4550-995b-3017473f6cd2-plan-1.json"
     }
   },
   "effects": {},
@@ -77,7 +86,8 @@
     "node:investigate-1:queued": "7fab0587-153c-476d-a5e5-68d770a51b5e",
     "node:investigate-1:started": "0a013f8c-92e0-4645-af85-b5a67199e558",
     "node:investigate-1:receipt-bound": "0c05c270-cf72-4152-b12f-f8c444501409",
-    "node:investigate-1:completed": "b0efb46b-bd3a-4ee9-92be-8cc216fae1cb"
+    "node:investigate-1:completed": "b0efb46b-bd3a-4ee9-92be-8cc216fae1cb",
+    "node:plan-1:queued": "03d77346-cff1-4dfd-8dd4-9d03a13ceff3"
   },
   "eventIds": {
     "e656d1eb-d4fb-461f-950a-aded3700afd9": true,
@@ -88,6 +98,7 @@
     "7fab0587-153c-476d-a5e5-68d770a51b5e": true,
     "0a013f8c-92e0-4645-af85-b5a67199e558": true,
     "0c05c270-cf72-4152-b12f-f8c444501409": true,
-    "b0efb46b-bd3a-4ee9-92be-8cc216fae1cb": true
+    "b0efb46b-bd3a-4ee9-92be-8cc216fae1cb": true,
+    "03d77346-cff1-4dfd-8dd4-9d03a13ceff3": true
   }
 }
