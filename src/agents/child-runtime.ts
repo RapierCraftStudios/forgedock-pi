@@ -1,15 +1,5 @@
-import { spawn } from "node:child_process";
-import { mkdirSync } from "node:fs";
 import { mkdir, realpath, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import {
-  basename,
-  dirname,
-  isAbsolute,
-  join,
-  relative,
-  resolve,
-} from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -20,26 +10,33 @@ import {
 } from "pi-subagents/capability-ceiling";
 
 import { FetchGitHubTransport } from "../adapters/github-api.ts";
-import { GitHubIssueProjector } from "../adapters/github-projection.ts";
-import { GitHubStateBranchStore } from "../adapters/github-state.ts";
-import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
+import { ForgeCheckpointService } from "../adapters/checkpoint.ts";
+import { resolveGitHubToken as resolveForgeGitHubToken } from "../adapters/github-auth.ts";
+import { ForgeReviewPreparationService } from "../adapters/review-preparation.ts";
 import {
-  createRunEvent,
-  RUN_PHASES,
-  type RunEvent,
-  type RunEventType,
-  type RunPhase,
-} from "../core/events.ts";
-import { applyRunEvent } from "../core/state.ts";
+  ApprovedVerificationRunner,
+  runProcess,
+  safeEnvironment,
+  TRUNCATED_OUTPUT_MARKER,
+  truncateTail,
+  validateBoundCommand,
+  type BoundVerificationCommand,
+} from "../adapters/verification.ts";
 import {
   FORGE_WORK_ON_OUTPUT_SCHEMA,
   isForgeWorkOnResult,
-} from "./contracts.ts";
+} from "../core/work-on-contracts.ts";
+import { RUN_PHASES } from "../core/events.ts";
 import {
   FORGE_REVIEW_CORRECTNESS_AGENT,
   FORGE_REVIEW_SECURITY_AGENT,
   registerForgeAgents,
 } from "./register.ts";
+import {
+  canonicalizePotentialPath as canonicalizeGuardPath,
+  isPathWithin as isGuardPathWithin,
+  toolPath as getToolPath,
+} from "./child-guard.ts";
 import {
   FORGE_RUNTIME_GIT_PATHSPECS,
   FORGE_RUNTIME_PATHS,
@@ -50,12 +47,6 @@ import {
 const BINDING_ENV = "PI_SUBAGENT_EXTENSION_BINDINGS";
 const BINDING_NAMESPACE = "forgedock.pi/1";
 const MAX_OUTPUT_BYTES = 50 * 1024;
-
-interface BoundVerificationCommand {
-  argv: readonly string[];
-  required: boolean;
-  timeoutMs: number;
-}
 
 interface ForgeChildBinding {
   runId: string;
@@ -72,15 +63,6 @@ interface ForgeChildBinding {
   verificationCommands: Readonly<Record<string, BoundVerificationCommand>>;
 }
 
-interface ProcessResult {
-  exitCode: number | null;
-  signal: NodeJS.Signals | null;
-  stdout: string;
-  stderr: string;
-  timedOut: boolean;
-}
-
-const TRUNCATED_OUTPUT_MARKER = "[output truncated to last";
 const MAX_RUNTIME_STATUS_BYTES = 1_024 * 1_024;
 
 const CheckpointParameters = Type.Object({
@@ -132,10 +114,42 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
   let ceiling: SubagentCapabilityCeilingHandle | undefined;
   let canonicalRoot: string | undefined;
   let githubToken: string | undefined;
+  const transportFactory = async (signal?: AbortSignal) => {
+    githubToken ??= await resolveForgeGitHubToken(
+      {
+        exec: (command, args, options) =>
+          pi.exec(command, [...args], options),
+      },
+      binding.worktreeRoot,
+      signal,
+      "Unable to resolve GitHub authentication for Forge checkpoint writes.",
+    );
+    return new FetchGitHubTransport({ token: githubToken });
+  };
+  const checkpointService = new ForgeCheckpointService({
+    binding,
+    transportFactory,
+  });
+  const reviewPreparationService = new ForgeReviewPreparationService({
+    binding,
+    transportFactory,
+    push: async (root, branch, signal) => {
+      const result = await pi.exec(
+        "git",
+        ["-C", root, "push", "--set-upstream", "origin", branch],
+        {
+          cwd: root,
+          timeout: 120_000,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      return { code: result.code, stdout: result.stdout, stderr: result.stderr };
+    },
+  });
 
   pi.on("session_start", async (_event, ctx) => {
     canonicalRoot = await realpath(binding.worktreeRoot);
-    if (!isPathWithin(canonicalRoot, await realpath(ctx.cwd))) {
+    if (!isGuardPathWithin(canonicalRoot, await realpath(ctx.cwd))) {
       throw new Error(
         `Forge child cwd ${ctx.cwd} is outside bound worktree ${canonicalRoot}.`,
       );
@@ -167,18 +181,18 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
     )
       return;
     const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
-    const pathValue = toolPath(event.input);
+    const pathValue = getToolPath(event.input);
     if (!pathValue) return;
-    const target = await canonicalizePotentialPath(ctx.cwd, pathValue);
-    if (!isPathWithin(root, target)) {
+    const target = await canonicalizeGuardPath(ctx.cwd, pathValue);
+    if (!isGuardPathWithin(root, target)) {
       return {
         block: true,
         reason: `${event.toolName} path is outside the assigned Forge worktree.`,
       };
     }
     if (
-      isPathWithin(join(root, ".pi"), target) ||
-      isPathWithin(join(root, ".git"), target)
+      isGuardPathWithin(join(root, ".pi"), target) ||
+      isGuardPathWithin(join(root, ".git"), target)
     ) {
       return {
         block: true,
@@ -418,49 +432,13 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         throw new Error(
           `Verification command '${params.name}' is not approved for this run.`,
         );
-      const [program, ...args] = command.argv;
-      if (!program)
-        throw new Error(
-          `Verification command '${params.name}' has an empty argv.`,
-        );
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
-      onUpdate?.({
-        content: [
-          { type: "text", text: `Running approved check ${params.name}...` },
-        ],
-        details: { name: params.name, status: "running" },
-      });
-      const result = await runProcess(program, args, {
-        cwd: root,
-        timeoutMs: command.timeoutMs,
-        env: safeEnvironment(binding.runId),
-        ...(signal ? { signal } : {}),
-      });
-      const status =
-        result.timedOut || result.exitCode === null
-          ? "unknown"
-          : result.exitCode === 0
-            ? "passed"
-            : "failed";
-      const output = [result.stdout, result.stderr].filter(Boolean).join("\n");
-      return {
-        content: [
-          {
-            type: "text",
-            text:
-              truncateTail(output, MAX_OUTPUT_BYTES) ||
-              `${params.name}: ${status}`,
-          },
-        ],
-        details: {
-          name: params.name,
-          required: command.required,
-          status,
-          exitCode: result.exitCode,
-          signal: result.signal,
-          timedOut: result.timedOut,
-        },
-      };
+      return new ApprovedVerificationRunner(root, binding.runId).run(
+        params.name,
+        command,
+        signal,
+        onUpdate,
+      );
     },
   });
 
@@ -471,112 +449,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       "Push the bound clean branch, create or reuse its PR, post FORGE:REVIEW_STARTED, and return the frozen review identity",
     parameters: PrepareReviewParameters,
     async execute(_toolCallId, _params, signal) {
-      const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
-      const status = await runProcess(
-        "git",
-        ["-C", root, "status", "--porcelain"],
-        {
-          cwd: root,
-          timeoutMs: 30_000,
-          env: safeEnvironment(binding.runId),
-          ...(signal ? { signal } : {}),
-        },
-      );
-      if (status.exitCode !== 0)
-        throw new Error(`git status failed: ${status.stderr}`);
-      if (status.stdout.trim()) {
-        throw new Error(
-          "Review preparation requires a clean committed worktree. Run forge_commit again for residual formatting or review-fix changes.",
-        );
-      }
-      const head = await runProcess("git", ["-C", root, "rev-parse", "HEAD"], {
-        cwd: root,
-        timeoutMs: 30_000,
-        env: safeEnvironment(binding.runId),
-        ...(signal ? { signal } : {}),
-      });
-      const headSha = head.stdout.trim();
-      if (head.exitCode !== 0 || !headSha)
-        throw new Error(`Unable to resolve review HEAD: ${head.stderr}`);
-      const push = await pi.exec(
-        "git",
-        ["-C", root, "push", "--set-upstream", "origin", binding.branch],
-        {
-          cwd: root,
-          timeout: 120_000,
-          ...(signal ? { signal } : {}),
-        },
-      );
-      if (push.code !== 0)
-        throw new Error(
-          `Bound branch push failed: ${push.stderr || push.stdout}`,
-        );
-
-      const token =
-        githubToken ??
-        (await resolveGitHubToken(pi, binding.worktreeRoot, signal));
-      githubToken = token;
-      const transport = new FetchGitHubTransport({ token });
-      const github = new GitHubWorkflowAdapter(transport, binding.repository);
-      const issue = await github.getIssue(binding.issueNumber, signal);
-      const pull = await github.createPullRequest({
-        title: issue.title,
-        body: `## Summary\n\nImplements #${binding.issueNumber} through ForgeDock Pi run \`${binding.runId}\`.\n\n## Testing\n\nRequired checks passed before review.\n\nCloses #${binding.issueNumber}\n\n**Reviewed head**: \`${headSha}\``,
-        head: binding.branch,
-        base: binding.baseBranch,
-        ...(signal ? { signal } : {}),
-      });
-      if (pull.headSha !== headSha)
-        throw new Error(
-          `Created PR head ${pull.headSha} does not match frozen review head ${headSha}.`,
-        );
-
-      const store = new GitHubStateBranchStore(
-        transport,
-        binding.repository,
-        binding.stateBranch,
-      );
-      const current = await store.readRun(binding.runId, signal);
-      const event = current.events.at(-1);
-      if (!event)
-        throw new Error(
-          "Cannot post review-started artifact without a run event.",
-        );
-      const projector = new GitHubIssueProjector(transport, binding.repository);
-      await projector.postArtifact({
-        issueNumber: binding.issueNumber,
-        runId: binding.runId,
-        eventId: event.eventId,
-        artifactKey: "review-started",
-        markdown: `PR #${pull.number} created targeting \`${binding.baseBranch}\`. The isolated review route is active for the required domains at commit \`${headSha}\`.\n\nReview will verify the builder contract, acceptance evidence, changed behavior, and absence of security/regression findings before merge.\n\n<!-- FORGE:REVIEW_STARTED -->`,
-        ...(signal ? { signal } : {}),
-      });
-      await projector.setWorkflowLabel(
-        binding.issueNumber,
-        "workflow:in-review",
-        signal,
-      );
-      await github.postPullArtifact({
-        pullNumber: pull.number,
-        marker: `<!-- FORGE:REVIEW_ROUTE mode=single-pr spec=review-pr.md sha=${headSha.slice(0, 7)} -->`,
-        body: `Review domains: correctness, security.\nTarget: ${binding.baseBranch}.`,
-        ...(signal ? { signal } : {}),
-      });
-      return {
-        content: [
-          {
-            type: "text",
-            text: `PR #${pull.number} is ready for nested review at ${headSha}.`,
-          },
-        ],
-        details: {
-          pullNumber: pull.number,
-          pullUrl: pull.htmlUrl,
-          headSha,
-          baseSha: pull.baseSha,
-          baseRef: pull.baseRef,
-        },
-      };
+      return reviewPreparationService.prepare(signal);
     },
   });
 
@@ -599,7 +472,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       }
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
       const resultPath = resolve(binding.resultPath);
-      if (!isPathWithin(join(root, ".pi", "forge"), resultPath)) {
+      if (!isGuardPathWithin(join(root, ".pi", "forge"), resultPath)) {
         throw new Error(
           "Bound result path is outside the protected Forge result directory.",
         );
@@ -629,114 +502,11 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       "Request a typed, core-validated phase transition in the authoritative GitHub run journal",
     parameters: CheckpointParameters,
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-      const token =
-        githubToken ??
-        (await resolveGitHubToken(pi, binding.worktreeRoot, signal));
-      githubToken = token;
-      const transport = new FetchGitHubTransport({ token });
-      const store = new GitHubStateBranchStore(
-        transport,
-        binding.repository,
-        binding.stateBranch,
+      return checkpointService.checkpoint(
+        params,
+        ctx.sessionManager.getSessionId(),
+        signal,
       );
-      const current = await store.readRun(binding.runId, signal);
-      if (!current.state || !current.lease)
-        throw new Error(
-          `Authoritative run ${binding.runId} is not initialized.`,
-        );
-      if (
-        current.lease.epoch !== binding.leaseEpoch ||
-        current.lease.ownerRunId !== binding.runId
-      ) {
-        throw new Error(
-          `Bound lease epoch ${binding.leaseEpoch} no longer owns run ${binding.runId}.`,
-        );
-      }
-      const idempotencyKey = `phase:${params.phase}:${params.attempt}:${params.action}`;
-      const priorEventId = current.state.idempotencyKeys[idempotencyKey];
-      let event: RunEvent;
-      let sequence: number;
-      let stateTip = current.tip;
-      let idempotent = false;
-
-      if (priorEventId) {
-        const priorEvent = current.events.find(
-          (candidate) => candidate.eventId === priorEventId,
-        );
-        if (!priorEvent)
-          throw new Error(
-            `Checkpoint event ${priorEventId} is missing from the journal.`,
-          );
-        event = priorEvent;
-        sequence = current.state.sequence;
-        idempotent = true;
-      } else {
-        event = createRunEvent({
-          runId: binding.runId,
-          repository: binding.repository,
-          sequence: current.state.sequence + 1,
-          previousEventHash: current.state.lastEventHash,
-          type: checkpointEventType(params.action),
-          actor: {
-            kind: "extension",
-            sessionId: ctx.sessionManager.getSessionId(),
-            leaseEpoch: binding.leaseEpoch,
-          },
-          idempotencyKey,
-          payload: checkpointPayload(params, binding),
-        });
-        const nextState = applyRunEvent(current.state, event);
-        stateTip = await store.commitRunState({
-          expectedTip: current.tip,
-          events: [...current.events, event],
-          state: nextState,
-          lease: current.lease,
-          message: `Checkpoint ${binding.runId} ${params.phase} ${params.action}`,
-          ...(signal ? { signal } : {}),
-        });
-        sequence = nextState.sequence;
-      }
-
-      if (params.action !== "queue") {
-        const projector = new GitHubIssueProjector(
-          transport,
-          binding.repository,
-        );
-        if (params.action !== "start") {
-          await projectPhaseReport(projector, event, params, binding, signal);
-        }
-        const workflowLabel = workflowLabelForCheckpoint(params);
-        if (workflowLabel)
-          await projector.setWorkflowLabel(
-            binding.issueNumber,
-            workflowLabel,
-            signal,
-          );
-        await postDerivedPhaseArtifacts(
-          projector,
-          event,
-          params,
-          binding,
-          signal,
-        );
-      }
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: idempotent
-              ? `Checkpoint already recorded by event ${event.eventId}.`
-              : `Recorded ${params.phase} ${params.action} at sequence ${sequence}.`,
-          },
-        ],
-        details: {
-          eventId: event.eventId,
-          idempotent,
-          sequence,
-          stateTip,
-        },
-      };
     },
   });
 
@@ -820,506 +590,3 @@ function readBinding(): ForgeChildBinding {
   };
 }
 
-function validateBoundCommand(
-  name: string,
-  value: unknown,
-): asserts value is BoundVerificationCommand {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error(`Verification binding ${name} must be an object.`);
-  const command = value as Record<string, unknown>;
-  if (
-    !Array.isArray(command.argv) ||
-    command.argv.length === 0 ||
-    command.argv.some((entry) => typeof entry !== "string" || !entry)
-  ) {
-    throw new Error(
-      `Verification binding ${name}.argv must be a non-empty string array.`,
-    );
-  }
-  if (typeof command.required !== "boolean")
-    throw new Error(`Verification binding ${name}.required must be boolean.`);
-  if (
-    !Number.isSafeInteger(command.timeoutMs) ||
-    (command.timeoutMs as number) < 1_000
-  ) {
-    throw new Error(
-      `Verification binding ${name}.timeoutMs must be at least 1000.`,
-    );
-  }
-}
-
-function checkpointEventType(
-  action:
-    | "queue"
-    | "start"
-    | "complete"
-    | "fail"
-    | "block"
-    | "needs-human"
-    | "abandon",
-): RunEventType {
-  const eventTypes: Record<typeof action, RunEventType> = {
-    queue: "phase.queued",
-    start: "phase.started",
-    complete: "phase.completed",
-    fail: "phase.failed",
-    block: "phase.blocked",
-    "needs-human": "phase.needs-human",
-    abandon: "phase.abandoned",
-  };
-  return eventTypes[action];
-}
-
-function checkpointPayload(
-  params: {
-    phase: RunPhase;
-    attempt: number;
-    action:
-      | "queue"
-      | "start"
-      | "complete"
-      | "fail"
-      | "block"
-      | "needs-human"
-      | "abandon";
-    restartAction?: string;
-    logicalNodeId?: string;
-    inputArtifactHash?: string;
-    outputArtifactHash?: string;
-    commitSha?: string;
-    evidence?: string[];
-    report?: string;
-    reason?: string;
-  },
-  binding: ForgeChildBinding,
-): Record<string, unknown> {
-  const common = { phase: params.phase, attempt: params.attempt };
-  if (params.action === "queue") {
-    return {
-      ...common,
-      restartAction:
-        params.restartAction ??
-        `resume ${params.phase} attempt ${params.attempt}`,
-      ...(params.inputArtifactHash
-        ? { inputArtifactHash: params.inputArtifactHash }
-        : {}),
-    };
-  }
-  if (params.action === "start") {
-    return {
-      ...common,
-      logicalNodeId:
-        params.logicalNodeId ?? `${params.phase}-${params.attempt}`,
-      worktreePath: binding.worktreeRoot,
-      branch: binding.branch,
-      baseSha: binding.baseSha,
-    };
-  }
-  if (params.action === "complete") {
-    return {
-      ...common,
-      evidence: params.evidence ?? [],
-      ...(params.report ? { report: params.report } : {}),
-      ...(params.outputArtifactHash
-        ? { outputArtifactHash: params.outputArtifactHash }
-        : {}),
-      ...(params.commitSha ? { commitSha: params.commitSha } : {}),
-    };
-  }
-  return {
-    ...common,
-    reason:
-      params.reason ??
-      `${params.phase} attempt ${params.attempt} ${params.action}`,
-  };
-}
-
-async function projectPhaseReport(
-  projector: GitHubIssueProjector,
-  event: RunEvent,
-  params: {
-    phase: RunPhase;
-    attempt: number;
-    action:
-      | "queue"
-      | "start"
-      | "complete"
-      | "fail"
-      | "block"
-      | "needs-human"
-      | "abandon";
-    evidence?: string[];
-    report?: string;
-    reason?: string;
-  },
-  binding: ForgeChildBinding,
-  signal?: AbortSignal,
-): Promise<void> {
-  if (
-    params.action === "complete" &&
-    (params.phase === "resolve" ||
-      params.phase === "prepare-worktree" ||
-      params.phase === "review")
-  )
-    return;
-  if (
-    params.phase === "plan" &&
-    params.action === "complete" &&
-    params.report
-  ) {
-    const blocks = splitPlanReport(params.report);
-    for (const block of blocks) {
-      await projector.postArtifact({
-        issueNumber: binding.issueNumber,
-        runId: binding.runId,
-        eventId: event.eventId,
-        artifactKey: block.key,
-        markdown: block.body,
-        ...(signal ? { signal } : {}),
-      });
-    }
-    return;
-  }
-  await projector.projectEvent({
-    issueNumber: binding.issueNumber,
-    event,
-    markdown: checkpointMarkdown(params, binding.runId),
-    addLabels: ["fail", "block", "needs-human"].includes(params.action)
-      ? ["needs-human"]
-      : [],
-    ...(signal ? { signal } : {}),
-  });
-}
-
-function splitPlanReport(report: string): Array<{ key: string; body: string }> {
-  const markers = [
-    { key: "builder-contract", marker: "<!-- FORGE:CONTRACT -->" },
-    { key: "implementation-context", marker: "<!-- FORGE:CONTEXT -->" },
-    { key: "architecture-plan", marker: "<!-- FORGE:ARCHITECT -->" },
-  ];
-  return markers.map((entry, index) => {
-    const start = report.indexOf(entry.marker);
-    if (start < 0) throw new Error(`Plan report is missing ${entry.marker}.`);
-    const nextMarker = markers[index + 1];
-    const end = nextMarker
-      ? report.indexOf(nextMarker.marker, start + entry.marker.length)
-      : report.length;
-    if (end < 0)
-      throw new Error(
-        `Plan report markers are out of order near ${entry.marker}.`,
-      );
-    return { key: entry.key, body: report.slice(start, end).trim() };
-  });
-}
-
-function checkpointMarkdown(
-  params: {
-    phase: RunPhase;
-    attempt: number;
-    action:
-      | "queue"
-      | "start"
-      | "complete"
-      | "fail"
-      | "block"
-      | "needs-human"
-      | "abandon";
-    evidence?: string[];
-    report?: string;
-    reason?: string;
-  },
-  runId: string,
-): string {
-  if (params.action === "complete" && params.report) {
-    validatePhaseReport(params.phase, params.report);
-    return params.report.trim();
-  }
-  const evidence = params.evidence?.length
-    ? `\n\n### Evidence\n${params.evidence.map((entry) => `- ${entry}`).join("\n")}`
-    : "";
-  const reason = params.reason ? `\n\n**Reason**: ${params.reason}` : "";
-  return `## ForgeDock Phase — ${params.phase}\n\n**Status**: ${params.action}\n**Attempt**: ${params.attempt}\n**Run**: \`${runId}\`${reason}${evidence}`;
-}
-
-async function postDerivedPhaseArtifacts(
-  projector: GitHubIssueProjector,
-  event: RunEvent,
-  params: {
-    phase: RunPhase;
-    attempt: number;
-    action:
-      | "queue"
-      | "start"
-      | "complete"
-      | "fail"
-      | "block"
-      | "needs-human"
-      | "abandon";
-    commitSha?: string;
-    report?: string;
-  },
-  binding: ForgeChildBinding,
-  signal?: AbortSignal,
-): Promise<void> {
-  if (params.action !== "complete") return;
-  if (params.phase === "investigate") {
-    await projector.postArtifact({
-      issueNumber: binding.issueNumber,
-      runId: binding.runId,
-      eventId: event.eventId,
-      artifactKey: "investigation-checkpoint",
-      markdown: `<!-- FORGE:CHECKPOINT -->\n\`\`\`json\n${JSON.stringify({ phase: "INVESTIGATION", status: "COMPLETE", next_phase: "BUILD", timestamp: event.occurredAt })}\n\`\`\``,
-      ...(signal ? { signal } : {}),
-    });
-    await projector.postArtifact({
-      issueNumber: binding.issueNumber,
-      runId: binding.runId,
-      eventId: event.eventId,
-      artifactKey: "fast-path",
-      markdown: `<!-- FORGE:FAST_PATH -->\n## Fast-Path Classification\n\n**COMPLEXITY_BAND**: STANDARD\n**Task type**: Bug Fix\n**Rationale**: Full Pi-native work-on pipeline selected from the confirmed investigation.\n**Phases skipped**: none — full pipeline`,
-      ...(signal ? { signal } : {}),
-    });
-  }
-  if (params.phase === "verify") {
-    await projector.appendToLatestComment({
-      issueNumber: binding.issueNumber,
-      marker: "<!-- FORGE:BUILDER -->",
-      append: "<!-- FORGE:BUILDER:COMPLETE -->",
-      skipIfContains: "<!-- FORGE:BUILDER:COMPLETE -->",
-      ...(signal ? { signal } : {}),
-    });
-    await projector.postArtifact({
-      issueNumber: binding.issueNumber,
-      runId: binding.runId,
-      eventId: event.eventId,
-      artifactKey: "build-checkpoint",
-      markdown: `<!-- FORGE:CHECKPOINT -->\n${JSON.stringify({ phase: "BUILD", status: "COMPLETE", next_phase: "REVIEW", timestamp: event.occurredAt, commit: params.commitSha ?? null, acceptance_gate: "PASSED" })}`,
-      ...(signal ? { signal } : {}),
-    });
-  }
-}
-
-function workflowLabelForCheckpoint(params: {
-  phase: RunPhase;
-  action:
-    | "queue"
-    | "start"
-    | "complete"
-    | "fail"
-    | "block"
-    | "needs-human"
-    | "abandon";
-  report?: string;
-}): string | undefined {
-  if (params.action === "start") {
-    if (params.phase === "investigate") return "workflow:investigating";
-    if (
-      params.phase === "plan" ||
-      params.phase === "prepare-worktree" ||
-      params.phase === "implement" ||
-      params.phase === "verify"
-    ) {
-      return "workflow:building";
-    }
-    if (params.phase === "review") return "workflow:in-review";
-  }
-  if (params.action === "complete" && params.phase === "investigate") {
-    return params.report?.includes("**Verdict**: INVALID")
-      ? "workflow:invalid"
-      : "workflow:ready-to-build";
-  }
-  return undefined;
-}
-
-function validatePhaseReport(phase: RunPhase, report: string): void {
-  const requiredByPhase: Partial<Record<RunPhase, readonly string[]>> = {
-    investigate: [
-      "<!-- FORGE:INVESTIGATOR -->",
-      "## Investigation Report",
-      "### Root Cause",
-      "### Evidence",
-      "### Acceptance Spec",
-      "<!-- INVESTIGATION:COMPLETE -->",
-    ],
-    plan: [
-      "<!-- FORGE:CONTRACT -->",
-      "## Builder Contract",
-      "<!-- FORGE:CONTEXT -->",
-      "<!-- FORGE:CONTEXT:COMPLETE -->",
-      "<!-- FORGE:ARCHITECT -->",
-      "<!-- FORGE:ARCHITECT:COMPLETE -->",
-    ],
-    implement: [
-      "<!-- FORGE:BUILDER -->",
-      "## Implementation Complete",
-      "### Approach",
-      "### Changes",
-      "### Acceptance Criteria Status",
-      "### Testing Checklist",
-    ],
-    verify: [
-      "<!-- FORGE:ACCEPTANCE_GATE -->",
-      "<!-- FORGE:ACCEPTANCE_GATE:PASSED -->",
-    ],
-  };
-  const missing = (requiredByPhase[phase] ?? []).filter(
-    (marker) => !report.includes(marker),
-  );
-  if (missing.length > 0) {
-    throw new Error(
-      `Phase ${phase} report is missing canonical ForgeDock fields: ${missing.join(", ")}.`,
-    );
-  }
-}
-
-function toolPath(input: unknown): string | undefined {
-  if (!input || typeof input !== "object" || Array.isArray(input))
-    return undefined;
-  const value = (input as Record<string, unknown>).path;
-  return typeof value === "string" && value.trim() ? value : undefined;
-}
-
-async function canonicalizePotentialPath(
-  cwd: string,
-  inputPath: string,
-): Promise<string> {
-  const absolute = isAbsolute(inputPath)
-    ? resolve(inputPath)
-    : resolve(cwd, inputPath);
-  const missingSegments: string[] = [];
-  let cursor = absolute;
-  while (true) {
-    try {
-      const existing = await realpath(cursor);
-      return resolve(existing, ...missingSegments);
-    } catch {
-      const parent = dirname(cursor);
-      if (parent === cursor) return absolute;
-      missingSegments.unshift(basename(cursor));
-      cursor = parent;
-    }
-  }
-}
-
-function isPathWithin(root: string, target: string): boolean {
-  const child = relative(root, target);
-  return child === "" || (!child.startsWith("..") && !isAbsolute(child));
-}
-
-async function resolveGitHubToken(
-  pi: ExtensionAPI,
-  cwd: string,
-  signal?: AbortSignal,
-): Promise<string> {
-  const result = await pi.exec("gh", ["auth", "token"], {
-    cwd,
-    timeout: 10_000,
-    ...(signal ? { signal } : {}),
-  });
-  const token = result.stdout.trim();
-  if (result.code !== 0 || !token)
-    throw new Error(
-      "Unable to resolve GitHub authentication for Forge checkpoint writes.",
-    );
-  return token;
-}
-
-function safeEnvironment(runId: string): NodeJS.ProcessEnv {
-  const home = resolve(tmpdir(), `forgedock-verify-${runId}`);
-  mkdirSync(home, { recursive: true, mode: 0o700 });
-  const source = process.env;
-  const env: NodeJS.ProcessEnv = {
-    PATH: source.PATH ?? "",
-    HOME: home,
-    XDG_CONFIG_HOME: resolve(home, ".config"),
-    GIT_CONFIG_NOSYSTEM: "1",
-    GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null",
-    CI: "1",
-    FORGEDOCK_RUN_ID: runId,
-    GIT_AUTHOR_NAME: "ForgeDock Pi",
-    GIT_AUTHOR_EMAIL: "forgedock-pi@users.noreply.github.com",
-    GIT_COMMITTER_NAME: "ForgeDock Pi",
-    GIT_COMMITTER_EMAIL: "forgedock-pi@users.noreply.github.com",
-  };
-  for (const name of [
-    "LANG",
-    "LC_ALL",
-    "TMPDIR",
-    "TEMP",
-    "TMP",
-    "SystemRoot",
-    "COMSPEC",
-    "PATHEXT",
-  ]) {
-    if (source[name]) env[name] = source[name];
-  }
-  return env;
-}
-
-async function runProcess(
-  program: string,
-  args: readonly string[],
-  options: {
-    cwd: string;
-    timeoutMs: number;
-    signal?: AbortSignal;
-    env: NodeJS.ProcessEnv;
-    maxOutputBytes?: number;
-  },
-): Promise<ProcessResult> {
-  return new Promise((resolvePromise, reject) => {
-    const child = spawn(program, args, {
-      cwd: options.cwd,
-      env: options.env,
-      shell: false,
-      stdio: ["ignore", "pipe", "pipe"],
-      ...(options.signal ? { signal: options.signal } : {}),
-    });
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => {
-      stdout = appendBounded(
-        stdout,
-        chunk,
-        options.maxOutputBytes ?? MAX_OUTPUT_BYTES * 2,
-      );
-    });
-    child.stderr.on("data", (chunk: string) => {
-      stderr = appendBounded(
-        stderr,
-        chunk,
-        options.maxOutputBytes ?? MAX_OUTPUT_BYTES * 2,
-      );
-    });
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGTERM");
-    }, options.timeoutMs);
-    timer.unref();
-    child.once("error", (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-    child.once("close", (exitCode, signal) => {
-      clearTimeout(timer);
-      resolvePromise({ exitCode, signal, stdout, stderr, timedOut });
-    });
-  });
-}
-
-function appendBounded(
-  current: string,
-  chunk: string,
-  maxBytes: number,
-): string {
-  return truncateTail(current + chunk, maxBytes);
-}
-
-function truncateTail(value: string, maxBytes: number): string {
-  const buffer = Buffer.from(value);
-  if (buffer.byteLength <= maxBytes) return value;
-  return `[output truncated to last ${maxBytes} bytes]\n${buffer.subarray(buffer.byteLength - maxBytes).toString("utf8")}`;
-}
