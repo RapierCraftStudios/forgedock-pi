@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 45,
-  "lastEventHash": "sha256:0718d0981068a418fc5c5f7dc2bb8638e308c4f10c391ca94d59faba342303c5",
+  "sequence": 46,
+  "lastEventHash": "sha256:7c4ecff3823b6e11eb89b54b1d265e9a238801ca1c294bcafc9daa24e376acee",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -380,9 +380,45 @@
       "node": "decision",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
-      "startedAt": "2026-08-25T19:10:45.677Z"
+      "startedAt": "2026-08-25T19:10:45.677Z",
+      "headSha": "ebedb10cd436f825d18549833e1d0c62f773c3ce",
+      "finalReviewDecision": {
+        "headSha": "ebedb10cd436f825d18549833e1d0c62f773c3ce",
+        "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+        "decision": "approved-with-follow-ups",
+        "blockingFindingIds": [],
+        "followUpFindingIds": [
+          "correctness-49-readonly-investigation-context",
+          "correctness-49-implement-bash-blocked"
+        ],
+        "checkResults": [
+          {
+            "name": "local verification",
+            "required": false,
+            "status": "not-configured"
+          },
+          {
+            "name": "github:check (22)",
+            "required": true,
+            "status": "passed"
+          },
+          {
+            "name": "github:check (24)",
+            "required": true,
+            "status": "passed"
+          }
+        ],
+        "reasons": []
+      },
+      "verificationResults": [],
+      "outcome": "awaiting-merge",
+      "evidence": [
+        "decision:approved-with-follow-ups",
+        "decision-comment:5415395407"
+      ],
+      "finishedAt": "2026-08-25T19:11:13.405Z"
     }
   },
   "effects": {},
@@ -431,7 +467,8 @@
     "node:ci-1:started": "4131ad15-c9d3-43b5-a19d-fb331299808d",
     "node:ci-1:complete": "967ca49b-74a5-4c82-9460-24d22d76b01d",
     "node:decision-1:queued": "bbb217cb-cc45-4b81-89d9-6e72b47bef80",
-    "node:decision-1:started": "006c59a7-86ca-4320-9764-2b56ecb7ba9a"
+    "node:decision-1:started": "006c59a7-86ca-4320-9764-2b56ecb7ba9a",
+    "node:decision-1:complete": "7f339d11-ff6d-42ce-a5d6-f0b411c987a3"
   },
   "eventIds": {
     "e54b6411-60d6-4281-8801-6488bc2a6398": true,
@@ -478,6 +515,7 @@
     "4131ad15-c9d3-43b5-a19d-fb331299808d": true,
     "967ca49b-74a5-4c82-9460-24d22d76b01d": true,
     "bbb217cb-cc45-4b81-89d9-6e72b47bef80": true,
-    "006c59a7-86ca-4320-9764-2b56ecb7ba9a": true
+    "006c59a7-86ca-4320-9764-2b56ecb7ba9a": true,
+    "7f339d11-ff6d-42ce-a5d6-f0b411c987a3": true
   }
 }
