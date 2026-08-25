@@ -10,8 +10,8 @@
     "ownerRunId": "fd616696-4975-49a6-9d2a-9a782a49ed27",
     "epoch": 1
   },
-  "sequence": 12,
-  "lastEventHash": "sha256:32e397a36923dd421aefc8eb4bf9b797f7b443b81608f3c9c64b195279028587",
+  "sequence": 13,
+  "lastEventHash": "sha256:b42be1eee702e43113a5bbb823eb68fda1f7ff4178cae32416e12365ecf975b2",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -73,7 +73,7 @@
       "node": "plan",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "86fff740db2e1ab31fc651fc80ea00ec7c5bdcbd",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a/.pi/forge/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a-plan-1.json",
       "subagentRunId": "48d3285c-f7a3-48ce-b5d4-1f599bc76f93",
@@ -82,7 +82,18 @@
       "startedAt": "2026-08-25T09:01:05.601Z",
       "previousSubagentRunId": "launch:plan-1:8b738622-0515-4bdc-b7c5-cb34d185f721",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "86fff740db2e1ab31fc651fc80ea00ec7c5bdcbd",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "Issue #30 requests one focused negative reviewer-finalizer assertion in test/agents/child-runtime-commit.test.ts and forbids production or unrelated test changes.",
+        "Frozen HEAD and base both resolve to 86fff740db2e1ab31fc651fc80ea00ec7c5bdcbd; the assigned branch is clean and unchanged.",
+        "allowedNodeTools returns only forge_finalize_reviewer for review-security while forge_finalize_node is present in the common non-review set.",
+        "The existing reviewer test asserts forge_finalize_reviewer at test/agents/child-runtime-commit.test.ts:36-39 but lacks the corresponding forge_finalize_node exclusion assertion.",
+        "npm run check passed at the frozen baseline with typecheck and 78 tests passing."
+      ],
+      "finishedAt": "2026-08-25T09:03:39.895Z"
     }
   },
   "effects": {},
@@ -98,7 +109,8 @@
     "node:investigate-1:completed": "29a15422-8340-45b5-a539-e4acfe3e3405",
     "node:plan-1:queued": "f0bf7637-2b77-49fa-9a7a-83dc24483b27",
     "node:plan-1:started": "6964775d-7bb0-4532-af98-55ade71a6dd8",
-    "node:plan-1:receipt-bound": "d01495f4-efe6-483f-8e09-697923d560a1"
+    "node:plan-1:receipt-bound": "d01495f4-efe6-483f-8e09-697923d560a1",
+    "node:plan-1:completed": "3409aed1-7a11-4d21-96cf-bb074005f57b"
   },
   "eventIds": {
     "a99b16b3-5107-4924-8a10-6bae25957c57": true,
@@ -112,6 +124,7 @@
     "29a15422-8340-45b5-a539-e4acfe3e3405": true,
     "f0bf7637-2b77-49fa-9a7a-83dc24483b27": true,
     "6964775d-7bb0-4532-af98-55ade71a6dd8": true,
-    "d01495f4-efe6-483f-8e09-697923d560a1": true
+    "d01495f4-efe6-483f-8e09-697923d560a1": true,
+    "3409aed1-7a11-4d21-96cf-bb074005f57b": true
   }
 }
