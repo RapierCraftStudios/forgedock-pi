@@ -78,7 +78,7 @@ For local development:
 pi install /absolute/path/to/forgedock-pi
 ```
 
-Restart Pi or run `/reload` after installation.
+Restart Pi or run `/reload` after installation. Active ForgeDock orchestrations deliberately block `/reload`; let the run finish or cancel it first so detached subagent completion cannot target an invalidated Pi runtime.
 
 ### ForgeDock bot authentication
 

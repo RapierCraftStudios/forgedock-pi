@@ -131,13 +131,18 @@ export class RunJournal {
     idempotencyKey: string;
     sessionId: string;
     actorKind?: "extension" | "human";
+    allowExpiredLease?: boolean;
     message: string;
     signal?: AbortSignal;
   }): Promise<JournalSnapshot> {
     for (let attempt = 1; attempt <= MAX_CAS_ATTEMPTS; attempt += 1) {
       const current = await this.#store.readRun(input.runId, input.signal);
       if (!current.state) throw new Error(`Run ${input.runId} does not exist.`);
-      assertCurrentAuthority(current.state, current.lease);
+      assertCurrentAuthority(
+        current.state,
+        current.lease,
+        input.allowExpiredLease === true && input.actorKind === "human",
+      );
       const epoch = current.state.lease?.epoch ?? current.state.leaseBinding?.epoch;
       if (epoch === undefined)
         throw new Error(`Run ${input.runId} has no active lease authority.`);
@@ -233,16 +238,17 @@ function validateOrchestrationLease(
   return lease;
 }
 
-function assertCurrentAuthority(
+export function assertCurrentAuthority(
   state: RunState,
   repositoryLease: RepositoryLease | undefined,
+  allowExpiredLease = false,
 ): void {
   if (state.lease) {
     if (
       !repositoryLease ||
       repositoryLease.ownerRunId !== state.runId ||
       repositoryLease.epoch !== state.lease.epoch ||
-      isLeaseExpired(repositoryLease, new Date())
+      (!allowExpiredLease && isLeaseExpired(repositoryLease, new Date()))
     )
       throw new Error(`Run ${state.runId} no longer owns the repository lease.`);
     return;
@@ -252,7 +258,7 @@ function assertCurrentAuthority(
       !repositoryLease ||
       repositoryLease.ownerRunId !== state.leaseBinding.ownerRunId ||
       repositoryLease.epoch !== state.leaseBinding.epoch ||
-      isLeaseExpired(repositoryLease, new Date())
+      (!allowExpiredLease && isLeaseExpired(repositoryLease, new Date()))
     ) {
       throw new Error(
         `Run ${state.runId} orchestration lease binding is stale.`,

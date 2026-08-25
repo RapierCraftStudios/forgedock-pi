@@ -5,6 +5,16 @@ import { registerForgeCommands } from "./ui/commands.ts";
 import { ForgeOrchestrationController } from "./workflows/orchestrate.ts";
 import { ForgeWorkOnController } from "./workflows/work-on.ts";
 
+export function assertForgeReloadAllowed(
+  reason: string,
+  orchestrationStatuses: readonly string[],
+): void {
+  if (reason === "reload" && orchestrationStatuses.includes("running"))
+    throw new Error(
+      "ForgeDock blocks /reload while an orchestration is running; let it finish or cancel it first.",
+    );
+}
+
 export default function forgedockPiExtension(pi: ExtensionAPI): void {
   const agentRegistrations = registerForgeAgents(pi);
   const controller = new ForgeWorkOnController(pi);
@@ -18,6 +28,10 @@ export default function forgedockPiExtension(pi: ExtensionAPI): void {
   });
 
   pi.on("session_shutdown", async (event, ctx) => {
+    assertForgeReloadAllowed(
+      event.reason,
+      orchestrator.list().map((run) => run.status),
+    );
     if (event.reason !== "reload")
       await orchestrator.shutdown(
         ctx,

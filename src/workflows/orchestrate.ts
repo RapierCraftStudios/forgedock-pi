@@ -182,6 +182,7 @@ export class ForgeOrchestrationController {
         expired.state,
         ctx,
         takeoverReason,
+        true,
       );
       await this.#workOn.stopOrchestration(expiredId, ctx, takeoverReason);
       await new OrchestrationJournal(store).cancel({
@@ -331,6 +332,7 @@ export class ForgeOrchestrationController {
     state: OrchestrationState,
     ctx: ExtensionContext,
     reason: string,
+    allowExpiredLease = false,
   ): Promise<void> {
     const childRunIds: string[] = [];
     const providerRunIds: string[] = [];
@@ -364,6 +366,8 @@ export class ForgeOrchestrationController {
           payload: { reason },
           idempotencyKey: "run:cancelled",
           sessionId: ctx.sessionManager.getSessionId(),
+          actorKind: "human",
+          allowExpiredLease,
           message: `Cancel child ForgeDock run ${runId}`,
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
