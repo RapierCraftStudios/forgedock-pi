@@ -10,8 +10,8 @@
     "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
     "epoch": 1
   },
-  "sequence": 9,
-  "lastEventHash": "sha256:eb8b8add6619a2806906ed09f09780461e9922374c45405364b08e52e4d8b7d6",
+  "sequence": 10,
+  "lastEventHash": "sha256:2b6c61b9d14b5180c9fe62a943a5e94a4daea8c31f31d249412cde698280f196",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -66,6 +66,15 @@
         "src/index.ts:14-17 attaches the orchestration listener, then runs work-on reconciliation, then orchestration resume; the emitted needs-human lifecycle and queued-lane pump can therefore race around publication of the persisted pending link."
       ],
       "finishedAt": "2026-08-25T16:50:23.736Z"
+    },
+    "plan-1": {
+      "nodeId": "plan-1",
+      "node": "plan",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/a45e6a39-385b-4289-8536-9cbd62e8dc0d/.pi/forge/a45e6a39-385b-4289-8536-9cbd62e8dc0d-plan-1.json"
     }
   },
   "effects": {},
@@ -78,7 +87,8 @@
     "node:investigate-1:queued": "bf503b3c-f993-48e4-9b59-97b5e87a7f9b",
     "node:investigate-1:started": "174277ae-224a-46c3-80c5-0241619ae0c3",
     "node:investigate-1:receipt-bound": "54006762-38b0-49e7-a682-28b85d69f94c",
-    "node:investigate-1:completed": "30e324d2-5c0e-4138-8642-caee701511fb"
+    "node:investigate-1:completed": "30e324d2-5c0e-4138-8642-caee701511fb",
+    "node:plan-1:queued": "6529e4f5-d48f-4570-994d-4609a0060655"
   },
   "eventIds": {
     "cc7da491-7462-4048-8eb8-70c6f11fbdd7": true,
@@ -89,6 +99,7 @@
     "bf503b3c-f993-48e4-9b59-97b5e87a7f9b": true,
     "174277ae-224a-46c3-80c5-0241619ae0c3": true,
     "54006762-38b0-49e7-a682-28b85d69f94c": true,
-    "30e324d2-5c0e-4138-8642-caee701511fb": true
+    "30e324d2-5c0e-4138-8642-caee701511fb": true,
+    "6529e4f5-d48f-4570-994d-4609a0060655": true
   }
 }
