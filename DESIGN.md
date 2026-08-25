@@ -310,6 +310,7 @@ Fork only if an integration test proves that a required logical node identity, s
 ```text
 /forge:init
 /forge:work-on <issue>
+/forge:audit [focus]
 /forge:review <pr>
 /forge:status [run]
 /forge:resume <run>
@@ -320,6 +321,8 @@ Fork only if an integration test proves that a required logical node identity, s
 `/forge:orchestrate` remains disabled until the single-issue milestone passes its recovery contract.
 
 A model-callable `forge` tool exposes typed actions for inspect, plan, launch, status, and request-approval. It does not expose raw merge/close primitives without policy and authority checks.
+
+`/forge:audit` is an upstream feedback boundary for installations running in external repositories. Its model phase is read-only and drafts only minimal sanitized evidence. A deterministic `forge_file_audit_issue` tool fixes the destination to `RapierCraftStudios/forgedock-pi`, redacts common secrets, user paths, and known source-repository identities, opens the exact draft for operator editing, and requires a separate confirmation before invoking `gh issue create`. Suspected security vulnerabilities are directed to private security advisories and must not enter this public path.
 
 ## First-milestone validation contract
 

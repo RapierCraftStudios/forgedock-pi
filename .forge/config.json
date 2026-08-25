@@ -34,14 +34,14 @@
       "forge-review-correctness",
       "forge-review-security"
     ],
-    "maxRounds": 1
+    "maxRounds": 2
   },
   "orchestration": {
-    "maxConcurrent": 16,
+    "maxConcurrent": 20,
     "maxIssues": 20
   },
   "subagents": {
-    "maxConcurrent": 2,
+    "maxConcurrent": 20,
     "maxDepth": 2,
     "workOnTimeoutMs": 14400000,
     "reviewerTimeoutMs": 3600000

@@ -6,7 +6,7 @@ ForgeDock Pi is currently experimental. Security fixes are applied to the latest
 
 ## Reporting a vulnerability
 
-Please use GitHub's private **Security advisory** reporting flow for this repository. Do not open a public issue for credential exposure, authorization bypass, command execution, path escape, protected-branch bypass, or merge-gate vulnerabilities.
+Please use GitHub's private **Security advisory** reporting flow for this repository. Do not open a public issue for credential exposure, authorization bypass, command execution, path escape, protected-branch bypass, or merge-gate vulnerabilities. `/forge:audit` creates public issues and must not be used for suspected vulnerabilities.
 
 Include:
 

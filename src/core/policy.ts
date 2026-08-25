@@ -272,7 +272,7 @@ export function parseForgePolicy(value: unknown): ForgePolicy {
               orchestration.maxConcurrent,
               "orchestration.maxConcurrent",
               1,
-              16,
+              20,
             ),
       maxIssues:
         orchestration?.maxIssues === undefined

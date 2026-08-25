@@ -38,6 +38,24 @@ const rawPolicy = {
   subagents: { maxConcurrent: 4, maxDepth: 2 },
 };
 
+test("policy supports twenty concurrent issue lanes and subagents", () => {
+  const policy = parseForgePolicy({
+    ...rawPolicy,
+    orchestration: { maxConcurrent: 20, maxIssues: 20 },
+    subagents: { ...rawPolicy.subagents, maxConcurrent: 20 },
+  });
+  assert.equal(policy.orchestration.maxConcurrent, 20);
+  assert.equal(policy.subagents.maxConcurrent, 20);
+  assert.throws(
+    () =>
+      parseForgePolicy({
+        ...rawPolicy,
+        orchestration: { maxConcurrent: 21, maxIssues: 21 },
+      }),
+    PolicyValidationError,
+  );
+});
+
 test("tracked policy enables only non-protected integration auto-merge", () => {
   const policy = parseForgePolicy(rawPolicy);
   assert.equal(canAutoMerge(policy, "staging"), true);

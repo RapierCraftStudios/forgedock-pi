@@ -6,6 +6,7 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
   confirmExpiredLeaseTakeover,
   confirmOrchestrationDispatch,
+  orchestrationResolverPrompt,
 } from "../../src/ui/commands.ts";
 
 const input = {
@@ -13,6 +14,15 @@ const input = {
   sourceExpression: "https://github.com/owner/repo/issues",
   resolutionSummary: "Three eligible open issues; active-owned lanes excluded.",
 };
+
+test("resolver keeps failed attempts eligible for explicit retry", () => {
+  const prompt = orchestrationResolverPrompt("49,50,51 --confirm");
+
+  assert.match(prompt, /prior failed, blocked, needs-human, or cancelled attempt is retryable/i);
+  assert.match(prompt, /issue remains open and no live run owns it/i);
+  assert.match(prompt, /successfully terminal issues \(merged or closed\)/i);
+  assert.match(prompt, /Original expression: "49,50,51 --confirm"/);
+});
 
 test("model-callable orchestration fails closed without interactive confirmation", async () => {
   const ui = {

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Added `/forge:audit [focus]` for read-only workflow diagnosis and privacy-gated upstream issue filing from external repositories.
+- Added deterministic sanitization, editable public-report previews, fixed upstream routing, and explicit operator confirmation.
+
 ## 0.1.0 — Experimental
 
 - Initial standalone Pi extension package.

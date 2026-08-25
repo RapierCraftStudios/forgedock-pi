@@ -43,6 +43,7 @@ Issue
 
 - `/forge:init`
 - `/forge:work-on <issue>`
+- `/forge:audit [focus]`
 - `/forge:status`
 - Durable GitHub state journal and repository lease
 - Canonical issue phase reports
@@ -79,6 +80,18 @@ pi install /absolute/path/to/forgedock-pi
 
 Restart Pi or run `/reload` after installation.
 
+### ForgeDock bot authentication
+
+Workflow state, issue, and pull-request API traffic requires the ForgeDock GitHub App by default. Place the App private key at `~/.config/forgedock/app.pem` with mode `0600`, or point ForgeDock Pi at another secure location before launching Pi:
+
+```bash
+export FORGEDOCK_APP_PEM=/secure/path/to/rapiercraft-forgedock.pem
+```
+
+The first-party defaults target App `4051319` and the RapierCraftStudios installation. Other installations must also set `FORGEDOCK_GITHUB_APP_ID` and `FORGEDOCK_GITHUB_INSTALLATION_ID`. A managed installation token can be supplied as `FORGEDOCK_BOT_TOKEN`; it expires and must be rotated externally. Installation tokens are minted in memory, cached until shortly before expiry, and never replace the active `gh` login.
+
+Operator `gh` authentication is retained for interactive setup and `/forge:audit`. Set `FORGEDOCK_ALLOW_OPERATOR_GH=1` only to explicitly opt into legacy workflow writes through that identity.
+
 ## Quick start
 
 From a trusted GitHub repository:
@@ -111,11 +124,24 @@ Then run:
 ## Commands
 
 | Command | Purpose |
-|---|---|
+| --- | --- |
 | `/forge:about` | Show extension, schema, and `pi-subagents` availability |
 | `/forge:init` | Create tracked policy and canonical labels |
 | `/forge:work-on <issue>` | Launch one issue through work-on and nested review |
+| `/forge:audit [focus]` | Analyze ForgeDock-owned workflow evidence and prepare a sanitized upstream issue |
 | `/forge:status` | Show ForgeDock runs linked to the Pi session |
+
+### Reporting workflow defects
+
+Run `/forge:audit` when ForgeDock itself behaves incorrectly in another project. The command performs a read-only analysis, searches for likely upstream duplicates, and prepares a structured report for `RapierCraftStudios/forgedock-pi`. Before submission, an editor shows the exact public title and body and a separate confirmation gate is required. Submission uses the authenticated GitHub CLI identity.
+
+Only sanitized metadata is included by default: ForgeDock, Node.js, and platform versions plus workflow statuses and redacted evidence. Source-repository identity, absolute paths, source code, issue or PR contents, customer data, full logs, and credentials must not be included. Report suspected vulnerabilities through the repository's private GitHub Security Advisory flow instead of `/forge:audit`.
+
+An optional focus narrows the investigation:
+
+```text
+/forge:audit merge gate remained blocked after successful checks
+```
 
 ## GitHub audit trail
 
