@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:e241bc9fc8450026142a57c3353f7c3dc6270e228d73425ef1c5974fa530d4fb",
+  "sequence": 6,
+  "lastEventHash": "sha256:56d2222b6335d6d60a5c181821d05c953de263578ead326b31a6111566e0126f",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -40,6 +40,15 @@
         "This read-only resolve node changed no files; its head remains the frozen base SHA 1b018483cd94b8324ae7e34eaa07293861f4f491."
       ],
       "finishedAt": "2026-08-25T21:23:26.200Z"
+    },
+    "investigate-1": {
+      "nodeId": "investigate-1",
+      "node": "investigate",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/bfc5cf36-a5ea-4540-85d3-ce22f55c032c/.pi/forge/bfc5cf36-a5ea-4540-85d3-ce22f55c032c-investigate-1.json"
     }
   },
   "effects": {},
@@ -48,13 +57,15 @@
     "node:resolve-1:queued": "dc9d7f0b-3fa8-4ee5-bffb-37962c0e19f0",
     "node:resolve-1:started": "b0e74a8e-3842-45a3-85a5-9d3091fb4b0a",
     "node:resolve-1:receipt-bound": "5b4f9ab7-25a5-4bfb-8c1b-66714158646a",
-    "node:resolve-1:completed": "3244fdde-7f46-4637-b1a1-32c288b19090"
+    "node:resolve-1:completed": "3244fdde-7f46-4637-b1a1-32c288b19090",
+    "node:investigate-1:queued": "503d5498-0eca-4b49-9271-dcefdb989ff0"
   },
   "eventIds": {
     "0ce6a9d0-87b1-44c6-943d-8393cb560926": true,
     "dc9d7f0b-3fa8-4ee5-bffb-37962c0e19f0": true,
     "b0e74a8e-3842-45a3-85a5-9d3091fb4b0a": true,
     "5b4f9ab7-25a5-4bfb-8c1b-66714158646a": true,
-    "3244fdde-7f46-4637-b1a1-32c288b19090": true
+    "3244fdde-7f46-4637-b1a1-32c288b19090": true,
+    "503d5498-0eca-4b49-9271-dcefdb989ff0": true
   }
 }
