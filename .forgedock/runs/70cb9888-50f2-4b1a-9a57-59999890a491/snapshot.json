@@ -5,13 +5,13 @@
   "issueNumber": 35,
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "leaseBinding": {
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 10,
-  "lastEventHash": "sha256:6ba6c72d626b0afd88914b695da6fc7c99f3c2562fd15e26b5ea7beb0afef15e",
+  "sequence": 11,
+  "lastEventHash": "sha256:8fc016e1495278318f0f1767e63bcdca83ef43018fd8cd5a33441ca3a607afc4",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -73,7 +73,9 @@
       "node": "close",
       "attempt": 1,
       "round": 1,
-      "status": "queued"
+      "status": "failed",
+      "reason": "Lease expired after its owning Pi session stopped heartbeating; takeover confirmed by operator session 01a03992-a251-78fc-b722-95aa7f4f9589.",
+      "finishedAt": "2026-08-25T16:02:13.844Z"
     }
   },
   "effects": {},
@@ -87,7 +89,8 @@
     "node:investigate-1:started": "d96d1140-7c47-410d-97aa-9534be6811ef",
     "node:investigate-1:receipt-bound": "ebea84c1-08ed-4782-846b-f6026da0a680",
     "node:investigate-1:completed": "21276528-fc63-4dcf-b923-03a4845ec50b",
-    "node:close-1:queued": "f8325301-44bb-4f6e-ac65-09ad0ba14f9a"
+    "node:close-1:queued": "f8325301-44bb-4f6e-ac65-09ad0ba14f9a",
+    "run:cancelled": "08490e8d-fd3b-49af-909e-1f87f2530c26"
   },
   "eventIds": {
     "cb0305d3-78ab-4c21-bfa3-e55b3ee42dc1": true,
@@ -99,6 +102,8 @@
     "d96d1140-7c47-410d-97aa-9534be6811ef": true,
     "ebea84c1-08ed-4782-846b-f6026da0a680": true,
     "21276528-fc63-4dcf-b923-03a4845ec50b": true,
-    "f8325301-44bb-4f6e-ac65-09ad0ba14f9a": true
-  }
+    "f8325301-44bb-4f6e-ac65-09ad0ba14f9a": true,
+    "08490e8d-fd3b-49af-909e-1f87f2530c26": true
+  },
+  "cancellationReason": "Lease expired after its owning Pi session stopped heartbeating; takeover confirmed by operator session 01a03992-a251-78fc-b722-95aa7f4f9589."
 }
