@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 13,
-  "lastEventHash": "sha256:fd4a7cac33718060446ed90351f1c19291b3c1a94a246469f342691ab15b1193",
+  "sequence": 14,
+  "lastEventHash": "sha256:ab3a55dae9b040d7fe65b7acccccbd1feb38177fd0aaf25b8c82472ae1d406c1",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -105,6 +105,15 @@
         "src/adapters/git.ts:319-335 explicitly removes each generated agent definition during runtime cleanup, so a new materialized read-only definition must be added to that cleanup allowlist."
       ],
       "finishedAt": "2026-08-25T18:56:11.270Z"
+    },
+    "prepare-worktree-1": {
+      "nodeId": "prepare-worktree-1",
+      "node": "prepare-worktree",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/152edce1-3e46-4425-8162-4f7b3cfaefc9/.pi/forge/152edce1-3e46-4425-8162-4f7b3cfaefc9-prepare-worktree-1.json"
     }
   },
   "effects": {},
@@ -121,7 +130,8 @@
     "node:plan-1:queued": "853230d5-398a-43ba-b0f1-71b745446adc",
     "node:plan-1:started": "fea1de0a-2310-4293-9fbf-76464d57f904",
     "node:plan-1:receipt-bound": "4c927727-d60a-4031-b6b7-cf03974bd89e",
-    "node:plan-1:completed": "aa60d9c4-6fd2-4181-b1e9-f232af02c842"
+    "node:plan-1:completed": "aa60d9c4-6fd2-4181-b1e9-f232af02c842",
+    "node:prepare-worktree-1:queued": "05600aee-13ae-4bf3-893f-c7d5d4ebb657"
   },
   "eventIds": {
     "e54b6411-60d6-4281-8801-6488bc2a6398": true,
@@ -136,6 +146,7 @@
     "853230d5-398a-43ba-b0f1-71b745446adc": true,
     "fea1de0a-2310-4293-9fbf-76464d57f904": true,
     "4c927727-d60a-4031-b6b7-cf03974bd89e": true,
-    "aa60d9c4-6fd2-4181-b1e9-f232af02c842": true
+    "aa60d9c4-6fd2-4181-b1e9-f232af02c842": true,
+    "05600aee-13ae-4bf3-893f-c7d5d4ebb657": true
   }
 }
