@@ -10,8 +10,8 @@
     "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:93760305dd1455672d50c4dc1d1f4d170f701da0ec81c15ba8672081255406b9",
+  "sequence": 6,
+  "lastEventHash": "sha256:1946c963b8565336b8d03a06938f1de14b2cd2af3ae8aa34a87ad132cb85b725",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -39,6 +39,15 @@
         "This read-only resolve node made no source or repository changes; head SHA remains the frozen base SHA."
       ],
       "finishedAt": "2026-08-25T16:45:14.873Z"
+    },
+    "investigate-1": {
+      "nodeId": "investigate-1",
+      "node": "investigate",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/c2553c16-045f-465c-87b3-08f0566183a2/.pi/forge/c2553c16-045f-465c-87b3-08f0566183a2-investigate-1.json"
     }
   },
   "effects": {},
@@ -47,13 +56,15 @@
     "node:resolve-1:queued": "e1134eb2-fae1-473d-b363-8d1ffde94bd1",
     "node:resolve-1:started": "ed0a877c-bc0a-4e7f-a368-374ac7195fed",
     "node:resolve-1:receipt-bound": "dedff898-b29a-4ec2-84ba-bcc0890b3f54",
-    "node:resolve-1:completed": "fad4ffac-7bc5-4f6b-b82e-a859b357fa06"
+    "node:resolve-1:completed": "fad4ffac-7bc5-4f6b-b82e-a859b357fa06",
+    "node:investigate-1:queued": "556578a7-17db-49eb-8e73-107264969c69"
   },
   "eventIds": {
     "26445051-7ba5-465e-8c7f-a17aa6f15137": true,
     "e1134eb2-fae1-473d-b363-8d1ffde94bd1": true,
     "ed0a877c-bc0a-4e7f-a368-374ac7195fed": true,
     "dedff898-b29a-4ec2-84ba-bcc0890b3f54": true,
-    "fad4ffac-7bc5-4f6b-b82e-a859b357fa06": true
+    "fad4ffac-7bc5-4f6b-b82e-a859b357fa06": true,
+    "556578a7-17db-49eb-8e73-107264969c69": true
   }
 }
