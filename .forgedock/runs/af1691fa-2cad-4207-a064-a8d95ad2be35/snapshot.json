@@ -10,8 +10,8 @@
     "ownerRunId": "5da43cdf-2ff6-479c-9bf8-d2241bbd78fe",
     "epoch": 1
   },
-  "sequence": 19,
-  "lastEventHash": "sha256:57a6cbdc52f87e30f458fd1675b089fbde52ddfb365e414a4cc16458f9c9a9fb",
+  "sequence": 20,
+  "lastEventHash": "sha256:9c84bcdf05d1714ede201e0ccfd7ea55431fa3b9801616a5a93d96de8c988ae1",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -128,10 +128,13 @@
       "status": "running",
       "baseSha": "4819168331da2a25f500a1d1436f231db8211f2b",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/af1691fa-2cad-4207-a064-a8d95ad2be35/.pi/forge/af1691fa-2cad-4207-a064-a8d95ad2be35-implement-1.json",
-      "subagentRunId": "launch:implement-1:2f10d050-98b2-4757-a0f1-2b3fe4a50a94",
+      "subagentRunId": "813e1163-f028-4943-9ede-d026d0751f4c",
       "launchNonce": "2f10d050-98b2-4757-a0f1-2b3fe4a50a94",
       "launchIntent": true,
-      "startedAt": "2026-08-25T08:17:35.098Z"
+      "startedAt": "2026-08-25T08:17:35.098Z",
+      "previousSubagentRunId": "launch:implement-1:2f10d050-98b2-4757-a0f1-2b3fe4a50a94",
+      "transportRetries": 0,
+      "launchReceipt": true
     }
   },
   "effects": {},
@@ -154,7 +157,8 @@
     "node:prepare-worktree-1:receipt-bound": "d45be9d7-bc63-4b13-abd2-4f1f50f295ed",
     "node:prepare-worktree-1:completed": "50b1a186-1835-42e5-979b-811aa71d0cf6",
     "node:implement-1:queued": "932c496b-860b-41eb-a0d3-45194e34f685",
-    "node:implement-1:started": "75023372-d33b-432a-903e-d1bebb787e1f"
+    "node:implement-1:started": "75023372-d33b-432a-903e-d1bebb787e1f",
+    "node:implement-1:receipt-bound": "361bf48c-0f2d-4622-b0bd-f65e9b474f7f"
   },
   "eventIds": {
     "8f4a2c50-a4a2-43e9-8677-7fe5092204e5": true,
@@ -175,6 +179,7 @@
     "d45be9d7-bc63-4b13-abd2-4f1f50f295ed": true,
     "50b1a186-1835-42e5-979b-811aa71d0cf6": true,
     "932c496b-860b-41eb-a0d3-45194e34f685": true,
-    "75023372-d33b-432a-903e-d1bebb787e1f": true
+    "75023372-d33b-432a-903e-d1bebb787e1f": true,
+    "361bf48c-0f2d-4622-b0bd-f65e9b474f7f": true
   }
 }
