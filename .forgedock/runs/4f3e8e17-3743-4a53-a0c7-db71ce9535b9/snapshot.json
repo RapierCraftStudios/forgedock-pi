@@ -10,15 +10,15 @@
     "ownerRunId": "dd680e3c-d22e-4841-9e2e-5042551e056a",
     "epoch": 1
   },
-  "sequence": 4,
-  "lastEventHash": "sha256:8655c1e4cf4c248a72d241c5362af98baf07ddd1bfbe5a69876898a98580185e",
+  "sequence": 5,
+  "lastEventHash": "sha256:ea0e3dd5e606c054d5c5123d808ab49585cb7b56a74f2c69c994366c91ad6eba",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "320ad98f894e872dcb4ddc50cc90237722ab736c",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/4f3e8e17-3743-4a53-a0c7-db71ce9535b9/.pi/forge/4f3e8e17-3743-4a53-a0c7-db71ce9535b9-resolve-1.json",
       "subagentRunId": "ca98512a-a8ba-4dc1-9e82-b0fe5eae8e90",
@@ -27,7 +27,21 @@
       "startedAt": "2026-08-25T10:07:49.300Z",
       "previousSubagentRunId": "launch:resolve-1:5b84a251-8fc6-4330-ab95-91b1db441730",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "round": 1,
+      "headSha": "320ad98f894e872dcb4ddc50cc90237722ab736c",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "GitHub issue 30 is open and titled test: keep reviewer finalizers role-specific.",
+        "The requested change is one focused regression assertion in test/agents/child-runtime-commit.test.ts.",
+        "Repository policy config selects dogfood as the integration branch.",
+        "The frozen base SHA is current HEAD and the assigned worktree is clean.",
+        "At the frozen base, allowedNodeTools for review-security includes forge_finalize_reviewer and does not include forge_finalize_node.",
+        "npm run check completed successfully with typecheck and 80 passing tests.",
+        "No files changed relative to the frozen base."
+      ],
+      "finishedAt": "2026-08-25T10:10:28.638Z"
     }
   },
   "effects": {},
@@ -35,12 +49,14 @@
     "run:create": "f09b50df-0043-4493-aea7-a52e7e099b6f",
     "node:resolve-1:queued": "466942e4-057e-4587-9a7a-d612f7aec0cc",
     "node:resolve-1:started": "d4cac4b1-bbd0-4679-935b-eb143a422df3",
-    "node:resolve-1:receipt-bound": "dab568df-0373-4e57-90cd-c2e582acc0cb"
+    "node:resolve-1:receipt-bound": "dab568df-0373-4e57-90cd-c2e582acc0cb",
+    "node:resolve-1:completed": "ab4ee4fe-52c0-4194-8295-3e36015828cf"
   },
   "eventIds": {
     "f09b50df-0043-4493-aea7-a52e7e099b6f": true,
     "466942e4-057e-4587-9a7a-d612f7aec0cc": true,
     "d4cac4b1-bbd0-4679-935b-eb143a422df3": true,
-    "dab568df-0373-4e57-90cd-c2e582acc0cb": true
+    "dab568df-0373-4e57-90cd-c2e582acc0cb": true,
+    "ab4ee4fe-52c0-4194-8295-3e36015828cf": true
   }
 }
