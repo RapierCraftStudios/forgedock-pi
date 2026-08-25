@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 14,
-  "lastEventHash": "sha256:1a6cdca2fce192f57f5be47c186e2ed7494e8bea131f33dd4fc69fc707307b5c",
+  "sequence": 15,
+  "lastEventHash": "sha256:2d978b75964135cc5eb69995275554800841d4f9933dcc333d75e50d434957a7",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -116,9 +116,13 @@
       "node": "prepare-worktree",
       "attempt": 1,
       "round": 1,
-      "status": "queued",
+      "status": "running",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
-      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/1d590b89-383d-442f-90d6-a93aa0a146e7/.pi/forge/1d590b89-383d-442f-90d6-a93aa0a146e7-prepare-worktree-1.json"
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/1d590b89-383d-442f-90d6-a93aa0a146e7/.pi/forge/1d590b89-383d-442f-90d6-a93aa0a146e7-prepare-worktree-1.json",
+      "subagentRunId": "launch:prepare-worktree-1:a119c8ad-12a4-4ebd-b3b9-9bfc4f2db485",
+      "launchNonce": "a119c8ad-12a4-4ebd-b3b9-9bfc4f2db485",
+      "launchIntent": true,
+      "startedAt": "2026-08-25T18:09:07.052Z"
     }
   },
   "effects": {},
@@ -136,7 +140,8 @@
     "node:plan-1:started": "a71101a0-0a14-4561-958e-f8798258117b",
     "node:plan-1:receipt-bound": "ab2e5598-433d-45b9-a743-8a481b52884c",
     "node:plan-1:completed": "3b23be71-6f33-4de5-84f3-67d9d351669f",
-    "node:prepare-worktree-1:queued": "d1631252-3f6b-45a7-bbad-c34ffc781897"
+    "node:prepare-worktree-1:queued": "d1631252-3f6b-45a7-bbad-c34ffc781897",
+    "node:prepare-worktree-1:started": "0f285798-caab-45c6-806a-71a6444ed337"
   },
   "eventIds": {
     "8420132c-2a1a-43b2-ad05-5a4473cc10d2": true,
@@ -152,6 +157,7 @@
     "a71101a0-0a14-4561-958e-f8798258117b": true,
     "ab2e5598-433d-45b9-a743-8a481b52884c": true,
     "3b23be71-6f33-4de5-84f3-67d9d351669f": true,
-    "d1631252-3f6b-45a7-bbad-c34ffc781897": true
+    "d1631252-3f6b-45a7-bbad-c34ffc781897": true,
+    "0f285798-caab-45c6-806a-71a6444ed337": true
   }
 }
