@@ -10,8 +10,8 @@
     "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:78e753145482f291c4bfd3432d0d721230cfabadfc80681eb2ac78cc620300b9",
+  "sequence": 9,
+  "lastEventHash": "sha256:560b4ae5eebe84f178756e3c77f47d8954d9cdeaf19e8355f9690a7b15cdb864",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -45,7 +45,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/5ae128e5-d087-4d0f-97cb-73d4435aabae/.pi/forge/5ae128e5-d087-4d0f-97cb-73d4435aabae-investigate-1.json",
       "subagentRunId": "7dbb7fe0-bd5b-4140-a50a-56b2b429187c",
@@ -54,7 +54,18 @@
       "startedAt": "2026-08-25T16:45:28.581Z",
       "previousSubagentRunId": "launch:investigate-1:feb23032-7af5-4f82-8322-9e9ee4cedaaf",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "Frozen-base source inspection confirms every bounded node is spawned with FORGE_WORK_ON_AGENT in src/adapters/subagents.ts, regardless of node type.",
+        "src/agents/register.ts registers FORGE_WORK_ON_AGENT with acceptanceRole \"writer\" and completionGuard true, and exposes source-edit/commit tools; this base has no FORGE_READ_ONLY_NODE_AGENT definition.",
+        "src/agents/materialize.ts emits only the shared forge-work-on bounded agent and agentFile hardcodes completionGuard: true for every generated definition.",
+        "test/adapters/subagents.test.ts checks the bounded task/schema but not the selected agent, expects four materialized/registered agents, and has no regression assertion for zero-edit bounded-node completion.",
+        "The supplied issue history records two finalized resolve/investigate children that were subsequently rejected solely for making no edits, matching the inspected configuration path."
+      ],
+      "finishedAt": "2026-08-25T16:48:33.217Z"
     }
   },
   "effects": {},
@@ -66,7 +77,8 @@
     "node:resolve-1:completed": "673bc42f-6537-4eac-b959-7ced88a79dd0",
     "node:investigate-1:queued": "d72b8fea-9bd6-4426-9180-94f6d90fdf39",
     "node:investigate-1:started": "9d4455c3-9162-44fe-871b-b8f6baaa6c28",
-    "node:investigate-1:receipt-bound": "3817abdb-db51-4564-98d7-ca31003770d9"
+    "node:investigate-1:receipt-bound": "3817abdb-db51-4564-98d7-ca31003770d9",
+    "node:investigate-1:completed": "c85bb77a-9290-4543-948d-2a36645599f6"
   },
   "eventIds": {
     "3d76639e-0ea5-4b9c-8cf5-c5861433e30c": true,
@@ -76,6 +88,7 @@
     "673bc42f-6537-4eac-b959-7ced88a79dd0": true,
     "d72b8fea-9bd6-4426-9180-94f6d90fdf39": true,
     "9d4455c3-9162-44fe-871b-b8f6baaa6c28": true,
-    "3817abdb-db51-4564-98d7-ca31003770d9": true
+    "3817abdb-db51-4564-98d7-ca31003770d9": true,
+    "c85bb77a-9290-4543-948d-2a36645599f6": true
   }
 }
