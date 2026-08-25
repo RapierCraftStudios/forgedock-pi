@@ -10,8 +10,8 @@
     "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
     "epoch": 1
   },
-  "sequence": 34,
-  "lastEventHash": "sha256:1dc5d5b88da05a1fb36526a25665bad784c04d5923f4a4cc5acad0b83d339905",
+  "sequence": 35,
+  "lastEventHash": "sha256:fa4ea4f3fd2f245f876ae2f9f0395c42634af893687b9c2d2cf286e9d8eba13e",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -237,10 +237,13 @@
       "status": "running",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/5ae128e5-d087-4d0f-97cb-73d4435aabae/.pi/forge/5ae128e5-d087-4d0f-97cb-73d4435aabae-review-security-1.json",
-      "subagentRunId": "launch:review-security-1:14893aae-a2b6-4cef-88f5-613139ebdaa2",
+      "subagentRunId": "6630f3c2-f993-41c9-afc1-6cbc64bfdd3a",
       "launchNonce": "14893aae-a2b6-4cef-88f5-613139ebdaa2",
       "launchIntent": true,
-      "startedAt": "2026-08-25T17:04:28.524Z"
+      "startedAt": "2026-08-25T17:04:28.524Z",
+      "previousSubagentRunId": "launch:review-security-1:14893aae-a2b6-4cef-88f5-613139ebdaa2",
+      "transportRetries": 0,
+      "launchReceipt": true
     }
   },
   "effects": {},
@@ -278,7 +281,8 @@
     "node:review-correctness-1:started": "f41e4580-8987-47c8-ab9e-68f6fcd6017a",
     "node:review-correctness-1:receipt-bound": "b1c38df7-c853-42e2-b364-240b8434f067",
     "node:review-security-1:queued": "d9e563d8-fb54-4e91-992e-dee49a12e20c",
-    "node:review-security-1:started": "f53da43c-68d1-4311-95b2-18cf7bc43d0a"
+    "node:review-security-1:started": "f53da43c-68d1-4311-95b2-18cf7bc43d0a",
+    "node:review-security-1:receipt-bound": "b92a7c83-eb8d-4cfc-b689-7f3fef1e059d"
   },
   "eventIds": {
     "3d76639e-0ea5-4b9c-8cf5-c5861433e30c": true,
@@ -314,6 +318,7 @@
     "f41e4580-8987-47c8-ab9e-68f6fcd6017a": true,
     "b1c38df7-c853-42e2-b364-240b8434f067": true,
     "d9e563d8-fb54-4e91-992e-dee49a12e20c": true,
-    "f53da43c-68d1-4311-95b2-18cf7bc43d0a": true
+    "f53da43c-68d1-4311-95b2-18cf7bc43d0a": true,
+    "b92a7c83-eb8d-4cfc-b689-7f3fef1e059d": true
   }
 }
