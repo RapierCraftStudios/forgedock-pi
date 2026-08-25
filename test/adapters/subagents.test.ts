@@ -145,10 +145,26 @@ test("RPC dedicated reviewer launch uses the registered reviewer and reviewer sc
     issueContext: "untrusted issue text",
     node: { nodeId: "review-security-1", node: "review-security", attempt: 1 },
   });
-  const spawn = bus.requests.at(-1) as { params: { agent: string; task: string; outputSchema: { properties: { schema: { const: string } } } } };
+  const spawn = bus.requests.at(-1) as {
+    params: {
+      agent: string;
+      task: string;
+      extensionBindings: Record<string, { nodeId: string; reviewHeadSha: string }>;
+      outputSchema: { properties: { schema: { const: string } } };
+    };
+  };
   assert.equal(spawn.params.agent, "forge-review-security");
   assert.equal(spawn.params.outputSchema.properties.schema.const, "forgedock.reviewer-result/v1");
   assert.match(spawn.params.task, /Frozen review head SHA: fedcba9876543210/);
+  assert.match(spawn.params.task, /forge_finalize_reviewer/);
+  assert.equal(
+    spawn.params.extensionBindings["forgedock.pi/1"]?.nodeId,
+    "review-security-1",
+  );
+  assert.equal(
+    spawn.params.extensionBindings["forgedock.pi/1"]?.reviewHeadSha,
+    "fedcba9876543210",
+  );
   assert.doesNotMatch(spawn.params.task, /runs\.all/);
 });
 
@@ -172,6 +188,7 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
   assert.equal(spawn.params.outputSchema.properties.schema.const, "forgedock.node-result/v1");
   assert.match(spawn.params.task, /Execute exactly one ForgeDock node: investigate/);
   assert.match(spawn.params.task, /do not call forge_checkpoint/i);
+  assert.match(spawn.params.task, /forge_finalize_node/);
   assert.doesNotMatch(spawn.params.task, /Process resolve, investigate, plan/i);
 });
 
@@ -240,6 +257,7 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
     );
     assert.doesNotMatch(workOn, /tools: .*subagent/);
     assert.doesNotMatch(workOn, /forge_finalize_work_on/);
+    assert.match(workOn, /forge_finalize_node/);
     assert.match(workOn, /^async: true$/m);
     assert.match(workOn, /maxSubagentDepth: 2/);
     assert.match(workOn, /^extensions:/m);
@@ -248,6 +266,8 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
     assert.match(workOn, /  - \/.*agents\/child-runtime\.ts/);
     assert.doesNotMatch(workOn, /  - "\/.*"/);
     assert.doesNotMatch(reviewer, /tools: .*subagent/);
+    assert.match(reviewer, /forge_finalize_reviewer/);
+    assert.match(reviewer, /^extensions:/m);
     assert.match(reviewer, /^async: false$/m);
     assert.match(refresh, /tools: .*subagent/);
     assert.match(refresh, /forge_refresh_base/);
