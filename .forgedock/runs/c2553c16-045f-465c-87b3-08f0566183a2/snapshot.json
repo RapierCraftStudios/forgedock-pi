@@ -10,8 +10,8 @@
     "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
     "epoch": 1
   },
-  "sequence": 19,
-  "lastEventHash": "sha256:57f82ca527c30d3e59f5044f030603507dfc95aca856d1fbca10fba2206b54eb",
+  "sequence": 20,
+  "lastEventHash": "sha256:1fbc3e30e60654e8a621628b682909bf9fef2dff6a625c8fa8c969061c31cf12",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -139,10 +139,13 @@
       "status": "running",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/c2553c16-045f-465c-87b3-08f0566183a2/.pi/forge/c2553c16-045f-465c-87b3-08f0566183a2-implement-1.json",
-      "subagentRunId": "launch:implement-1:a3ffa234-4bfb-412f-bb0f-0116774e6a24",
+      "subagentRunId": "538d3902-10a2-45ea-af02-49a3b6a68ba2",
       "launchNonce": "a3ffa234-4bfb-412f-bb0f-0116774e6a24",
       "launchIntent": true,
-      "startedAt": "2026-08-25T16:57:26.664Z"
+      "startedAt": "2026-08-25T16:57:26.664Z",
+      "previousSubagentRunId": "launch:implement-1:a3ffa234-4bfb-412f-bb0f-0116774e6a24",
+      "transportRetries": 0,
+      "launchReceipt": true
     }
   },
   "effects": {},
@@ -165,7 +168,8 @@
     "node:prepare-worktree-1:receipt-bound": "91b82e25-0ee6-4633-b620-5947f53693c1",
     "node:prepare-worktree-1:completed": "752d01ca-e5aa-46db-a05a-2027ff6ff41d",
     "node:implement-1:queued": "3003280b-f2f6-4122-bdc0-a7482ad3bc9e",
-    "node:implement-1:started": "87657c01-e587-4723-86c0-fc8cf35f7397"
+    "node:implement-1:started": "87657c01-e587-4723-86c0-fc8cf35f7397",
+    "node:implement-1:receipt-bound": "7801142a-5ba7-423b-86c3-f5bc1d9a8d8e"
   },
   "eventIds": {
     "26445051-7ba5-465e-8c7f-a17aa6f15137": true,
@@ -186,6 +190,7 @@
     "91b82e25-0ee6-4633-b620-5947f53693c1": true,
     "752d01ca-e5aa-46db-a05a-2027ff6ff41d": true,
     "3003280b-f2f6-4122-bdc0-a7482ad3bc9e": true,
-    "87657c01-e587-4723-86c0-fc8cf35f7397": true
+    "87657c01-e587-4723-86c0-fc8cf35f7397": true,
+    "7801142a-5ba7-423b-86c3-f5bc1d9a8d8e": true
   }
 }
