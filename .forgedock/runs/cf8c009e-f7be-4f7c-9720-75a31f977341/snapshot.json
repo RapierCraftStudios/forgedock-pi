@@ -10,8 +10,8 @@
     "ownerRunId": "5da43cdf-2ff6-479c-9bf8-d2241bbd78fe",
     "epoch": 1
   },
-  "sequence": 21,
-  "lastEventHash": "sha256:c52ee90e312c3e74c98caa7c1cc3ee1482e0e23def9681a2e7b8f37591f762ce",
+  "sequence": 22,
+  "lastEventHash": "sha256:b74445499b6c8e03c87f085923f38e320fbba906225b77862b77f274aba80da8",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -145,6 +145,15 @@
         "forge_diff reports 6 changed files with 627 insertions and 49 deletions; the implementation-node forge_verify command is policy-disallowed, so local checks were not run."
       ],
       "finishedAt": "2026-08-25T08:40:33.842Z"
+    },
+    "verify-1": {
+      "nodeId": "verify-1",
+      "node": "verify",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "4819168331da2a25f500a1d1436f231db8211f2b",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/cf8c009e-f7be-4f7c-9720-75a31f977341/.pi/forge/cf8c009e-f7be-4f7c-9720-75a31f977341-verify-1.json"
     }
   },
   "effects": {},
@@ -169,7 +178,8 @@
     "node:implement-1:queued": "9b887246-39a2-42a7-b54f-e632e9099e19",
     "node:implement-1:started": "91c24195-d61c-4711-9ead-31aa0a6755d2",
     "node:implement-1:receipt-bound": "93175ede-66cd-4113-afbd-96dbd528ad52",
-    "node:implement-1:completed": "d2c65171-c0db-417f-bdcb-ed1a7921340e"
+    "node:implement-1:completed": "d2c65171-c0db-417f-bdcb-ed1a7921340e",
+    "node:verify-1:queued": "f94b2e02-3263-45bd-9596-cd81897a3849"
   },
   "eventIds": {
     "3158194d-5ea4-46c8-b6f5-500304af5913": true,
@@ -192,6 +202,7 @@
     "9b887246-39a2-42a7-b54f-e632e9099e19": true,
     "91c24195-d61c-4711-9ead-31aa0a6755d2": true,
     "93175ede-66cd-4113-afbd-96dbd528ad52": true,
-    "d2c65171-c0db-417f-bdcb-ed1a7921340e": true
+    "d2c65171-c0db-417f-bdcb-ed1a7921340e": true,
+    "f94b2e02-3263-45bd-9596-cd81897a3849": true
   }
 }
