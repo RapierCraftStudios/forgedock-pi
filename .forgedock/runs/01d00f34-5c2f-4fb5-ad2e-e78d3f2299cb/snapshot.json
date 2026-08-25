@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 21,
-  "lastEventHash": "sha256:b9fd101aeff94d091ff29f596c6cdd3f1bd296308b2c976eff927ce600f97711",
+  "sequence": 22,
+  "lastEventHash": "sha256:4180d1fb6a8a6e15cdd5f5df7efa9f4eccfcf756c5f8094cee5df317ef445800",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -160,6 +160,15 @@
         "The complete test suite passed: 89 tests, 0 failures."
       ],
       "finishedAt": "2026-08-25T21:48:32.105Z"
+    },
+    "verify-1": {
+      "nodeId": "verify-1",
+      "node": "verify",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/01d00f34-5c2f-4fb5-ad2e-e78d3f2299cb/.pi/forge/01d00f34-5c2f-4fb5-ad2e-e78d3f2299cb-verify-1.json"
     }
   },
   "effects": {},
@@ -184,7 +193,8 @@
     "node:implement-1:queued": "537a8cae-1889-4c4c-9170-b731ca001dfa",
     "node:implement-1:started": "dbfdb4b2-790a-4ab3-9cf2-292b301e6011",
     "node:implement-1:receipt-bound": "ccd99c7c-54d1-475c-b07e-a41d519826e2",
-    "node:implement-1:completed": "1d9faff4-ea89-4e50-a6d0-5a6bd773f43b"
+    "node:implement-1:completed": "1d9faff4-ea89-4e50-a6d0-5a6bd773f43b",
+    "node:verify-1:queued": "f170b857-f098-49e3-a742-b2fd1bc5828b"
   },
   "eventIds": {
     "b212ad4a-3bb2-4f46-baa0-50c26cd787a3": true,
@@ -207,6 +217,7 @@
     "537a8cae-1889-4c4c-9170-b731ca001dfa": true,
     "dbfdb4b2-790a-4ab3-9cf2-292b301e6011": true,
     "ccd99c7c-54d1-475c-b07e-a41d519826e2": true,
-    "1d9faff4-ea89-4e50-a6d0-5a6bd773f43b": true
+    "1d9faff4-ea89-4e50-a6d0-5a6bd773f43b": true,
+    "f170b857-f098-49e3-a742-b2fd1bc5828b": true
   }
 }
