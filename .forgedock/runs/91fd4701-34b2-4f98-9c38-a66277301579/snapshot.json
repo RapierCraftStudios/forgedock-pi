@@ -10,15 +10,15 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 4,
-  "lastEventHash": "sha256:9ebf4d13e0edaf99c116f9598fe755717270572b4fd2a14859db77d76500eef8",
+  "sequence": 5,
+  "lastEventHash": "sha256:af444bb88558534e35212ec6306bfa8704317e66ac34b2653f35d8a4504d2bdf",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/91fd4701-34b2-4f98-9c38-a66277301579/.pi/forge/91fd4701-34b2-4f98-9c38-a66277301579-resolve-1.json",
       "subagentRunId": "5b633b96-b647-4c6c-a58e-e2bb3c7698d6",
@@ -27,7 +27,19 @@
       "startedAt": "2026-08-25T19:27:15.160Z",
       "previousSubagentRunId": "launch:resolve-1:319fb210-964a-43a9-b05b-fda53176e822",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "round": 1,
+      "headSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "Supplied issue context identifies open-dispatch target #52 with non-empty title \"bug: fix: verification nodes must receive implementation head and approved checks\" and a detailed reproduction, expected behavior, and impact.",
+        "src/workflows/work-on.ts requires the issue state to be open before creating and durably starting resolve-1; the task confirms this node was queued and started by that controller.",
+        "The supplied workflow:in-review label is non-terminal; no workflow:merged, workflow:invalid, or workflow:decomposed label is present in the supplied context.",
+        ".forge/config.json configures dogfood as the integration branch and lists only main as protected, matching the bound integration base.",
+        "Resolve is read-only; no files were changed and HEAD remains the frozen base SHA."
+      ],
+      "finishedAt": "2026-08-25T19:28:58.984Z"
     }
   },
   "effects": {},
@@ -35,12 +47,14 @@
     "run:create": "ba49bd33-cd25-4d3a-8106-d3166e61f8e2",
     "node:resolve-1:queued": "113969cd-f8df-4a38-917c-b7c0e6dc11bb",
     "node:resolve-1:started": "94b97bfa-34af-4cbf-a5cd-d904c3caa379",
-    "node:resolve-1:receipt-bound": "60c69e53-ce86-45b7-8d87-32d0ea58e099"
+    "node:resolve-1:receipt-bound": "60c69e53-ce86-45b7-8d87-32d0ea58e099",
+    "node:resolve-1:completed": "f1f5086f-cb54-40ac-85ba-9679d1fbd9eb"
   },
   "eventIds": {
     "ba49bd33-cd25-4d3a-8106-d3166e61f8e2": true,
     "113969cd-f8df-4a38-917c-b7c0e6dc11bb": true,
     "94b97bfa-34af-4cbf-a5cd-d904c3caa379": true,
-    "60c69e53-ce86-45b7-8d87-32d0ea58e099": true
+    "60c69e53-ce86-45b7-8d87-32d0ea58e099": true,
+    "f1f5086f-cb54-40ac-85ba-9679d1fbd9eb": true
   }
 }
