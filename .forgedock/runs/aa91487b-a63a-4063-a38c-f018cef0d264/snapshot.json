@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:68b01e57cf3d3d2847025cbfe1555f2cba052fabade79ea71cc28c0eb5665f9e",
+  "sequence": 9,
+  "lastEventHash": "sha256:a0a17055f2d3a88e80da9c1a1b9618cd5c3692c7bb0d71f8b119f53e385d2b67",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -46,7 +46,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/aa91487b-a63a-4063-a38c-f018cef0d264/.pi/forge/aa91487b-a63a-4063-a38c-f018cef0d264-investigate-1.json",
       "subagentRunId": "0cf6f747-68da-4e46-af4a-74605a40b698",
@@ -55,7 +55,19 @@
       "startedAt": "2026-08-25T18:50:00.966Z",
       "previousSubagentRunId": "launch:investigate-1:d14a0aa7-a68a-4ce2-a714-0b6c0cdf279f",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "Supplied durable traces show two valid bounded launches reaching node.started with launch sentinels and then node.needs-human after receipt binding attempted an invalid transition back to running; another node on the same build succeeded, confirming an ordering-dependent race.",
+        "src/workflows/work-on.ts:1889-1928 publishes the real child in activeNodes and persists the link before appending the authoritative node.resumed receipt event, so an immediate async completion callback can reconcile the real child concurrently with the original binder.",
+        "src/workflows/work-on.ts:770-814 binds a recovered receipt with idempotency key node:<nodeId>:receipt-bound-recovery, while src/workflows/work-on.ts:1908-1928 uses node:<nodeId>:receipt-bound and src/workflows/work-on.ts:496-518 uses node:<nodeId>:transport-resume-receipt:<retry>; identical receipt identities therefore do not share an idempotency key across live and recovery paths.",
+        "src/workflows/journal.ts:139-152 short-circuits duplicate appends only when their idempotency key is identical. With the differing keys, the losing binder retries against advanced durable state instead of being treated as an idempotent duplicate.",
+        "src/core/state.ts:581-590 permits node.resumed only while the prior node is running, and src/core/state.ts:632-640 additionally requires previousSubagentRunId to equal the current durable child. If reconciliation has already completed the node, the original binder fails with Node <id> cannot transition to running; if only the competing bind won, it fails replacement validation.",
+        "test/workflows/work-on.test.ts:27-54 does not exercise the sentinel-to-real bind-receipt action or competing live/recovery binding order, while test/core/state.test.ts:424-478 covers only a sequential resume-intent/receipt path."
+      ],
+      "finishedAt": "2026-08-25T18:53:27.614Z"
     }
   },
   "effects": {},
@@ -67,7 +79,8 @@
     "node:resolve-1:completed": "73bbd80d-f5a1-4e78-9129-b41618e76047",
     "node:investigate-1:queued": "b081e68f-79d0-4fd5-a509-6ee0cdc30b6f",
     "node:investigate-1:started": "07ec6a1c-a345-47d0-a7f5-b9e66f3054f7",
-    "node:investigate-1:receipt-bound": "2ace6f80-45f0-4bac-8173-e542feb4f09d"
+    "node:investigate-1:receipt-bound": "2ace6f80-45f0-4bac-8173-e542feb4f09d",
+    "node:investigate-1:completed": "30a7d6dd-9149-4ab7-bbb5-bb620ef6cf56"
   },
   "eventIds": {
     "30e6ac91-cb34-47e5-ba6f-432ab5cf60ea": true,
@@ -77,6 +90,7 @@
     "73bbd80d-f5a1-4e78-9129-b41618e76047": true,
     "b081e68f-79d0-4fd5-a509-6ee0cdc30b6f": true,
     "07ec6a1c-a345-47d0-a7f5-b9e66f3054f7": true,
-    "2ace6f80-45f0-4bac-8173-e542feb4f09d": true
+    "2ace6f80-45f0-4bac-8173-e542feb4f09d": true,
+    "30a7d6dd-9149-4ab7-bbb5-bb620ef6cf56": true
   }
 }
