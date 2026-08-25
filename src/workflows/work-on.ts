@@ -1555,6 +1555,16 @@ export class ForgeWorkOnController {
         )
         .sort((left, right) => right.attempt - left.attempt)[0];
       const terminalDecision = decisionNode?.finalReviewDecision;
+      // Capture all Git-dependent terminal evidence before deleting the owned
+      // worktree. Cleanup is destructive, so no later renderer may run git diff.
+      const terminalAggregate =
+        pull && terminalDecision && mergeNode?.headSha
+          ? await this.#aggregateFromState(
+              link,
+              terminalState.state,
+              decisionNode.attempt,
+            )
+          : undefined;
       const cleanupEffect = terminalState.state.effects[`cleanup:${link.forgeRunId}`];
       if (!cleanupEffect) {
         await this.#git.deleteRemoteBranch(link.prepared, ctx.signal);
@@ -1579,16 +1589,11 @@ export class ForgeWorkOnController {
         "owned worktree removed",
         "remote feature branch deletion is idempotent",
       ];
-      if (pull && terminalDecision && mergeNode?.headSha) {
-        const aggregate = await this.#aggregateFromState(
-          link,
-          terminalState.state,
-          decisionNode.attempt,
-        );
+      if (pull && terminalDecision && mergeNode?.headSha && terminalAggregate) {
         await postTerminalIssueArtifacts({
           projector,
           link,
-          result: aggregate,
+          result: terminalAggregate,
           pullNumber: pull.number,
           mergedSha: mergeNode.headSha,
           decision: terminalDecision,
