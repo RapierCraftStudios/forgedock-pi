@@ -10,8 +10,8 @@
     "ownerRunId": "fd616696-4975-49a6-9d2a-9a782a49ed27",
     "epoch": 1
   },
-  "sequence": 19,
-  "lastEventHash": "sha256:88e0256c57e1afe928756b56b66497c3202ec1fdc2f01f37c94f955e81308683",
+  "sequence": 20,
+  "lastEventHash": "sha256:2d36e16a1530c8723fcc9fbfd4ffa6f4975b7158b793a0ce257fabf1b344273f",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -128,10 +128,13 @@
       "status": "running",
       "baseSha": "86fff740db2e1ab31fc651fc80ea00ec7c5bdcbd",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a/.pi/forge/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a-implement-1.json",
-      "subagentRunId": "launch:implement-1:8673dc23-c9a9-4034-9b87-c8b3440c5769",
+      "subagentRunId": "44ff17bc-fbf6-4b26-9e21-71ec39e8de1c",
       "launchNonce": "8673dc23-c9a9-4034-9b87-c8b3440c5769",
       "launchIntent": true,
-      "startedAt": "2026-08-25T09:06:12.227Z"
+      "startedAt": "2026-08-25T09:06:12.227Z",
+      "previousSubagentRunId": "launch:implement-1:8673dc23-c9a9-4034-9b87-c8b3440c5769",
+      "transportRetries": 0,
+      "launchReceipt": true
     }
   },
   "effects": {},
@@ -154,7 +157,8 @@
     "node:prepare-worktree-1:receipt-bound": "aa918360-5fad-4832-97b5-2076460cca67",
     "node:prepare-worktree-1:completed": "fbc2fd5c-1560-4405-915d-895153c3a0a6",
     "node:implement-1:queued": "129cab71-e10d-43e6-96ec-b0531edd3437",
-    "node:implement-1:started": "50d1e8fe-8b95-4e67-8901-6b7d483ed5ef"
+    "node:implement-1:started": "50d1e8fe-8b95-4e67-8901-6b7d483ed5ef",
+    "node:implement-1:receipt-bound": "0ce8eec5-e379-463b-a1f1-6ed665538d2a"
   },
   "eventIds": {
     "a99b16b3-5107-4924-8a10-6bae25957c57": true,
@@ -175,6 +179,7 @@
     "aa918360-5fad-4832-97b5-2076460cca67": true,
     "fbc2fd5c-1560-4405-915d-895153c3a0a6": true,
     "129cab71-e10d-43e6-96ec-b0531edd3437": true,
-    "50d1e8fe-8b95-4e67-8901-6b7d483ed5ef": true
+    "50d1e8fe-8b95-4e67-8901-6b7d483ed5ef": true,
+    "0ce8eec5-e379-463b-a1f1-6ed665538d2a": true
   }
 }
