@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:dcf315458e7f13d43fe4e4e5cf374abda25c67b501dd318ac442c770b08e2746",
+  "sequence": 6,
+  "lastEventHash": "sha256:db3f280d150de9db552cfaee003a744312a5cbbe2b58609ff9fee03d097a8c10",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -39,6 +39,15 @@
         "The supplied workflow:in-review label is non-terminal and does not negate the already-established bound run identity."
       ],
       "finishedAt": "2026-08-25T17:56:57.397Z"
+    },
+    "investigate-1": {
+      "nodeId": "investigate-1",
+      "node": "investigate",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/0728ea77-6c26-447c-a00f-eb93c6edf47f/.pi/forge/0728ea77-6c26-447c-a00f-eb93c6edf47f-investigate-1.json"
     }
   },
   "effects": {},
@@ -47,13 +56,15 @@
     "node:resolve-1:queued": "8c93693b-60fb-400b-9f05-ff38f7e519be",
     "node:resolve-1:started": "8a12bb8d-c075-40ff-ae51-f60c00a61d6e",
     "node:resolve-1:receipt-bound": "6c77206a-cc60-44ef-933a-5932d86b70b4",
-    "node:resolve-1:completed": "13413ef3-0a5e-4383-ae29-5dfbd36daa9e"
+    "node:resolve-1:completed": "13413ef3-0a5e-4383-ae29-5dfbd36daa9e",
+    "node:investigate-1:queued": "8644e7cd-dcd9-4c8d-bd65-4fb4bf2c618b"
   },
   "eventIds": {
     "469de514-67bc-4228-9327-0648d8a035ef": true,
     "8c93693b-60fb-400b-9f05-ff38f7e519be": true,
     "8a12bb8d-c075-40ff-ae51-f60c00a61d6e": true,
     "6c77206a-cc60-44ef-933a-5932d86b70b4": true,
-    "13413ef3-0a5e-4383-ae29-5dfbd36daa9e": true
+    "13413ef3-0a5e-4383-ae29-5dfbd36daa9e": true,
+    "8644e7cd-dcd9-4c8d-bd65-4fb4bf2c618b": true
   }
 }
