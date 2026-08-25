@@ -10,8 +10,8 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 7,
-  "lastEventHash": "sha256:21438a9f28366f2b8b5a7a55c148db0e2eb667a906bb456107b3cc77480e119c",
+  "sequence": 8,
+  "lastEventHash": "sha256:dabcf55be2b1925314fefff7180e62307606b8a9e732da520875f49dc1507db1",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -48,10 +48,13 @@
       "status": "running",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/60698a6f-c159-4f2b-88a0-7f6552382e83/.pi/forge/60698a6f-c159-4f2b-88a0-7f6552382e83-investigate-1.json",
-      "subagentRunId": "launch:investigate-1:46326f06-15dd-4f9a-92d0-e7c6f2b2b649",
+      "subagentRunId": "f2c7a5af-9c1d-4afa-91a3-59530f52e048",
       "launchNonce": "46326f06-15dd-4f9a-92d0-e7c6f2b2b649",
       "launchIntent": true,
-      "startedAt": "2026-08-25T13:20:52.455Z"
+      "startedAt": "2026-08-25T13:20:52.455Z",
+      "previousSubagentRunId": "launch:investigate-1:46326f06-15dd-4f9a-92d0-e7c6f2b2b649",
+      "transportRetries": 0,
+      "launchReceipt": true
     }
   },
   "effects": {},
@@ -62,7 +65,8 @@
     "node:resolve-1:receipt-bound": "7ebe5af5-97bc-42f1-92a1-1f998e7cd149",
     "node:resolve-1:completed": "2d905a9c-34c6-4a14-a695-5059a5a43deb",
     "node:investigate-1:queued": "9d27afd2-5aaa-456e-9db8-bb0cb4deeadb",
-    "node:investigate-1:started": "b21e90cc-3821-4fb4-9a1b-f304dba02aa3"
+    "node:investigate-1:started": "b21e90cc-3821-4fb4-9a1b-f304dba02aa3",
+    "node:investigate-1:receipt-bound": "ce118a1e-c42c-45d8-9b5b-afac6d9ad16b"
   },
   "eventIds": {
     "87099038-93e7-477f-a866-f5ecd3967037": true,
@@ -71,6 +75,7 @@
     "7ebe5af5-97bc-42f1-92a1-1f998e7cd149": true,
     "2d905a9c-34c6-4a14-a695-5059a5a43deb": true,
     "9d27afd2-5aaa-456e-9db8-bb0cb4deeadb": true,
-    "b21e90cc-3821-4fb4-9a1b-f304dba02aa3": true
+    "b21e90cc-3821-4fb4-9a1b-f304dba02aa3": true,
+    "ce118a1e-c42c-45d8-9b5b-afac6d9ad16b": true
   }
 }
