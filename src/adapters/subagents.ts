@@ -6,12 +6,12 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
   FORGE_REVIEWER_OUTPUT_SCHEMA,
   FORGE_WORK_ON_OUTPUT_SCHEMA,
-} from "../agents/contracts.ts";
+} from "../core/agent-contracts.ts";
 import {
   FORGE_REVIEW_CORRECTNESS_AGENT,
   FORGE_REVIEW_SECURITY_AGENT,
   FORGE_WORK_ON_AGENT,
-} from "../agents/register.ts";
+} from "../core/agent-roles.ts";
 import type { ForgePolicy } from "../core/policy.ts";
 
 const RPC_REQUEST = "subagents:rpc:v1:request";

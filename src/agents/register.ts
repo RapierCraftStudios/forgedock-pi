@@ -5,27 +5,23 @@ import {
   registerAgent,
   type RuntimeAgentRegistration,
 } from "pi-subagents/agents";
+import {
+  FORGE_REVIEW_CORRECTNESS_AGENT,
+  FORGE_REVIEW_SECURITY_AGENT,
+  FORGE_REVIEW_TOOLS,
+  FORGE_WORK_ON_AGENT,
+  FORGE_WORK_ON_MAX_DEPTH,
+  FORGE_WORK_ON_TOOLS,
+} from "../core/agent-roles.ts";
 
-export const FORGE_WORK_ON_AGENT = "forge-work-on";
-export const FORGE_REVIEW_CORRECTNESS_AGENT = "forge-review-correctness";
-export const FORGE_REVIEW_SECURITY_AGENT = "forge-review-security";
-export const FORGE_REVIEW_TOOLS = ["read", "grep", "find", "ls"] as const;
-export const FORGE_WORK_ON_TOOLS = [
-  "read",
-  "edit",
-  "write",
-  "grep",
-  "find",
-  "ls",
-  "subagent",
-  "forge_checkpoint",
-  "forge_verify",
-  "forge_diff",
-  "forge_commit",
-  "forge_prepare_review",
-  "forge_finalize_work_on",
-] as const;
-export const FORGE_WORK_ON_MAX_DEPTH = 2;
+export {
+  FORGE_REVIEW_CORRECTNESS_AGENT,
+  FORGE_REVIEW_SECURITY_AGENT,
+  FORGE_REVIEW_TOOLS,
+  FORGE_WORK_ON_AGENT,
+  FORGE_WORK_ON_MAX_DEPTH,
+  FORGE_WORK_ON_TOOLS,
+} from "../core/agent-roles.ts";
 
 const REVIEW_PROTOCOL = `
 Return only the required structured result. Bind every finding to the supplied run ID and exact head SHA. A finding needs an exact file and line, observable impact, and concrete code-path or input evidence. Use confirmed only when the failure is demonstrated; otherwise use likely or possible. Do not edit files, launch subagents, access GitHub, or make merge decisions.
