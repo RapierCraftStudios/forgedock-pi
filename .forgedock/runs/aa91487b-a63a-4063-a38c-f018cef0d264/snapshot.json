@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 20,
-  "lastEventHash": "sha256:f87ea79e01784911550012bd6011d6335885870e8aeab45fef63644fa1bb99ec",
+  "sequence": 21,
+  "lastEventHash": "sha256:3e260f8140e84429b035bcb091b2de102a9e1469a11f24bd4162ae049bcee4c7",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -134,7 +134,7 @@
       "node": "implement",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/aa91487b-a63a-4063-a38c-f018cef0d264/.pi/forge/aa91487b-a63a-4063-a38c-f018cef0d264-implement-1.json",
       "subagentRunId": "4f2adc59-eaab-4e9e-8766-76e38e750b0c",
@@ -143,7 +143,18 @@
       "startedAt": "2026-08-25T18:59:47.867Z",
       "previousSubagentRunId": "launch:implement-1:fd3e6cb0-ef7f-478d-b83c-d6c9ec0a81fc",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "f8a5269e9765004b3c830bc11551bf4ddaea53fa",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "Commit f8a5269e9765004b3c830bc11551bf4ddaea53fa introduces one validated launch-receipt idempotency key derived from node ID, attempt, launch nonce, and provider run ID.",
+        "Initial launch binding, recovered completion binding, and transport-resume binding now use the same canonical identity, allowing RunJournal to consume duplicate callbacks idempotently before applying a second node.resumed transition.",
+        "Recovery binding requires a durable launch nonce and rejects a conflicting active-link nonce; sentinel provider IDs and invalid identity fields fail closed.",
+        "Full repository check passed with TypeScript validation and 82 passing tests; the focused work-on suite passed all 13 tests.",
+        "The committed worktree is clean and changes are limited to the two allowed paths."
+      ],
+      "finishedAt": "2026-08-25T19:03:52.688Z"
     }
   },
   "effects": {},
@@ -167,7 +178,8 @@
     "node:prepare-worktree-1:completed": "7a0ffc26-8af5-4b0f-8f45-3fe1a8976391",
     "node:implement-1:queued": "e10b1f20-f88d-4f94-a504-3694dc1ae7bb",
     "node:implement-1:started": "77d21d63-55fa-483f-af75-d6724c95ee29",
-    "node:implement-1:receipt-bound": "00d8bfa9-89df-4c9a-99df-785cb03617f6"
+    "node:implement-1:receipt-bound": "00d8bfa9-89df-4c9a-99df-785cb03617f6",
+    "node:implement-1:completed": "5ccd988d-08f7-4893-9289-818092a69dc5"
   },
   "eventIds": {
     "30e6ac91-cb34-47e5-ba6f-432ab5cf60ea": true,
@@ -189,6 +201,7 @@
     "7a0ffc26-8af5-4b0f-8f45-3fe1a8976391": true,
     "e10b1f20-f88d-4f94-a504-3694dc1ae7bb": true,
     "77d21d63-55fa-483f-af75-d6724c95ee29": true,
-    "00d8bfa9-89df-4c9a-99df-785cb03617f6": true
+    "00d8bfa9-89df-4c9a-99df-785cb03617f6": true,
+    "5ccd988d-08f7-4893-9289-818092a69dc5": true
   }
 }
