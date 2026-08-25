@@ -3,11 +3,11 @@
   "orchestrationId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
   "repository": "RapierCraftStudios/forgedock-pi",
   "integrationBranch": "dogfood",
-  "status": "running",
+  "status": "cancelled",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 39,
-  "lastEventHash": "sha256:50d4686240e5c0f90fa43149a4d3ef68d87b6b21d3ac12bc3d5c7b594ca57514",
+  "sequence": 40,
+  "lastEventHash": "sha256:9642d799d931ff2c6ebd65cd4c9ffa0162f75e267a6d177d5628f79fefb59136",
   "lanes": [
     {
       "issueNumber": 49,
@@ -102,7 +102,10 @@
     "lease:heartbeat:2026-08-25T18:39:14.323Z": "cb386bf2-5e0b-4df9-8dcc-e5eda805c862",
     "lease:heartbeat:2026-08-25T18:42:39.329Z": "f5feff8e-0d49-45b8-b32d-3138574aaf4d",
     "lane:50:needs-human": "869155fd-8edb-48a0-959c-1c7e0164d6b1",
-    "lease:heartbeat:2026-08-25T18:43:43.779Z": "c7c7664a-3fe1-4c47-93d3-abd7f72cbb74"
+    "lease:heartbeat:2026-08-25T18:43:43.779Z": "c7c7664a-3fe1-4c47-93d3-abd7f72cbb74",
+    "orchestration:cancel": "91e03bc2-4264-4505-95ce-0fcc54a36706"
   },
-  "createdAt": "2026-08-25T17:55:15.729Z"
+  "createdAt": "2026-08-25T17:55:15.729Z",
+  "reason": "Cancelled by the operator through /forge:cancel.",
+  "completedAt": "2026-08-25T18:44:05.225Z"
 }
