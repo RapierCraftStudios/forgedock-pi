@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 28,
-  "lastEventHash": "sha256:6f21abe66be1d6dffd581b8cbc7fdb8358f2cb8f808fe6af11fb9dc777ddcfcf",
+  "sequence": 29,
+  "lastEventHash": "sha256:736bbe3b8a35f0548a7d1cff7590cf8f7980a9ca1f94791696f8a80613bee2e9",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -199,7 +199,7 @@
       "node": "prepare-pr",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/91fd4701-34b2-4f98-9c38-a66277301579/.pi/forge/91fd4701-34b2-4f98-9c38-a66277301579-prepare-pr-1.json",
       "subagentRunId": "dda90957-04dd-4c95-b86f-91b7aa80a38f",
@@ -208,7 +208,15 @@
       "startedAt": "2026-08-25T19:55:16.473Z",
       "previousSubagentRunId": "launch:prepare-pr-1:3a5e8091-0261-46fd-a714-cf0f92157142",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "d923c7380dbec377a759cfd6a1189e379bc958cd",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "forge_prepare_review created or reused PR #61 targeting dogfood and froze review head d923c7380dbec377a759cfd6a1189e379bc958cd.",
+        "The prepared review route declares the required correctness and security domains."
+      ],
+      "finishedAt": "2026-08-25T19:56:31.627Z"
     }
   },
   "effects": {},
@@ -240,7 +248,8 @@
     "node:verify-1:completed": "a7635dee-f61f-4482-855c-95dc11f54a42",
     "node:prepare-pr-1:queued": "56c31530-2566-4ae2-8266-31ef352163c2",
     "node:prepare-pr-1:started": "74e7a4b8-ab1b-459c-a3a9-2d59a2906f93",
-    "node:prepare-pr-1:receipt-bound": "dec5f44f-e653-40e3-a9f0-3f97b8f211a4"
+    "node:prepare-pr-1:receipt-bound": "dec5f44f-e653-40e3-a9f0-3f97b8f211a4",
+    "node:prepare-pr-1:completed": "bd687264-fea1-49bf-a776-3bf84b850897"
   },
   "eventIds": {
     "ba49bd33-cd25-4d3a-8106-d3166e61f8e2": true,
@@ -270,6 +279,7 @@
     "a7635dee-f61f-4482-855c-95dc11f54a42": true,
     "56c31530-2566-4ae2-8266-31ef352163c2": true,
     "74e7a4b8-ab1b-459c-a3a9-2d59a2906f93": true,
-    "dec5f44f-e653-40e3-a9f0-3f97b8f211a4": true
+    "dec5f44f-e653-40e3-a9f0-3f97b8f211a4": true,
+    "bd687264-fea1-49bf-a776-3bf84b850897": true
   }
 }
