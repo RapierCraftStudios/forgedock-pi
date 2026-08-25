@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import type {
   ExtensionAPI,
   ExtensionCommandContext,
+  ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
@@ -17,6 +18,45 @@ import {
   FORGEDOCK_LEASE_SCHEMA,
   FORGEDOCK_PI_VERSION,
 } from "../core/version.ts";
+
+export interface OrchestrationConfirmationInput {
+  issueNumbers: readonly number[];
+  sourceExpression: string;
+  resolutionSummary: string;
+}
+
+/** Require an operator gesture before a model-callable orchestration can write. */
+export async function confirmOrchestrationDispatch(
+  ctx: Pick<ExtensionContext, "hasUI" | "ui">,
+  input: OrchestrationConfirmationInput,
+): Promise<void> {
+  if (!ctx.hasUI)
+    throw new Error(
+      "forge_orchestrate requires interactive operator confirmation.",
+    );
+  const confirmed = await ctx.ui.confirm(
+    "Launch ForgeDock orchestration?",
+    [
+      `Issues: ${input.issueNumbers.map((issue) => `#${issue}`).join(", ")}`,
+      `Source: ${input.sourceExpression}`,
+      `Resolution: ${input.resolutionSummary}`,
+      "This starts repository writers and may merge changes under tracked policy.",
+    ].join("\n"),
+  );
+  if (!confirmed)
+    throw new Error("ForgeDock orchestration was not confirmed by the operator.");
+}
+
+export async function confirmExpiredLeaseTakeover(
+  ctx: Pick<ExtensionContext, "hasUI" | "ui">,
+  ownerRunId: string,
+): Promise<boolean> {
+  if (!ctx.hasUI) return false;
+  return ctx.ui.confirm(
+    "Take over expired ForgeDock lease?",
+    `Expired orchestration ${ownerRunId} still owns the repository lease. Confirm cancellation and takeover.`,
+  );
+}
 
 export function registerForgeCommands(
   pi: ExtensionAPI,
@@ -46,8 +86,10 @@ export function registerForgeCommands(
       }),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      await confirmOrchestrationDispatch(ctx, params);
       const result = await orchestrator.start(params.issueNumbers, ctx, {
-        allowExpiredTakeover: true,
+        confirmExpiredTakeover: (ownerRunId) =>
+          confirmExpiredLeaseTakeover(ctx, ownerRunId),
       });
       return {
         content: [

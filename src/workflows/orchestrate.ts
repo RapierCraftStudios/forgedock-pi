@@ -123,7 +123,9 @@ export class ForgeOrchestrationController {
   async start(
     issueNumbers: readonly number[],
     ctx: ExtensionContext,
-    options: { allowExpiredTakeover?: boolean } = {},
+    options: {
+      confirmExpiredTakeover?: (ownerRunId: string) => Promise<boolean>;
+    } = {},
   ): Promise<StartOrchestrationResult> {
     validateIssueNumbers(issueNumbers);
     const repositoryRoot = await this.#git.resolveRepositoryRoot(
@@ -156,11 +158,14 @@ export class ForgeOrchestrationController {
       ctx.signal,
     );
     if (leaseProbe.lease && isLeaseExpired(leaseProbe.lease, new Date())) {
-      if (!options.allowExpiredTakeover)
-        throw new Error(
-          `Repository lease ${leaseProbe.lease.ownerRunId} expired and requires confirmed takeover.`,
-        );
       const expiredId = leaseProbe.lease.ownerRunId;
+      if (
+        !options.confirmExpiredTakeover ||
+        !(await options.confirmExpiredTakeover(expiredId))
+      )
+        throw new Error(
+          `Repository lease ${expiredId} expired and requires confirmed takeover.`,
+        );
       const expired = await store.readOrchestration(expiredId, ctx.signal);
       if (!expired.state || expired.state.status !== "running")
         throw new Error(
@@ -168,8 +173,7 @@ export class ForgeOrchestrationController {
         );
       await new OrchestrationJournal(store).cancel({
         orchestrationId: expiredId,
-        reason:
-          "Lease expired after its owning Pi session stopped heartbeating; abandoned during a confirmed replacement dispatch.",
+        reason: `Lease expired after its owning Pi session stopped heartbeating; takeover confirmed by operator session ${ctx.sessionManager.getSessionId()}.`,
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
     }

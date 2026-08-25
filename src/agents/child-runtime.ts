@@ -2,14 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import {
-  basename,
-  dirname,
-  isAbsolute,
-  join,
-  relative,
-  resolve,
-} from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -20,16 +13,27 @@ import {
 } from "pi-subagents/capability-ceiling";
 
 import { FetchGitHubTransport } from "../adapters/github-api.ts";
+import { parseChangedGitPaths } from "../adapters/git.ts";
 import { GitHubIssueProjector } from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
+import {
+  assertBuilderContractPaths,
+  type BuilderPathContract,
+  validateBuilderPathContract,
+} from "../core/builder-contract.ts";
 import {
   RUN_PHASES,
   type RunEvent,
   type RunEventType,
   type RunPhase,
 } from "../core/events.ts";
-import { RunJournal } from "../workflows/journal.ts";
+import { RunJournal } from "../adapters/run-journal.ts";
+import {
+  canonicalizePotentialPath,
+  isPathWithin,
+  toolPath,
+} from "./child-containment.ts";
 import {
   FORGE_NODE_OUTPUT_SCHEMA,
   FORGE_REVIEWER_OUTPUT_SCHEMA,
@@ -68,6 +72,7 @@ interface ForgeChildBinding {
   baseSha: string;
   maxReviewRounds: number;
   verificationCommands: Readonly<Record<string, BoundVerificationCommand>>;
+  builderContract?: BuilderPathContract;
   nodeId?: string;
   node?: string;
   nodeAttempt?: number;
@@ -417,6 +422,12 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         throw new Error(
           "Cannot create a Forge commit with no worktree changes.",
         );
+      if (binding.node === "implement" && !binding.builderContract)
+        throw new Error(
+          "Implementation commit refused without an accepted builder contract.",
+        );
+      if (binding.builderContract)
+        assertBuilderContractPaths(binding.builderContract, changedPaths);
       const added = await runProcess(
         "git",
         ["-C", root, "add", "-A", "--", ...changedPaths],
@@ -431,7 +442,16 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         throw new Error(`git add failed: ${added.stderr}`);
       const staged = await runProcess(
         "git",
-        ["-C", root, "diff", "--cached", "--name-only", "-z", "--"],
+        [
+          "-C",
+          root,
+          "diff",
+          "--cached",
+          "--name-status",
+          "--find-renames",
+          "-z",
+          "--",
+        ],
         {
           cwd: root,
           timeoutMs: 30_000,
@@ -441,13 +461,15 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       );
       if (staged.exitCode !== 0)
         throw new Error(`staged-path validation failed: ${staged.stderr}`);
-      const stagedPaths = parseNullSeparatedPaths(staged.stdout);
+      const stagedPaths = parseChangedGitPaths(staged.stdout);
       if (stagedPaths.some(isForgeRuntimePath))
         throw new Error("Refusing to commit staged Forge runtime paths.");
       if (stagedPaths.length === 0)
         throw new Error(
           "Cannot create a Forge commit with no validated implementation changes.",
         );
+      if (binding.builderContract)
+        assertBuilderContractPaths(binding.builderContract, stagedPaths);
       const message =
         params.kind === "implementation"
           ? `forge: implement issue #${binding.issueNumber}`
@@ -474,6 +496,34 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       });
       if (head.exitCode !== 0 || !head.stdout.trim())
         throw new Error(`Unable to resolve committed HEAD: ${head.stderr}`);
+      if (binding.builderContract) {
+        const committedPaths = await runProcess(
+          "git",
+          [
+            "-C",
+            root,
+            "diff",
+            "--name-status",
+            "--find-renames",
+            "-z",
+            binding.baseSha,
+            head.stdout.trim(),
+            "--",
+          ],
+          {
+            cwd: root,
+            timeoutMs: 30_000,
+            env,
+            ...(signal ? { signal } : {}),
+          },
+        );
+        if (committedPaths.exitCode !== 0)
+          throw new Error(`git committed diff failed: ${committedPaths.stderr}`);
+        assertBuilderContractPaths(
+          binding.builderContract,
+          parseChangedGitPaths(committedPaths.stdout),
+        );
+      }
       return {
         content: [
           {
@@ -578,6 +628,34 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       const headSha = head.stdout.trim();
       if (head.exitCode !== 0 || !headSha)
         throw new Error(`Unable to resolve review HEAD: ${head.stderr}`);
+      if (binding.builderContract) {
+        const committedPaths = await runProcess(
+          "git",
+          [
+            "-C",
+            root,
+            "diff",
+            "--name-status",
+            "--find-renames",
+            "-z",
+            binding.baseSha,
+            headSha,
+            "--",
+          ],
+          {
+            cwd: root,
+            timeoutMs: 30_000,
+            env: safeEnvironment(binding.runId),
+            ...(signal ? { signal } : {}),
+          },
+        );
+        if (committedPaths.exitCode !== 0)
+          throw new Error(`git committed diff failed: ${committedPaths.stderr}`);
+        assertBuilderContractPaths(
+          binding.builderContract,
+          parseChangedGitPaths(committedPaths.stdout),
+        );
+      }
       if (binding.refresh && !refreshPushLeaseSha)
         throw new Error(
           "Refreshed review cannot push before forge_refresh_base establishes the remote branch lease.",
@@ -979,6 +1057,8 @@ function readBinding(): ForgeChildBinding {
   ) {
     throw new Error("Forge binding maxReviewRounds must be from 1 through 5.");
   }
+  const builderContract = value.builderContract;
+  if (builderContract !== undefined) validateBuilderPathContract(builderContract);
   const commands = value.verificationCommands;
   if (!commands || typeof commands !== "object" || Array.isArray(commands))
     throw new Error("Forge binding verificationCommands must be an object.");
@@ -1029,6 +1109,7 @@ function readBinding(): ForgeChildBinding {
     baseSha: value.baseSha as string,
     maxReviewRounds: value.maxReviewRounds as number,
     verificationCommands,
+    ...(builderContract ? { builderContract } : {}),
     ...(node
       ? {
           nodeId: value.nodeId as string,
@@ -1426,13 +1507,6 @@ export function isForgeRuntimePath(value: string): boolean {
   );
 }
 
-function parseNullSeparatedPaths(output: string): string[] {
-  return output
-    .split("\0")
-    .filter(Boolean)
-    .map(normalizeRepositoryPath);
-}
-
 export function parseGitStatusPaths(output: string): string[] {
   const records = output.split("\0").filter(Boolean);
   const paths: string[] = [];
@@ -1468,40 +1542,6 @@ function nonRuntimeStatus(output: string): string {
     })
     .join("\n")
     .trim();
-}
-
-function toolPath(input: unknown): string | undefined {
-  if (!input || typeof input !== "object" || Array.isArray(input))
-    return undefined;
-  const value = (input as Record<string, unknown>).path;
-  return typeof value === "string" && value.trim() ? value : undefined;
-}
-
-async function canonicalizePotentialPath(
-  cwd: string,
-  inputPath: string,
-): Promise<string> {
-  const absolute = isAbsolute(inputPath)
-    ? resolve(inputPath)
-    : resolve(cwd, inputPath);
-  const missingSegments: string[] = [];
-  let cursor = absolute;
-  while (true) {
-    try {
-      const existing = await realpath(cursor);
-      return resolve(existing, ...missingSegments);
-    } catch {
-      const parent = dirname(cursor);
-      if (parent === cursor) return absolute;
-      missingSegments.unshift(basename(cursor));
-      cursor = parent;
-    }
-  }
-}
-
-function isPathWithin(root: string, target: string): boolean {
-  const child = relative(root, target);
-  return child === "" || (!child.startsWith("..") && !isAbsolute(child));
 }
 
 async function resolveGitHubToken(

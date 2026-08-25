@@ -8,6 +8,7 @@ import test from "node:test";
 
 import {
   GitWorktreeManager,
+  parseChangedGitPaths,
   type CommandExecutor,
 } from "../../src/adapters/git.ts";
 
@@ -44,6 +45,14 @@ const executor: CommandExecutor = {
 async function git(cwd: string, ...args: string[]): Promise<void> {
   await execFileAsync("git", args, { cwd, encoding: "utf8" });
 }
+
+test("NUL-delimited changed paths retain rename sources, destinations, and deletions", () => {
+  assert.deepEqual(
+    parseChangedGitPaths("R100\0src/old.ts\0src/new.ts\0D\0src/gone.ts\0"),
+    ["src/gone.ts", "src/new.ts", "src/old.ts"],
+  );
+  assert.throws(() => parseChangedGitPaths("R100\0src/old.ts\0"));
+});
 
 test("worktree manager creates an issue branch from integration and cleans it safely", async () => {
   const root = await mkdtemp(join(tmpdir(), "forgedock-git-test-"));

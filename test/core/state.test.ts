@@ -8,6 +8,7 @@ import {
   type RunEventType,
   type RunEventPayload,
 } from "../../src/core/events.ts";
+import { createBuilderPathContract } from "../../src/core/builder-contract.ts";
 import { acquireLease, takeoverLease } from "../../src/core/lease.ts";
 import {
   applyRunEvent,
@@ -110,6 +111,91 @@ function completeResolve(state: RunState): RunState {
     ),
   );
 }
+
+test("completed plan nodes persist a hash-bound builder path contract", () => {
+  let state = initializedState();
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.queued",
+      { nodeId: "plan-1", node: "plan", attempt: 1 },
+      "plan-node:queue",
+      1,
+    ),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.started",
+      { nodeId: "plan-1", node: "plan", attempt: 1 },
+      "plan-node:start",
+      1,
+    ),
+  );
+  const contract = createBuilderPathContract(["src/**", "test/**"]);
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.completed",
+      {
+        nodeId: "plan-1",
+        node: "plan",
+        attempt: 1,
+        builderContract: contract,
+      },
+      "plan-node:complete",
+      1,
+    ),
+  );
+  assert.deepEqual(state.nodes["plan-1"]?.builderContract, contract);
+
+  const tampered = { ...contract, contractHash: "tampered" };
+  let invalid = initializedState();
+  invalid = applyRunEvent(
+    invalid,
+    nextEvent(
+      invalid,
+      "node.queued",
+      { nodeId: "plan-1", node: "plan", attempt: 1 },
+      "invalid-plan:queue",
+      1,
+    ),
+  );
+  invalid = applyRunEvent(
+    invalid,
+    nextEvent(
+      invalid,
+      "node.started",
+      { nodeId: "plan-1", node: "plan", attempt: 1 },
+      "invalid-plan:start",
+      1,
+    ),
+  );
+  assert.throws(
+    () =>
+      applyRunEvent(
+        invalid,
+        nextEvent(
+          invalid,
+          "node.completed",
+          {
+            nodeId: "plan-1",
+            node: "plan",
+            attempt: 1,
+            builderContract: tampered,
+          },
+          "invalid-plan:complete",
+          1,
+        ),
+      ),
+    (error: unknown) =>
+      error instanceof StateTransitionError &&
+      error.code === "invalid-builder-contract",
+  );
+});
 
 test("state reducer enforces ordered phase transitions", () => {
   const state = initializedState();

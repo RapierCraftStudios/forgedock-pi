@@ -19,7 +19,6 @@ import {
   findForgeReviewerResult,
   findForgeWorkOnResult,
   type ForgeNodeResult,
-  type ForgeReviewFindingResult,
   type ForgeReviewerResult,
   type ForgeWorkOnResult,
 } from "../agents/contracts.ts";
@@ -31,6 +30,11 @@ import {
   checkPreMergeAuditTrail,
   checkReviewDecisionAuditTrail,
 } from "../core/artifact-protocol.ts";
+import {
+  assertBuilderContractPaths,
+  createBuilderPathContract,
+  type BuilderPathContract,
+} from "../core/builder-contract.ts";
 import { renderPhaseArtifact } from "../core/comment-contract.ts";
 import {
   chooseNextExecutableNode,
@@ -51,6 +55,23 @@ import {
   type VerificationResult,
 } from "../core/review.ts";
 import { RunJournal } from "./journal.ts";
+import { publishReviewFindingIssues } from "./review-findings.ts";
+export {
+  findingPriority,
+  lineWithinTolerance,
+  publishReviewFindingIssues,
+  reviewFindingMarker,
+  similarFindingTitle,
+} from "./review-findings.ts";
+import {
+  classifyRemediationFindings,
+  closeAddressedReviewFindingIssues,
+  isRemediationCandidate,
+  loadAuthoritativeReviewFindingIssues,
+  readRemediationMarkerState,
+  remediationCompleteMarker,
+  remediationStartMarker,
+} from "./remediation.ts";
 
 const RUN_LINK_ENTRY = "forgedock-run-link/v1";
 
@@ -90,6 +111,7 @@ export interface ActiveRunLink {
   findingIssueMap: Record<string, number>;
   issueContext: string;
   planContext?: string;
+  builderContract?: BuilderPathContract;
   activeNodes: Record<string, ActiveNodeRunLink>;
   currentNodeId?: string;
   nodeResultPath?: string;
@@ -907,6 +929,15 @@ export class ForgeWorkOnController {
       if (!comments.some((comment) => comment.includes(renderedArtifact)))
         throw new Error(`Node ${nodeResult.nodeId} artifact read-back failed.`);
     }
+    const completedBuilderContract =
+      nodeResult.status === "completed" &&
+      nodeResult.artifact?.phase === "plan"
+        ? createBuilderPathContract(nodeResult.artifact.allowedPaths)
+        : undefined;
+    if (completedBuilderContract) {
+      link.planContext = JSON.stringify(nodeResult.artifact, null, 2);
+      link.builderContract = completedBuilderContract;
+    }
     const journal = new RunJournal(store);
     const reportedVerification = new Map(
       nodeResult.verification.map((result) => [result.name, result]),
@@ -948,6 +979,9 @@ export class ForgeWorkOnController {
         outcome: nodeResult.outcome,
         reviewerResult: nodeResult.reviewerResult,
         verificationResults,
+        ...(completedBuilderContract
+          ? { builderContract: completedBuilderContract }
+          : {}),
         evidence: nodeResult.evidence,
         reason: nodeResult.blocker,
       },
@@ -1064,8 +1098,6 @@ export class ForgeWorkOnController {
       this.#emitLifecycle(link, { reason: nodeResult.blocker ?? nodeResult.status, nodeId: nodeResult.nodeId });
       return;
     }
-    if (nodeResult.artifact?.phase === "plan")
-      link.planContext = JSON.stringify(nodeResult.artifact, null, 2);
     if (nodeResult.node === "prepare-pr" || nodeResult.node === "verify" || nodeResult.node === "implement")
       link.reviewHeadSha = nodeResult.headSha;
     const snapshot = await store.readRun(link.forgeRunId, ctx.signal);
@@ -1205,6 +1237,11 @@ export class ForgeWorkOnController {
         throw new Error(
           "Implementation artifact commit or changed files do not match Git.",
         );
+      if (!link.builderContract)
+        throw new Error(
+          "Implementation artifact has no accepted builder path contract.",
+        );
+      assertBuilderContractPaths(link.builderContract, actualFiles);
     }
     if (
       (artifact.phase === "verify" && artifact.headSha !== nodeResult.headSha) ||
@@ -1443,7 +1480,40 @@ export class ForgeWorkOnController {
       ];
       const gate = evaluateReviewGate({ identity: { repository: link.repository, runId: link.forgeRunId, pullRequest: pull.number, headSha: aggregate.review.headSha, baseSha: aggregate.baseSha, rosterVersion: "forgedock.review-roster/v1" }, currentHeadSha: pull.headSha, currentBaseSha: pull.baseSha, requiredReviewers: policy.review.required, completedReviewers: aggregate.review.completedReviewers, findings: aggregate.review.findings as readonly ReviewFinding[], checks, mergeability: pull.mergeability, leaseValid: runLeaseAuthorityMatches(current.state, current.lease, link), baseBranch: pull.baseRef, protectedBranches: policy.branches.protected, autoMergeAuthorized: canAutoMerge(policy, pull.baseRef), malformedResults: currentReviewFailures });
       finalReviewDecision = gate;
+      const priorFindingIssueMap = { ...link.findingIssueMap };
       link.findingIssueMap = await publishReviewFindingIssues({ github, pullNumber: pull.number, link, result: aggregate, signal: ctx.signal });
+      if (aggregate.review.rounds > 1) {
+        await closeAddressedReviewFindingIssues({
+          github,
+          pullNumber: pull.number,
+          priorFindingIssueMap,
+          activeFindingIds: new Set(
+            aggregate.review.findings.map((finding) => finding.id),
+          ),
+          remediationCommitSha: aggregate.review.headSha,
+          runId: link.forgeRunId,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+        const completeMarker = remediationCompleteMarker(
+          link.forgeRunId,
+          aggregate.review.rounds - 1,
+        );
+        const completionBody = `${completeMarker}\n## Remediation Complete for PR #${pull.number}\n\n**Reviewed head**: \`${aggregate.review.headSha}\`\n**Outcome**: ${gate.decision === "approved" || gate.decision === "approved-with-follow-ups" ? "CLEAN RE-REVIEW" : "RE-ESCALATED"}\n\nFresh correctness and security review completed.`;
+        await github.postPullArtifact({
+          pullNumber: pull.number,
+          marker: completeMarker,
+          body: completionBody,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+        await projector.postArtifact({
+          issueNumber: link.issueNumber,
+          runId: link.forgeRunId,
+          eventId: `bounded-remediation-complete-${aggregate.review.headSha}`,
+          artifactKey: "remediation-complete",
+          markdown: completionBody,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+      }
       const decisionCommentId = await publishFinalReviewDecision(
         github,
         pull.number,
@@ -1468,10 +1538,62 @@ export class ForgeWorkOnController {
         `decision-comment:${decisionCommentId}`,
         ...gate.reasons,
       ];
-      const fixableFindings = aggregate.review.findings.filter((finding) => finding.confidence === "confirmed" || finding.confidence === "likely");
-      const canRemediate = gate.decision === "changes-requested" && fixableFindings.length > 0 && aggregate.review.rounds < policy.review.maxRounds;
-      outcome = gate.decision === "approved" || gate.decision === "approved-with-follow-ups" ? "awaiting-merge" : gate.decision === "needs-human" ? "needs-human" : canRemediate ? "remediation-required" : "failed";
-      if (canRemediate) link.remediationAttempts += 1;
+      const authoritativeFindings =
+        gate.decision === "changes-requested"
+          ? await loadAuthoritativeReviewFindingIssues({
+              github,
+              pullNumber: pull.number,
+              ...(ctx.signal ? { signal: ctx.signal } : {}),
+            })
+          : [];
+      const remediation = classifyRemediationFindings(
+        authoritativeFindings,
+        link.builderContract,
+      );
+      const canRemediate =
+        gate.decision === "changes-requested" &&
+        remediation.fixable.length > 0 &&
+        remediation.escalated.length === 0 &&
+        aggregate.review.rounds < policy.review.maxRounds;
+      outcome = gate.decision === "approved" || gate.decision === "approved-with-follow-ups" ? "awaiting-merge" : gate.decision === "needs-human" || gate.decision === "changes-requested" && !canRemediate ? "needs-human" : canRemediate ? "remediation-required" : "failed";
+      if (canRemediate) {
+        const attempt = aggregate.review.rounds;
+        const startMarker = remediationStartMarker(link.forgeRunId, attempt);
+        const markerState = readRemediationMarkerState(
+          await github.getComments(pull.number, ctx.signal),
+          link.forgeRunId,
+        );
+        const alreadyStarted = markerState.startedAttempts.includes(attempt);
+        const findingLines = remediation.fixable.map(
+          ({ issueNumber, finding }) =>
+            `- #${issueNumber} ${finding.id}: ${finding.summary} (${finding.file}:${finding.line})`,
+        );
+        const remediationBody = `${startMarker}\n## Remediation In Progress for PR #${pull.number}\n\n**Reviewed head**: \`${aggregate.review.headSha}\`\n**Authoritative findings**:\n${findingLines.join("\n")}\n\nApply only these in-contract findings, then run a fresh complete reviewer panel.`;
+        await github.postPullArtifact({
+          pullNumber: pull.number,
+          marker: startMarker,
+          body: remediationBody,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+        await projector.postArtifact({
+          issueNumber: link.issueNumber,
+          runId: link.forgeRunId,
+          eventId: `bounded-remediation-${aggregate.review.headSha}`,
+          artifactKey: "remediation-started",
+          markdown: remediationBody,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+        link.planContext = [
+          link.planContext,
+          "Authoritative remediation inputs:",
+          JSON.stringify(remediation.fixable, null, 2),
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+        link.remediationAttempts = alreadyStarted
+          ? Math.max(link.remediationAttempts, attempt)
+          : link.remediationAttempts + 1;
+      }
       if (outcome !== "awaiting-merge" && outcome !== "remediation-required") {
         await journal.append({ runId: link.forgeRunId, type: outcome === "needs-human" ? "node.needs-human" : "node.failed", payload: { ...common, headSha: pull.headSha, reason: gate.reasons.join(" "), evidence }, idempotencyKey: `node:${node.nodeId}:${outcome}`, sessionId, message: `Stop decision node ${node.nodeId}`, ...(ctx.signal ? { signal: ctx.signal } : {}) });
         link.status = outcome === "needs-human" ? "needs-human" : "failed";
@@ -1496,6 +1618,9 @@ export class ForgeWorkOnController {
       const mergeDecision = decision?.finalReviewDecision;
       const actualHead = await this.#git.head(link.prepared.worktreePath, ctx.signal);
       const actualFiles = await this.#git.changedFiles(link.prepared.worktreePath, link.prepared.baseSha, ctx.signal);
+      if (!link.builderContract)
+        throw new Error("Merge requires an accepted builder path contract.");
+      assertBuilderContractPaths(link.builderContract, actualFiles);
       const mergeAuthorityValid = runLeaseAuthorityMatches(
         authority.state,
         authority.lease,
@@ -1755,6 +1880,18 @@ export class ForgeWorkOnController {
       if (node.headSha && actualHead !== node.headSha) throw new Error(`Reviewer node ${node.nodeId} requires frozen head ${node.headSha}, found ${actualHead}.`);
     }
     const queuedState = await store.readRun(link.forgeRunId, ctx.signal);
+    if (!link.builderContract && queuedState.state) {
+      const durablePlan = Object.values(queuedState.state.nodes)
+        .filter(
+          (candidate) =>
+            candidate.node === "plan" &&
+            candidate.status === "completed" &&
+            candidate.builderContract,
+        )
+        .sort((left, right) => right.attempt - left.attempt)[0];
+      if (durablePlan?.builderContract)
+        link.builderContract = durablePlan.builderContract;
+    }
     const queuedNode = queuedState.state?.nodes[node.nodeId];
     if (queuedNode?.status === "completed") return;
     if (queuedNode?.status === "running" && queuedNode.subagentRunId) {
@@ -1845,6 +1982,9 @@ export class ForgeWorkOnController {
       leaseEpoch: link.leaseEpoch,
       leaseOwnerRunId: link.leaseOwnerRunId,
       policy,
+      ...(link.builderContract
+        ? { builderContract: link.builderContract }
+        : {}),
       issueContext: node.node === "implement" && node.attempt > 1
         ? `${issueContext}\n\nThis is immutable remediation attempt ${node.attempt}. Read the durable decision/review artifacts and apply only confirmed or likely in-contract findings. Do not repeat investigation or planning.`
         : issueContext,
@@ -2187,27 +2327,48 @@ export class ForgeWorkOnController {
     projector: GitHubIssueProjector;
     ctx: ExtensionContext;
   }): Promise<boolean> {
-    const fixable = input.result.review.findings.filter(
-      (finding) =>
-        finding.confidence === "confirmed" || finding.confidence === "likely",
+    const authoritative = await loadAuthoritativeReviewFindingIssues({
+      github: input.github,
+      pullNumber: input.pullNumber,
+      ...(input.ctx.signal ? { signal: input.ctx.signal } : {}),
+    });
+    const classification = classifyRemediationFindings(
+      authoritative,
+      input.link.builderContract,
     );
     if (
-      fixable.length === 0 ||
+      !isRemediationCandidate(input.result, classification.fixable) ||
+      classification.escalated.length > 0 ||
       input.link.remediationAttempts >= 1 ||
       input.result.review.rounds >= 5
     )
       return false;
-    const findingLines = fixable.map((finding) => {
-      const issueNumber = input.findingIssueMap[finding.id];
-      return `- #${issueNumber ?? "?"} ${finding.id}: ${finding.summary} (${finding.file}:${finding.line})`;
-    });
-    const remediationBody = `<!-- FORGE:REMEDIATION -->\n## Remediation In Progress for PR #${input.pullNumber}\n\n**Run**: \`${input.link.forgeRunId}\`\n**Reviewed head**: \`${input.result.review.headSha}\`\n**Fixable findings**:\n${findingLines.join("\n")}\n\nA single bounded remediation attempt is authorized. Fresh full review is mandatory.`;
+    const attempt = 1;
+    const markerState = readRemediationMarkerState(
+      await input.github.getComments(input.pullNumber, input.ctx.signal),
+      input.link.forgeRunId,
+    );
+    if (markerState.completedAttempts.includes(attempt)) return false;
+    const findingLines = classification.fixable.map(
+      ({ issueNumber, finding }) =>
+        `- #${issueNumber} ${finding.id}: ${finding.summary} (${finding.file}:${finding.line})`,
+    );
+    const startMarker = remediationStartMarker(
+      input.link.forgeRunId,
+      attempt,
+    );
+    const remediationBody = `${startMarker}\n## Remediation In Progress for PR #${input.pullNumber}\n\n**Run**: \`${input.link.forgeRunId}\`\n**Reviewed head**: \`${input.result.review.headSha}\`\n**Fixable findings**:\n${findingLines.join("\n")}\n\nA single bounded remediation attempt is authorized. Fresh full review is mandatory.`;
     await input.github.postPullArtifact({
       pullNumber: input.pullNumber,
-      marker: `<!-- FORGE:REMEDIATION run=${input.link.forgeRunId} attempt=1 -->`,
+      marker: startMarker,
       body: remediationBody,
       ...(input.ctx.signal ? { signal: input.ctx.signal } : {}),
     });
+    await input.projector.setWorkflowLabel(
+      input.link.issueNumber,
+      "workflow:in-review",
+      input.ctx.signal,
+    );
     await input.projector.postArtifact({
       issueNumber: input.link.issueNumber,
       runId: input.link.forgeRunId,
@@ -2282,17 +2443,15 @@ export class ForgeWorkOnController {
       const activeFindingIds = new Set(
         result.review.findings.map((finding) => finding.id),
       );
-      for (const [findingId, issueNumber] of Object.entries(
+      await closeAddressedReviewFindingIssues({
+        github,
+        pullNumber: existingPull.number,
         priorFindingIssueMap,
-      )) {
-        if (activeFindingIds.has(findingId)) continue;
-        await github.commentOnIssue(
-          issueNumber,
-          `Fixed by remediation of PR #${existingPull.number} at reviewed head \`${result.review.headSha}\`.`,
-          ctx.signal,
-        );
-        await github.closeIssue(issueNumber, ctx.signal);
-      }
+        activeFindingIds,
+        remediationCommitSha: result.review.headSha,
+        runId: link.forgeRunId,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
       await postRemediationArtifact({
         github,
         projector,
@@ -2371,6 +2530,8 @@ export class ForgeWorkOnController {
       throw new Error(
         "Work-on changed-file result does not match the actual committed diff.",
       );
+    if (link.builderContract)
+      assertBuilderContractPaths(link.builderContract, actualFiles);
 
     await appendPhase(
       journal,
@@ -3032,142 +3193,6 @@ async function postTerminalIssueArtifacts(input: {
   });
 }
 
-export async function publishReviewFindingIssues(input: {
-  github: GitHubWorkflowAdapter;
-  pullNumber: number;
-  link: ActiveRunLink;
-  result: ForgeWorkOnResult;
-  signal?: AbortSignal;
-}): Promise<Record<string, number>> {
-  const existing = await input.github.listIssuesByLabel(
-    "review-finding",
-    "all",
-    input.signal,
-  );
-  const issueMap: Record<string, number> = {};
-  for (const finding of input.result.review.findings) {
-    const marker = reviewFindingMarker(
-      input.pullNumber,
-      finding.id,
-      input.result.review.headSha,
-    );
-    const exact = existing.find((issue) => issue.body.includes(marker));
-    if (exact?.state === "open") {
-      issueMap[finding.id] = exact.number;
-      continue;
-    }
-    const similar = existing.find(
-      (issue) =>
-        issue.state === "open" &&
-        issue.body.includes(`**File**: \`${finding.file}\``) &&
-        lineWithinTolerance(issue.body, finding.line) &&
-        similarFindingTitle(issue.title, finding.summary),
-    );
-    if (similar) {
-      issueMap[finding.id] = similar.number;
-      continue;
-    }
-    const regression = exact?.state === "closed";
-    const priority = regression
-      ? "priority:P1"
-      : findingPriority(finding.severity);
-    const title = `fix: ${finding.summary} (review finding — PR #${input.pullNumber})`.slice(
-      0,
-      240,
-    );
-    const body = renderFindingIssueBody({
-      finding,
-      pullNumber: input.pullNumber,
-      link: input.link,
-      headSha: input.result.review.headSha,
-      marker,
-      regressionIssue: regression ? exact?.number : undefined,
-    });
-    const created = await input.github.createIssue({
-      title,
-      body,
-      labels: ["review-finding", "needs-validation", priority],
-      ...(input.signal ? { signal: input.signal } : {}),
-    });
-    issueMap[finding.id] = created.number;
-    if (!existing.some((issue) => issue.number === created.number))
-      existing.push(created);
-  }
-  if (input.result.review.findings.length > 0) {
-    const lines = input.result.review.findings.map(
-      (finding) =>
-        `- #${issueMap[finding.id]} — ${finding.id}: ${finding.summary}`,
-    );
-    await input.github.postPullArtifact({
-      pullNumber: input.pullNumber,
-      marker: `<!-- FORGE:REVIEW_FINDING_ISSUES head=${input.result.review.headSha} -->`,
-      body: `## Review Finding Issues\n\n${lines.join("\n")}`,
-      ...(input.signal ? { signal: input.signal } : {}),
-    });
-  }
-  return issueMap;
-}
-
-export function reviewFindingMarker(
-  pullNumber: number,
-  findingId: string,
-  headSha: string,
-): string {
-  return `<!-- FORGE:REVIEW_FINDING source-pr=${pullNumber} finding=${encodeURIComponent(findingId)} head=${headSha} -->`;
-}
-
-function renderFindingIssueBody(input: {
-  finding: ForgeReviewFindingResult;
-  pullNumber: number;
-  link: ActiveRunLink;
-  headSha: string;
-  marker: string;
-  regressionIssue?: number;
-}): string {
-  const evidence = input.finding.evidence
-    .map((entry) => `- ${entry}`)
-    .join("\n");
-  return `${input.marker}\n## Review Finding\n\n**Source PR**: #${input.pullNumber}\n**Source issue**: #${input.link.issueNumber}\n**Forge run**: \`${input.link.forgeRunId}\`\n**Reviewed head**: \`${input.headSha}\`\n**Reviewer**: \`${input.finding.reviewer}\`\n**Finding ID**: \`${input.finding.id}\`\n**Confidence**: ${input.finding.confidence.toUpperCase()}\n**Severity**: ${input.finding.severity.toUpperCase()}\n**Category**: ${input.finding.category}\n**File**: \`${input.finding.file}\`\n**Line**: ${input.finding.line}\n${input.regressionIssue ? `**Regression of**: #${input.regressionIssue}\n` : ""}\n### Problem\n\n${input.finding.summary}\n\n### Evidence\n\n${evidence || "- Reviewer supplied no additional evidence."}\n\n### Acceptance Criteria\n\n- [ ] Reproduce or validate the finding against the current integration branch.\n- [ ] Fix the root cause without expanding unrelated scope.\n- [ ] Add focused regression coverage.\n- [ ] Re-review the exact remediation head.\n\n<!-- FORGE:PATTERN: ${findingPattern(input.finding)} -->\n<!-- FORGE:CLASS: ${findingPattern(input.finding)} -->`;
-}
-
-function findingPattern(finding: ForgeReviewFindingResult): string {
-  return `${finding.category}-${finding.id}`
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 80);
-}
-
-export function findingPriority(severity: ForgeReviewFindingResult["severity"]): string {
-  return {
-    critical: "priority:P0",
-    high: "priority:P1",
-    medium: "priority:P2",
-    low: "priority:P3",
-  }[severity];
-}
-
-export function lineWithinTolerance(body: string, line: number): boolean {
-  const match = /\*\*Line\*\*:\s*(\d+)/.exec(body);
-  if (!match?.[1]) return false;
-  return Math.abs(Number(match[1]) - line) <= 5;
-}
-
-export function similarFindingTitle(title: string, summary: string): boolean {
-  const words = (value: string): Set<string> =>
-    new Set(
-      value
-        .toLowerCase()
-        .split(/[^a-z0-9]+/)
-        .filter((word) => word.length > 3),
-    );
-  const left = words(title);
-  const right = words(summary);
-  let shared = 0;
-  for (const word of left) if (right.has(word)) shared += 1;
-  return shared >= 3;
-}
-
 async function postRemediationArtifact(input: {
   github: GitHubWorkflowAdapter;
   projector: GitHubIssueProjector;
@@ -3181,12 +3206,16 @@ async function postRemediationArtifact(input: {
     input.result.status === "ready-for-merge"
       ? "CLEAN RE-REVIEW"
       : "RE-ESCALATED";
-  const body = `<!-- FORGE:REMEDIATION -->\n## Remediation Complete for PR #${input.pullNumber}\n\n**Attempt**: ${input.link.remediationAttempts}\n**Reviewed head**: \`${input.result.review.headSha}\`\n**Outcome**: ${outcome}\n**Remaining findings**: ${Object.entries(input.findingIssueMap)
+  const completeMarker = remediationCompleteMarker(
+    input.link.forgeRunId,
+    input.link.remediationAttempts,
+  );
+  const body = `${completeMarker}\n## Remediation Complete for PR #${input.pullNumber}\n\n**Attempt**: ${input.link.remediationAttempts}\n**Reviewed head**: \`${input.result.review.headSha}\`\n**Outcome**: ${outcome}\n**Remaining findings**: ${Object.entries(input.findingIssueMap)
     .map(([id, number]) => `#${number} (${id})`)
     .join(", ") || "none"}\n\n<!-- FORGE:REMEDIATION:COMPLETE -->`;
   await input.github.postPullArtifact({
     pullNumber: input.pullNumber,
-    marker: `<!-- FORGE:REMEDIATION:COMPLETE run=${input.link.forgeRunId} -->`,
+    marker: completeMarker,
     body,
     ...(input.signal ? { signal: input.signal } : {}),
   });
@@ -3614,6 +3643,9 @@ function normalizeActiveRunLink(value: unknown): ActiveRunLink | undefined {
     issueContext: link.issueContext ?? "",
     ...(typeof link.planContext === "string"
       ? { planContext: link.planContext }
+      : {}),
+    ...(link.builderContract
+      ? { builderContract: link.builderContract }
       : {}),
     activeNodes:
       link.activeNodes && typeof link.activeNodes === "object"

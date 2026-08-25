@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
+import type { BuilderPathContract } from "./builder-contract.ts";
 import type {
   FinalReviewDecision,
   VerificationResult,
@@ -122,6 +123,7 @@ export interface NodeEventPayload {
   publishedCommentId?: number;
   finalReviewDecision?: FinalReviewDecision;
   verificationResults?: readonly VerificationResult[];
+  builderContract?: BuilderPathContract;
   outcome?: string;
   evidence?: readonly string[];
   reason?: string;

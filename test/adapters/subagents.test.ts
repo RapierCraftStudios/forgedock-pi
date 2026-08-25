@@ -17,6 +17,7 @@ import {
   FORGE_WORK_ON_TOOLS,
   registerForgeAgents,
 } from "../../src/agents/register.ts";
+import { createBuilderPathContract } from "../../src/core/builder-contract.ts";
 import { parseForgePolicy } from "../../src/core/policy.ts";
 
 class FakeEventBus {
@@ -194,6 +195,42 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
   assert.match(spawn.params.task, /gh issue view/);
   assert.match(spawn.params.task, /GET-only gh api/);
   assert.doesNotMatch(spawn.params.task, /Process resolve, investigate, plan/i);
+});
+
+test("bounded implementation launch binds the durable builder contract", async () => {
+  const { pi, bus } = fakePi();
+  const client = new SubagentsRpcClient(pi);
+  const builderContract = createBuilderPathContract(["src/**", "test/**"]);
+  await client.spawnNode({
+    runId: "run-implement",
+    issueNumber: 9,
+    repository: "owner/repo",
+    worktreeRoot: "/tmp/worktree",
+    branch: "forge/9",
+    baseBranch: "staging",
+    baseSha: "abcdef1234567890",
+    leaseEpoch: 1,
+    policy,
+    issueContext: "untrusted issue text",
+    builderContract,
+    node: { nodeId: "implement-1", node: "implement", attempt: 1 },
+  });
+  const spawn = bus.requests.at(-1) as {
+    params: {
+      task: string;
+      extensionBindings: Record<
+        string,
+        { builderContract?: { contractHash: string } }
+      >;
+    };
+  };
+  assert.equal(
+    spawn.params.extensionBindings["forgedock.pi/1"]?.builderContract
+      ?.contractHash,
+    builderContract.contractHash,
+  );
+  assert.match(spawn.params.task, new RegExp(builderContract.contractHash));
+  assert.match(spawn.params.task, /Allowed paths: src\/\*\*, test\/\*\*/);
 });
 
 test("RPC work-on treats GitHub-only verification as valid", async () => {

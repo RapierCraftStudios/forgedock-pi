@@ -192,14 +192,18 @@ export class GitWorktreeManager {
   ): Promise<string[]> {
     const result = await this.#git(
       worktreePath,
-      ["diff", "--name-only", `${baseSha}...HEAD`],
+      [
+        "diff",
+        "--name-status",
+        "--find-renames",
+        "-z",
+        `${baseSha}...HEAD`,
+        "--",
+      ],
       30_000,
       signal,
     );
-    return result.stdout
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
+    return parseChangedGitPaths(result.stdout);
   }
 
   async assertClean(worktreePath: string, signal?: AbortSignal): Promise<void> {
@@ -353,6 +357,30 @@ async function exists(path: string): Promise<boolean> {
 function assertSafeIdentifier(value: string, field: string): void {
   if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value))
     throw new TypeError(`${field} contains unsafe characters.`);
+}
+
+/** Parse every path affected by a NUL-delimited Git name-status listing. */
+export function parseChangedGitPaths(output: string): string[] {
+  const tokens = output.split("\0");
+  const paths: string[] = [];
+  for (let index = 0; index < tokens.length; ) {
+    const status = tokens[index++];
+    if (!status) continue;
+    const first = tokens[index++];
+    if (!first)
+      throw new Error(`Malformed NUL-delimited Git status record: ${status}.`);
+    paths.push(first);
+    const kind = status.charAt(0);
+    if (kind === "R" || kind === "C") {
+      const second = tokens[index++];
+      if (!second)
+        throw new Error(
+          `Malformed Git rename/copy record without a destination: ${status}.`,
+        );
+      paths.push(second);
+    }
+  }
+  return [...new Set(paths)].sort((left, right) => left.localeCompare(right));
 }
 
 function isPathWithin(root: string, target: string): boolean {

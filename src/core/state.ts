@@ -14,6 +14,10 @@ import {
   type RunPhase,
   validateRunEvent,
 } from "./events.ts";
+import {
+  type BuilderPathContract,
+  validateBuilderPathContract,
+} from "./builder-contract.ts";
 import { type RepositoryLease, validateRepositoryLease } from "./lease.ts";
 
 export const RUN_STATE_SCHEMA = "forgedock.run-state/v1" as const;
@@ -700,6 +704,7 @@ function applyNodeEvent(state: RunState, event: RunEvent): void {
           })),
         }
       : {}),
+    ...validatedBuilderContract(record.builderContract),
     ...(typeof record.outcome === "string" ? { outcome: record.outcome } : {}),
     ...(Array.isArray(record.evidence)
       ? {
@@ -719,6 +724,21 @@ function applyNodeEvent(state: RunState, event: RunEvent): void {
   if (status === "failed") state.status = "failed";
   if (status === "blocked") state.status = "blocked";
   if (status === "needs-human") state.status = "needs-human";
+}
+
+function validatedBuilderContract(
+  value: unknown,
+): { builderContract?: BuilderPathContract } {
+  if (value === undefined) return {};
+  try {
+    validateBuilderPathContract(value);
+  } catch (error) {
+    throw new StateTransitionError(
+      "invalid-builder-contract",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+  return { builderContract: value };
 }
 
 function applyEffect(state: RunState, event: RunEvent): void {

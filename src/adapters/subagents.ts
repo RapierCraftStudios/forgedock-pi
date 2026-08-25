@@ -15,6 +15,7 @@ import {
   FORGE_REFRESH_REVIEW_AGENT,
   FORGE_WORK_ON_AGENT,
 } from "../agents/register.ts";
+import type { BuilderPathContract } from "../core/builder-contract.ts";
 import type { ForgePolicy } from "../core/policy.ts";
 import type { WorkflowNode } from "../core/dispatcher.ts";
 
@@ -56,6 +57,7 @@ export interface WorkOnLaunchInput {
   leaseOwnerRunId?: string;
   policy: ForgePolicy;
   issueContext: string;
+  builderContract?: BuilderPathContract;
 }
 
 export interface RefreshReviewLaunchInput extends WorkOnLaunchInput {
@@ -216,6 +218,9 @@ export class SubagentsRpcClient {
       baseSha: input.baseSha,
       maxReviewRounds: input.policy.review.maxRounds,
       verificationCommands: input.policy.verification.commands,
+      ...(input.builderContract
+        ? { builderContract: input.builderContract }
+        : {}),
       ...(input.node
         ? {
             nodeId: input.node.nodeId,
@@ -257,6 +262,12 @@ export class SubagentsRpcClient {
           `Assigned worktree: ${input.worktreeRoot}`,
           `Branch: ${input.branch}`,
           `Frozen base SHA: ${input.baseSha}`,
+          ...(input.builderContract
+            ? [
+                `Accepted builder contract: ${input.builderContract.contractHash} (revision ${input.builderContract.revision})`,
+                `Allowed paths: ${input.builderContract.allowedPaths.join(", ")}`,
+              ]
+            : []),
           "The parent has already durably queued and started this node. Execute only this node, then return one schema-valid forgedock.node-result/v1 value. Do not process any other phase, do not call forge_checkpoint, do not launch subagents, and do not merge, close, or clean up.",
           ["resolve", "investigate", "plan"].includes(input.node.node)
             ? "Use bash when needed for ordinary read-only GitHub and repository inspection, including gh issue view, gh pr view, gh run view, and GET-only gh api calls. Do not perform GitHub writes, git writes, or shell-based source edits."
