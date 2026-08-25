@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 13,
-  "lastEventHash": "sha256:89df1487b5182ff24f7873152b8329a24c15824e08186e8f255c8514d22eceba",
+  "sequence": 14,
+  "lastEventHash": "sha256:0d146285d2153d1313a2ee0a677a25555182bca221d2cc87e81bfb5e17cbd318",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -102,6 +102,15 @@
         "package.json defines typecheck, test, and combined check scripts; .forge/config.json requires GitHub verification on dogfood and configures no named local verification commands."
       ],
       "finishedAt": "2026-08-25T21:35:58.285Z"
+    },
+    "prepare-worktree-1": {
+      "nodeId": "prepare-worktree-1",
+      "node": "prepare-worktree",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/bbc39a72-07c4-4977-85a8-4473d856f301/.pi/forge/bbc39a72-07c4-4977-85a8-4473d856f301-prepare-worktree-1.json"
     }
   },
   "effects": {},
@@ -118,7 +127,8 @@
     "node:plan-1:queued": "09bb664d-cae3-487b-a038-0ed382af8de1",
     "node:plan-1:started": "c384f509-0c5c-4343-bc1c-298461dd8f99",
     "node:plan-1:receipt-bound": "35cb3454-96a5-45d8-88cd-37164320459a",
-    "node:plan-1:completed": "9914c504-54eb-4a62-b7c5-dfd245210273"
+    "node:plan-1:completed": "9914c504-54eb-4a62-b7c5-dfd245210273",
+    "node:prepare-worktree-1:queued": "cace401b-a951-46d3-a2aa-6c785012d858"
   },
   "eventIds": {
     "7b5d2931-7497-4d47-b405-55ab5d7a6899": true,
@@ -133,6 +143,7 @@
     "09bb664d-cae3-487b-a038-0ed382af8de1": true,
     "c384f509-0c5c-4343-bc1c-298461dd8f99": true,
     "35cb3454-96a5-45d8-88cd-37164320459a": true,
-    "9914c504-54eb-4a62-b7c5-dfd245210273": true
+    "9914c504-54eb-4a62-b7c5-dfd245210273": true,
+    "cace401b-a951-46d3-a2aa-6c785012d858": true
   }
 }
