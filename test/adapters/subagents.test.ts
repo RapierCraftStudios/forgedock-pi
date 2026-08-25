@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -281,6 +281,56 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
     assert.equal(settings.retry.maxRetries, 5);
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("runtime materialization rejects a pre-existing .pi symlink", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-agents-link-"));
+  const external = await mkdtemp(join(tmpdir(), "forgedock-agents-external-"));
+  const sentinel = join(external, "sentinel.txt");
+  try {
+    await writeFile(sentinel, "external\n");
+    await symlink(external, join(root, ".pi"), "dir");
+    await assert.rejects(
+      materializeForgeAgents(root),
+      /no-follow|ELOOP|symbolic link|secure/i,
+    );
+    assert.equal(await readFile(sentinel, "utf8"), "external\n");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(external, { recursive: true, force: true });
+  }
+});
+
+test("runtime materialization rejects a replacement final-file symlink", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-agents-replacement-"));
+  const external = await mkdtemp(join(tmpdir(), "forgedock-agents-target-"));
+  const target = join(external, "agent.md");
+  try {
+    await writeFile(target, "external\n");
+    await mkdir(join(root, ".pi", "agents"), { recursive: true });
+    await symlink(target, join(root, ".pi", "agents", "forge-work-on.md"));
+    await assert.rejects(materializeForgeAgents(root));
+    assert.equal(await readFile(target, "utf8"), "external\n");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(external, { recursive: true, force: true });
+  }
+});
+
+test("runtime materialization rejects a pre-existing .pi/forge symlink", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-forge-link-"));
+  const external = await mkdtemp(join(tmpdir(), "forgedock-forge-target-"));
+  const sentinel = join(external, "sentinel.txt");
+  try {
+    await writeFile(sentinel, "external\n");
+    await mkdir(join(root, ".pi", "agents"), { recursive: true });
+    await symlink(external, join(root, ".pi", "forge"), "dir");
+    await assert.rejects(materializeForgeAgents(root));
+    assert.equal(await readFile(sentinel, "utf8"), "external\n");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(external, { recursive: true, force: true });
   }
 });
 

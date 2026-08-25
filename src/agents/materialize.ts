@@ -1,5 +1,7 @@
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { constants } from "node:fs";
+import { mkdir, open } from "node:fs/promises";
+import type { FileHandle } from "node:fs/promises";
+import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -22,92 +24,109 @@ import {
 export async function materializeForgeAgents(
   worktreeRoot: string,
 ): Promise<string[]> {
-  const piDir = join(worktreeRoot, ".pi");
-  const agentsDir = join(piDir, "agents");
-  await mkdir(agentsDir, { recursive: true, mode: 0o700 });
-  await materializeRetrySettings(piDir);
-  const childRuntimePath = fileURLToPath(
-    new URL("./child-runtime.ts", import.meta.url),
-  );
-  const subagentsExtensionPath = fileURLToPath(
-    import.meta.resolve("pi-subagents"),
-  );
-  const files = [
-    {
-      name: FORGE_WORK_ON_AGENT,
-      content: agentFile({
-        name: FORGE_WORK_ON_AGENT,
-        description:
-          "Own one ForgeDock issue through implementation and nested fresh review",
-        tools: FORGE_WORK_ON_TOOLS,
-        prompt: FORGE_WORK_ON_PROMPT,
-        maxDepth: FORGE_WORK_ON_MAX_DEPTH,
-        acceptanceRole: "writer",
-        async: true,
-        extensions: [subagentsExtensionPath, childRuntimePath],
-        timeoutMs: FORGE_WORK_ON_TIMEOUT_MS,
-      }),
-    },
-    {
-      name: FORGE_REFRESH_REVIEW_AGENT,
-      content: agentFile({
-        name: FORGE_REFRESH_REVIEW_AGENT,
-        description:
-          "Rebase a completed ForgeDock lane and run fresh verification/review",
-        tools: FORGE_REFRESH_REVIEW_TOOLS,
-        prompt: FORGE_REFRESH_REVIEW_PROMPT,
-        maxDepth: FORGE_WORK_ON_MAX_DEPTH,
-        acceptanceRole: "writer",
-        async: true,
-        extensions: [subagentsExtensionPath, childRuntimePath],
-        timeoutMs: FORGE_WORK_ON_TIMEOUT_MS,
-      }),
-    },
-    {
-      name: FORGE_REVIEW_CORRECTNESS_AGENT,
-      content: agentFile({
-        name: FORGE_REVIEW_CORRECTNESS_AGENT,
-        description: "Fresh correctness and regression reviewer for ForgeDock",
-        tools: FORGE_REVIEW_TOOLS,
-        prompt: FORGE_REVIEW_CORRECTNESS_PROMPT,
-        maxDepth: 1,
-        acceptanceRole: "read-only",
-        async: false,
-        extensions: [childRuntimePath],
-        timeoutMs: FORGE_REVIEW_TIMEOUT_MS,
-      }),
-    },
-    {
-      name: FORGE_REVIEW_SECURITY_AGENT,
-      content: agentFile({
-        name: FORGE_REVIEW_SECURITY_AGENT,
-        description:
-          "Fresh security and production-safety reviewer for ForgeDock",
-        tools: FORGE_REVIEW_TOOLS,
-        prompt: FORGE_REVIEW_SECURITY_PROMPT,
-        maxDepth: 1,
-        acceptanceRole: "read-only",
-        async: false,
-        extensions: [childRuntimePath],
-        timeoutMs: FORGE_REVIEW_TIMEOUT_MS,
-      }),
-    },
-  ];
+  const rootDir = await openAnchoredDirectory(worktreeRoot);
+  try {
+    const piDir = await ensureDirectory(rootDir, ".pi");
+    try {
+      const agentsDir = await ensureDirectory(piDir, "agents");
+      try {
+        await materializeRetrySettings(piDir);
+        const childRuntimePath = fileURLToPath(
+          new URL("./child-runtime.ts", import.meta.url),
+        );
+        const subagentsExtensionPath = fileURLToPath(
+          import.meta.resolve("pi-subagents"),
+        );
+        const files = [
+          {
+            name: FORGE_WORK_ON_AGENT,
+            content: agentFile({
+              name: FORGE_WORK_ON_AGENT,
+              description:
+                "Own one ForgeDock issue through implementation and nested fresh review",
+              tools: FORGE_WORK_ON_TOOLS,
+              prompt: FORGE_WORK_ON_PROMPT,
+              maxDepth: FORGE_WORK_ON_MAX_DEPTH,
+              acceptanceRole: "writer",
+              async: true,
+              extensions: [subagentsExtensionPath, childRuntimePath],
+              timeoutMs: FORGE_WORK_ON_TIMEOUT_MS,
+            }),
+          },
+          {
+            name: FORGE_REFRESH_REVIEW_AGENT,
+            content: agentFile({
+              name: FORGE_REFRESH_REVIEW_AGENT,
+              description:
+                "Rebase a completed ForgeDock lane and run fresh verification/review",
+              tools: FORGE_REFRESH_REVIEW_TOOLS,
+              prompt: FORGE_REFRESH_REVIEW_PROMPT,
+              maxDepth: FORGE_WORK_ON_MAX_DEPTH,
+              acceptanceRole: "writer",
+              async: true,
+              extensions: [subagentsExtensionPath, childRuntimePath],
+              timeoutMs: FORGE_WORK_ON_TIMEOUT_MS,
+            }),
+          },
+          {
+            name: FORGE_REVIEW_CORRECTNESS_AGENT,
+            content: agentFile({
+              name: FORGE_REVIEW_CORRECTNESS_AGENT,
+              description:
+                "Fresh correctness and regression reviewer for ForgeDock",
+              tools: FORGE_REVIEW_TOOLS,
+              prompt: FORGE_REVIEW_CORRECTNESS_PROMPT,
+              maxDepth: 1,
+              acceptanceRole: "read-only",
+              async: false,
+              extensions: [childRuntimePath],
+              timeoutMs: FORGE_REVIEW_TIMEOUT_MS,
+            }),
+          },
+          {
+            name: FORGE_REVIEW_SECURITY_AGENT,
+            content: agentFile({
+              name: FORGE_REVIEW_SECURITY_AGENT,
+              description:
+                "Fresh security and production-safety reviewer for ForgeDock",
+              tools: FORGE_REVIEW_TOOLS,
+              prompt: FORGE_REVIEW_SECURITY_PROMPT,
+              maxDepth: 1,
+              acceptanceRole: "read-only",
+              async: false,
+              extensions: [childRuntimePath],
+              timeoutMs: FORGE_REVIEW_TIMEOUT_MS,
+            }),
+          },
+        ];
 
-  const paths: string[] = [];
-  for (const file of files) {
-    const path = join(agentsDir, `${file.name}.md`);
-    await writeFile(path, file.content, { encoding: "utf8", mode: 0o600 });
-    paths.push(path);
+        const paths: string[] = [];
+        for (const file of files) {
+          const name = `${file.name}.md`;
+          await writeTextFile(agentsDir, name, file.content, 0o600);
+          paths.push(join(worktreeRoot, ".pi", "agents", name));
+        }
+        return paths;
+      } finally {
+        await agentsDir.close();
+      }
+    } finally {
+      await piDir.close();
+    }
+  } finally {
+    await rootDir.close();
   }
-  return paths;
 }
 
-async function materializeRetrySettings(piDir: string): Promise<void> {
-  const settingsPath = join(piDir, "settings.json");
+async function materializeRetrySettings(piDir: FileHandle): Promise<void> {
+  let existingText: string | undefined;
   try {
-    await access(settingsPath);
-    const existing = JSON.parse(await readFile(settingsPath, "utf8")) as {
+    existingText = await readTextFile(piDir, "settings.json");
+  } catch (error) {
+    if (!isMissingFile(error)) throw error;
+  }
+  if (existingText !== undefined) {
+    const existing = JSON.parse(existingText) as {
       retry?: { enabled?: unknown; maxRetries?: unknown };
     };
     if (existing.retry?.enabled === false)
@@ -123,11 +142,10 @@ async function materializeRetrySettings(piDir: string): Promise<void> {
         "ForgeDock requires retry.maxRetries to be at least 3 for transient provider recovery.",
       );
     return;
-  } catch (error) {
-    if (!isMissingFile(error)) throw error;
   }
-  await writeFile(
-    settingsPath,
+  await writeTextFile(
+    piDir,
+    "settings.json",
     `${JSON.stringify(
       {
         retry: {
@@ -141,23 +159,142 @@ async function materializeRetrySettings(piDir: string): Promise<void> {
       null,
       2,
     )}\n`,
-    { encoding: "utf8", mode: 0o600 },
+    0o600,
   );
-  const markerDir = join(piDir, "forge");
-  await mkdir(markerDir, { recursive: true, mode: 0o700 });
-  await writeFile(join(markerDir, "generated-settings"), "settings.json\n", {
-    encoding: "utf8",
-    mode: 0o600,
-  });
+  const markerDir = await ensureDirectory(piDir, "forge");
+  try {
+    await writeTextFile(markerDir, "generated-settings", "settings.json\n", 0o600);
+  } finally {
+    await markerDir.close();
+  }
+}
+
+async function openAnchoredDirectory(path: string): Promise<FileHandle> {
+  const flags = directoryFlags();
+  const absolute = resolve(path);
+  const segments = absolute.split(sep).filter(Boolean);
+  let current = await open(sep, flags);
+  for (const segment of segments) {
+    const childPath = descriptorPath(current, segment);
+    let next: FileHandle;
+    try {
+      next = await open(childPath, flags);
+    } catch (error) {
+      await current.close().catch(() => undefined);
+      throw error;
+    }
+    await current.close();
+    current = next;
+  }
+  return current;
+}
+
+async function ensureDirectory(
+  parent: FileHandle,
+  name: string,
+): Promise<FileHandle> {
+  const path = descriptorPath(parent, name);
+  try {
+    await mkdir(path, { mode: 0o700 });
+  } catch (error) {
+    if (!isErrno(error, "EEXIST")) throw error;
+  }
+  return open(path, directoryFlags());
+}
+
+async function readTextFile(parent: FileHandle, name: string): Promise<string> {
+  const handle = await openFinalFile(parent, name, constants.O_RDONLY);
+  try {
+    return await handle.readFile("utf8");
+  } finally {
+    await handle.close();
+  }
+}
+
+async function writeTextFile(
+  parent: FileHandle,
+  name: string,
+  content: string,
+  mode: number,
+): Promise<void> {
+  const handle = await openFinalFile(
+    parent,
+    name,
+    constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC,
+    mode,
+  );
+  try {
+    await handle.writeFile(content, "utf8");
+  } finally {
+    await handle.close();
+  }
+}
+
+async function openFinalFile(
+  parent: FileHandle,
+  name: string,
+  flags: number,
+  mode?: number,
+): Promise<FileHandle> {
+  requireSecureFilesystem();
+  return open(
+    descriptorPath(parent, name),
+    flags | constants.O_NOFOLLOW,
+    mode,
+  );
+}
+
+function directoryFlags(): number {
+  requireSecureFilesystem();
+  return constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
+}
+
+function descriptorPath(parent: FileHandle, name: string): string {
+  if (
+    !name ||
+    name === "." ||
+    name === ".." ||
+    name.includes("/") ||
+    name.includes("\\") ||
+    name.includes("\0")
+  )
+    throw new TypeError("Secure Forge paths require a single file name.");
+  return join(descriptorRoot(), String(parent.fd), name);
+}
+
+function descriptorRoot(): string {
+  if (process.platform === "linux" || process.platform === "android")
+    return "/proc/self/fd";
+  if (
+    process.platform === "darwin" ||
+    process.platform === "freebsd" ||
+    process.platform === "openbsd" ||
+    process.platform === "netbsd"
+  )
+    return "/dev/fd";
+  throw new Error(
+    "ForgeDock cannot safely materialize runtime files on this platform: directory-handle no-follow support is unavailable.",
+  );
+}
+
+function requireSecureFilesystem(): void {
+  if (
+    typeof constants.O_NOFOLLOW !== "number" ||
+    typeof constants.O_DIRECTORY !== "number"
+  )
+    throw new Error(
+      "ForgeDock cannot safely materialize runtime files: no-follow directory opens are unavailable.",
+    );
+}
+
+function isErrno(error: unknown, code: string): boolean {
+  return Boolean(
+    error && typeof error === "object" && "code" in error && error.code === code,
+  );
 }
 
 function isMissingFile(error: unknown): boolean {
-  return Boolean(
-    error &&
-      typeof error === "object" &&
-      "code" in error &&
-      error.code === "ENOENT",
-  );
+  return isErrno(error, "ENOENT");
 }
 
 function agentFile(input: {

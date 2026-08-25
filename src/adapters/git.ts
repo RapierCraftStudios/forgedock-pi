@@ -1,13 +1,22 @@
+import { constants } from "node:fs";
 import {
   access,
-  appendFile,
   mkdir,
-  readFile,
+  open,
   realpath,
   rm,
   rmdir,
 } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import type { FileHandle } from "node:fs/promises";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 
 export interface ExecOptions {
   cwd?: string;
@@ -71,24 +80,37 @@ export class GitWorktreeManager {
       signal,
     );
     const rawExcludePath = result.stdout.trim();
+    if (!rawExcludePath)
+      throw new Error("Unable to resolve Git's local exclude file.");
     const excludePath = isAbsolute(rawExcludePath)
       ? rawExcludePath
       : resolve(repositoryRoot, rawExcludePath);
-    if (!rawExcludePath)
-      throw new Error("Unable to resolve Git's local exclude file.");
-    const existing = await readFile(excludePath, "utf8").catch(() => "");
-    if (
-      existing
-        .split("\n")
-        .map((line) => line.trim())
-        .includes(".pi/")
-    )
-      return;
-    await appendFile(
-      excludePath,
-      `${existing && !existing.endsWith("\n") ? "\n" : ""}.pi/\n`,
-      "utf8",
-    );
+    const metadataDir = await openAnchoredDirectory(dirname(excludePath));
+    try {
+      let existing = "";
+      try {
+        existing = await readTextFile(
+          metadataDir,
+          basename(excludePath),
+        );
+      } catch (error) {
+        if (!isMissingFile(error)) throw error;
+      }
+      if (
+        existing
+          .split("\n")
+          .map((line) => line.trim())
+          .includes(".pi/")
+      )
+        return;
+      await appendTextFile(
+        metadataDir,
+        basename(excludePath),
+        `${existing && !existing.endsWith("\n") ? "\n" : ""}.pi/\n`,
+      );
+    } finally {
+      await metadataDir.close();
+    }
   }
 
   async resolveRepositoryRoot(
@@ -316,22 +338,214 @@ export class GitWorktreeManager {
   }
 }
 
+async function openAnchoredDirectory(path: string): Promise<FileHandle> {
+  const flags = directoryFlags();
+  const absolute = resolve(path);
+  const segments = absolute.split(sep).filter(Boolean);
+  let current = await open(sep, flags);
+  for (const segment of segments) {
+    const childPath = descriptorPath(current, segment);
+    let next: FileHandle;
+    try {
+      next = await open(childPath, flags);
+    } catch (error) {
+      await current.close().catch(() => undefined);
+      throw error;
+    }
+    await current.close();
+    current = next;
+  }
+  return current;
+}
+
+async function readTextFile(parent: FileHandle, name: string): Promise<string> {
+  const handle = await openFinalFile(parent, name, constants.O_RDONLY);
+  try {
+    return await handle.readFile("utf8");
+  } finally {
+    await handle.close();
+  }
+}
+
+async function appendTextFile(
+  parent: FileHandle,
+  name: string,
+  content: string,
+): Promise<void> {
+  const handle = await openFinalFile(
+    parent,
+    name,
+    constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT,
+    0o666,
+  );
+  try {
+    await handle.writeFile(content, "utf8");
+  } finally {
+    await handle.close();
+  }
+}
+
+async function openFinalFile(
+  parent: FileHandle,
+  name: string,
+  flags: number,
+  mode?: number,
+): Promise<FileHandle> {
+  requireSecureFilesystem();
+  return open(
+    descriptorPath(parent, name),
+    flags | constants.O_NOFOLLOW,
+    mode,
+  );
+}
+
+function directoryFlags(): number {
+  requireSecureFilesystem();
+  return constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
+}
+
+function descriptorPath(parent: FileHandle, name: string): string {
+  if (
+    !name ||
+    name === "." ||
+    name === ".." ||
+    name.includes("/") ||
+    name.includes("\\") ||
+    name.includes("\0")
+  )
+    throw new TypeError("Secure Git paths require a single file name.");
+  return join(descriptorRoot(), String(parent.fd), name);
+}
+
+function descriptorRoot(): string {
+  if (process.platform === "linux" || process.platform === "android")
+    return "/proc/self/fd";
+  if (
+    process.platform === "darwin" ||
+    process.platform === "freebsd" ||
+    process.platform === "openbsd" ||
+    process.platform === "netbsd"
+  )
+    return "/dev/fd";
+  throw new Error(
+    "ForgeDock cannot safely update Git's local exclude file on this platform: directory-handle no-follow support is unavailable.",
+  );
+}
+
+function requireSecureFilesystem(): void {
+  if (
+    typeof constants.O_NOFOLLOW !== "number" ||
+    typeof constants.O_DIRECTORY !== "number"
+  )
+    throw new Error(
+      "ForgeDock cannot safely update Git's local exclude file: no-follow directory opens are unavailable.",
+    );
+}
+
+function isErrno(error: unknown, code: string): boolean {
+  return Boolean(
+    error && typeof error === "object" && "code" in error && error.code === code,
+  );
+}
+
+function isMissingFile(error: unknown): boolean {
+  return isErrno(error, "ENOENT");
+}
+
 async function cleanupForgeRuntime(worktreePath: string): Promise<void> {
-  const piDir = join(worktreePath, ".pi");
-  const agentsDir = join(piDir, "agents");
-  const forgeDir = join(piDir, "forge");
-  if (await exists(join(forgeDir, "generated-settings")))
-    await rm(join(piDir, "settings.json"), { force: true });
-  for (const name of [
-    "forge-work-on.md",
-    "forge-refresh-review.md",
-    "forge-review-correctness.md",
-    "forge-review-security.md",
-  ])
-    await rm(join(agentsDir, name), { force: true });
-  await rm(forgeDir, { recursive: true, force: true });
-  await rmdir(agentsDir).catch(() => undefined);
-  await rmdir(piDir).catch(() => undefined);
+  let rootDir: FileHandle;
+  try {
+    rootDir = await openAnchoredDirectory(worktreePath);
+  } catch (error) {
+    if (isMissingFile(error)) return;
+    throw error;
+  }
+  try {
+    const piDir = await openExistingDirectory(rootDir, ".pi");
+    if (!piDir) return;
+    try {
+      const forgeDir = await openExistingDirectory(piDir, "forge");
+      let generatedSettings = false;
+      if (forgeDir) {
+        try {
+          generatedSettings = await finalFileExists(
+            forgeDir,
+            "generated-settings",
+          );
+        } finally {
+          await forgeDir.close();
+        }
+      }
+      if (generatedSettings) await removeChild(piDir, "settings.json");
+
+      const agentsDir = await openExistingDirectory(piDir, "agents");
+      if (agentsDir) {
+        try {
+          for (const name of [
+            "forge-work-on.md",
+            "forge-refresh-review.md",
+            "forge-review-correctness.md",
+            "forge-review-security.md",
+          ])
+            await removeChild(agentsDir, name);
+        } finally {
+          await agentsDir.close();
+        }
+        await removeDirectory(piDir, "agents");
+      }
+      await removeChild(piDir, "forge", true);
+      await removeDirectory(rootDir, ".pi");
+    } finally {
+      await piDir.close();
+    }
+  } finally {
+    await rootDir.close();
+  }
+}
+
+async function openExistingDirectory(
+  parent: FileHandle,
+  name: string,
+): Promise<FileHandle | undefined> {
+  try {
+    return await open(descriptorPath(parent, name), directoryFlags());
+  } catch (error) {
+    if (isMissingFile(error)) return undefined;
+    throw error;
+  }
+}
+
+async function finalFileExists(
+  parent: FileHandle,
+  name: string,
+): Promise<boolean> {
+  try {
+    const handle = await openFinalFile(parent, name, constants.O_RDONLY);
+    await handle.close();
+    return true;
+  } catch (error) {
+    if (isMissingFile(error)) return false;
+    throw error;
+  }
+}
+
+async function removeChild(
+  parent: FileHandle,
+  name: string,
+  recursive = false,
+): Promise<void> {
+  const path = descriptorPath(parent, name);
+  if (recursive) await rm(path, { recursive: true, force: true });
+  else await rm(path, { force: true });
+}
+
+async function removeDirectory(parent: FileHandle, name: string): Promise<void> {
+  try {
+    await rmdir(descriptorPath(parent, name));
+  } catch {
+    // The directory may contain user files or may already be absent. Both
+    // cases are safe to leave for the owned-worktree cleanup/retry path.
+  }
 }
 
 function isAlreadyAbsent(error: unknown): boolean {
