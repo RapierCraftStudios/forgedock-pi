@@ -10,8 +10,8 @@
     "ownerRunId": "5da43cdf-2ff6-479c-9bf8-d2241bbd78fe",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:0be8ab57c0c5bc6f8e0bb51b167eedd2f2db6632d9cfa15a740c7756aafd88ad",
+  "sequence": 9,
+  "lastEventHash": "sha256:bcb9d3c86be814fe6c6f8485d30b0b7ff370e65d67a73abed71d1648cd3c991d",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -45,7 +45,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "4819168331da2a25f500a1d1436f231db8211f2b",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/cf8c009e-f7be-4f7c-9720-75a31f977341/.pi/forge/cf8c009e-f7be-4f7c-9720-75a31f977341-investigate-1.json",
       "subagentRunId": "2549c313-0269-422a-834a-6fff7133b106",
@@ -54,7 +54,19 @@
       "startedAt": "2026-08-25T08:01:52.562Z",
       "previousSubagentRunId": "launch:investigate-1:22db2865-ca13-4c05-8991-d138c533ef10",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "4819168331da2a25f500a1d1436f231db8211f2b",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "GitHub issue 15 describes five structured findings from PR 6, zero generated review-finding issues, and contradictory review and decision verdicts.",
+        "GitHub PR 6 review comments contain five structured findings and a review summary with CHANGES REQUESTED, while its decision record says APPROVED and the merged PR has merge commit 1e2a635ff05080dda36c17efe409e86af4fe17c4.",
+        "The frozen-base publisher in src/workflows/work-on.ts creates generated finding issues on the durable decision and legacy finalization paths, but its exact identity is source PR, finding ID, and head only; its fallback similarity match is not scoped to source PR and does not bind run, reviewer, confidence, or severity.",
+        "The frozen-base joined summary in src/workflows/work-on.ts renders PASS, FINDINGS, or BLOCKED from reviewer payloads rather than the FinalReviewDecision returned by evaluateReviewGate; the durable decision path does not render the canonical review summary.",
+        "The frozen-base review decision audit checks marker presence only, and the legacy canonical summary uses a generic marker that can match the earlier joined summary. No source edits were made during investigation.",
+        "Baseline verification passed: npm test reported 77 passing tests and npm run typecheck completed successfully."
+      ],
+      "finishedAt": "2026-08-25T08:10:27.004Z"
     }
   },
   "effects": {},
@@ -66,7 +78,8 @@
     "node:resolve-1:completed": "c19def9f-2ed7-4bd2-8cb0-59d1bfbc201b",
     "node:investigate-1:queued": "42f3027b-f110-4817-86e9-7cc6f7f90116",
     "node:investigate-1:started": "a5e5420e-383e-45c9-ab0d-b819fb1180a9",
-    "node:investigate-1:receipt-bound": "7dde0492-2f78-48bf-a7df-039f6538ceff"
+    "node:investigate-1:receipt-bound": "7dde0492-2f78-48bf-a7df-039f6538ceff",
+    "node:investigate-1:completed": "597630be-479f-4347-bcee-0600c18383b5"
   },
   "eventIds": {
     "3158194d-5ea4-46c8-b6f5-500304af5913": true,
@@ -76,6 +89,7 @@
     "c19def9f-2ed7-4bd2-8cb0-59d1bfbc201b": true,
     "42f3027b-f110-4817-86e9-7cc6f7f90116": true,
     "a5e5420e-383e-45c9-ab0d-b819fb1180a9": true,
-    "7dde0492-2f78-48bf-a7df-039f6538ceff": true
+    "7dde0492-2f78-48bf-a7df-039f6538ceff": true,
+    "597630be-479f-4347-bcee-0600c18383b5": true
   }
 }
