@@ -10,15 +10,15 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 4,
-  "lastEventHash": "sha256:f01ee0e0074f4a4108b32ea30dca36496505a266358073fd11657073ab780a15",
+  "sequence": 5,
+  "lastEventHash": "sha256:20c3452532e720f1100cff5f3562b98e8c49ad021ec63524a9b8d657654822ed",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/1d590b89-383d-442f-90d6-a93aa0a146e7/.pi/forge/1d590b89-383d-442f-90d6-a93aa0a146e7-resolve-1.json",
       "subagentRunId": "2bd24ee4-c8f4-4398-87a4-34a18120a3dc",
@@ -27,7 +27,19 @@
       "startedAt": "2026-08-25T17:58:28.035Z",
       "previousSubagentRunId": "launch:resolve-1:0f33496f-386a-4c1e-b4e1-c603a06383aa",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "round": 1,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "Issue #52 has a positive issue number and the supplied non-empty title \"bug: fix: verification nodes must receive implementation head and approved checks\".",
+        "The supplied issue context describes a concrete ForgeDock Pi 0.1.0 verification-node defect, reproduction, expected behavior, evidence, and impact; it has no labels indicating terminal or duplicate status.",
+        "src/workflows/work-on.ts requires the target issue to be open before a run is initialized and resolve-1 is dispatched; the bound task states this node was already durably queued and started.",
+        "The validated repository policy in .forge/config.json names RapierCraftStudios/forgedock-pi and configures dogfood as the sole integration branch while only main is protected.",
+        "Issue #52 is eligible for continued ForgeDock processing on integration base dogfood."
+      ],
+      "finishedAt": "2026-08-25T17:59:34.180Z"
     }
   },
   "effects": {},
@@ -35,12 +47,14 @@
     "run:create": "8420132c-2a1a-43b2-ad05-5a4473cc10d2",
     "node:resolve-1:queued": "f84e5c80-7c60-481a-bdf5-c41f3ad9345f",
     "node:resolve-1:started": "f9d238a0-ad2d-4e48-89cc-1a826225311b",
-    "node:resolve-1:receipt-bound": "65de1a51-a049-45ec-af75-91b81ffeadcc"
+    "node:resolve-1:receipt-bound": "65de1a51-a049-45ec-af75-91b81ffeadcc",
+    "node:resolve-1:completed": "19bdacfe-2b41-45d6-9e8a-612420cc464d"
   },
   "eventIds": {
     "8420132c-2a1a-43b2-ad05-5a4473cc10d2": true,
     "f84e5c80-7c60-481a-bdf5-c41f3ad9345f": true,
     "f9d238a0-ad2d-4e48-89cc-1a826225311b": true,
-    "65de1a51-a049-45ec-af75-91b81ffeadcc": true
+    "65de1a51-a049-45ec-af75-91b81ffeadcc": true,
+    "19bdacfe-2b41-45d6-9e8a-612420cc464d": true
   }
 }
