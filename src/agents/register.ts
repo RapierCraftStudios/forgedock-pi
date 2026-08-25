@@ -7,6 +7,7 @@ import {
 } from "pi-subagents/agents";
 
 export const FORGE_WORK_ON_AGENT = "forge-work-on";
+export const FORGE_READ_ONLY_NODE_AGENT = "forge-read-only-node";
 export const FORGE_REVIEW_CORRECTNESS_AGENT = "forge-review-correctness";
 export const FORGE_REVIEW_SECURITY_AGENT = "forge-review-security";
 export const FORGE_REFRESH_REVIEW_AGENT = "forge-refresh-review";
@@ -17,6 +18,16 @@ export const FORGE_REVIEW_TOOLS = [
   "ls",
   "forge_diff",
   "forge_finalize_reviewer",
+] as const;
+export const FORGE_READ_ONLY_NODE_TOOLS = [
+  "read",
+  "grep",
+  "find",
+  "ls",
+  "forge_verify",
+  "forge_diff",
+  "forge_prepare_review",
+  "forge_finalize_node",
 ] as const;
 export const FORGE_WORK_ON_TOOLS = [
   "read",
@@ -148,6 +159,29 @@ export function registerForgeAgents(
         defaultTimeoutMs: FORGE_WORK_ON_TIMEOUT_MS,
         maxSubagentDepth: FORGE_WORK_ON_MAX_DEPTH,
         completionGuard: true,
+      },
+    }),
+  );
+
+  registrations.push(
+    registerAgent({
+      pi,
+      name: FORGE_READ_ONLY_NODE_AGENT,
+      definition: {
+        description:
+          "Execute a bounded ForgeDock node without requiring or permitting source edits",
+        systemPrompt: FORGE_WORK_ON_PROMPT,
+        systemPromptMode: "replace",
+        inheritProjectContext: true,
+        inheritSkills: false,
+        defaultContext: "fresh",
+        tools: [...FORGE_READ_ONLY_NODE_TOOLS],
+        extensions: [childRuntimePath],
+        acceptanceRole: "read-only",
+        defaultAsync: true,
+        defaultTimeoutMs: FORGE_WORK_ON_TIMEOUT_MS,
+        maxSubagentDepth: 1,
+        completionGuard: false,
       },
     }),
   );
