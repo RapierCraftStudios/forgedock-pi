@@ -10,8 +10,8 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:67cddccc72bdf224eb0f7a77c67fa404675fe90ebac40d878e640aca3ebd7346",
+  "sequence": 6,
+  "lastEventHash": "sha256:318d73c89a8c52a52673a21385cf1496f6b3e2f818f149e3be81168507705a13",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -41,6 +41,15 @@
         "The repository remained unchanged during resolution; the inspected paths have no diff from the frozen base."
       ],
       "finishedAt": "2026-08-25T13:13:37.482Z"
+    },
+    "investigate-1": {
+      "nodeId": "investigate-1",
+      "node": "investigate",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/63c88c5f-9abf-46ab-8be0-f65381de7c26/.pi/forge/63c88c5f-9abf-46ab-8be0-f65381de7c26-investigate-1.json"
     }
   },
   "effects": {},
@@ -49,13 +58,15 @@
     "node:resolve-1:queued": "95b80259-7782-459b-b043-940a1400d1c3",
     "node:resolve-1:started": "ac6d930e-a541-4c88-80ca-cf86384a5d3d",
     "node:resolve-1:receipt-bound": "35fc53cb-2cb8-4373-80a1-7d312fa80489",
-    "node:resolve-1:completed": "7623def0-a199-461f-b6e6-47a0fb677f63"
+    "node:resolve-1:completed": "7623def0-a199-461f-b6e6-47a0fb677f63",
+    "node:investigate-1:queued": "13d90537-533c-4ef7-9062-a6b503802ef8"
   },
   "eventIds": {
     "ffc52c6f-bd15-425f-8eed-03dd42ee40d4": true,
     "95b80259-7782-459b-b043-940a1400d1c3": true,
     "ac6d930e-a541-4c88-80ca-cf86384a5d3d": true,
     "35fc53cb-2cb8-4373-80a1-7d312fa80489": true,
-    "7623def0-a199-461f-b6e6-47a0fb677f63": true
+    "7623def0-a199-461f-b6e6-47a0fb677f63": true,
+    "13d90537-533c-4ef7-9062-a6b503802ef8": true
   }
 }
