@@ -10,8 +10,8 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:ab81bc987c846cdb91e64a4f872bef25ad8e83849b6b8a62491dd6628dedd3ca",
+  "sequence": 9,
+  "lastEventHash": "sha256:adbf74f8455ea3371bd0551c2483be1843eca520e31722801d8e6f9580e712ca",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -46,7 +46,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/70cb9888-50f2-4b1a-9a57-59999890a491/.pi/forge/70cb9888-50f2-4b1a-9a57-59999890a491-investigate-1.json",
       "subagentRunId": "c9c37a38-dfea-4653-a16e-467871c4eef3",
@@ -55,7 +55,18 @@
       "startedAt": "2026-08-25T13:21:19.864Z",
       "previousSubagentRunId": "launch:investigate-1:6109bc2c-12be-4aa3-8405-a9633fb9781e",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "invalid",
+      "evidence": [
+        "Frozen HEAD is 03e6133becc50ba8509b976743ea76ffeaab2c4d and the worktree has no changes.",
+        "src/workflows/work-on.ts:2141-2148 filters completed decision nodes to outcome awaiting-merge and selects the highest attempt, so an earlier remediation-required decision cannot shadow a later approved decision.",
+        "Commit 320ad98f894e872dcb4ddc50cc90237722ab736c changes the historical Object.values(...).find(...) selector to the awaiting-merge filter plus descending attempt sort; git ancestry confirms it is included in the frozen base.",
+        "test/core/dispatcher.test.ts:123-174 exercises a remediation-required round followed by an awaiting-merge decision and expects merge as the next node.",
+        "npm test passed all 80 tests and npm run typecheck passed on the frozen base."
+      ],
+      "finishedAt": "2026-08-25T13:25:27.480Z"
     }
   },
   "effects": {},
@@ -67,7 +78,8 @@
     "node:resolve-1:completed": "107036be-015e-4ba3-948f-bb3630802276",
     "node:investigate-1:queued": "49ac5b29-9640-43b2-bd7b-ece42825770a",
     "node:investigate-1:started": "d96d1140-7c47-410d-97aa-9534be6811ef",
-    "node:investigate-1:receipt-bound": "ebea84c1-08ed-4782-846b-f6026da0a680"
+    "node:investigate-1:receipt-bound": "ebea84c1-08ed-4782-846b-f6026da0a680",
+    "node:investigate-1:completed": "21276528-fc63-4dcf-b923-03a4845ec50b"
   },
   "eventIds": {
     "cb0305d3-78ab-4c21-bfa3-e55b3ee42dc1": true,
@@ -77,6 +89,7 @@
     "107036be-015e-4ba3-948f-bb3630802276": true,
     "49ac5b29-9640-43b2-bd7b-ece42825770a": true,
     "d96d1140-7c47-410d-97aa-9534be6811ef": true,
-    "ebea84c1-08ed-4782-846b-f6026da0a680": true
+    "ebea84c1-08ed-4782-846b-f6026da0a680": true,
+    "21276528-fc63-4dcf-b923-03a4845ec50b": true
   }
 }
