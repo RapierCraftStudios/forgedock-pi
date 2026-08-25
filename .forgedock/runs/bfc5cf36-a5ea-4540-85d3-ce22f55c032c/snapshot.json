@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 19,
-  "lastEventHash": "sha256:236fa7de9a04f48ca51d1cf743ed84a41603949829494c7d5c1b387e155df04e",
+  "sequence": 20,
+  "lastEventHash": "sha256:63727d50c2c832ec78a6738138b2af9b650822716c6aa2efcc5eac119849486d",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -138,10 +138,13 @@
       "status": "running",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/bfc5cf36-a5ea-4540-85d3-ce22f55c032c/.pi/forge/bfc5cf36-a5ea-4540-85d3-ce22f55c032c-implement-1.json",
-      "subagentRunId": "launch:implement-1:99d5a67a-1797-4285-a284-7d2d57328f90",
+      "subagentRunId": "24e8d3d0-2c15-4c3d-9cd9-a593aa3c5c9e",
       "launchNonce": "99d5a67a-1797-4285-a284-7d2d57328f90",
       "launchIntent": true,
-      "startedAt": "2026-08-25T21:35:40.301Z"
+      "startedAt": "2026-08-25T21:35:40.301Z",
+      "previousSubagentRunId": "launch:implement-1:99d5a67a-1797-4285-a284-7d2d57328f90",
+      "transportRetries": 0,
+      "launchReceipt": true
     }
   },
   "effects": {},
@@ -164,7 +167,8 @@
     "node:prepare-worktree-1:receipt-bound": "60f1b279-2442-412a-87c0-163b602c15f2",
     "node:prepare-worktree-1:completed": "32dfa109-2ec4-4943-a83f-08195d72576b",
     "node:implement-1:queued": "f3d5ac44-fdd1-4ed7-afdb-f2f4389f57bc",
-    "node:implement-1:started": "ef559147-da52-4bdf-91ba-50d0b2a53307"
+    "node:implement-1:started": "ef559147-da52-4bdf-91ba-50d0b2a53307",
+    "node:implement-1:receipt-bound": "99a88f9d-6fd1-45ae-82b4-36b65e4c1e21"
   },
   "eventIds": {
     "0ce6a9d0-87b1-44c6-943d-8393cb560926": true,
@@ -185,6 +189,7 @@
     "60f1b279-2442-412a-87c0-163b602c15f2": true,
     "32dfa109-2ec4-4943-a83f-08195d72576b": true,
     "f3d5ac44-fdd1-4ed7-afdb-f2f4389f57bc": true,
-    "ef559147-da52-4bdf-91ba-50d0b2a53307": true
+    "ef559147-da52-4bdf-91ba-50d0b2a53307": true,
+    "99a88f9d-6fd1-45ae-82b4-36b65e4c1e21": true
   }
 }
