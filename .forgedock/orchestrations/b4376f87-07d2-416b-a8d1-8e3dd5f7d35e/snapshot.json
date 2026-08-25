@@ -3,11 +3,11 @@
   "orchestrationId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
   "repository": "RapierCraftStudios/forgedock-pi",
   "integrationBranch": "dogfood",
-  "status": "running",
+  "status": "cancelled",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 34,
-  "lastEventHash": "sha256:15b2fd436320cf8eb2988a517c458984f7c8a21374204be896ed0429a37a0ab9",
+  "sequence": 35,
+  "lastEventHash": "sha256:b495bf633d7cda44bdea99fb69855a4e90be0095a86d094ba89038b4495f81aa",
   "lanes": [
     {
       "issueNumber": 45,
@@ -193,7 +193,10 @@
     "lane:13:started": "c16b90eb-88e6-4534-99b8-c86743579e6a",
     "lease:heartbeat:2026-08-25T13:23:17.547Z": "cd40d015-f169-4d87-a4a9-a86358506fec",
     "lease:heartbeat:2026-08-25T13:24:17.554Z": "11234a4e-0f54-4780-b631-5093aee0491c",
-    "lane:12:started": "12450d41-cca4-4581-88ee-1b360e6bccd4"
+    "lane:12:started": "12450d41-cca4-4581-88ee-1b360e6bccd4",
+    "orchestration:cancel": "90f4d679-4bb6-48de-a563-fbcf96cfcbb3"
   },
-  "createdAt": "2026-08-25T13:03:44.411Z"
+  "createdAt": "2026-08-25T13:03:44.411Z",
+  "reason": "Lease expired after its owning Pi session stopped heartbeating; takeover confirmed by operator session 01a03992-a251-78fc-b722-95aa7f4f9589.",
+  "completedAt": "2026-08-25T16:03:02.838Z"
 }
