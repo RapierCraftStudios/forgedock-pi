@@ -5,13 +5,13 @@
   "issueNumber": 53,
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "leaseBinding": {
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 35,
-  "lastEventHash": "sha256:7a2d9997d32e0b02ec218479421326a57df72da99ae8e32618ef7ae442abe92e",
+  "sequence": 36,
+  "lastEventHash": "sha256:947fa0a1ee4aecdbf0b51762564ee1ae0de26cf9312510ea0de5a0224015256c",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -227,7 +227,7 @@
       "node": "review-correctness",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "failed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/647f8b9f-3eaa-4f3f-9bcb-c777f83f60c1/.pi/forge/647f8b9f-3eaa-4f3f-9bcb-c777f83f60c1-review-correctness-1.json",
       "subagentRunId": "786c05aa-6954-4c1f-9a76-cb6513d7aa08",
@@ -236,14 +236,16 @@
       "startedAt": "2026-08-25T20:28:07.757Z",
       "previousSubagentRunId": "launch:review-correctness-1:d44a297c-64c7-4f80-83f5-a50d89f235fe",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "reason": "Cancelled by the operator through /forge:cancel.",
+      "finishedAt": "2026-08-25T21:18:48.348Z"
     },
     "review-security-1": {
       "nodeId": "review-security-1",
       "node": "review-security",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "failed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/647f8b9f-3eaa-4f3f-9bcb-c777f83f60c1/.pi/forge/647f8b9f-3eaa-4f3f-9bcb-c777f83f60c1-review-security-1.json",
       "subagentRunId": "c29ff2cf-c87b-4f30-a8f0-27c986fab262",
@@ -252,7 +254,9 @@
       "startedAt": "2026-08-25T20:28:27.519Z",
       "previousSubagentRunId": "launch:review-security-1:9f9a97f5-e655-4e70-9f3e-4cb594db29af",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "reason": "Cancelled by the operator through /forge:cancel.",
+      "finishedAt": "2026-08-25T21:18:48.348Z"
     }
   },
   "effects": {},
@@ -291,7 +295,8 @@
     "node:review-correctness-1:receipt-bound": "ba86f9d2-4c26-4bee-a24e-f04038654fcc",
     "node:review-security-1:queued": "e483a333-6088-4dcc-9a23-d9f78d5daea4",
     "node:review-security-1:started": "15cb0778-9fa7-460d-9dbf-b3c8d2e4115c",
-    "node:review-security-1:receipt-bound": "4dedb917-fef4-4955-85a5-d4ea2075fbc4"
+    "node:review-security-1:receipt-bound": "4dedb917-fef4-4955-85a5-d4ea2075fbc4",
+    "run:cancelled": "1e8da667-9217-4d6b-8431-4135be375646"
   },
   "eventIds": {
     "28127e57-647b-4271-865e-4db189ff5d19": true,
@@ -328,6 +333,8 @@
     "ba86f9d2-4c26-4bee-a24e-f04038654fcc": true,
     "e483a333-6088-4dcc-9a23-d9f78d5daea4": true,
     "15cb0778-9fa7-460d-9dbf-b3c8d2e4115c": true,
-    "4dedb917-fef4-4955-85a5-d4ea2075fbc4": true
-  }
+    "4dedb917-fef4-4955-85a5-d4ea2075fbc4": true,
+    "1e8da667-9217-4d6b-8431-4135be375646": true
+  },
+  "cancellationReason": "Cancelled by the operator through /forge:cancel."
 }
