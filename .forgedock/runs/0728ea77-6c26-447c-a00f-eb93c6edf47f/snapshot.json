@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 15,
-  "lastEventHash": "sha256:7fc4df5620839a072bcf17ecd371fabe6e12ca15a8cd1836a153c76af22f58e6",
+  "sequence": 16,
+  "lastEventHash": "sha256:f2df0a23fca6667e75cd769d9b6b0e73b6c5df6fef32fb4d59280e520810dbf8",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -114,10 +114,13 @@
       "status": "running",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/0728ea77-6c26-447c-a00f-eb93c6edf47f/.pi/forge/0728ea77-6c26-447c-a00f-eb93c6edf47f-prepare-worktree-1.json",
-      "subagentRunId": "launch:prepare-worktree-1:c7dac426-d8c1-47fb-9685-d256e0906c20",
+      "subagentRunId": "0f653b01-6f8d-4f42-9abb-444d60d76723",
       "launchNonce": "c7dac426-d8c1-47fb-9685-d256e0906c20",
       "launchIntent": true,
-      "startedAt": "2026-08-25T18:04:03.602Z"
+      "startedAt": "2026-08-25T18:04:03.602Z",
+      "previousSubagentRunId": "launch:prepare-worktree-1:c7dac426-d8c1-47fb-9685-d256e0906c20",
+      "transportRetries": 0,
+      "launchReceipt": true
     }
   },
   "effects": {},
@@ -136,7 +139,8 @@
     "node:plan-1:receipt-bound": "e8f29750-9bed-4063-ab81-29c94da3a38c",
     "node:plan-1:completed": "ffb19ef5-576d-423a-8a62-6d33dbba3d9e",
     "node:prepare-worktree-1:queued": "b306a7e6-41d3-4c34-86e1-d86ca995e7dd",
-    "node:prepare-worktree-1:started": "2946aeab-3d4b-41c6-bb11-936b38f0db86"
+    "node:prepare-worktree-1:started": "2946aeab-3d4b-41c6-bb11-936b38f0db86",
+    "node:prepare-worktree-1:receipt-bound": "d7905e49-d82f-4661-aeb2-18870d6c7d69"
   },
   "eventIds": {
     "469de514-67bc-4228-9327-0648d8a035ef": true,
@@ -153,6 +157,7 @@
     "e8f29750-9bed-4063-ab81-29c94da3a38c": true,
     "ffb19ef5-576d-423a-8a62-6d33dbba3d9e": true,
     "b306a7e6-41d3-4c34-86e1-d86ca995e7dd": true,
-    "2946aeab-3d4b-41c6-bb11-936b38f0db86": true
+    "2946aeab-3d4b-41c6-bb11-936b38f0db86": true,
+    "d7905e49-d82f-4661-aeb2-18870d6c7d69": true
   }
 }
