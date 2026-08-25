@@ -10,8 +10,8 @@
     "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
     "epoch": 1
   },
-  "sequence": 15,
-  "lastEventHash": "sha256:2602fd99f757697772707e255c20af47e86ba44f25e6fd0db0e64d5cc2f2fd70",
+  "sequence": 16,
+  "lastEventHash": "sha256:7d9eb04a4092f35587e7309f0ff694b15c338248af5341dcd577c8ee85d9c5c8",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -114,10 +114,13 @@
       "status": "running",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/c2553c16-045f-465c-87b3-08f0566183a2/.pi/forge/c2553c16-045f-465c-87b3-08f0566183a2-prepare-worktree-1.json",
-      "subagentRunId": "launch:prepare-worktree-1:1c1c06ee-d477-4a87-8b7e-720cf07be212",
+      "subagentRunId": "e2916507-39ca-4b10-a606-8680fc0c8271",
       "launchNonce": "1c1c06ee-d477-4a87-8b7e-720cf07be212",
       "launchIntent": true,
-      "startedAt": "2026-08-25T16:56:02.019Z"
+      "startedAt": "2026-08-25T16:56:02.019Z",
+      "previousSubagentRunId": "launch:prepare-worktree-1:1c1c06ee-d477-4a87-8b7e-720cf07be212",
+      "transportRetries": 0,
+      "launchReceipt": true
     }
   },
   "effects": {},
@@ -136,7 +139,8 @@
     "node:plan-1:receipt-bound": "e004c810-f82b-4874-8fac-e7aed951866e",
     "node:plan-1:completed": "e775ef44-7c7a-46f0-acf6-e9c97bd017af",
     "node:prepare-worktree-1:queued": "976468b6-27e7-4b91-882d-8b5bf8bbed83",
-    "node:prepare-worktree-1:started": "8bfaf8ad-8a2b-4bec-a6a1-de93da96b480"
+    "node:prepare-worktree-1:started": "8bfaf8ad-8a2b-4bec-a6a1-de93da96b480",
+    "node:prepare-worktree-1:receipt-bound": "91b82e25-0ee6-4633-b620-5947f53693c1"
   },
   "eventIds": {
     "26445051-7ba5-465e-8c7f-a17aa6f15137": true,
@@ -153,6 +157,7 @@
     "e004c810-f82b-4874-8fac-e7aed951866e": true,
     "e775ef44-7c7a-46f0-acf6-e9c97bd017af": true,
     "976468b6-27e7-4b91-882d-8b5bf8bbed83": true,
-    "8bfaf8ad-8a2b-4bec-a6a1-de93da96b480": true
+    "8bfaf8ad-8a2b-4bec-a6a1-de93da96b480": true,
+    "91b82e25-0ee6-4633-b620-5947f53693c1": true
   }
 }
