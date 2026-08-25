@@ -10,15 +10,15 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 4,
-  "lastEventHash": "sha256:04e42f618bf635fe0aeba7970c57aaedbd6fcaa00002e8ab2779f56013c1a96f",
+  "sequence": 5,
+  "lastEventHash": "sha256:876823ffb4aea6189e1f252ae512c1623b19bfb3b937c0b39ca16e9f35a422bc",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/4d0cac12-19d8-465f-b913-006f21cd4335/.pi/forge/4d0cac12-19d8-465f-b913-006f21cd4335-resolve-1.json",
       "subagentRunId": "28bc8373-2eee-4f7b-846c-768b4a6fb947",
@@ -27,7 +27,19 @@
       "startedAt": "2026-08-25T17:56:24.950Z",
       "previousSubagentRunId": "launch:resolve-1:6ba5fa2a-e871-4972-9fb1-07314e8ad835",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "round": 1,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "Issue context supplies positive issue number #50 and a non-empty bug title.",
+        "The issue body provides concrete reproduction steps, expected behavior, current durable run evidence, and operational impact, making it actionable for investigation.",
+        "The assigned run was started only after WorkOnController's open-issue guard; src/workflows/work-on.ts rejects any issue whose state is not open before run initialization.",
+        "The repository policy names dogfood as the integration branch and protects only main, so the bound base branch is configured and non-protected.",
+        "The report identifies a regression after closed issue #48 and supplies two current failing runs, so the historical issue does not make this current regression ineligible."
+      ],
+      "finishedAt": "2026-08-25T17:57:35.690Z"
     }
   },
   "effects": {},
@@ -35,12 +47,14 @@
     "run:create": "b1e68782-9a16-4c99-ac4d-202289a4121f",
     "node:resolve-1:queued": "63f67fe3-ecfe-4516-9318-abcae36902fb",
     "node:resolve-1:started": "41e3a373-e5fd-4e8a-819e-f427100ba46c",
-    "node:resolve-1:receipt-bound": "28ebce38-e471-4890-8ab1-b0f588c03508"
+    "node:resolve-1:receipt-bound": "28ebce38-e471-4890-8ab1-b0f588c03508",
+    "node:resolve-1:completed": "c78d215f-cdfd-47f1-b514-6a72c8fa4242"
   },
   "eventIds": {
     "b1e68782-9a16-4c99-ac4d-202289a4121f": true,
     "63f67fe3-ecfe-4516-9318-abcae36902fb": true,
     "41e3a373-e5fd-4e8a-819e-f427100ba46c": true,
-    "28ebce38-e471-4890-8ab1-b0f588c03508": true
+    "28ebce38-e471-4890-8ab1-b0f588c03508": true,
+    "c78d215f-cdfd-47f1-b514-6a72c8fa4242": true
   }
 }
