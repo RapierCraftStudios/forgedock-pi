@@ -10,8 +10,8 @@
     "ownerRunId": "5da43cdf-2ff6-479c-9bf8-d2241bbd78fe",
     "epoch": 1
   },
-  "sequence": 14,
-  "lastEventHash": "sha256:79d056cfe4b4e7ddb2afb8441a1015dc4584dffb901c1140e6b88dd9707dc32c",
+  "sequence": 15,
+  "lastEventHash": "sha256:8fbc4277c7ad2add8045ed4c20b377e4cd9b1a264c09c40f73d38515fd52c591",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -100,9 +100,13 @@
       "node": "prepare-worktree",
       "attempt": 1,
       "round": 1,
-      "status": "queued",
+      "status": "running",
       "baseSha": "4819168331da2a25f500a1d1436f231db8211f2b",
-      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/af1691fa-2cad-4207-a064-a8d95ad2be35/.pi/forge/af1691fa-2cad-4207-a064-a8d95ad2be35-prepare-worktree-1.json"
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/af1691fa-2cad-4207-a064-a8d95ad2be35/.pi/forge/af1691fa-2cad-4207-a064-a8d95ad2be35-prepare-worktree-1.json",
+      "subagentRunId": "launch:prepare-worktree-1:1d85626d-58b5-490b-ae08-a3cdc1ad185a",
+      "launchNonce": "1d85626d-58b5-490b-ae08-a3cdc1ad185a",
+      "launchIntent": true,
+      "startedAt": "2026-08-25T08:15:07.155Z"
     }
   },
   "effects": {},
@@ -120,7 +124,8 @@
     "node:plan-1:started": "09e5a36c-ac38-4d5c-b970-9efbbc69eed4",
     "node:plan-1:receipt-bound": "b8f22b44-fd30-4d4b-9a5a-02b2d56bb5bc",
     "node:plan-1:completed": "80cb0d54-cfbe-47a6-b445-4b7fea0c42f6",
-    "node:prepare-worktree-1:queued": "3957f26b-948c-41f7-9ee8-6a919c8dca35"
+    "node:prepare-worktree-1:queued": "3957f26b-948c-41f7-9ee8-6a919c8dca35",
+    "node:prepare-worktree-1:started": "e67d6680-ccd7-4464-b823-c73d886c819c"
   },
   "eventIds": {
     "8f4a2c50-a4a2-43e9-8677-7fe5092204e5": true,
@@ -136,6 +141,7 @@
     "09e5a36c-ac38-4d5c-b970-9efbbc69eed4": true,
     "b8f22b44-fd30-4d4b-9a5a-02b2d56bb5bc": true,
     "80cb0d54-cfbe-47a6-b445-4b7fea0c42f6": true,
-    "3957f26b-948c-41f7-9ee8-6a919c8dca35": true
+    "3957f26b-948c-41f7-9ee8-6a919c8dca35": true,
+    "e67d6680-ccd7-4464-b823-c73d886c819c": true
   }
 }
