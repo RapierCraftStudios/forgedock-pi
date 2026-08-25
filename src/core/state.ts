@@ -458,9 +458,13 @@ function assertContractBinding(
   phase: RunPhase,
   record: Record<string, unknown>,
 ): void {
-  if (!state.builderContract) return;
   if (phase !== "implement" && phase !== "verify" && phase !== "review")
     return;
+  if (!state.builderContract)
+    throw new StateTransitionError(
+      "missing-builder-contract",
+      `Phase ${phase} requires an accepted builder contract from plan.`,
+    );
   if (record.contractHash !== state.builderContract.contractHash) {
     throw new StateTransitionError(
       "contract-hash-mismatch",
@@ -507,6 +511,12 @@ function applyPhaseCompleted(state: RunState, event: RunEvent): void {
   assertLeaseEpoch(state, event);
   const { record, phase, attempt } = requirePhasePayload(event);
   const current = assertCurrentAttempt(state, phase, attempt, ["running"]);
+  if (phase === "plan" && record.builderContract === undefined) {
+    throw new StateTransitionError(
+      "missing-builder-contract",
+      "Plan completion requires a typed builder contract artifact.",
+    );
+  }
   if (phase === "plan" && record.builderContract !== undefined) {
     let contract: BuilderContract;
     try {

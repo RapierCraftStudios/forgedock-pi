@@ -191,8 +191,18 @@ test("hash chain and idempotency conflicts fail closed", () => {
 });
 
 test("terminal runs release their repository lease", () => {
+  const builderContract = {
+    schema: "forgedock.builder-contract/v1" as const,
+    revision: 1,
+    allowedPaths: [{ kind: "exact" as const, path: "src/core/state.ts" }],
+  };
+  const contractHash = hashBuilderContract(builderContract);
   let state = initializedState();
   for (const phase of RUN_PHASES) {
+    const contractBinding =
+      phase === "implement" || phase === "verify" || phase === "review"
+        ? { contractHash, contractRevision: 1 }
+        : {};
     state = applyRunEvent(
       state,
       nextEvent(
@@ -202,6 +212,7 @@ test("terminal runs release their repository lease", () => {
           phase,
           attempt: 1,
           restartAction: `retry ${phase}`,
+          ...contractBinding,
         },
         `${phase}:queue`,
       ),
@@ -215,6 +226,7 @@ test("terminal runs release their repository lease", () => {
           phase,
           attempt: 1,
           logicalNodeId: `${phase}-1`,
+          ...contractBinding,
         },
         `${phase}:start`,
       ),
@@ -228,6 +240,10 @@ test("terminal runs release their repository lease", () => {
           phase,
           attempt: 1,
           evidence: [],
+          ...contractBinding,
+          ...(phase === "plan"
+            ? { builderContract, contractHash, contractRevision: 1 }
+            : {}),
         },
         `${phase}:complete`,
       ),

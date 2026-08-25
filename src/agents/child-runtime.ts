@@ -25,6 +25,7 @@ import { GitHubIssueProjector } from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
 import {
+  canonicalJson,
   createRunEvent,
   RUN_PHASES,
   type RunEvent,
@@ -51,9 +52,7 @@ import {
 } from "./register.ts";
 import {
   FORGE_RUNTIME_GIT_PATHSPECS,
-  FORGE_RUNTIME_PATHS,
   isForgeRuntimePath,
-  parseNullDelimitedGitPaths,
 } from "./runtime-paths.ts";
 
 const BINDING_ENV = "PI_SUBAGENT_EXTENSION_BINDINGS";
@@ -215,7 +214,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
       const modeArgs =
         params.mode === "name-only"
-          ? ["--name-only"]
+          ? ["--name-status", "--find-renames", "-z"]
           : params.mode === "stat"
             ? ["--stat"]
             : ["--no-ext-diff", "--unified=80"];
@@ -233,11 +232,15 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         throw new Error(
           `git diff failed (${String(result.exitCode)}): ${result.stderr}`,
         );
+      const output =
+        params.mode === "name-only"
+          ? parseChangedGitPaths(result.stdout).join("\n")
+          : result.stdout;
       return {
         content: [
           {
             type: "text",
-            text: truncateTail(result.stdout, MAX_OUTPUT_BYTES) || "No diff.",
+            text: truncateTail(output, MAX_OUTPUT_BYTES) || "No diff.",
           },
         ],
         details: {
@@ -274,32 +277,6 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         throw new Error(
           "Cannot create a Forge commit with no worktree changes.",
         );
-      const trackedRuntime = await runProcess(
-        "git",
-        [
-          "-C",
-          root,
-          "ls-tree",
-          "-r",
-          "-z",
-          "--name-only",
-          "HEAD",
-          "--",
-          ...FORGE_RUNTIME_PATHS,
-        ],
-        {
-          cwd: root,
-          timeoutMs: 30_000,
-          env,
-          ...(signal ? { signal } : {}),
-        },
-      );
-      if (trackedRuntime.exitCode !== 0)
-        throw new Error(`git ls-tree failed: ${trackedRuntime.stderr}`);
-      const trackedRuntimePaths = new Set(
-        parseNullDelimitedGitPaths(trackedRuntime.stdout),
-      );
-
       const added = await runProcess(
         "git",
         ["-C", root, "add", "-A", "--", ".", ...FORGE_RUNTIME_GIT_PATHSPECS],
@@ -354,13 +331,11 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           "Forge commit refused to validate runtime paths because Git output was truncated.",
         );
       const stagedPaths = parseChangedGitPaths(staged.stdout);
-      const newlyStagedRuntimePaths = stagedPaths.filter(
-        (path) => isForgeRuntimePath(path) && !trackedRuntimePaths.has(path),
-      );
-      if (newlyStagedRuntimePaths.length > 0) {
+      const stagedRuntimePaths = stagedPaths.filter(isForgeRuntimePath);
+      if (stagedRuntimePaths.length > 0) {
         const reset = await runProcess(
           "git",
-          ["-C", root, "reset", "--", ...newlyStagedRuntimePaths],
+          ["-C", root, "reset", "--", ...stagedRuntimePaths],
           {
             cwd: root,
             timeoutMs: 30_000,
@@ -371,7 +346,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         if (reset.exitCode !== 0)
           throw new Error(`git reset failed: ${reset.stderr}`);
         throw new Error(
-          `Forge commit refused newly staged runtime paths: ${newlyStagedRuntimePaths.join(", ")}`,
+          `Forge commit refused runtime paths: ${stagedRuntimePaths.join(", ")}`,
         );
       }
       if (!acceptedContract)
@@ -761,6 +736,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         contractRevision?: number;
         builderContract?: BuilderContract;
       };
+      let parsedPlanContract: BuilderContract | undefined;
       if (
         checkpointParams.action === "complete" &&
         checkpointParams.phase === "plan" &&
@@ -773,8 +749,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           checkpointParams.contractHash !== contractHash
         )
           throw new Error("Plan contractHash does not match the contract report.");
-        acceptedContract = contract;
-        acceptedContractHash = contractHash;
+        parsedPlanContract = contract;
         checkpointParams = {
           ...checkpointParams,
           contractHash,
@@ -806,6 +781,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         };
       }
       const idempotencyKey = `phase:${checkpointParams.phase}:${checkpointParams.attempt}:${checkpointParams.action}`;
+      const requestedPayload = checkpointPayload(checkpointParams, binding);
       const priorEventId = current.state.idempotencyKeys[idempotencyKey];
       let event: RunEvent;
       let sequence: number;
@@ -820,6 +796,14 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           throw new Error(
             `Checkpoint event ${priorEventId} is missing from the journal.`,
           );
+        if (canonicalJson(priorEvent.payload) !== canonicalJson(requestedPayload))
+          throw new Error(
+            `Checkpoint idempotency conflict for ${idempotencyKey}: payload differs from the authoritative event.`,
+          );
+        if (parsedPlanContract) {
+          acceptedContract = parsedPlanContract;
+          acceptedContractHash = hashBuilderContract(parsedPlanContract);
+        }
         event = priorEvent;
         sequence = current.state.sequence;
         idempotent = true;
@@ -836,7 +820,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
             leaseEpoch: binding.leaseEpoch,
           },
           idempotencyKey,
-          payload: checkpointPayload(checkpointParams, binding),
+          payload: requestedPayload,
         });
         const nextState = applyRunEvent(current.state, event);
         stateTip = await store.commitRunState({
@@ -848,6 +832,10 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           ...(signal ? { signal } : {}),
         });
         sequence = nextState.sequence;
+        if (parsedPlanContract) {
+          acceptedContract = parsedPlanContract;
+          acceptedContractHash = hashBuilderContract(parsedPlanContract);
+        }
       }
 
       if (checkpointParams.action !== "queue") {
@@ -937,7 +925,23 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         throw new Error("Bound lease no longer owns this run.");
       const idempotencyKey = `contract:revision:${revision.contractHash}`;
       const priorEventId = current.state.idempotencyKeys[idempotencyKey];
+      const projector = new GitHubIssueProjector(transport, binding.repository);
       if (priorEventId) {
+        const priorEvent = current.events.find(
+          (candidate) => candidate.eventId === priorEventId,
+        );
+        if (!priorEvent)
+          throw new Error(
+            `Contract revision event ${priorEventId} is missing from the journal.`,
+          );
+        await projector.postArtifact({
+          issueNumber: binding.issueNumber,
+          runId: binding.runId,
+          eventId: priorEvent.eventId,
+          artifactKey: `builder-contract-revision-${revision.revision}`,
+          markdown: renderContractRevisionArtifact(revision),
+          ...(signal ? { signal } : {}),
+        });
         acceptedContract = revision.contract;
         acceptedContractHash = revision.contractHash;
         return {
@@ -970,7 +974,6 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         message: `Record ForgeDock builder contract revision ${revision.revision}`,
         ...(signal ? { signal } : {}),
       });
-      const projector = new GitHubIssueProjector(transport, binding.repository);
       await projector.postArtifact({
         issueNumber: binding.issueNumber,
         runId: binding.runId,
