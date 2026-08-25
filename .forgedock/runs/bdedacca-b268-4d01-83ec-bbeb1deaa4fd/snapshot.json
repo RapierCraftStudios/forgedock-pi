@@ -10,8 +10,8 @@
     "ownerRunId": "6ef5cb4d-c467-443b-9adc-e16a435761b8",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:3dd39b75e435d7928120d4f81e6c7306ad281e91c757e63e598664258c4bd898",
+  "sequence": 6,
+  "lastEventHash": "sha256:3c2fc2cbfb487e526ee95281d736edce8f0cb30e6d6d83b281f2d52f51b253bf",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -41,6 +41,15 @@
         "The worktree is unchanged from the frozen base; no implementation or verification command was performed in the resolve node."
       ],
       "finishedAt": "2026-08-25T07:46:28.561Z"
+    },
+    "investigate-1": {
+      "nodeId": "investigate-1",
+      "node": "investigate",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "6bed85fb9eb77e7867e793c38866021075e73fe9",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/bdedacca-b268-4d01-83ec-bbeb1deaa4fd/.pi/forge/bdedacca-b268-4d01-83ec-bbeb1deaa4fd-investigate-1.json"
     }
   },
   "effects": {},
@@ -49,13 +58,15 @@
     "node:resolve-1:queued": "faf6ac87-ec83-4f50-8476-b77b728c4efb",
     "node:resolve-1:started": "a90f2ad1-9030-4375-aac7-a4f7193252b3",
     "node:resolve-1:receipt-bound": "dbeb0750-70b7-49ce-a1cf-6ffe7b0b516d",
-    "node:resolve-1:completed": "a45b248a-a601-4f16-b9fa-a408fcd3f0aa"
+    "node:resolve-1:completed": "a45b248a-a601-4f16-b9fa-a408fcd3f0aa",
+    "node:investigate-1:queued": "d4265f1a-971b-4f23-b9ad-b3c16631f837"
   },
   "eventIds": {
     "e9489238-7e56-4d1d-ab2d-c01dde876078": true,
     "faf6ac87-ec83-4f50-8476-b77b728c4efb": true,
     "a90f2ad1-9030-4375-aac7-a4f7193252b3": true,
     "dbeb0750-70b7-49ce-a1cf-6ffe7b0b516d": true,
-    "a45b248a-a601-4f16-b9fa-a408fcd3f0aa": true
+    "a45b248a-a601-4f16-b9fa-a408fcd3f0aa": true,
+    "d4265f1a-971b-4f23-b9ad-b3c16631f837": true
   }
 }
