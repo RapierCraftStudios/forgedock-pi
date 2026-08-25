@@ -10,8 +10,8 @@
     "ownerRunId": "c0f52a10-07ba-4b5e-a47d-e39138c05aa2",
     "epoch": 1
   },
-  "sequence": 9,
-  "lastEventHash": "sha256:e150c2a05902fc961b9e1e0156d59f3b77cd001114ba3ab3e992d0fe8a308617",
+  "sequence": 10,
+  "lastEventHash": "sha256:4b19d9c9ad4cc7bf9b3ffaa9d72fe2584cf4dcac6c308df77daa656ed99dea66",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -63,6 +63,15 @@
         "No files were changed because investigate is read-only; command-based tests were unavailable by node policy."
       ],
       "finishedAt": "2026-08-25T16:09:45.378Z"
+    },
+    "plan-1": {
+      "nodeId": "plan-1",
+      "node": "plan",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/140cccbe-c0c2-478e-a44e-a17c0126dde7/.pi/forge/140cccbe-c0c2-478e-a44e-a17c0126dde7-plan-1.json"
     }
   },
   "effects": {},
@@ -75,7 +84,8 @@
     "node:investigate-1:queued": "1628e1be-3c4d-4004-bb22-f173fbc501da",
     "node:investigate-1:started": "6c43124d-c903-4037-880e-b19d76ee5ba4",
     "node:investigate-1:receipt-bound": "f1ad8fb8-9c64-4b81-8289-02fa22581fed",
-    "node:investigate-1:completed": "7f279ef1-907a-46ea-9709-e613aaddb8d1"
+    "node:investigate-1:completed": "7f279ef1-907a-46ea-9709-e613aaddb8d1",
+    "node:plan-1:queued": "234ab317-0dbb-48ac-8822-b1ea9e96fd11"
   },
   "eventIds": {
     "b4bb38a3-184b-4668-a8ee-ff93cc336fe2": true,
@@ -86,6 +96,7 @@
     "1628e1be-3c4d-4004-bb22-f173fbc501da": true,
     "6c43124d-c903-4037-880e-b19d76ee5ba4": true,
     "f1ad8fb8-9c64-4b81-8289-02fa22581fed": true,
-    "7f279ef1-907a-46ea-9709-e613aaddb8d1": true
+    "7f279ef1-907a-46ea-9709-e613aaddb8d1": true,
+    "234ab317-0dbb-48ac-8822-b1ea9e96fd11": true
   }
 }
