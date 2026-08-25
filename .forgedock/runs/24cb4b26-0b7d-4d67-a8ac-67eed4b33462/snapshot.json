@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:fb3e7f70a4f3d0e812cb57d35a9d345feb4a953edc74bb13ee3f43b84ff25e5b",
+  "sequence": 9,
+  "lastEventHash": "sha256:edeb56b3c1e9c8bed4e2c682a2b089e05dfade1f7a0f4694ade2d6b04b678652",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -44,7 +44,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/24cb4b26-0b7d-4d67-a8ac-67eed4b33462/.pi/forge/24cb4b26-0b7d-4d67-a8ac-67eed4b33462-investigate-1.json",
       "subagentRunId": "d0336e43-ee59-4a60-ba77-8da61959bfc6",
@@ -53,7 +53,19 @@
       "startedAt": "2026-08-25T18:06:35.965Z",
       "previousSubagentRunId": "launch:investigate-1:5fa245e2-e754-47bd-ad19-ad44c03c6944",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "decomposed",
+      "evidence": [
+        "`src/agents/child-runtime.ts:493-538` executes an approved verification argv directly with the assigned worktree as cwd; it does not enforce container UID/GID, redirect project caches, or inspect ownership after the command.",
+        "`src/agents/child-runtime.ts:1525-1550` relocates HOME/XDG configuration to a temporary directory, but this does not stop Docker bind-mounted repository paths from receiving root-owned pytest/runtime artifacts.",
+        "`src/adapters/git.ts:267-300` removes generated runtime, checks Git cleanliness, invokes `git worktree remove` as the host process, and only then attempts recursive `rm`; an ownership permission error is not classified as already absent and therefore aborts cleanup before fallback or local branch deletion.",
+        "`src/adapters/git.ts:319-335` cleans only ForgeDock-generated `.pi` paths and has no scan, diagnosis, ownership normalization, or supported remediation for foreign-owned ignored artifacts elsewhere in the worktree.",
+        "`src/workflows/orchestrate.ts:224-270` and `src/workflows/work-on.ts:2104-2117` show cancellation stops active subagents and records cancellation but does not schedule or invoke owned-worktree cleanup.",
+        "`test/adapters/git.test.ts:39-113` covers successful and idempotent cleanup with host-owned files only; there is no permission/foreign-owner regression coverage."
+      ],
+      "finishedAt": "2026-08-25T18:10:12.390Z"
     }
   },
   "effects": {},
@@ -65,7 +77,8 @@
     "node:resolve-1:completed": "f9984056-4d7b-4fac-91f5-b15c708f0d08",
     "node:investigate-1:queued": "f001b97e-e72b-4c5e-8a6e-176333e85818",
     "node:investigate-1:started": "59a20c87-f8e9-4c46-beb6-8e6dbaa38811",
-    "node:investigate-1:receipt-bound": "beff0643-a87c-4975-8c0d-05b8718d3126"
+    "node:investigate-1:receipt-bound": "beff0643-a87c-4975-8c0d-05b8718d3126",
+    "node:investigate-1:completed": "610cd852-007b-4100-95f3-d9811af8382e"
   },
   "eventIds": {
     "95971218-41e1-4ae2-ba0d-26c8315f8e4e": true,
@@ -75,6 +88,7 @@
     "f9984056-4d7b-4fac-91f5-b15c708f0d08": true,
     "f001b97e-e72b-4c5e-8a6e-176333e85818": true,
     "59a20c87-f8e9-4c46-beb6-8e6dbaa38811": true,
-    "beff0643-a87c-4975-8c0d-05b8718d3126": true
+    "beff0643-a87c-4975-8c0d-05b8718d3126": true,
+    "610cd852-007b-4100-95f3-d9811af8382e": true
   }
 }
