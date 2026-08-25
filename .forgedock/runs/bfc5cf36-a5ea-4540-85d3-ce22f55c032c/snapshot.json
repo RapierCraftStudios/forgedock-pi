@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 20,
-  "lastEventHash": "sha256:63727d50c2c832ec78a6738138b2af9b650822716c6aa2efcc5eac119849486d",
+  "sequence": 21,
+  "lastEventHash": "sha256:1fea97e0b004372b66bc2e7455c260a96ca122141abe492f93a80f454848c4fb",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -135,7 +135,7 @@
       "node": "implement",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/bfc5cf36-a5ea-4540-85d3-ce22f55c032c/.pi/forge/bfc5cf36-a5ea-4540-85d3-ce22f55c032c-implement-1.json",
       "subagentRunId": "24e8d3d0-2c15-4c3d-9cd9-a593aa3c5c9e",
@@ -144,7 +144,16 @@
       "startedAt": "2026-08-25T21:35:40.301Z",
       "previousSubagentRunId": "launch:implement-1:99d5a67a-1797-4285-a284-7d2d57328f90",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "d5866a89186cd854fdc44b61ebf9a98255b5f1d5",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "Commit d5866a89186cd854fdc44b61ebf9a98255b5f1d5 centralizes launch receipt binding behind a nonce-scoped idempotency identity shared by live launch, recovery, and transport-resume paths.",
+        "Receipt postcondition validation accepts an exact durable binding even after terminal completion and rejects nonce, sentinel, provider receipt, result path, retry count, and base identity conflicts.",
+        "npm run check passed strict TypeScript checking and all 84 tests."
+      ],
+      "finishedAt": "2026-08-25T21:40:31.706Z"
     }
   },
   "effects": {},
@@ -168,7 +177,8 @@
     "node:prepare-worktree-1:completed": "32dfa109-2ec4-4943-a83f-08195d72576b",
     "node:implement-1:queued": "f3d5ac44-fdd1-4ed7-afdb-f2f4389f57bc",
     "node:implement-1:started": "ef559147-da52-4bdf-91ba-50d0b2a53307",
-    "node:implement-1:receipt-bound": "99a88f9d-6fd1-45ae-82b4-36b65e4c1e21"
+    "node:implement-1:receipt-bound": "99a88f9d-6fd1-45ae-82b4-36b65e4c1e21",
+    "node:implement-1:completed": "7eb5adf6-4651-4e86-b5e6-7f57da29f30a"
   },
   "eventIds": {
     "0ce6a9d0-87b1-44c6-943d-8393cb560926": true,
@@ -190,6 +200,7 @@
     "32dfa109-2ec4-4943-a83f-08195d72576b": true,
     "f3d5ac44-fdd1-4ed7-afdb-f2f4389f57bc": true,
     "ef559147-da52-4bdf-91ba-50d0b2a53307": true,
-    "99a88f9d-6fd1-45ae-82b4-36b65e4c1e21": true
+    "99a88f9d-6fd1-45ae-82b4-36b65e4c1e21": true,
+    "7eb5adf6-4651-4e86-b5e6-7f57da29f30a": true
   }
 }
