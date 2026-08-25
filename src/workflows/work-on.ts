@@ -265,6 +265,14 @@ export class ForgeWorkOnController {
           }
           continue;
         }
+        if (isLaunchSentinel(link.subagentRunId)) {
+          const reason =
+            "A provider continuation receipt was not persisted; refusing to launch a duplicate continuation.";
+          link.status = "needs-human";
+          this.#persistLink(link);
+          this.#emitLifecycle(link, { reason });
+          continue;
+        }
         const payload = await this.#rpc.status(link.subagentRunId);
         if (!findForgeWorkOnResult(payload)) continue;
         link.status = "finalizing";
@@ -295,25 +303,34 @@ export class ForgeWorkOnController {
     if (this.#providerRecovering.has(link.forgeRunId)) return;
     this.#providerRecovering.add(link.forgeRunId);
     const previousRunId = link.subagentRunId;
+    const retry = link.providerRetries + 1;
+    const intent = createNodeLaunchIntent(
+      `legacy-resume-${retry}`,
+      link.resultPath,
+    );
+    this.#links.delete(previousRunId);
+    link.subagentRunId = intent.sentinelRunId;
+    link.status = "running";
+    this.#persistLink(link);
     try {
       const receipt = await this.#rpc.resume(
         previousRunId,
         `Resume the same ForgeDock run from its durable checkpoints after a transient provider transport failure. Do not repeat completed phases. Failure: ${failure}`,
       );
-      this.#links.delete(previousRunId);
+      this.#links.delete(intent.sentinelRunId);
       link.subagentRunId = receipt.runId;
-      link.providerRetries += 1;
+      link.providerRetries = retry;
       link.status = "running";
       this.#persistLink(link);
       ctx.ui.notify(
-        `ForgeDock issue #${link.issueNumber} resumed after transient provider failure (${link.providerRetries}/3).`,
+        `ForgeDock issue #${link.issueNumber} resumed after transient provider failure (${retry}/3).`,
         "warning",
       );
     } catch (error) {
-      link.status = "failed";
+      link.status = "needs-human";
       this.#persistLink(link);
       this.#emitLifecycle(link, {
-        reason: `Transient provider retry failed: ${errorMessage(error)}`,
+        reason: `Provider continuation is ambiguous after durable intent; refusing a duplicate resume: ${errorMessage(error)}`,
       });
     } finally {
       this.#providerRecovering.delete(link.forgeRunId);
@@ -345,51 +362,123 @@ export class ForgeWorkOnController {
     if (transportRetries >= 3) return false;
 
     const previousSubagentRunId = activeNode.subagentRunId;
-    const receipt = await this.#rpc.resume(
-      previousSubagentRunId,
-      [
-        `Resume the same retained ForgeDock node ${nodeId} after a transient transport interruption.`,
-        "Continue from the existing child transcript and tool history.",
-        "Do not restart investigation, planning, implementation, verification, or review exploration.",
-        "Do not create a fresh replacement node or repeat completed side effects.",
-        `Interrupted transport: ${failure}`,
-      ].join("\n"),
-    );
+    if (node.subagentRunId !== previousSubagentRunId) return false;
     const retry = transportRetries + 1;
-    await new RunJournal(store).append({
+    const resultPath = node.resultPath ?? activeNode.resultPath;
+    const intent = createNodeLaunchIntent(
+      `${nodeId}-resume-${retry}`,
+      resultPath,
+    );
+    const journal = new RunJournal(store);
+    await journal.append({
       runId: link.forgeRunId,
       type: "node.resumed",
       payload: {
         nodeId,
         node: node.node,
         attempt: node.attempt,
-        subagentRunId: receipt.runId,
+        ...(node.round ? { round: node.round } : {}),
+        subagentRunId: intent.sentinelRunId,
         previousSubagentRunId,
-        resultPath: node.resultPath ?? activeNode.resultPath,
+        resultPath,
         transportRetries: retry,
+        launchNonce: intent.launchNonce,
+        launchIntent: true,
         baseSha: node.baseSha ?? link.prepared.baseSha,
         ...(node.headSha ? { headSha: node.headSha } : {}),
         reason: failure,
       },
-      idempotencyKey: `node:${nodeId}:transport-resume:${retry}`,
+      idempotencyKey: `node:${nodeId}:transport-resume-intent:${retry}`,
       sessionId: ctx.sessionManager.getSessionId(),
-      message: `Resume ForgeDock node ${nodeId} after transient transport failure`,
+      message: `Record resume intent for ForgeDock node ${nodeId}`,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
     this.#links.delete(previousSubagentRunId);
     delete link.activeNodes[previousSubagentRunId];
-    const resumedNode = {
+    link.activeNodes[intent.sentinelRunId] = {
+      nodeId,
+      subagentRunId: intent.sentinelRunId,
+      resultPath,
+      launchNonce: intent.launchNonce,
+    };
+    if (link.subagentRunId === previousSubagentRunId)
+      link.subagentRunId = intent.sentinelRunId;
+    link.status = "running";
+    this.#persistLink(link);
+
+    let receipt;
+    try {
+      receipt = await this.#rpc.resume(
+        previousSubagentRunId,
+        [
+          `Resume the same retained ForgeDock node ${nodeId} after a transient transport interruption.`,
+          "Continue from the existing child transcript and tool history.",
+          "Do not restart investigation, planning, implementation, verification, or review exploration.",
+          "Do not create a fresh replacement node or repeat completed side effects.",
+          `Interrupted transport: ${failure}`,
+        ].join("\n"),
+      );
+    } catch (error) {
+      const reason = `Provider continuation is ambiguous after durable resume intent; refusing a duplicate: ${errorMessage(error)}`;
+      await journal.append({
+        runId: link.forgeRunId,
+        type: "node.needs-human",
+        payload: {
+          nodeId,
+          node: node.node,
+          attempt: node.attempt,
+          ...(node.round ? { round: node.round } : {}),
+          subagentRunId: intent.sentinelRunId,
+          resultPath,
+          reason,
+        },
+        idempotencyKey: `node:${nodeId}:transport-resume-ambiguous:${retry}`,
+        sessionId: ctx.sessionManager.getSessionId(),
+        message: `Fail closed ambiguous resume for ForgeDock node ${nodeId}`,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      link.status = "needs-human";
+      this.#persistLink(link);
+      this.#emitLifecycle(link, { reason, nodeId });
+      return true;
+    }
+
+    delete link.activeNodes[intent.sentinelRunId];
+    link.activeNodes[receipt.runId] = {
       nodeId,
       subagentRunId: receipt.runId,
-      resultPath: activeNode.resultPath,
+      resultPath,
+      launchNonce: intent.launchNonce,
     };
-    link.activeNodes[receipt.runId] = resumedNode;
-    if (link.subagentRunId === previousSubagentRunId)
+    this.#links.delete(intent.sentinelRunId);
+    if (link.subagentRunId === intent.sentinelRunId)
       link.subagentRunId = receipt.runId;
     link.providerRetries = retry;
     link.status = "running";
-    this.#links.set(receipt.runId, link);
     this.#persistLink(link);
+    await journal.append({
+      runId: link.forgeRunId,
+      type: "node.resumed",
+      payload: {
+        nodeId,
+        node: node.node,
+        attempt: node.attempt,
+        ...(node.round ? { round: node.round } : {}),
+        subagentRunId: receipt.runId,
+        previousSubagentRunId: intent.sentinelRunId,
+        resultPath,
+        transportRetries: retry,
+        launchNonce: intent.launchNonce,
+        launchReceipt: true,
+        baseSha: node.baseSha ?? link.prepared.baseSha,
+        ...(node.headSha ? { headSha: node.headSha } : {}),
+        reason: failure,
+      },
+      idempotencyKey: `node:${nodeId}:transport-resume-receipt:${retry}`,
+      sessionId: ctx.sessionManager.getSessionId(),
+      message: `Bind resume receipt for ForgeDock node ${nodeId}`,
+      ...(ctx.signal ? { signal: ctx.signal } : {}),
+    });
     ctx.ui.notify(
       `ForgeDock issue #${link.issueNumber} resumed ${nodeId} in-place after a transient transport failure (${retry}/3).`,
       "warning",
@@ -1121,7 +1210,13 @@ export class ForgeWorkOnController {
     let verificationResults: VerificationResult[] = [];
     let headSha = link.reviewHeadSha ?? link.prepared.baseSha;
     if (node.node === "review-join") {
-      const reviewers = Object.values(current.state.nodes).filter((candidate) => candidate.node === "review-correctness" || candidate.node === "review-security");
+      const reviewRound = node.round ?? node.attempt;
+      const reviewers = Object.values(current.state.nodes).filter(
+        (candidate) =>
+          (candidate.node === "review-correctness" ||
+            candidate.node === "review-security") &&
+          (candidate.round ?? candidate.attempt) === reviewRound,
+      );
       if (
         reviewers.length !== 2 ||
         reviewers.some(
@@ -1137,7 +1232,11 @@ export class ForgeWorkOnController {
         );
       headSha = reviewers[0]?.headSha ?? headSha;
       if (!pull) throw new Error("Review join requires a prepared pull request.");
-      const aggregate = await this.#aggregateFromState(link, current.state);
+      const aggregate = await this.#aggregateFromState(
+        link,
+        current.state,
+        reviewRound,
+      );
       const summaryCommentId = await publishJoinedReviewSummary(
         github,
         pull.number,
@@ -1225,7 +1324,11 @@ export class ForgeWorkOnController {
       }
     } else if (node.node === "decision") {
       if (!pull) throw new Error("Decision requires a prepared pull request.");
-      const aggregate = await this.#aggregateFromState(link, current.state);
+      const aggregate = await this.#aggregateFromState(
+        link,
+        current.state,
+        node.round ?? node.attempt,
+      );
       const currentState = current.state;
       const latestNode = (name: string) =>
         Object.values(currentState.nodes)
@@ -1323,7 +1426,16 @@ export class ForgeWorkOnController {
     } else if (node.node === "merge") {
       if (!pull) throw new Error("Merge requires a prepared pull request.");
       const authority = await store.readRun(link.forgeRunId, ctx.signal);
-      const decision = authority.state ? Object.values(authority.state.nodes).find((candidate) => candidate.node === "decision" && candidate.status === "completed") : undefined;
+      const decision = authority.state
+        ? Object.values(authority.state.nodes)
+            .filter(
+              (candidate) =>
+                candidate.node === "decision" &&
+                candidate.status === "completed" &&
+                candidate.outcome === "awaiting-merge",
+            )
+            .sort((left, right) => right.attempt - left.attempt)[0]
+        : undefined;
       const mergeDecision = decision?.finalReviewDecision;
       const actualHead = await this.#git.head(link.prepared.worktreePath, ctx.signal);
       const actualFiles = await this.#git.changedFiles(link.prepared.worktreePath, link.prepared.baseSha, ctx.signal);
@@ -1345,7 +1457,11 @@ export class ForgeWorkOnController {
       outcome = "merged";
       evidence = [`merge:${merged.sha}`];
       await journal.append({ runId: link.forgeRunId, type: "effect.recorded", payload: { effectType: "merge", effectId: `merge:${pull.number}`, digest: digest(merged.sha) }, idempotencyKey: `effect:merge:${pull.number}`, sessionId, message: `Record merge effect for ${pull.number}`, ...(ctx.signal ? { signal: ctx.signal } : {}) });
-      const aggregate = await this.#aggregateFromState(link, authority.state as import("../core/state.ts").RunState);
+      const aggregate = await this.#aggregateFromState(
+        link,
+        authority.state as import("../core/state.ts").RunState,
+        decision.attempt,
+      );
       await postReviewCompletionArtifacts({
         github,
         projector,
@@ -1367,14 +1483,20 @@ export class ForgeWorkOnController {
       const terminalState = await store.readRun(link.forgeRunId, ctx.signal);
       if (!terminalState.state)
         throw new Error("Cleanup requires durable run state.");
-      const decisionNode = Object.values(terminalState.state.nodes).find(
-        (candidate) =>
-          candidate.node === "decision" && candidate.status === "completed",
-      );
-      const mergeNode = Object.values(terminalState.state.nodes).find(
-        (candidate) =>
-          candidate.node === "merge" && candidate.status === "completed",
-      );
+      const decisionNode = Object.values(terminalState.state.nodes)
+        .filter(
+          (candidate) =>
+            candidate.node === "decision" &&
+            candidate.status === "completed" &&
+            candidate.outcome === "awaiting-merge",
+        )
+        .sort((left, right) => right.attempt - left.attempt)[0];
+      const mergeNode = Object.values(terminalState.state.nodes)
+        .filter(
+          (candidate) =>
+            candidate.node === "merge" && candidate.status === "completed",
+        )
+        .sort((left, right) => right.attempt - left.attempt)[0];
       const terminalDecision = decisionNode?.finalReviewDecision;
       const cleanupEffect = terminalState.state.effects[`cleanup:${link.forgeRunId}`];
       if (!cleanupEffect) {
@@ -1404,6 +1526,7 @@ export class ForgeWorkOnController {
         const aggregate = await this.#aggregateFromState(
           link,
           terminalState.state,
+          decisionNode.attempt,
         );
         await postTerminalIssueArtifacts({
           projector,
@@ -1456,16 +1579,28 @@ export class ForgeWorkOnController {
     await this.#dispatchNode(link, next, policy, store, ctx, "Parent-owned continuation from durable state.");
   }
 
-  async #aggregateFromState(link: ActiveRunLink, state: import("../core/state.ts").RunState): Promise<ForgeWorkOnResult> {
-    const reviewers = Object.values(state.nodes)
-      .filter(
-        (node) =>
-          (node.node === "review-correctness" ||
-            node.node === "review-security") &&
-          node.status === "completed" &&
-          node.publishedCommentId &&
-          node.reviewerResult,
-      )
+  async #aggregateFromState(
+    link: ActiveRunLink,
+    state: import("../core/state.ts").RunState,
+    round?: number,
+  ): Promise<ForgeWorkOnResult> {
+    const completedReviewerNodes = Object.values(state.nodes).filter(
+      (node) =>
+        (node.node === "review-correctness" ||
+          node.node === "review-security") &&
+        node.status === "completed" &&
+        node.publishedCommentId &&
+        node.reviewerResult,
+    );
+    const reviewRound =
+      round ??
+      Math.max(
+        ...completedReviewerNodes.map((node) => node.round ?? node.attempt),
+        1,
+      );
+    const reviewers = completedReviewerNodes
+      .filter((node) => (node.round ?? node.attempt) === reviewRound)
+      .sort((left, right) => left.node.localeCompare(right.node))
       .map((node) => node.reviewerResult as ForgeReviewerResult);
     if (reviewers.length !== 2 || reviewers[0]?.headSha !== reviewers[1]?.headSha)
       throw new Error("Review aggregate requires two independent same-SHA reviewer results.");
@@ -1476,7 +1611,11 @@ export class ForgeWorkOnController {
     );
     const verification = ["verify", "ci"].flatMap((nodeName) => {
       const latest = Object.values(state.nodes)
-        .filter((node) => node.node === nodeName)
+        .filter(
+          (node) =>
+            node.node === nodeName &&
+            (node.round ?? node.attempt) === reviewRound,
+        )
         .sort((left, right) => right.attempt - left.attempt)[0];
       return (latest?.verificationResults ?? []).map((result) => ({
         name: result.name,
@@ -1499,7 +1638,7 @@ export class ForgeWorkOnController {
       headSha,
       changedFiles,
       verification,
-      review: { headSha, rounds: Math.max(...Object.values(state.nodes).filter((node) => node.node === "review-correctness" || node.node === "review-security").map((node) => node.attempt), 1), completedReviewers: reviewers.map((reviewer) => reviewer.reviewer), reviewerResults: reviewers, findings: reviewers.flatMap((reviewer) => reviewer.findings) },
+      review: { headSha, rounds: reviewRound, completedReviewers: reviewers.map((reviewer) => reviewer.reviewer), reviewerResults: reviewers, findings: reviewers.flatMap((reviewer) => reviewer.findings) },
       residualRisks: [],
     };
   }
@@ -1581,7 +1720,7 @@ export class ForgeWorkOnController {
     link.currentNodeId = node.nodeId;
     link.status = "running";
     this.#persistLink(link);
-    await journal.append({
+    const started = await journal.append({
       runId: link.forgeRunId,
       type: "node.started",
       payload: {
@@ -1600,6 +1739,32 @@ export class ForgeWorkOnController {
       message: `Record launch intent for ForgeDock node ${node.nodeId}`,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
+    const durableIntent = started.state.nodes[node.nodeId];
+    if (
+      !durableIntent ||
+      durableIntent.subagentRunId !== sentinel ||
+      durableIntent.launchNonce !== launchIntent.launchNonce
+    ) {
+      delete link.activeNodes[sentinel];
+      if (!durableIntent?.subagentRunId)
+        throw new Error(`Node ${node.nodeId} has no durable launch winner.`);
+      const durableResultPath = durableIntent.resultPath ?? resultPath;
+      link.activeNodes[durableIntent.subagentRunId] = {
+        nodeId: node.nodeId,
+        subagentRunId: durableIntent.subagentRunId,
+        resultPath: durableResultPath,
+        ...(durableIntent.launchNonce
+          ? { launchNonce: durableIntent.launchNonce }
+          : {}),
+      };
+      link.subagentRunId = durableIntent.subagentRunId;
+      link.resultPath = durableResultPath;
+      link.nodeResultPath = durableResultPath;
+      link.currentNodeId = node.nodeId;
+      link.status = "running";
+      this.#persistLink(link);
+      return;
+    }
     const launchInput = {
       runId: link.forgeRunId,
       issueNumber: link.issueNumber,
@@ -1721,6 +1886,15 @@ export class ForgeWorkOnController {
         candidate.issueNumber === issueNumber,
     );
     if (!link) return undefined;
+    if (isLaunchSentinel(link.subagentRunId)) {
+      link.status = "needs-human";
+      this.#persistLink(link);
+      return {
+        forgeRunId: link.forgeRunId,
+        subagentRunId: link.subagentRunId,
+        state: "paused",
+      };
+    }
     const payload = await this.#rpc.status(link.subagentRunId);
     const completion = findAsyncCompletionForRun(
       payload,
@@ -1733,13 +1907,33 @@ export class ForgeWorkOnController {
       link.providerRetries < 3
     ) {
       const previousRunId = link.subagentRunId;
-      const receipt = await this.#rpc.resume(
-        previousRunId,
-        `Resume the same ForgeDock run from durable checkpoints after terminal transient failure. Do not repeat completed phases. Failure: ${completion.error}`,
+      const retry = link.providerRetries + 1;
+      const intent = createNodeLaunchIntent(
+        `orchestration-resume-${retry}`,
+        link.resultPath,
       );
       this.#links.delete(previousRunId);
+      link.subagentRunId = intent.sentinelRunId;
+      link.status = "running";
+      this.#persistLink(link);
+      let receipt;
+      try {
+        receipt = await this.#rpc.resume(
+          previousRunId,
+          `Resume the same ForgeDock run from durable checkpoints after terminal transient failure. Do not repeat completed phases. Failure: ${completion.error}`,
+        );
+      } catch {
+        link.status = "needs-human";
+        this.#persistLink(link);
+        return {
+          forgeRunId: link.forgeRunId,
+          subagentRunId: link.subagentRunId,
+          state: "paused",
+        };
+      }
+      this.#links.delete(intent.sentinelRunId);
       link.subagentRunId = receipt.runId;
-      link.providerRetries += 1;
+      link.providerRetries = retry;
       link.status = "running";
       this.#persistLink(link);
       return {
@@ -1758,11 +1952,30 @@ export class ForgeWorkOnController {
         /No comment found for marker.*FORGE:BUILDER/i.test(result.blocker)
       ) {
         const previousRunId = link.subagentRunId;
-        const receipt = await this.#rpc.resume(
-          previousRunId,
-          "Resume the same ForgeDock run after a fixed idempotent projection defect. Retry verify complete attempt 1 exactly once; the authoritative phase event and implementation commit already exist. Then continue review preparation and nested review without repeating completed phases.",
+        const intent = createNodeLaunchIntent(
+          "orchestration-projection-resume",
+          link.resultPath,
         );
         this.#links.delete(previousRunId);
+        link.subagentRunId = intent.sentinelRunId;
+        link.status = "running";
+        this.#persistLink(link);
+        let receipt;
+        try {
+          receipt = await this.#rpc.resume(
+            previousRunId,
+            "Resume the same ForgeDock run after a fixed idempotent projection defect. Retry verify complete attempt 1 exactly once; the authoritative phase event and implementation commit already exist. Then continue review preparation and nested review without repeating completed phases.",
+          );
+        } catch {
+          link.status = "needs-human";
+          this.#persistLink(link);
+          return {
+            forgeRunId: link.forgeRunId,
+            subagentRunId: link.subagentRunId,
+            state: "paused",
+          };
+        }
+        this.#links.delete(intent.sentinelRunId);
         link.subagentRunId = receipt.runId;
         link.status = "running";
         this.#persistLink(link);
@@ -3396,7 +3609,12 @@ export function isLaunchSentinel(runId: string): boolean {
   return runId.startsWith("launch:");
 }
 
-export type LaunchRecoveryAction = "bind-receipt" | "promote-running" | "recover-artifact" | "needs-human";
+export type LaunchRecoveryAction =
+  | "bind-receipt"
+  | "promote-running"
+  | "inspect-active"
+  | "recover-artifact"
+  | "needs-human";
 
 /** Reconciliation seam shared by restart recovery and live completion handling. */
 export function reconcileLaunchState(input: {
@@ -3414,6 +3632,12 @@ export function reconcileLaunchState(input: {
     !isLaunchSentinel(input.activeRunId)
   )
     return "bind-receipt";
+  if (
+    input.durableStatus === "running" &&
+    input.durableRunId === input.activeRunId &&
+    !isLaunchSentinel(input.activeRunId)
+  )
+    return "inspect-active";
   if (input.resultArtifactPresent) return "recover-artifact";
   if (isLaunchSentinel(input.activeRunId)) return "needs-human";
   return "needs-human";
