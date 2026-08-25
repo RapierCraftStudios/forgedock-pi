@@ -3,11 +3,11 @@
   "orchestrationId": "007ae8ca-880f-459c-b88f-92cc89bfafa4",
   "repository": "RapierCraftStudios/forgedock-pi",
   "integrationBranch": "dogfood",
-  "status": "running",
+  "status": "cancelled",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 2,
-  "lastEventHash": "sha256:c6301224edafdc76e9a558b7f7b9c2a6ba914d26ddd1e74f62fbb969552b0779",
+  "sequence": 3,
+  "lastEventHash": "sha256:0f5e6ea63154a78ab8ecc7f1c4c12b50470e5df258084b01d366c444ba61afe2",
   "lanes": [
     {
       "issueNumber": 15,
@@ -26,7 +26,10 @@
   ],
   "idempotencyKeys": {
     "orchestration:create": "dd9950b8-48e2-48ca-9e35-811248078afc",
-    "lane:15:started": "355bb205-0ae5-4948-a642-40050128a7ff"
+    "lane:15:started": "355bb205-0ae5-4948-a642-40050128a7ff",
+    "orchestration:cancel": "09f36fe7-2868-4bf7-9ee9-1ed4d2f5e235"
   },
-  "createdAt": "2026-08-25T07:24:03.001Z"
+  "createdAt": "2026-08-25T07:24:03.001Z",
+  "reason": "Operator-authorized reset after host restart before any phase completed.",
+  "completedAt": "2026-08-25T07:28:50.740Z"
 }
