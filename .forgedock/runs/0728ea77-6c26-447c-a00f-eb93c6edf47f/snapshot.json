@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 13,
-  "lastEventHash": "sha256:ee60a782009e23f5e4ec8b07a3f8b20ae20b1ccd826341b895d40f20737f1422",
+  "sequence": 14,
+  "lastEventHash": "sha256:d64045c7e9f8d04dbccf3ab240de84634ddd93a801cbe82a82aa74c8fcc167c9",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -105,6 +105,15 @@
         "package.json defines npm run check as typecheck followed by the complete test suite; .forge/config.json has no local verification commands configured, so implementation verification should still use the repository scripts available to the writer."
       ],
       "finishedAt": "2026-08-25T18:03:41.231Z"
+    },
+    "prepare-worktree-1": {
+      "nodeId": "prepare-worktree-1",
+      "node": "prepare-worktree",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/0728ea77-6c26-447c-a00f-eb93c6edf47f/.pi/forge/0728ea77-6c26-447c-a00f-eb93c6edf47f-prepare-worktree-1.json"
     }
   },
   "effects": {},
@@ -121,7 +130,8 @@
     "node:plan-1:queued": "d7b28e80-523d-40b2-acee-f957e31de934",
     "node:plan-1:started": "da41df4b-0da0-4a6a-b15b-972779aefc18",
     "node:plan-1:receipt-bound": "e8f29750-9bed-4063-ab81-29c94da3a38c",
-    "node:plan-1:completed": "ffb19ef5-576d-423a-8a62-6d33dbba3d9e"
+    "node:plan-1:completed": "ffb19ef5-576d-423a-8a62-6d33dbba3d9e",
+    "node:prepare-worktree-1:queued": "b306a7e6-41d3-4c34-86e1-d86ca995e7dd"
   },
   "eventIds": {
     "469de514-67bc-4228-9327-0648d8a035ef": true,
@@ -136,6 +146,7 @@
     "d7b28e80-523d-40b2-acee-f957e31de934": true,
     "da41df4b-0da0-4a6a-b15b-972779aefc18": true,
     "e8f29750-9bed-4063-ab81-29c94da3a38c": true,
-    "ffb19ef5-576d-423a-8a62-6d33dbba3d9e": true
+    "ffb19ef5-576d-423a-8a62-6d33dbba3d9e": true,
+    "b306a7e6-41d3-4c34-86e1-d86ca995e7dd": true
   }
 }
