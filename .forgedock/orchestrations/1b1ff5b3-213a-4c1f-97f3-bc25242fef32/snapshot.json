@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 2,
   "leaseEpoch": 1,
-  "sequence": 28,
-  "lastEventHash": "sha256:afa2c966e727cbcbbe02ab5530533eb928e0ead6ba5f899934cf459c5ba0ac82",
+  "sequence": 29,
+  "lastEventHash": "sha256:7ac0c0e2e8cf18919fbb5f63a9870d40654aabd53d0627dcdcb3d29880a63d27",
   "lanes": [
     {
       "issueNumber": 49,
@@ -30,8 +30,9 @@
     {
       "issueNumber": 51,
       "ordinal": 2,
-      "status": "queued",
-      "refreshes": 0
+      "status": "failed",
+      "refreshes": 0,
+      "reason": "GitHub API 403 for /repos/RapierCraftStudios/forgedock-pi/git/blobs."
     },
     {
       "issueNumber": 52,
@@ -74,7 +75,8 @@
     "lease:heartbeat:2026-08-25T19:09:23.980Z": "4fcf1c20-ac10-4ca7-80d8-62b2b5182519",
     "lease:heartbeat:2026-08-25T19:10:23.982Z": "9255a7ee-5c89-4750-af12-8613585551b8",
     "lane:49:ready:0": "410b409e-c293-42ef-8f12-9c2af50dccd8",
-    "lease:heartbeat:2026-08-25T19:16:39.011Z": "5a86eabb-fcb9-4e25-8613-0faa734b1aa7"
+    "lease:heartbeat:2026-08-25T19:16:39.011Z": "5a86eabb-fcb9-4e25-8613-0faa734b1aa7",
+    "lane:51:launch-failed": "f81016e6-2d00-4b9c-ba9f-b6a354ef1478"
   },
   "createdAt": "2026-08-25T18:47:20.196Z"
 }
