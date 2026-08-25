@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 12,
-  "lastEventHash": "sha256:0890ecbb7ba823fa59aced85968a74288da05601ab0b81f37f282577b40c721d",
+  "sequence": 13,
+  "lastEventHash": "sha256:ee60a782009e23f5e4ec8b07a3f8b20ae20b1ccd826341b895d40f20737f1422",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -73,7 +73,7 @@
       "node": "plan",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/0728ea77-6c26-447c-a00f-eb93c6edf47f/.pi/forge/0728ea77-6c26-447c-a00f-eb93c6edf47f-plan-1.json",
       "subagentRunId": "630198fd-86ea-42e4-afad-e6a6941740a6",
@@ -82,7 +82,29 @@
       "startedAt": "2026-08-25T18:00:59.077Z",
       "previousSubagentRunId": "launch:plan-1:713e123b-daee-43b0-af29-6975a1fb6ef9",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "builderContract": {
+        "schema": "forgedock.builder-path-contract/v1",
+        "revision": 1,
+        "allowedPaths": [
+          "src/adapters/subagents.ts",
+          "src/agents/materialize.ts",
+          "src/agents/register.ts",
+          "test/adapters/subagents.test.ts"
+        ],
+        "contractHash": "fff6fcbe9965bf9091443cfbd886e7d182309345f67b1435236e1d26f66ae3ce"
+      },
+      "outcome": "completed",
+      "evidence": [
+        "At frozen base 03e6133becc50ba8509b976743ea76ffeaab2c4d, src/agents/register.ts registers the bounded FORGE_WORK_ON_AGENT as acceptanceRole writer with completionGuard true and has no FORGE_READ_ONLY_NODE_AGENT definition.",
+        "src/agents/materialize.ts hardcodes completionGuard: true in agentFile and materializes only work-on, refresh-review, and two reviewer definitions.",
+        "src/adapters/subagents.ts #spawn assigns FORGE_WORK_ON_AGENT to every bounded non-review node, so this frozen base requires both role-specific routing and guard configuration rather than only a boolean correction.",
+        "test/adapters/subagents.test.ts covers bounded launch and generated agents but does not assert role-specific bounded routing or read-only completionGuard behavior.",
+        "package.json defines npm run check as typecheck followed by the complete test suite; .forge/config.json has no local verification commands configured, so implementation verification should still use the repository scripts available to the writer."
+      ],
+      "finishedAt": "2026-08-25T18:03:41.231Z"
     }
   },
   "effects": {},
@@ -98,7 +120,8 @@
     "node:investigate-1:completed": "af8e0161-af1c-4128-8f14-49116b8bdc28",
     "node:plan-1:queued": "d7b28e80-523d-40b2-acee-f957e31de934",
     "node:plan-1:started": "da41df4b-0da0-4a6a-b15b-972779aefc18",
-    "node:plan-1:receipt-bound": "e8f29750-9bed-4063-ab81-29c94da3a38c"
+    "node:plan-1:receipt-bound": "e8f29750-9bed-4063-ab81-29c94da3a38c",
+    "node:plan-1:completed": "ffb19ef5-576d-423a-8a62-6d33dbba3d9e"
   },
   "eventIds": {
     "469de514-67bc-4228-9327-0648d8a035ef": true,
@@ -112,6 +135,7 @@
     "af8e0161-af1c-4128-8f14-49116b8bdc28": true,
     "d7b28e80-523d-40b2-acee-f957e31de934": true,
     "da41df4b-0da0-4a6a-b15b-972779aefc18": true,
-    "e8f29750-9bed-4063-ab81-29c94da3a38c": true
+    "e8f29750-9bed-4063-ab81-29c94da3a38c": true,
+    "ffb19ef5-576d-423a-8a62-6d33dbba3d9e": true
   }
 }
