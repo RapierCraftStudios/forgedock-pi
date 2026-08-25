@@ -10,8 +10,8 @@
     "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
     "epoch": 1
   },
-  "sequence": 9,
-  "lastEventHash": "sha256:560b4ae5eebe84f178756e3c77f47d8954d9cdeaf19e8355f9690a7b15cdb864",
+  "sequence": 10,
+  "lastEventHash": "sha256:f285201e77a174fd51c40bc2ab93aa71c5349e09b0953abccda53faa85420970",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -66,6 +66,15 @@
         "The supplied issue history records two finalized resolve/investigate children that were subsequently rejected solely for making no edits, matching the inspected configuration path."
       ],
       "finishedAt": "2026-08-25T16:48:33.217Z"
+    },
+    "plan-1": {
+      "nodeId": "plan-1",
+      "node": "plan",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/5ae128e5-d087-4d0f-97cb-73d4435aabae/.pi/forge/5ae128e5-d087-4d0f-97cb-73d4435aabae-plan-1.json"
     }
   },
   "effects": {},
@@ -78,7 +87,8 @@
     "node:investigate-1:queued": "d72b8fea-9bd6-4426-9180-94f6d90fdf39",
     "node:investigate-1:started": "9d4455c3-9162-44fe-871b-b8f6baaa6c28",
     "node:investigate-1:receipt-bound": "3817abdb-db51-4564-98d7-ca31003770d9",
-    "node:investigate-1:completed": "c85bb77a-9290-4543-948d-2a36645599f6"
+    "node:investigate-1:completed": "c85bb77a-9290-4543-948d-2a36645599f6",
+    "node:plan-1:queued": "596c2de8-6600-44d9-b471-0aa566eda8e9"
   },
   "eventIds": {
     "3d76639e-0ea5-4b9c-8cf5-c5861433e30c": true,
@@ -89,6 +99,7 @@
     "d72b8fea-9bd6-4426-9180-94f6d90fdf39": true,
     "9d4455c3-9162-44fe-871b-b8f6baaa6c28": true,
     "3817abdb-db51-4564-98d7-ca31003770d9": true,
-    "c85bb77a-9290-4543-948d-2a36645599f6": true
+    "c85bb77a-9290-4543-948d-2a36645599f6": true,
+    "596c2de8-6600-44d9-b471-0aa566eda8e9": true
   }
 }
