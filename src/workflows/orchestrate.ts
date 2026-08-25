@@ -15,7 +15,10 @@ import {
   readyOrchestrationLanes,
   type OrchestrationState,
 } from "../core/orchestration.ts";
-import { isLeaseExpired } from "../core/lease.ts";
+import {
+  isLeaseExpired,
+  type RepositoryLease,
+} from "../core/lease.ts";
 import { isProtectedBranch, type ForgePolicy } from "../core/policy.ts";
 import { OrchestrationJournal } from "./orchestration-journal.ts";
 import {
@@ -54,6 +57,16 @@ export interface StartOrchestrationResult {
   integrationBranch: string;
 }
 
+export class OrchestrationCancellationCleanupError extends Error {
+  readonly state: OrchestrationState;
+
+  constructor(state: OrchestrationState, message: string) {
+    super(message);
+    this.name = "OrchestrationCancellationCleanupError";
+    this.state = state;
+  }
+}
+
 export class ForgeOrchestrationController {
   readonly #pi: ExtensionAPI;
   readonly #workOn: ForgeWorkOnController;
@@ -62,6 +75,8 @@ export class ForgeOrchestrationController {
   readonly #pumping = new Set<string>();
   readonly #pumpPending = new Set<string>();
   readonly #heartbeating = new Set<string>();
+  readonly #cancelling = new Set<string>();
+  readonly #cancellations = new Map<string, Promise<OrchestrationState>>();
   readonly #lifecycleQueues = new Map<string, Promise<void>>();
   #lifecycleUnsubscribe: (() => void) | undefined;
   #heartbeatTimer: NodeJS.Timeout | undefined;
@@ -115,6 +130,8 @@ export class ForgeOrchestrationController {
     if (this.#heartbeatTimer) clearInterval(this.#heartbeatTimer);
     this.#heartbeatTimer = undefined;
     this.#heartbeating.clear();
+    this.#cancelling.clear();
+    this.#cancellations.clear();
     this.#pumpPending.clear();
     this.#lifecycleQueues.clear();
     this.#ctx = undefined;
@@ -228,6 +245,28 @@ export class ForgeOrchestrationController {
   ): Promise<OrchestrationState> {
     if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(orchestrationId))
       throw new Error("Invalid orchestration ID.");
+    const normalizedReason = reason.trim();
+    if (!normalizedReason)
+      throw new Error("Cancellation reason must be non-empty.");
+    const existing = this.#cancellations.get(orchestrationId);
+    if (existing) return existing;
+    this.#cancelling.add(orchestrationId);
+    const cancellation = this.#cancel(orchestrationId, ctx, normalizedReason);
+    this.#cancellations.set(orchestrationId, cancellation);
+    try {
+      return await cancellation;
+    } finally {
+      if (this.#cancellations.get(orchestrationId) === cancellation)
+        this.#cancellations.delete(orchestrationId);
+      this.#cancelling.delete(orchestrationId);
+    }
+  }
+
+  async #cancel(
+    orchestrationId: string,
+    ctx: ExtensionContext,
+    reason: string,
+  ): Promise<OrchestrationState> {
     const repositoryRoot = await this.#git.resolveRepositoryRoot(
       ctx.cwd,
       ctx.signal,
@@ -243,29 +282,83 @@ export class ForgeOrchestrationController {
       policy.repository.name,
       policy.state.branch,
     );
-    const current = await store.readOrchestration(
-      orchestrationId,
-      ctx.signal,
-    );
+    let current = await store.readOrchestration(orchestrationId, ctx.signal);
     if (!current.state)
       throw new Error(`Orchestration ${orchestrationId} does not exist.`);
-    if (current.state.status !== "running") return current.state;
-    if (!current.lease || current.lease.ownerRunId !== orchestrationId)
+    if (current.state.status !== "running") {
+      this.#syncLocalOrchestration(orchestrationId, current.state);
+      return current.state;
+    }
+    assertCancellationAuthority(orchestrationId, current.lease);
+
+    await this.#waitForQuiescence(orchestrationId, ctx.signal);
+    current = await store.readOrchestration(orchestrationId, ctx.signal);
+    if (!current.state)
+      throw new Error(`Orchestration ${orchestrationId} does not exist.`);
+    if (current.state.status !== "running") {
+      this.#syncLocalOrchestration(orchestrationId, current.state);
+      return current.state;
+    }
+    assertCancellationAuthority(orchestrationId, current.lease);
+
+    const stopped = await this.#workOn.stopOrchestration(
+      orchestrationId,
+      ctx,
+      reason,
+    );
+    if (stopped.durableFailures.length > 0) {
       throw new Error(
-        `Orchestration ${orchestrationId} does not own the active repository lease.`,
+        `Child run cancellation failed while the orchestration lease remains active: ${renderStopFailures(stopped.durableFailures)}. Retry /forge:cancel after resolving state-branch access.`,
       );
-    await this.#workOn.stopOrchestration(orchestrationId);
+    }
+
     const cancelled = await new OrchestrationJournal(store).cancel({
       orchestrationId,
       reason,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
-    const link = this.#links.get(orchestrationId);
-    if (link) {
-      this.#syncLink(link, cancelled.state);
-      this.#persistLink(link);
-    }
+    const authoritative = await store.readOrchestration(
+      orchestrationId,
+      ctx.signal,
+    );
+    if (
+      !authoritative.state ||
+      authoritative.state.status !== "cancelled" ||
+      authoritative.lease
+    )
+      throw new Error(
+        `Orchestration ${orchestrationId} cancellation could not be verified; inspect the state branch before retrying.`,
+      );
+    this.#syncLocalOrchestration(orchestrationId, authoritative.state);
+    if (stopped.providerFailures.length > 0)
+      throw new OrchestrationCancellationCleanupError(
+        authoritative.state,
+        `Orchestration ${orchestrationId} is durably cancelled and its lease is released, but provider child shutdown reported: ${renderStopFailures(stopped.providerFailures)}. Inspect those child receipts; repeating /forge:cancel is safe.`,
+      );
     return cancelled.state;
+  }
+
+  async #waitForQuiescence(
+    orchestrationId: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    while (
+      this.#pumping.has(orchestrationId) ||
+      this.#heartbeating.has(orchestrationId) ||
+      this.#lifecycleQueues.has(orchestrationId)
+    ) {
+      await cancellationDelay(signal);
+    }
+  }
+
+  #syncLocalOrchestration(
+    orchestrationId: string,
+    state: OrchestrationState,
+  ): void {
+    const link = this.#links.get(orchestrationId);
+    if (!link) return;
+    this.#syncLink(link, state);
+    this.#persistLink(link);
   }
 
   async shutdown(ctx: ExtensionContext, reason: string): Promise<void> {
@@ -321,7 +414,7 @@ export class ForgeOrchestrationController {
     ctx: ExtensionContext,
   ): Promise<void> {
     const orchestrationId = event.orchestrationId;
-    if (!orchestrationId) return;
+    if (!orchestrationId || this.#cancelling.has(orchestrationId)) return;
     const prior = this.#lifecycleQueues.get(orchestrationId) ?? Promise.resolve();
     const next = prior
       .catch(() => undefined)
@@ -343,7 +436,7 @@ export class ForgeOrchestrationController {
     ctx: ExtensionContext,
   ): Promise<void> {
     const orchestrationId = event.orchestrationId;
-    if (!orchestrationId) return;
+    if (!orchestrationId || this.#cancelling.has(orchestrationId)) return;
     const link = this.#links.get(orchestrationId);
     if (!link || link.status !== "running") return;
     const current = await this.#read(link, ctx.signal);
@@ -437,6 +530,7 @@ export class ForgeOrchestrationController {
     link: ActiveOrchestrationLink,
     ctx: ExtensionContext,
   ): Promise<void> {
+    if (this.#cancelling.has(link.orchestrationId)) return;
     if (this.#pumping.has(link.orchestrationId)) {
       this.#pumpPending.add(link.orchestrationId);
       return;
@@ -444,10 +538,16 @@ export class ForgeOrchestrationController {
     this.#pumping.add(link.orchestrationId);
     try {
       let progress = true;
-      while (progress && link.status === "running") {
+      while (
+        progress &&
+        link.status === "running" &&
+        !this.#cancelling.has(link.orchestrationId)
+      ) {
         progress = false;
         let current = await this.#read(link, ctx.signal);
+        if (this.#cancelling.has(link.orchestrationId)) break;
         for (const lane of readyOrchestrationLanes(current.state)) {
+          if (this.#cancelling.has(link.orchestrationId)) break;
           const existing = this.#workOn
             .listRuns()
             .find(
@@ -463,6 +563,7 @@ export class ForgeOrchestrationController {
             : undefined;
           if (!result) {
             try {
+              if (this.#cancelling.has(link.orchestrationId)) break;
               result = await this.#workOn.startIssue(
                 lane.issueNumber,
                 ctx,
@@ -472,6 +573,7 @@ export class ForgeOrchestrationController {
                 },
               );
             } catch (error) {
+              if (this.#cancelling.has(link.orchestrationId)) break;
               const recovered = this.#workOn.listRuns().find(
                 (run) =>
                   run.orchestrationId === link.orchestrationId &&
@@ -510,6 +612,7 @@ export class ForgeOrchestrationController {
               }
             }
           }
+          if (this.#cancelling.has(link.orchestrationId)) break;
           try {
             await current.journal.append({
               orchestrationId: link.orchestrationId,
@@ -534,7 +637,9 @@ export class ForgeOrchestrationController {
           current = await this.#read(link, ctx.signal);
         }
 
+        if (this.#cancelling.has(link.orchestrationId)) break;
         current = await this.#read(link, ctx.signal);
+        if (this.#cancelling.has(link.orchestrationId)) break;
         const integration = nextIntegrationLane(current.state);
         if (integration?.forgeRunId) {
           await current.journal.append({
@@ -548,6 +653,7 @@ export class ForgeOrchestrationController {
           try {
             await this.#workOn.integrateIssue(integration.forgeRunId, ctx);
           } catch (error) {
+            if (this.#cancelling.has(link.orchestrationId)) break;
             const latest = await this.#read(link, ctx.signal);
             await latest.journal.append({
               orchestrationId: link.orchestrationId,
@@ -567,7 +673,9 @@ export class ForgeOrchestrationController {
           progress = true;
         }
 
+        if (this.#cancelling.has(link.orchestrationId)) break;
         current = await this.#read(link, ctx.signal);
+        if (this.#cancelling.has(link.orchestrationId)) break;
         if (current.state.lanes.every(isTerminalLane)) {
           const completed = await current.journal.complete({
             orchestrationId: link.orchestrationId,
@@ -589,7 +697,10 @@ export class ForgeOrchestrationController {
       this.#persistLink(link);
     } finally {
       this.#pumping.delete(link.orchestrationId);
-      if (this.#pumpPending.delete(link.orchestrationId))
+      if (
+        this.#pumpPending.delete(link.orchestrationId) &&
+        !this.#cancelling.has(link.orchestrationId)
+      )
         void this.#pump(link, ctx);
     }
   }
@@ -597,7 +708,11 @@ export class ForgeOrchestrationController {
   async #heartbeat(ctx: ExtensionContext): Promise<void> {
     const now = new Date();
     for (const link of this.#links.values()) {
-      if (link.status !== "running") continue;
+      if (
+        link.status !== "running" ||
+        this.#cancelling.has(link.orchestrationId)
+      )
+        continue;
       if (
         now.getTime() - Date.parse(link.lastHeartbeatAt) <
           link.heartbeatSeconds * 1_000 ||
@@ -607,6 +722,7 @@ export class ForgeOrchestrationController {
       this.#heartbeating.add(link.orchestrationId);
       try {
         const { journal } = await this.#read(link, ctx.signal);
+        if (this.#cancelling.has(link.orchestrationId)) continue;
         const result = await journal.heartbeat({
           orchestrationId: link.orchestrationId,
           sessionId: ctx.sessionManager.getSessionId(),
@@ -789,6 +905,38 @@ function normalizeReason(
 ): string {
   const normalized = value?.trim();
   return normalized || fallback;
+}
+
+function assertCancellationAuthority(
+  orchestrationId: string,
+  lease: RepositoryLease | undefined,
+): asserts lease is RepositoryLease {
+  if (!lease || lease.ownerRunId !== orchestrationId)
+    throw new Error(
+      `Orchestration ${orchestrationId} does not own the active repository lease.`,
+    );
+}
+
+function renderStopFailures(
+  failures: readonly { id: string; error: string }[],
+): string {
+  return failures.map((failure) => `${failure.id}: ${failure.error}`).join("; ");
+}
+
+async function cancellationDelay(signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) throw signal.reason ?? new Error("Cancellation aborted.");
+  await new Promise<void>((resolve, reject) => {
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new Error("Cancellation aborted."));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, 10);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    timer.unref();
+  });
 }
 
 function errorMessage(error: unknown): string {

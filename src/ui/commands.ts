@@ -9,7 +9,10 @@ import type {
 import { Type } from "typebox";
 
 import { parseForgePolicy, type ForgePolicy } from "../core/policy.ts";
-import type { ForgeOrchestrationController } from "../workflows/orchestrate.ts";
+import {
+  OrchestrationCancellationCleanupError,
+  type ForgeOrchestrationController,
+} from "../workflows/orchestrate.ts";
 import type { ForgeWorkOnController } from "../workflows/work-on.ts";
 import { parseIssueNumber } from "./forge-command-parser.ts";
 import {
@@ -177,15 +180,27 @@ export function registerForgeCommands(
         ctx.ui.notify("ForgeDock orchestration was left unchanged.", "info");
         return;
       }
-      const state = await orchestrator.cancel(
-        orchestrationId,
-        ctx,
-        "Cancelled by the operator through /forge:cancel.",
-      );
-      ctx.ui.notify(
-        `ForgeDock orchestration ${orchestrationId} is ${state.status}; durable audit history was preserved and its lease was released.`,
-        "info",
-      );
+      try {
+        const state = await orchestrator.cancel(
+          orchestrationId,
+          ctx,
+          "Cancelled by the operator through /forge:cancel.",
+        );
+        ctx.ui.notify(
+          `ForgeDock orchestration ${orchestrationId} is ${state.status}; durable audit history was preserved and its lease is released. Repeating this command is safe.`,
+          "info",
+        );
+      } catch (error) {
+        if (error instanceof OrchestrationCancellationCleanupError) {
+          ctx.ui.notify(error.message, "warning");
+          return;
+        }
+        ctx.ui.notify(
+          `ForgeDock could not confirm cancellation of ${orchestrationId}: ${errorMessage(error)} The orchestration may still own the repository lease; retry /forge:cancel or inspect the state branch.`,
+          "error",
+        );
+        throw error;
+      }
     },
   });
 
@@ -586,4 +601,8 @@ async function pathExists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

@@ -44,6 +44,7 @@ import {
   type ForgePolicy,
 } from "../core/policy.ts";
 import type { RepositoryLease } from "../core/lease.ts";
+import { isTerminalRunState } from "../core/state.ts";
 import {
   evaluateReviewGate,
   type FinalReviewDecision,
@@ -62,7 +63,8 @@ export type ActiveRunStatus =
   | "completed"
   | "blocked"
   | "needs-human"
-  | "failed";
+  | "failed"
+  | "cancelled";
 
 interface ActiveNodeRunLink {
   nodeId: string;
@@ -124,6 +126,19 @@ export interface StartIssueOptions {
   leaseEpoch?: number;
 }
 
+export interface StopOrchestrationFailure {
+  id: string;
+  error: string;
+}
+
+export interface StopOrchestrationResult {
+  forgeRunIds: readonly string[];
+  attemptedReceipts: readonly string[];
+  stoppedReceipts: readonly string[];
+  durableFailures: readonly StopOrchestrationFailure[];
+  providerFailures: readonly StopOrchestrationFailure[];
+}
+
 export class ForgeWorkOnController {
   readonly #pi: ExtensionAPI;
   readonly #rpc: SubagentsRpcClient;
@@ -133,6 +148,7 @@ export class ForgeWorkOnController {
     (event: WorkOnLifecycleEvent) => void
   >();
   readonly #providerRecovering = new Set<string>();
+  readonly #cancelledRuns = new Set<string>();
   #completionUnsubscribe: (() => void) | undefined;
 
   constructor(pi: ExtensionAPI) {
@@ -330,6 +346,7 @@ export class ForgeWorkOnController {
     this.#completionUnsubscribe = undefined;
     this.#lifecycleListeners.clear();
     this.#providerRecovering.clear();
+    this.#cancelledRuns.clear();
   }
 
   async #retryProviderFailure(
@@ -1720,6 +1737,8 @@ export class ForgeWorkOnController {
     ctx: ExtensionContext,
     issueContext: string,
   ): Promise<void> {
+    if (this.#cancelledRuns.has(link.forgeRunId))
+      throw new Error(`Run ${link.forgeRunId} is being cancelled.`);
     if (["review-join", "ci", "decision", "merge", "close", "cleanup"].includes(node.node)) {
       link.currentNodeId = node.nodeId;
       link.reviewHeadSha = node.headSha ?? link.reviewHeadSha;
@@ -2101,19 +2120,92 @@ export class ForgeWorkOnController {
     await this.#finalize(link, ctx, result);
   }
 
-  async stopOrchestration(orchestrationId: string): Promise<void> {
-    const active = [...this.#links.values()].filter(
-      (link) =>
-        link.orchestrationId === orchestrationId &&
-        ["running", "refreshing", "finalizing"].includes(link.status),
-    );
-    await Promise.allSettled(
-      active.map(async (link) => {
-        link.status = "failed";
+  async stopOrchestration(
+    orchestrationId: string,
+    ctx: ExtensionContext,
+    reason: string,
+  ): Promise<StopOrchestrationResult> {
+    const uniqueLinks = new Map<string, ActiveRunLink>();
+    for (const link of this.#links.values()) {
+      if (link.orchestrationId === orchestrationId)
+        uniqueLinks.set(link.forgeRunId, link);
+    }
+
+    const durableFailures: StopOrchestrationFailure[] = [];
+    const stoppable: ActiveRunLink[] = [];
+    for (const link of uniqueLinks.values()) {
+      const previousStatus = link.status;
+      this.#cancelledRuns.add(link.forgeRunId);
+      link.status = "cancelled";
+      this.#persistLink(link);
+      try {
+        const token = await resolveGitHubToken(
+          this.#pi,
+          link.prepared.repositoryRoot,
+          ctx.signal,
+        );
+        const store = new GitHubStateBranchStore(
+          new FetchGitHubTransport({ token }),
+          link.repository,
+          link.stateBranch,
+        );
+        const current = await store.readRun(link.forgeRunId, ctx.signal);
+        if (!current.state)
+          throw new Error(`Run ${link.forgeRunId} does not exist.`);
+        if (isTerminalRunState(current.state)) {
+          if (current.state.status === "completed") {
+            this.#cancelledRuns.delete(link.forgeRunId);
+            link.status = "completed";
+          } else link.status = "cancelled";
+          this.#persistLink(link);
+          if (current.state.status === "cancelled") stoppable.push(link);
+        } else {
+          await new RunJournal(store).append({
+            runId: link.forgeRunId,
+            type: "run.cancelled",
+            payload: { reason },
+            idempotencyKey: "run:cancel",
+            sessionId: ctx.sessionManager.getSessionId(),
+            message: `Cancel ForgeDock run ${link.forgeRunId}`,
+            ...(ctx.signal ? { signal: ctx.signal } : {}),
+          });
+          stoppable.push(link);
+        }
+      } catch (error) {
+        this.#cancelledRuns.delete(link.forgeRunId);
+        link.status = previousStatus;
         this.#persistLink(link);
-        await this.#rpc.stop(link.subagentRunId);
+        stoppable.push(link);
+        durableFailures.push({
+          id: link.forgeRunId,
+          error: errorMessage(error),
+        });
+      }
+    }
+
+    const receipts = [
+      ...new Set(stoppable.flatMap((link) => cancellationReceiptIds(link))),
+    ];
+    const stoppedReceipts: string[] = [];
+    const providerFailures: StopOrchestrationFailure[] = [];
+    await Promise.all(
+      receipts.map(async (receipt) => {
+        try {
+          await this.#rpc.stop(receipt);
+          stoppedReceipts.push(receipt);
+        } catch (error) {
+          providerFailures.push({ id: receipt, error: errorMessage(error) });
+        }
       }),
     );
+
+    return {
+      forgeRunIds: [...uniqueLinks.keys()],
+      attemptedReceipts: receipts,
+      stoppedReceipts,
+      durableFailures,
+      providerFailures,
+    };
   }
 
   onLifecycle(
@@ -2852,7 +2944,9 @@ export class ForgeWorkOnController {
       const link = normalizeActiveRunLink(entry.data);
       if (link) latest.set(link.forgeRunId, link);
     }
+    this.#cancelledRuns.clear();
     for (const link of latest.values()) {
+      if (link.status === "cancelled") this.#cancelledRuns.add(link.forgeRunId);
       this.#links.set(link.subagentRunId, link);
       for (const runId of Object.keys(link.activeNodes))
         this.#links.set(runId, link);
@@ -2860,6 +2954,7 @@ export class ForgeWorkOnController {
   }
 
   #persistLink(link: ActiveRunLink): void {
+    if (this.#cancelledRuns.has(link.forgeRunId)) link.status = "cancelled";
     this.#pi.appendEntry(RUN_LINK_ENTRY, link);
     this.#links.set(link.subagentRunId, link);
     for (const runId of Object.keys(link.activeNodes))
@@ -3588,6 +3683,7 @@ function normalizeActiveRunLink(value: unknown): ActiveRunLink | undefined {
     "blocked",
     "needs-human",
     "failed",
+    "cancelled",
   ];
   if (
     typeof link.forgeRunId !== "string" ||
@@ -3691,6 +3787,19 @@ export function createNodeLaunchIntent(
 
 export function isLaunchSentinel(runId: string): boolean {
   return runId.startsWith("launch:");
+}
+
+export function cancellationReceiptIds(
+  link: Pick<ActiveRunLink, "subagentRunId" | "activeNodes">,
+): string[] {
+  return [
+    ...new Set(
+      [
+        link.subagentRunId,
+        ...Object.values(link.activeNodes).map((node) => node.subagentRunId),
+      ].filter((runId) => runId && !isLaunchSentinel(runId)),
+    ),
+  ];
 }
 
 export type LaunchRecoveryAction =

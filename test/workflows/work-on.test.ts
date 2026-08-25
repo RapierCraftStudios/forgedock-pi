@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  cancellationReceiptIds,
   canonicalReviewerName,
   finalReviewDecisionMarker,
   findingPriority,
@@ -15,6 +16,32 @@ import {
   reviewSupersessionMarker,
   similarFindingTitle,
 } from "../../src/workflows/work-on.ts";
+
+test("orchestration cancellation deduplicates real child receipts and excludes launch sentinels", () => {
+  assert.deepEqual(
+    cancellationReceiptIds({
+      subagentRunId: "child-current",
+      activeNodes: {
+        current: {
+          nodeId: "implement-1",
+          subagentRunId: "child-current",
+          resultPath: "/tmp/current.json",
+        },
+        stale: {
+          nodeId: "plan-1",
+          subagentRunId: "child-stale",
+          resultPath: "/tmp/stale.json",
+        },
+        pending: {
+          nodeId: "verify-1",
+          subagentRunId: "launch:verify-1:nonce",
+          resultPath: "/tmp/pending.json",
+        },
+      },
+    }),
+    ["child-current", "child-stale"],
+  );
+});
 
 test("short reviewer aliases normalize to configured agent names", () => {
   assert.equal(canonicalReviewerName("security"), "forge-review-security");
