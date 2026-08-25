@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 19,
-  "lastEventHash": "sha256:a425690869544402befdb89a6da1182a21303ff3486cb95dacd4dabcafaad126",
+  "sequence": 20,
+  "lastEventHash": "sha256:c48c3e7d43a39fef6a646d77693788bcb48dcae9dd34b95c874d753c41680e59",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -144,10 +144,13 @@
       "status": "running",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/1d590b89-383d-442f-90d6-a93aa0a146e7/.pi/forge/1d590b89-383d-442f-90d6-a93aa0a146e7-implement-1.json",
-      "subagentRunId": "launch:implement-1:153ec5cf-0810-428d-85ad-6018f8fd551d",
+      "subagentRunId": "462d4aa9-caa6-473f-93ba-a080ea7c8b1d",
       "launchNonce": "153ec5cf-0810-428d-85ad-6018f8fd551d",
       "launchIntent": true,
-      "startedAt": "2026-08-25T18:10:31.925Z"
+      "startedAt": "2026-08-25T18:10:31.925Z",
+      "previousSubagentRunId": "launch:implement-1:153ec5cf-0810-428d-85ad-6018f8fd551d",
+      "transportRetries": 0,
+      "launchReceipt": true
     }
   },
   "effects": {},
@@ -170,7 +173,8 @@
     "node:prepare-worktree-1:receipt-bound": "398b7b5c-f8ed-4433-bc4e-74063015eccd",
     "node:prepare-worktree-1:completed": "438c0b34-8f25-4328-b224-3e9fb2de3ba7",
     "node:implement-1:queued": "a9a27316-fbca-46ec-b147-2e8886899ed9",
-    "node:implement-1:started": "8dc92d4d-c90f-4122-88ce-2ba5980ce695"
+    "node:implement-1:started": "8dc92d4d-c90f-4122-88ce-2ba5980ce695",
+    "node:implement-1:receipt-bound": "970bf4d0-c6b6-4cce-804b-d499cc7f881a"
   },
   "eventIds": {
     "8420132c-2a1a-43b2-ad05-5a4473cc10d2": true,
@@ -191,6 +195,7 @@
     "398b7b5c-f8ed-4433-bc4e-74063015eccd": true,
     "438c0b34-8f25-4328-b224-3e9fb2de3ba7": true,
     "a9a27316-fbca-46ec-b147-2e8886899ed9": true,
-    "8dc92d4d-c90f-4122-88ce-2ba5980ce695": true
+    "8dc92d4d-c90f-4122-88ce-2ba5980ce695": true,
+    "970bf4d0-c6b6-4cce-804b-d499cc7f881a": true
   }
 }
