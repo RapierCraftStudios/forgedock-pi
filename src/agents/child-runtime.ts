@@ -1094,6 +1094,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       "Request a typed, core-validated phase transition in the authoritative GitHub run journal",
     parameters: CheckpointParameters,
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+      await requireActiveAuthority(signal);
       if (binding.refresh)
         throw new Error(
           "Refresh-review runs cannot mutate the original phase journal.",

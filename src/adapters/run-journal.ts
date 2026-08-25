@@ -241,7 +241,8 @@ function assertCurrentAuthority(
     if (
       !repositoryLease ||
       repositoryLease.ownerRunId !== state.runId ||
-      repositoryLease.epoch !== state.lease.epoch
+      repositoryLease.epoch !== state.lease.epoch ||
+      isLeaseExpired(repositoryLease, new Date())
     )
       throw new Error(`Run ${state.runId} no longer owns the repository lease.`);
     return;
@@ -250,7 +251,8 @@ function assertCurrentAuthority(
     if (
       !repositoryLease ||
       repositoryLease.ownerRunId !== state.leaseBinding.ownerRunId ||
-      repositoryLease.epoch !== state.leaseBinding.epoch
+      repositoryLease.epoch !== state.leaseBinding.epoch ||
+      isLeaseExpired(repositoryLease, new Date())
     ) {
       throw new Error(
         `Run ${state.runId} orchestration lease binding is stale.`,
