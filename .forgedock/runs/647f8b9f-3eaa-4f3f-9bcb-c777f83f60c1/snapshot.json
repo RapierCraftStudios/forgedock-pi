@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 19,
-  "lastEventHash": "sha256:fc4c1251593d367e37c038342559d44f476744756c3f620ca9d93f947b1b9c76",
+  "sequence": 20,
+  "lastEventHash": "sha256:bb560098c5d1bcc5989de35a94e04886b61fe24cb2257a71f1e8e3b82c133a66",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -144,10 +144,13 @@
       "status": "running",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/647f8b9f-3eaa-4f3f-9bcb-c777f83f60c1/.pi/forge/647f8b9f-3eaa-4f3f-9bcb-c777f83f60c1-implement-1.json",
-      "subagentRunId": "launch:implement-1:a01fdb1b-b9b6-4d79-a121-b1685eeaefc7",
+      "subagentRunId": "886094b6-93bd-40c5-83f3-eb9889c9736f",
       "launchNonce": "a01fdb1b-b9b6-4d79-a121-b1685eeaefc7",
       "launchIntent": true,
-      "startedAt": "2026-08-25T20:13:35.723Z"
+      "startedAt": "2026-08-25T20:13:35.723Z",
+      "previousSubagentRunId": "launch:implement-1:a01fdb1b-b9b6-4d79-a121-b1685eeaefc7",
+      "transportRetries": 0,
+      "launchReceipt": true
     }
   },
   "effects": {},
@@ -170,7 +173,8 @@
     "node:prepare-worktree-1:receipt-bound": "39266f15-fb43-4dc5-b5bc-26d9e26a3cba",
     "node:prepare-worktree-1:completed": "0dda2fd5-cafd-49dd-bd9f-455046a912f6",
     "node:implement-1:queued": "0cedcd18-b20c-4030-83cb-dd028eab9a29",
-    "node:implement-1:started": "a0b31486-11a6-4f9f-9c85-8251084c8204"
+    "node:implement-1:started": "a0b31486-11a6-4f9f-9c85-8251084c8204",
+    "node:implement-1:receipt-bound": "91912910-7ab4-41a4-8629-cf3d1653d06b"
   },
   "eventIds": {
     "28127e57-647b-4271-865e-4db189ff5d19": true,
@@ -191,6 +195,7 @@
     "39266f15-fb43-4dc5-b5bc-26d9e26a3cba": true,
     "0dda2fd5-cafd-49dd-bd9f-455046a912f6": true,
     "0cedcd18-b20c-4030-83cb-dd028eab9a29": true,
-    "a0b31486-11a6-4f9f-9c85-8251084c8204": true
+    "a0b31486-11a6-4f9f-9c85-8251084c8204": true,
+    "91912910-7ab4-41a4-8629-cf3d1653d06b": true
   }
 }
