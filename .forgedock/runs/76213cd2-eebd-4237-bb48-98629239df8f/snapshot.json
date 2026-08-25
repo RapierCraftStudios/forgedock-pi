@@ -10,8 +10,8 @@
     "ownerRunId": "c0f52a10-07ba-4b5e-a47d-e39138c05aa2",
     "epoch": 1
   },
-  "sequence": 9,
-  "lastEventHash": "sha256:2707e5ba1bb03ba0067ffcf492d90adf60aacd5afd61b93b632196d689c3aa0f",
+  "sequence": 10,
+  "lastEventHash": "sha256:d44d1c3879d695fc8ce33eeac072958568559d8e0434829d6057260a48e22c6b",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -68,6 +68,15 @@
         "The supplied durable run evidence shows both a successful bind and failures immediately after node.started on the same build, which matches this timing-dependent source path."
       ],
       "finishedAt": "2026-08-25T16:10:15.583Z"
+    },
+    "plan-1": {
+      "nodeId": "plan-1",
+      "node": "plan",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/76213cd2-eebd-4237-bb48-98629239df8f/.pi/forge/76213cd2-eebd-4237-bb48-98629239df8f-plan-1.json"
     }
   },
   "effects": {},
@@ -80,7 +89,8 @@
     "node:investigate-1:queued": "461285cc-2725-4a69-8958-e42e86d54293",
     "node:investigate-1:started": "339a6926-685a-48e9-a71f-48c6193f5f07",
     "node:investigate-1:receipt-bound": "ef12a0ac-6784-42cd-92f4-a1ac8f93632f",
-    "node:investigate-1:completed": "4196f00d-d7c5-4872-a84d-85ddba3ae3e4"
+    "node:investigate-1:completed": "4196f00d-d7c5-4872-a84d-85ddba3ae3e4",
+    "node:plan-1:queued": "fd441304-5428-4eba-b248-d4373d0d0946"
   },
   "eventIds": {
     "d92452d2-d7eb-4247-84c7-2453dfafa617": true,
@@ -91,6 +101,7 @@
     "461285cc-2725-4a69-8958-e42e86d54293": true,
     "339a6926-685a-48e9-a71f-48c6193f5f07": true,
     "ef12a0ac-6784-42cd-92f4-a1ac8f93632f": true,
-    "4196f00d-d7c5-4872-a84d-85ddba3ae3e4": true
+    "4196f00d-d7c5-4872-a84d-85ddba3ae3e4": true,
+    "fd441304-5428-4eba-b248-d4373d0d0946": true
   }
 }
