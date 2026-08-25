@@ -121,6 +121,18 @@ test("provider receipt recovery finds the async run by durable launch identity",
       ),
       "provider-run-1",
     );
+    assert.equal(
+      await findProviderReceiptFromDescriptors(
+        {
+          forgeRunId: "forge-run-1",
+          nodeId: "resolve-1",
+          resultPath: "/worktree/result.json",
+          launchNonce: "different-nonce",
+        },
+        root,
+      ),
+      undefined,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

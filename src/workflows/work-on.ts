@@ -897,6 +897,7 @@ export class ForgeWorkOnController {
           : activeNode.launchNonce
             ? { launchNonce: activeNode.launchNonce }
             : {}),
+        allowMismatchedNonce: (durableNode.transportRetries ?? 0) > 0,
       });
       if (recoveredRunId) {
         delete link.activeNodes[activeNode.subagentRunId];

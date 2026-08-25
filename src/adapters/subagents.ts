@@ -428,6 +428,7 @@ export class SubagentsRpcClient {
     nodeId: string;
     resultPath: string;
     launchNonce?: string;
+    allowMismatchedNonce?: boolean;
   }): Promise<string | undefined> {
     return findProviderReceiptFromDescriptors(input);
   }
@@ -568,6 +569,7 @@ export async function findProviderReceiptFromDescriptors(
     nodeId: string;
     resultPath: string;
     launchNonce?: string;
+    allowMismatchedNonce?: boolean;
   },
   asyncRoot = defaultAsyncRunRoot(),
 ): Promise<string | undefined> {
@@ -628,7 +630,11 @@ export async function findProviderReceiptFromDescriptors(
   if (exact.length > 1)
     throw new Error("Provider launch nonce matches multiple async runs.");
 
-  const active = matches
+  const fallbackMatches =
+    input.launchNonce && !input.allowMismatchedNonce
+      ? matches.filter((match) => match.launchNonce === undefined)
+      : matches;
+  const active = fallbackMatches
     .filter((match) =>
       ["queued", "pending", "running", "paused"].includes(match.state ?? ""),
     )
