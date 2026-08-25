@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 19,
-  "lastEventHash": "sha256:2ddcf6ecc78c1e3e3229b2325e8deb53054246d329bbe59db8b9dc856d93482d",
+  "sequence": 20,
+  "lastEventHash": "sha256:23097594c0257e103bb502f31779337580d009a3c078514835040094be72d63c",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -135,10 +135,13 @@
       "status": "running",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/bbc39a72-07c4-4977-85a8-4473d856f301/.pi/forge/bbc39a72-07c4-4977-85a8-4473d856f301-implement-1.json",
-      "subagentRunId": "launch:implement-1:226c7a93-3185-40ac-a35c-d5ed80d2a5b9",
+      "subagentRunId": "929550fb-4712-4d04-8908-96a8ac3aeb3c",
       "launchNonce": "226c7a93-3185-40ac-a35c-d5ed80d2a5b9",
       "launchIntent": true,
-      "startedAt": "2026-08-25T21:37:38.359Z"
+      "startedAt": "2026-08-25T21:37:38.359Z",
+      "previousSubagentRunId": "launch:implement-1:226c7a93-3185-40ac-a35c-d5ed80d2a5b9",
+      "transportRetries": 0,
+      "launchReceipt": true
     }
   },
   "effects": {},
@@ -161,7 +164,8 @@
     "node:prepare-worktree-1:receipt-bound": "b607fba9-adaa-46ad-aa26-2b9750170d24",
     "node:prepare-worktree-1:completed": "7bf638b8-0854-4642-bce9-007a65cb7f8f",
     "node:implement-1:queued": "3fd57e97-4e3e-40f9-bc44-d7c8dcbb9cfd",
-    "node:implement-1:started": "7cbf0e1f-5601-4577-9f0a-aecc93b83b07"
+    "node:implement-1:started": "7cbf0e1f-5601-4577-9f0a-aecc93b83b07",
+    "node:implement-1:receipt-bound": "6583778d-0e7f-427b-a5f4-138a59880206"
   },
   "eventIds": {
     "7b5d2931-7497-4d47-b405-55ab5d7a6899": true,
@@ -182,6 +186,7 @@
     "b607fba9-adaa-46ad-aa26-2b9750170d24": true,
     "7bf638b8-0854-4642-bce9-007a65cb7f8f": true,
     "3fd57e97-4e3e-40f9-bc44-d7c8dcbb9cfd": true,
-    "7cbf0e1f-5601-4577-9f0a-aecc93b83b07": true
+    "7cbf0e1f-5601-4577-9f0a-aecc93b83b07": true,
+    "6583778d-0e7f-427b-a5f4-138a59880206": true
   }
 }
