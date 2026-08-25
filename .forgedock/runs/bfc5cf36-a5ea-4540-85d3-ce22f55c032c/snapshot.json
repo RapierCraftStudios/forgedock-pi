@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 35,
-  "lastEventHash": "sha256:617be4d7a62a885d73e7ce5b2caf2d842bbbd30052db982f160377b739bf865b",
+  "sequence": 36,
+  "lastEventHash": "sha256:70044b9bece7614b0540def9c83e1a7cf6d1895709f1cc888c7acb7b468287dd",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -233,7 +233,7 @@
       "node": "review-security",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/bfc5cf36-a5ea-4540-85d3-ce22f55c032c/.pi/forge/bfc5cf36-a5ea-4540-85d3-ce22f55c032c-review-security-1.json",
       "subagentRunId": "6edb0707-b41c-408a-a9db-bd8025161320",
@@ -242,7 +242,30 @@
       "startedAt": "2026-08-25T21:45:27.150Z",
       "previousSubagentRunId": "launch:review-security-1:2664f014-7018-4abe-8d40-7151dccf50bf",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "d5866a89186cd854fdc44b61ebf9a98255b5f1d5",
+      "reviewerResult": {
+        "schema": "forgedock.reviewer-result/v1",
+        "runId": "bfc5cf36-a5ea-4540-85d3-ce22f55c032c",
+        "reviewer": "forge-review-security",
+        "headSha": "d5866a89186cd854fdc44b61ebf9a98255b5f1d5",
+        "verdict": "pass",
+        "findings": [],
+        "filesReviewed": [
+          "src/workflows/work-on.ts",
+          "test/core/state.test.ts",
+          "test/workflows/work-on.test.ts"
+        ],
+        "limitations": [
+          "Static review only; no test-execution tool was available."
+        ]
+      },
+      "publishedCommentId": 5417249362,
+      "evidence": [
+        "pr:66",
+        "comment:5417249362"
+      ],
+      "finishedAt": "2026-08-25T21:46:41.513Z"
     }
   },
   "effects": {},
@@ -281,7 +304,8 @@
     "node:review-correctness-1:receipt-bound": "bd93374a-9653-4adb-9f77-55213c5e8436",
     "node:review-security-1:queued": "515eb4cd-6297-44f6-a1de-917056804a5d",
     "node:review-security-1:started": "87ca824d-592b-4395-ab01-1b45f5125da5",
-    "node:review-security-1:receipt-bound": "f4252b14-4dd1-4b1f-b208-9c1405b23d90"
+    "node:review-security-1:receipt-bound": "f4252b14-4dd1-4b1f-b208-9c1405b23d90",
+    "node:review-security-1:artifact-published": "218edb0b-f821-49f9-9d79-af33d1becf16"
   },
   "eventIds": {
     "0ce6a9d0-87b1-44c6-943d-8393cb560926": true,
@@ -318,6 +342,7 @@
     "bd93374a-9653-4adb-9f77-55213c5e8436": true,
     "515eb4cd-6297-44f6-a1de-917056804a5d": true,
     "87ca824d-592b-4395-ab01-1b45f5125da5": true,
-    "f4252b14-4dd1-4b1f-b208-9c1405b23d90": true
+    "f4252b14-4dd1-4b1f-b208-9c1405b23d90": true,
+    "218edb0b-f821-49f9-9d79-af33d1becf16": true
   }
 }
