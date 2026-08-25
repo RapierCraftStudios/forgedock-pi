@@ -10,15 +10,15 @@
     "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
     "epoch": 1
   },
-  "sequence": 4,
-  "lastEventHash": "sha256:aa29353d302b2bc4ed4073b3638c9aee544ad0622acde1c274a9f061f183b33b",
+  "sequence": 5,
+  "lastEventHash": "sha256:93760305dd1455672d50c4dc1d1f4d170f701da0ec81c15ba8672081255406b9",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/c2553c16-045f-465c-87b3-08f0566183a2/.pi/forge/c2553c16-045f-465c-87b3-08f0566183a2-resolve-1.json",
       "subagentRunId": "a6ecdcc3-4c01-4d7c-9063-54caac215b5e",
@@ -27,7 +27,18 @@
       "startedAt": "2026-08-25T16:44:02.718Z",
       "previousSubagentRunId": "launch:resolve-1:d564f1bc-3a9c-4fea-bf85-50e0ce1348ed",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "round": 1,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "Supplied issue context identifies issue #50 with the non-empty title \"bug: regression: launch receipt binding still fails on running bounded nodes\" and an actionable regression report with reproduction, expected behavior, evidence, and impact.",
+        "The supplied label workflow:investigating is consistent with an active ForgeDock issue run and no terminal workflow label is present in the supplied issue context.",
+        ".forge/config.json names dogfood as the sole integration branch and main as the protected branch, so the bound integration base dogfood is policy-valid and non-protected.",
+        "This read-only resolve node made no source or repository changes; head SHA remains the frozen base SHA."
+      ],
+      "finishedAt": "2026-08-25T16:45:14.873Z"
     }
   },
   "effects": {},
@@ -35,12 +46,14 @@
     "run:create": "26445051-7ba5-465e-8c7f-a17aa6f15137",
     "node:resolve-1:queued": "e1134eb2-fae1-473d-b363-8d1ffde94bd1",
     "node:resolve-1:started": "ed0a877c-bc0a-4e7f-a368-374ac7195fed",
-    "node:resolve-1:receipt-bound": "dedff898-b29a-4ec2-84ba-bcc0890b3f54"
+    "node:resolve-1:receipt-bound": "dedff898-b29a-4ec2-84ba-bcc0890b3f54",
+    "node:resolve-1:completed": "fad4ffac-7bc5-4f6b-b82e-a859b357fa06"
   },
   "eventIds": {
     "26445051-7ba5-465e-8c7f-a17aa6f15137": true,
     "e1134eb2-fae1-473d-b363-8d1ffde94bd1": true,
     "ed0a877c-bc0a-4e7f-a368-374ac7195fed": true,
-    "dedff898-b29a-4ec2-84ba-bcc0890b3f54": true
+    "dedff898-b29a-4ec2-84ba-bcc0890b3f54": true,
+    "fad4ffac-7bc5-4f6b-b82e-a859b357fa06": true
   }
 }
