@@ -37,6 +37,10 @@ test("every bounded non-review node can persist its trusted result", () => {
     allowedNodeTools("review-security").has("forge_finalize_reviewer"),
     true,
   );
+  assert.equal(
+    allowedNodeTools("review-security").has("forge_finalize_node"),
+    false,
+  );
 });
 
 test("commit path staging excludes ignored Forge runtime content", async () => {
