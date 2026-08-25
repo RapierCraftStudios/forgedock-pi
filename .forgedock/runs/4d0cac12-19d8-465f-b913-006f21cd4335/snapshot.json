@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 9,
-  "lastEventHash": "sha256:dd7e7cbf030f45a5ae832829b857eecab89a736059675a0c9176f59e3f531028",
+  "sequence": 10,
+  "lastEventHash": "sha256:54c6ed254d9786e759ef92f408db4a971e796591b9258afdf76b34218039af3e",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -67,6 +67,15 @@
         "test/workflows/work-on.test.ts:27-54 covers only pure reconciliation classifications, while test/core/state.test.ts:410-478 covers sequential intent/receipt replacement; neither exercises overlapping live and recovery receipt binds."
       ],
       "finishedAt": "2026-08-25T18:02:04.485Z"
+    },
+    "plan-1": {
+      "nodeId": "plan-1",
+      "node": "plan",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/4d0cac12-19d8-465f-b913-006f21cd4335/.pi/forge/4d0cac12-19d8-465f-b913-006f21cd4335-plan-1.json"
     }
   },
   "effects": {},
@@ -79,7 +88,8 @@
     "node:investigate-1:queued": "5026cacf-3e74-44ca-b8eb-d7f467b5294d",
     "node:investigate-1:started": "14dd697a-786f-4864-a49f-dc6b45f12e53",
     "node:investigate-1:receipt-bound": "bc6da250-e6ea-4cb5-b534-aafcaf5fc1d2",
-    "node:investigate-1:completed": "e64a5d7b-aad3-41c7-bce8-d9c7f8d54dba"
+    "node:investigate-1:completed": "e64a5d7b-aad3-41c7-bce8-d9c7f8d54dba",
+    "node:plan-1:queued": "f98f8963-ac6c-4bbc-bc31-084d283cc533"
   },
   "eventIds": {
     "b1e68782-9a16-4c99-ac4d-202289a4121f": true,
@@ -90,6 +100,7 @@
     "5026cacf-3e74-44ca-b8eb-d7f467b5294d": true,
     "14dd697a-786f-4864-a49f-dc6b45f12e53": true,
     "bc6da250-e6ea-4cb5-b534-aafcaf5fc1d2": true,
-    "e64a5d7b-aad3-41c7-bce8-d9c7f8d54dba": true
+    "e64a5d7b-aad3-41c7-bce8-d9c7f8d54dba": true,
+    "f98f8963-ac6c-4bbc-bc31-084d283cc533": true
   }
 }
