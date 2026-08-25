@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import test from "node:test";
 
 import {
+  allowedNodeTools,
   isForgeRuntimePath,
   parseGitStatusPaths,
 } from "../../src/agents/child-runtime.ts";
@@ -16,6 +17,27 @@ const execFileAsync = promisify(execFile);
 async function git(cwd: string, ...args: string[]) {
   return execFileAsync("git", args, { cwd, encoding: "utf8" });
 }
+
+test("every bounded non-review node can persist its trusted result", () => {
+  for (const node of [
+    "resolve",
+    "investigate",
+    "plan",
+    "prepare-worktree",
+    "implement",
+    "verify",
+    "prepare-pr",
+  ])
+    assert.equal(
+      allowedNodeTools(node).has("forge_finalize_node"),
+      true,
+      `${node} must expose forge_finalize_node`,
+    );
+  assert.equal(
+    allowedNodeTools("review-security").has("forge_finalize_reviewer"),
+    true,
+  );
+});
 
 test("commit path staging excludes ignored Forge runtime content", async () => {
   const root = await mkdtemp(join(tmpdir(), "forgedock-commit-"));

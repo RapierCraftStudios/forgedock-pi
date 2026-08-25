@@ -1046,14 +1046,15 @@ function readBinding(): ForgeChildBinding {
   };
 }
 
-function allowedNodeTools(node: string | undefined): ReadonlySet<string> {
+export function allowedNodeTools(node: string | undefined): ReadonlySet<string> {
   if (!node) return new Set(["forge_refresh_base", "forge_verify", "forge_diff", "forge_commit", "forge_prepare_review", "forge_finalize_work_on"]);
   if (node === "review-correctness" || node === "review-security")
     return new Set(["forge_finalize_reviewer"]);
   const common = ["forge_diff", "forge_finalize_node"];
   if (node === "implement") return new Set([...common, "forge_commit"]);
   if (node === "verify") return new Set([...common, "forge_verify"]);
-  if (node === "prepare-pr") return new Set(["forge_prepare_review"]);
+  if (node === "prepare-pr")
+    return new Set(["forge_prepare_review", "forge_finalize_node"]);
   return new Set(common);
 }
 
