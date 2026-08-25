@@ -10,15 +10,26 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 1,
-  "lastEventHash": "sha256:8ca382d112eeef0ae7d6cfd4f4d10d2847ac2ae7f636a22eb0811e5035d6d713",
+  "sequence": 2,
+  "lastEventHash": "sha256:287451a4442e2d342c9171c9f910aa94abbe64adae5551c46f9f32c37e75ca66",
   "phases": {},
-  "nodes": {},
+  "nodes": {
+    "resolve-1": {
+      "nodeId": "resolve-1",
+      "node": "resolve",
+      "attempt": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/ad833ef6-336b-43b6-8237-4cf8d5be7308/.pi/forge/ad833ef6-336b-43b6-8237-4cf8d5be7308-resolve-1.json"
+    }
+  },
   "effects": {},
   "idempotencyKeys": {
-    "run:create": "92936804-08d9-4fa4-b99b-e94fc611107e"
+    "run:create": "92936804-08d9-4fa4-b99b-e94fc611107e",
+    "node:resolve-1:queued": "5af4ecdd-0802-4584-8ef7-e33ba64ccaa6"
   },
   "eventIds": {
-    "92936804-08d9-4fa4-b99b-e94fc611107e": true
+    "92936804-08d9-4fa4-b99b-e94fc611107e": true,
+    "5af4ecdd-0802-4584-8ef7-e33ba64ccaa6": true
   }
 }
