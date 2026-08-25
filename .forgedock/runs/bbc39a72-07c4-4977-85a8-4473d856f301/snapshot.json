@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:0d0d331a42867269283de88a8343e1e538362846636ecc7e05bd41c806d58f56",
+  "sequence": 6,
+  "lastEventHash": "sha256:49dee445d6af8e452186ed8601c70f9cb12ea2be0adf11f2e8b7b565d965b429",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -39,6 +39,15 @@
         "Referenced repository paths src/adapters/subagents.ts and src/agents/child-runtime.ts exist in the frozen worktree; no source or state files were modified by this read-only node."
       ],
       "finishedAt": "2026-08-25T21:29:17.005Z"
+    },
+    "investigate-1": {
+      "nodeId": "investigate-1",
+      "node": "investigate",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/bbc39a72-07c4-4977-85a8-4473d856f301/.pi/forge/bbc39a72-07c4-4977-85a8-4473d856f301-investigate-1.json"
     }
   },
   "effects": {},
@@ -47,13 +56,15 @@
     "node:resolve-1:queued": "2f0bd0be-1ce5-4dcd-9375-be9384fc6d51",
     "node:resolve-1:started": "af67ca53-a502-4e7b-9e10-083cbeb2f6a9",
     "node:resolve-1:receipt-bound": "7ee3f295-bc6d-4730-987b-24605a806a51",
-    "node:resolve-1:completed": "281d814c-ce2a-408a-9a49-39649dc21487"
+    "node:resolve-1:completed": "281d814c-ce2a-408a-9a49-39649dc21487",
+    "node:investigate-1:queued": "d2d7362f-216b-4fa1-ad83-a9dbd28617be"
   },
   "eventIds": {
     "7b5d2931-7497-4d47-b405-55ab5d7a6899": true,
     "2f0bd0be-1ce5-4dcd-9375-be9384fc6d51": true,
     "af67ca53-a502-4e7b-9e10-083cbeb2f6a9": true,
     "7ee3f295-bc6d-4730-987b-24605a806a51": true,
-    "281d814c-ce2a-408a-9a49-39649dc21487": true
+    "281d814c-ce2a-408a-9a49-39649dc21487": true,
+    "d2d7362f-216b-4fa1-ad83-a9dbd28617be": true
   }
 }
