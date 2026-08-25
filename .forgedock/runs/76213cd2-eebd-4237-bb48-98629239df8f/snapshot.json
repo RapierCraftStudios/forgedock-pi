@@ -10,15 +10,15 @@
     "ownerRunId": "c0f52a10-07ba-4b5e-a47d-e39138c05aa2",
     "epoch": 1
   },
-  "sequence": 4,
-  "lastEventHash": "sha256:9b9e8c9dd16896e8cacfe1df9d4affd3b223091daf4e0ee7c58c59e20d1eb294",
+  "sequence": 5,
+  "lastEventHash": "sha256:2c5207aea42fa5e14ff6d5108cd053d522ba4974eddbb1b85ac86c66b9585722",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/76213cd2-eebd-4237-bb48-98629239df8f/.pi/forge/76213cd2-eebd-4237-bb48-98629239df8f-resolve-1.json",
       "subagentRunId": "b573b0d4-5eba-423b-a51b-f84cfdedc600",
@@ -27,7 +27,18 @@
       "startedAt": "2026-08-25T16:04:21.793Z",
       "previousSubagentRunId": "launch:resolve-1:1fe08866-c792-48fb-9a3d-566b61754aaa",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "round": 1,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "Supplied issue #50 context contains a non-empty bug title, concrete reproduction, expected behavior, durable run evidence, and impact.",
+        "Supplied issue labels are empty, so no terminal, duplicate, or active workflow label excludes the issue.",
+        "Repository .forge/config.json names RapierCraftStudios/forgedock-pi and configures dogfood as the integration branch while only main is protected.",
+        "The assigned node provides frozen base SHA 03e6133becc50ba8509b976743ea76ffeaab2c4d for the bounded run."
+      ],
+      "finishedAt": "2026-08-25T16:05:43.575Z"
     }
   },
   "effects": {},
@@ -35,12 +46,14 @@
     "run:create": "d92452d2-d7eb-4247-84c7-2453dfafa617",
     "node:resolve-1:queued": "c7ad0b8f-6778-4809-b864-4870aef2e757",
     "node:resolve-1:started": "17151da0-8878-4cf0-9ec1-f068913bcb3d",
-    "node:resolve-1:receipt-bound": "bf33c197-c42a-49ea-b725-fd63b7f94ec8"
+    "node:resolve-1:receipt-bound": "bf33c197-c42a-49ea-b725-fd63b7f94ec8",
+    "node:resolve-1:completed": "e7d6be24-ae39-4b87-a82d-687a7e059115"
   },
   "eventIds": {
     "d92452d2-d7eb-4247-84c7-2453dfafa617": true,
     "c7ad0b8f-6778-4809-b864-4870aef2e757": true,
     "17151da0-8878-4cf0-9ec1-f068913bcb3d": true,
-    "bf33c197-c42a-49ea-b725-fd63b7f94ec8": true
+    "bf33c197-c42a-49ea-b725-fd63b7f94ec8": true,
+    "e7d6be24-ae39-4b87-a82d-687a7e059115": true
   }
 }
