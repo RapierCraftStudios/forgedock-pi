@@ -10,8 +10,8 @@
     "ownerRunId": "dd680e3c-d22e-4841-9e2e-5042551e056a",
     "epoch": 1
   },
-  "sequence": 13,
-  "lastEventHash": "sha256:e43274c85b4065f5a874cc1f52a6d59cc039e5142a778169a321ed6805da72b7",
+  "sequence": 14,
+  "lastEventHash": "sha256:6d8880a193f2111f9af0cbb77d1bdf35e3a1b71a94f73d220e91458db73ba454",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -97,6 +97,15 @@
         "The plan permits one target test-file change and forbids production or unrelated-file changes."
       ],
       "finishedAt": "2026-08-25T10:16:52.917Z"
+    },
+    "prepare-worktree-1": {
+      "nodeId": "prepare-worktree-1",
+      "node": "prepare-worktree",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "320ad98f894e872dcb4ddc50cc90237722ab736c",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/4f3e8e17-3743-4a53-a0c7-db71ce9535b9/.pi/forge/4f3e8e17-3743-4a53-a0c7-db71ce9535b9-prepare-worktree-1.json"
     }
   },
   "effects": {},
@@ -113,7 +122,8 @@
     "node:plan-1:queued": "a83096a3-9072-44a2-99fb-0cb7de5ddd5b",
     "node:plan-1:started": "c23aeab2-bb8b-4acb-9b2f-df01c20b570e",
     "node:plan-1:receipt-bound": "058d2e35-b53a-41d3-924d-4784fbb01fda",
-    "node:plan-1:completed": "45472e37-566c-44ec-888f-c8514c6b27c7"
+    "node:plan-1:completed": "45472e37-566c-44ec-888f-c8514c6b27c7",
+    "node:prepare-worktree-1:queued": "d39ed3dc-4027-47e0-88fd-e521d9109eb6"
   },
   "eventIds": {
     "f09b50df-0043-4493-aea7-a52e7e099b6f": true,
@@ -128,6 +138,7 @@
     "a83096a3-9072-44a2-99fb-0cb7de5ddd5b": true,
     "c23aeab2-bb8b-4acb-9b2f-df01c20b570e": true,
     "058d2e35-b53a-41d3-924d-4784fbb01fda": true,
-    "45472e37-566c-44ec-888f-c8514c6b27c7": true
+    "45472e37-566c-44ec-888f-c8514c6b27c7": true,
+    "d39ed3dc-4027-47e0-88fd-e521d9109eb6": true
   }
 }
