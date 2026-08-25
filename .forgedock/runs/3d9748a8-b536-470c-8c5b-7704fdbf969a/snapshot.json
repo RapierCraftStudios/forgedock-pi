@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 14,
-  "lastEventHash": "sha256:2b78e09e4a50e17e146f1be8e60e7e723968cd3ceff2f782a473bf9e62e1e7fd",
+  "sequence": 15,
+  "lastEventHash": "sha256:847a89a83e1dee122551cb69dc2018c0828c7df0a28e35900937b1b6382b1c28",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -113,9 +113,13 @@
       "node": "prepare-worktree",
       "attempt": 1,
       "round": 1,
-      "status": "queued",
+      "status": "running",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
-      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/3d9748a8-b536-470c-8c5b-7704fdbf969a/.pi/forge/3d9748a8-b536-470c-8c5b-7704fdbf969a-prepare-worktree-1.json"
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/3d9748a8-b536-470c-8c5b-7704fdbf969a/.pi/forge/3d9748a8-b536-470c-8c5b-7704fdbf969a-prepare-worktree-1.json",
+      "subagentRunId": "launch:prepare-worktree-1:62d06bfc-8917-4c4e-8785-e7f1341c37a2",
+      "launchNonce": "62d06bfc-8917-4c4e-8785-e7f1341c37a2",
+      "launchIntent": true,
+      "startedAt": "2026-08-25T18:11:12.257Z"
     }
   },
   "effects": {},
@@ -133,7 +137,8 @@
     "node:plan-1:started": "4b43b6c5-58f0-4527-9d38-a7eec84de925",
     "node:plan-1:receipt-bound": "8d7873f0-f323-42b4-82f1-6fb51adc825a",
     "node:plan-1:completed": "d34c1acb-834e-4fb2-9824-e8d0bf7da110",
-    "node:prepare-worktree-1:queued": "37a380d9-452c-464f-a0e4-e6142fdc2c3d"
+    "node:prepare-worktree-1:queued": "37a380d9-452c-464f-a0e4-e6142fdc2c3d",
+    "node:prepare-worktree-1:started": "46c4f192-993f-49e1-81f7-ff15cdcfd18e"
   },
   "eventIds": {
     "5658c076-9cc2-4ce6-adda-0b20f4e315c6": true,
@@ -149,6 +154,7 @@
     "4b43b6c5-58f0-4527-9d38-a7eec84de925": true,
     "8d7873f0-f323-42b4-82f1-6fb51adc825a": true,
     "d34c1acb-834e-4fb2-9824-e8d0bf7da110": true,
-    "37a380d9-452c-464f-a0e4-e6142fdc2c3d": true
+    "37a380d9-452c-464f-a0e4-e6142fdc2c3d": true,
+    "46c4f192-993f-49e1-81f7-ff15cdcfd18e": true
   }
 }
