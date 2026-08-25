@@ -125,3 +125,9 @@ test("protected branches always require a human", () => {
   );
   assert.equal(result.decision, "needs-human");
 });
+
+test("disabled auto-merge on an integration branch requires a human", () => {
+  const result = evaluateReviewGate(input({ autoMergeAuthorized: false }));
+  assert.equal(result.decision, "needs-human");
+  assert.ok(result.reasons.some((reason) => reason.includes("staging")));
+});
