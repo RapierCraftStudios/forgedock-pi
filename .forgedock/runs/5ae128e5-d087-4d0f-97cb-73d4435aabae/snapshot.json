@@ -10,15 +10,15 @@
     "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
     "epoch": 1
   },
-  "sequence": 4,
-  "lastEventHash": "sha256:ab4f8a52b1497036eedf8eb66b1618462b1de907ea7da33a563182bc54bfa291",
+  "sequence": 5,
+  "lastEventHash": "sha256:5ce3aa3f6a3e75d93446a2f24c7bed1bf80197e3275eb812400d8a9af92dc21d",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/5ae128e5-d087-4d0f-97cb-73d4435aabae/.pi/forge/5ae128e5-d087-4d0f-97cb-73d4435aabae-resolve-1.json",
       "subagentRunId": "0dd279dd-332a-42f3-9127-7c70d01f1c7b",
@@ -27,7 +27,18 @@
       "startedAt": "2026-08-25T16:43:23.049Z",
       "previousSubagentRunId": "launch:resolve-1:f77eee95-111f-41dd-ae76-a28bfefbcfc8",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "round": 1,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "The supplied issue context identifies issue #49 with a non-empty title, an actionable reproduction, expected behavior, impact, and workflow:investigating label.",
+        "src/workflows/work-on.ts requires a positive issue number, a configured non-protected integration branch, and an open GitHub issue before initializing and dispatching a run; the task states this node was already durably queued and started.",
+        ".forge/config.json lists dogfood as the sole integration branch and main as the protected branch, so the bound dogfood base is configured and non-protected.",
+        "This read-only resolve node made no source changes; its head remains the frozen base SHA 03e6133becc50ba8509b976743ea76ffeaab2c4d."
+      ],
+      "finishedAt": "2026-08-25T16:44:36.849Z"
     }
   },
   "effects": {},
@@ -35,12 +46,14 @@
     "run:create": "3d76639e-0ea5-4b9c-8cf5-c5861433e30c",
     "node:resolve-1:queued": "1edfefaf-a4f5-42bd-8c7f-51096c50e1a2",
     "node:resolve-1:started": "2119e34a-8063-4ebf-8f85-3db4ac288bf4",
-    "node:resolve-1:receipt-bound": "56c93627-1a34-4d4e-8717-d13cef7aa5bd"
+    "node:resolve-1:receipt-bound": "56c93627-1a34-4d4e-8717-d13cef7aa5bd",
+    "node:resolve-1:completed": "673bc42f-6537-4eac-b959-7ced88a79dd0"
   },
   "eventIds": {
     "3d76639e-0ea5-4b9c-8cf5-c5861433e30c": true,
     "1edfefaf-a4f5-42bd-8c7f-51096c50e1a2": true,
     "2119e34a-8063-4ebf-8f85-3db4ac288bf4": true,
-    "56c93627-1a34-4d4e-8717-d13cef7aa5bd": true
+    "56c93627-1a34-4d4e-8717-d13cef7aa5bd": true,
+    "673bc42f-6537-4eac-b959-7ced88a79dd0": true
   }
 }
