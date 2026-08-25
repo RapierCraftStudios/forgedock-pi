@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 35,
-  "lastEventHash": "sha256:e241d4f9ea27c4e64de176df866cfa507ebac92486ec52ec94cf299e6cd63de9",
+  "sequence": 36,
+  "lastEventHash": "sha256:ea3d0829205ddde1f2964129c25c23de17552632260e96d94847ad1e6d405d5a",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -223,7 +223,7 @@
       "node": "review-correctness",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/91fd4701-34b2-4f98-9c38-a66277301579/.pi/forge/91fd4701-34b2-4f98-9c38-a66277301579-review-correctness-1.json",
       "subagentRunId": "c6b84bbd-567b-4109-b970-9315ddc195ca",
@@ -232,7 +232,54 @@
       "startedAt": "2026-08-25T19:56:54.779Z",
       "previousSubagentRunId": "launch:review-correctness-1:ecc5f5d2-cb37-4fa4-82b6-cdf917374bfa",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "d923c7380dbec377a759cfd6a1189e379bc958cd",
+      "reviewerResult": {
+        "schema": "forgedock.reviewer-result/v1",
+        "runId": "91fd4701-34b2-4f98-9c38-a66277301579",
+        "reviewer": "correctness",
+        "headSha": "d923c7380dbec377a759cfd6a1189e379bc958cd",
+        "verdict": "findings",
+        "findings": [
+          {
+            "id": "correctness-legacy-verify-head",
+            "reviewer": "correctness",
+            "runId": "91fd4701-34b2-4f98-9c38-a66277301579",
+            "headSha": "d923c7380dbec377a759cfd6a1189e379bc958cd",
+            "confidence": "likely",
+            "severity": "medium",
+            "category": "production-safety",
+            "file": "src/workflows/work-on.ts",
+            "line": 884,
+            "summary": "In-flight verify nodes created before this patch can no longer reconcile after an upgrade",
+            "evidence": [
+              "Before this patch, node.queued/node.started payloads in #dispatchNode did not persist node.headSha, so a verify node already running in durable state at upgrade time legitimately has durableNode.headSha undefined.",
+              "The new condition at lines 882-888 rejects every such completed verify result solely because durableNode.headSha is missing, even when nodeResult.headSha matches the completed implementation record and the actual implementation commit.",
+              "The updated state test now supplies headSha on every verify event, but there is no compatibility test or fallback that derives the head from the matching completed implement node; affected durable runs therefore throw during reconciliation instead of progressing or entering a controlled migration path.",
+              "The new readBinding requirement for nodeHeadSha similarly means a retained pre-upgrade verify binding cannot initialize under the updated child runtime, reinforcing the upgrade interruption for already-launched verification work."
+            ]
+          }
+        ],
+        "filesReviewed": [
+          "src/adapters/subagents.ts",
+          "src/agents/child-runtime.ts",
+          "src/core/dispatcher.ts",
+          "src/workflows/work-on.ts",
+          "test/adapters/subagents.test.ts",
+          "test/agents/child-runtime-commit.test.ts",
+          "test/core/dispatcher.test.ts",
+          "test/core/state.test.ts"
+        ],
+        "limitations": [
+          "Static review only; no command-execution tool was available to run the test suite."
+        ]
+      },
+      "publishedCommentId": 5415986174,
+      "evidence": [
+        "pr:61",
+        "comment:5415986174"
+      ],
+      "finishedAt": "2026-08-25T19:59:06.974Z"
     },
     "review-security-1": {
       "nodeId": "review-security-1",
@@ -287,7 +334,8 @@
     "node:review-correctness-1:receipt-bound": "09ae7b7d-b300-48b3-8f27-e286052f637d",
     "node:review-security-1:queued": "a180072f-6526-4aac-99c1-facf9b8c5ccb",
     "node:review-security-1:started": "7eb2a983-4a8e-4e4a-a35a-d305716d36e3",
-    "node:review-security-1:receipt-bound": "340b91db-384f-4571-81e2-4ad20e80d7a6"
+    "node:review-security-1:receipt-bound": "340b91db-384f-4571-81e2-4ad20e80d7a6",
+    "node:review-correctness-1:artifact-published": "0f817d14-7937-434e-a99f-7a215fc5f290"
   },
   "eventIds": {
     "ba49bd33-cd25-4d3a-8106-d3166e61f8e2": true,
@@ -324,6 +372,7 @@
     "09ae7b7d-b300-48b3-8f27-e286052f637d": true,
     "a180072f-6526-4aac-99c1-facf9b8c5ccb": true,
     "7eb2a983-4a8e-4e4a-a35a-d305716d36e3": true,
-    "340b91db-384f-4571-81e2-4ad20e80d7a6": true
+    "340b91db-384f-4571-81e2-4ad20e80d7a6": true,
+    "0f817d14-7937-434e-a99f-7a215fc5f290": true
   }
 }
