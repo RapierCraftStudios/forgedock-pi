@@ -10,8 +10,8 @@
     "ownerRunId": "c0f52a10-07ba-4b5e-a47d-e39138c05aa2",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:8d3d7caf3fa19e321bad8753727b30278c369f939a01f456fede0252a76cf102",
+  "sequence": 9,
+  "lastEventHash": "sha256:e150c2a05902fc961b9e1e0156d59f3b77cd001114ba3ab3e992d0fe8a308617",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -45,7 +45,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/140cccbe-c0c2-478e-a44e-a17c0126dde7/.pi/forge/140cccbe-c0c2-478e-a44e-a17c0126dde7-investigate-1.json",
       "subagentRunId": "78eb9168-9080-4265-8809-c568a7b610e6",
@@ -54,7 +54,15 @@
       "startedAt": "2026-08-25T16:06:42.793Z",
       "previousSubagentRunId": "launch:investigate-1:8f7e890a-e270-44cc-ac5e-936eb414ef73",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "Frozen-base inspection found the reported `pending:` initialization and an exact restart path that sends it to provider status lookup.",
+        "No files were changed because investigate is read-only; command-based tests were unavailable by node policy."
+      ],
+      "finishedAt": "2026-08-25T16:09:45.378Z"
     }
   },
   "effects": {},
@@ -66,7 +74,8 @@
     "node:resolve-1:completed": "33397b0e-d180-4ac4-8229-0fbf802bf35d",
     "node:investigate-1:queued": "1628e1be-3c4d-4004-bb22-f173fbc501da",
     "node:investigate-1:started": "6c43124d-c903-4037-880e-b19d76ee5ba4",
-    "node:investigate-1:receipt-bound": "f1ad8fb8-9c64-4b81-8289-02fa22581fed"
+    "node:investigate-1:receipt-bound": "f1ad8fb8-9c64-4b81-8289-02fa22581fed",
+    "node:investigate-1:completed": "7f279ef1-907a-46ea-9709-e613aaddb8d1"
   },
   "eventIds": {
     "b4bb38a3-184b-4668-a8ee-ff93cc336fe2": true,
@@ -76,6 +85,7 @@
     "33397b0e-d180-4ac4-8229-0fbf802bf35d": true,
     "1628e1be-3c4d-4004-bb22-f173fbc501da": true,
     "6c43124d-c903-4037-880e-b19d76ee5ba4": true,
-    "f1ad8fb8-9c64-4b81-8289-02fa22581fed": true
+    "f1ad8fb8-9c64-4b81-8289-02fa22581fed": true,
+    "7f279ef1-907a-46ea-9709-e613aaddb8d1": true
   }
 }
