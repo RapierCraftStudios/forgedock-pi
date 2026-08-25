@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 14,
-  "lastEventHash": "sha256:d64045c7e9f8d04dbccf3ab240de84634ddd93a801cbe82a82aa74c8fcc167c9",
+  "sequence": 15,
+  "lastEventHash": "sha256:7fc4df5620839a072bcf17ecd371fabe6e12ca15a8cd1836a153c76af22f58e6",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -111,9 +111,13 @@
       "node": "prepare-worktree",
       "attempt": 1,
       "round": 1,
-      "status": "queued",
+      "status": "running",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
-      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/0728ea77-6c26-447c-a00f-eb93c6edf47f/.pi/forge/0728ea77-6c26-447c-a00f-eb93c6edf47f-prepare-worktree-1.json"
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/0728ea77-6c26-447c-a00f-eb93c6edf47f/.pi/forge/0728ea77-6c26-447c-a00f-eb93c6edf47f-prepare-worktree-1.json",
+      "subagentRunId": "launch:prepare-worktree-1:c7dac426-d8c1-47fb-9685-d256e0906c20",
+      "launchNonce": "c7dac426-d8c1-47fb-9685-d256e0906c20",
+      "launchIntent": true,
+      "startedAt": "2026-08-25T18:04:03.602Z"
     }
   },
   "effects": {},
@@ -131,7 +135,8 @@
     "node:plan-1:started": "da41df4b-0da0-4a6a-b15b-972779aefc18",
     "node:plan-1:receipt-bound": "e8f29750-9bed-4063-ab81-29c94da3a38c",
     "node:plan-1:completed": "ffb19ef5-576d-423a-8a62-6d33dbba3d9e",
-    "node:prepare-worktree-1:queued": "b306a7e6-41d3-4c34-86e1-d86ca995e7dd"
+    "node:prepare-worktree-1:queued": "b306a7e6-41d3-4c34-86e1-d86ca995e7dd",
+    "node:prepare-worktree-1:started": "2946aeab-3d4b-41c6-bb11-936b38f0db86"
   },
   "eventIds": {
     "469de514-67bc-4228-9327-0648d8a035ef": true,
@@ -147,6 +152,7 @@
     "da41df4b-0da0-4a6a-b15b-972779aefc18": true,
     "e8f29750-9bed-4063-ab81-29c94da3a38c": true,
     "ffb19ef5-576d-423a-8a62-6d33dbba3d9e": true,
-    "b306a7e6-41d3-4c34-86e1-d86ca995e7dd": true
+    "b306a7e6-41d3-4c34-86e1-d86ca995e7dd": true,
+    "2946aeab-3d4b-41c6-bb11-936b38f0db86": true
   }
 }
