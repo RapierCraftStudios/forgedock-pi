@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 22,
-  "lastEventHash": "sha256:49bb78d538937d860d6c33107c904d4241f7e62549ad3b6a45689fabb4d1a11d",
+  "sequence": 23,
+  "lastEventHash": "sha256:e4299d547679690216097672ad0fbe71a84bfe2c4fceeddfe39f47315071b3bf",
   "lanes": [
     {
       "issueNumber": 49,
@@ -52,10 +52,11 @@
     {
       "issueNumber": 54,
       "ordinal": 5,
-      "status": "running",
+      "status": "failed",
       "refreshes": 0,
       "forgeRunId": "24cb4b26-0b7d-4d67-a8ac-67eed4b33462",
-      "subagentRunId": "bf5e02cd-8a35-4396-bc27-a1593becdfb8"
+      "subagentRunId": "bf5e02cd-8a35-4396-bc27-a1593becdfb8",
+      "reason": "GitHub API 403 for /repos/RapierCraftStudios/forgedock-pi/git/blobs."
     }
   ],
   "idempotencyKeys": {
@@ -80,7 +81,8 @@
     "lease:heartbeat:2026-08-25T18:08:39.238Z": "b60714bc-8e69-43f7-a68e-f0080d52c223",
     "lease:heartbeat:2026-08-25T18:09:39.249Z": "5c737b17-5766-492a-b9d2-bf81a1ae4f60",
     "lease:heartbeat:2026-08-25T18:10:39.251Z": "622f2d23-fd45-4bbe-909f-91ad07236136",
-    "lease:heartbeat:2026-08-25T18:11:39.253Z": "052e774a-0cae-4ade-b259-4cb88e43d18c"
+    "lease:heartbeat:2026-08-25T18:11:39.253Z": "052e774a-0cae-4ade-b259-4cb88e43d18c",
+    "lane:54:failed": "0cf91077-b245-47dd-ab35-9ff67089490e"
   },
   "createdAt": "2026-08-25T17:55:15.729Z"
 }
