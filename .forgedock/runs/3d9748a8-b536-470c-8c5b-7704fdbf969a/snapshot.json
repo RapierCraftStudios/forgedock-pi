@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 16,
-  "lastEventHash": "sha256:96ee6cc14b03ce2689e4fe5738cbb22ff92b661f439915909064095e612eed45",
+  "sequence": 17,
+  "lastEventHash": "sha256:173119c013527c0788601d327069bcb51ae8d78de6c7eccb9fdefb5c299d30d9",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -113,7 +113,7 @@
       "node": "prepare-worktree",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/3d9748a8-b536-470c-8c5b-7704fdbf969a/.pi/forge/3d9748a8-b536-470c-8c5b-7704fdbf969a-prepare-worktree-1.json",
       "subagentRunId": "253fea55-1beb-450e-8eb1-d3c9c8b65d33",
@@ -122,7 +122,16 @@
       "startedAt": "2026-08-25T18:11:12.257Z",
       "previousSubagentRunId": "launch:prepare-worktree-1:62d06bfc-8917-4c4e-8785-e7f1341c37a2",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "Assigned worktree exists at /home/dev/Projects/forgedock-pi/.forge/worktrees/3d9748a8-b536-470c-8c5b-7704fdbf969a.",
+        "forge_diff against the frozen base reported no diff, confirming a clean prepared worktree.",
+        "Bound branch, integration base, and frozen base SHA were preserved exactly from the immutable node assignment."
+      ],
+      "finishedAt": "2026-08-25T18:12:08.579Z"
     }
   },
   "effects": {},
@@ -142,7 +151,8 @@
     "node:plan-1:completed": "d34c1acb-834e-4fb2-9824-e8d0bf7da110",
     "node:prepare-worktree-1:queued": "37a380d9-452c-464f-a0e4-e6142fdc2c3d",
     "node:prepare-worktree-1:started": "46c4f192-993f-49e1-81f7-ff15cdcfd18e",
-    "node:prepare-worktree-1:receipt-bound": "5d46b027-0e8e-4961-b6fe-e3764c8ee4b4"
+    "node:prepare-worktree-1:receipt-bound": "5d46b027-0e8e-4961-b6fe-e3764c8ee4b4",
+    "node:prepare-worktree-1:completed": "b174e737-3516-4e64-ba8d-e1b1addce8ba"
   },
   "eventIds": {
     "5658c076-9cc2-4ce6-adda-0b20f4e315c6": true,
@@ -160,6 +170,7 @@
     "d34c1acb-834e-4fb2-9824-e8d0bf7da110": true,
     "37a380d9-452c-464f-a0e4-e6142fdc2c3d": true,
     "46c4f192-993f-49e1-81f7-ff15cdcfd18e": true,
-    "5d46b027-0e8e-4961-b6fe-e3764c8ee4b4": true
+    "5d46b027-0e8e-4961-b6fe-e3764c8ee4b4": true,
+    "b174e737-3516-4e64-ba8d-e1b1addce8ba": true
   }
 }
