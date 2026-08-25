@@ -10,8 +10,8 @@
     "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
     "epoch": 1
   },
-  "sequence": 12,
-  "lastEventHash": "sha256:d1f98862056e855ca34da12f67a192f8b655a58a29fa119b3592370eb0922c90",
+  "sequence": 13,
+  "lastEventHash": "sha256:a3d5772b3efd021e4c406d9c0d7f06e2fae8624f99998833d309b0cfe119c3ba",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -72,7 +72,7 @@
       "node": "plan",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/c2553c16-045f-465c-87b3-08f0566183a2/.pi/forge/c2553c16-045f-465c-87b3-08f0566183a2-plan-1.json",
       "subagentRunId": "08112a82-adc2-48ef-9d60-a5242defc772",
@@ -81,7 +81,30 @@
       "startedAt": "2026-08-25T16:50:30.508Z",
       "previousSubagentRunId": "launch:plan-1:1621abb1-3403-42fb-8c9c-2c67be2b3797",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "builderContract": {
+        "schema": "forgedock.builder-path-contract/v1",
+        "revision": 1,
+        "allowedPaths": [
+          "src/core/events.ts",
+          "src/core/state.ts",
+          "src/workflows/work-on.ts",
+          "test/core/events.test.ts",
+          "test/core/state.test.ts",
+          "test/workflows/work-on.test.ts"
+        ],
+        "contractHash": "47f914aa49c3d174ab812f8ffeee908134624dd6d2e12a52f6611528623315b6"
+      },
+      "outcome": "completed",
+      "evidence": [
+        "Read-only planning inspection of src/workflows/work-on.ts, src/core/events.ts, src/core/state.ts, and the related workflow/state tests at frozen base 03e6133becc50ba8509b976743ea76ffeaab2c4d.",
+        "src/workflows/work-on.ts records a launch sentinel with node.started, then binds initial, recovered, and resumed provider receipts through node.resumed events.",
+        "src/core/state.ts maps node.resumed to running and requires the prior node status to be running, coupling receipt correlation to a lifecycle transition.",
+        "test/workflows/work-on.test.ts covers basic launch reconciliation but not duplicate receipt callbacks or a completion/binding race; test/core/state.test.ts covers one continuation receipt only."
+      ],
+      "finishedAt": "2026-08-25T16:55:40.467Z"
     }
   },
   "effects": {},
@@ -97,7 +120,8 @@
     "node:investigate-1:completed": "ecf3cd37-552e-46b3-87df-64cf4dbd2d6c",
     "node:plan-1:queued": "8eff53bb-13e7-432b-b8cc-f974cf2006dd",
     "node:plan-1:started": "b5f8d6b0-f4ab-48e9-a6cc-3e08df98f321",
-    "node:plan-1:receipt-bound": "e004c810-f82b-4874-8fac-e7aed951866e"
+    "node:plan-1:receipt-bound": "e004c810-f82b-4874-8fac-e7aed951866e",
+    "node:plan-1:completed": "e775ef44-7c7a-46f0-acf6-e9c97bd017af"
   },
   "eventIds": {
     "26445051-7ba5-465e-8c7f-a17aa6f15137": true,
@@ -111,6 +135,7 @@
     "ecf3cd37-552e-46b3-87df-64cf4dbd2d6c": true,
     "8eff53bb-13e7-432b-b8cc-f974cf2006dd": true,
     "b5f8d6b0-f4ab-48e9-a6cc-3e08df98f321": true,
-    "e004c810-f82b-4874-8fac-e7aed951866e": true
+    "e004c810-f82b-4874-8fac-e7aed951866e": true,
+    "e775ef44-7c7a-46f0-acf6-e9c97bd017af": true
   }
 }
