@@ -10,8 +10,8 @@
     "ownerRunId": "fd616696-4975-49a6-9d2a-9a782a49ed27",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:bbdff65a6e4d77686a5d91d91d7eb0889fc0969f50fb5b26c97f3e5fd77401d4",
+  "sequence": 9,
+  "lastEventHash": "sha256:66dc729e023827b4d6fb74fbd3daabe8fd64fbc5a41c4f53e392b1ba197db034",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -46,7 +46,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "86fff740db2e1ab31fc651fc80ea00ec7c5bdcbd",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a/.pi/forge/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a-investigate-1.json",
       "subagentRunId": "d1941357-f5c3-4cc5-9751-2131cc25135f",
@@ -55,7 +55,18 @@
       "startedAt": "2026-08-25T08:57:28.624Z",
       "previousSubagentRunId": "launch:investigate-1:a8a0e1ff-0fb9-4702-a838-04803e271a23",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "86fff740db2e1ab31fc651fc80ea00ec7c5bdcbd",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "GitHub issue #30 requests a focused regression assertion in test/agents/child-runtime-commit.test.ts: a review node must expose forge_finalize_reviewer and must not expose forge_finalize_node, with no production or unrelated test changes.",
+        "The assigned worktree is clean at the frozen base 86fff740db2e1ab31fc651fc80ea00ec7c5bdcbd; HEAD and origin/dogfood resolve to that SHA.",
+        "src/agents/child-runtime.ts lines 1051-1052 return only forge_finalize_reviewer for review-correctness and review-security, while the non-review common set at lines 1053-1058 contains forge_finalize_node.",
+        "test/agents/child-runtime-commit.test.ts lines 21-40 currently asserts the reviewer finalizer is exposed for review-security but has no negative assertion for forge_finalize_node.",
+        "npm run check passed at the frozen base: typecheck and all 78 tests passed."
+      ],
+      "finishedAt": "2026-08-25T09:00:45.454Z"
     }
   },
   "effects": {},
@@ -67,7 +78,8 @@
     "node:resolve-1:completed": "dfd34456-eac8-47c5-8dff-e1140875cfc8",
     "node:investigate-1:queued": "c86367d3-6344-4396-8df1-cae8e79bb36b",
     "node:investigate-1:started": "e29d3963-1d92-4b0b-9ef4-7e137c09ab92",
-    "node:investigate-1:receipt-bound": "0ea3b5ac-9fa3-41b5-989b-dee887046b45"
+    "node:investigate-1:receipt-bound": "0ea3b5ac-9fa3-41b5-989b-dee887046b45",
+    "node:investigate-1:completed": "29a15422-8340-45b5-a539-e4acfe3e3405"
   },
   "eventIds": {
     "a99b16b3-5107-4924-8a10-6bae25957c57": true,
@@ -77,6 +89,7 @@
     "dfd34456-eac8-47c5-8dff-e1140875cfc8": true,
     "c86367d3-6344-4396-8df1-cae8e79bb36b": true,
     "e29d3963-1d92-4b0b-9ef4-7e137c09ab92": true,
-    "0ea3b5ac-9fa3-41b5-989b-dee887046b45": true
+    "0ea3b5ac-9fa3-41b5-989b-dee887046b45": true,
+    "29a15422-8340-45b5-a539-e4acfe3e3405": true
   }
 }
