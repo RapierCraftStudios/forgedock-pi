@@ -6,6 +6,7 @@ import {
   finalReviewDecisionMarker,
   findingPriority,
   isTransientProviderFailure,
+  launchReceiptIdempotencyKey,
   lineWithinTolerance,
   parseAsyncCompletion,
   reconcileLaunchState,
@@ -50,6 +51,53 @@ test("normal matching provider receipts are inspected instead of escalated", () 
       resultArtifactPresent: false,
     }),
     "needs-human",
+  );
+});
+
+test("direct, recovery, and transport callbacks share one launch receipt identity", () => {
+  const receipt = {
+    nodeId: "resolve-1",
+    attempt: 1,
+    launchNonce: "nonce-1",
+    providerRunId: "child-1",
+  };
+  const direct = launchReceiptIdempotencyKey(receipt);
+  const recovery = launchReceiptIdempotencyKey({ ...receipt });
+  const duplicate = launchReceiptIdempotencyKey({ ...receipt });
+  const transportRecovery = launchReceiptIdempotencyKey({ ...receipt });
+
+  assert.equal(direct, recovery);
+  assert.equal(direct, transportRecovery);
+  assert.equal(new Set([direct, recovery, duplicate, transportRecovery]).size, 1);
+});
+
+test("launch receipt identity changes with every callback identity component", () => {
+  const receipt = {
+    nodeId: "resolve-1",
+    attempt: 1,
+    launchNonce: "nonce-1",
+    providerRunId: "child-1",
+  };
+  const canonical = launchReceiptIdempotencyKey(receipt);
+  const changed = [
+    launchReceiptIdempotencyKey({ ...receipt, nodeId: "resolve-2" }),
+    launchReceiptIdempotencyKey({ ...receipt, attempt: 2 }),
+    launchReceiptIdempotencyKey({ ...receipt, launchNonce: "nonce-2" }),
+    launchReceiptIdempotencyKey({ ...receipt, providerRunId: "child-2" }),
+  ];
+
+  assert.equal(new Set([canonical, ...changed]).size, 5);
+  assert.throws(
+    () => launchReceiptIdempotencyKey({ ...receipt, attempt: 0 }),
+    /positive attempt/,
+  );
+  assert.throws(
+    () =>
+      launchReceiptIdempotencyKey({
+        ...receipt,
+        providerRunId: "launch:resolve-1:nonce-1",
+      }),
+    /provider run ID/,
   );
 });
 

@@ -511,7 +511,12 @@ export class ForgeWorkOnController {
         ...(node.headSha ? { headSha: node.headSha } : {}),
         reason: failure,
       },
-      idempotencyKey: `node:${nodeId}:transport-resume-receipt:${retry}`,
+      idempotencyKey: launchReceiptIdempotencyKey({
+        nodeId,
+        attempt: node.attempt,
+        launchNonce: intent.launchNonce,
+        providerRunId: receipt.runId,
+      }),
       sessionId: ctx.sessionManager.getSessionId(),
       message: `Bind resume receipt for ForgeDock node ${nodeId}`,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
@@ -791,6 +796,14 @@ export class ForgeWorkOnController {
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
       } else {
+        const launchNonce = durableNode.launchNonce;
+        if (!launchNonce)
+          throw new Error(`Node ${nodeId} has no durable launch nonce.`);
+        if (
+          activeNode.launchNonce &&
+          activeNode.launchNonce !== launchNonce
+        )
+          throw new Error(`Node ${nodeId} provider receipt has a mismatched launch nonce.`);
         await journal.append({
           runId: link.forgeRunId,
           type: "node.resumed",
@@ -802,12 +815,17 @@ export class ForgeWorkOnController {
             previousSubagentRunId: durableNode.subagentRunId,
             subagentRunId: activeNode.subagentRunId,
             resultPath: activeNode.resultPath,
-            ...(durableNode.launchNonce ? { launchNonce: durableNode.launchNonce } : {}),
+            launchNonce,
             launchReceipt: true,
             transportRetries: durableNode.transportRetries ?? 0,
             baseSha: durableNode.baseSha ?? link.prepared.baseSha,
           },
-          idempotencyKey: `node:${nodeId}:receipt-bound-recovery`,
+          idempotencyKey: launchReceiptIdempotencyKey({
+            nodeId,
+            attempt: durableNode.attempt,
+            launchNonce,
+            providerRunId: activeNode.subagentRunId,
+          }),
           sessionId: ctx.sessionManager.getSessionId(),
           message: `Bind recovered provider receipt for ForgeDock node ${nodeId}`,
           ...(ctx.signal ? { signal: ctx.signal } : {}),
@@ -1921,7 +1939,12 @@ export class ForgeWorkOnController {
         transportRetries: 0,
         baseSha: link.prepared.baseSha,
       },
-      idempotencyKey: `node:${node.nodeId}:receipt-bound`,
+      idempotencyKey: launchReceiptIdempotencyKey({
+        nodeId: node.nodeId,
+        attempt: node.attempt,
+        launchNonce: launchIntent.launchNonce,
+        providerRunId: receipt.runId,
+      }),
       sessionId: ctx.sessionManager.getSessionId(),
       message: `Bind provider receipt for ForgeDock node ${node.nodeId}`,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
@@ -3691,6 +3714,35 @@ export function createNodeLaunchIntent(
 
 export function isLaunchSentinel(runId: string): boolean {
   return runId.startsWith("launch:");
+}
+
+/** Canonical identity for every path that binds a provider launch receipt. */
+export function launchReceiptIdempotencyKey(input: {
+  nodeId: string;
+  attempt: number;
+  launchNonce: string;
+  providerRunId: string;
+}): string {
+  if (
+    !input.nodeId.trim() ||
+    !Number.isSafeInteger(input.attempt) ||
+    input.attempt < 1 ||
+    !input.launchNonce.trim() ||
+    !input.providerRunId.trim() ||
+    isLaunchSentinel(input.providerRunId)
+  )
+    throw new TypeError(
+      "Launch receipt identity requires nodeId, positive attempt, launch nonce, and provider run ID.",
+    );
+  return [
+    "node",
+    encodeURIComponent(input.nodeId),
+    "attempt",
+    input.attempt,
+    "launch-receipt",
+    encodeURIComponent(input.launchNonce),
+    encodeURIComponent(input.providerRunId),
+  ].join(":");
 }
 
 export type LaunchRecoveryAction =
