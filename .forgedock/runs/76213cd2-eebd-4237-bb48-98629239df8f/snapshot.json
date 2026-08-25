@@ -10,8 +10,8 @@
     "ownerRunId": "c0f52a10-07ba-4b5e-a47d-e39138c05aa2",
     "epoch": 1
   },
-  "sequence": 12,
-  "lastEventHash": "sha256:03f48868c531c4c54a4d47cfc7da76235dfd53f143fce40e8e783fd78d103fa3",
+  "sequence": 13,
+  "lastEventHash": "sha256:210423a73862f9e85afbd00bb1500ef35bee8798fc9de90dd6261a335f22ffbb",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -74,7 +74,7 @@
       "node": "plan",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/76213cd2-eebd-4237-bb48-98629239df8f/.pi/forge/76213cd2-eebd-4237-bb48-98629239df8f-plan-1.json",
       "subagentRunId": "80a3ee76-807c-4dab-9bef-ad1a888acc02",
@@ -83,7 +83,26 @@
       "startedAt": "2026-08-25T16:10:37.772Z",
       "previousSubagentRunId": "launch:plan-1:d19d9e28-9f7c-4fdb-bec0-2779d6ce3583",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "builderContract": {
+        "schema": "forgedock.builder-path-contract/v1",
+        "revision": 1,
+        "allowedPaths": [
+          "src/workflows/work-on.ts",
+          "test/workflows/work-on.test.ts"
+        ],
+        "contractHash": "5933fe29e99cf34a13c56b551772c080413e7d8c495c54d41c40dc57e3e509e1"
+      },
+      "outcome": "completed",
+      "evidence": [
+        "Frozen source inspection at 03e6133becc50ba8509b976743ea76ffeaab2c4d found divergent idempotency keys for the same initial provider receipt: live binding uses node:<nodeId>:receipt-bound in src/workflows/work-on.ts:1910-1928, while reconciliation uses node:<nodeId>:receipt-bound-recovery in src/workflows/work-on.ts:793-814.",
+        "RunJournal.append short-circuits only when the exact idempotency key already exists, then otherwise reapplies the requested transition after each CAS reload (src/workflows/journal.ts:127-191).",
+        "The node reducer requires node.resumed to observe a currently running node (src/core/state.ts:562-601), so a losing receipt-binding append can reload after the competing path completed the node and fail with the reported cannot-transition-to-running error.",
+        "No source or test files were changed because plan-1 is read-only."
+      ],
+      "finishedAt": "2026-08-25T16:20:48.755Z"
     }
   },
   "effects": {},
@@ -99,7 +118,8 @@
     "node:investigate-1:completed": "4196f00d-d7c5-4872-a84d-85ddba3ae3e4",
     "node:plan-1:queued": "fd441304-5428-4eba-b248-d4373d0d0946",
     "node:plan-1:started": "bb00fbbc-3ff1-4d3e-a8e4-d6cb4dcbe1a4",
-    "node:plan-1:receipt-bound": "a9aee4cf-9a71-4a51-a0c0-3b47e35e67c0"
+    "node:plan-1:receipt-bound": "a9aee4cf-9a71-4a51-a0c0-3b47e35e67c0",
+    "node:plan-1:completed": "f4515f3e-2b3f-43fb-bdf5-6faf27b7e2ee"
   },
   "eventIds": {
     "d92452d2-d7eb-4247-84c7-2453dfafa617": true,
@@ -113,6 +133,7 @@
     "4196f00d-d7c5-4872-a84d-85ddba3ae3e4": true,
     "fd441304-5428-4eba-b248-d4373d0d0946": true,
     "bb00fbbc-3ff1-4d3e-a8e4-d6cb4dcbe1a4": true,
-    "a9aee4cf-9a71-4a51-a0c0-3b47e35e67c0": true
+    "a9aee4cf-9a71-4a51-a0c0-3b47e35e67c0": true,
+    "f4515f3e-2b3f-43fb-bdf5-6faf27b7e2ee": true
   }
 }
