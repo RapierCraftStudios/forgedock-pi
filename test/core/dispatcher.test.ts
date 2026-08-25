@@ -140,13 +140,38 @@ test("decision remediation advances one immutable fresh round and then exhausts 
     },
   ];
   let records = prefix;
-  for (const node of ["implement", "verify", "prepare-pr"] as const) {
+  for (const node of [
+    "implement",
+    "verify",
+    "prepare-pr",
+    "review-correctness",
+    "review-security",
+    "review-join",
+    "ci",
+    "decision",
+  ] as const) {
     const next = chooseNextExecutableNode({ nodes: records, maxReviewRounds: 2 });
     assert.equal(next?.node, node);
     assert.equal(next?.nodeId, `${node}-2`);
     assert.equal(next?.round, 2);
-    records = [...records, { ...next!, status: "completed" }];
+    records = [
+      ...records,
+      {
+        ...next!,
+        status: "completed",
+        ...(node === "review-correctness"
+          ? { publishedCommentId: 201 }
+          : node === "review-security"
+            ? { publishedCommentId: 202 }
+            : {}),
+        ...(node === "decision" ? { outcome: "awaiting-merge" as const } : {}),
+      },
+    ];
   }
+  assert.equal(
+    chooseNextExecutableNode({ nodes: records, maxReviewRounds: 2 })?.node,
+    "merge",
+  );
   assert.equal(
     chooseNextExecutableNode({ nodes: prefix, maxReviewRounds: 1 }),
     undefined,

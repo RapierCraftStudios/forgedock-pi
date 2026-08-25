@@ -407,6 +407,77 @@ test("the immutable final review decision is retained on its decision node", () 
   );
 });
 
+test("resume intent is durable before a provider continuation receipt", () => {
+  let state = initializedState();
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.queued",
+      { nodeId: "verify-1", node: "verify", attempt: 1 },
+      "verify:queue",
+    ),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.started",
+      {
+        nodeId: "verify-1",
+        node: "verify",
+        attempt: 1,
+        subagentRunId: "child-old",
+      },
+      "verify:start",
+    ),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.resumed",
+      {
+        nodeId: "verify-1",
+        node: "verify",
+        attempt: 1,
+        previousSubagentRunId: "child-old",
+        subagentRunId: "launch:verify-1-resume-1:nonce",
+        resultPath: "/tmp/verify-1.json",
+        launchNonce: "nonce",
+        launchIntent: true,
+        transportRetries: 1,
+      },
+      "verify:resume:intent",
+    ),
+  );
+  assert.equal(
+    state.nodes["verify-1"]?.subagentRunId,
+    "launch:verify-1-resume-1:nonce",
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.resumed",
+      {
+        nodeId: "verify-1",
+        node: "verify",
+        attempt: 1,
+        previousSubagentRunId: "launch:verify-1-resume-1:nonce",
+        subagentRunId: "child-new",
+        resultPath: "/tmp/verify-1.json",
+        launchNonce: "nonce",
+        launchReceipt: true,
+        transportRetries: 1,
+      },
+      "verify:resume:receipt",
+    ),
+  );
+  assert.equal(state.nodes["verify-1"]?.subagentRunId, "child-new");
+  assert.equal(state.nodes["verify-1"]?.transportRetries, 1);
+});
+
 test("hash chain and idempotency conflicts fail closed", () => {
   const state = initializedState();
   const valid = nextEvent(
