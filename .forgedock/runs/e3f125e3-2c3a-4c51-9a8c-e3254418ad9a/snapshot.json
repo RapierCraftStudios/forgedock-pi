@@ -10,8 +10,8 @@
     "ownerRunId": "fd616696-4975-49a6-9d2a-9a782a49ed27",
     "epoch": 1
   },
-  "sequence": 36,
-  "lastEventHash": "sha256:08b13c1ff2b3df77714d45faf9c94bc04a0353604fd7740c516b773515aa8b0f",
+  "sequence": 37,
+  "lastEventHash": "sha256:b6e427e220434ff18f7f65db71dce949f6338b090dba078f49dce4c47de680a5",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -357,7 +357,7 @@
       "node": "review-security",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "86fff740db2e1ab31fc651fc80ea00ec7c5bdcbd",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a/.pi/forge/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a-review-security-1.json",
       "subagentRunId": "cbc36ce5-ea8c-45a4-9cbe-c2bac77bc3cc",
@@ -366,7 +366,109 @@
       "startedAt": "2026-08-25T09:16:32.056Z",
       "previousSubagentRunId": "launch:review-security-1:32874a30-6454-42b9-aa65-d68226a17ddd",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "8aee96d4b8e41e0ec28edcf47e52c23ef060f360",
+      "reviewerResult": {
+        "schema": "forgedock.reviewer-result/v1",
+        "runId": "e3f125e3-2c3a-4c51-9a8c-e3254418ad9a",
+        "reviewer": "security",
+        "headSha": "8aee96d4b8e41e0ec28edcf47e52c23ef060f360",
+        "verdict": "findings",
+        "findings": [
+          {
+            "id": "SECURITY-001",
+            "reviewer": "security",
+            "runId": "e3f125e3-2c3a-4c51-9a8c-e3254418ad9a",
+            "headSha": "8aee96d4b8e41e0ec28edcf47e52c23ef060f360",
+            "confidence": "confirmed",
+            "severity": "critical",
+            "category": "security",
+            "file": "src/agents/child-runtime.ts",
+            "line": 171,
+            "summary": "Read-only nodes can execute unrestricted bash with the parent environment.",
+            "evidence": [
+              "The tool_call hook returns immediately for bash on resolve, investigate, and plan nodes; it does not inspect or allowlist the command (lines 171-181).",
+              "FORGE_WORK_ON_TOOLS exposes bash to every bounded writer node (src/agents/register.ts:20-24), so the hook is the only command boundary.",
+              "The native bash path is not run through safeEnvironment; a prompt-injected issue can invoke gh/git/curl, read user files or GitHub CLI credentials, and perform GitHub writes or pushes despite the read-only node contract."
+            ]
+          },
+          {
+            "id": "SECURITY-002",
+            "reviewer": "security",
+            "runId": "e3f125e3-2c3a-4c51-9a8c-e3254418ad9a",
+            "headSha": "8aee96d4b8e41e0ec28edcf47e52c23ef060f360",
+            "confidence": "confirmed",
+            "severity": "high",
+            "category": "security",
+            "file": "src/agents/child-runtime.ts",
+            "line": 187,
+            "summary": "The child guard does not make resolve/investigate/plan read-only: write and edit are permitted on any in-worktree path.",
+            "evidence": [
+              "After the Forge-tool check, the hook handles read/write/edit/grep/find/ls only by checking path containment and then returns; there is no node-based denial for write or edit (lines 187-204).",
+              "The same FORGE_WORK_ON_TOOLS list gives write and edit to every bounded node (src/agents/register.ts:20-29).",
+              "A resolve or investigate child can therefore modify source, workflow, or policy files before implementation; later forge_commit stages every changed path via git add -A -- ...changedPaths (child-runtime.ts:410-422), with no accepted-plan allowlist or clean-boundary check."
+            ]
+          },
+          {
+            "id": "SECURITY-003",
+            "reviewer": "security",
+            "runId": "e3f125e3-2c3a-4c51-9a8c-e3254418ad9a",
+            "headSha": "8aee96d4b8e41e0ec28edcf47e52c23ef060f360",
+            "confidence": "confirmed",
+            "severity": "high",
+            "category": "data-loss",
+            "file": "src/agents/materialize.ts",
+            "line": 100,
+            "summary": "Agent materialization follows repository-controlled symlinks and can overwrite files outside the Forge runtime directory.",
+            "evidence": [
+              "materializeForgeAgents is called on the freshly checked-out worktree before the child starts (src/workflows/work-on.ts:555).",
+              "The implementation creates .pi/agents with mkdir but never rejects symlink components, then writes fixed agent filenames with writeFile; writeFile follows a tracked symlink at .pi/agents/forge-work-on.md (materialize.ts:25-27, 97-101).",
+              "A repository can commit that path as a symlink to another tracked file, an external writable path, or a host configuration file; the write occurs as the user and can corrupt source/policy data or overwrite an outside file before any child path guard runs."
+            ]
+          },
+          {
+            "id": "SECURITY-004",
+            "reviewer": "security",
+            "runId": "e3f125e3-2c3a-4c51-9a8c-e3254418ad9a",
+            "headSha": "8aee96d4b8e41e0ec28edcf47e52c23ef060f360",
+            "confidence": "confirmed",
+            "severity": "high",
+            "category": "auth",
+            "file": "src/ui/commands.ts",
+            "line": 50,
+            "summary": "The model-callable forge_orchestrate tool has no enforced user confirmation and always authorizes expired-lease takeover.",
+            "evidence": [
+              "The tool description asks the LLM to resolve and confirm, but execute ignores sourceExpression and resolutionSummary and unconditionally calls orchestrator.start with allowExpiredTakeover: true (commands.ts:27-50).",
+              "orchestrate.start uses that boolean to cancel the expired orchestration and release its lease without an authorization identity (workflows/orchestrate.ts:158-174); the only confirmation requirement is prompt text.",
+              "An indirect prompt injection in GitHub issue text, or any direct model tool call, can dispatch arbitrary positive issue numbers and cancel a prior orchestration; with auto-merge policy this can launch writes/merges without the promised operator approval."
+            ]
+          }
+        ],
+        "filesReviewed": [
+          "src/agents/child-runtime.ts",
+          "src/agents/materialize.ts",
+          "src/agents/register.ts",
+          "src/ui/commands.ts",
+          "src/workflows/orchestrate.ts",
+          "src/workflows/work-on.ts",
+          "src/adapters/subagents.ts",
+          "src/adapters/git.ts",
+          "src/core/lease.ts",
+          "src/core/policy.ts",
+          "SECURITY.md",
+          "DESIGN.md"
+        ],
+        "limitations": [
+          "Static review of the frozen worktree; no live GitHub or provider execution was performed.",
+          "No comparison against an unfrozen base checkout was used."
+        ]
+      },
+      "publishedCommentId": 5408410243,
+      "evidence": [
+        "pr:31",
+        "comment:5408410243"
+      ],
+      "finishedAt": "2026-08-25T09:33:40.878Z"
     }
   },
   "effects": {},
@@ -406,7 +508,8 @@
     "node:review-security-1:queued": "aa182756-6497-49d6-b125-b1b8882dc4b2",
     "node:review-security-1:started": "7fbd78aa-ea8d-479a-bfa6-fa604b8ff33c",
     "node:review-security-1:receipt-bound": "1b9d0261-cd1a-4c82-8c6f-b96277ac5a6e",
-    "node:review-correctness-1:artifact-published": "db502bca-7b44-4288-9b5f-39e8066ddf8a"
+    "node:review-correctness-1:artifact-published": "db502bca-7b44-4288-9b5f-39e8066ddf8a",
+    "node:review-security-1:artifact-published": "b1b385c9-1d11-4193-af8f-cbf8197afc7e"
   },
   "eventIds": {
     "a99b16b3-5107-4924-8a10-6bae25957c57": true,
@@ -444,6 +547,7 @@
     "aa182756-6497-49d6-b125-b1b8882dc4b2": true,
     "7fbd78aa-ea8d-479a-bfa6-fa604b8ff33c": true,
     "1b9d0261-cd1a-4c82-8c6f-b96277ac5a6e": true,
-    "db502bca-7b44-4288-9b5f-39e8066ddf8a": true
+    "db502bca-7b44-4288-9b5f-39e8066ddf8a": true,
+    "b1b385c9-1d11-4193-af8f-cbf8197afc7e": true
   }
 }
