@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 41,
-  "lastEventHash": "sha256:ed3d3e6db11a56c6462266b31b4a6b2f824f84c1d0e56f8f4416eac9aad39487",
+  "sequence": 42,
+  "lastEventHash": "sha256:b3b90fd04477cc0ab03bfb522c5d234fcaf9aca9c192710d5073838800def0c3",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -348,7 +348,9 @@
       "node": "ci",
       "attempt": 1,
       "round": 1,
-      "status": "queued"
+      "status": "running",
+      "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "startedAt": "2026-08-25T21:47:24.372Z"
     }
   },
   "effects": {},
@@ -393,7 +395,8 @@
     "node:review-join-1:queued": "136b5c83-9cda-4672-ac54-2c9829b174dc",
     "node:review-join-1:started": "0841af4e-c698-4349-b0db-ffb3933ca326",
     "node:review-join-1:complete": "77b2414e-e445-49ce-ae2b-ba9d86267126",
-    "node:ci-1:queued": "ab33e70c-5a9d-4b4f-b4fd-9560f0093f0e"
+    "node:ci-1:queued": "ab33e70c-5a9d-4b4f-b4fd-9560f0093f0e",
+    "node:ci-1:started": "1d701a11-99be-4d1c-8187-a8ba5566137f"
   },
   "eventIds": {
     "7b5d2931-7497-4d47-b405-55ab5d7a6899": true,
@@ -436,6 +439,7 @@
     "136b5c83-9cda-4672-ac54-2c9829b174dc": true,
     "0841af4e-c698-4349-b0db-ffb3933ca326": true,
     "77b2414e-e445-49ce-ae2b-ba9d86267126": true,
-    "ab33e70c-5a9d-4b4f-b4fd-9560f0093f0e": true
+    "ab33e70c-5a9d-4b4f-b4fd-9560f0093f0e": true,
+    "1d701a11-99be-4d1c-8187-a8ba5566137f": true
   }
 }
