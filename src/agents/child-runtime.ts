@@ -19,7 +19,10 @@ import {
   type SubagentCapabilityCeilingHandle,
 } from "pi-subagents/capability-ceiling";
 
-import { FetchGitHubTransport } from "../adapters/github-api.ts";
+import {
+  FetchGitHubTransport,
+  type GitHubTransport,
+} from "../adapters/github-api.ts";
 import { GitHubIssueProjector } from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
@@ -80,6 +83,22 @@ interface ProcessResult {
   timedOut: boolean;
 }
 
+export interface ForgeChildRuntimeDependencies {
+  createTransport?: (token: string) => GitHubTransport;
+  createStateStore?: (
+    transport: GitHubTransport,
+    repository: string,
+    branch: string,
+  ) => Pick<GitHubStateBranchStore, "readRun" | "commitRunState">;
+  createProjector?: (
+    transport: GitHubTransport,
+    repository: string,
+  ) => Pick<
+    GitHubIssueProjector,
+    "projectEvent" | "postArtifact" | "appendToLatestComment" | "setWorkflowLabel"
+  >;
+}
+
 const TRUNCATED_OUTPUT_MARKER = "[output truncated to last";
 const MAX_RUNTIME_STATUS_BYTES = 1_024 * 1_024;
 
@@ -126,8 +145,22 @@ const FinalizeWorkOnParameters = Type.Object({
   value: Type.Unsafe(FORGE_WORK_ON_OUTPUT_SCHEMA),
 });
 
-export default function forgeChildRuntime(pi: ExtensionAPI): void {
+export default function forgeChildRuntime(
+  pi: ExtensionAPI,
+  dependencies: ForgeChildRuntimeDependencies = {},
+): void {
   const binding = readBinding();
+  const createTransport =
+    dependencies.createTransport ??
+    ((token: string) => new FetchGitHubTransport({ token }));
+  const createStateStore =
+    dependencies.createStateStore ??
+    ((transport: GitHubTransport, repository: string, branch: string) =>
+      new GitHubStateBranchStore(transport, repository, branch));
+  const createProjector =
+    dependencies.createProjector ??
+    ((transport: GitHubTransport, repository: string) =>
+      new GitHubIssueProjector(transport, repository));
   const agentRegistrations = registerForgeAgents(pi);
   let ceiling: SubagentCapabilityCeilingHandle | undefined;
   let canonicalRoot: string | undefined;
@@ -516,7 +549,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         githubToken ??
         (await resolveGitHubToken(pi, binding.worktreeRoot, signal));
       githubToken = token;
-      const transport = new FetchGitHubTransport({ token });
+      const transport = createTransport(token);
       const github = new GitHubWorkflowAdapter(transport, binding.repository);
       const issue = await github.getIssue(binding.issueNumber, signal);
       const pull = await github.createPullRequest({
@@ -531,7 +564,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           `Created PR head ${pull.headSha} does not match frozen review head ${headSha}.`,
         );
 
-      const store = new GitHubStateBranchStore(
+      const store = createStateStore(
         transport,
         binding.repository,
         binding.stateBranch,
@@ -542,7 +575,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         throw new Error(
           "Cannot post review-started artifact without a run event.",
         );
-      const projector = new GitHubIssueProjector(transport, binding.repository);
+      const projector = createProjector(transport, binding.repository);
       await projector.postArtifact({
         issueNumber: binding.issueNumber,
         runId: binding.runId,
@@ -633,8 +666,8 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         githubToken ??
         (await resolveGitHubToken(pi, binding.worktreeRoot, signal));
       githubToken = token;
-      const transport = new FetchGitHubTransport({ token });
-      const store = new GitHubStateBranchStore(
+      const transport = createTransport(token);
+      const store = createStateStore(
         transport,
         binding.repository,
         binding.stateBranch,
@@ -658,6 +691,17 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       let sequence: number;
       let stateTip = current.tip;
       let idempotent = false;
+      const reportPhases = [
+        "investigate",
+        "plan",
+        "implement",
+        "verify",
+      ] as const;
+      if (params.action === "complete" && reportPhases.includes(params.phase as (typeof reportPhases)[number])) {
+        if (!params.report)
+          throw new Error(`Phase ${params.phase} complete requires a canonical report.`);
+        validatePhaseReport(params.phase, params.report);
+      }
 
       if (priorEventId) {
         const priorEvent = current.events.find(
@@ -698,10 +742,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       }
 
       if (params.action !== "queue") {
-        const projector = new GitHubIssueProjector(
-          transport,
-          binding.repository,
-        );
+        const projector = createProjector(transport, binding.repository);
         if (params.action !== "start") {
           await projectPhaseReport(projector, event, params, binding, signal);
         }
@@ -1131,7 +1172,7 @@ function workflowLabelForCheckpoint(params: {
   return undefined;
 }
 
-function validatePhaseReport(phase: RunPhase, report: string): void {
+export function validatePhaseReport(phase: RunPhase, report: string): void {
   const requiredByPhase: Partial<Record<RunPhase, readonly string[]>> = {
     investigate: [
       "<!-- FORGE:INVESTIGATOR -->",

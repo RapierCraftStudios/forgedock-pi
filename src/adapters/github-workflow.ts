@@ -115,7 +115,7 @@ export class GitHubWorkflowAdapter {
     signal?: AbortSignal;
   }): Promise<GitHubPullRequestData> {
     const existing = await this.findPullRequest(input.head, input.signal);
-    if (existing && existing.state === "open") return existing;
+    if (existing && (existing.state === "open" || existing.merged)) return existing;
     const path = `${this.#apiRoot}/pulls`;
     const response = await this.#transport.request<PullApiResponse>({
       method: "POST",
@@ -228,6 +228,8 @@ export class GitHubWorkflowAdapter {
 
   async closeIssue(issueNumber: number, signal?: AbortSignal): Promise<void> {
     assertNumber(issueNumber, "issue");
+    const current = await this.getIssue(issueNumber, signal);
+    if (current.state === "closed") return;
     const path = `${this.#apiRoot}/issues/${issueNumber}`;
     const response = await this.#transport.request<IssueApiResponse>({
       method: "PATCH",

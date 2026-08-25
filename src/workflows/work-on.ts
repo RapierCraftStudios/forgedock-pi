@@ -7,7 +7,10 @@ import type {
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 
-import { FetchGitHubTransport } from "../adapters/github-api.ts";
+import {
+  FetchGitHubTransport,
+  type GitHubTransport,
+} from "../adapters/github-api.ts";
 import { loadForgePolicy } from "../adapters/config.ts";
 import { GitWorktreeManager, type PreparedWorktree } from "../adapters/git.ts";
 import { GitHubIssueProjector } from "../adapters/github-projection.ts";
@@ -54,19 +57,139 @@ export interface StartIssueResult {
   branch: string;
 }
 
+export type ForgeGitPort = Pick<
+  GitWorktreeManager,
+  | "resolveRepositoryRoot"
+  | "prepare"
+  | "head"
+  | "changedFiles"
+  | "assertClean"
+  | "push"
+  | "deleteRemoteBranch"
+  | "cleanup"
+>;
+
+export type ForgeRpcPort = Pick<
+  SubagentsRpcClient,
+  "ping" | "spawnWorkOn" | "status" | "onAsyncComplete"
+>;
+
+export type ForgeStateStorePort = Pick<
+  GitHubStateBranchStore,
+  "ensureBranch" | "readRun" | "commitRunState"
+>;
+
+export type ForgeJournalPort = Pick<RunJournal, "initialize" | "append">;
+
+export type ForgeGithubPort = Pick<
+  GitHubWorkflowAdapter,
+  | "getIssue"
+  | "findPullRequest"
+  | "createPullRequest"
+  | "getPullRequest"
+  | "mergePullRequest"
+  | "getComments"
+  | "postPullArtifact"
+  | "closeIssue"
+>;
+
+export type ForgeProjectorPort = Pick<
+  GitHubIssueProjector,
+  "projectEvent" | "postArtifact" | "appendToLatestComment" | "setWorkflowLabel"
+>;
+
+export type ForgeTokenResolver = (
+  pi: ExtensionAPI,
+  cwd: string,
+  signal?: AbortSignal,
+) => Promise<string>;
+
+export interface ForgeWorkOnDependencies {
+  git?: ForgeGitPort;
+  rpc?: ForgeRpcPort;
+  loadPolicy?: typeof loadForgePolicy;
+  materializeAgents?: typeof materializeForgeAgents;
+  resolveGitHubToken?: ForgeTokenResolver;
+  createTransport?: (token: string) => GitHubTransport;
+  createStateStore?: (
+    transport: GitHubTransport,
+    repository: string,
+    branch: string,
+  ) => ForgeStateStorePort;
+  createGithub?: (
+    transport: GitHubTransport,
+    repository: string,
+  ) => ForgeGithubPort;
+  createProjector?: (
+    transport: GitHubTransport,
+    repository: string,
+  ) => ForgeProjectorPort;
+  createJournal?: (store: ForgeStateStorePort) => ForgeJournalPort;
+}
+
 export class ForgeWorkOnController {
   readonly #pi: ExtensionAPI;
-  readonly #rpc: SubagentsRpcClient;
-  readonly #git: GitWorktreeManager;
+  readonly #rpc: ForgeRpcPort;
+  readonly #git: ForgeGitPort;
+  readonly #loadPolicy: NonNullable<ForgeWorkOnDependencies["loadPolicy"]>;
+  readonly #materializeAgents: NonNullable<
+    ForgeWorkOnDependencies["materializeAgents"]
+  >;
+  readonly #resolveGitHubToken: ForgeTokenResolver;
+  readonly #createTransport: NonNullable<
+    ForgeWorkOnDependencies["createTransport"]
+  >;
+  readonly #createStateStore: NonNullable<
+    ForgeWorkOnDependencies["createStateStore"]
+  >;
+  readonly #createGithub: NonNullable<
+    ForgeWorkOnDependencies["createGithub"]
+  >;
+  readonly #createProjector: NonNullable<
+    ForgeWorkOnDependencies["createProjector"]
+  >;
+  readonly #createJournal: NonNullable<
+    ForgeWorkOnDependencies["createJournal"]
+  >;
   readonly #links = new Map<string, ActiveRunLink>();
   #completionUnsubscribe: (() => void) | undefined;
 
-  constructor(pi: ExtensionAPI) {
+  constructor(
+    pi: ExtensionAPI,
+    dependencies: ForgeWorkOnDependencies = {},
+  ) {
     this.#pi = pi;
-    this.#rpc = new SubagentsRpcClient(pi);
-    this.#git = new GitWorktreeManager({
-      exec: (command, args, options) => pi.exec(command, [...args], options),
-    });
+    this.#rpc =
+      dependencies.rpc ??
+      new SubagentsRpcClient(pi);
+    this.#git =
+      dependencies.git ??
+      new GitWorktreeManager({
+        exec: (command, args, options) => pi.exec(command, [...args], options),
+      });
+    this.#loadPolicy = dependencies.loadPolicy ?? loadForgePolicy;
+    this.#materializeAgents =
+      dependencies.materializeAgents ?? materializeForgeAgents;
+    this.#resolveGitHubToken =
+      dependencies.resolveGitHubToken ?? resolveGitHubToken;
+    this.#createTransport =
+      dependencies.createTransport ??
+      ((token) => new FetchGitHubTransport({ token }));
+    this.#createStateStore =
+      dependencies.createStateStore ??
+      ((transport, repository, branch) =>
+        new GitHubStateBranchStore(transport, repository, branch));
+    this.#createGithub =
+      dependencies.createGithub ??
+      ((transport, repository) =>
+        new GitHubWorkflowAdapter(transport, repository));
+    this.#createProjector =
+      dependencies.createProjector ??
+      ((transport, repository) =>
+        new GitHubIssueProjector(transport, repository));
+    this.#createJournal =
+      dependencies.createJournal ??
+      ((store) => new RunJournal(store as GitHubStateBranchStore));
   }
 
   async attach(ctx: ExtensionContext): Promise<void> {
@@ -104,23 +227,23 @@ export class ForgeWorkOnController {
       ctx.cwd,
       ctx.signal,
     );
-    const { policy } = await loadForgePolicy(repositoryRoot);
+    const { policy } = await this.#loadPolicy(repositoryRoot);
     const integrationBranch = chooseIntegrationBranch(policy);
     if (isProtectedBranch(policy, integrationBranch))
       throw new Error(`Integration branch ${integrationBranch} is protected.`);
-    const token = await resolveGitHubToken(
+    const token = await this.#resolveGitHubToken(
       this.#pi,
       repositoryRoot,
       ctx.signal,
     );
-    const transport = new FetchGitHubTransport({ token });
-    const github = new GitHubWorkflowAdapter(transport, policy.repository.name);
+    const transport = this.#createTransport(token);
+    const github = this.#createGithub(transport, policy.repository.name);
     const issue = await github.getIssue(issueNumber, ctx.signal);
     if (issue.state !== "open")
       throw new Error(`Issue #${issueNumber} is not open.`);
 
     const runId = randomUUID();
-    const store = new GitHubStateBranchStore(
+    const store = this.#createStateStore(
       transport,
       policy.repository.name,
       policy.state.branch,
@@ -141,8 +264,8 @@ export class ForgeWorkOnController {
     });
 
     try {
-      await materializeForgeAgents(prepared.worktreePath);
-      const journal = new RunJournal(store);
+      await this.#materializeAgents(prepared.worktreePath);
+      const journal = this.#createJournal(store);
       const initialized = await journal.initialize({
         runId,
         repository: policy.repository.name,
@@ -153,7 +276,7 @@ export class ForgeWorkOnController {
         leaseSeconds: policy.state.leaseSeconds,
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
-      const projector = new GitHubIssueProjector(
+      const projector = this.#createProjector(
         transport,
         policy.repository.name,
       );
@@ -247,21 +370,21 @@ export class ForgeWorkOnController {
       return;
     }
 
-    const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
-    const token = await resolveGitHubToken(
+    const { policy } = await this.#loadPolicy(link.prepared.repositoryRoot);
+    const token = await this.#resolveGitHubToken(
       this.#pi,
       link.prepared.repositoryRoot,
       ctx.signal,
     );
-    const transport = new FetchGitHubTransport({ token });
-    const store = new GitHubStateBranchStore(
+    const transport = this.#createTransport(token);
+    const store = this.#createStateStore(
       transport,
       link.repository,
       link.stateBranch,
     );
-    const journal = new RunJournal(store);
-    const github = new GitHubWorkflowAdapter(transport, link.repository);
-    const projector = new GitHubIssueProjector(transport, link.repository);
+    const journal = this.#createJournal(store);
+    const github = this.#createGithub(transport, link.repository);
+    const projector = this.#createProjector(transport, link.repository);
     const sessionId = ctx.sessionManager.getSessionId();
 
     await this.#git.assertClean(link.prepared.worktreePath, ctx.signal);
@@ -387,7 +510,7 @@ export class ForgeWorkOnController {
       completedReviewers: result.review.completedReviewers,
       findings,
       checks,
-      mergeability: currentPull.mergeability,
+      mergeability: currentPull.merged ? "mergeable" : currentPull.mergeability,
       leaseValid: currentRun.lease?.ownerRunId === link.forgeRunId,
       baseBranch: currentPull.baseRef,
       protectedBranches: policy.branches.protected,
