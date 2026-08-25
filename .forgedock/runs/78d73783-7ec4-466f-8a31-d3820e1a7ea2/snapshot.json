@@ -10,8 +10,8 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:869d2a8360a9aaede0304a51edf377bc9504fb49584c269f14530ed5d6415e64",
+  "sequence": 9,
+  "lastEventHash": "sha256:4262263f82de712b53c9da60bfc26f3052f6c5dafd16e9828f1870f5d98fad7e",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -46,7 +46,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/78d73783-7ec4-466f-8a31-d3820e1a7ea2/.pi/forge/78d73783-7ec4-466f-8a31-d3820e1a7ea2-investigate-1.json",
       "subagentRunId": "878c9f33-cf26-4704-bbcd-c1d39bb165fe",
@@ -55,7 +55,21 @@
       "startedAt": "2026-08-25T13:17:49.302Z",
       "previousSubagentRunId": "launch:investigate-1:2fd6071e-89eb-42d4-a64b-67dd96891cae",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "Frozen base source at src/workflows/work-on.ts:625-629 sets workflow:investigating when a run starts, establishing the initial label projection.",
+        "The bounded launch contract at src/adapters/subagents.ts:255-265 explicitly forbids forge_checkpoint; test/adapters/subagents.test.ts:173-197 verifies bounded investigate launches do not use child checkpoints.",
+        "Bounded child reconciliation at src/workflows/work-on.ts:889-909 renders and posts the typed artifact, then at src/workflows/work-on.ts:936-958 appends the durable node event; it does not call setWorkflowLabel.",
+        "The bounded parent-node dispatcher at src/workflows/work-on.ts:1217-1268 and 1604-1648 posts parent artifacts, appends outcomes, and dispatches the next node, but has no workflow-label projection.",
+        "The decision path can record awaiting-merge at src/workflows/work-on.ts:1382-1499, while merge, close, and cleanup record merged or closed outcomes at src/workflows/work-on.ts:1504-1640 without setting workflow:awaiting-merge, workflow:merged, workflow:invalid, or workflow:decomposed.",
+        "The only workflow:merged call in work-on.ts is the legacy finalization path at src/workflows/work-on.ts:2793-2804; it is separate from the bounded node dispatcher.",
+        "The expected stage vocabulary is defined in src/core/artifact-protocol.ts:1-10 and the available GitHub projector removes the prior workflow label in src/adapters/github-projection.ts:182-209, but bounded lifecycle tests do not exercise these transitions.",
+        "npm run check passed on the unchanged frozen worktree: typecheck succeeded and all 80 tests passed."
+      ],
+      "finishedAt": "2026-08-25T13:24:57.160Z"
     }
   },
   "effects": {},
@@ -67,7 +81,8 @@
     "node:resolve-1:completed": "1a6839e0-0bd4-4d91-b652-f8a4e684dc2f",
     "node:investigate-1:queued": "9ae9ba4d-fc1d-49a0-a98e-96d3d4b5bec2",
     "node:investigate-1:started": "126e5bcb-328b-47ca-acdf-4aa67beee463",
-    "node:investigate-1:receipt-bound": "c86e43c6-f43c-4689-84af-bc2e167223c5"
+    "node:investigate-1:receipt-bound": "c86e43c6-f43c-4689-84af-bc2e167223c5",
+    "node:investigate-1:completed": "c4d0419f-bbc5-431d-83a4-c120c0f80683"
   },
   "eventIds": {
     "5925fc27-4668-475e-91fb-3a6462b0ab46": true,
@@ -77,6 +92,7 @@
     "1a6839e0-0bd4-4d91-b652-f8a4e684dc2f": true,
     "9ae9ba4d-fc1d-49a0-a98e-96d3d4b5bec2": true,
     "126e5bcb-328b-47ca-acdf-4aa67beee463": true,
-    "c86e43c6-f43c-4689-84af-bc2e167223c5": true
+    "c86e43c6-f43c-4689-84af-bc2e167223c5": true,
+    "c4d0419f-bbc5-431d-83a4-c120c0f80683": true
   }
 }
