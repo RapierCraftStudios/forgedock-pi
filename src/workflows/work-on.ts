@@ -1530,6 +1530,7 @@ export class ForgeWorkOnController {
         current.state,
         reviewRound,
       );
+      await requireActiveRunAuthority(store, link, ctx.signal);
       const summaryCommentId = await publishJoinedReviewSummary(
         github,
         pull.number,
@@ -1585,6 +1586,7 @@ export class ForgeWorkOnController {
         : ci.timedOut
           ? "PENDING"
           : "BLOCKED";
+      await requireActiveRunAuthority(store, link, ctx.signal);
       await projector.postArtifact({
         issueNumber: link.issueNumber,
         runId: link.forgeRunId,
@@ -1680,8 +1682,10 @@ export class ForgeWorkOnController {
       const gate = evaluateReviewGate({ identity: { repository: link.repository, runId: link.forgeRunId, pullRequest: pull.number, headSha: aggregate.review.headSha, baseSha: aggregate.baseSha, rosterVersion: "forgedock.review-roster/v1" }, currentHeadSha: pull.headSha, currentBaseSha: pull.baseSha, requiredReviewers: policy.review.required, completedReviewers: aggregate.review.completedReviewers, findings: aggregate.review.findings as readonly ReviewFinding[], checks, mergeability: pull.mergeability, leaseValid: runLeaseAuthorityMatches(current.state, current.lease, link), baseBranch: pull.baseRef, protectedBranches: policy.branches.protected, autoMergeAuthorized: canAutoMerge(policy, pull.baseRef), malformedResults: currentReviewFailures });
       finalReviewDecision = gate;
       const priorFindingIssueMap = { ...link.findingIssueMap };
+      await requireActiveRunAuthority(store, link, ctx.signal);
       link.findingIssueMap = await publishReviewFindingIssues({ github, pullNumber: pull.number, link, result: aggregate, signal: ctx.signal });
       if (aggregate.review.rounds > 1) {
+        await requireActiveRunAuthority(store, link, ctx.signal);
         await closeAddressedReviewFindingIssues({
           github,
           pullNumber: pull.number,
@@ -1698,12 +1702,14 @@ export class ForgeWorkOnController {
           aggregate.review.rounds - 1,
         );
         const completionBody = `${completeMarker}\n## Remediation Complete for PR #${pull.number}\n\n**Reviewed head**: \`${aggregate.review.headSha}\`\n**Outcome**: ${gate.decision === "approved" || gate.decision === "approved-with-follow-ups" ? "CLEAN RE-REVIEW" : "RE-ESCALATED"}\n\nFresh correctness and security review completed.`;
+        await requireActiveRunAuthority(store, link, ctx.signal);
         await github.postPullArtifact({
           pullNumber: pull.number,
           marker: completeMarker,
           body: completionBody,
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
+        await requireActiveRunAuthority(store, link, ctx.signal);
         await projector.postArtifact({
           issueNumber: link.issueNumber,
           runId: link.forgeRunId,
@@ -1713,6 +1719,7 @@ export class ForgeWorkOnController {
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
       }
+      await requireActiveRunAuthority(store, link, ctx.signal);
       const decisionCommentId = await publishFinalReviewDecision(
         github,
         pull.number,
@@ -1768,12 +1775,14 @@ export class ForgeWorkOnController {
             `- #${issueNumber} ${finding.id}: ${finding.summary} (${finding.file}:${finding.line})`,
         );
         const remediationBody = `${startMarker}\n## Remediation In Progress for PR #${pull.number}\n\n**Reviewed head**: \`${aggregate.review.headSha}\`\n**Authoritative findings**:\n${findingLines.join("\n")}\n\nApply only these in-contract findings, then run a fresh complete reviewer panel.`;
+        await requireActiveRunAuthority(store, link, ctx.signal);
         await github.postPullArtifact({
           pullNumber: pull.number,
           marker: startMarker,
           body: remediationBody,
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
+        await requireActiveRunAuthority(store, link, ctx.signal);
         await projector.postArtifact({
           issueNumber: link.issueNumber,
           runId: link.forgeRunId,
