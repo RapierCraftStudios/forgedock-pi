@@ -10,15 +10,15 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 4,
-  "lastEventHash": "sha256:4f38afe7efca64b8a944805bb30ddf2d361c406e595a9bd57d6063801e8a2428",
+  "sequence": 5,
+  "lastEventHash": "sha256:1a3460415fddd5025af400dbee6ca86aabfafeb037005659be0795478e0b0d29",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/60698a6f-c159-4f2b-88a0-7f6552382e83/.pi/forge/60698a6f-c159-4f2b-88a0-7f6552382e83-resolve-1.json",
       "subagentRunId": "4c2cacde-6592-4b51-bcaa-8654fb77a66f",
@@ -27,7 +27,18 @@
       "startedAt": "2026-08-25T13:15:17.376Z",
       "previousSubagentRunId": "launch:resolve-1:bf1b8fca-8036-44cd-b692-0c2c435dc31d",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "round": 1,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "Issue 36 is open on GitHub and carries review-finding, needs-validation, and workflow:investigating labels.",
+        "The repository policy identifies RapierCraftStudios/forgedock-pi, configures dogfood as the integration branch, and protects main; dogfood is not protected.",
+        "The assigned worktree HEAD equals frozen base 03e6133becc50ba8509b976743ea76ffeaab2c4d, has no changes, and resolve-1 performed no writes.",
+        "The current base contains commit 320ad98 normalization in aggregateFromState and focused alias regression coverage; substantive finding classification is deferred to the investigate node."
+      ],
+      "finishedAt": "2026-08-25T13:20:25.658Z"
     }
   },
   "effects": {},
@@ -35,12 +46,14 @@
     "run:create": "87099038-93e7-477f-a866-f5ecd3967037",
     "node:resolve-1:queued": "2034673d-1a6f-421d-8842-1f0e0d5d4271",
     "node:resolve-1:started": "923832ce-63d5-455e-af28-606aaaf72193",
-    "node:resolve-1:receipt-bound": "7ebe5af5-97bc-42f1-92a1-1f998e7cd149"
+    "node:resolve-1:receipt-bound": "7ebe5af5-97bc-42f1-92a1-1f998e7cd149",
+    "node:resolve-1:completed": "2d905a9c-34c6-4a14-a695-5059a5a43deb"
   },
   "eventIds": {
     "87099038-93e7-477f-a866-f5ecd3967037": true,
     "2034673d-1a6f-421d-8842-1f0e0d5d4271": true,
     "923832ce-63d5-455e-af28-606aaaf72193": true,
-    "7ebe5af5-97bc-42f1-92a1-1f998e7cd149": true
+    "7ebe5af5-97bc-42f1-92a1-1f998e7cd149": true,
+    "2d905a9c-34c6-4a14-a695-5059a5a43deb": true
   }
 }
