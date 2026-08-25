@@ -1823,6 +1823,26 @@ export class ForgeWorkOnController {
             .sort((left, right) => right.attempt - left.attempt)[0]
         : undefined;
       const mergeDecision = decision?.finalReviewDecision;
+      const currentCiRequired = isGitHubCiRequired(policy, pull.baseRef);
+      const currentCi = currentCiRequired
+        ? await github.waitForPullRequestChecks({
+            headSha: pull.headSha,
+            baseBranch: pull.baseRef,
+            timeoutMs: policy.verification.github.waitTimeoutMs,
+            pollIntervalMs: policy.verification.github.pollIntervalMs,
+            ...(ctx.signal ? { signal: ctx.signal } : {}),
+          })
+        : {
+            checks: [],
+            headSha: pull.headSha,
+            requiredContexts: [],
+            configuredWorkflowCount: 0,
+            timedOut: false,
+          };
+      const currentCiPassed = acceptanceGatePassed({
+        checks: currentCi.checks,
+        policyExempt: !currentCiRequired,
+      });
       const actualHead = await this.#git.head(link.prepared.worktreePath, ctx.signal);
       const actualFiles = await this.#git.changedFiles(link.prepared.worktreePath, link.prepared.baseSha, ctx.signal);
       if (!link.builderContract)
@@ -1833,8 +1853,8 @@ export class ForgeWorkOnController {
         authority.lease,
         link,
       );
-      if (!mergeAuthorityValid || !decision || !mergeDecision || (mergeDecision.decision !== "approved" && mergeDecision.decision !== "approved-with-follow-ups") || decision.outcome !== "awaiting-merge" || mergeDecision.headSha !== pull.headSha || mergeDecision.baseSha !== pull.baseSha || decision.headSha !== pull.headSha || decision.baseSha !== pull.baseSha || pull.baseRef !== link.prepared.baseBranch || !policy.branches.integration.includes(pull.baseRef) || !canAutoMerge(policy, pull.baseRef) || actualHead !== pull.headSha || actualFiles.length === 0) {
-        const reason = "Merge authority, reviewed SHA/base, integration branch, clean tree, or actual diff validation failed.";
+      if (!mergeAuthorityValid || !currentCiPassed || currentCi.headSha !== pull.headSha || !decision || !mergeDecision || (mergeDecision.decision !== "approved" && mergeDecision.decision !== "approved-with-follow-ups") || decision.outcome !== "awaiting-merge" || mergeDecision.headSha !== pull.headSha || mergeDecision.baseSha !== pull.baseSha || decision.headSha !== pull.headSha || decision.baseSha !== pull.baseSha || pull.baseRef !== link.prepared.baseBranch || !policy.branches.integration.includes(pull.baseRef) || !canAutoMerge(policy, pull.baseRef) || actualHead !== pull.headSha || actualFiles.length === 0) {
+        const reason = "Merge authority, current CI, reviewed SHA/base, integration branch, clean tree, or actual diff validation failed.";
         await journal.append({ runId: link.forgeRunId, type: "node.needs-human", payload: { ...common, headSha: pull.headSha, reason, evidence: [reason] }, idempotencyKey: `node:${node.nodeId}:authority`, sessionId, message: `Gate merge node ${node.nodeId}`, ...(ctx.signal ? { signal: ctx.signal } : {}) });
         link.status = "needs-human";
         this.#persistLink(link);
@@ -1853,7 +1873,7 @@ export class ForgeWorkOnController {
         decision.attempt,
       );
       await requireActiveRunAuthority(store, link, ctx.signal);
-    await postReviewCompletionArtifacts({
+      await postReviewCompletionArtifacts({
         github,
         projector,
         link,
