@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 16,
-  "lastEventHash": "sha256:eb7276ff376247e19572456da296b2bae0a30e89ed0151cea656981a19dd279e",
+  "sequence": 17,
+  "lastEventHash": "sha256:a2321f2f410bdf7a4da00e6483cb37b8a80bdc3c9fa2549173b0c06408e2837e",
   "lanes": [
     {
       "issueNumber": 49,
@@ -29,10 +29,11 @@
     {
       "issueNumber": 51,
       "ordinal": 2,
-      "status": "running",
+      "status": "failed",
       "refreshes": 0,
       "forgeRunId": "140cccbe-c0c2-478e-a44e-a17c0126dde7",
-      "subagentRunId": "84d1dc9e-c2fd-4b83-a873-835a18a30cb7"
+      "subagentRunId": "84d1dc9e-c2fd-4b83-a873-835a18a30cb7",
+      "reason": "Prepared-worktree artifact identity does not match Git."
     }
   ],
   "idempotencyKeys": {
@@ -51,7 +52,8 @@
     "lease:heartbeat:2026-08-25T16:12:21.619Z": "94074a47-4bd4-4b78-8bf8-bea8d68a2b82",
     "lease:heartbeat:2026-08-25T16:13:21.625Z": "7c5a9bc1-bfca-4c8c-9a22-83c527de2c50",
     "lane:49:failed": "662c96f5-eceb-453f-bab6-35fac29d7da6",
-    "lease:heartbeat:2026-08-25T16:14:21.741Z": "33e34a10-8ae4-48aa-8939-9a287a943fbf"
+    "lease:heartbeat:2026-08-25T16:14:21.741Z": "33e34a10-8ae4-48aa-8939-9a287a943fbf",
+    "lane:51:failed": "2f6ca762-6aaf-447e-87f6-2dab0d9aee07"
   },
   "createdAt": "2026-08-25T16:03:08.881Z"
 }
