@@ -1,0 +1,24 @@
+{
+  "schema": "forgedock.run-state/v1",
+  "runId": "24cb4b26-0b7d-4d67-a8ac-67eed4b33462",
+  "repository": "RapierCraftStudios/forgedock-pi",
+  "issueNumber": 54,
+  "integrationBranch": "dogfood",
+  "protectedBranch": "main",
+  "status": "active",
+  "leaseBinding": {
+    "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
+    "epoch": 1
+  },
+  "sequence": 1,
+  "lastEventHash": "sha256:8a3f11a224f658ffb539da5daa87c50d00cd2f5c5f19f12be66304e789e87b32",
+  "phases": {},
+  "nodes": {},
+  "effects": {},
+  "idempotencyKeys": {
+    "run:create": "95971218-41e1-4ae2-ba0d-26c8315f8e4e"
+  },
+  "eventIds": {
+    "95971218-41e1-4ae2-ba0d-26c8315f8e4e": true
+  }
+}
