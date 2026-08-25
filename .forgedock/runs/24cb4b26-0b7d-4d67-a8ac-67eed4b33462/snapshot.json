@@ -5,13 +5,13 @@
   "issueNumber": 54,
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "leaseBinding": {
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 15,
-  "lastEventHash": "sha256:cf71c410cb17555dd2a8e686490ed1dcc5ed43f6ea19e6724708928659ea1038",
+  "sequence": 16,
+  "lastEventHash": "sha256:4acaf4ed12570653aac6c8deb309641d90a3ae04422b04d402d8946dc10f8b95",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -88,9 +88,11 @@
       "node": "cleanup",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "failed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
-      "startedAt": "2026-08-25T18:12:29.774Z"
+      "startedAt": "2026-08-25T18:12:29.774Z",
+      "reason": "Cancelled by the operator through /forge:cancel.",
+      "finishedAt": "2026-08-25T18:43:57.362Z"
     }
   },
   "effects": {
@@ -116,7 +118,8 @@
     "effect:issue-close:54": "fd4fda93-9d84-4575-ad43-0f18161f286e",
     "node:close-1:complete": "6ac0f5e9-3deb-4b93-bdcc-a85576c29b3c",
     "node:cleanup-1:queued": "ef063983-ece6-447e-80a8-8880e7b11bf4",
-    "node:cleanup-1:started": "6845c9b0-bf9d-475a-a157-b3b892e127ba"
+    "node:cleanup-1:started": "6845c9b0-bf9d-475a-a157-b3b892e127ba",
+    "run:cancelled": "8a18d61a-636e-4b91-92b0-c60f6f848c62"
   },
   "eventIds": {
     "95971218-41e1-4ae2-ba0d-26c8315f8e4e": true,
@@ -133,6 +136,8 @@
     "fd4fda93-9d84-4575-ad43-0f18161f286e": true,
     "6ac0f5e9-3deb-4b93-bdcc-a85576c29b3c": true,
     "ef063983-ece6-447e-80a8-8880e7b11bf4": true,
-    "6845c9b0-bf9d-475a-a157-b3b892e127ba": true
-  }
+    "6845c9b0-bf9d-475a-a157-b3b892e127ba": true,
+    "8a18d61a-636e-4b91-92b0-c60f6f848c62": true
+  },
+  "cancellationReason": "Cancelled by the operator through /forge:cancel."
 }
