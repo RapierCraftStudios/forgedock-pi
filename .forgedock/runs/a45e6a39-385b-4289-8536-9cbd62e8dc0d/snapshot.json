@@ -10,8 +10,8 @@
     "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
     "epoch": 1
   },
-  "sequence": 12,
-  "lastEventHash": "sha256:003cab747d3f3ca9a4d6f8f55c64d4fca78d516ac2cf9a67ae7d96916a6902af",
+  "sequence": 13,
+  "lastEventHash": "sha256:c813fd25ce96738eca2794bd100ae3654e6a960cd2e7590053e77affcee45e2b",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -72,7 +72,7 @@
       "node": "plan",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/a45e6a39-385b-4289-8536-9cbd62e8dc0d/.pi/forge/a45e6a39-385b-4289-8536-9cbd62e8dc0d-plan-1.json",
       "subagentRunId": "b56a0a32-f43b-4884-b574-61b976610e91",
@@ -81,7 +81,30 @@
       "startedAt": "2026-08-25T16:50:55.672Z",
       "previousSubagentRunId": "launch:plan-1:1eaa69d8-17b7-4497-9e3e-917ef42e2127",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "builderContract": {
+        "schema": "forgedock.builder-path-contract/v1",
+        "revision": 1,
+        "allowedPaths": [
+          "src/workflows/orchestrate.ts",
+          "src/workflows/work-on.ts",
+          "test/core/orchestration.test.ts",
+          "test/workflows/work-on.test.ts"
+        ],
+        "contractHash": "a1dbe32be7368b20e2815692cc72c009b18ca26b40fe30397a5834eed99250b8"
+      },
+      "outcome": "completed",
+      "evidence": [
+        "src/workflows/work-on.ts:643 initializes subagentRunId as pending:<runId>, persists the link, and only afterward awaits first-node dispatch.",
+        "src/workflows/work-on.ts:239-305 reconciles restored links and can pass an unrecognized pending: value to pi-subagents status when activeNodes is empty.",
+        "src/workflows/work-on.ts:1740-1931 already provides the durable node queue, launch-intent, provider-spawn, and receipt-binding protocol that initialization recovery should reuse.",
+        "src/workflows/orchestrate.ts:451-523 accepts any existing work-on link and writes its subagentRunId into lane.started without validating that it is a provider receipt.",
+        "src/index.ts:14-17 attaches orchestration listeners, then reconciles work-on links, then resumes orchestration pumping; recovery must not emit a false terminal lifecycle event during that window.",
+        "package.json and .github/workflows/ci.yml define npm run check (typecheck plus tests) on Node.js 22 and 24."
+      ],
+      "finishedAt": "2026-08-25T16:55:56.131Z"
     }
   },
   "effects": {},
@@ -97,7 +120,8 @@
     "node:investigate-1:completed": "30e324d2-5c0e-4138-8642-caee701511fb",
     "node:plan-1:queued": "6529e4f5-d48f-4570-994d-4609a0060655",
     "node:plan-1:started": "61551b86-0cd2-452c-91e2-872c94fae3a3",
-    "node:plan-1:receipt-bound": "865be8be-79d3-4e2c-9752-5bc000bfe268"
+    "node:plan-1:receipt-bound": "865be8be-79d3-4e2c-9752-5bc000bfe268",
+    "node:plan-1:completed": "23d44595-66e3-4d3f-a226-1421efe8afe0"
   },
   "eventIds": {
     "cc7da491-7462-4048-8eb8-70c6f11fbdd7": true,
@@ -111,6 +135,7 @@
     "30e324d2-5c0e-4138-8642-caee701511fb": true,
     "6529e4f5-d48f-4570-994d-4609a0060655": true,
     "61551b86-0cd2-452c-91e2-872c94fae3a3": true,
-    "865be8be-79d3-4e2c-9752-5bc000bfe268": true
+    "865be8be-79d3-4e2c-9752-5bc000bfe268": true,
+    "23d44595-66e3-4d3f-a226-1421efe8afe0": true
   }
 }
