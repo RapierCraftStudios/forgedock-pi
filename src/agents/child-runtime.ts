@@ -1049,7 +1049,7 @@ function readBinding(): ForgeChildBinding {
 export function allowedNodeTools(node: string | undefined): ReadonlySet<string> {
   if (!node) return new Set(["forge_refresh_base", "forge_verify", "forge_diff", "forge_commit", "forge_prepare_review", "forge_finalize_work_on"]);
   if (node === "review-correctness" || node === "review-security")
-    return new Set(["forge_finalize_reviewer"]);
+    return new Set(["forge_diff", "forge_finalize_reviewer"]);
   const common = ["forge_diff", "forge_finalize_node"];
   if (node === "implement") return new Set([...common, "forge_commit"]);
   if (node === "verify") return new Set([...common, "forge_verify"]);

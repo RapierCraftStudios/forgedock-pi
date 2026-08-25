@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  canonicalReviewerName,
   finalReviewDecisionMarker,
   findingPriority,
   isTransientProviderFailure,
@@ -14,6 +15,14 @@ import {
   reviewSupersessionMarker,
   similarFindingTitle,
 } from "../../src/workflows/work-on.ts";
+
+test("short reviewer aliases normalize to configured agent names", () => {
+  assert.equal(canonicalReviewerName("security"), "forge-review-security");
+  assert.equal(
+    canonicalReviewerName("forge-review-correctness"),
+    "forge-review-correctness",
+  );
+});
 
 test("normal matching provider receipts are inspected instead of escalated", () => {
   assert.equal(

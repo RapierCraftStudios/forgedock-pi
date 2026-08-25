@@ -7,6 +7,7 @@ import {
   type OrchestrationEventType,
   type OrchestrationState,
 } from "../../src/core/orchestration.ts";
+import { lifecycleMatchesForgeRun } from "../../src/workflows/orchestrate.ts";
 
 const orchestrationId = "orchestration-1";
 const repository = "owner/repo";
@@ -45,6 +46,23 @@ function initialized(): OrchestrationState {
     ),
   );
 }
+
+test("lane lifecycle follows the stable Forge run instead of rotating child receipts", () => {
+  assert.equal(
+    lifecycleMatchesForgeRun(
+      { forgeRunId: "forge-run-1" },
+      { forgeRunId: "forge-run-1" },
+    ),
+    true,
+  );
+  assert.equal(
+    lifecycleMatchesForgeRun(
+      { forgeRunId: "forge-run-1" },
+      { forgeRunId: "different-forge-run" },
+    ),
+    false,
+  );
+});
 
 test("a falsely failed lane can rebind to its still-active child", () => {
   let state = initialized();

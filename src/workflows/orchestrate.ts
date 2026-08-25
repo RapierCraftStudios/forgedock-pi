@@ -351,8 +351,9 @@ export class ForgeOrchestrationController {
       (candidate) => candidate.issueNumber === event.issueNumber,
     );
     if (!lane || isTerminalLane(lane)) return;
-    if (lane.forgeRunId && event.forgeRunId !== lane.forgeRunId) return;
-    if (lane.subagentRunId && event.subagentRunId !== lane.subagentRunId) return;
+    if (!lifecycleMatchesForgeRun(lane, event)) return;
+    // A work-on run uses a new child receipt for each bounded node. The stable
+    // Forge run ID, not the latest child receipt, owns lane lifecycle events.
     const journal = current.journal;
     if (event.status === "ready") {
       await journal.append({
@@ -753,6 +754,13 @@ function renderCompletion(state: OrchestrationState): string {
     .map(([status, count]) => `${status}=${count}`)
     .join(" · ");
   return `ForgeDock orchestration ${state.orchestrationId} finished: ${state.status}.\n${summary}`;
+}
+
+export function lifecycleMatchesForgeRun(
+  lane: { forgeRunId?: string },
+  event: { forgeRunId: string },
+): boolean {
+  return !lane.forgeRunId || lane.forgeRunId === event.forgeRunId;
 }
 
 function required(value: string | undefined, field: string): string {

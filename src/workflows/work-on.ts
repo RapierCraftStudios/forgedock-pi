@@ -88,6 +88,8 @@ export interface ActiveRunLink {
   providerRetries: number;
   remediationAttempts: number;
   findingIssueMap: Record<string, number>;
+  issueContext: string;
+  planContext?: string;
   activeNodes: Record<string, ActiveNodeRunLink>;
   currentNodeId?: string;
   nodeResultPath?: string;
@@ -263,6 +265,33 @@ export class ForgeWorkOnController {
               activeNode,
             );
           }
+          continue;
+        }
+        const parentNode = parentNodeFromId(link.currentNodeId);
+        if (parentNode && link.currentNodeId) {
+          const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
+          const token = await resolveGitHubToken(
+            this.#pi,
+            link.prepared.repositoryRoot,
+            ctx.signal,
+          );
+          const store = new GitHubStateBranchStore(
+            new FetchGitHubTransport({ token }),
+            link.repository,
+            link.stateBranch,
+          );
+          await this.#runParentNode(
+            link,
+            {
+              nodeId: link.currentNodeId,
+              node: parentNode,
+              attempt: nodeAttempt(link.currentNodeId),
+              round: nodeAttempt(link.currentNodeId),
+            },
+            policy,
+            store,
+            ctx,
+          );
           continue;
         }
         if (isLaunchSentinel(link.subagentRunId)) {
@@ -604,6 +633,11 @@ export class ForgeWorkOnController {
         node: "resolve" as const,
         attempt: 1,
       };
+      const issueContext = JSON.stringify(
+        { title: issue.title, body: issue.body, labels: issue.labels },
+        null,
+        2,
+      );
       const link: ActiveRunLink = {
         forgeRunId: runId,
         subagentRunId: `pending:${runId}`,
@@ -624,16 +658,12 @@ export class ForgeWorkOnController {
         providerRetries: 0,
         remediationAttempts: 0,
         findingIssueMap: {},
+        issueContext,
         activeNodes: {},
         currentNodeId: node.nodeId,
         nodeResultPath: linkResultPath(prepared.worktreePath, runId, node.nodeId),
       };
       this.#persistLink(link);
-      const issueContext = JSON.stringify(
-        { title: issue.title, body: issue.body, labels: issue.labels },
-        null,
-        2,
-      );
       await this.#dispatchNode(link, node, policy, store, ctx, issueContext);
       ctx.ui.setStatus("forgedock", `issue #${issueNumber} · work-on running`);
       return {
@@ -1034,6 +1064,8 @@ export class ForgeWorkOnController {
       this.#emitLifecycle(link, { reason: nodeResult.blocker ?? nodeResult.status, nodeId: nodeResult.nodeId });
       return;
     }
+    if (nodeResult.artifact?.phase === "plan")
+      link.planContext = JSON.stringify(nodeResult.artifact, null, 2);
     if (nodeResult.node === "prepare-pr" || nodeResult.node === "verify" || nodeResult.node === "implement")
       link.reviewHeadSha = nodeResult.headSha;
     const snapshot = await store.readRun(link.forgeRunId, ctx.signal);
@@ -1063,7 +1095,14 @@ export class ForgeWorkOnController {
       this.#emitLifecycle(link, { headSha: nodeResult.headSha, baseSha: nodeResult.baseSha, nodeId: nodeResult.nodeId });
       return;
     }
-    await this.#dispatchNode(link, next, policy, store, ctx, "Resume from durable node artifacts only.");
+    await this.#dispatchNode(
+      link,
+      next,
+      policy,
+      store,
+      ctx,
+      [link.issueContext, link.planContext, "Continue from completed durable node results."].filter(Boolean).join("\n\n"),
+    );
   }
 
   async #loadReviewerResult(
@@ -1195,7 +1234,15 @@ export class ForgeWorkOnController {
     const prior = initial.state.nodes[node.nodeId];
     if (prior?.status === "completed") {
       const next = chooseNextExecutableNode(initial.state);
-      if (next) await this.#dispatchNode(link, next, policy, store, ctx, "Parent-owned continuation from durable state.");
+      if (next)
+        await this.#dispatchNode(
+          link,
+          next,
+          policy,
+          store,
+          ctx,
+          [link.issueContext, link.planContext, "Continue from completed durable node results."].filter(Boolean).join("\n\n"),
+        );
       return;
     }
     if (prior && ["failed", "blocked", "needs-human"].includes(prior.status)) {
@@ -1211,7 +1258,9 @@ export class ForgeWorkOnController {
     const projector = new GitHubIssueProjector(transport, link.repository);
     const current = await store.readRun(link.forgeRunId, ctx.signal);
     if (!current.state) throw new Error(`Run ${link.forgeRunId} state is missing for parent node.`);
-    const pull = await github.findPullRequest(link.prepared.branch, ctx.signal);
+    let pull = await github.findPullRequest(link.prepared.branch, ctx.signal);
+    if (pull && (node.node === "decision" || node.node === "merge"))
+      pull = await resolveMergeability(github, pull.number, ctx.signal);
     let evidence: string[] = [];
     let outcome: string | undefined;
     let finalReviewDecision: FinalReviewDecision | undefined;
@@ -1584,7 +1633,14 @@ export class ForgeWorkOnController {
     if (!nextState.state) throw new Error("Parent node state disappeared during reconciliation.");
     const next = chooseNextExecutableNode(nextState.state);
     if (!next) throw new Error(`Parent node ${node.nodeId} completed without a next node.`);
-    await this.#dispatchNode(link, next, policy, store, ctx, "Parent-owned continuation from durable state.");
+    await this.#dispatchNode(
+      link,
+      next,
+      policy,
+      store,
+      ctx,
+      [link.issueContext, link.planContext, "Continue from completed durable node results."].filter(Boolean).join("\n\n"),
+    );
   }
 
   async #aggregateFromState(
@@ -1646,7 +1702,7 @@ export class ForgeWorkOnController {
       headSha,
       changedFiles,
       verification,
-      review: { headSha, rounds: reviewRound, completedReviewers: reviewers.map((reviewer) => reviewer.reviewer), reviewerResults: reviewers, findings: reviewers.flatMap((reviewer) => reviewer.findings) },
+      review: { headSha, rounds: reviewRound, completedReviewers: reviewers.map((reviewer) => canonicalReviewerName(reviewer.reviewer)), reviewerResults: reviewers, findings: reviewers.flatMap((reviewer) => reviewer.findings) },
       residualRisks: [],
     };
   }
@@ -2077,7 +2133,14 @@ export class ForgeWorkOnController {
     if (!current.state) throw new Error(`Run ${forgeRunId} state is missing for integration.`);
     if (!runLeaseAuthorityMatches(current.state, current.lease, link))
       throw new Error("Integration decision is not authorized by the current run lease.");
-    const decision = Object.values(current.state.nodes).find((node) => node.node === "decision" && node.status === "completed");
+    const decision = Object.values(current.state.nodes)
+      .filter(
+        (node) =>
+          node.node === "decision" &&
+          node.status === "completed" &&
+          node.outcome === "awaiting-merge",
+      )
+      .sort((left, right) => right.attempt - left.attempt)[0];
     if (!decision || decision.outcome !== "awaiting-merge") throw new Error("Integration requires a durable approved awaiting-merge decision.");
     const currentBaseSha = await this.#git.remoteBaseSha(link.prepared.repositoryRoot, link.prepared.baseBranch, ctx.signal);
     if (currentBaseSha !== decision.baseSha) {
@@ -3333,6 +3396,10 @@ export function reviewInstanceMarker(
   return `<!-- FORGE:REVIEW-INSTANCE run=${forgeRunId} domain=${domain} round=${round} head=${headSha} -->`;
 }
 
+export function canonicalReviewerName(reviewer: string): string {
+  return `forge-review-${reviewerDomain(reviewer)}`;
+}
+
 function reviewerDomain(reviewer: string): string {
   return reviewer.replace(/^forge-review-/, "").replace(/\s*\(.+\)$/, "");
 }
@@ -3539,6 +3606,10 @@ function normalizeActiveRunLink(value: unknown): ActiveRunLink | undefined {
     providerRetries: link.providerRetries ?? 0,
     remediationAttempts: link.remediationAttempts ?? 0,
     findingIssueMap: link.findingIssueMap ?? {},
+    issueContext: link.issueContext ?? "",
+    ...(typeof link.planContext === "string"
+      ? { planContext: link.planContext }
+      : {}),
     activeNodes:
       link.activeNodes && typeof link.activeNodes === "object"
         ? link.activeNodes

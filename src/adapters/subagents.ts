@@ -140,7 +140,7 @@ export class SubagentsRpcClient {
       `Run ID: ${input.runId}`,
       `Frozen review head SHA: ${reviewHeadSha}`,
       `Assigned worktree: ${input.worktreeRoot}`,
-      "Inspect only the frozen committed patch. Return exactly forgedock.reviewer-result/v1 with the supplied output schema. Bind runId to the Forge run ID above and headSha to the frozen SHA. Before returning, call forge_finalize_reviewer with the complete result, then call structured_output with the identical value. Never write .pi files directly. Do not edit source, launch subagents, access GitHub, merge, or call any other Forge workflow tool.",
+      "Call forge_diff first. Review only defects introduced or changed by the frozen patch; pre-existing repository defects outside changed lines are out of scope and must not be reported. Return exactly forgedock.reviewer-result/v1 with the supplied output schema. Bind runId to the Forge run ID above and headSha to the frozen SHA. Before returning, call forge_finalize_reviewer with the complete result, then call structured_output with the identical value. Never write .pi files directly. Do not edit source, launch subagents, access GitHub, merge, or call any other Forge workflow tool.",
       input.issueContext,
     ].join("\n\n");
     const data = await this.#request(

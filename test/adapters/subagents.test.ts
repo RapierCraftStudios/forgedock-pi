@@ -156,6 +156,8 @@ test("RPC dedicated reviewer launch uses the registered reviewer and reviewer sc
   assert.equal(spawn.params.agent, "forge-review-security");
   assert.equal(spawn.params.outputSchema.properties.schema.const, "forgedock.reviewer-result/v1");
   assert.match(spawn.params.task, /Frozen review head SHA: fedcba9876543210/);
+  assert.match(spawn.params.task, /Call forge_diff first/);
+  assert.match(spawn.params.task, /pre-existing repository defects.*out of scope/i);
   assert.match(spawn.params.task, /forge_finalize_reviewer/);
   assert.equal(
     spawn.params.extensionBindings["forgedock.pi/1"]?.nodeId,
