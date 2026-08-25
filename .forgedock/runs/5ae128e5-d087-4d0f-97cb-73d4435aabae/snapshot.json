@@ -10,8 +10,8 @@
     "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
     "epoch": 1
   },
-  "sequence": 13,
-  "lastEventHash": "sha256:6992206aa36b39651f170d27468dca38dbe7f91d0ef6917c268e7aac348c66a4",
+  "sequence": 14,
+  "lastEventHash": "sha256:ef35076840cb22f634f420c3023250a378c63cfbea698fe7a97230d08857a123",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -105,6 +105,15 @@
         "No verification command was executed because this plan node is read-only and shell execution is unavailable."
       ],
       "finishedAt": "2026-08-25T16:52:21.910Z"
+    },
+    "prepare-worktree-1": {
+      "nodeId": "prepare-worktree-1",
+      "node": "prepare-worktree",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/5ae128e5-d087-4d0f-97cb-73d4435aabae/.pi/forge/5ae128e5-d087-4d0f-97cb-73d4435aabae-prepare-worktree-1.json"
     }
   },
   "effects": {},
@@ -121,7 +130,8 @@
     "node:plan-1:queued": "596c2de8-6600-44d9-b471-0aa566eda8e9",
     "node:plan-1:started": "dc49a293-f867-4085-b996-e60bdf0a821e",
     "node:plan-1:receipt-bound": "03b29350-6a49-4212-9638-55e564387929",
-    "node:plan-1:completed": "32829db7-3a3f-489e-a0e2-e45142baee05"
+    "node:plan-1:completed": "32829db7-3a3f-489e-a0e2-e45142baee05",
+    "node:prepare-worktree-1:queued": "4459409d-86bd-42f2-8a30-bb095676ada0"
   },
   "eventIds": {
     "3d76639e-0ea5-4b9c-8cf5-c5861433e30c": true,
@@ -136,6 +146,7 @@
     "596c2de8-6600-44d9-b471-0aa566eda8e9": true,
     "dc49a293-f867-4085-b996-e60bdf0a821e": true,
     "03b29350-6a49-4212-9638-55e564387929": true,
-    "32829db7-3a3f-489e-a0e2-e45142baee05": true
+    "32829db7-3a3f-489e-a0e2-e45142baee05": true,
+    "4459409d-86bd-42f2-8a30-bb095676ada0": true
   }
 }
