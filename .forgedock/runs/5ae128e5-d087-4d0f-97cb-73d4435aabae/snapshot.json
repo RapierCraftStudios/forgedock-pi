@@ -10,8 +10,8 @@
     "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
     "epoch": 1
   },
-  "sequence": 24,
-  "lastEventHash": "sha256:bb43f774596569b5007b55e9f2405526f0b39ef39ae6256a4c60ac4ff227fd86",
+  "sequence": 25,
+  "lastEventHash": "sha256:890eedf3980c4cc5fc444f2cfb2d7988c51fbe0734ca35ed7cb5944e8a089b7d",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -162,7 +162,7 @@
       "node": "verify",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/5ae128e5-d087-4d0f-97cb-73d4435aabae/.pi/forge/5ae128e5-d087-4d0f-97cb-73d4435aabae-verify-1.json",
       "subagentRunId": "40dcc822-ff20-4582-bb9e-13306079de80",
@@ -171,7 +171,23 @@
       "startedAt": "2026-08-25T17:00:02.539Z",
       "previousSubagentRunId": "launch:verify-1:e01ce3bb-f572-4eeb-abef-bccc704ed849",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "40c615bb39ecd1ad71ed13cd4fdbdf6bd66a40c5",
+      "verificationResults": [
+        {
+          "name": "local verification",
+          "required": false,
+          "status": "not-configured"
+        }
+      ],
+      "outcome": "completed",
+      "evidence": [
+        ".forge/config.json configures GitHub verification for dogfood and contains no local verification commands.",
+        "The completed implement-1 artifact at head 40c615bb39ecd1ad71ed13cd4fdbdf6bd66a40c5 records npm run check passed, including TypeScript typechecking and 81 tests.",
+        "The completed implement-1 artifact records git diff --check passed and only the five builder-contract-allowed paths changed.",
+        "forge_diff confirms the current frozen-base diff changes exactly the five allowed paths; authoritative GitHub CI is deferred to the parent after PR preparation."
+      ],
+      "finishedAt": "2026-08-25T17:01:59.001Z"
     }
   },
   "effects": {},
@@ -199,7 +215,8 @@
     "node:implement-1:completed": "0ef3e1dc-63e6-44cf-b580-344d4c1cc596",
     "node:verify-1:queued": "3840c416-dcdf-4e7b-b77e-5bbfaa8dca4c",
     "node:verify-1:started": "eb48671e-0166-43d0-af23-6ee3a1eb9850",
-    "node:verify-1:receipt-bound": "1c4e278b-e881-4ae4-a7f6-9d0783430b87"
+    "node:verify-1:receipt-bound": "1c4e278b-e881-4ae4-a7f6-9d0783430b87",
+    "node:verify-1:completed": "fb8d28cf-e817-490c-a987-ad0c79ead7c0"
   },
   "eventIds": {
     "3d76639e-0ea5-4b9c-8cf5-c5861433e30c": true,
@@ -225,6 +242,7 @@
     "0ef3e1dc-63e6-44cf-b580-344d4c1cc596": true,
     "3840c416-dcdf-4e7b-b77e-5bbfaa8dca4c": true,
     "eb48671e-0166-43d0-af23-6ee3a1eb9850": true,
-    "1c4e278b-e881-4ae4-a7f6-9d0783430b87": true
+    "1c4e278b-e881-4ae4-a7f6-9d0783430b87": true,
+    "fb8d28cf-e817-490c-a987-ad0c79ead7c0": true
   }
 }
