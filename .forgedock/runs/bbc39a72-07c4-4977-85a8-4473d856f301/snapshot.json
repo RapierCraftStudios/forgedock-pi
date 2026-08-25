@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 42,
-  "lastEventHash": "sha256:b3b90fd04477cc0ab03bfb522c5d234fcaf9aca9c192710d5073838800def0c3",
+  "sequence": 43,
+  "lastEventHash": "sha256:61c9e9bb481997b757493b7d2b716d9eb8fdbbde43d1ac73a06b14ad4d1e6f52",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -348,9 +348,27 @@
       "node": "ci",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
-      "startedAt": "2026-08-25T21:47:24.372Z"
+      "startedAt": "2026-08-25T21:47:24.372Z",
+      "headSha": "1bc24423636e5394b4f99e6d2270f1c256bd3cd3",
+      "verificationResults": [
+        {
+          "name": "github:check (22)",
+          "required": true,
+          "status": "passed"
+        },
+        {
+          "name": "github:check (24)",
+          "required": true,
+          "status": "passed"
+        }
+      ],
+      "evidence": [
+        "github:check (22):passed",
+        "github:check (24):passed"
+      ],
+      "finishedAt": "2026-08-25T21:47:36.996Z"
     }
   },
   "effects": {},
@@ -396,7 +414,8 @@
     "node:review-join-1:started": "0841af4e-c698-4349-b0db-ffb3933ca326",
     "node:review-join-1:complete": "77b2414e-e445-49ce-ae2b-ba9d86267126",
     "node:ci-1:queued": "ab33e70c-5a9d-4b4f-b4fd-9560f0093f0e",
-    "node:ci-1:started": "1d701a11-99be-4d1c-8187-a8ba5566137f"
+    "node:ci-1:started": "1d701a11-99be-4d1c-8187-a8ba5566137f",
+    "node:ci-1:complete": "f0ae8c90-b99c-4745-bdd3-4d7b53b137e2"
   },
   "eventIds": {
     "7b5d2931-7497-4d47-b405-55ab5d7a6899": true,
@@ -440,6 +459,7 @@
     "0841af4e-c698-4349-b0db-ffb3933ca326": true,
     "77b2414e-e445-49ce-ae2b-ba9d86267126": true,
     "ab33e70c-5a9d-4b4f-b4fd-9560f0093f0e": true,
-    "1d701a11-99be-4d1c-8187-a8ba5566137f": true
+    "1d701a11-99be-4d1c-8187-a8ba5566137f": true,
+    "f0ae8c90-b99c-4745-bdd3-4d7b53b137e2": true
   }
 }
