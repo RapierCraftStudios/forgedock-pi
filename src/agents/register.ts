@@ -10,7 +10,13 @@ export const FORGE_WORK_ON_AGENT = "forge-work-on";
 export const FORGE_REVIEW_CORRECTNESS_AGENT = "forge-review-correctness";
 export const FORGE_REVIEW_SECURITY_AGENT = "forge-review-security";
 export const FORGE_REFRESH_REVIEW_AGENT = "forge-refresh-review";
-export const FORGE_REVIEW_TOOLS = ["read", "grep", "find", "ls"] as const;
+export const FORGE_REVIEW_TOOLS = [
+  "read",
+  "grep",
+  "find",
+  "ls",
+  "forge_finalize_reviewer",
+] as const;
 export const FORGE_WORK_ON_TOOLS = [
   "read",
   "edit",
@@ -22,6 +28,7 @@ export const FORGE_WORK_ON_TOOLS = [
   "forge_diff",
   "forge_commit",
   "forge_prepare_review",
+  "forge_finalize_node",
 ] as const;
 export const FORGE_REFRESH_REVIEW_TOOLS = [
   "read",
@@ -78,6 +85,7 @@ export function registerForgeAgents(
         inheritSkills: false,
         defaultContext: "fresh",
         tools: [...FORGE_REVIEW_TOOLS],
+        extensions: [childRuntimePath],
         acceptanceRole: "read-only",
         defaultAsync: false,
         defaultTimeoutMs: FORGE_REVIEW_TIMEOUT_MS,
@@ -100,6 +108,7 @@ export function registerForgeAgents(
         inheritSkills: false,
         defaultContext: "fresh",
         tools: [...FORGE_REVIEW_TOOLS],
+        extensions: [childRuntimePath],
         acceptanceRole: "read-only",
         defaultAsync: false,
         defaultTimeoutMs: FORGE_REVIEW_TIMEOUT_MS,

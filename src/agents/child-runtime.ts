@@ -31,7 +31,11 @@ import {
 } from "../core/events.ts";
 import { RunJournal } from "../workflows/journal.ts";
 import {
+  FORGE_NODE_OUTPUT_SCHEMA,
+  FORGE_REVIEWER_OUTPUT_SCHEMA,
   FORGE_WORK_ON_OUTPUT_SCHEMA,
+  isForgeNodeResult,
+  isForgeReviewerResult,
   isForgeWorkOnResult,
 } from "./contracts.ts";
 import {
@@ -64,7 +68,10 @@ interface ForgeChildBinding {
   baseSha: string;
   maxReviewRounds: number;
   verificationCommands: Readonly<Record<string, BoundVerificationCommand>>;
+  nodeId?: string;
   node?: string;
+  nodeAttempt?: number;
+  reviewHeadSha?: string;
   refresh: boolean;
   previousReviewRounds?: number;
 }
@@ -117,6 +124,14 @@ const CommitParameters = Type.Object({
 });
 
 const PrepareReviewParameters = Type.Object({});
+
+const FinalizeReviewerParameters = Type.Object({
+  value: Type.Unsafe(FORGE_REVIEWER_OUTPUT_SCHEMA),
+});
+
+const FinalizeNodeParameters = Type.Object({
+  value: Type.Unsafe(FORGE_NODE_OUTPUT_SCHEMA),
+});
 
 const FinalizeWorkOnParameters = Type.Object({
   value: Type.Unsafe(FORGE_WORK_ON_OUTPUT_SCHEMA),
@@ -653,6 +668,99 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
+    name: "forge_finalize_reviewer",
+    label: "Forge Finalize Reviewer",
+    description:
+      "Persist one schema-valid read-only reviewer result at the trusted bound result path",
+    parameters: FinalizeReviewerParameters,
+    async execute(_toolCallId, params) {
+      if (!binding.nodeId || !binding.node?.startsWith("review-"))
+        throw new Error(
+          "forge_finalize_reviewer requires a bounded reviewer binding.",
+        );
+      if (!isForgeReviewerResult(params.value))
+        throw new Error("Final reviewer result failed schema validation.");
+      const expectedReviewer = binding.node === "review-security"
+        ? "security"
+        : "correctness";
+      if (
+        params.value.runId !== binding.runId ||
+        (params.value.reviewer !== expectedReviewer &&
+          params.value.reviewer !== `forge-review-${expectedReviewer}`) ||
+        params.value.headSha !== binding.reviewHeadSha
+      )
+        throw new Error(
+          "Final reviewer result identity does not match its binding.",
+        );
+      const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const resultPath = resolve(binding.resultPath);
+      if (!isPathWithin(join(root, ".pi", "forge"), resultPath))
+        throw new Error(
+          "Bound reviewer result path is outside the protected Forge result directory.",
+        );
+      await mkdir(dirname(resultPath), { recursive: true, mode: 0o700 });
+      await writeFile(
+        resultPath,
+        `${JSON.stringify(params.value, null, 2)}\n`,
+        { encoding: "utf8", mode: 0o600 },
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Persisted ${binding.nodeId} reviewer result.`,
+          },
+        ],
+        details: { resultPath, nodeId: binding.nodeId },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "forge_finalize_node",
+    label: "Forge Finalize Node",
+    description:
+      "Persist one schema-valid bounded node result at the trusted bound result path",
+    parameters: FinalizeNodeParameters,
+    async execute(_toolCallId, params) {
+      if (!binding.nodeId || !binding.node || !binding.nodeAttempt)
+        throw new Error("forge_finalize_node requires a bounded node binding.");
+      if (!isForgeNodeResult(params.value))
+        throw new Error("Final node result failed schema validation.");
+      if (
+        params.value.runId !== binding.runId ||
+        params.value.issueNumber !== binding.issueNumber ||
+        params.value.nodeId !== binding.nodeId ||
+        params.value.node !== binding.node ||
+        params.value.branch !== binding.branch ||
+        params.value.baseSha !== binding.baseSha
+      )
+        throw new Error("Final node result identity does not match its binding.");
+      const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const resultPath = resolve(binding.resultPath);
+      if (!isPathWithin(join(root, ".pi", "forge"), resultPath))
+        throw new Error(
+          "Bound node result path is outside the protected Forge result directory.",
+        );
+      await mkdir(dirname(resultPath), { recursive: true, mode: 0o700 });
+      await writeFile(
+        resultPath,
+        `${JSON.stringify(params.value, null, 2)}\n`,
+        { encoding: "utf8", mode: 0o600 },
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Persisted ${binding.nodeId} result for run ${binding.runId}.`,
+          },
+        ],
+        details: { resultPath, nodeId: binding.nodeId },
+      };
+    },
+  });
+
+  pi.registerTool({
     name: "forge_finalize_work_on",
     label: "Forge Finalize Work-On",
     description:
@@ -873,6 +981,22 @@ function readBinding(): ForgeChildBinding {
     validateBoundCommand(name, commandValue);
     verificationCommands[name] = commandValue;
   }
+  const node = typeof value.node === "string" ? value.node : undefined;
+  if (
+    node &&
+    (typeof value.nodeId !== "string" ||
+      !value.nodeId.trim() ||
+      !Number.isSafeInteger(value.nodeAttempt) ||
+      (value.nodeAttempt as number) < 1)
+  )
+    throw new Error(
+      "Bounded node bindings require nodeId and a positive nodeAttempt.",
+    );
+  if (
+    node?.startsWith("review-") &&
+    (typeof value.reviewHeadSha !== "string" || !value.reviewHeadSha.trim())
+  )
+    throw new Error("Reviewer bindings require reviewHeadSha.");
   const refresh = value.refresh === true;
   const previousReviewRounds = value.previousReviewRounds;
   if (
@@ -899,7 +1023,16 @@ function readBinding(): ForgeChildBinding {
     baseSha: value.baseSha as string,
     maxReviewRounds: value.maxReviewRounds as number,
     verificationCommands,
-    ...(typeof value.node === "string" ? { node: value.node } : {}),
+    ...(node
+      ? {
+          nodeId: value.nodeId as string,
+          node,
+          nodeAttempt: value.nodeAttempt as number,
+          ...(typeof value.reviewHeadSha === "string"
+            ? { reviewHeadSha: value.reviewHeadSha }
+            : {}),
+        }
+      : {}),
     refresh,
     ...(refresh
       ? { previousReviewRounds: previousReviewRounds as number }
@@ -909,7 +1042,9 @@ function readBinding(): ForgeChildBinding {
 
 function allowedNodeTools(node: string | undefined): ReadonlySet<string> {
   if (!node) return new Set(["forge_refresh_base", "forge_verify", "forge_diff", "forge_commit", "forge_prepare_review", "forge_finalize_work_on"]);
-  const common = ["forge_diff"];
+  if (node === "review-correctness" || node === "review-security")
+    return new Set(["forge_finalize_reviewer"]);
+  const common = ["forge_diff", "forge_finalize_node"];
   if (node === "implement") return new Set([...common, "forge_commit"]);
   if (node === "verify") return new Set([...common, "forge_verify"]);
   if (node === "prepare-pr") return new Set(["forge_prepare_review"]);

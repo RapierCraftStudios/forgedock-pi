@@ -115,12 +115,32 @@ export class SubagentsRpcClient {
       input.node.node === "review-correctness"
         ? FORGE_REVIEW_CORRECTNESS_AGENT
         : FORGE_REVIEW_SECURITY_AGENT;
+    const reviewHeadSha = input.reviewHeadSha ?? input.baseSha;
+    const binding = {
+      runId: input.runId,
+      resultPath,
+      repository: input.repository,
+      issueNumber: input.issueNumber,
+      leaseEpoch: input.leaseEpoch,
+      leaseOwnerRunId: input.leaseOwnerRunId ?? input.runId,
+      stateBranch: input.policy.state.branch,
+      worktreeRoot: input.worktreeRoot,
+      branch: input.branch,
+      baseBranch: input.baseBranch,
+      baseSha: input.baseSha,
+      maxReviewRounds: input.policy.review.maxRounds,
+      verificationCommands: input.policy.verification.commands,
+      nodeId: input.node.nodeId,
+      node: input.node.node,
+      nodeAttempt: input.node.attempt,
+      reviewHeadSha,
+    };
     const task = [
       `Review ForgeDock issue #${input.issueNumber} as the ${input.node.node === "review-correctness" ? "correctness" : "security"} reviewer.`,
       `Run ID: ${input.runId}`,
-      `Frozen review head SHA: ${input.reviewHeadSha ?? input.baseSha}`,
+      `Frozen review head SHA: ${reviewHeadSha}`,
       `Assigned worktree: ${input.worktreeRoot}`,
-      "Inspect only the frozen committed patch. Return exactly forgedock.reviewer-result/v1 with the supplied output schema. Bind runId to the Forge run ID above and headSha to the frozen SHA. Do not edit, launch subagents, access GitHub, merge, or call Forge workflow tools.",
+      "Inspect only the frozen committed patch. Return exactly forgedock.reviewer-result/v1 with the supplied output schema. Bind runId to the Forge run ID above and headSha to the frozen SHA. Before returning, call forge_finalize_reviewer with the complete result, then call structured_output with the identical value. Never write .pi files directly. Do not edit source, launch subagents, access GitHub, merge, or call any other Forge workflow tool.",
       input.issueContext,
     ].join("\n\n");
     const data = await this.#request(
@@ -130,6 +150,7 @@ export class SubagentsRpcClient {
         task,
         cwd: input.worktreeRoot,
         context: "fresh",
+        extensionBindings: { [BINDING_NAMESPACE]: binding },
         outputSchema: FORGE_REVIEWER_OUTPUT_SCHEMA,
         output: resultPath,
         outputMode: "file-only",
@@ -238,6 +259,7 @@ export class SubagentsRpcClient {
           `Frozen base SHA: ${input.baseSha}`,
           "The parent has already durably queued and started this node. Execute only this node, then return one schema-valid forgedock.node-result/v1 value. Do not process any other phase, do not call forge_checkpoint, do not launch subagents, and do not merge, close, or clean up.",
           "For every non-review node, return artifact as a forgedock.phase-artifact/v1 object whose phase matches this node. Supply typed facts only; never author Markdown or markers. Investigation must include actual taskType, complexity, evidence, decomposition, skipped phases, and acceptance checks. Plan must include allowed paths, forbidden changes, invariants, context, hazards, steps, and criterion mapping. Implementation must include the real commit SHA and changed-file statistics. Verification must name every check and use passed, failed, skipped, pending, unknown, not-configured, or policy-exempt truthfully. For prepare-pr, call forge_prepare_review and return the exact PR/head/domains. The trusted parent validates the object and deterministically renders GitHub Markdown. Review nodes return only the typed reviewer result.",
+          "Before returning, call forge_finalize_node with the complete node result, then call structured_output with the identical value. Never write or edit .pi/forge files directly; the trusted finalizer owns the bound result artifact.",
           input.issueContext,
         ].join("\n\n")
       : task;
