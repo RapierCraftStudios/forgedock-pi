@@ -10,8 +10,8 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:7f0b1ec64ce5088a93ccd0b50b3310e33b234d23baf3a4a48073b9cf8e0dd84f",
+  "sequence": 6,
+  "lastEventHash": "sha256:03592267c49dce578e28869a37390ee24948c7ac3de0aead0b028f3a6207ec5e",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -42,6 +42,15 @@
         "The finding is actionable in the current command/orchestration production path and should proceed to investigation, bounded planning, implementation, and focused regression coverage; this resolve node made no source edits."
       ],
       "finishedAt": "2026-08-25T13:15:04.214Z"
+    },
+    "investigate-1": {
+      "nodeId": "investigate-1",
+      "node": "investigate",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/2f356134-65eb-417b-8e7d-241d70d422bd/.pi/forge/2f356134-65eb-417b-8e7d-241d70d422bd-investigate-1.json"
     }
   },
   "effects": {},
@@ -50,13 +59,15 @@
     "node:resolve-1:queued": "62c0afea-1e90-414e-92f7-b3e79f036bf2",
     "node:resolve-1:started": "dc36feae-bb65-4e01-b4ec-9408e6657b4d",
     "node:resolve-1:receipt-bound": "28b86dff-a9dc-471d-a88e-30ea5612c6d0",
-    "node:resolve-1:completed": "2b6b2033-ebf0-46c8-8757-f125c3680978"
+    "node:resolve-1:completed": "2b6b2033-ebf0-46c8-8757-f125c3680978",
+    "node:investigate-1:queued": "b2fad7c2-a4ce-4a9c-a8fc-9546a18ca7af"
   },
   "eventIds": {
     "54ee3201-92dd-4d2c-ba52-c90a7ae3e845": true,
     "62c0afea-1e90-414e-92f7-b3e79f036bf2": true,
     "dc36feae-bb65-4e01-b4ec-9408e6657b4d": true,
     "28b86dff-a9dc-471d-a88e-30ea5612c6d0": true,
-    "2b6b2033-ebf0-46c8-8757-f125c3680978": true
+    "2b6b2033-ebf0-46c8-8757-f125c3680978": true,
+    "b2fad7c2-a4ce-4a9c-a8fc-9546a18ca7af": true
   }
 }
