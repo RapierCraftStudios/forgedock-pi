@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:dc7eba04f0cd18930a039a78ef678c9cfc7a996d32eb3c1f2e552fe57a820eaa",
+  "sequence": 9,
+  "lastEventHash": "sha256:e3d189fa52604882b1b3f76d4e4888ab0640dd25c9f9e10017961638b7cbe21a",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -46,7 +46,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/91fd4701-34b2-4f98-9c38-a66277301579/.pi/forge/91fd4701-34b2-4f98-9c38-a66277301579-investigate-1.json",
       "subagentRunId": "6a833013-dae4-44ed-a26c-ce2503e89bba",
@@ -55,7 +55,18 @@
       "startedAt": "2026-08-25T19:29:16.531Z",
       "previousSubagentRunId": "launch:investigate-1:02cfe2d8-e839-4a84-a625-f468336d8d34",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "src/core/dispatcher.ts:207-215 derives a new node head only from prepare-pr or verify; when verify-1 follows implement-1, neither source exists, so verify-1 is returned without the implementation head.",
+        "src/workflows/work-on.ts:1738-1746 and 1794-1805 omit node.headSha from both node.queued and node.started payloads, leaving the durable node snapshot unable to bind the verifier to the implementation revision.",
+        "src/adapters/subagents.ts:254-266 builds the bounded task with only the frozen base SHA and never renders input.node.headSha or approved verification names.",
+        "src/adapters/subagents.ts:219 proves the validated verification command map is already passed through the protected extension binding, while src/agents/child-runtime.ts:496-500 rejects any guessed name absent from that opaque map.",
+        "test/adapters/subagents.test.ts:178-209 checks generic bounded-node wording but has no assertion for verify head or command-name handoff; test/core/dispatcher.test.ts has no transition assertion that verify inherits implement head."
+      ],
+      "finishedAt": "2026-08-25T19:32:58.232Z"
     }
   },
   "effects": {},
@@ -67,7 +78,8 @@
     "node:resolve-1:completed": "f1f5086f-cb54-40ac-85ba-9679d1fbd9eb",
     "node:investigate-1:queued": "fca2d2ca-4177-4af6-956c-d56acc652efe",
     "node:investigate-1:started": "5d2a46d8-e6ee-4690-82e4-8b241a9b67f3",
-    "node:investigate-1:receipt-bound": "977292e6-91ba-49e0-973c-ca98141b3749"
+    "node:investigate-1:receipt-bound": "977292e6-91ba-49e0-973c-ca98141b3749",
+    "node:investigate-1:completed": "4c47288f-628c-4ef8-a579-251084b965a3"
   },
   "eventIds": {
     "ba49bd33-cd25-4d3a-8106-d3166e61f8e2": true,
@@ -77,6 +89,7 @@
     "f1f5086f-cb54-40ac-85ba-9679d1fbd9eb": true,
     "fca2d2ca-4177-4af6-956c-d56acc652efe": true,
     "5d2a46d8-e6ee-4690-82e4-8b241a9b67f3": true,
-    "977292e6-91ba-49e0-973c-ca98141b3749": true
+    "977292e6-91ba-49e0-973c-ca98141b3749": true,
+    "4c47288f-628c-4ef8-a579-251084b965a3": true
   }
 }
