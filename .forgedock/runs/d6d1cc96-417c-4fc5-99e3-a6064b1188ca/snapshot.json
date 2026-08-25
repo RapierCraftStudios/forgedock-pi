@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 20,
-  "lastEventHash": "sha256:66e7bf1f76420fdb99946586b32aa2f2afdbd05931ae344733870f88d0006cbe",
+  "sequence": 21,
+  "lastEventHash": "sha256:f35c75c4f6a8a6be2692bab945a1e1c58b03234fe805e164c328c4f657eb8bd1",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -142,7 +142,7 @@
       "node": "implement",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/d6d1cc96-417c-4fc5-99e3-a6064b1188ca/.pi/forge/d6d1cc96-417c-4fc5-99e3-a6064b1188ca-implement-1.json",
       "subagentRunId": "5fc0a2c5-1957-44e0-b052-4d011892da6b",
@@ -151,7 +151,17 @@
       "startedAt": "2026-08-25T21:36:50.363Z",
       "previousSubagentRunId": "launch:implement-1:a23a0802-b473-43ab-b919-d539045b461f",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "ef0b3811c0cf6b62849248f5cd9e9d59ad99aaa3",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "Commit ef0b3811c0cf6b62849248f5cd9e9d59ad99aaa3 was created through forge_commit.",
+        "npm run check passed: TypeScript typecheck and all 87 tests completed successfully.",
+        "forge_verify command execution was skipped because bounded implement nodes do not have forge_verify authority.",
+        "The committed worktree is clean and all eight changed files are within the accepted builder contract."
+      ],
+      "finishedAt": "2026-08-25T21:46:14.984Z"
     }
   },
   "effects": {},
@@ -175,7 +185,8 @@
     "node:prepare-worktree-1:completed": "7429a6dd-ac4b-41f4-b229-2ebe567de8a8",
     "node:implement-1:queued": "4bb878ad-40f3-42b5-b652-7facd8348de0",
     "node:implement-1:started": "acfb4423-fabe-48eb-b16e-271bbfe2579d",
-    "node:implement-1:receipt-bound": "a2a9fa27-1ae3-4c3b-9535-e79e68488b22"
+    "node:implement-1:receipt-bound": "a2a9fa27-1ae3-4c3b-9535-e79e68488b22",
+    "node:implement-1:completed": "ec516d58-b8cd-44c5-b603-676958c59b6c"
   },
   "eventIds": {
     "d170fe65-a4bc-4853-b400-9293cdbfe1a8": true,
@@ -197,6 +208,7 @@
     "7429a6dd-ac4b-41f4-b229-2ebe567de8a8": true,
     "4bb878ad-40f3-42b5-b652-7facd8348de0": true,
     "acfb4423-fabe-48eb-b16e-271bbfe2579d": true,
-    "a2a9fa27-1ae3-4c3b-9535-e79e68488b22": true
+    "a2a9fa27-1ae3-4c3b-9535-e79e68488b22": true,
+    "ec516d58-b8cd-44c5-b603-676958c59b6c": true
   }
 }
