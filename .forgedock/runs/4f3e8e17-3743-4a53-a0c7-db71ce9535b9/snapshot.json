@@ -10,8 +10,8 @@
     "ownerRunId": "dd680e3c-d22e-4841-9e2e-5042551e056a",
     "epoch": 1
   },
-  "sequence": 24,
-  "lastEventHash": "sha256:36a7ef9525d0650958dd64f0c13404cb735a11c1dafaa032a4ae1fe30ecbfbad",
+  "sequence": 25,
+  "lastEventHash": "sha256:20104b7364f36560bf6de67504128bcf4c35e6892d0527fa14109a912bf59fa7",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -154,7 +154,7 @@
       "node": "verify",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "320ad98f894e872dcb4ddc50cc90237722ab736c",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/4f3e8e17-3743-4a53-a0c7-db71ce9535b9/.pi/forge/4f3e8e17-3743-4a53-a0c7-db71ce9535b9-verify-1.json",
       "subagentRunId": "ce533ecb-376e-48c9-8501-0cc418da38dc",
@@ -163,7 +163,25 @@
       "startedAt": "2026-08-25T10:21:49.219Z",
       "previousSubagentRunId": "launch:verify-1:da204f01-90c3-4806-a81d-d70d320e7dba",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "e6c258b8d23e35b58d8f2e6d3fde8c0901d18810",
+      "verificationResults": [
+        {
+          "name": "local verification",
+          "required": false,
+          "status": "not-configured"
+        }
+      ],
+      "outcome": "completed",
+      "evidence": [
+        "forge_diff stat reports exactly 1 file changed with 4 insertions and 0 deletions.",
+        "forge_diff name-only reports only test/agents/child-runtime-commit.test.ts.",
+        "The patch retains the positive forge_finalize_reviewer and forge_diff assertions and adds the requested false membership assertion for forge_finalize_node on review-security.",
+        "No production source or unrelated test files changed.",
+        "npm run check was not executed: verification.commands is empty in .forge/config.json and forge_verify rejected the unbound command; bash execution is prohibited for this node.",
+        "No configured GitHub CI result is available during verify-1; parent-owned GitHub CI remains required for the prepared review head."
+      ],
+      "finishedAt": "2026-08-25T10:26:00.719Z"
     }
   },
   "effects": {},
@@ -191,7 +209,8 @@
     "node:implement-1:completed": "37f71755-f69e-4017-a8fe-b3b389460347",
     "node:verify-1:queued": "079bcbe2-a18c-4f9e-8d5e-19b7de00b822",
     "node:verify-1:started": "19d0994e-b981-442a-a7ea-f51a0bb06ff4",
-    "node:verify-1:receipt-bound": "231d9ccc-5de4-4c46-829e-3f96195d3bd7"
+    "node:verify-1:receipt-bound": "231d9ccc-5de4-4c46-829e-3f96195d3bd7",
+    "node:verify-1:completed": "73c9f8da-9b88-4d8b-b96a-049db88b8cbf"
   },
   "eventIds": {
     "f09b50df-0043-4493-aea7-a52e7e099b6f": true,
@@ -217,6 +236,7 @@
     "37f71755-f69e-4017-a8fe-b3b389460347": true,
     "079bcbe2-a18c-4f9e-8d5e-19b7de00b822": true,
     "19d0994e-b981-442a-a7ea-f51a0bb06ff4": true,
-    "231d9ccc-5de4-4c46-829e-3f96195d3bd7": true
+    "231d9ccc-5de4-4c46-829e-3f96195d3bd7": true,
+    "73c9f8da-9b88-4d8b-b96a-049db88b8cbf": true
   }
 }
