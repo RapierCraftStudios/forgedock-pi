@@ -1,0 +1,11 @@
+{
+  "schema": "forgedock.repository-lease/v1",
+  "repository": "RapierCraftStudios/forgedock-pi",
+  "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
+  "ownerSessionId": "01a039c8-c9cd-753e-a5f7-5df5dcd4abad",
+  "epoch": 1,
+  "acquiredAt": "2026-08-25T16:42:55.342Z",
+  "lastHeartbeatAt": "2026-08-25T16:42:55.342Z",
+  "expiresAt": "2026-08-25T17:42:55.342Z",
+  "takeoverRequired": false
+}
