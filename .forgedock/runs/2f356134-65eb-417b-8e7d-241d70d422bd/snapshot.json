@@ -10,8 +10,8 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:c2d7f92efc003a25fca7a614dc963972febaa1b64306a693d9bb889e4246cc72",
+  "sequence": 9,
+  "lastEventHash": "sha256:51ea1030435273f523c38a5a44a4f8371d4f6c0408ea3f38b31321671baf2b49",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -48,7 +48,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/2f356134-65eb-417b-8e7d-241d70d422bd/.pi/forge/2f356134-65eb-417b-8e7d-241d70d422bd-investigate-1.json",
       "subagentRunId": "b9c5de25-3f3b-4c68-b29b-e0f454fdd694",
@@ -57,7 +57,18 @@
       "startedAt": "2026-08-25T13:15:26.319Z",
       "previousSubagentRunId": "launch:investigate-1:3a0ccb98-5041-4038-885d-c1da60833d64",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "The assigned branch is at the required frozen base and head SHA 03e6133becc50ba8509b976743ea76ffeaab2c4d with no working-tree or patch changes.",
+        "Issue 41 is open in RapierCraftStudios/forgedock-pi, labeled review-finding, needs-validation, and priority:P1, and identifies SECURITY-004 from PR 31.",
+        "A direct registration and execution capture of the current forge_orchestrate tool with issue number 41, source expression #41, and a resolution summary recorded allowExpiredTakeover as true; the source expression and resolution summary were not passed to orchestrator.start.",
+        "The full test suite completed with 80 passing tests, but no command-level forge_orchestrate authorization regression test exists.",
+        "The typecheck completed successfully against the frozen tree."
+      ],
+      "finishedAt": "2026-08-25T13:21:12.464Z"
     }
   },
   "effects": {},
@@ -69,7 +80,8 @@
     "node:resolve-1:completed": "2b6b2033-ebf0-46c8-8757-f125c3680978",
     "node:investigate-1:queued": "b2fad7c2-a4ce-4a9c-a8fc-9546a18ca7af",
     "node:investigate-1:started": "8d468f84-8bfb-4a24-8f8b-d99bfd5297f2",
-    "node:investigate-1:receipt-bound": "72ecdbdf-1cb6-4e13-8aa9-4b20bf935cf9"
+    "node:investigate-1:receipt-bound": "72ecdbdf-1cb6-4e13-8aa9-4b20bf935cf9",
+    "node:investigate-1:completed": "f6d7d245-7997-421f-98fe-020d78c9f592"
   },
   "eventIds": {
     "54ee3201-92dd-4d2c-ba52-c90a7ae3e845": true,
@@ -79,6 +91,7 @@
     "2b6b2033-ebf0-46c8-8757-f125c3680978": true,
     "b2fad7c2-a4ce-4a9c-a8fc-9546a18ca7af": true,
     "8d468f84-8bfb-4a24-8f8b-d99bfd5297f2": true,
-    "72ecdbdf-1cb6-4e13-8aa9-4b20bf935cf9": true
+    "72ecdbdf-1cb6-4e13-8aa9-4b20bf935cf9": true,
+    "f6d7d245-7997-421f-98fe-020d78c9f592": true
   }
 }
