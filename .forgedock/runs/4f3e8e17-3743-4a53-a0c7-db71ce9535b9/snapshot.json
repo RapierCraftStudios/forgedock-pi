@@ -10,8 +10,8 @@
     "ownerRunId": "dd680e3c-d22e-4841-9e2e-5042551e056a",
     "epoch": 1
   },
-  "sequence": 48,
-  "lastEventHash": "sha256:7ad33a9aa3104b74923748850f6c02895ff9bfc84393f4ede9f6abc10595821a",
+  "sequence": 49,
+  "lastEventHash": "sha256:6d966ac43396c9e31f54a08c0ce8f37c48cbbc97441b3e1ad469bd3b48e05265",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -380,7 +380,14 @@
       "startedAt": "2026-08-25T10:32:12.132Z"
     }
   },
-  "effects": {},
+  "effects": {
+    "merge:42": {
+      "effectType": "merge",
+      "effectId": "merge:42",
+      "digest": "sha256:c1512b44b879fe83a6f82dae8fed1fc6382797156324fab1abb1a069defc52a3",
+      "eventId": "a7ccdc63-674c-4fc2-8cea-44ce18a0b59c"
+    }
+  },
   "idempotencyKeys": {
     "run:create": "f09b50df-0043-4493-aea7-a52e7e099b6f",
     "node:resolve-1:queued": "466942e4-057e-4587-9a7a-d612f7aec0cc",
@@ -429,7 +436,8 @@
     "node:decision-1:started": "56741a4c-575f-4b23-b5b8-0d6840ca138a",
     "node:decision-1:complete": "f974d273-2c65-48f1-90e5-bfc1e5fd0dfc",
     "node:merge-1:queued": "9eda5d52-4a78-4611-9961-f0b18506cf1f",
-    "node:merge-1:started": "95c15236-ed25-4192-848a-cba5fc40d15f"
+    "node:merge-1:started": "95c15236-ed25-4192-848a-cba5fc40d15f",
+    "effect:merge:42": "a7ccdc63-674c-4fc2-8cea-44ce18a0b59c"
   },
   "eventIds": {
     "f09b50df-0043-4493-aea7-a52e7e099b6f": true,
@@ -479,6 +487,7 @@
     "56741a4c-575f-4b23-b5b8-0d6840ca138a": true,
     "f974d273-2c65-48f1-90e5-bfc1e5fd0dfc": true,
     "9eda5d52-4a78-4611-9961-f0b18506cf1f": true,
-    "95c15236-ed25-4192-848a-cba5fc40d15f": true
+    "95c15236-ed25-4192-848a-cba5fc40d15f": true,
+    "a7ccdc63-674c-4fc2-8cea-44ce18a0b59c": true
   }
 }
