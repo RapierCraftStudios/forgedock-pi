@@ -38,6 +38,10 @@ import {
   type WorkflowNode,
 } from "../core/dispatcher.ts";
 import {
+  classifyChildRunIdentity,
+  isProviderRunReceipt,
+} from "../core/orchestration.ts";
+import {
   canAutoMerge,
   isGitHubCiRequired,
   isProtectedBranch,
@@ -236,6 +240,9 @@ export class ForgeWorkOnController {
     for (const link of uniqueLinks.values()) {
       if (link.status !== "running" && link.status !== "refreshing") continue;
       try {
+        if (isPendingInitialization(link.subagentRunId))
+          await this.#resumeFirstNodeInitialization(link, ctx);
+        if (link.status !== "running" && link.status !== "refreshing") continue;
         const activeNodes = Object.values(link.activeNodes);
         if (activeNodes.length > 0) {
           for (const activeNode of activeNodes) {
@@ -248,7 +255,9 @@ export class ForgeWorkOnController {
               );
               continue;
             }
-            const payload = await this.#rpc.status(activeNode.subagentRunId);
+            const payload = await this.#rpc.status(
+              providerRunReceipt(activeNode.subagentRunId),
+            );
             const completion = parseAsyncCompletion(payload);
             if (
               completion?.state === "paused" ||
@@ -302,7 +311,9 @@ export class ForgeWorkOnController {
           this.#emitLifecycle(link, { reason });
           continue;
         }
-        const payload = await this.#rpc.status(link.subagentRunId);
+        const payload = await this.#rpc.status(
+          providerRunReceipt(link.subagentRunId),
+        );
         if (!findForgeWorkOnResult(payload)) continue;
         link.status = "finalizing";
         this.#persistLink(link);
@@ -312,7 +323,7 @@ export class ForgeWorkOnController {
         const hasDispatcherLaunch =
           Boolean(link.currentNodeId) ||
           Object.keys(link.activeNodes).length > 0 ||
-          isLaunchSentinel(link.subagentRunId);
+          classifyChildRunIdentity(link.subagentRunId) !== "provider-receipt";
         link.status = hasDispatcherLaunch ? "needs-human" : "failed";
         this.#persistLink(link);
         this.#emitLifecycle(link, {
@@ -330,6 +341,78 @@ export class ForgeWorkOnController {
     this.#completionUnsubscribe = undefined;
     this.#lifecycleListeners.clear();
     this.#providerRecovering.clear();
+  }
+
+  async #resumeFirstNodeInitialization(
+    link: ActiveRunLink,
+    ctx: ExtensionContext,
+  ): Promise<void> {
+    const nodeId = link.currentNodeId ?? "resolve-1";
+    if (nodeId !== "resolve-1")
+      throw new Error(
+        `Initializing ForgeDock run ${link.forgeRunId} has unexpected current node ${nodeId}.`,
+      );
+    const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
+    const token = await resolveGitHubToken(
+      this.#pi,
+      link.prepared.repositoryRoot,
+      ctx.signal,
+    );
+    const store = new GitHubStateBranchStore(
+      new FetchGitHubTransport({ token }),
+      link.repository,
+      link.stateBranch,
+    );
+    const snapshot = await store.readRun(link.forgeRunId, ctx.signal);
+    const durableNode = snapshot.state?.nodes[nodeId];
+    const action = selectFirstNodeInitializationAction({
+      linkRunId: link.subagentRunId,
+      durableStatus: durableNode?.status,
+      durableRunId: durableNode?.subagentRunId,
+    });
+    if (action === "dispatch") {
+      await this.#dispatchNode(
+        link,
+        { nodeId, node: "resolve", attempt: 1 },
+        policy,
+        store,
+        ctx,
+        link.issueContext,
+      );
+      return;
+    }
+    if (action === "restore") {
+      const durableRunId = durableNode?.subagentRunId;
+      if (!durableRunId)
+        throw new Error(`Node ${nodeId} has no durable child identity.`);
+      const resultPath =
+        durableNode.resultPath ??
+        linkResultPath(link.prepared.worktreePath, link.forgeRunId, nodeId);
+      this.#links.delete(link.subagentRunId);
+      link.activeNodes[durableRunId] = {
+        nodeId,
+        subagentRunId: durableRunId,
+        resultPath,
+        ...(durableNode.launchNonce
+          ? { launchNonce: durableNode.launchNonce }
+          : {}),
+      };
+      link.subagentRunId = durableRunId;
+      link.resultPath = resultPath;
+      link.nodeResultPath = resultPath;
+      link.currentNodeId = nodeId;
+      this.#persistLink(link);
+      return;
+    }
+    const reason = `Resolve node initialization is already ${durableNode?.status ?? "unknown"}; refusing to invent a provider receipt.`;
+    link.status =
+      durableNode?.status === "blocked"
+        ? "blocked"
+        : durableNode?.status === "needs-human"
+          ? "needs-human"
+          : "failed";
+    this.#persistLink(link);
+    this.#emitLifecycle(link, { reason, nodeId });
   }
 
   async #retryProviderFailure(
@@ -351,7 +434,7 @@ export class ForgeWorkOnController {
     this.#persistLink(link);
     try {
       const receipt = await this.#rpc.resume(
-        previousRunId,
+        providerRunReceipt(previousRunId),
         `Resume the same ForgeDock run from its durable checkpoints after a transient provider transport failure. Do not repeat completed phases. Failure: ${failure}`,
       );
       this.#links.delete(intent.sentinelRunId);
@@ -446,7 +529,7 @@ export class ForgeWorkOnController {
     let receipt;
     try {
       receipt = await this.#rpc.resume(
-        previousSubagentRunId,
+        providerRunReceipt(previousSubagentRunId),
         [
           `Resume the same retained ForgeDock node ${nodeId} after a transient transport interruption.`,
           "Continue from the existing child transcript and tool history.",
@@ -668,7 +751,7 @@ export class ForgeWorkOnController {
       ctx.ui.setStatus("forgedock", `issue #${issueNumber} · work-on running`);
       return {
         runId,
-        subagentRunId: link.subagentRunId,
+        subagentRunId: providerRunReceipt(link.subagentRunId),
         issueNumber,
         worktreePath: prepared.worktreePath,
         branch: prepared.branch,
@@ -1110,7 +1193,7 @@ export class ForgeWorkOnController {
     activeNode: ActiveNodeRunLink,
   ): Promise<ForgeReviewerResult | undefined> {
     const payload = await this.#rpc
-      .status(activeNode.subagentRunId)
+      .status(providerRunReceipt(activeNode.subagentRunId))
       .catch(() => undefined);
     let result = findForgeReviewerResult(payload);
     if (!result) {
@@ -1152,7 +1235,7 @@ export class ForgeWorkOnController {
     activeNode: ActiveNodeRunLink,
   ): Promise<ForgeNodeResult | undefined> {
     const payload = await this.#rpc
-      .status(activeNode.subagentRunId)
+      .status(providerRunReceipt(activeNode.subagentRunId))
       .catch(() => undefined);
     let result = findForgeNodeResult(payload);
     if (!result) {
@@ -1858,6 +1941,7 @@ export class ForgeWorkOnController {
       receipt = node.node === "review-correctness" || node.node === "review-security"
         ? await this.#rpc.spawnReviewNode(launchInput as typeof launchInput & { node: { nodeId: string; node: "review-correctness" | "review-security"; attempt: number; headSha?: string } })
         : await this.#rpc.spawnNode(launchInput);
+      providerRunReceipt(receipt.runId);
     } catch (error) {
       const reason = `Provider launch is ambiguous after durable intent: ${errorMessage(error)}`;
       await journal.append({
@@ -1941,6 +2025,7 @@ export class ForgeWorkOnController {
   async reactivateOrchestrationIssue(
     orchestrationId: string,
     issueNumber: number,
+    ctx: ExtensionContext,
   ): Promise<
     | {
         forgeRunId: string;
@@ -1955,16 +2040,18 @@ export class ForgeWorkOnController {
         candidate.issueNumber === issueNumber,
     );
     if (!link) return undefined;
-    if (isLaunchSentinel(link.subagentRunId)) {
-      link.status = "needs-human";
-      this.#persistLink(link);
-      return {
-        forgeRunId: link.forgeRunId,
-        subagentRunId: link.subagentRunId,
-        state: "paused",
-      };
+    if (isPendingInitialization(link.subagentRunId))
+      await this.#resumeFirstNodeInitialization(link, ctx);
+    if (link.status !== "running" || isLaunchSentinel(link.subagentRunId)) {
+      if (isLaunchSentinel(link.subagentRunId)) {
+        link.status = "needs-human";
+        this.#persistLink(link);
+      }
+      return undefined;
     }
-    const payload = await this.#rpc.status(link.subagentRunId);
+    const payload = await this.#rpc.status(
+      providerRunReceipt(link.subagentRunId),
+    );
     const completion = findAsyncCompletionForRun(
       payload,
       link.subagentRunId,
@@ -1988,7 +2075,7 @@ export class ForgeWorkOnController {
       let receipt;
       try {
         receipt = await this.#rpc.resume(
-          previousRunId,
+          providerRunReceipt(previousRunId),
           `Resume the same ForgeDock run from durable checkpoints after terminal transient failure. Do not repeat completed phases. Failure: ${completion.error}`,
         );
       } catch {
@@ -2032,7 +2119,7 @@ export class ForgeWorkOnController {
         let receipt;
         try {
           receipt = await this.#rpc.resume(
-            previousRunId,
+            providerRunReceipt(previousRunId),
             "Resume the same ForgeDock run after a fixed idempotent projection defect. Retry verify complete attempt 1 exactly once; the authoritative phase event and implementation commit already exist. Then continue review preparation and nested review without repeating completed phases.",
           );
         } catch {
@@ -2111,7 +2198,8 @@ export class ForgeWorkOnController {
       active.map(async (link) => {
         link.status = "failed";
         this.#persistLink(link);
-        await this.#rpc.stop(link.subagentRunId);
+        if (isProviderRunReceipt(link.subagentRunId))
+          await this.#rpc.stop(link.subagentRunId);
       }),
     );
   }
@@ -2161,7 +2249,9 @@ export class ForgeWorkOnController {
   }
 
   async #loadResult(link: ActiveRunLink): Promise<ForgeWorkOnResult> {
-    const statusPayload = await this.#rpc.status(link.subagentRunId);
+    const statusPayload = await this.#rpc.status(
+      providerRunReceipt(link.subagentRunId),
+    );
     let result = findForgeWorkOnResult(statusPayload);
     if (!result) {
       const resultText = await readFile(link.resultPath, "utf8").catch(
@@ -2218,7 +2308,7 @@ export class ForgeWorkOnController {
     });
     const previousRunId = input.link.subagentRunId;
     const receipt = await this.#rpc.resume(
-      previousRunId,
+      providerRunReceipt(previousRunId),
       [
         "Run one legacy-compatible bounded remediation attempt on the existing PR branch.",
         `PR: #${input.pullNumber}`,
@@ -3618,7 +3708,7 @@ function normalizeActiveRunLink(value: unknown): ActiveRunLink | undefined {
     activeNodes:
       link.activeNodes && typeof link.activeNodes === "object"
         ? link.activeNodes
-        : link.currentNodeId
+        : link.currentNodeId && !isPendingInitialization(link.subagentRunId)
           ? {
               [link.subagentRunId]: {
                 nodeId: link.currentNodeId,
@@ -3690,7 +3780,35 @@ export function createNodeLaunchIntent(
 }
 
 export function isLaunchSentinel(runId: string): boolean {
-  return runId.startsWith("launch:");
+  return classifyChildRunIdentity(runId) === "launch-intent";
+}
+
+export function isPendingInitialization(runId: string): boolean {
+  return classifyChildRunIdentity(runId) === "initializing";
+}
+
+export type FirstNodeInitializationAction =
+  | "dispatch"
+  | "restore"
+  | "fail-closed"
+  | "not-initializing";
+
+/** Decide restart behavior without ever interpreting an internal ID as a receipt. */
+export function selectFirstNodeInitializationAction(input: {
+  linkRunId: string;
+  durableStatus?: "queued" | "running" | "completed" | "failed" | "blocked" | "needs-human";
+  durableRunId?: string;
+}): FirstNodeInitializationAction {
+  if (!isPendingInitialization(input.linkRunId)) return "not-initializing";
+  if (!input.durableStatus || input.durableStatus === "queued") return "dispatch";
+  if (input.durableStatus === "running" && input.durableRunId) return "restore";
+  return "fail-closed";
+}
+
+function providerRunReceipt(runId: string): string {
+  if (!isProviderRunReceipt(runId))
+    throw new Error(`Internal child identity ${runId} is not a provider receipt.`);
+  return runId;
 }
 
 export type LaunchRecoveryAction =

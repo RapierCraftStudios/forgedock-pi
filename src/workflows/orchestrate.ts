@@ -10,6 +10,7 @@ import { loadForgePolicy } from "../adapters/config.ts";
 import { GitWorktreeManager } from "../adapters/git.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import {
+  isProviderRunReceipt,
   isTerminalLane,
   nextIntegrationLane,
   readyOrchestrationLanes,
@@ -296,8 +297,9 @@ export class ForgeOrchestrationController {
       const active = await this.#workOn.reactivateOrchestrationIssue(
         link.orchestrationId,
         lane.issueNumber,
+        ctx,
       );
-      if (!active) continue;
+      if (!active || !isProviderRunReceipt(active.subagentRunId)) continue;
       const current = await this.#read(link, ctx.signal);
       await current.journal.append({
         orchestrationId: link.orchestrationId,
@@ -455,6 +457,11 @@ export class ForgeOrchestrationController {
                 run.orchestrationId === link.orchestrationId &&
                 run.issueNumber === lane.issueNumber,
             );
+          if (existing && !isProviderRunReceipt(existing.subagentRunId)) {
+            // Work-on owns initialization recovery. Keep this lane queued so a
+            // second start cannot race the durable first-node launch intent.
+            return;
+          }
           let result = existing
             ? {
                 runId: existing.forgeRunId,
@@ -476,7 +483,7 @@ export class ForgeOrchestrationController {
                 (run) =>
                   run.orchestrationId === link.orchestrationId &&
                   run.issueNumber === lane.issueNumber &&
-                  Object.keys(run.activeNodes).length > 0,
+                  isProviderRunReceipt(run.subagentRunId),
               );
               if (recovered) {
                 result = {
@@ -510,6 +517,7 @@ export class ForgeOrchestrationController {
               }
             }
           }
+          if (!isProviderRunReceipt(result.subagentRunId)) return;
           try {
             await current.journal.append({
               orchestrationId: link.orchestrationId,

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   applyOrchestrationEvent,
+  classifyChildRunIdentity,
   createOrchestrationEvent,
   type OrchestrationEventType,
   type OrchestrationState,
@@ -61,6 +62,62 @@ test("lane lifecycle follows the stable Forge run instead of rotating child rece
       { forgeRunId: "different-forge-run" },
     ),
     false,
+  );
+});
+
+test("child identity classification distinguishes internal sentinels", () => {
+  assert.equal(classifyChildRunIdentity("pending:forge-run"), "initializing");
+  assert.equal(classifyChildRunIdentity("launch:resolve-1:nonce"), "launch-intent");
+  assert.equal(classifyChildRunIdentity("provider-run"), "provider-receipt");
+});
+
+test("lane start and recovery reject internal child identities", () => {
+  for (const subagentRunId of [
+    "pending:forge-run-2",
+    "launch:resolve-1:nonce",
+  ]) {
+    const state = initialized();
+    assert.throws(
+      () =>
+        applyOrchestrationEvent(
+          state,
+          next(
+            state,
+            "lane.started",
+            { issueNumber: 2, forgeRunId: "forge-run-2", subagentRunId },
+            `start-${subagentRunId}`,
+          ),
+        ),
+      /cannot publish internal child identity/,
+    );
+  }
+
+  let failed = initialized();
+  failed = applyOrchestrationEvent(
+    failed,
+    next(
+      failed,
+      "lane.failed",
+      { issueNumber: 2, reason: "transient setup failure" },
+      "fail-before-recovery",
+    ),
+  );
+  assert.throws(
+    () =>
+      applyOrchestrationEvent(
+        failed,
+        next(
+          failed,
+          "lane.recovered",
+          {
+            issueNumber: 2,
+            forgeRunId: "forge-run-2",
+            subagentRunId: "pending:forge-run-2",
+          },
+          "recover-pending",
+        ),
+      ),
+    /cannot publish internal child identity/,
   );
 });
 

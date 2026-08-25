@@ -27,6 +27,26 @@ export type OrchestrationStatus =
   | "failed"
   | "cancelled";
 
+export type ChildRunIdentityKind =
+  | "initializing"
+  | "launch-intent"
+  | "provider-receipt";
+
+/** Classify child identities before crossing a provider or lane boundary. */
+export function classifyChildRunIdentity(runId: string): ChildRunIdentityKind {
+  if (runId.startsWith("pending:")) return "initializing";
+  if (runId.startsWith("launch:")) return "launch-intent";
+  return "provider-receipt";
+}
+
+export function isProviderRunReceipt(runId: string): boolean {
+  return (
+    Boolean(runId.trim()) &&
+    runId === runId.trim() &&
+    classifyChildRunIdentity(runId) === "provider-receipt"
+  );
+}
+
 export interface OrchestrationLane {
   issueNumber: number;
   ordinal: number;
@@ -355,9 +375,15 @@ function applyLaneEvent(
     );
 
   if (transition === "started" || transition === "recovered") {
+    const subagentRunId = payloadString(event, "subagentRunId");
+    if (!isProviderRunReceipt(subagentRunId))
+      throw new OrchestrationTransitionError(
+        "internal-child-receipt",
+        `${event.type} cannot publish internal child identity ${subagentRunId}.`,
+      );
     next.status = "running";
     next.forgeRunId = payloadString(event, "forgeRunId");
-    next.subagentRunId = payloadString(event, "subagentRunId");
+    next.subagentRunId = subagentRunId;
     delete next.reason;
   } else if (transition === "ready") {
     next.status = "ready";

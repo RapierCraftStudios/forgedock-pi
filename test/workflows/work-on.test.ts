@@ -5,11 +5,14 @@ import {
   canonicalReviewerName,
   finalReviewDecisionMarker,
   findingPriority,
+  isLaunchSentinel,
+  isPendingInitialization,
   isTransientProviderFailure,
   lineWithinTolerance,
   parseAsyncCompletion,
   reconcileLaunchState,
   reviewFindingMarker,
+  selectFirstNodeInitializationAction,
   reviewInstanceMarker,
   reviewSummaryInstanceMarker,
   reviewSupersessionMarker,
@@ -21,6 +24,52 @@ test("short reviewer aliases normalize to configured agent names", () => {
   assert.equal(
     canonicalReviewerName("forge-review-correctness"),
     "forge-review-correctness",
+  );
+});
+
+test("internal child identities are explicit and never confused with receipts", () => {
+  assert.equal(isPendingInitialization("pending:forge-run-1"), true);
+  assert.equal(isLaunchSentinel("pending:forge-run-1"), false);
+  assert.equal(isLaunchSentinel("launch:resolve-1:nonce"), true);
+  assert.equal(isPendingInitialization("provider-run-1"), false);
+});
+
+test("interrupted first-node initialization resumes from durable state", () => {
+  assert.equal(
+    selectFirstNodeInitializationAction({
+      linkRunId: "pending:forge-run-1",
+    }),
+    "dispatch",
+  );
+  assert.equal(
+    selectFirstNodeInitializationAction({
+      linkRunId: "pending:forge-run-1",
+      durableStatus: "queued",
+    }),
+    "dispatch",
+  );
+  assert.equal(
+    selectFirstNodeInitializationAction({
+      linkRunId: "pending:forge-run-1",
+      durableStatus: "running",
+      durableRunId: "launch:resolve-1:nonce",
+    }),
+    "restore",
+  );
+  assert.equal(
+    selectFirstNodeInitializationAction({
+      linkRunId: "pending:forge-run-1",
+      durableStatus: "running",
+      durableRunId: "provider-run-1",
+    }),
+    "restore",
+  );
+  assert.equal(
+    selectFirstNodeInitializationAction({
+      linkRunId: "pending:forge-run-1",
+      durableStatus: "needs-human",
+    }),
+    "fail-closed",
   );
 });
 
