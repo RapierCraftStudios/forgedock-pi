@@ -10,15 +10,15 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 4,
-  "lastEventHash": "sha256:d8cca2df10b7f363e2138ebd52266460a76013a4cfaeb52449d895b5e0f40a89",
+  "sequence": 5,
+  "lastEventHash": "sha256:4f5b7647745219f8ea9c723da7e292651b06076930974a0c79f0615660bb3ae9",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/78d73783-7ec4-466f-8a31-d3820e1a7ea2/.pi/forge/78d73783-7ec4-466f-8a31-d3820e1a7ea2-resolve-1.json",
       "subagentRunId": "3b6cb25e-5d91-414b-a8bc-6c563bcc2ccb",
@@ -27,7 +27,19 @@
       "startedAt": "2026-08-25T13:14:01.995Z",
       "previousSubagentRunId": "launch:resolve-1:41138656-83dc-4411-82e3-c6a36213935c",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "round": 1,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "GitHub issue #37 is OPEN in RapierCraftStudios/forgedock-pi, and its title and review-finding body match the assigned bounded workflow-label task.",
+        "The configured integration branch is dogfood; main is the only protected branch, and the GitHub dogfood branch currently resolves to frozen base SHA 03e6133becc50ba8509b976743ea76ffeaab2c4d.",
+        "Issue #37 carries workflow:investigating, review-finding, needs-validation, and priority:P2, with no terminal workflow label; its active run comment is bound to run 78d73783-7ec4-466f-8a31-d3820e1a7ea2.",
+        "The finding is confirmed against the frozen source: bounded parent reconciliation at src/workflows/work-on.ts lines 1604-1614 posts node artifacts and node.completed events but does not set workflow labels for decision, merge, close, or cleanup; child-runtime.ts lines 647-650 only sets workflow:in-review, while the legacy finalize path at work-on.ts lines 2800-2804 is the only merged-label path.",
+        "The issue defines a focused remediation with concrete acceptance criteria; resolution is unambiguous, eligible, and does not require decomposition."
+      ],
+      "finishedAt": "2026-08-25T13:17:26.008Z"
     }
   },
   "effects": {},
@@ -35,12 +47,14 @@
     "run:create": "5925fc27-4668-475e-91fb-3a6462b0ab46",
     "node:resolve-1:queued": "a50eb250-499b-4d89-98e6-bd53ed3f493d",
     "node:resolve-1:started": "4e904873-647a-4daf-b76b-30264321434f",
-    "node:resolve-1:receipt-bound": "1bae8438-d1b9-43ce-9bcc-1c2d0e5dc2f7"
+    "node:resolve-1:receipt-bound": "1bae8438-d1b9-43ce-9bcc-1c2d0e5dc2f7",
+    "node:resolve-1:completed": "1a6839e0-0bd4-4d91-b652-f8a4e684dc2f"
   },
   "eventIds": {
     "5925fc27-4668-475e-91fb-3a6462b0ab46": true,
     "a50eb250-499b-4d89-98e6-bd53ed3f493d": true,
     "4e904873-647a-4daf-b76b-30264321434f": true,
-    "1bae8438-d1b9-43ce-9bcc-1c2d0e5dc2f7": true
+    "1bae8438-d1b9-43ce-9bcc-1c2d0e5dc2f7": true,
+    "1a6839e0-0bd4-4d91-b652-f8a4e684dc2f": true
   }
 }
