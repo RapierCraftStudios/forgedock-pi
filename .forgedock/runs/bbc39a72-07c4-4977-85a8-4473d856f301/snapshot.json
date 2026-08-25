@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 12,
-  "lastEventHash": "sha256:e92282e91c3efa1e111e40b52b8b2d616b089fb01a59be20b315a762524b1900",
+  "sequence": 13,
+  "lastEventHash": "sha256:89df1487b5182ff24f7873152b8329a24c15824e08186e8f255c8514d22eceba",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -72,7 +72,7 @@
       "node": "plan",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/bbc39a72-07c4-4977-85a8-4473d856f301/.pi/forge/bbc39a72-07c4-4977-85a8-4473d856f301-plan-1.json",
       "subagentRunId": "37762322-82d4-48f3-a9fb-6f9042803a33",
@@ -81,7 +81,27 @@
       "startedAt": "2026-08-25T21:32:50.792Z",
       "previousSubagentRunId": "launch:plan-1:500fe68b-4973-430a-833b-090d7b9d1ae4",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "verificationResults": [],
+      "builderContract": {
+        "schema": "forgedock.builder-path-contract/v1",
+        "revision": 1,
+        "allowedPaths": [
+          "src/agents/child-runtime.ts",
+          "test/agents/child-runtime-commit.test.ts"
+        ],
+        "contractHash": "20cd1d5706f01b5919343139b783bb3836adca038fdd7b3083e78658a36250ba"
+      },
+      "outcome": "completed",
+      "evidence": [
+        "src/adapters/subagents.ts:510-520 advertises Bash for implement nodes and selects FORGE_WORK_ON_AGENT for implement.",
+        "src/agents/register.ts:25-39 includes bash in FORGE_WORK_ON_TOOLS while the read-only node tool set excludes it.",
+        "src/agents/child-runtime.ts:170-181 currently blocks bash unless the bound node is resolve, investigate, or plan, so a bound implement worker is rejected before execution.",
+        "test/adapters/subagents.test.ts:218-233 verifies only the implementation task text and selected agent, not the child-runtime bash authorization path.",
+        "package.json defines typecheck, test, and combined check scripts; .forge/config.json requires GitHub verification on dogfood and configures no named local verification commands."
+      ],
+      "finishedAt": "2026-08-25T21:35:58.285Z"
     }
   },
   "effects": {},
@@ -97,7 +117,8 @@
     "node:investigate-1:completed": "a884d467-b658-4387-9a12-24be91fe53cc",
     "node:plan-1:queued": "09bb664d-cae3-487b-a038-0ed382af8de1",
     "node:plan-1:started": "c384f509-0c5c-4343-bc1c-298461dd8f99",
-    "node:plan-1:receipt-bound": "35cb3454-96a5-45d8-88cd-37164320459a"
+    "node:plan-1:receipt-bound": "35cb3454-96a5-45d8-88cd-37164320459a",
+    "node:plan-1:completed": "9914c504-54eb-4a62-b7c5-dfd245210273"
   },
   "eventIds": {
     "7b5d2931-7497-4d47-b405-55ab5d7a6899": true,
@@ -111,6 +132,7 @@
     "a884d467-b658-4387-9a12-24be91fe53cc": true,
     "09bb664d-cae3-487b-a038-0ed382af8de1": true,
     "c384f509-0c5c-4343-bc1c-298461dd8f99": true,
-    "35cb3454-96a5-45d8-88cd-37164320459a": true
+    "35cb3454-96a5-45d8-88cd-37164320459a": true,
+    "9914c504-54eb-4a62-b7c5-dfd245210273": true
   }
 }
