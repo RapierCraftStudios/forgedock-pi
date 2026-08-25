@@ -407,6 +407,95 @@ test("the immutable final review decision is retained on its decision node", () 
   );
 });
 
+test("initial launch receipt replaces its sentinel once and terminal nodes stay immutable", () => {
+  let state = initializedState();
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.queued",
+      { nodeId: "resolve-1", node: "resolve", attempt: 1 },
+      "resolve:queue",
+    ),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.started",
+      {
+        nodeId: "resolve-1",
+        node: "resolve",
+        attempt: 1,
+        subagentRunId: "launch:resolve-1:nonce",
+        resultPath: "/tmp/resolve-1.json",
+        launchNonce: "nonce",
+        launchIntent: true,
+        transportRetries: 0,
+        baseSha: "base",
+      },
+      "resolve:start",
+    ),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.resumed",
+      {
+        nodeId: "resolve-1",
+        node: "resolve",
+        attempt: 1,
+        previousSubagentRunId: "launch:resolve-1:nonce",
+        subagentRunId: "child-1",
+        resultPath: "/tmp/resolve-1.json",
+        launchNonce: "nonce",
+        launchReceipt: true,
+        transportRetries: 0,
+        baseSha: "base",
+      },
+      "resolve:receipt",
+    ),
+  );
+  assert.equal(state.nodes["resolve-1"]?.subagentRunId, "child-1");
+  assert.equal(state.nodes["resolve-1"]?.launchReceipt, true);
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.completed",
+      { nodeId: "resolve-1", node: "resolve", attempt: 1 },
+      "resolve:complete",
+    ),
+  );
+  assert.throws(
+    () =>
+      applyRunEvent(
+        state,
+        nextEvent(
+          state,
+          "node.resumed",
+          {
+            nodeId: "resolve-1",
+            node: "resolve",
+            attempt: 1,
+            previousSubagentRunId: "launch:resolve-1:nonce",
+            subagentRunId: "child-1",
+            resultPath: "/tmp/resolve-1.json",
+            launchNonce: "nonce",
+            launchReceipt: true,
+            transportRetries: 0,
+            baseSha: "base",
+          },
+          "resolve:receipt:duplicate-key",
+        ),
+      ),
+    (error) =>
+      error instanceof StateTransitionError &&
+      error.code === "illegal-node-transition",
+  );
+});
+
 test("resume intent is durable before a provider continuation receipt", () => {
   let state = initializedState();
   state = applyRunEvent(

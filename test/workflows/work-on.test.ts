@@ -6,6 +6,7 @@ import {
   finalReviewDecisionMarker,
   findingPriority,
   isTransientProviderFailure,
+  launchReceiptIdempotencyKey,
   lineWithinTolerance,
   parseAsyncCompletion,
   reconcileLaunchState,
@@ -14,6 +15,7 @@ import {
   reviewSummaryInstanceMarker,
   reviewSupersessionMarker,
   similarFindingTitle,
+  validateLaunchReceiptBinding,
 } from "../../src/workflows/work-on.ts";
 
 test("short reviewer aliases normalize to configured agent names", () => {
@@ -38,6 +40,15 @@ test("normal matching provider receipts are inspected instead of escalated", () 
     reconcileLaunchState({
       durableStatus: "running",
       durableRunId: "launch:resolve-1:nonce",
+      activeRunId: "child-1",
+      resultArtifactPresent: false,
+    }),
+    "bind-receipt",
+  );
+  assert.equal(
+    reconcileLaunchState({
+      durableStatus: "running",
+      durableRunId: "launch:resolve-1:nonce",
       activeRunId: "launch:resolve-1:nonce",
       resultArtifactPresent: false,
     }),
@@ -50,6 +61,51 @@ test("normal matching provider receipts are inspected instead of escalated", () 
       resultArtifactPresent: false,
     }),
     "needs-human",
+  );
+});
+
+test("launch receipt identity is shared by live and recovery callers but nonce scoped", () => {
+  const live = launchReceiptIdempotencyKey("resolve-1", 1, "nonce-1");
+  const recovery = launchReceiptIdempotencyKey("resolve-1", 1, "nonce-1");
+  assert.equal(live, recovery);
+  assert.notEqual(live, launchReceiptIdempotencyKey("resolve-1", 1, "nonce-2"));
+  assert.notEqual(live, launchReceiptIdempotencyKey("resolve-1", 2, "nonce-1"));
+});
+
+test("exact receipt duplicates remain valid after completion and conflicts fail closed", () => {
+  const expected = {
+    nodeId: "resolve-1",
+    node: "resolve",
+    attempt: 1,
+    previousSubagentRunId: "launch:resolve-1:nonce-1",
+    subagentRunId: "child-1",
+    resultPath: "/tmp/resolve-1.json",
+    launchNonce: "nonce-1",
+    transportRetries: 0,
+    baseSha: "base-sha",
+  };
+  const completed = {
+    ...expected,
+    status: "completed" as const,
+    launchIntent: true,
+    launchReceipt: true,
+  };
+  assert.doesNotThrow(() => validateLaunchReceiptBinding(completed, expected));
+  assert.throws(
+    () =>
+      validateLaunchReceiptBinding(completed, {
+        ...expected,
+        subagentRunId: "child-conflict",
+      }),
+    /provider receipt/,
+  );
+  assert.throws(
+    () =>
+      validateLaunchReceiptBinding(completed, {
+        ...expected,
+        launchNonce: "stale-nonce",
+      }),
+    /launchNonce/,
   );
 });
 

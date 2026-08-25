@@ -37,6 +37,7 @@ import {
   chooseReadyReviewerNodes,
   type WorkflowNode,
 } from "../core/dispatcher.ts";
+import type { NodeState } from "../core/state.ts";
 import {
   canAutoMerge,
   isGitHubCiRequired,
@@ -50,7 +51,7 @@ import {
   type ReviewFinding,
   type VerificationResult,
 } from "../core/review.ts";
-import { RunJournal } from "./journal.ts";
+import { RunJournal, type JournalSnapshot } from "./journal.ts";
 
 const RUN_LINK_ENTRY = "forgedock-run-link/v1";
 
@@ -493,25 +494,20 @@ export class ForgeWorkOnController {
     link.providerRetries = retry;
     link.status = "running";
     this.#persistLink(link);
-    await journal.append({
+    await bindLaunchReceipt(journal, {
       runId: link.forgeRunId,
-      type: "node.resumed",
-      payload: {
-        nodeId,
-        node: node.node,
-        attempt: node.attempt,
-        ...(node.round ? { round: node.round } : {}),
-        subagentRunId: receipt.runId,
-        previousSubagentRunId: intent.sentinelRunId,
-        resultPath,
-        transportRetries: retry,
-        launchNonce: intent.launchNonce,
-        launchReceipt: true,
-        baseSha: node.baseSha ?? link.prepared.baseSha,
-        ...(node.headSha ? { headSha: node.headSha } : {}),
-        reason: failure,
-      },
-      idempotencyKey: `node:${nodeId}:transport-resume-receipt:${retry}`,
+      nodeId,
+      node: node.node,
+      attempt: node.attempt,
+      ...(node.round ? { round: node.round } : {}),
+      previousSubagentRunId: intent.sentinelRunId,
+      subagentRunId: receipt.runId,
+      resultPath,
+      transportRetries: retry,
+      launchNonce: intent.launchNonce,
+      baseSha: node.baseSha ?? link.prepared.baseSha,
+      ...(node.headSha ? { headSha: node.headSha } : {}),
+      reason: failure,
       sessionId: ctx.sessionManager.getSessionId(),
       message: `Bind resume receipt for ForgeDock node ${nodeId}`,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
@@ -791,23 +787,20 @@ export class ForgeWorkOnController {
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
       } else {
-        await journal.append({
+        if (!durableNode.subagentRunId || !durableNode.launchNonce)
+          throw new Error(`Node ${nodeId} has no durable launch identity to bind.`);
+        await bindLaunchReceipt(journal, {
           runId: link.forgeRunId,
-          type: "node.resumed",
-          payload: {
-            nodeId,
-            node: durableNode.node,
-            attempt: durableNode.attempt,
-            ...(durableNode.round ? { round: durableNode.round } : {}),
-            previousSubagentRunId: durableNode.subagentRunId,
-            subagentRunId: activeNode.subagentRunId,
-            resultPath: activeNode.resultPath,
-            ...(durableNode.launchNonce ? { launchNonce: durableNode.launchNonce } : {}),
-            launchReceipt: true,
-            transportRetries: durableNode.transportRetries ?? 0,
-            baseSha: durableNode.baseSha ?? link.prepared.baseSha,
-          },
-          idempotencyKey: `node:${nodeId}:receipt-bound-recovery`,
+          nodeId,
+          node: durableNode.node,
+          attempt: durableNode.attempt,
+          ...(durableNode.round ? { round: durableNode.round } : {}),
+          previousSubagentRunId: durableNode.subagentRunId,
+          subagentRunId: activeNode.subagentRunId,
+          resultPath: activeNode.resultPath,
+          launchNonce: durableNode.launchNonce,
+          transportRetries: durableNode.transportRetries ?? 0,
+          baseSha: durableNode.baseSha ?? link.prepared.baseSha,
           sessionId: ctx.sessionManager.getSessionId(),
           message: `Bind recovered provider receipt for ForgeDock node ${nodeId}`,
           ...(ctx.signal ? { signal: ctx.signal } : {}),
@@ -1905,23 +1898,18 @@ export class ForgeWorkOnController {
     }
     link.status = "running";
     this.#persistLink(link);
-    await journal.append({
+    await bindLaunchReceipt(journal, {
       runId: link.forgeRunId,
-      type: "node.resumed",
-      payload: {
-        nodeId: node.nodeId,
-        node: node.node,
-        attempt: node.attempt,
-        ...(node.round ? { round: node.round } : {}),
-        previousSubagentRunId: sentinel,
-        subagentRunId: receipt.runId,
-        resultPath: receipt.resultPath,
-        launchNonce: launchIntent.launchNonce,
-        launchReceipt: true,
-        transportRetries: 0,
-        baseSha: link.prepared.baseSha,
-      },
-      idempotencyKey: `node:${node.nodeId}:receipt-bound`,
+      nodeId: node.nodeId,
+      node: node.node,
+      attempt: node.attempt,
+      ...(node.round ? { round: node.round } : {}),
+      previousSubagentRunId: sentinel,
+      subagentRunId: receipt.runId,
+      resultPath: receipt.resultPath,
+      launchNonce: launchIntent.launchNonce,
+      transportRetries: 0,
+      baseSha: link.prepared.baseSha,
       sessionId: ctx.sessionManager.getSessionId(),
       message: `Bind provider receipt for ForgeDock node ${node.nodeId}`,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
@@ -3687,6 +3675,113 @@ export function createNodeLaunchIntent(
     launchNonce,
     sentinelRunId: `launch:${nodeId}:${launchNonce}`,
   };
+}
+
+export interface LaunchReceiptBinding {
+  runId: string;
+  nodeId: string;
+  node: string;
+  attempt: number;
+  round?: number;
+  previousSubagentRunId: string;
+  subagentRunId: string;
+  resultPath: string;
+  launchNonce: string;
+  transportRetries: number;
+  baseSha: string;
+  headSha?: string;
+  reason?: string;
+  sessionId: string;
+  message: string;
+  signal?: AbortSignal;
+}
+
+/**
+ * Every producer for a provider receipt uses this nonce-scoped identity. The
+ * caller name is deliberately absent so concurrent live and recovery binders
+ * collapse to one durable event.
+ */
+export function launchReceiptIdempotencyKey(
+  nodeId: string,
+  attempt: number,
+  launchNonce: string,
+): string {
+  if (!nodeId || !Number.isSafeInteger(attempt) || attempt < 1 || !launchNonce)
+    throw new TypeError("Launch receipt identity requires nodeId, attempt, and nonce.");
+  const identity = createHash("sha256")
+    .update(JSON.stringify([nodeId, attempt, launchNonce]))
+    .digest("hex");
+  return `node:${nodeId}:receipt-bound:${identity}`;
+}
+
+/**
+ * Accept an exact prior binding even after the node has become terminal, while
+ * rejecting a nonce collision, stale callback, or different provider receipt.
+ */
+export function validateLaunchReceiptBinding(
+  durableNode: NodeState | undefined,
+  expected: Omit<LaunchReceiptBinding, "runId" | "sessionId" | "message" | "signal" | "reason">,
+): void {
+  const mismatches: string[] = [];
+  if (!durableNode) mismatches.push("missing durable node");
+  else {
+    if (durableNode.nodeId !== expected.nodeId) mismatches.push("nodeId");
+    if (durableNode.node !== expected.node) mismatches.push("node");
+    if (durableNode.attempt !== expected.attempt) mismatches.push("attempt");
+    if (expected.round !== undefined && durableNode.round !== expected.round)
+      mismatches.push("round");
+    if (durableNode.previousSubagentRunId !== expected.previousSubagentRunId)
+      mismatches.push("launch sentinel");
+    if (durableNode.subagentRunId !== expected.subagentRunId)
+      mismatches.push("provider receipt");
+    if (durableNode.resultPath !== expected.resultPath) mismatches.push("resultPath");
+    if (durableNode.launchNonce !== expected.launchNonce) mismatches.push("launchNonce");
+    if (durableNode.launchReceipt !== true) mismatches.push("launchReceipt");
+    if (durableNode.transportRetries !== expected.transportRetries)
+      mismatches.push("transportRetries");
+    if (durableNode.baseSha !== expected.baseSha) mismatches.push("baseSha");
+    if (expected.headSha !== undefined && durableNode.headSha !== expected.headSha)
+      mismatches.push("headSha");
+  }
+  if (mismatches.length > 0)
+    throw new Error(
+      `Launch receipt binding conflict for ${expected.nodeId}: ${mismatches.join(", ")}.`,
+    );
+}
+
+export async function bindLaunchReceipt(
+  journal: Pick<RunJournal, "append">,
+  input: LaunchReceiptBinding,
+): Promise<JournalSnapshot> {
+  const snapshot = await journal.append({
+    runId: input.runId,
+    type: "node.resumed",
+    payload: {
+      nodeId: input.nodeId,
+      node: input.node,
+      attempt: input.attempt,
+      ...(input.round ? { round: input.round } : {}),
+      previousSubagentRunId: input.previousSubagentRunId,
+      subagentRunId: input.subagentRunId,
+      resultPath: input.resultPath,
+      launchNonce: input.launchNonce,
+      launchReceipt: true,
+      transportRetries: input.transportRetries,
+      baseSha: input.baseSha,
+      ...(input.headSha ? { headSha: input.headSha } : {}),
+      ...(input.reason ? { reason: input.reason } : {}),
+    },
+    idempotencyKey: launchReceiptIdempotencyKey(
+      input.nodeId,
+      input.attempt,
+      input.launchNonce,
+    ),
+    sessionId: input.sessionId,
+    message: input.message,
+    ...(input.signal ? { signal: input.signal } : {}),
+  });
+  validateLaunchReceiptBinding(snapshot.state.nodes[input.nodeId], input);
+  return snapshot;
 }
 
 export function isLaunchSentinel(runId: string): boolean {
