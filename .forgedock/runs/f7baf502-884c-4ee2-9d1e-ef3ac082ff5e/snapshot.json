@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 13,
-  "lastEventHash": "sha256:ba55cf6955bf7f97798895d67f6518580f11fe957c36e84079e1d47208d64c4a",
+  "sequence": 14,
+  "lastEventHash": "sha256:da653722d32fb664775c74148c26a7a7d5a5f05e8d1848213e247268a8214569",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -107,6 +107,15 @@
         "test/workflows/work-on.test.ts covers launch recovery helpers, and test/core/orchestration.test.ts covers lane start/recovery transitions, providing focused regression-test locations."
       ],
       "finishedAt": "2026-08-25T21:34:31.979Z"
+    },
+    "prepare-worktree-1": {
+      "nodeId": "prepare-worktree-1",
+      "node": "prepare-worktree",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/f7baf502-884c-4ee2-9d1e-ef3ac082ff5e/.pi/forge/f7baf502-884c-4ee2-9d1e-ef3ac082ff5e-prepare-worktree-1.json"
     }
   },
   "effects": {},
@@ -123,7 +132,8 @@
     "node:plan-1:queued": "893f4615-8f30-432f-93f0-d1f4392f59ff",
     "node:plan-1:started": "d1b66068-3991-4946-be65-a31e36287314",
     "node:plan-1:receipt-bound": "c7fa5d1a-3887-4d38-a140-e6ce0d2dcf8b",
-    "node:plan-1:completed": "a1999c74-5687-43c2-8165-6e6d601fdd44"
+    "node:plan-1:completed": "a1999c74-5687-43c2-8165-6e6d601fdd44",
+    "node:prepare-worktree-1:queued": "4fd7e135-63d7-4bf2-a436-96f0e8d0f402"
   },
   "eventIds": {
     "d79711c5-d9b4-48e3-bdf3-6040e8c09ce7": true,
@@ -138,6 +148,7 @@
     "893f4615-8f30-432f-93f0-d1f4392f59ff": true,
     "d1b66068-3991-4946-be65-a31e36287314": true,
     "c7fa5d1a-3887-4d38-a140-e6ce0d2dcf8b": true,
-    "a1999c74-5687-43c2-8165-6e6d601fdd44": true
+    "a1999c74-5687-43c2-8165-6e6d601fdd44": true,
+    "4fd7e135-63d7-4bf2-a436-96f0e8d0f402": true
   }
 }
