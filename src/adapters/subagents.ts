@@ -10,6 +10,7 @@ import {
   type ForgeWorkOnResult,
 } from "../agents/contracts.ts";
 import {
+  FORGE_READ_ONLY_NODE_AGENT,
   FORGE_REVIEW_CORRECTNESS_AGENT,
   FORGE_REVIEW_SECURITY_AGENT,
   FORGE_REFRESH_REVIEW_AGENT,
@@ -258,16 +259,17 @@ export class SubagentsRpcClient {
           `Branch: ${input.branch}`,
           `Frozen base SHA: ${input.baseSha}`,
           "The parent has already durably queued and started this node. Execute only this node, then return one schema-valid forgedock.node-result/v1 value. Do not process any other phase, do not call forge_checkpoint, do not launch subagents, and do not merge, close, or clean up.",
-          ["resolve", "investigate", "plan"].includes(input.node.node)
-            ? "Use bash when needed for ordinary read-only GitHub and repository inspection, including gh issue view, gh pr view, gh run view, and GET-only gh api calls. Do not perform GitHub writes, git writes, or shell-based source edits."
-            : "Do not use bash in this node.",
+          boundedShellGuidance(input.node.node),
           "For every non-review node, return artifact as a forgedock.phase-artifact/v1 object whose phase matches this node. Supply typed facts only; never author Markdown or markers. Investigation must include actual taskType, complexity, evidence, decomposition, skipped phases, and acceptance checks. Plan must include allowed paths, forbidden changes, invariants, context, hazards, steps, and criterion mapping. Implementation must include the real commit SHA and changed-file statistics. Verification must name every check and use passed, failed, skipped, pending, unknown, not-configured, or policy-exempt truthfully. For prepare-pr, call forge_prepare_review and return the exact PR/head/domains. The trusted parent validates the object and deterministically renders GitHub Markdown. Review nodes return only the typed reviewer result.",
           "Before returning, call forge_finalize_node with the complete node result, then call structured_output with the identical value. Never write or edit .pi/forge files directly; the trusted finalizer owns the bound result artifact.",
           input.issueContext,
         ].join("\n\n")
       : task;
     const child = {
-      agent: FORGE_WORK_ON_AGENT,
+      agent:
+        bounded && input.node
+          ? boundedNodeAgent(input.node.node)
+          : FORGE_WORK_ON_AGENT,
       task: boundedTask,
       cwd: input.worktreeRoot,
       context: "fresh",
@@ -503,6 +505,20 @@ function findRunId(value: unknown): string | undefined {
   if (details && typeof details === "object" && !Array.isArray(details))
     return findRunId(details);
   return undefined;
+}
+
+function boundedShellGuidance(node: WorkflowNode): string {
+  if (node === "implement")
+    return "Bash is available for implementation and Git inspection inside the assigned worktree. Use forge_commit for the authoritative commit and do not push or write GitHub state directly.";
+  if (["resolve", "investigate", "plan"].includes(node))
+    return "This is a read-only node. Use only read, grep, find, and ls against the assigned worktree plus the supplied issue context. Shell execution, source edits, Git writes, and GitHub writes are unavailable.";
+  return "Shell execution is unavailable in this node.";
+}
+
+export function boundedNodeAgent(node: WorkflowNode): string {
+  return node === "implement"
+    ? FORGE_WORK_ON_AGENT
+    : FORGE_READ_ONLY_NODE_AGENT;
 }
 
 function safeScriptJson(value: unknown): string {

@@ -6,9 +6,14 @@ import test from "node:test";
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-import { SubagentsRpcClient } from "../../src/adapters/subagents.ts";
+import {
+  boundedNodeAgent,
+  SubagentsRpcClient,
+} from "../../src/adapters/subagents.ts";
 import { materializeForgeAgents } from "../../src/agents/materialize.ts";
 import {
+  FORGE_READ_ONLY_NODE_AGENT,
+  FORGE_READ_ONLY_NODE_TOOLS,
   FORGE_REVIEW_TOOLS,
   FORGE_REFRESH_REVIEW_AGENT,
   FORGE_REFRESH_REVIEW_TOOLS,
@@ -186,14 +191,45 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
     issueContext: "untrusted issue text",
     node: { nodeId: "investigate-1", node: "investigate", attempt: 1 },
   });
-  const spawn = bus.requests.at(-1) as { params: { task: string; outputSchema: { properties: { schema: { const: string } } } } };
+  const spawn = bus.requests.at(-1) as {
+    params: {
+      agent: string;
+      task: string;
+      outputSchema: { properties: { schema: { const: string } } };
+    };
+  };
+  assert.equal(spawn.params.agent, FORGE_READ_ONLY_NODE_AGENT);
   assert.equal(spawn.params.outputSchema.properties.schema.const, "forgedock.node-result/v1");
   assert.match(spawn.params.task, /Execute exactly one ForgeDock node: investigate/);
   assert.match(spawn.params.task, /do not call forge_checkpoint/i);
   assert.match(spawn.params.task, /forge_finalize_node/);
-  assert.match(spawn.params.task, /gh issue view/);
-  assert.match(spawn.params.task, /GET-only gh api/);
+  assert.match(spawn.params.task, /read-only node/);
+  assert.match(spawn.params.task, /Shell execution.*unavailable/);
   assert.doesNotMatch(spawn.params.task, /Process resolve, investigate, plan/i);
+});
+
+test("RPC bounded implementation remediation retains the guarded writer", async () => {
+  const { pi, bus } = fakePi();
+  const client = new SubagentsRpcClient(pi);
+  await client.spawnNode({
+    runId: "run-remediation",
+    issueNumber: 9,
+    repository: "owner/repo",
+    worktreeRoot: "/tmp/worktree",
+    branch: "forge/9",
+    baseBranch: "staging",
+    baseSha: "abcdef1234567890",
+    leaseEpoch: 1,
+    policy,
+    issueContext: "untrusted issue text",
+    node: { nodeId: "implement-2", node: "implement", attempt: 2 },
+  });
+  const spawn = bus.requests.at(-1) as {
+    params: { agent: string; task: string };
+  };
+  assert.equal(spawn.params.agent, FORGE_WORK_ON_AGENT);
+  assert.match(spawn.params.task, /Bash is available for implementation/);
+  assert.match(spawn.params.task, /Use forge_commit/);
 });
 
 test("RPC work-on treats GitHub-only verification as valid", async () => {
@@ -246,7 +282,11 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
   const root = await mkdtemp(join(tmpdir(), "forgedock-agents-"));
   try {
     const paths = await materializeForgeAgents(root);
-    assert.equal(paths.length, 4);
+    assert.equal(paths.length, 5);
+    const readOnlyNode = await readFile(
+      join(root, ".pi", "agents", `${FORGE_READ_ONLY_NODE_AGENT}.md`),
+      "utf8",
+    );
     const workOn = await readFile(
       join(root, ".pi", "agents", "forge-work-on.md"),
       "utf8",
@@ -259,6 +299,17 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
       join(root, ".pi", "agents", `${FORGE_REFRESH_REVIEW_AGENT}.md`),
       "utf8",
     );
+    assert.match(readOnlyNode, /^acceptanceRole: read-only$/m);
+    assert.match(readOnlyNode, /^completionGuard: false$/m);
+    assert.doesNotMatch(
+      readOnlyNode,
+      /tools: .*\b(?:bash|edit|write|forge_commit|subagent)\b/,
+    );
+    assert.match(readOnlyNode, /forge_verify/);
+    assert.match(readOnlyNode, /forge_diff/);
+    assert.match(readOnlyNode, /forge_prepare_review/);
+    assert.match(readOnlyNode, /forge_finalize_node/);
+    assert.match(workOn, /^completionGuard: true$/m);
     assert.doesNotMatch(workOn, /tools: .*subagent/);
     assert.doesNotMatch(workOn, /forge_finalize_work_on/);
     assert.match(workOn, /forge_finalize_node/);
@@ -271,10 +322,12 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
     assert.doesNotMatch(workOn, /  - "\/.*"/);
     assert.doesNotMatch(reviewer, /tools: .*subagent/);
     assert.match(reviewer, /forge_finalize_reviewer/);
+    assert.match(reviewer, /^completionGuard: true$/m);
     assert.match(reviewer, /^extensions:/m);
     assert.match(reviewer, /^async: false$/m);
     assert.match(refresh, /tools: .*subagent/);
     assert.match(refresh, /forge_refresh_base/);
+    assert.match(refresh, /^completionGuard: true$/m);
     assert.match(refresh, /maxSubagentDepth: 2/);
     const settings = JSON.parse(
       await readFile(join(root, ".pi", "settings.json"), "utf8"),
@@ -306,6 +359,42 @@ test("RPC resume revives a transiently failed work-on session", async () => {
 });
 
 test("runtime Forge hierarchy keeps bounded work-on least-authority", () => {
+  for (const forbiddenTool of [
+    "bash",
+    "edit",
+    "write",
+    "forge_commit",
+    "subagent",
+  ]) {
+    assert.equal(
+      (FORGE_READ_ONLY_NODE_TOOLS as readonly string[]).includes(forbiddenTool),
+      false,
+    );
+  }
+  for (const trustedNodeTool of [
+    "forge_verify",
+    "forge_diff",
+    "forge_prepare_review",
+    "forge_finalize_node",
+  ]) {
+    assert.equal(
+      (FORGE_READ_ONLY_NODE_TOOLS as readonly string[]).includes(
+        trustedNodeTool,
+      ),
+      true,
+    );
+  }
+  for (const node of [
+    "resolve",
+    "investigate",
+    "plan",
+    "prepare-worktree",
+    "verify",
+    "prepare-pr",
+  ] as const) {
+    assert.equal(boundedNodeAgent(node), FORGE_READ_ONLY_NODE_AGENT);
+  }
+  assert.equal(boundedNodeAgent("implement"), FORGE_WORK_ON_AGENT);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("bash"), true);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("subagent"), false);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_finalize_work_on"), false);
@@ -322,6 +411,37 @@ test("runtime Forge hierarchy keeps bounded work-on least-authority", () => {
 
   const { pi } = fakePi();
   const registrations = registerForgeAgents(pi);
-  assert.equal(registrations.length, 4);
+  assert.equal(registrations.length, 5);
+  const registry = (
+    globalThis as Record<PropertyKey, unknown>
+  )[Symbol.for("pi-subagents.runtime-agents.v1")] as {
+    byPi: WeakMap<
+      ExtensionAPI,
+      Array<{
+        agent: {
+          name: string;
+          acceptanceRole?: string;
+          completionGuard?: boolean;
+        };
+      }>
+    >;
+  };
+  const runtimeAgents = registry.byPi.get(pi)?.map(({ agent }) => agent) ?? [];
+  const readOnlyAgent = runtimeAgents.find(
+    ({ name }) => name === FORGE_READ_ONLY_NODE_AGENT,
+  );
+  assert.equal(readOnlyAgent?.acceptanceRole, "read-only");
+  assert.equal(readOnlyAgent?.completionGuard, false);
+  assert.equal(
+    runtimeAgents.find(({ name }) => name === FORGE_WORK_ON_AGENT)
+      ?.completionGuard,
+    true,
+  );
+  for (const agent of runtimeAgents.filter(
+    ({ name }) =>
+      name !== FORGE_READ_ONLY_NODE_AGENT && name !== FORGE_WORK_ON_AGENT,
+  )) {
+    assert.equal(agent.completionGuard, true);
+  }
   for (const registration of registrations) registration.dispose();
 });

@@ -323,6 +323,7 @@ async function cleanupForgeRuntime(worktreePath: string): Promise<void> {
   if (await exists(join(forgeDir, "generated-settings")))
     await rm(join(piDir, "settings.json"), { force: true });
   for (const name of [
+    "forge-read-only-node.md",
     "forge-work-on.md",
     "forge-refresh-review.md",
     "forge-review-correctness.md",
