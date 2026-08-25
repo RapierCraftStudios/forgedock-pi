@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 25,
-  "lastEventHash": "sha256:da1f44a24f969390998cf55a935afcb03049623a318846b4243ddea32e76fffd",
+  "sequence": 26,
+  "lastEventHash": "sha256:f37cfb2f6ab8563f16119bd8bf68d7958c61ba18a8bfe5d86b333ec07cde26b6",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -186,6 +186,15 @@
         "The completed implementation artifact records npm run check passed at head ebedb10cd436f825d18549833e1d0c62f773c3ce."
       ],
       "finishedAt": "2026-08-25T19:03:45.918Z"
+    },
+    "prepare-pr-1": {
+      "nodeId": "prepare-pr-1",
+      "node": "prepare-pr",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/152edce1-3e46-4425-8162-4f7b3cfaefc9/.pi/forge/152edce1-3e46-4425-8162-4f7b3cfaefc9-prepare-pr-1.json"
     }
   },
   "effects": {},
@@ -214,7 +223,8 @@
     "node:verify-1:queued": "18ec0f80-e52e-40f3-85e6-a0c34d90acb7",
     "node:verify-1:started": "60de254f-18df-4edd-8e35-b4f74ad1ca0c",
     "node:verify-1:receipt-bound": "93330838-d530-4b21-92d4-1bc07c5d2350",
-    "node:verify-1:completed": "2e9cf5c4-e1b2-47da-ba4f-9fb3bcfe87b0"
+    "node:verify-1:completed": "2e9cf5c4-e1b2-47da-ba4f-9fb3bcfe87b0",
+    "node:prepare-pr-1:queued": "8a239ede-4836-40c1-9900-6f91b8343d04"
   },
   "eventIds": {
     "e54b6411-60d6-4281-8801-6488bc2a6398": true,
@@ -241,6 +251,7 @@
     "18ec0f80-e52e-40f3-85e6-a0c34d90acb7": true,
     "60de254f-18df-4edd-8e35-b4f74ad1ca0c": true,
     "93330838-d530-4b21-92d4-1bc07c5d2350": true,
-    "2e9cf5c4-e1b2-47da-ba4f-9fb3bcfe87b0": true
+    "2e9cf5c4-e1b2-47da-ba4f-9fb3bcfe87b0": true,
+    "8a239ede-4836-40c1-9900-6f91b8343d04": true
   }
 }
