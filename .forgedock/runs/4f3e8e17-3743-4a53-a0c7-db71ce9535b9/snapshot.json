@@ -10,8 +10,8 @@
     "ownerRunId": "dd680e3c-d22e-4841-9e2e-5042551e056a",
     "epoch": 1
   },
-  "sequence": 43,
-  "lastEventHash": "sha256:0b57c5a6ea27b3eae2c0670a1e707339fa38bc3f54311b97810893a06a1627ec",
+  "sequence": 44,
+  "lastEventHash": "sha256:0c6590acb57b211be4d22e67689ef45e0694d2c8c5445944d67649dca6981a0c",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -327,6 +327,13 @@
         "github:check (24):passed"
       ],
       "finishedAt": "2026-08-25T10:30:50.827Z"
+    },
+    "decision-1": {
+      "nodeId": "decision-1",
+      "node": "decision",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued"
     }
   },
   "effects": {},
@@ -373,7 +380,8 @@
     "node:review-join-1:complete": "3c4cd4cb-0eee-4ab9-aa96-fbb0c7162986",
     "node:ci-1:queued": "ac8a2d0c-5a59-4627-8e1c-245de1f2547a",
     "node:ci-1:started": "cd084bcb-2e9c-47d9-a0aa-a8ab1f2ddd19",
-    "node:ci-1:complete": "5379b96c-3b67-49af-8355-590122b212ec"
+    "node:ci-1:complete": "5379b96c-3b67-49af-8355-590122b212ec",
+    "node:decision-1:queued": "f4a421f8-741f-4f41-b74e-178cb6d97774"
   },
   "eventIds": {
     "f09b50df-0043-4493-aea7-a52e7e099b6f": true,
@@ -418,6 +426,7 @@
     "3c4cd4cb-0eee-4ab9-aa96-fbb0c7162986": true,
     "ac8a2d0c-5a59-4627-8e1c-245de1f2547a": true,
     "cd084bcb-2e9c-47d9-a0aa-a8ab1f2ddd19": true,
-    "5379b96c-3b67-49af-8355-590122b212ec": true
+    "5379b96c-3b67-49af-8355-590122b212ec": true,
+    "f4a421f8-741f-4f41-b74e-178cb6d97774": true
   }
 }
