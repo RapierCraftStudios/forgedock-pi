@@ -10,8 +10,8 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 3,
-  "lastEventHash": "sha256:900670090fb9bd75e406ab099dfcca669b0d7f391e379e8b944b0b3171c7da0b",
+  "sequence": 4,
+  "lastEventHash": "sha256:152d24ac36c15e40a2c0f617d0e7efb53fdce3fd753448d11e539fd43b99cd5f",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -21,21 +21,26 @@
       "status": "running",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/c63066ba-6002-47c5-98e2-b53b0a330be8/.pi/forge/c63066ba-6002-47c5-98e2-b53b0a330be8-resolve-1.json",
-      "subagentRunId": "launch:resolve-1:fcabe5b5-8532-4468-8da2-d3956e0b7b34",
+      "subagentRunId": "1260bb11-7cce-4f5f-b33e-6137d848ef3f",
       "launchNonce": "fcabe5b5-8532-4468-8da2-d3956e0b7b34",
       "launchIntent": true,
-      "startedAt": "2026-08-25T13:22:14.417Z"
+      "startedAt": "2026-08-25T13:22:14.417Z",
+      "previousSubagentRunId": "launch:resolve-1:fcabe5b5-8532-4468-8da2-d3956e0b7b34",
+      "transportRetries": 0,
+      "launchReceipt": true
     }
   },
   "effects": {},
   "idempotencyKeys": {
     "run:create": "3657ebd1-2b0d-4785-b61e-b9139b658304",
     "node:resolve-1:queued": "7aaad409-17eb-43da-a9c0-6f1ee640eaa1",
-    "node:resolve-1:started": "cb90872d-e8eb-460a-b1ae-e76c71e58deb"
+    "node:resolve-1:started": "cb90872d-e8eb-460a-b1ae-e76c71e58deb",
+    "node:resolve-1:receipt-bound": "ab401843-8d8a-483d-aebe-2dc6eece188a"
   },
   "eventIds": {
     "3657ebd1-2b0d-4785-b61e-b9139b658304": true,
     "7aaad409-17eb-43da-a9c0-6f1ee640eaa1": true,
-    "cb90872d-e8eb-460a-b1ae-e76c71e58deb": true
+    "cb90872d-e8eb-460a-b1ae-e76c71e58deb": true,
+    "ab401843-8d8a-483d-aebe-2dc6eece188a": true
   }
 }
