@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 24,
-  "lastEventHash": "sha256:41d194a34c5b3708f85aa2012c3fd7c00784329f6a199b5a77c86d1468c771e3",
+  "sequence": 25,
+  "lastEventHash": "sha256:e7f30960729cb163d49b4b1ef0202ea7d0b2956f07643bcf4516e504c0ec71f3",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -168,7 +168,7 @@
       "node": "verify",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/1d590b89-383d-442f-90d6-a93aa0a146e7/.pi/forge/1d590b89-383d-442f-90d6-a93aa0a146e7-verify-1.json",
       "subagentRunId": "acd8af98-d07a-421e-8ae0-d2de1ad295e5",
@@ -177,7 +177,25 @@
       "startedAt": "2026-08-25T18:21:36.111Z",
       "previousSubagentRunId": "launch:verify-1:22908b01-233e-4415-a681-c330e65e2546",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "42acf06106f15587d38594e2d0efd8d593103c4c",
+      "verificationResults": [
+        {
+          "name": "local verification",
+          "required": false,
+          "status": "not-configured"
+        }
+      ],
+      "outcome": "completed",
+      "evidence": [
+        "Supervisor supplied the exact completed implementation head 42acf06106f15587d38594e2d0efd8d593103c4c after the launch task omitted it.",
+        "Supervisor confirmed the complete approved forge_verify inventory is empty; no local command was called or guessed.",
+        "Trusted forge_diff reported exactly seven changed files, all within the accepted builder contract, with 298 insertions and 14 deletions.",
+        "Static inspection confirmed verify-N selects completed implement-N headSha, launch events retain that head, bounded task text enumerates the complete approved-name inventory including the empty case, and reconciliation rejects mismatched verify result heads.",
+        "Focused regression coverage was added across dispatcher, subagent task construction, durable state projection, and workflow identity validation.",
+        "GitHub verification for dogfood remains required and is deferred to the parent-owned integration stage."
+      ],
+      "finishedAt": "2026-08-25T18:23:44.907Z"
     }
   },
   "effects": {},
@@ -205,7 +223,8 @@
     "node:implement-1:completed": "1c11c6c5-44d9-4295-a6c2-c392681c79d1",
     "node:verify-1:queued": "c435633c-8d90-4982-ba6a-53447a21b1b2",
     "node:verify-1:started": "b837c9b2-c40a-43cc-a2e0-d621bf583454",
-    "node:verify-1:receipt-bound": "c759d76c-2c5b-4bac-9b21-2fcf597c0d03"
+    "node:verify-1:receipt-bound": "c759d76c-2c5b-4bac-9b21-2fcf597c0d03",
+    "node:verify-1:completed": "3416c92f-1c5d-4445-af21-fad887fd9abf"
   },
   "eventIds": {
     "8420132c-2a1a-43b2-ad05-5a4473cc10d2": true,
@@ -231,6 +250,7 @@
     "1c11c6c5-44d9-4295-a6c2-c392681c79d1": true,
     "c435633c-8d90-4982-ba6a-53447a21b1b2": true,
     "b837c9b2-c40a-43cc-a2e0-d621bf583454": true,
-    "c759d76c-2c5b-4bac-9b21-2fcf597c0d03": true
+    "c759d76c-2c5b-4bac-9b21-2fcf597c0d03": true,
+    "3416c92f-1c5d-4445-af21-fad887fd9abf": true
   }
 }
