@@ -3,13 +3,18 @@ import test from "node:test";
 
 import { checkCurrentReviewAuditTrail } from "../../src/core/artifact-protocol.ts";
 import {
-  chooseNextExecutableNode,
+  chooseNextExecutableNode as chooseWorkflowDispatch,
   chooseReadyReviewerNodes,
   reviewJoinReady,
   type WorkflowNodeRecord,
 } from "../../src/core/dispatcher.ts";
 
 const headSha = "abcdef1234567890";
+
+function chooseNextExecutableNode(state: { nodes: WorkflowNodeRecord[] }): WorkflowNodeRecord | undefined {
+  const decision = chooseWorkflowDispatch(state);
+  return decision.kind === "next" ? decision : undefined;
+}
 
 function completed(
   node: WorkflowNodeRecord["node"],

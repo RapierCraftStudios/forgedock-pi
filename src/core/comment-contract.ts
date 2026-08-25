@@ -121,26 +121,139 @@ export interface PreparedReviewArtifact extends PhaseArtifactBase {
   domains: string[];
 }
 
-export const FORGE_PHASE_ARTIFACT_SCHEMA = {
+const schemaString = { type: "string", minLength: 1 } as const;
+const schemaStrings = { type: "array", items: schemaString } as const;
+const schemaNonEmptyStrings = { type: "array", minItems: 1, items: schemaString } as const;
+const acceptanceCheckSchema = {
   type: "object",
-  additionalProperties: true,
-  required: ["schema", "phase"],
+  additionalProperties: false,
+  required: ["id", "description", "status", "evidence"],
   properties: {
-    schema: { type: "string", const: "forgedock.phase-artifact/v1" },
-    phase: {
-      type: "string",
-      enum: [
-        "resolve",
-        "investigate",
-        "plan",
-        "prepare-worktree",
-        "implement",
-        "verify",
-        "prepare-pr",
-      ],
-    },
+    id: schemaString,
+    description: schemaString,
+    status: { type: "string", enum: ["pending", "passed", "failed", "not-applicable"] },
+    evidence: schemaStrings,
   },
 } as const;
+const artifactIdentity = {
+  schema: { type: "string", const: "forgedock.phase-artifact/v1" },
+} as const;
+
+/** Discriminated model-facing schema kept at least as strict as isPhaseArtifact(). */
+export const FORGE_PHASE_ARTIFACT_SCHEMA = {
+  oneOf: [
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["schema", "phase", "issueNumber", "title", "eligible", "baseBranch", "evidence"],
+      properties: { ...artifactIdentity, phase: { type: "string", const: "resolve" }, issueNumber: { type: "integer", minimum: 1 }, title: schemaString, eligible: { type: "boolean" }, baseBranch: schemaString, evidence: schemaStrings },
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["schema", "phase", "verdict", "confidence", "severity", "taskType", "complexity", "claimed", "observed", "rootCause", "affectedFiles", "evidence", "history", "recommendation", "relatedIssues", "decomposition", "skippedPhases", "acceptanceChecks"],
+      properties: {
+        ...artifactIdentity,
+        phase: { type: "string", const: "investigate" },
+        verdict: { type: "string", enum: ["confirmed", "invalid", "decompose"] },
+        confidence: { type: "string", enum: ["high", "medium", "low"] },
+        severity: { type: "string", enum: ["critical", "high", "medium", "low"] },
+        taskType: schemaString,
+        complexity: { type: "string", enum: ["trivial", "standard", "complex"] },
+        claimed: schemaString,
+        observed: schemaString,
+        rootCause: schemaString,
+        affectedFiles: { type: "array", minItems: 1, items: { type: "object", additionalProperties: false, required: ["path", "reason"], properties: { path: schemaString, reason: schemaString } } },
+        evidence: schemaNonEmptyStrings,
+        history: schemaNonEmptyStrings,
+        recommendation: schemaString,
+        relatedIssues: { type: "array", items: { type: "integer", minimum: 1 } },
+        decomposition: { type: "object", additionalProperties: false, required: ["required", "reason"], properties: { required: { type: "boolean" }, reason: schemaString } },
+        skippedPhases: { type: "array", items: { type: "object", additionalProperties: false, required: ["phase", "reason"], properties: { phase: schemaString, reason: schemaString } } },
+        acceptanceChecks: { type: "array", minItems: 1, items: acceptanceCheckSchema },
+      },
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["schema", "phase", "objective", "allowedPaths", "forbiddenChanges", "invariants", "deliverables", "acceptanceMapping", "context", "steps", "outOfScope"],
+      properties: {
+        ...artifactIdentity,
+        phase: { type: "string", const: "plan" },
+        objective: schemaString,
+        allowedPaths: schemaNonEmptyStrings,
+        forbiddenChanges: schemaNonEmptyStrings,
+        invariants: schemaNonEmptyStrings,
+        deliverables: schemaNonEmptyStrings,
+        acceptanceMapping: { type: "array", minItems: 1, items: { type: "object", additionalProperties: false, required: ["checkId", "implementation"], properties: { checkId: schemaString, implementation: schemaString } } },
+        context: { type: "object", additionalProperties: false, required: ["history", "callersAndDataFlow", "ciSurface", "priorFindings", "hazards"], properties: { history: schemaNonEmptyStrings, callersAndDataFlow: schemaNonEmptyStrings, ciSurface: schemaNonEmptyStrings, priorFindings: schemaNonEmptyStrings, hazards: schemaNonEmptyStrings } },
+        steps: { type: "array", minItems: 1, items: { type: "object", additionalProperties: false, required: ["order", "action", "checkIds"], properties: { order: { type: "integer", minimum: 1 }, action: schemaString, checkIds: schemaNonEmptyStrings } } },
+        outOfScope: schemaStrings,
+      },
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["schema", "phase", "branch", "baseBranch", "baseSha", "worktree"],
+      properties: { ...artifactIdentity, phase: { type: "string", const: "prepare-worktree" }, branch: schemaString, baseBranch: schemaString, baseSha: { type: "string", minLength: 7 }, worktree: schemaString },
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["schema", "phase", "branch", "baseSha", "commitSha", "changedFiles", "acceptanceChecks", "checksRun"],
+      properties: {
+        ...artifactIdentity,
+        phase: { type: "string", const: "implement" },
+        branch: schemaString,
+        baseSha: { type: "string", minLength: 7 },
+        commitSha: { type: "string", minLength: 7 },
+        changedFiles: { type: "array", minItems: 1, items: { type: "object", additionalProperties: false, required: ["path", "additions", "deletions", "change"], properties: { path: schemaString, additions: { type: "integer", minimum: 0 }, deletions: { type: "integer", minimum: 0 }, change: schemaString } } },
+        acceptanceChecks: { type: "array", minItems: 1, items: acceptanceCheckSchema },
+        checksRun: { type: "array", minItems: 1, items: { type: "object", additionalProperties: false, required: ["name", "status", "evidence"], properties: { name: schemaString, status: { type: "string", enum: ["passed", "failed", "skipped", "not-configured"] }, evidence: schemaString } } },
+      },
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["schema", "phase", "headSha", "checks", "readiness", "reason"],
+      properties: {
+        ...artifactIdentity,
+        phase: { type: "string", const: "verify" },
+        headSha: { type: "string", minLength: 7 },
+        checks: { type: "array", minItems: 1, items: { type: "object", additionalProperties: false, required: ["name", "required", "status", "evidence"], properties: { name: schemaString, required: { type: "boolean" }, status: { type: "string", enum: ["passed", "failed", "skipped", "pending", "unknown", "not-configured", "policy-exempt"] }, evidence: schemaString } } },
+        readiness: { type: "string", enum: ["ready-for-ci", "blocked"] },
+        reason: schemaString,
+      },
+    },
+    {
+      type: "object",
+      additionalProperties: false,
+      required: ["schema", "phase", "pullNumber", "baseBranch", "headSha", "reviewRound", "domains"],
+      properties: { ...artifactIdentity, phase: { type: "string", const: "prepare-pr" }, pullNumber: { type: "integer", minimum: 1 }, baseBranch: schemaString, headSha: { type: "string", minLength: 7 }, reviewRound: { type: "integer", minimum: 1 }, domains: schemaNonEmptyStrings },
+    },
+  ],
+} as const;
+
+export function phaseArtifactValidationError(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return "artifact must be an object";
+  const artifact = value as Record<string, unknown>;
+  const phase = typeof artifact.phase === "string" ? artifact.phase : "unknown";
+  const required: Record<string, readonly string[]> = {
+    resolve: ["schema", "phase", "issueNumber", "title", "eligible", "baseBranch", "evidence"],
+    investigate: ["schema", "phase", "verdict", "confidence", "severity", "taskType", "complexity", "claimed", "observed", "rootCause", "affectedFiles", "evidence", "history", "recommendation", "relatedIssues", "decomposition", "skippedPhases", "acceptanceChecks"],
+    plan: ["schema", "phase", "objective", "allowedPaths", "forbiddenChanges", "invariants", "deliverables", "acceptanceMapping", "context", "steps", "outOfScope"],
+    "prepare-worktree": ["schema", "phase", "branch", "baseBranch", "baseSha", "worktree"],
+    implement: ["schema", "phase", "branch", "baseSha", "commitSha", "changedFiles", "acceptanceChecks", "checksRun"],
+    verify: ["schema", "phase", "headSha", "checks", "readiness", "reason"],
+    "prepare-pr": ["schema", "phase", "pullNumber", "baseBranch", "headSha", "reviewRound", "domains"],
+  };
+  const fields = required[phase];
+  if (!fields) return `artifact.phase ${JSON.stringify(phase)} is unsupported`;
+  const missing = fields.filter((field) => artifact[field] === undefined);
+  if (missing.length) return `${phase} artifact is missing required field(s): ${missing.join(", ")}`;
+  return `${phase} artifact contains one or more invalid field values`;
+}
 
 export function isPhaseArtifact(value: unknown): value is PhaseArtifact {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;

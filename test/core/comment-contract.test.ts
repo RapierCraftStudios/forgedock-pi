@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Check } from "typebox/value";
 
 import {
+  FORGE_PHASE_ARTIFACT_SCHEMA,
   isPhaseArtifact,
+  phaseArtifactValidationError,
   renderPhaseArtifact,
   type InvestigationArtifact,
   type PlanArtifact,
@@ -61,6 +64,34 @@ const plan: PlanArtifact = {
   steps: [{ order: 1, action: "Add the assertion.", checkIds: ["AC-1"] }],
   outOfScope: ["Production changes"],
 };
+
+test("phase output schema and trusted validator accept every advertised phase", () => {
+  const artifacts = [
+    { schema: "forgedock.phase-artifact/v1", phase: "resolve", issueNumber: 1, title: "Issue", eligible: true, baseBranch: "staging", evidence: [] },
+    investigation,
+    plan,
+    { schema: "forgedock.phase-artifact/v1", phase: "prepare-worktree", branch: "forge/1", baseBranch: "staging", baseSha: "abcdef1", worktree: "/tmp/worktree" },
+    { schema: "forgedock.phase-artifact/v1", phase: "implement", branch: "forge/1", baseSha: "abcdef1", commitSha: "bcdefa2", changedFiles: [{ path: "src/a.ts", additions: 1, deletions: 0, change: "added" }], acceptanceChecks: investigation.acceptanceChecks, checksRun: [{ name: "test", status: "passed", evidence: "ok" }] },
+    { schema: "forgedock.phase-artifact/v1", phase: "verify", headSha: "bcdefa2", checks: [{ name: "test", required: true, status: "passed", evidence: "ok" }], readiness: "ready-for-ci", reason: "passed" },
+    { schema: "forgedock.phase-artifact/v1", phase: "prepare-pr", pullNumber: 1, baseBranch: "staging", headSha: "bcdefa2", reviewRound: 1, domains: ["correctness", "security"] },
+  ];
+  for (const artifact of artifacts) {
+    assert.equal(Check(FORGE_PHASE_ARTIFACT_SCHEMA, artifact), true, String(artifact.phase));
+    assert.equal(isPhaseArtifact(artifact), true, String(artifact.phase));
+  }
+});
+
+test("resolve schema rejects investigation-only fields with a field diagnostic", () => {
+  const invalid = {
+    schema: "forgedock.phase-artifact/v1",
+    phase: "resolve",
+    claimed: "investigation-shaped",
+    evidence: ["evidence"],
+  };
+  assert.equal(Check(FORGE_PHASE_ARTIFACT_SCHEMA, invalid), false);
+  assert.equal(isPhaseArtifact(invalid), false);
+  assert.match(phaseArtifactValidationError(invalid), /issueNumber, title, eligible, baseBranch/);
+});
 
 test("typed phase artifacts reject marker-only Markdown substitutes", () => {
   assert.equal(isPhaseArtifact(investigation), true);

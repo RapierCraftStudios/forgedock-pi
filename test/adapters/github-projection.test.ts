@@ -141,6 +141,37 @@ test("logical issue artifacts are idempotent by revision and supersede older rev
   );
 });
 
+test("artifact identity is scoped to the Forge run even when node revisions repeat", async () => {
+  const transport = new ProjectionTransport();
+  const projector = new GitHubIssueProjector(transport, "owner/repo");
+  const oldRun = await projector.postArtifact({
+    issueNumber: 42,
+    runId: "run-old",
+    eventId: "node-resolve-1",
+    artifactKey: "node-resolve",
+    markdown: "Old resolve",
+  });
+  const newRun = await projector.postArtifact({
+    issueNumber: 42,
+    runId: "run-new",
+    eventId: "node-resolve-1",
+    artifactKey: "node-resolve",
+    markdown: "New resolve",
+  });
+  const repeated = await projector.postArtifact({
+    issueNumber: 42,
+    runId: "run-new",
+    eventId: "node-resolve-1",
+    artifactKey: "node-resolve",
+    markdown: "New resolve",
+  });
+  assert.notEqual(oldRun, newRun);
+  assert.equal(newRun, repeated);
+  assert.equal(transport.commentPosts, 2);
+  assert.match(transport.comments[1]?.body ?? "", /FORGEDOCK-ARTIFACT:run-new:node-resolve-1:node-resolve/);
+  assert.match(transport.comments[1]?.body ?? "", /New resolve/);
+});
+
 test("comment append is idempotent when the marker is already present", async () => {
   const transport = new ProjectionTransport();
   transport.comments.push({

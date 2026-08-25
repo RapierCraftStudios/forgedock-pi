@@ -18,9 +18,9 @@ import {
 import { isLeaseExpired } from "../core/lease.ts";
 import { isProtectedBranch, type ForgePolicy } from "../core/policy.ts";
 import { OrchestrationJournal } from "./orchestration-journal.ts";
-import {
+import type {
   ForgeWorkOnController,
-  type WorkOnLifecycleEvent,
+  WorkOnLifecycleEvent,
 } from "./work-on.ts";
 
 const ORCHESTRATION_LINK_ENTRY = "forgedock-orchestration-link/v1";
@@ -258,7 +258,7 @@ export class ForgeOrchestrationController {
       throw new Error(
         `Orchestration ${orchestrationId} does not own the active repository lease.`,
       );
-    await this.#workOn.stopOrchestration(orchestrationId);
+    await this.#workOn.stopOrchestration(orchestrationId, ctx, reason);
     const cancelled = await new OrchestrationJournal(store).cancel({
       orchestrationId,
       reason,

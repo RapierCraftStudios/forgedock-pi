@@ -60,6 +60,12 @@ export interface DispatcherState {
   readonly maxReviewRounds?: number;
 }
 
+export type WorkflowDispatchDecision =
+  | ({ kind: "next" } & WorkflowNodeRecord)
+  | { kind: "waiting"; reason: string }
+  | { kind: "blocked"; reason: string; node?: WorkflowNodeRecord }
+  | { kind: "workflow-complete" };
+
 const ORDERED_NODES: readonly WorkflowNode[] = [
   "resolve",
   "investigate",
@@ -78,34 +84,75 @@ const ORDERED_NODES: readonly WorkflowNode[] = [
   "cleanup",
 ];
 
-/**
- * Select exactly one next node from durable records. Review join is released only
- * when both reviewers completed at the same frozen head SHA.
- */
+/** Distinguish executable work from durable waiting, blocking, and completion. */
 export function chooseNextExecutableNode(
   state: DispatcherState | RunState,
+): WorkflowDispatchDecision {
+  const nodes = dispatcherNodes(state);
+  const latest = latestWorkflowNodes(nodes);
+  const next = findNextExecutableNode(state);
+  if (next) return { kind: "next", ...next };
+  const active = latest.find((node) => node.status === "queued" || node.status === "running");
+  if (active)
+    return {
+      kind: "waiting",
+      reason: `Node ${active.nodeId} is durably ${active.status}.`,
+    };
+  const terminal = latest.find((node) =>
+    ["blocked", "failed", "needs-human"].includes(node.status),
+  );
+  if (terminal)
+    return {
+      kind: "blocked",
+      node: terminal,
+      reason: terminal.reason ?? `Node ${terminal.nodeId} is ${terminal.status}.`,
+    };
+  const reviewers = latest.filter(
+    (node) =>
+      (node.node === "review-correctness" || node.node === "review-security") &&
+      node.status === "completed",
+  );
+  if (
+    reviewers.length >= 2 &&
+    reviewers.at(-1)?.headSha !== reviewers.at(-2)?.headSha
+  )
+    return { kind: "blocked", reason: "Reviewer results target different head SHAs." };
+  const latestDecision = latest
+    .filter((node) => node.node === "decision" && node.status === "completed")
+    .sort((left, right) => right.attempt - left.attempt)[0];
+  const maxReviewRounds = "maxReviewRounds" in state ? state.maxReviewRounds : undefined;
+  if (
+    latestDecision?.outcome === "remediation-required" &&
+    maxReviewRounds !== undefined &&
+    latestDecision.attempt >= maxReviewRounds
+  )
+    return { kind: "blocked", node: latestDecision, reason: "Review remediation rounds are exhausted." };
+  if (ORDERED_NODES.every((node) => nodes.some((record) => record.node === node && record.status === "completed")))
+    return { kind: "workflow-complete" };
+  return { kind: "waiting", reason: "Workflow prerequisites are not yet durably satisfied." };
+}
+
+/** Ready is an explicit durable decision boundary, never the absence of local work. */
+export function isAwaitingIntegrationBoundary(
+  state: DispatcherState | RunState,
+): boolean {
+  const nodes = dispatcherNodes(state);
+  const latestDecision = nodes
+    .filter((node) => node.node === "decision" && node.status === "completed")
+    .sort((left, right) => right.attempt - left.attempt)[0];
+  return (
+    latestDecision?.outcome === "awaiting-merge" &&
+    !nodes.some((node) => node.status === "queued" || node.status === "running")
+  );
+}
+
+function findNextExecutableNode(
+  state: DispatcherState | RunState,
 ): WorkflowNodeRecord | undefined {
-  const nodes: readonly WorkflowNodeRecord[] =
-    "nodes" in state
-      ? Object.values(state.nodes).map((node) => ({
-          nodeId: node.nodeId,
-          node: node.node as WorkflowNode,
-          attempt: node.attempt,
-          ...(node.round ? { round: node.round } : {}),
-          status: node.status,
-          ...(node.headSha ? { headSha: node.headSha } : {}),
-          ...(node.baseSha ? { baseSha: node.baseSha } : {}),
-          ...(node.outcome ? { outcome: node.outcome as NodeOutcome } : {}),
-          ...(node.resultPath ? { resultPath: node.resultPath } : {}),
-          ...(node.subagentRunId ? { subagentRunId: node.subagentRunId } : {}),
-          ...(node.publishedCommentId
-            ? { publishedCommentId: node.publishedCommentId }
-            : {}),
-          ...(node.reason ? { reason: node.reason } : {}),
-        }))
-      : [];
-  const latest = new Map<WorkflowNode, WorkflowNodeRecord>();
-  for (const record of nodes) latest.set(record.node, record);
+  const nodes = dispatcherNodes(state);
+  const latest = new Map(
+    latestWorkflowNodes(nodes).map((record) => [record.node, record]),
+  );
 
   const decision = latest.get("decision");
   const maxReviewRounds =
@@ -216,6 +263,38 @@ export function chooseNextExecutableNode(
     };
   }
   return undefined;
+}
+
+function dispatcherNodes(
+  state: DispatcherState | RunState,
+): readonly WorkflowNodeRecord[] {
+  return "nodes" in state
+    ? Object.values(state.nodes).map((node) => ({
+        nodeId: node.nodeId,
+        node: node.node as WorkflowNode,
+        attempt: node.attempt,
+        ...(node.round ? { round: node.round } : {}),
+        status: node.status,
+        ...(node.headSha ? { headSha: node.headSha } : {}),
+        ...(node.baseSha ? { baseSha: node.baseSha } : {}),
+        ...(node.outcome ? { outcome: node.outcome as NodeOutcome } : {}),
+        ...(node.resultPath ? { resultPath: node.resultPath } : {}),
+        ...(node.subagentRunId ? { subagentRunId: node.subagentRunId } : {}),
+        ...(node.publishedCommentId ? { publishedCommentId: node.publishedCommentId } : {}),
+        ...(node.reason ? { reason: node.reason } : {}),
+      }))
+    : [];
+}
+
+function latestWorkflowNodes(
+  nodes: readonly WorkflowNodeRecord[],
+): WorkflowNodeRecord[] {
+  const latest = new Map<WorkflowNode, WorkflowNodeRecord>();
+  for (const record of nodes) {
+    const prior = latest.get(record.node);
+    if (!prior || record.attempt >= prior.attempt) latest.set(record.node, record);
+  }
+  return [...latest.values()];
 }
 
 function nextTerminalNode(

@@ -2,11 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  chooseNextExecutableNode,
+  chooseNextExecutableNode as chooseWorkflowDispatch,
   chooseReadyReviewerNodes,
   reviewJoinReady,
   type WorkflowNodeRecord,
 } from "../../src/core/dispatcher.ts";
+
+function chooseNextExecutableNode(state: { nodes: WorkflowNodeRecord[]; maxReviewRounds?: number }): WorkflowNodeRecord | undefined {
+  const decision = chooseWorkflowDispatch(state);
+  return decision.kind === "next" ? decision : undefined;
+}
 
 function completed(node: WorkflowNodeRecord["node"], id = `${node}-1`, headSha = "abcdef1234567"): WorkflowNodeRecord {
   return {
@@ -20,6 +25,30 @@ function completed(node: WorkflowNodeRecord["node"], id = `${node}-1`, headSha =
       : {}),
   };
 }
+
+test("dispatcher distinguishes a durable running node from workflow completion", () => {
+  const decision = chooseWorkflowDispatch({
+    nodes: [
+      completed("resolve"),
+      { nodeId: "investigate-1", node: "investigate", attempt: 1, status: "running" },
+    ],
+  });
+  assert.equal(decision.kind, "waiting");
+  assert.match(decision.kind === "waiting" ? decision.reason : "", /durably running/);
+  const queued = chooseWorkflowDispatch({
+    nodes: [
+      completed("resolve"),
+      {
+        nodeId: "investigate-1",
+        node: "investigate",
+        attempt: 1,
+        status: "queued",
+        subagentRunId: "launch:investigate-1:nonce",
+      },
+    ],
+  });
+  assert.equal(queued.kind, "waiting");
+});
 
 test("dispatcher selects exactly one bounded node and gates review join on same SHA", () => {
   const records: WorkflowNodeRecord[] = [

@@ -562,6 +562,56 @@ test("resume intent is durable before a provider continuation receipt", () => {
   );
   assert.equal(state.nodes["verify-1"]?.subagentRunId, "child-new");
   assert.equal(state.nodes["verify-1"]?.transportRetries, 1);
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.resumed",
+      {
+        nodeId: "verify-1",
+        node: "verify",
+        attempt: 1,
+        previousSubagentRunId: "launch:verify-1-resume-1:nonce",
+        subagentRunId: "child-new",
+        resultPath: "/tmp/verify-1.json",
+        launchNonce: "nonce",
+        launchReceipt: true,
+        transportRetries: 1,
+      },
+      "verify:resume:receipt:duplicate-callback",
+    ),
+  );
+  assert.equal(state.nodes["verify-1"]?.subagentRunId, "child-new");
+});
+
+test("run cancellation durably abandons every active phase and node", () => {
+  let state = initializedState();
+  state = applyRunEvent(
+    state,
+    nextEvent(state, "phase.queued", { phase: "resolve", attempt: 1, restartAction: "cancel" }, "resolve:queue"),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(state, "phase.started", { phase: "resolve", attempt: 1, logicalNodeId: "resolve-1" }, "resolve:start"),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(state, "node.queued", { nodeId: "resolve-1", node: "resolve", attempt: 1 }, "node:queue"),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(state, "node.started", { nodeId: "resolve-1", node: "resolve", attempt: 1, subagentRunId: "child-1" }, "node:start"),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(state, "run.cancelled", { reason: "operator cancelled" }, "run:cancelled"),
+  );
+  assert.equal(state.status, "cancelled");
+  assert.equal(state.cancellationReason, "operator cancelled");
+  assert.equal(state.phases.resolve?.attempts[0]?.status, "abandoned");
+  assert.equal(state.phases.resolve?.attempts[0]?.reason, "operator cancelled");
+  assert.equal(state.nodes["resolve-1"]?.status, "failed");
+  assert.equal(state.nodes["resolve-1"]?.reason, "operator cancelled");
 });
 
 test("hash chain and idempotency conflicts fail closed", () => {

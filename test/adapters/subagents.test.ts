@@ -6,9 +6,11 @@ import test from "node:test";
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-import { SubagentsRpcClient } from "../../src/adapters/subagents.ts";
+import { boundedNodeAgent, SubagentsRpcClient } from "../../src/adapters/subagents.ts";
 import { materializeForgeAgents } from "../../src/agents/materialize.ts";
 import {
+  FORGE_READ_ONLY_NODE_AGENT,
+  FORGE_READ_ONLY_NODE_TOOLS,
   FORGE_REVIEW_TOOLS,
   FORGE_REFRESH_REVIEW_AGENT,
   FORGE_REFRESH_REVIEW_TOOLS,
@@ -187,7 +189,8 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
     issueContext: "untrusted issue text",
     node: { nodeId: "investigate-1", node: "investigate", attempt: 1 },
   });
-  const spawn = bus.requests.at(-1) as { params: { task: string; outputSchema: { properties: { schema: { const: string } } } } };
+  const spawn = bus.requests.at(-1) as { params: { agent: string; task: string; outputSchema: { properties: { schema: { const: string } } } } };
+  assert.equal(spawn.params.agent, FORGE_READ_ONLY_NODE_AGENT);
   assert.equal(spawn.params.outputSchema.properties.schema.const, "forgedock.node-result/v1");
   assert.match(spawn.params.task, /Execute exactly one ForgeDock node: investigate/);
   assert.match(spawn.params.task, /do not call forge_checkpoint/i);
@@ -195,6 +198,22 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
   assert.match(spawn.params.task, /gh issue view/);
   assert.match(spawn.params.task, /GET-only gh api/);
   assert.doesNotMatch(spawn.params.task, /Process resolve, investigate, plan/i);
+  await client.spawnNode({
+    runId: "run-resolve",
+    issueNumber: 9,
+    repository: "owner/repo",
+    worktreeRoot: "/tmp/worktree",
+    branch: "forge/9",
+    baseBranch: "staging",
+    baseSha: "abcdef1234567890",
+    leaseEpoch: 1,
+    policy,
+    issueContext: "untrusted issue text",
+    node: { nodeId: "resolve-1", node: "resolve", attempt: 1 },
+  });
+  const resolveSpawn = bus.requests.at(-1) as { params: { task: string } };
+  assert.match(resolveSpawn.params.task, /resolve artifact contract is exact/);
+  assert.match(resolveSpawn.params.task, /issueNumber: positive integer/);
 });
 
 test("bounded implementation launch binds the durable builder contract", async () => {
@@ -283,7 +302,11 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
   const root = await mkdtemp(join(tmpdir(), "forgedock-agents-"));
   try {
     const paths = await materializeForgeAgents(root);
-    assert.equal(paths.length, 4);
+    assert.equal(paths.length, 5);
+    const readOnlyNode = await readFile(
+      join(root, ".pi", "agents", `${FORGE_READ_ONLY_NODE_AGENT}.md`),
+      "utf8",
+    );
     const workOn = await readFile(
       join(root, ".pi", "agents", "forge-work-on.md"),
       "utf8",
@@ -296,6 +319,8 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
       join(root, ".pi", "agents", `${FORGE_REFRESH_REVIEW_AGENT}.md`),
       "utf8",
     );
+    assert.match(readOnlyNode, /^acceptanceRole: read-only$/m);
+    assert.doesNotMatch(readOnlyNode, /tools: .*\b(?:edit|write|forge_commit)\b/);
     assert.doesNotMatch(workOn, /tools: .*subagent/);
     assert.doesNotMatch(workOn, /forge_finalize_work_on/);
     assert.match(workOn, /forge_finalize_node/);
@@ -303,9 +328,9 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
     assert.match(workOn, /maxSubagentDepth: 2/);
     assert.match(workOn, /^extensions:/m);
     assert.doesNotMatch(workOn, /subagentOnlyExtensions:/);
-    assert.match(workOn, /  - \/.*pi-subagents\/index\.ts/);
-    assert.match(workOn, /  - \/.*agents\/child-runtime\.ts/);
-    assert.doesNotMatch(workOn, /  - "\/.*"/);
+    assert.match(workOn, / {2}- \/.*pi-subagents\/index\.ts/);
+    assert.match(workOn, / {2}- \/.*agents\/child-runtime\.ts/);
+    assert.doesNotMatch(workOn, / {2}- "\/.*"/);
     assert.doesNotMatch(reviewer, /tools: .*subagent/);
     assert.match(reviewer, /forge_finalize_reviewer/);
     assert.match(reviewer, /^extensions:/m);
@@ -343,6 +368,11 @@ test("RPC resume revives a transiently failed work-on session", async () => {
 });
 
 test("runtime Forge hierarchy keeps bounded work-on least-authority", () => {
+  assert.equal((FORGE_READ_ONLY_NODE_TOOLS as readonly string[]).includes("edit"), false);
+  assert.equal(boundedNodeAgent("resolve"), FORGE_READ_ONLY_NODE_AGENT);
+  assert.equal(boundedNodeAgent("investigate"), FORGE_READ_ONLY_NODE_AGENT);
+  assert.equal(boundedNodeAgent("plan"), FORGE_READ_ONLY_NODE_AGENT);
+  assert.equal(boundedNodeAgent("implement"), FORGE_WORK_ON_AGENT);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("bash"), true);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("subagent"), false);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_finalize_work_on"), false);
@@ -359,6 +389,6 @@ test("runtime Forge hierarchy keeps bounded work-on least-authority", () => {
 
   const { pi } = fakePi();
   const registrations = registerForgeAgents(pi);
-  assert.equal(registrations.length, 4);
+  assert.equal(registrations.length, 5);
   for (const registration of registrations) registration.dispose();
 });

@@ -7,13 +7,16 @@ import {
   findingPriority,
   isTransientProviderFailure,
   lineWithinTolerance,
+  parentNodeFromId,
   parseAsyncCompletion,
   reconcileLaunchState,
   reviewFindingMarker,
   reviewInstanceMarker,
   reviewSummaryInstanceMarker,
   reviewSupersessionMarker,
+  shouldBufferLaunchCompletion,
   similarFindingTitle,
+  workflowLabelForNode,
 } from "../../src/workflows/work-on.ts";
 
 test("short reviewer aliases normalize to configured agent names", () => {
@@ -22,6 +25,26 @@ test("short reviewer aliases normalize to configured agent names", () => {
     canonicalReviewerName("forge-review-correctness"),
     "forge-review-correctness",
   );
+});
+
+test("restart recovery recognizes every parent-owned durable node", () => {
+  for (const node of ["review-join", "ci", "decision", "merge", "close", "cleanup"] as const)
+    assert.equal(parentNodeFromId(`${node}-2`), node);
+  assert.equal(parentNodeFromId("implement-1"), undefined);
+});
+
+test("provider completion is buffered until its launch receipt is durably bound", () => {
+  assert.equal(shouldBufferLaunchCompletion(true, true), true);
+  assert.equal(shouldBufferLaunchCompletion(false, false), true);
+  assert.equal(shouldBufferLaunchCompletion(false, true), false);
+});
+
+test("bounded parent nodes project every terminal workflow label", () => {
+  assert.equal(workflowLabelForNode("decision", "awaiting-merge"), "workflow:awaiting-merge");
+  assert.equal(workflowLabelForNode("decision", "remediation-required"), "workflow:in-review");
+  assert.equal(workflowLabelForNode("merge", "merged"), "workflow:merged");
+  assert.equal(workflowLabelForNode("close", "closed", "invalid"), "workflow:invalid");
+  assert.equal(workflowLabelForNode("cleanup", "closed", "decomposed"), "workflow:decomposed");
 });
 
 test("normal matching provider receipts are inspected instead of escalated", () => {

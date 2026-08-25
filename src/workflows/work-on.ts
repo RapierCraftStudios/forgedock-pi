@@ -39,6 +39,7 @@ import { renderPhaseArtifact } from "../core/comment-contract.ts";
 import {
   chooseNextExecutableNode,
   chooseReadyReviewerNodes,
+  isAwaitingIntegrationBoundary,
   type WorkflowNode,
 } from "../core/dispatcher.ts";
 import {
@@ -146,6 +147,12 @@ export interface StartIssueOptions {
   leaseEpoch?: number;
 }
 
+export interface ParsedAsyncCompletion {
+  runId: string;
+  state: "running" | "complete" | "failed" | "paused" | "stopped";
+  error?: string;
+}
+
 export class ForgeWorkOnController {
   readonly #pi: ExtensionAPI;
   readonly #rpc: SubagentsRpcClient;
@@ -155,6 +162,9 @@ export class ForgeWorkOnController {
     (event: WorkOnLifecycleEvent) => void
   >();
   readonly #providerRecovering = new Set<string>();
+  readonly #receiptBindings = new Set<string>();
+  readonly #earlyCompletions = new Map<string, ParsedAsyncCompletion>();
+  readonly #reconcilingNodes = new Set<string>();
   #completionUnsubscribe: (() => void) | undefined;
 
   constructor(pi: ExtensionAPI) {
@@ -177,11 +187,13 @@ export class ForgeWorkOnController {
       const completion = parseAsyncCompletion(payload);
       if (!completion) return;
       const link = this.#links.get(completion.runId);
-      if (
-        !link ||
-        (link.status !== "running" && link.status !== "refreshing")
-      )
+      if (shouldBufferLaunchCompletion(this.#receiptBindings.has(completion.runId), Boolean(link))) {
+        if (completion.state !== "paused" && completion.state !== "running")
+          this.#bufferEarlyCompletion(completion);
         return;
+      }
+      if (!link) return;
+      if (link.status !== "running" && link.status !== "refreshing") return;
       if (completion.state === "paused" || completion.state === "running")
         return;
       const activeNode =
@@ -194,7 +206,7 @@ export class ForgeWorkOnController {
             }
           : undefined);
       if (activeNode) {
-        void this.#reconcileNode(
+        void this.#reconcileActiveNode(
           link,
           ctx,
           completion.error,
@@ -262,7 +274,7 @@ export class ForgeWorkOnController {
         if (activeNodes.length > 0) {
           for (const activeNode of activeNodes) {
             if (isLaunchSentinel(activeNode.subagentRunId)) {
-              await this.#reconcileNode(
+              await this.#reconcileActiveNode(
                 link,
                 ctx,
                 "No provider receipt is durably discoverable for this launch intent.",
@@ -277,7 +289,7 @@ export class ForgeWorkOnController {
               completion?.state === "running"
             )
               continue;
-            await this.#reconcileNode(
+            await this.#reconcileActiveNode(
               link,
               ctx,
               completion?.state === "failed" ||
@@ -707,6 +719,30 @@ export class ForgeWorkOnController {
     }
   }
 
+  #bufferEarlyCompletion(completion: ParsedAsyncCompletion): void {
+    this.#earlyCompletions.set(completion.runId, completion);
+    if (this.#earlyCompletions.size > 100) {
+      const oldest = this.#earlyCompletions.keys().next().value;
+      if (oldest) this.#earlyCompletions.delete(oldest);
+    }
+  }
+
+  async #reconcileActiveNode(
+    link: ActiveRunLink,
+    ctx: ExtensionContext,
+    providerError: string | undefined,
+    activeNode: ActiveNodeRunLink,
+  ): Promise<void> {
+    const key = `${link.forgeRunId}:${activeNode.nodeId}:${activeNode.subagentRunId}`;
+    if (this.#reconcilingNodes.has(key)) return;
+    this.#reconcilingNodes.add(key);
+    try {
+      await this.#reconcileNode(link, ctx, providerError, activeNode);
+    } finally {
+      this.#reconcilingNodes.delete(key);
+    }
+  }
+
   async #reconcileNode(
     link: ActiveRunLink,
     ctx: ExtensionContext,
@@ -1120,16 +1156,25 @@ export class ForgeWorkOnController {
       this.#persistLink(link);
       return;
     }
-    const next = chooseNextExecutableNode(snapshot.state);
-    if (!next) {
-      link.status = "ready";
-      this.#persistLink(link);
-      this.#emitLifecycle(link, { headSha: nodeResult.headSha, baseSha: nodeResult.baseSha, nodeId: nodeResult.nodeId });
+    const dispatch = chooseNextExecutableNode(snapshot.state);
+    if (dispatch.kind !== "next") {
+      if (dispatch.kind === "blocked") {
+        link.status = dispatch.node?.status === "needs-human" ? "needs-human" : "blocked";
+        this.#persistLink(link);
+        this.#emitLifecycle(link, { reason: dispatch.reason, nodeId: nodeResult.nodeId });
+      } else if (isAwaitingIntegrationBoundary(snapshot.state)) {
+        link.status = "ready";
+        this.#persistLink(link);
+        this.#emitLifecycle(link, { headSha: nodeResult.headSha, baseSha: nodeResult.baseSha, nodeId: nodeResult.nodeId });
+      } else {
+        link.status = "running";
+        this.#persistLink(link);
+      }
       return;
     }
     await this.#dispatchNode(
       link,
-      next,
+      dispatch,
       policy,
       store,
       ctx,
@@ -1270,11 +1315,11 @@ export class ForgeWorkOnController {
     if (!initial.state) throw new Error(`Run ${link.forgeRunId} state is missing for parent node.`);
     const prior = initial.state.nodes[node.nodeId];
     if (prior?.status === "completed") {
-      const next = chooseNextExecutableNode(initial.state);
-      if (next)
+      const dispatch = chooseNextExecutableNode(initial.state);
+      if (dispatch.kind === "next")
         await this.#dispatchNode(
           link,
-          next,
+          dispatch,
           policy,
           store,
           ctx,
@@ -1610,8 +1655,7 @@ export class ForgeWorkOnController {
             .filter(
               (candidate) =>
                 candidate.node === "decision" &&
-                candidate.status === "completed" &&
-                candidate.outcome === "awaiting-merge",
+                candidate.status === "completed",
             )
             .sort((left, right) => right.attempt - left.attempt)[0]
         : undefined;
@@ -1669,8 +1713,7 @@ export class ForgeWorkOnController {
         .filter(
           (candidate) =>
             candidate.node === "decision" &&
-            candidate.status === "completed" &&
-            candidate.outcome === "awaiting-merge",
+            candidate.status === "completed",
         )
         .sort((left, right) => right.attempt - left.attempt)[0];
       const mergeNode = Object.values(terminalState.state.nodes)
@@ -1726,6 +1769,16 @@ export class ForgeWorkOnController {
         });
       }
     }
+    const investigationOutcome = Object.values(current.state.nodes)
+      .filter((candidate) => candidate.node === "investigate" && candidate.status === "completed")
+      .sort((left, right) => right.attempt - left.attempt)[0]?.outcome;
+    const workflowLabel = workflowLabelForNode(
+      node.node,
+      outcome,
+      investigationOutcome,
+    );
+    if (workflowLabel)
+      await projector.setWorkflowLabel(link.issueNumber, workflowLabel, ctx.signal);
     if (node.node !== "ci") {
       await projector.postArtifact({
         issueNumber: link.issueNumber,
@@ -1761,11 +1814,21 @@ export class ForgeWorkOnController {
     }
     const nextState = await store.readRun(link.forgeRunId, ctx.signal);
     if (!nextState.state) throw new Error("Parent node state disappeared during reconciliation.");
-    const next = chooseNextExecutableNode(nextState.state);
-    if (!next) throw new Error(`Parent node ${node.nodeId} completed without a next node.`);
+    const dispatch = chooseNextExecutableNode(nextState.state);
+    if (dispatch.kind === "blocked") {
+      link.status = dispatch.node?.status === "needs-human" ? "needs-human" : "blocked";
+      this.#persistLink(link);
+      this.#emitLifecycle(link, { reason: dispatch.reason, nodeId: node.nodeId });
+      return;
+    }
+    if (dispatch.kind !== "next") {
+      link.status = "running";
+      this.#persistLink(link);
+      return;
+    }
     await this.#dispatchNode(
       link,
-      next,
+      dispatch,
       policy,
       store,
       ctx,
@@ -2026,16 +2089,18 @@ export class ForgeWorkOnController {
     }
     const reviewerNode =
       node.node === "review-correctness" || node.node === "review-security";
-    // Persist the receipt before binding it in the authoritative event log.
-    // A crash here leaves the real ID in the session link and restart binds it;
-    // the durable sentinel prevents a second provider spawn.
+    // Session persistence makes the receipt crash-discoverable. While the
+    // authoritative journal bind is in flight, completion callbacks are
+    // buffered so they cannot complete a sentinel-bound node first.
+    this.#receiptBindings.add(receipt.runId);
     delete link.activeNodes[sentinel];
-    link.activeNodes[receipt.runId] = {
+    const activeNode: ActiveNodeRunLink = {
       nodeId: node.nodeId,
       subagentRunId: receipt.runId,
       resultPath: receipt.resultPath,
       launchNonce: launchIntent.launchNonce,
     };
+    link.activeNodes[receipt.runId] = activeNode;
     if (!reviewerNode) {
       this.#links.delete(link.subagentRunId);
       link.subagentRunId = receipt.runId;
@@ -2045,30 +2110,73 @@ export class ForgeWorkOnController {
     }
     link.status = "running";
     this.#persistLink(link);
-    await journal.append({
-      runId: link.forgeRunId,
-      type: "node.resumed",
-      payload: {
-        nodeId: node.nodeId,
-        node: node.node,
-        attempt: node.attempt,
-        ...(node.round ? { round: node.round } : {}),
-        previousSubagentRunId: sentinel,
-        subagentRunId: receipt.runId,
-        resultPath: receipt.resultPath,
-        launchNonce: launchIntent.launchNonce,
-        launchReceipt: true,
-        transportRetries: 0,
-        baseSha: link.prepared.baseSha,
-      },
-      idempotencyKey: `node:${node.nodeId}:receipt-bound`,
-      sessionId: ctx.sessionManager.getSessionId(),
-      message: `Bind provider receipt for ForgeDock node ${node.nodeId}`,
-      ...(ctx.signal ? { signal: ctx.signal } : {}),
-    });
+    try {
+      await journal.append({
+        runId: link.forgeRunId,
+        type: "node.resumed",
+        payload: {
+          nodeId: node.nodeId,
+          node: node.node,
+          attempt: node.attempt,
+          ...(node.round ? { round: node.round } : {}),
+          previousSubagentRunId: sentinel,
+          subagentRunId: receipt.runId,
+          resultPath: receipt.resultPath,
+          launchNonce: launchIntent.launchNonce,
+          launchReceipt: true,
+          transportRetries: 0,
+          baseSha: link.prepared.baseSha,
+        },
+        idempotencyKey: `node:${node.nodeId}:receipt-bound`,
+        sessionId: ctx.sessionManager.getSessionId(),
+        message: `Bind provider receipt for ForgeDock node ${node.nodeId}`,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+    } catch (error) {
+      const reason = `launch-receipt-bind-failed: ${errorMessage(error)}`;
+      let recorded = false;
+      try {
+        await journal.append({
+          runId: link.forgeRunId,
+          type: "node.needs-human",
+          payload: {
+            nodeId: node.nodeId,
+            node: node.node,
+            attempt: node.attempt,
+            ...(node.round ? { round: node.round } : {}),
+            reason,
+            subagentRunId: sentinel,
+            resultPath: receipt.resultPath,
+            launchNonce: launchIntent.launchNonce,
+          },
+          idempotencyKey: `node:${node.nodeId}:receipt-bind-failed`,
+          sessionId: ctx.sessionManager.getSessionId(),
+          message: `Fail closed receipt binding for ForgeDock node ${node.nodeId}`,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+        recorded = true;
+      } catch {
+        recorded = false;
+      } finally {
+        this.#receiptBindings.delete(receipt.runId);
+      }
+      link.status = "needs-human";
+      this.#persistLink(link);
+      this.#emitLifecycle(link, { reason, nodeId: node.nodeId });
+      if (!recorded) throw new Error(reason);
+      return;
+    }
+    this.#receiptBindings.delete(receipt.runId);
     link.providerRetries = 0;
     link.status = "running";
     this.#persistLink(link);
+    const buffered = this.#earlyCompletions.get(receipt.runId);
+    if (buffered) this.#earlyCompletions.delete(receipt.runId);
+    const observed = buffered ?? parseAsyncCompletion(
+      await this.#rpc.status(receipt.runId).catch(() => undefined),
+    );
+    if (observed && observed.state !== "running" && observed.state !== "paused")
+      await this.#reconcileActiveNode(link, ctx, observed.error, activeNode);
   }
 
   listRuns(): ActiveRunLink[] {
@@ -2241,19 +2349,57 @@ export class ForgeWorkOnController {
     await this.#finalize(link, ctx, result);
   }
 
-  async stopOrchestration(orchestrationId: string): Promise<void> {
-    const active = [...this.#links.values()].filter(
-      (link) =>
-        link.orchestrationId === orchestrationId &&
-        ["running", "refreshing", "finalizing"].includes(link.status),
+  async stopOrchestration(
+    orchestrationId: string,
+    ctx: ExtensionContext,
+    reason: string,
+  ): Promise<void> {
+    const active = new Map(
+      [...this.#links.values()]
+        .filter(
+          (link) =>
+            link.orchestrationId === orchestrationId &&
+            link.status !== "completed",
+        )
+        .map((link) => [link.forgeRunId, link]),
     );
-    await Promise.allSettled(
-      active.map(async (link) => {
-        link.status = "failed";
-        this.#persistLink(link);
-        await this.#rpc.stop(link.subagentRunId);
-      }),
-    );
+    for (const link of active.values()) {
+      const token = await resolveGitHubToken(
+        this.#pi,
+        link.prepared.repositoryRoot,
+        ctx.signal,
+      );
+      const store = new GitHubStateBranchStore(
+        new FetchGitHubTransport({ token }),
+        link.repository,
+        link.stateBranch,
+      );
+      const current = await store.readRun(link.forgeRunId, ctx.signal);
+      if (!current.state || current.state.status === "completed" || current.state.status === "cancelled")
+        continue;
+      const providerRunIds = new Set(Object.keys(link.activeNodes));
+      if (
+        providerRunIds.size === 0 &&
+        ["running", "refreshing", "finalizing"].includes(link.status)
+      )
+        providerRunIds.add(link.subagentRunId);
+      for (const runId of providerRunIds) {
+        if (!isLaunchSentinel(runId)) await this.#rpc.stop(runId);
+      }
+      await new RunJournal(store).append({
+        runId: link.forgeRunId,
+        type: "run.cancelled",
+        payload: { reason },
+        idempotencyKey: "run:cancelled",
+        sessionId: ctx.sessionManager.getSessionId(),
+        message: `Cancel child ForgeDock run ${link.forgeRunId}`,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      link.status = "failed";
+      link.activeNodes = {};
+      link.currentNodeId = undefined;
+      this.#persistLink(link);
+    }
   }
 
   onLifecycle(
@@ -2282,8 +2428,7 @@ export class ForgeWorkOnController {
       .filter(
         (node) =>
           node.node === "decision" &&
-          node.status === "completed" &&
-          node.outcome === "awaiting-merge",
+          node.status === "completed",
       )
       .sort((left, right) => right.attempt - left.attempt)[0];
     if (!decision || decision.outcome !== "awaiting-merge") throw new Error("Integration requires a durable approved awaiting-merge decision.");
@@ -3561,13 +3706,31 @@ function findAsyncCompletionForRun(
   return undefined;
 }
 
-export function parseAsyncCompletion(value: unknown):
-  | {
-      runId: string;
-      state: "running" | "complete" | "failed" | "paused" | "stopped";
-      error?: string;
-    }
-  | undefined {
+export function shouldBufferLaunchCompletion(
+  receiptBindingInFlight: boolean,
+  linkKnown: boolean,
+): boolean {
+  return receiptBindingInFlight || !linkKnown;
+}
+
+export function workflowLabelForNode(
+  node: WorkflowNode,
+  outcome: string | undefined,
+  investigationOutcome?: string,
+): string | undefined {
+  if (node === "decision" && outcome === "awaiting-merge")
+    return "workflow:awaiting-merge";
+  if (node === "decision" && outcome === "remediation-required")
+    return "workflow:in-review";
+  if (node === "merge" && outcome === "merged") return "workflow:merged";
+  if ((node === "close" || node === "cleanup") && investigationOutcome === "invalid")
+    return "workflow:invalid";
+  if ((node === "close" || node === "cleanup") && investigationOutcome === "decomposed")
+    return "workflow:decomposed";
+  return undefined;
+}
+
+export function parseAsyncCompletion(value: unknown): ParsedAsyncCompletion | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
   const record = value as Record<string, unknown>;
@@ -3682,7 +3845,7 @@ function runLeaseAuthorityMatches(
   );
 }
 
-function parentNodeFromId(id: string | undefined): WorkflowNode | undefined {
+export function parentNodeFromId(id: string | undefined): WorkflowNode | undefined {
   if (!id) return undefined;
   for (const node of ["review-join", "ci", "decision", "merge", "close", "cleanup"] as const)
     if (id.startsWith(`${node}-`)) return node;

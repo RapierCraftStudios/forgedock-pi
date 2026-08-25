@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  FORGE_READ_ONLY_NODE_AGENT,
+  FORGE_READ_ONLY_NODE_TOOLS,
   FORGE_REVIEW_CORRECTNESS_AGENT,
   FORGE_REVIEW_CORRECTNESS_PROMPT,
   FORGE_REVIEW_SECURITY_AGENT,
@@ -33,6 +35,20 @@ export async function materializeForgeAgents(
     import.meta.resolve("pi-subagents"),
   );
   const files = [
+    {
+      name: FORGE_READ_ONLY_NODE_AGENT,
+      content: agentFile({
+        name: FORGE_READ_ONLY_NODE_AGENT,
+        description: "Execute a bounded ForgeDock node without source edits",
+        tools: FORGE_READ_ONLY_NODE_TOOLS,
+        prompt: FORGE_WORK_ON_PROMPT,
+        maxDepth: 1,
+        acceptanceRole: "read-only",
+        async: true,
+        extensions: [childRuntimePath],
+        timeoutMs: FORGE_WORK_ON_TIMEOUT_MS,
+      }),
+    },
     {
       name: FORGE_WORK_ON_AGENT,
       content: agentFile({

@@ -96,17 +96,24 @@ export class GitHubIssueProjector {
   }): Promise<number> {
     if (!/^[a-z0-9-]+$/.test(input.artifactKey))
       throw new TypeError("Artifact keys must be lowercase kebab-case.");
-    const marker = `<!-- FORGEDOCK-ARTIFACT:${input.eventId}:${input.artifactKey} -->`;
+    const marker = `<!-- FORGEDOCK-ARTIFACT:${input.runId}:${input.eventId}:${input.artifactKey} -->`;
     const identityMarker = `<!-- FORGEDOCK-ARTIFACT-IDENTITY run=${input.runId} key=${input.artifactKey} -->`;
     const revisionMarker = `<!-- FORGEDOCK-ARTIFACT-REVISION revision=${input.eventId} -->`;
+    const rendered = input.markdown.trim();
     const comments = await this.#listComments(input.issueNumber, input.signal);
     const existing = comments.find(
       (comment) =>
-        comment.body.includes(marker) ||
-        (comment.body.includes(identityMarker) &&
-          comment.body.includes(revisionMarker)),
+        comment.body.includes(marker) &&
+        comment.body.includes(identityMarker) &&
+        comment.body.includes(revisionMarker),
     );
-    if (existing) return existing.id;
+    if (existing) {
+      if (!existing.body.includes(rendered))
+        throw new GitHubApiError(422, `${this.#apiRoot}/issues/${input.issueNumber}/comments`, {
+          message: `Artifact ${marker} exists with a different rendered payload.`,
+        });
+      return existing.id;
+    }
     const prior = comments
       .filter(
         (comment) =>
@@ -118,7 +125,7 @@ export class GitHubIssueProjector {
       ? `\n<!-- FORGEDOCK-SUPERSEDES comment=${prior.id} -->`
       : "";
     const path = `${this.#apiRoot}/issues/${input.issueNumber}/comments`;
-    const body = `${marker}\n${identityMarker}\n${revisionMarker}${supersedes}\n<!-- FORGEDOCK-RUN:${input.runId} -->\n${input.markdown.trim()}\n`;
+    const body = `${marker}\n${identityMarker}\n${revisionMarker}${supersedes}\n<!-- FORGEDOCK-RUN:${input.runId} -->\n${rendered}\n`;
     const response = await this.#transport.request<IssueComment>({
       method: "POST",
       path,
@@ -128,13 +135,15 @@ export class GitHubIssueProjector {
     const comment = requireGitHubSuccess(response, path, [201]);
     const readBack = await this.#findComment(
       input.issueNumber,
-      revisionMarker,
+      marker,
       input.signal,
     );
     if (
       !readBack ||
       readBack.id !== comment.id ||
-      !readBack.body.includes(identityMarker)
+      !readBack.body.includes(identityMarker) ||
+      !readBack.body.includes(revisionMarker) ||
+      !readBack.body.includes(rendered)
     ) {
       throw new GitHubApiError(422, path, {
         message: `Artifact read-back missing ${marker}`,

@@ -29,6 +29,7 @@ import {
   type RunPhase,
 } from "../core/events.ts";
 import { RunJournal } from "../adapters/run-journal.ts";
+import { phaseArtifactValidationError } from "../core/comment-contract.ts";
 import {
   canonicalizePotentialPath,
   isPathWithin,
@@ -809,8 +810,15 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
     async execute(_toolCallId, params) {
       if (!binding.nodeId || !binding.node || !binding.nodeAttempt)
         throw new Error("forge_finalize_node requires a bounded node binding.");
-      if (!isForgeNodeResult(params.value))
-        throw new Error("Final node result failed schema validation.");
+      if (!isForgeNodeResult(params.value)) {
+        const artifact =
+          params.value && typeof params.value === "object" && !Array.isArray(params.value)
+            ? (params.value as { artifact?: unknown }).artifact
+            : undefined;
+        throw new Error(
+          `Final node result failed schema validation: ${phaseArtifactValidationError(artifact)}.`,
+        );
+      }
       if (
         params.value.runId !== binding.runId ||
         params.value.issueNumber !== binding.issueNumber ||

@@ -634,10 +634,17 @@ function applyNodeEvent(state: RunState, event: RunEvent): void {
       );
   }
   if (event.type === "node.resumed") {
+    const duplicateReceiptBinding =
+      record.launchReceipt === true &&
+      prior?.launchReceipt === true &&
+      prior.subagentRunId === record.subagentRunId &&
+      prior.previousSubagentRunId === record.previousSubagentRunId &&
+      prior.launchNonce === record.launchNonce;
     if (
       typeof record.subagentRunId !== "string" ||
       typeof record.previousSubagentRunId !== "string" ||
-      record.previousSubagentRunId !== prior?.subagentRunId
+      (!duplicateReceiptBinding &&
+        record.previousSubagentRunId !== prior?.subagentRunId)
     )
       throw new StateTransitionError(
         "invalid-node-resume",
@@ -923,11 +930,39 @@ export function applyRunEvent(
       state.outcome = outcome;
       break;
     }
-    case "run.cancelled":
+    case "run.cancelled": {
       assertLeaseEpoch(state, event);
+      const reason = requireString(payloadRecord(event), "reason");
+      for (const [phase, phaseState] of Object.entries(state.phases) as Array<
+        [RunPhase, PhaseState]
+      >) {
+        state.phases[phase] = {
+          phase,
+          attempts: phaseState.attempts.map((attempt) =>
+            attempt.status === "queued" || attempt.status === "running"
+              ? {
+                  ...attempt,
+                  status: "abandoned" as const,
+                  reason,
+                  finishedAt: event.occurredAt,
+                }
+              : attempt,
+          ),
+        };
+      }
+      for (const [nodeId, node] of Object.entries(state.nodes)) {
+        if (node.status !== "queued" && node.status !== "running") continue;
+        state.nodes[nodeId] = {
+          ...node,
+          status: "failed",
+          reason,
+          finishedAt: event.occurredAt,
+        };
+      }
       state.status = "cancelled";
-      state.cancellationReason = requireString(payloadRecord(event), "reason");
+      state.cancellationReason = reason;
       break;
+    }
   }
 
   state.sequence = event.sequence;
