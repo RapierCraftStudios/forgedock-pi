@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 18,
-  "lastEventHash": "sha256:5758988ed840decd0c742170b3f27940208f18be140d263fa3e2d48000f55928",
+  "sequence": 19,
+  "lastEventHash": "sha256:4e279d81dddaed99ef7ef5e271df7e2f96470082fbe3c101b9b0832c1f4d5857",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -138,9 +138,13 @@
       "node": "implement",
       "attempt": 1,
       "round": 1,
-      "status": "queued",
+      "status": "running",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
-      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/3d9748a8-b536-470c-8c5b-7704fdbf969a/.pi/forge/3d9748a8-b536-470c-8c5b-7704fdbf969a-implement-1.json"
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/3d9748a8-b536-470c-8c5b-7704fdbf969a/.pi/forge/3d9748a8-b536-470c-8c5b-7704fdbf969a-implement-1.json",
+      "subagentRunId": "launch:implement-1:b95c2211-c105-45eb-9c59-692d541dca1d",
+      "launchNonce": "b95c2211-c105-45eb-9c59-692d541dca1d",
+      "launchIntent": true,
+      "startedAt": "2026-08-25T18:12:36.871Z"
     }
   },
   "effects": {},
@@ -162,7 +166,8 @@
     "node:prepare-worktree-1:started": "46c4f192-993f-49e1-81f7-ff15cdcfd18e",
     "node:prepare-worktree-1:receipt-bound": "5d46b027-0e8e-4961-b6fe-e3764c8ee4b4",
     "node:prepare-worktree-1:completed": "b174e737-3516-4e64-ba8d-e1b1addce8ba",
-    "node:implement-1:queued": "f79be07a-8cd9-4c93-8121-1c60fe3067cd"
+    "node:implement-1:queued": "f79be07a-8cd9-4c93-8121-1c60fe3067cd",
+    "node:implement-1:started": "72dccbc6-e061-4e10-83cf-4847261bd208"
   },
   "eventIds": {
     "5658c076-9cc2-4ce6-adda-0b20f4e315c6": true,
@@ -182,6 +187,7 @@
     "46c4f192-993f-49e1-81f7-ff15cdcfd18e": true,
     "5d46b027-0e8e-4961-b6fe-e3764c8ee4b4": true,
     "b174e737-3516-4e64-ba8d-e1b1addce8ba": true,
-    "f79be07a-8cd9-4c93-8121-1c60fe3067cd": true
+    "f79be07a-8cd9-4c93-8121-1c60fe3067cd": true,
+    "72dccbc6-e061-4e10-83cf-4847261bd208": true
   }
 }
