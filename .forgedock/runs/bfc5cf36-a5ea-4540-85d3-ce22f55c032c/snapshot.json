@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 13,
-  "lastEventHash": "sha256:087b63fbc4fea57ebe134bcac371edfb662bf7d538bf74d74718619dbcc68b18",
+  "sequence": 14,
+  "lastEventHash": "sha256:307b3213a0417fc9e985a386db8a201b4b6c8d6852b718a862b11e8c80942451",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -104,6 +104,15 @@
         "Issue #50 reports both successful and failing paths on the same build and two durable launch sentinels followed by launch-receipt-bind-failed, consistent with the source-level receipt-binding race."
       ],
       "finishedAt": "2026-08-25T21:33:31.613Z"
+    },
+    "prepare-worktree-1": {
+      "nodeId": "prepare-worktree-1",
+      "node": "prepare-worktree",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/bfc5cf36-a5ea-4540-85d3-ce22f55c032c/.pi/forge/bfc5cf36-a5ea-4540-85d3-ce22f55c032c-prepare-worktree-1.json"
     }
   },
   "effects": {},
@@ -120,7 +129,8 @@
     "node:plan-1:queued": "30e56168-383b-4caa-8ff3-9167ee8ae600",
     "node:plan-1:started": "637845a8-ef63-4ef1-b680-ff410d1c0084",
     "node:plan-1:receipt-bound": "bdfe3d78-a3d2-46e2-80a6-fc975cfd2349",
-    "node:plan-1:completed": "d2f69a1a-e5ba-4f7f-8fa6-010baa19e762"
+    "node:plan-1:completed": "d2f69a1a-e5ba-4f7f-8fa6-010baa19e762",
+    "node:prepare-worktree-1:queued": "22ef5f11-53ed-49a5-b3c6-043f89c8fc91"
   },
   "eventIds": {
     "0ce6a9d0-87b1-44c6-943d-8393cb560926": true,
@@ -135,6 +145,7 @@
     "30e56168-383b-4caa-8ff3-9167ee8ae600": true,
     "637845a8-ef63-4ef1-b680-ff410d1c0084": true,
     "bdfe3d78-a3d2-46e2-80a6-fc975cfd2349": true,
-    "d2f69a1a-e5ba-4f7f-8fa6-010baa19e762": true
+    "d2f69a1a-e5ba-4f7f-8fa6-010baa19e762": true,
+    "22ef5f11-53ed-49a5-b3c6-043f89c8fc91": true
   }
 }
