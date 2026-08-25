@@ -10,8 +10,8 @@
     "ownerRunId": "5da43cdf-2ff6-479c-9bf8-d2241bbd78fe",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:bfeae1704bd6065eb9711a9cabd4517664f2892ac9cdff8a49d0c29ae6b1cd99",
+  "sequence": 6,
+  "lastEventHash": "sha256:578b8ddf69c9cbf30c459228ee0d74329d739ddb373bebecf5e0a6099ed5d504",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -39,6 +39,15 @@
         "The assigned worktree is clean and HEAD equals frozen base SHA 4819168331da2a25f500a1d1436f231db8211f2b."
       ],
       "finishedAt": "2026-08-25T08:02:43.892Z"
+    },
+    "investigate-1": {
+      "nodeId": "investigate-1",
+      "node": "investigate",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "4819168331da2a25f500a1d1436f231db8211f2b",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/af1691fa-2cad-4207-a064-a8d95ad2be35/.pi/forge/af1691fa-2cad-4207-a064-a8d95ad2be35-investigate-1.json"
     }
   },
   "effects": {},
@@ -47,13 +56,15 @@
     "node:resolve-1:queued": "8289a896-69b7-467d-93c5-64ce82c3d47f",
     "node:resolve-1:started": "70df1daa-89c1-4720-9f74-906fc10d451b",
     "node:resolve-1:receipt-bound": "c3f6939d-b693-4b01-99f0-ed71160321c0",
-    "node:resolve-1:completed": "5913cf39-8a8e-467c-81ed-62f018949301"
+    "node:resolve-1:completed": "5913cf39-8a8e-467c-81ed-62f018949301",
+    "node:investigate-1:queued": "6c477f4a-5d12-47b8-98e8-1d0c7ff6de2d"
   },
   "eventIds": {
     "8f4a2c50-a4a2-43e9-8677-7fe5092204e5": true,
     "8289a896-69b7-467d-93c5-64ce82c3d47f": true,
     "70df1daa-89c1-4720-9f74-906fc10d451b": true,
     "c3f6939d-b693-4b01-99f0-ed71160321c0": true,
-    "5913cf39-8a8e-467c-81ed-62f018949301": true
+    "5913cf39-8a8e-467c-81ed-62f018949301": true,
+    "6c477f4a-5d12-47b8-98e8-1d0c7ff6de2d": true
   }
 }
