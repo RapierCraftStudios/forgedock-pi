@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 25,
-  "lastEventHash": "sha256:9d3e23943a6e697b356adfecc733411afb9cb8ca0d3a7352e873544b6eac8d79",
+  "sequence": 26,
+  "lastEventHash": "sha256:4aafc90c4ba8f43f245d92bcda9b716533eed8f86889fe9b9b441fad35a5df17",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -193,6 +193,15 @@
         "Required GitHub verification for dogfood remains pending and parent-owned."
       ],
       "finishedAt": "2026-08-25T19:54:58.164Z"
+    },
+    "prepare-pr-1": {
+      "nodeId": "prepare-pr-1",
+      "node": "prepare-pr",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/91fd4701-34b2-4f98-9c38-a66277301579/.pi/forge/91fd4701-34b2-4f98-9c38-a66277301579-prepare-pr-1.json"
     }
   },
   "effects": {},
@@ -221,7 +230,8 @@
     "node:verify-1:queued": "a47432f3-a996-4d2b-b0d0-9467831eebfe",
     "node:verify-1:started": "2461931b-7d69-4eb2-8ced-c4dc8430bede",
     "node:verify-1:receipt-bound": "35a42d99-ba46-49bf-9a38-b857a70f5ca6",
-    "node:verify-1:completed": "a7635dee-f61f-4482-855c-95dc11f54a42"
+    "node:verify-1:completed": "a7635dee-f61f-4482-855c-95dc11f54a42",
+    "node:prepare-pr-1:queued": "56c31530-2566-4ae2-8266-31ef352163c2"
   },
   "eventIds": {
     "ba49bd33-cd25-4d3a-8106-d3166e61f8e2": true,
@@ -248,6 +258,7 @@
     "a47432f3-a996-4d2b-b0d0-9467831eebfe": true,
     "2461931b-7d69-4eb2-8ced-c4dc8430bede": true,
     "35a42d99-ba46-49bf-9a38-b857a70f5ca6": true,
-    "a7635dee-f61f-4482-855c-95dc11f54a42": true
+    "a7635dee-f61f-4482-855c-95dc11f54a42": true,
+    "56c31530-2566-4ae2-8266-31ef352163c2": true
   }
 }
