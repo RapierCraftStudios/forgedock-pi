@@ -10,8 +10,8 @@
     "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
     "epoch": 1
   },
-  "sequence": 25,
-  "lastEventHash": "sha256:890eedf3980c4cc5fc444f2cfb2d7988c51fbe0734ca35ed7cb5944e8a089b7d",
+  "sequence": 26,
+  "lastEventHash": "sha256:ab1085c5810e73520d749e434c6c9c26ba1197adf663ea8b14799a997c043d88",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -188,6 +188,15 @@
         "forge_diff confirms the current frozen-base diff changes exactly the five allowed paths; authoritative GitHub CI is deferred to the parent after PR preparation."
       ],
       "finishedAt": "2026-08-25T17:01:59.001Z"
+    },
+    "prepare-pr-1": {
+      "nodeId": "prepare-pr-1",
+      "node": "prepare-pr",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/5ae128e5-d087-4d0f-97cb-73d4435aabae/.pi/forge/5ae128e5-d087-4d0f-97cb-73d4435aabae-prepare-pr-1.json"
     }
   },
   "effects": {},
@@ -216,7 +225,8 @@
     "node:verify-1:queued": "3840c416-dcdf-4e7b-b77e-5bbfaa8dca4c",
     "node:verify-1:started": "eb48671e-0166-43d0-af23-6ee3a1eb9850",
     "node:verify-1:receipt-bound": "1c4e278b-e881-4ae4-a7f6-9d0783430b87",
-    "node:verify-1:completed": "fb8d28cf-e817-490c-a987-ad0c79ead7c0"
+    "node:verify-1:completed": "fb8d28cf-e817-490c-a987-ad0c79ead7c0",
+    "node:prepare-pr-1:queued": "367134d9-7ea1-4bbf-a1cd-1251197c389a"
   },
   "eventIds": {
     "3d76639e-0ea5-4b9c-8cf5-c5861433e30c": true,
@@ -243,6 +253,7 @@
     "3840c416-dcdf-4e7b-b77e-5bbfaa8dca4c": true,
     "eb48671e-0166-43d0-af23-6ee3a1eb9850": true,
     "1c4e278b-e881-4ae4-a7f6-9d0783430b87": true,
-    "fb8d28cf-e817-490c-a987-ad0c79ead7c0": true
+    "fb8d28cf-e817-490c-a987-ad0c79ead7c0": true,
+    "367134d9-7ea1-4bbf-a1cd-1251197c389a": true
   }
 }
