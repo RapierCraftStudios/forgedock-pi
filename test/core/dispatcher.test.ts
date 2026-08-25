@@ -41,6 +41,37 @@ test("dispatcher selects exactly one bounded node and gates review join on same 
   );
 });
 
+test("verify and prepare-pr use the completed predecessor head from the same round", () => {
+  const prefix: WorkflowNodeRecord[] = [
+    completed("resolve"),
+    completed("investigate"),
+    completed("plan"),
+    completed("prepare-worktree"),
+  ];
+  const implemented = [
+    ...prefix,
+    completed("implement", "implement-1", "implementation123"),
+  ];
+  assert.equal(
+    chooseNextExecutableNode({ nodes: implemented })?.headSha,
+    "implementation123",
+  );
+  assert.throws(
+    () =>
+      chooseNextExecutableNode({
+        nodes: [...prefix, { ...completed("implement"), headSha: undefined }],
+      }),
+    /requires the completed implementation head from the same round/,
+  );
+  const verified = [
+    ...implemented,
+    completed("verify", "verify-1", "verified1234567"),
+  ];
+  const prepare = chooseNextExecutableNode({ nodes: verified });
+  assert.equal(prepare?.node, "prepare-pr");
+  assert.equal(prepare?.headSha, "verified1234567");
+});
+
 test("both reviewer nodes become independently runnable at the frozen PR head", () => {
   const records: WorkflowNodeRecord[] = [
     completed("resolve"),
@@ -140,6 +171,7 @@ test("decision remediation advances one immutable fresh round and then exhausts 
     },
   ];
   let records = prefix;
+  const remediationHead = "remediated1234567";
   for (const node of [
     "implement",
     "verify",
@@ -154,11 +186,14 @@ test("decision remediation advances one immutable fresh round and then exhausts 
     assert.equal(next?.node, node);
     assert.equal(next?.nodeId, `${node}-2`);
     assert.equal(next?.round, 2);
+    if (node === "verify" || node === "prepare-pr")
+      assert.equal(next?.headSha, remediationHead);
     records = [
       ...records,
       {
         ...next!,
         status: "completed",
+        ...(node === "implement" ? { headSha: remediationHead } : {}),
         ...(node === "review-correctness"
           ? { publishedCommentId: 201 }
           : node === "review-security"

@@ -414,10 +414,16 @@ test("resume intent is durable before a provider continuation receipt", () => {
     nextEvent(
       state,
       "node.queued",
-      { nodeId: "verify-1", node: "verify", attempt: 1 },
+      {
+        nodeId: "verify-1",
+        node: "verify",
+        attempt: 1,
+        headSha: "implementation-head",
+      },
       "verify:queue",
     ),
   );
+  assert.equal(state.nodes["verify-1"]?.headSha, "implementation-head");
   state = applyRunEvent(
     state,
     nextEvent(
@@ -428,10 +434,12 @@ test("resume intent is durable before a provider continuation receipt", () => {
         node: "verify",
         attempt: 1,
         subagentRunId: "child-old",
+        headSha: "implementation-head",
       },
       "verify:start",
     ),
   );
+  assert.equal(state.nodes["verify-1"]?.headSha, "implementation-head");
   state = applyRunEvent(
     state,
     nextEvent(
@@ -447,10 +455,12 @@ test("resume intent is durable before a provider continuation receipt", () => {
         launchNonce: "nonce",
         launchIntent: true,
         transportRetries: 1,
+        headSha: "implementation-head",
       },
       "verify:resume:intent",
     ),
   );
+  assert.equal(state.nodes["verify-1"]?.headSha, "implementation-head");
   assert.equal(
     state.nodes["verify-1"]?.subagentRunId,
     "launch:verify-1-resume-1:nonce",
@@ -470,10 +480,12 @@ test("resume intent is durable before a provider continuation receipt", () => {
         launchNonce: "nonce",
         launchReceipt: true,
         transportRetries: 1,
+        headSha: "implementation-head",
       },
       "verify:resume:receipt",
     ),
   );
+  assert.equal(state.nodes["verify-1"]?.headSha, "implementation-head");
   assert.equal(state.nodes["verify-1"]?.subagentRunId, "child-new");
   assert.equal(state.nodes["verify-1"]?.transportRetries, 1);
 });

@@ -196,6 +196,105 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
   assert.doesNotMatch(spawn.params.task, /Process resolve, investigate, plan/i);
 });
 
+test("RPC bounded verify launch discloses the frozen head and complete approved name set", async () => {
+  const { pi, bus } = fakePi();
+  const client = new SubagentsRpcClient(pi);
+  const mixedPolicy = {
+    ...policy,
+    verification: {
+      ...policy.verification,
+      commands: {
+        ...policy.verification.commands,
+        lint: {
+          argv: ["npm", "run", "lint"],
+          required: false,
+          timeoutMs: 60_000,
+        },
+      },
+    },
+  };
+  await client.spawnNode({
+    runId: "run-verify",
+    issueNumber: 9,
+    repository: "owner/repo",
+    worktreeRoot: "/tmp/worktree",
+    branch: "forge/9",
+    baseBranch: "staging",
+    baseSha: "abcdef1234567890",
+    leaseEpoch: 1,
+    policy: mixedPolicy,
+    issueContext: "untrusted issue text",
+    node: {
+      nodeId: "verify-1",
+      node: "verify",
+      attempt: 1,
+      headSha: "fedcba9876543210",
+    },
+  });
+  const spawn = bus.requests.at(-1) as { params: { task: string } };
+  assert.match(
+    spawn.params.task,
+    /Frozen implementation head SHA: fedcba9876543210/,
+  );
+  assert.match(spawn.params.task, /test \(required\)/);
+  assert.match(spawn.params.task, /lint \(optional\)/);
+  assert.match(spawn.params.task, /complete set/);
+  assert.doesNotMatch(spawn.params.task, /npm run lint/);
+});
+
+test("RPC bounded verify launch fails closed without an implementation head", async () => {
+  const { pi, bus } = fakePi();
+  const client = new SubagentsRpcClient(pi);
+  await assert.rejects(
+    client.spawnNode({
+      runId: "run-verify-missing-head",
+      issueNumber: 9,
+      repository: "owner/repo",
+      worktreeRoot: "/tmp/worktree",
+      branch: "forge/9",
+      baseBranch: "staging",
+      baseSha: "abcdef1234567890",
+      leaseEpoch: 1,
+      policy,
+      issueContext: "untrusted issue text",
+      node: { nodeId: "verify-1", node: "verify", attempt: 1 },
+    }),
+    /requires a frozen implementation head SHA/,
+  );
+  assert.equal(bus.requests.length, 0);
+});
+
+test("RPC bounded verify launch represents an empty approved command set explicitly", async () => {
+  const { pi, bus } = fakePi();
+  const client = new SubagentsRpcClient(pi);
+  const noCommandsPolicy = {
+    ...policy,
+    verification: { ...policy.verification, commands: {} },
+  };
+  await client.spawnNode({
+    runId: "run-verify-empty",
+    issueNumber: 9,
+    repository: "owner/repo",
+    worktreeRoot: "/tmp/worktree",
+    branch: "forge/9",
+    baseBranch: "staging",
+    baseSha: "abcdef1234567890",
+    leaseEpoch: 1,
+    policy: noCommandsPolicy,
+    issueContext: "untrusted issue text",
+    node: {
+      nodeId: "verify-1",
+      node: "verify",
+      attempt: 1,
+      headSha: "fedcba9876543210",
+    },
+  });
+  const spawn = bus.requests.at(-1) as { params: { task: string } };
+  assert.match(spawn.params.task, /complete set\): none/);
+  assert.match(spawn.params.task, /Do not call forge_verify/);
+  assert.match(spawn.params.task, /do not ask the supervisor/i);
+});
+
 test("RPC work-on treats GitHub-only verification as valid", async () => {
   const { pi, bus } = fakePi();
   const client = new SubagentsRpcClient(pi);

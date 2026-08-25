@@ -147,15 +147,15 @@ export function chooseNextExecutableNode(
           ))
       )
         return undefined;
+      const frozenHead = frozenHeadForNode(nodes, latest, node, nextRound);
+      assertRequiredPredecessorHead(node, nextRound, frozenHead);
       return {
         nodeId: `${node}-${nextRound}`,
         node,
         attempt: nextRound,
         round: nextRound,
         status: "queued",
-        ...(latest.get("prepare-pr")?.headSha
-          ? { headSha: latest.get("prepare-pr")?.headSha }
-          : {}),
+        ...(frozenHead ? { headSha: frozenHead } : {}),
       };
     }
     return undefined;
@@ -204,18 +204,53 @@ export function chooseNextExecutableNode(
         correctness.headSha !== security.headSha)
     )
       return undefined;
-    const frozenHead =
-      latest.get("prepare-pr")?.headSha ?? latest.get("verify")?.headSha;
+    const attempt = (record?.attempt ?? 0) + 1;
+    const frozenHead = frozenHeadForNode(nodes, latest, node, attempt);
+    assertRequiredPredecessorHead(node, attempt, frozenHead);
     return {
-      nodeId: `${node}-${(record?.attempt ?? 0) + 1}`,
+      nodeId: `${node}-${attempt}`,
       node,
-      attempt: (record?.attempt ?? 0) + 1,
+      attempt,
       round: (record?.round ?? record?.attempt ?? 0) + 1,
       status: "queued",
       ...(frozenHead ? { headSha: frozenHead } : {}),
     };
   }
   return undefined;
+}
+
+function assertRequiredPredecessorHead(
+  node: WorkflowNode,
+  attempt: number,
+  headSha: string | undefined,
+): void {
+  if ((node === "verify" || node === "prepare-pr") && !headSha) {
+    const predecessor = node === "verify" ? "implementation" : "verification";
+    throw new Error(
+      `${node}-${attempt} requires the completed ${predecessor} head from the same round.`,
+    );
+  }
+}
+
+function frozenHeadForNode(
+  records: readonly WorkflowNodeRecord[],
+  latest: Map<WorkflowNode, WorkflowNodeRecord>,
+  node: WorkflowNode,
+  attempt: number,
+): string | undefined {
+  const predecessor =
+    node === "verify" ? "implement" : node === "prepare-pr" ? "verify" : undefined;
+  if (predecessor) {
+    return [...records]
+      .reverse()
+      .find(
+        (record) =>
+          record.node === predecessor &&
+          record.attempt === attempt &&
+          record.status === "completed",
+      )?.headSha;
+  }
+  return latest.get("prepare-pr")?.headSha ?? latest.get("verify")?.headSha;
 }
 
 function nextTerminalNode(

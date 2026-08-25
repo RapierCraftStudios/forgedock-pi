@@ -784,6 +784,7 @@ export class ForgeWorkOnController {
             subagentRunId: activeNode.subagentRunId,
             resultPath: activeNode.resultPath,
             baseSha: durableNode.baseSha ?? link.prepared.baseSha,
+            ...(durableNode.headSha ? { headSha: durableNode.headSha } : {}),
           },
           idempotencyKey: `node:${nodeId}:promote-running`,
           sessionId: ctx.sessionManager.getSessionId(),
@@ -806,6 +807,7 @@ export class ForgeWorkOnController {
             launchReceipt: true,
             transportRetries: durableNode.transportRetries ?? 0,
             baseSha: durableNode.baseSha ?? link.prepared.baseSha,
+            ...(durableNode.headSha ? { headSha: durableNode.headSha } : {}),
           },
           idempotencyKey: `node:${nodeId}:receipt-bound-recovery`,
           sessionId: ctx.sessionManager.getSessionId(),
@@ -877,6 +879,12 @@ export class ForgeWorkOnController {
       throw new Error(
         `Node result ${nodeResult.node} does not match bound node ${expectedNode}.`,
       );
+    assertFrozenVerifyIdentity({
+      node: expectedNode as WorkflowNode,
+      frozenHeadSha: durableNode.headSha,
+      observedHeadSha: nodeResult.headSha,
+      source: "node result",
+    });
     const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
     const token = await resolveGitHubToken(this.#pi, link.prepared.repositoryRoot, ctx.signal);
     const transport = new FetchGitHubTransport({ token });
@@ -1733,6 +1741,19 @@ export class ForgeWorkOnController {
       link.forgeRunId,
       node.nodeId,
     );
+    if (node.node === "verify" || node.node === "review-correctness" || node.node === "review-security") {
+      await this.#git.assertClean(link.prepared.worktreePath, ctx.signal);
+      const actualHead = await this.#git.head(link.prepared.worktreePath, ctx.signal);
+      if (node.node === "verify")
+        assertFrozenVerifyIdentity({
+          node: node.node,
+          frozenHeadSha: node.headSha,
+          observedHeadSha: actualHead,
+          source: "assigned worktree",
+        });
+      else if (node.headSha && actualHead !== node.headSha)
+        throw new Error(`Reviewer node ${node.nodeId} requires frozen head ${node.headSha}, found ${actualHead}.`);
+    }
     await journal.append({
       runId: link.forgeRunId,
       type: "node.queued",
@@ -1742,6 +1763,7 @@ export class ForgeWorkOnController {
         attempt: node.attempt,
         ...(node.round ? { round: node.round } : {}),
         baseSha: link.prepared.baseSha,
+        ...(node.headSha ? { headSha: node.headSha } : {}),
         resultPath,
       },
       idempotencyKey: `node:${node.nodeId}:queued`,
@@ -1749,11 +1771,6 @@ export class ForgeWorkOnController {
       message: `Queue ForgeDock node ${node.nodeId}`,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
-    if (node.node === "review-correctness" || node.node === "review-security") {
-      await this.#git.assertClean(link.prepared.worktreePath, ctx.signal);
-      const actualHead = await this.#git.head(link.prepared.worktreePath, ctx.signal);
-      if (node.headSha && actualHead !== node.headSha) throw new Error(`Reviewer node ${node.nodeId} requires frozen head ${node.headSha}, found ${actualHead}.`);
-    }
     const queuedState = await store.readRun(link.forgeRunId, ctx.signal);
     const queuedNode = queuedState.state?.nodes[node.nodeId];
     if (queuedNode?.status === "completed") return;
@@ -1802,6 +1819,7 @@ export class ForgeWorkOnController {
         launchNonce: launchIntent.launchNonce,
         launchIntent: true,
         baseSha: link.prepared.baseSha,
+        ...(node.headSha ? { headSha: node.headSha } : {}),
       },
       idempotencyKey: `node:${node.nodeId}:started`,
       sessionId: ctx.sessionManager.getSessionId(),
@@ -1920,6 +1938,7 @@ export class ForgeWorkOnController {
         launchReceipt: true,
         transportRetries: 0,
         baseSha: link.prepared.baseSha,
+        ...(node.headSha ? { headSha: node.headSha } : {}),
       },
       idempotencyKey: `node:${node.nodeId}:receipt-bound`,
       sessionId: ctx.sessionManager.getSessionId(),
@@ -3403,6 +3422,21 @@ export function reviewInstanceMarker(
 
 export function canonicalReviewerName(reviewer: string): string {
   return `forge-review-${reviewerDomain(reviewer)}`;
+}
+
+export function assertFrozenVerifyIdentity(input: {
+  node: WorkflowNode;
+  frozenHeadSha?: string;
+  observedHeadSha: string;
+  source: string;
+}): void {
+  if (input.node !== "verify") return;
+  if (!input.frozenHeadSha)
+    throw new Error("Verify launch requires a frozen implementation head SHA.");
+  if (input.observedHeadSha !== input.frozenHeadSha)
+    throw new Error(
+      `Verify ${input.source} head SHA mismatch: expected ${input.frozenHeadSha}, found ${input.observedHeadSha}.`,
+    );
 }
 
 function reviewerDomain(reviewer: string): string {

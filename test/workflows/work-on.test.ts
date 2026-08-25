@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  assertFrozenVerifyIdentity,
   canonicalReviewerName,
   finalReviewDecisionMarker,
   findingPriority,
@@ -15,6 +16,36 @@ import {
   reviewSupersessionMarker,
   similarFindingTitle,
 } from "../../src/workflows/work-on.ts";
+
+test("bounded verify identity requires and retains the frozen implementation head", () => {
+  assert.doesNotThrow(() =>
+    assertFrozenVerifyIdentity({
+      node: "verify",
+      frozenHeadSha: "implementation123",
+      observedHeadSha: "implementation123",
+      source: "node result",
+    }),
+  );
+  assert.throws(
+    () =>
+      assertFrozenVerifyIdentity({
+        node: "verify",
+        observedHeadSha: "implementation123",
+        source: "assigned worktree",
+      }),
+    /requires a frozen implementation head SHA/,
+  );
+  assert.throws(
+    () =>
+      assertFrozenVerifyIdentity({
+        node: "verify",
+        frozenHeadSha: "implementation123",
+        observedHeadSha: "stale123456789",
+        source: "node result",
+      }),
+    /node result head SHA mismatch/,
+  );
+});
 
 test("short reviewer aliases normalize to configured agent names", () => {
   assert.equal(canonicalReviewerName("security"), "forge-review-security");
