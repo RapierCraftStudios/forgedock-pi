@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:d2a48cedf4842801c268cd56e3bc583aed7e6a549fb9d9647c94a5c0c7e7f519",
+  "sequence": 9,
+  "lastEventHash": "sha256:dd7e7cbf030f45a5ae832829b857eecab89a736059675a0c9176f59e3f531028",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -46,7 +46,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/4d0cac12-19d8-465f-b913-006f21cd4335/.pi/forge/4d0cac12-19d8-465f-b913-006f21cd4335-investigate-1.json",
       "subagentRunId": "ff65f6f8-35bd-473e-83a3-91bed4f6f8db",
@@ -55,7 +55,18 @@
       "startedAt": "2026-08-25T17:58:00.969Z",
       "previousSubagentRunId": "launch:investigate-1:0c5c5291-7cae-476c-a1c4-52b14c67449c",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "src/workflows/work-on.ts:1889-1924 persists the real child receipt in the live link and then appends node.resumed with idempotency key node:<nodeId>:receipt-bound.",
+        "src/workflows/work-on.ts:688-814 can concurrently reconcile that same live child while durable state still contains the launch sentinel; its bind-receipt branch appends an equivalent node.resumed event under the different key node:<nodeId>:receipt-bound-recovery.",
+        "src/workflows/journal.ts:127-180 deduplicates append operations only by exact idempotency key, so the two semantic receipt bindings are not idempotent with each other after a CAS retry.",
+        "src/core/state.ts:594-600 requires node.resumed to start from running, and src/core/state.ts:632-657 further requires previousSubagentRunId to equal the current durable run ID; a losing duplicate bind can therefore fail after the winning path has rebound or completed the node.",
+        "test/workflows/work-on.test.ts:27-54 covers only pure reconciliation classifications, while test/core/state.test.ts:410-478 covers sequential intent/receipt replacement; neither exercises overlapping live and recovery receipt binds."
+      ],
+      "finishedAt": "2026-08-25T18:02:04.485Z"
     }
   },
   "effects": {},
@@ -67,7 +78,8 @@
     "node:resolve-1:completed": "c78d215f-cdfd-47f1-b514-6a72c8fa4242",
     "node:investigate-1:queued": "5026cacf-3e74-44ca-b8eb-d7f467b5294d",
     "node:investigate-1:started": "14dd697a-786f-4864-a49f-dc6b45f12e53",
-    "node:investigate-1:receipt-bound": "bc6da250-e6ea-4cb5-b534-aafcaf5fc1d2"
+    "node:investigate-1:receipt-bound": "bc6da250-e6ea-4cb5-b534-aafcaf5fc1d2",
+    "node:investigate-1:completed": "e64a5d7b-aad3-41c7-bce8-d9c7f8d54dba"
   },
   "eventIds": {
     "b1e68782-9a16-4c99-ac4d-202289a4121f": true,
@@ -77,6 +89,7 @@
     "c78d215f-cdfd-47f1-b514-6a72c8fa4242": true,
     "5026cacf-3e74-44ca-b8eb-d7f467b5294d": true,
     "14dd697a-786f-4864-a49f-dc6b45f12e53": true,
-    "bc6da250-e6ea-4cb5-b534-aafcaf5fc1d2": true
+    "bc6da250-e6ea-4cb5-b534-aafcaf5fc1d2": true,
+    "e64a5d7b-aad3-41c7-bce8-d9c7f8d54dba": true
   }
 }
