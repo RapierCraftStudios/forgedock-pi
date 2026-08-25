@@ -10,8 +10,8 @@
     "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
     "epoch": 1
   },
-  "sequence": 13,
-  "lastEventHash": "sha256:a3d5772b3efd021e4c406d9c0d7f06e2fae8624f99998833d309b0cfe119c3ba",
+  "sequence": 14,
+  "lastEventHash": "sha256:b2e65bd8d2b98e8c4f05be0fc46ef7f2539352f8b7810b2e3e69acfaf6153e13",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -105,6 +105,15 @@
         "test/workflows/work-on.test.ts covers basic launch reconciliation but not duplicate receipt callbacks or a completion/binding race; test/core/state.test.ts covers one continuation receipt only."
       ],
       "finishedAt": "2026-08-25T16:55:40.467Z"
+    },
+    "prepare-worktree-1": {
+      "nodeId": "prepare-worktree-1",
+      "node": "prepare-worktree",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/c2553c16-045f-465c-87b3-08f0566183a2/.pi/forge/c2553c16-045f-465c-87b3-08f0566183a2-prepare-worktree-1.json"
     }
   },
   "effects": {},
@@ -121,7 +130,8 @@
     "node:plan-1:queued": "8eff53bb-13e7-432b-b8cc-f974cf2006dd",
     "node:plan-1:started": "b5f8d6b0-f4ab-48e9-a6cc-3e08df98f321",
     "node:plan-1:receipt-bound": "e004c810-f82b-4874-8fac-e7aed951866e",
-    "node:plan-1:completed": "e775ef44-7c7a-46f0-acf6-e9c97bd017af"
+    "node:plan-1:completed": "e775ef44-7c7a-46f0-acf6-e9c97bd017af",
+    "node:prepare-worktree-1:queued": "976468b6-27e7-4b91-882d-8b5bf8bbed83"
   },
   "eventIds": {
     "26445051-7ba5-465e-8c7f-a17aa6f15137": true,
@@ -136,6 +146,7 @@
     "8eff53bb-13e7-432b-b8cc-f974cf2006dd": true,
     "b5f8d6b0-f4ab-48e9-a6cc-3e08df98f321": true,
     "e004c810-f82b-4874-8fac-e7aed951866e": true,
-    "e775ef44-7c7a-46f0-acf6-e9c97bd017af": true
+    "e775ef44-7c7a-46f0-acf6-e9c97bd017af": true,
+    "976468b6-27e7-4b91-882d-8b5bf8bbed83": true
   }
 }
