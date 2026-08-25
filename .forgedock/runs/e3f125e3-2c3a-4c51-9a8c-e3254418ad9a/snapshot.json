@@ -5,13 +5,13 @@
   "issueNumber": 30,
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "failed",
   "leaseBinding": {
     "ownerRunId": "fd616696-4975-49a6-9d2a-9a782a49ed27",
     "epoch": 1
   },
-  "sequence": 45,
-  "lastEventHash": "sha256:f445f1026cf9ead46d1b236830783b0ba46e617d76d9653737237fa7040730ad",
+  "sequence": 46,
+  "lastEventHash": "sha256:0bb4b2a9e50822f63f3edb754465bf5149433e61b26b5ddf05bfa8119cfd08cc",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -520,9 +520,18 @@
       "node": "decision",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "failed",
       "baseSha": "86fff740db2e1ab31fc651fc80ea00ec7c5bdcbd",
-      "startedAt": "2026-08-25T09:35:11.516Z"
+      "startedAt": "2026-08-25T09:35:11.516Z",
+      "headSha": "8aee96d4b8e41e0ec28edcf47e52c23ef060f360",
+      "evidence": [
+        "decision:blocked",
+        "decision-comment:5408436525",
+        "Pull request mergeability is unknown.",
+        "Required review panel incomplete: forge-review-security."
+      ],
+      "reason": "Pull request mergeability is unknown. Required review panel incomplete: forge-review-security.",
+      "finishedAt": "2026-08-25T09:35:38.346Z"
     }
   },
   "effects": {},
@@ -571,7 +580,8 @@
     "node:ci-1:started": "940853ac-9699-476e-a194-d3db4a94cf68",
     "node:ci-1:complete": "233ae29e-c7da-4749-b623-8b1073d420cb",
     "node:decision-1:queued": "625baefe-14cd-4fad-ad09-4cbefb461e07",
-    "node:decision-1:started": "74959c0c-f68e-4f0b-9117-50405531f482"
+    "node:decision-1:started": "74959c0c-f68e-4f0b-9117-50405531f482",
+    "node:decision-1:failed": "ec981592-13f1-4590-a479-2546753097ea"
   },
   "eventIds": {
     "a99b16b3-5107-4924-8a10-6bae25957c57": true,
@@ -618,6 +628,7 @@
     "940853ac-9699-476e-a194-d3db4a94cf68": true,
     "233ae29e-c7da-4749-b623-8b1073d420cb": true,
     "625baefe-14cd-4fad-ad09-4cbefb461e07": true,
-    "74959c0c-f68e-4f0b-9117-50405531f482": true
+    "74959c0c-f68e-4f0b-9117-50405531f482": true,
+    "ec981592-13f1-4590-a479-2546753097ea": true
   }
 }
