@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 14,
-  "lastEventHash": "sha256:dcd2d0e8a5fec90d6fb775c9649ac3a9c0d2d3fa7bc0d447f4931054f0af82c0",
+  "sequence": 15,
+  "lastEventHash": "sha256:951b329117d654683b49117858544e514024cf32a0f638bb16cc3542f7e2cc32",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -116,9 +116,13 @@
       "node": "prepare-worktree",
       "attempt": 1,
       "round": 1,
-      "status": "queued",
+      "status": "running",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
-      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/91fd4701-34b2-4f98-9c38-a66277301579/.pi/forge/91fd4701-34b2-4f98-9c38-a66277301579-prepare-worktree-1.json"
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/91fd4701-34b2-4f98-9c38-a66277301579/.pi/forge/91fd4701-34b2-4f98-9c38-a66277301579-prepare-worktree-1.json",
+      "subagentRunId": "launch:prepare-worktree-1:6a68a989-7483-43e5-a14e-86c62585da93",
+      "launchNonce": "6a68a989-7483-43e5-a14e-86c62585da93",
+      "launchIntent": true,
+      "startedAt": "2026-08-25T19:45:03.296Z"
     }
   },
   "effects": {},
@@ -136,7 +140,8 @@
     "node:plan-1:started": "b02fd87d-b8e6-4b35-bb6c-70042fa054bc",
     "node:plan-1:receipt-bound": "99f63fc3-3850-406d-b569-037e4a0ec108",
     "node:plan-1:completed": "e30532af-cf80-4e59-b45e-e94be5909ef2",
-    "node:prepare-worktree-1:queued": "0199d7f5-657d-4412-be1f-02757723fbaf"
+    "node:prepare-worktree-1:queued": "0199d7f5-657d-4412-be1f-02757723fbaf",
+    "node:prepare-worktree-1:started": "d9e901bf-c11f-41da-8294-749cc526b6fb"
   },
   "eventIds": {
     "ba49bd33-cd25-4d3a-8106-d3166e61f8e2": true,
@@ -152,6 +157,7 @@
     "b02fd87d-b8e6-4b35-bb6c-70042fa054bc": true,
     "99f63fc3-3850-406d-b569-037e4a0ec108": true,
     "e30532af-cf80-4e59-b45e-e94be5909ef2": true,
-    "0199d7f5-657d-4412-be1f-02757723fbaf": true
+    "0199d7f5-657d-4412-be1f-02757723fbaf": true,
+    "d9e901bf-c11f-41da-8294-749cc526b6fb": true
   }
 }
