@@ -10,8 +10,8 @@
     "ownerRunId": "fd616696-4975-49a6-9d2a-9a782a49ed27",
     "epoch": 1
   },
-  "sequence": 21,
-  "lastEventHash": "sha256:fb34f5619404a0b3ce75e921ef0d49350893a5ef8c338c324898922b47654a19",
+  "sequence": 22,
+  "lastEventHash": "sha256:034424195500e7c28a8556173bf62fb08a421ac751c020c6128231e071766d00",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -144,6 +144,15 @@
         "forge_verify is unavailable for the bounded implement node; project verification remains for the verify node."
       ],
       "finishedAt": "2026-08-25T09:08:59.990Z"
+    },
+    "verify-1": {
+      "nodeId": "verify-1",
+      "node": "verify",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "86fff740db2e1ab31fc651fc80ea00ec7c5bdcbd",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a/.pi/forge/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a-verify-1.json"
     }
   },
   "effects": {},
@@ -168,7 +177,8 @@
     "node:implement-1:queued": "129cab71-e10d-43e6-96ec-b0531edd3437",
     "node:implement-1:started": "50d1e8fe-8b95-4e67-8901-6b7d483ed5ef",
     "node:implement-1:receipt-bound": "0ce8eec5-e379-463b-a1f1-6ed665538d2a",
-    "node:implement-1:completed": "2c637580-7660-4a9e-9060-a9bd642f41ec"
+    "node:implement-1:completed": "2c637580-7660-4a9e-9060-a9bd642f41ec",
+    "node:verify-1:queued": "67ae1dec-fb70-4e23-8ed5-c43d825b07b2"
   },
   "eventIds": {
     "a99b16b3-5107-4924-8a10-6bae25957c57": true,
@@ -191,6 +201,7 @@
     "129cab71-e10d-43e6-96ec-b0531edd3437": true,
     "50d1e8fe-8b95-4e67-8901-6b7d483ed5ef": true,
     "0ce8eec5-e379-463b-a1f1-6ed665538d2a": true,
-    "2c637580-7660-4a9e-9060-a9bd642f41ec": true
+    "2c637580-7660-4a9e-9060-a9bd642f41ec": true,
+    "67ae1dec-fb70-4e23-8ed5-c43d825b07b2": true
   }
 }
