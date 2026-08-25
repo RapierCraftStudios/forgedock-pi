@@ -10,8 +10,8 @@
     "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
     "epoch": 1
   },
-  "sequence": 19,
-  "lastEventHash": "sha256:70eb9bd3c5294e79c857118bc93ad386eb0963684d83a445d1ae1d145a81f66f",
+  "sequence": 20,
+  "lastEventHash": "sha256:7ffff592d4bf1c2adeb02df6d067b50427be6d6682869349a65d5b92d4e0259e",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -139,10 +139,13 @@
       "status": "running",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/5ae128e5-d087-4d0f-97cb-73d4435aabae/.pi/forge/5ae128e5-d087-4d0f-97cb-73d4435aabae-implement-1.json",
-      "subagentRunId": "launch:implement-1:723ffcdb-72ba-45cd-8ea4-fa2f0123d89c",
+      "subagentRunId": "aaaf5197-5e62-4b2b-92c3-874a1230d42c",
       "launchNonce": "723ffcdb-72ba-45cd-8ea4-fa2f0123d89c",
       "launchIntent": true,
-      "startedAt": "2026-08-25T16:53:47.731Z"
+      "startedAt": "2026-08-25T16:53:47.731Z",
+      "previousSubagentRunId": "launch:implement-1:723ffcdb-72ba-45cd-8ea4-fa2f0123d89c",
+      "transportRetries": 0,
+      "launchReceipt": true
     }
   },
   "effects": {},
@@ -165,7 +168,8 @@
     "node:prepare-worktree-1:receipt-bound": "88d630ee-5658-40f8-bbf5-b19c6bfbc535",
     "node:prepare-worktree-1:completed": "8e476eed-6ef1-4962-898b-e5e53319a529",
     "node:implement-1:queued": "4423009a-5991-4fe6-b627-51238c849912",
-    "node:implement-1:started": "d29954a9-cf40-48c6-8986-9f2b0f95d074"
+    "node:implement-1:started": "d29954a9-cf40-48c6-8986-9f2b0f95d074",
+    "node:implement-1:receipt-bound": "fab16ded-e94c-4ff6-8452-a1950a2d1d56"
   },
   "eventIds": {
     "3d76639e-0ea5-4b9c-8cf5-c5861433e30c": true,
@@ -186,6 +190,7 @@
     "88d630ee-5658-40f8-bbf5-b19c6bfbc535": true,
     "8e476eed-6ef1-4962-898b-e5e53319a529": true,
     "4423009a-5991-4fe6-b627-51238c849912": true,
-    "d29954a9-cf40-48c6-8986-9f2b0f95d074": true
+    "d29954a9-cf40-48c6-8986-9f2b0f95d074": true,
+    "fab16ded-e94c-4ff6-8452-a1950a2d1d56": true
   }
 }
