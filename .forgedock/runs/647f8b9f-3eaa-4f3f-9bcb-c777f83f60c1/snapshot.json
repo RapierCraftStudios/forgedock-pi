@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 31,
-  "lastEventHash": "sha256:8ffc5d59403e8f8fccb147b1a0c8dd0093b6fc49544a62d6fe50b4dd30091b1e",
+  "sequence": 32,
+  "lastEventHash": "sha256:1ca42e640cb75403faf67be770bcbe1f108fca8f7f946527335d10e23b768053",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -230,10 +230,13 @@
       "status": "running",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/647f8b9f-3eaa-4f3f-9bcb-c777f83f60c1/.pi/forge/647f8b9f-3eaa-4f3f-9bcb-c777f83f60c1-review-correctness-1.json",
-      "subagentRunId": "launch:review-correctness-1:d44a297c-64c7-4f80-83f5-a50d89f235fe",
+      "subagentRunId": "786c05aa-6954-4c1f-9a76-cb6513d7aa08",
       "launchNonce": "d44a297c-64c7-4f80-83f5-a50d89f235fe",
       "launchIntent": true,
-      "startedAt": "2026-08-25T20:28:07.757Z"
+      "startedAt": "2026-08-25T20:28:07.757Z",
+      "previousSubagentRunId": "launch:review-correctness-1:d44a297c-64c7-4f80-83f5-a50d89f235fe",
+      "transportRetries": 0,
+      "launchReceipt": true
     }
   },
   "effects": {},
@@ -268,7 +271,8 @@
     "node:prepare-pr-1:receipt-bound": "2f451701-35d9-4036-a08e-f9c3d6a532c3",
     "node:prepare-pr-1:completed": "e44b5e1b-fe29-402d-8deb-1e1e5630c58f",
     "node:review-correctness-1:queued": "4cd42f82-a5fd-46b0-a638-4d952c40324c",
-    "node:review-correctness-1:started": "d3ec5426-1ce3-42a4-93be-1f489685e5d0"
+    "node:review-correctness-1:started": "d3ec5426-1ce3-42a4-93be-1f489685e5d0",
+    "node:review-correctness-1:receipt-bound": "ba86f9d2-4c26-4bee-a24e-f04038654fcc"
   },
   "eventIds": {
     "28127e57-647b-4271-865e-4db189ff5d19": true,
@@ -301,6 +305,7 @@
     "2f451701-35d9-4036-a08e-f9c3d6a532c3": true,
     "e44b5e1b-fe29-402d-8deb-1e1e5630c58f": true,
     "4cd42f82-a5fd-46b0-a638-4d952c40324c": true,
-    "d3ec5426-1ce3-42a4-93be-1f489685e5d0": true
+    "d3ec5426-1ce3-42a4-93be-1f489685e5d0": true,
+    "ba86f9d2-4c26-4bee-a24e-f04038654fcc": true
   }
 }
