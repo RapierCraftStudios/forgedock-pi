@@ -10,8 +10,8 @@
     "ownerRunId": "fd616696-4975-49a6-9d2a-9a782a49ed27",
     "epoch": 1
   },
-  "sequence": 15,
-  "lastEventHash": "sha256:76a556fc528b1628eec7077c5f78669705587b4d26498367ca160ea392579656",
+  "sequence": 16,
+  "lastEventHash": "sha256:25a70c1e833d2d9d7eb4046ff21bed55f3e11c3600995013bbf130ad86a72b30",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -103,10 +103,13 @@
       "status": "running",
       "baseSha": "86fff740db2e1ab31fc651fc80ea00ec7c5bdcbd",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a/.pi/forge/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a-prepare-worktree-1.json",
-      "subagentRunId": "launch:prepare-worktree-1:8b8be15b-af3f-4c7f-9624-b4c61c91d7b1",
+      "subagentRunId": "80b5d7e0-668f-4270-9cc6-61ff452fe7d4",
       "launchNonce": "8b8be15b-af3f-4c7f-9624-b4c61c91d7b1",
       "launchIntent": true,
-      "startedAt": "2026-08-25T09:04:01.767Z"
+      "startedAt": "2026-08-25T09:04:01.767Z",
+      "previousSubagentRunId": "launch:prepare-worktree-1:8b8be15b-af3f-4c7f-9624-b4c61c91d7b1",
+      "transportRetries": 0,
+      "launchReceipt": true
     }
   },
   "effects": {},
@@ -125,7 +128,8 @@
     "node:plan-1:receipt-bound": "d01495f4-efe6-483f-8e09-697923d560a1",
     "node:plan-1:completed": "3409aed1-7a11-4d21-96cf-bb074005f57b",
     "node:prepare-worktree-1:queued": "a8702a3f-0dfd-4a41-b620-56fe3a9d067f",
-    "node:prepare-worktree-1:started": "8a857b1a-91f5-41ca-bab8-3ae361f14ecb"
+    "node:prepare-worktree-1:started": "8a857b1a-91f5-41ca-bab8-3ae361f14ecb",
+    "node:prepare-worktree-1:receipt-bound": "aa918360-5fad-4832-97b5-2076460cca67"
   },
   "eventIds": {
     "a99b16b3-5107-4924-8a10-6bae25957c57": true,
@@ -142,6 +146,7 @@
     "d01495f4-efe6-483f-8e09-697923d560a1": true,
     "3409aed1-7a11-4d21-96cf-bb074005f57b": true,
     "a8702a3f-0dfd-4a41-b620-56fe3a9d067f": true,
-    "8a857b1a-91f5-41ca-bab8-3ae361f14ecb": true
+    "8a857b1a-91f5-41ca-bab8-3ae361f14ecb": true,
+    "aa918360-5fad-4832-97b5-2076460cca67": true
   }
 }
