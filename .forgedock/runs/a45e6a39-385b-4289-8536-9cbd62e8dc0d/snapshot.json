@@ -10,8 +10,8 @@
     "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
     "epoch": 1
   },
-  "sequence": 19,
-  "lastEventHash": "sha256:180d4ac91293bb1e832e145b1e71778c84cfc3aacaa9882d283aac7dff6cbb4c",
+  "sequence": 20,
+  "lastEventHash": "sha256:f769ab05d31ac5715b06ec397d807ea38df72a9e7887d96f035d9d112c502192",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -139,10 +139,13 @@
       "status": "running",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/a45e6a39-385b-4289-8536-9cbd62e8dc0d/.pi/forge/a45e6a39-385b-4289-8536-9cbd62e8dc0d-implement-1.json",
-      "subagentRunId": "launch:implement-1:bae8287e-eab2-4020-86e3-3b245660b4bc",
+      "subagentRunId": "3bbf8d6f-d061-4cdd-9f40-2f7b54ef03e7",
       "launchNonce": "bae8287e-eab2-4020-86e3-3b245660b4bc",
       "launchIntent": true,
-      "startedAt": "2026-08-25T16:57:48.001Z"
+      "startedAt": "2026-08-25T16:57:48.001Z",
+      "previousSubagentRunId": "launch:implement-1:bae8287e-eab2-4020-86e3-3b245660b4bc",
+      "transportRetries": 0,
+      "launchReceipt": true
     }
   },
   "effects": {},
@@ -165,7 +168,8 @@
     "node:prepare-worktree-1:receipt-bound": "8e7d40d2-ffed-4717-b19c-cc4bc1eb111f",
     "node:prepare-worktree-1:completed": "0919dff0-781a-46c0-8c0c-f48bf047afde",
     "node:implement-1:queued": "3e8ebf30-5e8c-4edf-8797-008952727ac4",
-    "node:implement-1:started": "eefa6584-7ffd-470d-aac5-c7c08a0db403"
+    "node:implement-1:started": "eefa6584-7ffd-470d-aac5-c7c08a0db403",
+    "node:implement-1:receipt-bound": "379e90dc-45a3-4e39-9efb-2f75117428d7"
   },
   "eventIds": {
     "cc7da491-7462-4048-8eb8-70c6f11fbdd7": true,
@@ -186,6 +190,7 @@
     "8e7d40d2-ffed-4717-b19c-cc4bc1eb111f": true,
     "0919dff0-781a-46c0-8c0c-f48bf047afde": true,
     "3e8ebf30-5e8c-4edf-8797-008952727ac4": true,
-    "eefa6584-7ffd-470d-aac5-c7c08a0db403": true
+    "eefa6584-7ffd-470d-aac5-c7c08a0db403": true,
+    "379e90dc-45a3-4e39-9efb-2f75117428d7": true
   }
 }
