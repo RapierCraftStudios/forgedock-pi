@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 36,
-  "lastEventHash": "sha256:a102eb6afa5575d2952dddc2400b8267836de1515bb065e13280124eec96afcb",
+  "sequence": 37,
+  "lastEventHash": "sha256:da204f8155273cf4301aba7c94c0a54b761bafc78cd7dcb21aba5df90b656d8a",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -216,7 +216,7 @@
       "node": "review-correctness",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/152edce1-3e46-4425-8162-4f7b3cfaefc9/.pi/forge/152edce1-3e46-4425-8162-4f7b3cfaefc9-review-correctness-1.json",
       "subagentRunId": "a1b4ee9d-0fcf-4b6a-9732-7d7ceca882ba",
@@ -225,7 +225,69 @@
       "startedAt": "2026-08-25T19:05:59.956Z",
       "previousSubagentRunId": "launch:review-correctness-1:2c266e21-3844-490b-9007-207029949c6e",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "ebedb10cd436f825d18549833e1d0c62f773c3ce",
+      "reviewerResult": {
+        "schema": "forgedock.reviewer-result/v1",
+        "runId": "152edce1-3e46-4425-8162-4f7b3cfaefc9",
+        "reviewer": "forge-review-correctness",
+        "headSha": "ebedb10cd436f825d18549833e1d0c62f773c3ce",
+        "verdict": "findings",
+        "findings": [
+          {
+            "id": "correctness-49-readonly-investigation-context",
+            "reviewer": "forge-review-correctness",
+            "runId": "152edce1-3e46-4425-8162-4f7b3cfaefc9",
+            "headSha": "ebedb10cd436f825d18549833e1d0c62f773c3ce",
+            "confidence": "likely",
+            "severity": "medium",
+            "category": "correctness",
+            "file": "src/agents/register.ts",
+            "line": 22,
+            "summary": "Read-only investigation nodes have no way to inspect Git or GitHub history",
+            "evidence": [
+              "The new FORGE_READ_ONLY_NODE_TOOLS contains only filesystem readers plus Forge phase tools; it provides neither bash nor a dedicated read-only Git/GitHub metadata tool.",
+              "boundedNodeAgent routes investigate and plan to this agent, and src/adapters/subagents.ts:514 explicitly limits them to read/grep/find/ls. This replaces the prior bounded-node guidance that allowed read-only git/gh inspection.",
+              "The parent context in src/workflows/work-on.ts:636-639 supplies only issue title, body, and labels, while InvestigationArtifact requires non-empty history and the plan contract carries history/CI context. For an issue whose evidence is in comments, related PRs/runs, or git log/blame, the worker cannot obtain those facts and must either fabricate/placeholder the required fields or misclassify/block the issue.",
+              "The changed tests only assert that shell is unavailable; they do not exercise production of a valid, evidence-backed investigation/plan under the reduced capability set."
+            ]
+          },
+          {
+            "id": "correctness-49-implement-bash-blocked",
+            "reviewer": "forge-review-correctness",
+            "runId": "152edce1-3e46-4425-8162-4f7b3cfaefc9",
+            "headSha": "ebedb10cd436f825d18549833e1d0c62f773c3ce",
+            "confidence": "confirmed",
+            "severity": "medium",
+            "category": "correctness",
+            "file": "src/adapters/subagents.ts",
+            "line": 512,
+            "summary": "Implementation task advertises bash even though the child runtime rejects every implementation bash call",
+            "evidence": [
+              "The changed boundedShellGuidance tells implement workers that bash is available for implementation and Git inspection, and the selected FORGE_WORK_ON_AGENT exposes the bash tool.",
+              "In src/agents/child-runtime.ts:171-180, the tool_call hook permits bash only when binding.node is resolve, investigate, or plan; binding.node === \"implement\" deterministically returns a blocking response.",
+              "Therefore any implementation following the new instruction—for example invoking a generator or inspecting Git with bash—receives a tool rejection. The new test checks only the task text and selected agent, so it misses the runtime integration failure."
+            ]
+          }
+        ],
+        "filesReviewed": [
+          "src/adapters/git.ts",
+          "src/adapters/subagents.ts",
+          "src/agents/materialize.ts",
+          "src/agents/register.ts",
+          "test/adapters/subagents.test.ts"
+        ],
+        "limitations": [
+          "Review was static because the reviewer toolset does not provide shell/test execution.",
+          "Issue #49's external GitHub discussion was unavailable; conclusions are based on the frozen patch and repository contracts."
+        ]
+      },
+      "publishedCommentId": 5415369115,
+      "evidence": [
+        "pr:57",
+        "comment:5415369115"
+      ],
+      "finishedAt": "2026-08-25T19:09:13.393Z"
     },
     "review-security-1": {
       "nodeId": "review-security-1",
@@ -306,7 +368,8 @@
     "node:review-security-1:queued": "235ac096-6d59-4ba9-a870-fd47900d772e",
     "node:review-security-1:started": "8339094b-4bc1-4763-b279-b0ad8c7e001c",
     "node:review-security-1:receipt-bound": "f6b006ec-def0-43db-844a-f8cb541a282b",
-    "node:review-security-1:artifact-published": "6d7a74ee-5899-4a27-bb56-6543450bae0d"
+    "node:review-security-1:artifact-published": "6d7a74ee-5899-4a27-bb56-6543450bae0d",
+    "node:review-correctness-1:artifact-published": "a8eab6b5-5364-40cd-bc34-4e8266e02aec"
   },
   "eventIds": {
     "e54b6411-60d6-4281-8801-6488bc2a6398": true,
@@ -344,6 +407,7 @@
     "235ac096-6d59-4ba9-a870-fd47900d772e": true,
     "8339094b-4bc1-4763-b279-b0ad8c7e001c": true,
     "f6b006ec-def0-43db-844a-f8cb541a282b": true,
-    "6d7a74ee-5899-4a27-bb56-6543450bae0d": true
+    "6d7a74ee-5899-4a27-bb56-6543450bae0d": true,
+    "a8eab6b5-5364-40cd-bc34-4e8266e02aec": true
   }
 }
