@@ -10,15 +10,15 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 4,
-  "lastEventHash": "sha256:468cb7d9a4f879443467ee0c399377d6f9469141232fb713cbd87f3abd5bc58e",
+  "sequence": 5,
+  "lastEventHash": "sha256:67cddccc72bdf224eb0f7a77c67fa404675fe90ebac40d878e640aca3ebd7346",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/63c88c5f-9abf-46ab-8be0-f65381de7c26/.pi/forge/63c88c5f-9abf-46ab-8be0-f65381de7c26-resolve-1.json",
       "subagentRunId": "70f0e5eb-9c40-4dd0-9bb0-64942868157e",
@@ -27,7 +27,20 @@
       "startedAt": "2026-08-25T13:10:30.565Z",
       "previousSubagentRunId": "launch:resolve-1:dd20f080-7937-49e5-83f6-d65acc61371c",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "round": 1,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "Issue #40 is open and carries review-finding, needs-validation, and priority:P1 labels, so it is eligible for work-on.",
+        "The configured integration branch is dogfood, and frozen base 03e6133becc50ba8509b976743ea76ffeaab2c4d is the current HEAD and matches origin/dogfood.",
+        "At the frozen base, src/workflows/work-on.ts line 584 calls materializeForgeAgents on the prepared worktree before the child runtime starts.",
+        "At the frozen base, src/agents/materialize.ts lines 25-27 recursively create .pi/agents without rejecting symlink components, and line 100 writes fixed agent paths with writeFile.",
+        "A temporary reproduction against the frozen implementation redirected .pi/agents/forge-work-on.md to a victim file; materialization changed the victim content and exited successfully.",
+        "The repository remained unchanged during resolution; the inspected paths have no diff from the frozen base."
+      ],
+      "finishedAt": "2026-08-25T13:13:37.482Z"
     }
   },
   "effects": {},
@@ -35,12 +48,14 @@
     "run:create": "ffc52c6f-bd15-425f-8eed-03dd42ee40d4",
     "node:resolve-1:queued": "95b80259-7782-459b-b043-940a1400d1c3",
     "node:resolve-1:started": "ac6d930e-a541-4c88-80ca-cf86384a5d3d",
-    "node:resolve-1:receipt-bound": "35fc53cb-2cb8-4373-80a1-7d312fa80489"
+    "node:resolve-1:receipt-bound": "35fc53cb-2cb8-4373-80a1-7d312fa80489",
+    "node:resolve-1:completed": "7623def0-a199-461f-b6e6-47a0fb677f63"
   },
   "eventIds": {
     "ffc52c6f-bd15-425f-8eed-03dd42ee40d4": true,
     "95b80259-7782-459b-b043-940a1400d1c3": true,
     "ac6d930e-a541-4c88-80ca-cf86384a5d3d": true,
-    "35fc53cb-2cb8-4373-80a1-7d312fa80489": true
+    "35fc53cb-2cb8-4373-80a1-7d312fa80489": true,
+    "7623def0-a199-461f-b6e6-47a0fb677f63": true
   }
 }
