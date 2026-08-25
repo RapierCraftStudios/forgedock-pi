@@ -62,7 +62,7 @@ test("expired lease takeover requires a separate operator authorization", async 
   assert.match(message, /cancellation and takeover/);
 });
 
-test("orchestration confirmation names the exact issue set and resolution", async () => {
+test("orchestration confirmation names only the trusted exact issue set", async () => {
   let prompt = "";
   const ui = {
     confirm: async (_title: string, message: string) => {
@@ -73,7 +73,7 @@ test("orchestration confirmation names the exact issue set and resolution", asyn
 
   await confirmOrchestrationDispatch({ hasUI: true, ui }, input);
   assert.match(prompt, /Issues: #2, #16, #41/);
-  assert.match(prompt, /Source: https:\/\/github\.com\/owner\/repo\/issues/);
-  assert.match(prompt, /Three eligible open issues/);
   assert.match(prompt, /may merge changes/);
+  assert.doesNotMatch(prompt, /github\.com/);
+  assert.doesNotMatch(prompt, /eligible open issues/);
 });

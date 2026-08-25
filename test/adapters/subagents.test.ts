@@ -250,6 +250,7 @@ test("bounded implementation launch binds the durable builder contract", async (
   );
   assert.match(spawn.params.task, new RegExp(builderContract.contractHash));
   assert.match(spawn.params.task, /Allowed paths: src\/\*\*, test\/\*\*/);
+  assert.match(spawn.params.task, /Bash is available for implementation/);
 });
 
 test("RPC work-on treats GitHub-only verification as valid", async () => {
@@ -422,13 +423,17 @@ test("runtime Forge hierarchy keeps bounded work-on least-authority", () => {
     (FORGE_READ_ONLY_NODE_TOOLS as readonly string[]).includes("edit"),
     false,
   );
+  assert.equal(
+    (FORGE_READ_ONLY_NODE_TOOLS as readonly string[]).includes("bash"),
+    false,
+  );
   assert.equal(boundedNodeAgent("resolve"), FORGE_READ_ONLY_NODE_AGENT);
   assert.equal(boundedNodeAgent("investigate"), FORGE_READ_ONLY_NODE_AGENT);
   assert.equal(boundedNodeAgent("plan"), FORGE_READ_ONLY_NODE_AGENT);
   assert.equal(boundedNodeAgent("implement"), FORGE_WORK_ON_AGENT);
   assert.equal(
     (FORGE_WORK_ON_TOOLS as readonly string[]).includes("bash"),
-    false,
+    true,
   );
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("subagent"), false);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_finalize_work_on"), false);

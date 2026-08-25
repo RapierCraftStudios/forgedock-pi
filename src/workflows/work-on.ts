@@ -2349,6 +2349,12 @@ export class ForgeWorkOnController {
     await this.#finalize(link, ctx, result);
   }
 
+  async stopProviderRuns(runIds: readonly string[]): Promise<void> {
+    for (const runId of new Set(runIds)) {
+      if (!isLaunchSentinel(runId)) await this.#rpc.stop(runId);
+    }
+  }
+
   async stopOrchestration(
     orchestrationId: string,
     ctx: ExtensionContext,
@@ -2375,8 +2381,14 @@ export class ForgeWorkOnController {
         link.stateBranch,
       );
       const current = await store.readRun(link.forgeRunId, ctx.signal);
-      if (!current.state || current.state.status === "completed" || current.state.status === "cancelled")
+      if (!current.state || current.state.status === "completed") continue;
+      if (current.state.status === "cancelled") {
+        link.status = "failed";
+        link.activeNodes = {};
+        link.currentNodeId = undefined;
+        this.#persistLink(link);
         continue;
+      }
       const providerRunIds = new Set(Object.keys(link.activeNodes));
       if (
         providerRunIds.size === 0 &&

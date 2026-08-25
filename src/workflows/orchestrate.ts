@@ -7,6 +7,7 @@ import type {
 
 import { FetchGitHubTransport } from "../adapters/github-api.ts";
 import { loadForgePolicy } from "../adapters/config.ts";
+import { RunJournal } from "../adapters/run-journal.ts";
 import { GitWorktreeManager } from "../adapters/git.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import {
@@ -168,9 +169,17 @@ export class ForgeOrchestrationController {
         throw new Error(
           `Expired repository lease ${expiredId} has no cancellable orchestration state.`,
         );
+      const takeoverReason = `Lease expired after its owning Pi session stopped heartbeating; takeover confirmed by operator session ${ctx.sessionManager.getSessionId()}.`;
+      await this.#cancelDurableChildRuns(
+        store,
+        expired.state,
+        ctx,
+        takeoverReason,
+      );
+      await this.#workOn.stopOrchestration(expiredId, ctx, takeoverReason);
       await new OrchestrationJournal(store).cancel({
         orchestrationId: expiredId,
-        reason: `Lease expired after its owning Pi session stopped heartbeating; takeover confirmed by operator session ${ctx.sessionManager.getSessionId()}.`,
+        reason: takeoverReason,
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
     }
@@ -255,6 +264,7 @@ export class ForgeOrchestrationController {
       throw new Error(
         `Orchestration ${orchestrationId} does not own the active repository lease.`,
       );
+    await this.#cancelDurableChildRuns(store, current.state, ctx, reason);
     await this.#workOn.stopOrchestration(orchestrationId, ctx, reason);
     const cancelled = await new OrchestrationJournal(store).cancel({
       orchestrationId,
@@ -278,6 +288,57 @@ export class ForgeOrchestrationController {
     await Promise.allSettled(
       active.map((link) => this.cancel(link.orchestrationId, ctx, reason)),
     );
+  }
+
+  async #cancelDurableChildRuns(
+    store: GitHubStateBranchStore,
+    state: OrchestrationState,
+    ctx: ExtensionContext,
+    reason: string,
+  ): Promise<void> {
+    const childRunIds: string[] = [];
+    const providerRunIds: string[] = [];
+    for (const lane of state.lanes) {
+      if (!lane.forgeRunId) continue;
+      const current = await store.readRun(lane.forgeRunId, ctx.signal);
+      if (
+        !current.state ||
+        current.state.status === "completed" ||
+        current.state.status === "cancelled"
+      )
+        continue;
+      childRunIds.push(lane.forgeRunId);
+      if (lane.subagentRunId) providerRunIds.push(lane.subagentRunId);
+      for (const node of Object.values(current.state.nodes)) {
+        if (node.status === "running" && node.subagentRunId)
+          providerRunIds.push(node.subagentRunId);
+      }
+    }
+    await this.#workOn.stopProviderRuns(providerRunIds);
+    const journal = new RunJournal(store);
+    for (const runId of childRunIds) {
+      const current = await store.readRun(runId, ctx.signal);
+      if (
+        current.state &&
+        current.state.status !== "completed" &&
+        current.state.status !== "cancelled"
+      ) {
+        await journal.append({
+          runId,
+          type: "run.cancelled",
+          payload: { reason },
+          idempotencyKey: "run:cancelled",
+          sessionId: ctx.sessionManager.getSessionId(),
+          message: `Cancel child ForgeDock run ${runId}`,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+      }
+      const readBack = await store.readRun(runId, ctx.signal);
+      if (readBack.state?.status !== "cancelled")
+        throw new Error(
+          `Child ForgeDock run ${runId} did not durably reach cancelled state.`,
+        );
+    }
   }
 
   async #recoverFalseFailures(

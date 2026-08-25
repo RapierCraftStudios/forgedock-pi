@@ -270,9 +270,7 @@ export class SubagentsRpcClient {
               ]
             : []),
           "The parent has already durably queued and started this node. Execute only this node, then return one schema-valid forgedock.node-result/v1 value. Do not process any other phase, do not call forge_checkpoint, do not launch subagents, and do not merge, close, or clean up.",
-          ["resolve", "investigate", "plan"].includes(input.node.node)
-            ? "This is a read-only node. Use only read, grep, find, and ls against the assigned worktree plus the supplied issue context. Shell execution, source edits, Git writes, and GitHub writes are unavailable."
-            : "Shell execution is unavailable in this node.",
+          boundedShellGuidance(input.node.node),
           input.node.node === "resolve"
             ? "The resolve artifact contract is exact: { schema: 'forgedock.phase-artifact/v1', phase: 'resolve', issueNumber: positive integer, title: non-empty string, eligible: boolean, baseBranch: non-empty string, evidence: string[] }. Investigation fields are not a substitute for these fields."
             : "Use the phase-specific artifact branch in the supplied output schema.",
@@ -520,6 +518,14 @@ function findRunId(value: unknown): string | undefined {
   if (details && typeof details === "object" && !Array.isArray(details))
     return findRunId(details);
   return undefined;
+}
+
+function boundedShellGuidance(node: WorkflowNode): string {
+  if (node === "implement")
+    return "Bash is available for implementation and Git inspection inside the assigned worktree. Use forge_commit for the authoritative commit and do not push or write GitHub state directly.";
+  if (["resolve", "investigate", "plan"].includes(node))
+    return "This is a read-only node. Use only read, grep, find, and ls against the assigned worktree plus the supplied issue context. Shell execution, source edits, Git writes, and GitHub writes are unavailable.";
+  return "Shell execution is unavailable in this node.";
 }
 
 export function boundedNodeAgent(node: WorkflowNode): string {

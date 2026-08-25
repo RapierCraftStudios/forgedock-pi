@@ -1627,8 +1627,8 @@ export function boundedToolDenial(
   node: string | undefined,
   toolName: string,
 ): string | undefined {
-  if (toolName === "bash")
-    return "Shell execution is disabled for bounded ForgeDock nodes; use trusted typed tools only.";
+  if (toolName === "bash" && READ_ONLY_NODES.has(node ?? ""))
+    return `Shell execution is disabled for read-only ${node} nodes; use repository read tools and supplied context.`;
   if (READ_ONLY_NODES.has(node ?? "") && (toolName === "write" || toolName === "edit"))
     return `${toolName} is not allowed for read-only ${node} nodes.`;
   return undefined;

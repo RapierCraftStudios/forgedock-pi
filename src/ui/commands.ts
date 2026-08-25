@@ -38,9 +38,8 @@ export async function confirmOrchestrationDispatch(
     "Launch ForgeDock orchestration?",
     [
       `Issues: ${input.issueNumbers.map((issue) => `#${issue}`).join(", ")}`,
-      `Source: ${input.sourceExpression}`,
-      `Resolution: ${input.resolutionSummary}`,
       "This starts repository writers and may merge changes under tracked policy.",
+      "Confirm only if this exact issue set matches your request.",
     ].join("\n"),
   );
   if (!confirmed)
