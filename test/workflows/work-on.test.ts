@@ -7,12 +7,34 @@ import {
   isTransientProviderFailure,
   lineWithinTolerance,
   parseAsyncCompletion,
+  reconcileLaunchState,
   reviewFindingMarker,
   reviewInstanceMarker,
   reviewSummaryInstanceMarker,
   reviewSupersessionMarker,
   similarFindingTitle,
 } from "../../src/workflows/work-on.ts";
+
+test("normal matching provider receipts are inspected instead of escalated", () => {
+  assert.equal(
+    reconcileLaunchState({
+      durableStatus: "running",
+      durableRunId: "child-1",
+      activeRunId: "child-1",
+      resultArtifactPresent: false,
+    }),
+    "inspect-active",
+  );
+  assert.equal(
+    reconcileLaunchState({
+      durableStatus: "running",
+      durableRunId: "launch:resolve-1:nonce",
+      activeRunId: "launch:resolve-1:nonce",
+      resultArtifactPresent: false,
+    }),
+    "needs-human",
+  );
+});
 
 test("final review decisions have one run-round-head identity", () => {
   assert.equal(
