@@ -6,18 +6,19 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 30,
-  "lastEventHash": "sha256:1fdf426353fc729ad19596a28eec8cef084eb9fb9ea3009d76a8f2bebe37d2fb",
+  "sequence": 31,
+  "lastEventHash": "sha256:0f8e2235fb5729752c8cb92a834858a4e7d7ad620f750618b616dcd7be343972",
   "lanes": [
     {
       "issueNumber": 30,
       "ordinal": 0,
-      "status": "integrating",
+      "status": "failed",
       "refreshes": 0,
       "forgeRunId": "4f3e8e17-3743-4a53-a0c7-db71ce9535b9",
       "subagentRunId": "launch:review-security-1:a4aa001a-9d8d-45f7-8b75-722d1147689a",
       "headSha": "e6c258b8d23e35b58d8f2e6d3fde8c0901d18810",
-      "baseSha": "320ad98f894e872dcb4ddc50cc90237722ab736c"
+      "baseSha": "320ad98f894e872dcb4ddc50cc90237722ab736c",
+      "reason": "git diff --name-only 320ad98f894e872dcb4ddc50cc90237722ab736c...HEAD failed (1):"
     }
   ],
   "idempotencyKeys": {
@@ -50,7 +51,8 @@
     "lane:30:ready:0": "f7dc85a8-4770-471c-b62a-70283aae369a",
     "lane:30:integrate:0": "3ccd3f1e-1ab0-4741-a72a-8359d6cf181e",
     "lease:heartbeat:2026-08-25T10:32:27.183Z": "2aab3545-d9f6-4e94-80b1-894dff2fdeeb",
-    "lease:heartbeat:2026-08-25T10:33:27.194Z": "0da9db60-1043-4988-bdce-4da055d42160"
+    "lease:heartbeat:2026-08-25T10:33:27.194Z": "0da9db60-1043-4988-bdce-4da055d42160",
+    "lane:30:integration-failed": "04d979f1-6fde-445c-8d6c-c8e9b6460593"
   },
   "createdAt": "2026-08-25T10:07:22.415Z"
 }
