@@ -551,6 +551,14 @@ function applyNodeEvent(state: RunState, event: RunEvent): void {
       "Node attempt must be positive.",
     );
   const prior = state.nodes[record.nodeId];
+  if (
+    record.round !== undefined &&
+    (!Number.isSafeInteger(record.round) || (record.round as number) < 1)
+  )
+    throw new StateTransitionError(
+      "invalid-node",
+      `Node ${record.nodeId} round must be positive.`,
+    );
   const statusByType = {
     "node.queued": "queued",
     "node.started": "running",
@@ -592,6 +600,17 @@ function applyNodeEvent(state: RunState, event: RunEvent): void {
       `Node ${record.nodeId} cannot transition to ${status}.`,
     );
   }
+  if (event.type === "node.started" && record.launchIntent) {
+    if (
+      typeof record.subagentRunId !== "string" ||
+      typeof record.resultPath !== "string" ||
+      typeof record.launchNonce !== "string"
+    )
+      throw new StateTransitionError(
+        "invalid-launch-intent",
+        `Node ${record.nodeId} launch intent requires sentinel, resultPath, and nonce.`,
+      );
+  }
   if (event.type === "reviewer.artifact-published") {
     if (
       prior?.node !== "review-correctness" &&
@@ -620,7 +639,15 @@ function applyNodeEvent(state: RunState, event: RunEvent): void {
         "invalid-node-resume",
         `Node ${record.nodeId} resume must replace its current subagent run.`,
       );
-    const expectedRetries = (prior.transportRetries ?? 0) + 1;
+    const launchReceipt = record.launchReceipt === true;
+    if (launchReceipt && !prior?.launchIntent)
+      throw new StateTransitionError(
+        "invalid-node-resume",
+        `Node ${record.nodeId} receipt cannot bind without a durable launch intent.`,
+      );
+    const expectedRetries = launchReceipt
+      ? (prior.transportRetries ?? 0)
+      : (prior.transportRetries ?? 0) + 1;
     if (record.transportRetries !== expectedRetries)
       throw new StateTransitionError(
         "invalid-node-resume",
@@ -632,6 +659,9 @@ function applyNodeEvent(state: RunState, event: RunEvent): void {
     nodeId: record.nodeId,
     node: record.node,
     attempt: record.attempt as number,
+    ...(Number.isSafeInteger(record.round)
+      ? { round: record.round as number }
+      : {}),
     status,
     ...(typeof record.headSha === "string" ? { headSha: record.headSha } : {}),
     ...(typeof record.baseSha === "string" ? { baseSha: record.baseSha } : {}),
@@ -648,6 +678,11 @@ function applyNodeEvent(state: RunState, event: RunEvent): void {
     ...(typeof record.resultPath === "string"
       ? { resultPath: record.resultPath }
       : {}),
+    ...(typeof record.launchNonce === "string"
+      ? { launchNonce: record.launchNonce }
+      : {}),
+    ...(record.launchIntent === true ? { launchIntent: true } : {}),
+    ...(record.launchReceipt === true ? { launchReceipt: true } : {}),
     ...(record.reviewerResult && typeof record.reviewerResult === "object"
       ? { reviewerResult: record.reviewerResult }
       : {}),

@@ -44,6 +44,7 @@ export interface WorkflowNodeRecord {
   nodeId: string;
   node: WorkflowNode;
   attempt: number;
+  round?: number;
   status: NodeStatus;
   headSha?: string;
   baseSha?: string;
@@ -56,6 +57,7 @@ export interface WorkflowNodeRecord {
 
 export interface DispatcherState {
   readonly nodes: readonly WorkflowNodeRecord[];
+  readonly maxReviewRounds?: number;
 }
 
 const ORDERED_NODES: readonly WorkflowNode[] = [
@@ -89,6 +91,7 @@ export function chooseNextExecutableNode(
           nodeId: node.nodeId,
           node: node.node as WorkflowNode,
           attempt: node.attempt,
+          ...(node.round ? { round: node.round } : {}),
           status: node.status,
           ...(node.headSha ? { headSha: node.headSha } : {}),
           ...(node.baseSha ? { baseSha: node.baseSha } : {}),
@@ -105,14 +108,57 @@ export function chooseNextExecutableNode(
   for (const record of nodes) latest.set(record.node, record);
 
   const decision = latest.get("decision");
+  const maxReviewRounds =
+    "maxReviewRounds" in state ? state.maxReviewRounds : undefined;
   if (decision?.status === "completed" && decision.outcome === "remediation-required") {
-    const implementation = latest.get("implement");
-    return {
-      nodeId: `implement-${(implementation?.attempt ?? 0) + 1}`,
-      node: "implement",
-      attempt: (implementation?.attempt ?? 0) + 1,
-      status: "queued",
-    };
+    const round = decision.round ?? decision.attempt;
+    const nextRound = round + 1;
+    if (
+      maxReviewRounds !== undefined &&
+      nextRound > maxReviewRounds
+    )
+      return undefined;
+    const roundNodes: readonly WorkflowNode[] = [
+      "implement",
+      "verify",
+      "prepare-pr",
+      "review-correctness",
+      "review-security",
+      "review-join",
+      "ci",
+      "decision",
+    ];
+    for (const node of roundNodes) {
+      const record = nodes.find(
+        (candidate) => candidate.node === node && candidate.attempt === nextRound,
+      );
+      if (record && ["queued", "running"].includes(record.status))
+        return undefined;
+      if (record?.status === "completed") continue;
+      if (record && ["blocked", "failed", "needs-human"].includes(record.status))
+        return undefined;
+      if (
+        node === "review-join" &&
+        (!latest.get("review-correctness") ||
+          !latest.get("review-security") ||
+          !reviewJoinReady(
+            nodes.filter((candidate) => candidate.attempt === nextRound),
+            latest.get("review-correctness")?.headSha ?? "",
+          ))
+      )
+        return undefined;
+      return {
+        nodeId: `${node}-${nextRound}`,
+        node,
+        attempt: nextRound,
+        round: nextRound,
+        status: "queued",
+        ...(latest.get("prepare-pr")?.headSha
+          ? { headSha: latest.get("prepare-pr")?.headSha }
+          : {}),
+      };
+    }
+    return undefined;
   }
 
   const investigation = latest.get("investigate");
@@ -164,6 +210,7 @@ export function chooseNextExecutableNode(
       nodeId: `${node}-${(record?.attempt ?? 0) + 1}`,
       node,
       attempt: (record?.attempt ?? 0) + 1,
+      round: (record?.round ?? record?.attempt ?? 0) + 1,
       status: "queued",
       ...(frozenHead ? { headSha: frozenHead } : {}),
     };
@@ -188,6 +235,7 @@ function nextTerminalNode(
     nodeId: `${node}-${(record?.attempt ?? 0) + 1}`,
     node,
     attempt: (record?.attempt ?? 0) + 1,
+    round: (record?.round ?? record?.attempt ?? 0) + 1,
     status: "queued",
   };
 }
@@ -201,6 +249,7 @@ export function chooseReadyReviewerNodes(
           nodeId: node.nodeId,
           node: node.node as WorkflowNode,
           attempt: node.attempt,
+          ...(node.round ? { round: node.round } : {}),
           status: node.status,
           ...(node.headSha ? { headSha: node.headSha } : {}),
           ...(node.baseSha ? { baseSha: node.baseSha } : {}),
@@ -234,6 +283,7 @@ export function chooseReadyReviewerNodes(
         nodeId: `${node}-${reviewAttempt}`,
         node,
         attempt: reviewAttempt,
+        round: reviewAttempt,
         status: "queued" as const,
         headSha: prepared.headSha,
         ...(prepared.baseSha ? { baseSha: prepared.baseSha } : {}),

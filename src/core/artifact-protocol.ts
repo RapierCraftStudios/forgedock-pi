@@ -9,6 +9,9 @@ export const WORKFLOW_LABEL_BY_STAGE = {
   decomposed: "workflow:decomposed",
 } as const;
 
+export const ACCEPTANCE_GATE_SUCCESS_MARKER =
+  "<!-- FORGE:ACCEPTANCE_GATE:COMPLETE -->" as const;
+
 export const PRE_MERGE_ISSUE_MARKERS = [
   "<!-- FORGE:INVESTIGATOR -->",
   "<!-- INVESTIGATION:COMPLETE -->",
@@ -21,7 +24,7 @@ export const PRE_MERGE_ISSUE_MARKERS = [
   "<!-- FORGE:BUILDER -->",
   "<!-- FORGE:BUILDER:COMPLETE -->",
   "<!-- FORGE:ACCEPTANCE_GATE -->",
-  "<!-- FORGE:ACCEPTANCE_GATE:COMPLETE -->",
+  ACCEPTANCE_GATE_SUCCESS_MARKER,
   "<!-- FORGE:REVIEW_STARTED -->",
 ] as const;
 
@@ -136,6 +139,17 @@ export function checkPreMergeAuditTrail(input: {
   const missingIssueMarkers = PRE_MERGE_ISSUE_MARKERS.filter(
     (marker) => !issueBody.includes(marker),
   );
+  // COMPLETE is the sole successful wire marker. A legacy PASSED marker, or a
+  // gate body that records a failed/unknown required check, must not satisfy audit.
+  if (
+    issueBody.includes("<!-- FORGE:ACCEPTANCE_GATE:PASSED -->") ||
+    (issueBody.includes("<!-- FORGE:ACCEPTANCE_GATE -->") &&
+      issueBody.includes(ACCEPTANCE_GATE_SUCCESS_MARKER) &&
+      /:\s*(failed|unknown|pending|skipped|not-configured)\s*\(required\)/i.test(
+        issueBody,
+      ))
+  )
+    missingIssueMarkers.push(ACCEPTANCE_GATE_SUCCESS_MARKER);
   const missingPullRequestMarkers = PRE_MERGE_PR_MARKERS.filter(
     (marker) => !pullBody.includes(marker),
   );
