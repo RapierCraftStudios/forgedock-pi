@@ -5,13 +5,13 @@
   "issueNumber": 49,
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "leaseBinding": {
     "ownerRunId": "90e86f6c-27d5-4545-a6f7-31c44865faf3",
     "epoch": 1
   },
-  "sequence": 11,
-  "lastEventHash": "sha256:5a5a17c8e75ecb6de5820a70f6faab9d9759b449a59e4ddb29e9dda32e89a54c",
+  "sequence": 12,
+  "lastEventHash": "sha256:c79ef9b96fa3afe6570f1130335505c219e20f619f8f69aa900cbab7a18aa654",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -73,13 +73,15 @@
       "node": "plan",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "failed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/32314a60-750e-4cfb-a814-d5480229a146/.pi/forge/32314a60-750e-4cfb-a814-d5480229a146-plan-1.json",
       "subagentRunId": "launch:plan-1:6f3eab80-4d15-4363-b225-7ce2083c5a38",
       "launchNonce": "6f3eab80-4d15-4363-b225-7ce2083c5a38",
       "launchIntent": true,
-      "startedAt": "2026-08-25T16:36:13.048Z"
+      "startedAt": "2026-08-25T16:36:13.048Z",
+      "reason": "Cancelled by the operator through /forge:cancel.",
+      "finishedAt": "2026-08-25T16:38:02.780Z"
     }
   },
   "effects": {},
@@ -94,7 +96,8 @@
     "node:investigate-1:receipt-bound": "62745712-2955-4d23-8cd6-5c25650354e4",
     "node:investigate-1:completed": "3835f222-6f89-446a-b4d9-61e3a0aa22b9",
     "node:plan-1:queued": "5c0ae571-b8f5-4f68-9706-53cf899d76e1",
-    "node:plan-1:started": "aff33d87-5b65-4e31-8286-eac06f2126ac"
+    "node:plan-1:started": "aff33d87-5b65-4e31-8286-eac06f2126ac",
+    "run:cancelled": "a8430478-c130-420f-b204-d05fec61fd53"
   },
   "eventIds": {
     "7eed9207-da0e-4400-abe2-4146c8435a67": true,
@@ -107,6 +110,8 @@
     "62745712-2955-4d23-8cd6-5c25650354e4": true,
     "3835f222-6f89-446a-b4d9-61e3a0aa22b9": true,
     "5c0ae571-b8f5-4f68-9706-53cf899d76e1": true,
-    "aff33d87-5b65-4e31-8286-eac06f2126ac": true
-  }
+    "aff33d87-5b65-4e31-8286-eac06f2126ac": true,
+    "a8430478-c130-420f-b204-d05fec61fd53": true
+  },
+  "cancellationReason": "Cancelled by the operator through /forge:cancel."
 }
