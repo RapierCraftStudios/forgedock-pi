@@ -10,8 +10,8 @@
     "ownerRunId": "dd680e3c-d22e-4841-9e2e-5042551e056a",
     "epoch": 1
   },
-  "sequence": 49,
-  "lastEventHash": "sha256:6d966ac43396c9e31f54a08c0ce8f37c48cbbc97441b3e1ad469bd3b48e05265",
+  "sequence": 50,
+  "lastEventHash": "sha256:676af87669adcc59aea2d4a34aaf714b29c4c06b9efb0c9b42f986fe64c3073d",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -375,9 +375,16 @@
       "node": "merge",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "320ad98f894e872dcb4ddc50cc90237722ab736c",
-      "startedAt": "2026-08-25T10:32:12.132Z"
+      "startedAt": "2026-08-25T10:32:12.132Z",
+      "headSha": "95ed6586005d9763fb3e6d2751adaff73c5920df",
+      "verificationResults": [],
+      "outcome": "merged",
+      "evidence": [
+        "merge:95ed6586005d9763fb3e6d2751adaff73c5920df"
+      ],
+      "finishedAt": "2026-08-25T10:32:45.718Z"
     }
   },
   "effects": {
@@ -437,7 +444,8 @@
     "node:decision-1:complete": "f974d273-2c65-48f1-90e5-bfc1e5fd0dfc",
     "node:merge-1:queued": "9eda5d52-4a78-4611-9961-f0b18506cf1f",
     "node:merge-1:started": "95c15236-ed25-4192-848a-cba5fc40d15f",
-    "effect:merge:42": "a7ccdc63-674c-4fc2-8cea-44ce18a0b59c"
+    "effect:merge:42": "a7ccdc63-674c-4fc2-8cea-44ce18a0b59c",
+    "node:merge-1:complete": "7dee7f56-8d0c-4621-9bed-cb9b65f45c1d"
   },
   "eventIds": {
     "f09b50df-0043-4493-aea7-a52e7e099b6f": true,
@@ -488,6 +496,7 @@
     "f974d273-2c65-48f1-90e5-bfc1e5fd0dfc": true,
     "9eda5d52-4a78-4611-9961-f0b18506cf1f": true,
     "95c15236-ed25-4192-848a-cba5fc40d15f": true,
-    "a7ccdc63-674c-4fc2-8cea-44ce18a0b59c": true
+    "a7ccdc63-674c-4fc2-8cea-44ce18a0b59c": true,
+    "7dee7f56-8d0c-4621-9bed-cb9b65f45c1d": true
   }
 }
