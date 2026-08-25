@@ -10,8 +10,8 @@
     "ownerRunId": "88697068-2f3e-4339-a599-99e31f17c5b9",
     "epoch": 1
   },
-  "sequence": 19,
-  "lastEventHash": "sha256:25675f30779edfae2b670429e3ff1ad0618c771cbe973b385cf75232ef0a7064",
+  "sequence": 20,
+  "lastEventHash": "sha256:deca76cb42b2f8dfe08e3446ee561389d19b6b8bc2bcc8203a4548113cb36295",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -126,6 +126,18 @@
           "commitSha": "6a29271e442c36fb060a4af4bcf85143b608bed8"
         }
       ]
+    },
+    "review": {
+      "phase": "review",
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "queued",
+          "leaseEpoch": 1,
+          "restartAction": "resume review attempt 1",
+          "evidence": []
+        }
+      ]
     }
   },
   "effects": {},
@@ -148,7 +160,8 @@
     "phase:implement:1:complete": "ae4150e7-85fa-41d3-9090-57e281aa6457",
     "phase:verify:1:queue": "69c407fc-f8b6-4282-bbd5-9b940b2d6e14",
     "phase:verify:1:start": "78cfce03-fcc7-49ca-a9a4-863e7823bb4f",
-    "phase:verify:1:complete": "7d3615b6-2039-497e-81f8-1e988fca09f1"
+    "phase:verify:1:complete": "7d3615b6-2039-497e-81f8-1e988fca09f1",
+    "phase:review:1:queue": "9dbfa0c9-6a5a-46c9-9219-61a0f1d736fc"
   },
   "eventIds": {
     "dd64e839-ce68-4545-9d0f-84fbe1e805dd": true,
@@ -169,6 +182,7 @@
     "ae4150e7-85fa-41d3-9090-57e281aa6457": true,
     "69c407fc-f8b6-4282-bbd5-9b940b2d6e14": true,
     "78cfce03-fcc7-49ca-a9a4-863e7823bb4f": true,
-    "7d3615b6-2039-497e-81f8-1e988fca09f1": true
+    "7d3615b6-2039-497e-81f8-1e988fca09f1": true,
+    "9dbfa0c9-6a5a-46c9-9219-61a0f1d736fc": true
   }
 }
