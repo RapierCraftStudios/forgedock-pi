@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 15,
-  "lastEventHash": "sha256:2d978b75964135cc5eb69995275554800841d4f9933dcc333d75e50d434957a7",
+  "sequence": 16,
+  "lastEventHash": "sha256:c00f871fa84e2b8cbe6116b67da7f48c36b5131ed285c2e958532519ec1c33c8",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -119,10 +119,13 @@
       "status": "running",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/1d590b89-383d-442f-90d6-a93aa0a146e7/.pi/forge/1d590b89-383d-442f-90d6-a93aa0a146e7-prepare-worktree-1.json",
-      "subagentRunId": "launch:prepare-worktree-1:a119c8ad-12a4-4ebd-b3b9-9bfc4f2db485",
+      "subagentRunId": "877387f0-410c-4018-9f40-c014b996566c",
       "launchNonce": "a119c8ad-12a4-4ebd-b3b9-9bfc4f2db485",
       "launchIntent": true,
-      "startedAt": "2026-08-25T18:09:07.052Z"
+      "startedAt": "2026-08-25T18:09:07.052Z",
+      "previousSubagentRunId": "launch:prepare-worktree-1:a119c8ad-12a4-4ebd-b3b9-9bfc4f2db485",
+      "transportRetries": 0,
+      "launchReceipt": true
     }
   },
   "effects": {},
@@ -141,7 +144,8 @@
     "node:plan-1:receipt-bound": "ab2e5598-433d-45b9-a743-8a481b52884c",
     "node:plan-1:completed": "3b23be71-6f33-4de5-84f3-67d9d351669f",
     "node:prepare-worktree-1:queued": "d1631252-3f6b-45a7-bbad-c34ffc781897",
-    "node:prepare-worktree-1:started": "0f285798-caab-45c6-806a-71a6444ed337"
+    "node:prepare-worktree-1:started": "0f285798-caab-45c6-806a-71a6444ed337",
+    "node:prepare-worktree-1:receipt-bound": "398b7b5c-f8ed-4433-bc4e-74063015eccd"
   },
   "eventIds": {
     "8420132c-2a1a-43b2-ad05-5a4473cc10d2": true,
@@ -158,6 +162,7 @@
     "ab2e5598-433d-45b9-a743-8a481b52884c": true,
     "3b23be71-6f33-4de5-84f3-67d9d351669f": true,
     "d1631252-3f6b-45a7-bbad-c34ffc781897": true,
-    "0f285798-caab-45c6-806a-71a6444ed337": true
+    "0f285798-caab-45c6-806a-71a6444ed337": true,
+    "398b7b5c-f8ed-4433-bc4e-74063015eccd": true
   }
 }
