@@ -65,7 +65,6 @@ export class ForgeOrchestrationController {
   readonly #lifecycleQueues = new Map<string, Promise<void>>();
   #lifecycleUnsubscribe: (() => void) | undefined;
   #heartbeatTimer: NodeJS.Timeout | undefined;
-  #ctx: ExtensionContext | undefined;
 
   constructor(pi: ExtensionAPI, workOn: ForgeWorkOnController) {
     this.#pi = pi;
@@ -76,7 +75,6 @@ export class ForgeOrchestrationController {
   }
 
   async attach(ctx: ExtensionContext): Promise<void> {
-    this.#ctx = ctx;
     this.#restoreLinks(ctx);
     this.#lifecycleUnsubscribe?.();
     this.#lifecycleUnsubscribe = this.#workOn.onLifecycle((event) => {
@@ -117,7 +115,6 @@ export class ForgeOrchestrationController {
     this.#heartbeating.clear();
     this.#pumpPending.clear();
     this.#lifecycleQueues.clear();
-    this.#ctx = undefined;
   }
 
   async start(
