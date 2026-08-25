@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:876823ffb4aea6189e1f252ae512c1623b19bfb3b937c0b39ca16e9f35a422bc",
+  "sequence": 6,
+  "lastEventHash": "sha256:a89fe7cd68060d1e5c257bd5cfd0940536a9380f4db67d6aca5cf1b751df9e82",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -40,6 +40,15 @@
         "The report identifies a regression after closed issue #48 and supplies two current failing runs, so the historical issue does not make this current regression ineligible."
       ],
       "finishedAt": "2026-08-25T17:57:35.690Z"
+    },
+    "investigate-1": {
+      "nodeId": "investigate-1",
+      "node": "investigate",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/4d0cac12-19d8-465f-b913-006f21cd4335/.pi/forge/4d0cac12-19d8-465f-b913-006f21cd4335-investigate-1.json"
     }
   },
   "effects": {},
@@ -48,13 +57,15 @@
     "node:resolve-1:queued": "63f67fe3-ecfe-4516-9318-abcae36902fb",
     "node:resolve-1:started": "41e3a373-e5fd-4e8a-819e-f427100ba46c",
     "node:resolve-1:receipt-bound": "28ebce38-e471-4890-8ab1-b0f588c03508",
-    "node:resolve-1:completed": "c78d215f-cdfd-47f1-b514-6a72c8fa4242"
+    "node:resolve-1:completed": "c78d215f-cdfd-47f1-b514-6a72c8fa4242",
+    "node:investigate-1:queued": "5026cacf-3e74-44ca-b8eb-d7f467b5294d"
   },
   "eventIds": {
     "b1e68782-9a16-4c99-ac4d-202289a4121f": true,
     "63f67fe3-ecfe-4516-9318-abcae36902fb": true,
     "41e3a373-e5fd-4e8a-819e-f427100ba46c": true,
     "28ebce38-e471-4890-8ab1-b0f588c03508": true,
-    "c78d215f-cdfd-47f1-b514-6a72c8fa4242": true
+    "c78d215f-cdfd-47f1-b514-6a72c8fa4242": true,
+    "5026cacf-3e74-44ca-b8eb-d7f467b5294d": true
   }
 }
