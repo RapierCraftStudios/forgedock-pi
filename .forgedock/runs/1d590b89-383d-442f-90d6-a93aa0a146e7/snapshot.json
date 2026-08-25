@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:20c3452532e720f1100cff5f3562b98e8c49ad021ec63524a9b8d657654822ed",
+  "sequence": 6,
+  "lastEventHash": "sha256:d4e2356a890d047453c81bd872431b60b60e0d3c503fdf54c701d43bbf5c37c0",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -40,6 +40,15 @@
         "Issue #52 is eligible for continued ForgeDock processing on integration base dogfood."
       ],
       "finishedAt": "2026-08-25T17:59:34.180Z"
+    },
+    "investigate-1": {
+      "nodeId": "investigate-1",
+      "node": "investigate",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/1d590b89-383d-442f-90d6-a93aa0a146e7/.pi/forge/1d590b89-383d-442f-90d6-a93aa0a146e7-investigate-1.json"
     }
   },
   "effects": {},
@@ -48,13 +57,15 @@
     "node:resolve-1:queued": "f84e5c80-7c60-481a-bdf5-c41f3ad9345f",
     "node:resolve-1:started": "f9d238a0-ad2d-4e48-89cc-1a826225311b",
     "node:resolve-1:receipt-bound": "65de1a51-a049-45ec-af75-91b81ffeadcc",
-    "node:resolve-1:completed": "19bdacfe-2b41-45d6-9e8a-612420cc464d"
+    "node:resolve-1:completed": "19bdacfe-2b41-45d6-9e8a-612420cc464d",
+    "node:investigate-1:queued": "871353cc-0b76-4dc9-b494-5bf244080eb4"
   },
   "eventIds": {
     "8420132c-2a1a-43b2-ad05-5a4473cc10d2": true,
     "f84e5c80-7c60-481a-bdf5-c41f3ad9345f": true,
     "f9d238a0-ad2d-4e48-89cc-1a826225311b": true,
     "65de1a51-a049-45ec-af75-91b81ffeadcc": true,
-    "19bdacfe-2b41-45d6-9e8a-612420cc464d": true
+    "19bdacfe-2b41-45d6-9e8a-612420cc464d": true,
+    "871353cc-0b76-4dc9-b494-5bf244080eb4": true
   }
 }
