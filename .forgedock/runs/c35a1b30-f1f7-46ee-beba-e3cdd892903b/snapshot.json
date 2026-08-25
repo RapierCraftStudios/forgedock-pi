@@ -10,8 +10,8 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:a8218b4caff974cb6596fd2ce1ef22844c1c2e72008dae5a7d1c83b6734a7de1",
+  "sequence": 6,
+  "lastEventHash": "sha256:9203e22df77f37e293d72750eb17ccc476fcf064f05bce12e2eb774a059514f9",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -41,6 +41,15 @@
         "The issue is eligible for ForgeDock processing: it is open, repository identity and policy match, an allowed integration base is available, and the requested behavior is within the workflow-state codebase."
       ],
       "finishedAt": "2026-08-25T13:10:08.906Z"
+    },
+    "investigate-1": {
+      "nodeId": "investigate-1",
+      "node": "investigate",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/c35a1b30-f1f7-46ee-beba-e3cdd892903b/.pi/forge/c35a1b30-f1f7-46ee-beba-e3cdd892903b-investigate-1.json"
     }
   },
   "effects": {},
@@ -49,13 +58,15 @@
     "node:resolve-1:queued": "01f5828f-ea92-4f52-a4c9-f31eea1ea587",
     "node:resolve-1:started": "6276eff0-ff8c-4016-a1c9-e9310ea1d076",
     "node:resolve-1:receipt-bound": "e55cd811-ab1b-4fc0-8a86-3b37f2ac55a7",
-    "node:resolve-1:completed": "81ea4383-f925-499e-9405-bdd6ed7e1d0f"
+    "node:resolve-1:completed": "81ea4383-f925-499e-9405-bdd6ed7e1d0f",
+    "node:investigate-1:queued": "5b0d724e-464a-42db-9710-8ed970eba696"
   },
   "eventIds": {
     "3ccb0018-858e-4ed2-b7d5-ccc785c984b0": true,
     "01f5828f-ea92-4f52-a4c9-f31eea1ea587": true,
     "6276eff0-ff8c-4016-a1c9-e9310ea1d076": true,
     "e55cd811-ab1b-4fc0-8a86-3b37f2ac55a7": true,
-    "81ea4383-f925-499e-9405-bdd6ed7e1d0f": true
+    "81ea4383-f925-499e-9405-bdd6ed7e1d0f": true,
+    "5b0d724e-464a-42db-9710-8ed970eba696": true
   }
 }
