@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 39,
-  "lastEventHash": "sha256:813024392eea431288587d78b89e817609436d8f524b55a9280fa85d5e192230",
+  "sequence": 40,
+  "lastEventHash": "sha256:40829e5f5e3f38ed442c5e6264a1495d9183a0e75dd2f151e1921782aa911e7f",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -330,9 +330,18 @@
       "node": "review-join",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
-      "startedAt": "2026-08-25T21:46:26.900Z"
+      "startedAt": "2026-08-25T21:46:26.900Z",
+      "headSha": "1bc24423636e5394b4f99e6d2270f1c256bd3cd3",
+      "verificationResults": [],
+      "evidence": [
+        "correctness reviewer completed and published",
+        "security reviewer completed and published",
+        "summary-comment:5417248597",
+        "head:1bc24423636e5394b4f99e6d2270f1c256bd3cd3"
+      ],
+      "finishedAt": "2026-08-25T21:47:07.461Z"
     }
   },
   "effects": {},
@@ -375,7 +384,8 @@
     "node:review-correctness-1:artifact-published": "b797780f-be19-4791-9fe7-dba3b963540d",
     "node:review-security-1:artifact-published": "357da1a5-2d80-49ed-83d0-57713cef2e07",
     "node:review-join-1:queued": "136b5c83-9cda-4672-ac54-2c9829b174dc",
-    "node:review-join-1:started": "0841af4e-c698-4349-b0db-ffb3933ca326"
+    "node:review-join-1:started": "0841af4e-c698-4349-b0db-ffb3933ca326",
+    "node:review-join-1:complete": "77b2414e-e445-49ce-ae2b-ba9d86267126"
   },
   "eventIds": {
     "7b5d2931-7497-4d47-b405-55ab5d7a6899": true,
@@ -416,6 +426,7 @@
     "b797780f-be19-4791-9fe7-dba3b963540d": true,
     "357da1a5-2d80-49ed-83d0-57713cef2e07": true,
     "136b5c83-9cda-4672-ac54-2c9829b174dc": true,
-    "0841af4e-c698-4349-b0db-ffb3933ca326": true
+    "0841af4e-c698-4349-b0db-ffb3933ca326": true,
+    "77b2414e-e445-49ce-ae2b-ba9d86267126": true
   }
 }
