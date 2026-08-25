@@ -10,8 +10,8 @@
     "ownerRunId": "5da43cdf-2ff6-479c-9bf8-d2241bbd78fe",
     "epoch": 1
   },
-  "sequence": 12,
-  "lastEventHash": "sha256:d935117142e4dcc025242f2df697c42f227e2fd71e8b392f8026ef6146f6b208",
+  "sequence": 13,
+  "lastEventHash": "sha256:86a13663a6f9ac10e2878642431e87d786793feb1fdfecc1c25f832072849a1c",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -74,7 +74,7 @@
       "node": "plan",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "4819168331da2a25f500a1d1436f231db8211f2b",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/af1691fa-2cad-4207-a064-a8d95ad2be35/.pi/forge/af1691fa-2cad-4207-a064-a8d95ad2be35-plan-1.json",
       "subagentRunId": "fd3362c8-3407-4291-98e2-8c908513775a",
@@ -83,7 +83,17 @@
       "startedAt": "2026-08-25T08:08:39.114Z",
       "previousSubagentRunId": "launch:plan-1:18f68e39-201d-41d6-acfb-9cfb3291d8c0",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "4819168331da2a25f500a1d1436f231db8211f2b",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "Issue #14 and its durable investigation classify this as confirmed, standard-complexity security hardening for repository-local runtime materialization.",
+        "The frozen base uses recursive mkdir plus path-based writes for .pi/agents, .pi/settings.json, and .pi/forge/generated-settings in src/agents/materialize.ts; it also reads and appends the Git local exclude path with readFile/appendFile in src/adapters/git.ts.",
+        "The PR #6 security review finding SEC-ISSUE1-004 identifies the check-then-write and parent-directory replacement race; the investigation reproduced redirection through a pre-existing .pi symlink and identified the same class in Git local-exclude writes.",
+        "Existing focused coverage is in test/adapters/subagents.test.ts and test/adapters/git.test.ts; SECURITY.md documents the broader non-sandbox boundary but not this concurrent local-filesystem-actor contract."
+      ],
+      "finishedAt": "2026-08-25T08:14:51.287Z"
     }
   },
   "effects": {},
@@ -99,7 +109,8 @@
     "node:investigate-1:completed": "40112892-37a2-494f-a55b-08dd7f5dcbf0",
     "node:plan-1:queued": "12459116-bdf6-45f6-a33e-cfdebcfb947f",
     "node:plan-1:started": "09e5a36c-ac38-4d5c-b970-9efbbc69eed4",
-    "node:plan-1:receipt-bound": "b8f22b44-fd30-4d4b-9a5a-02b2d56bb5bc"
+    "node:plan-1:receipt-bound": "b8f22b44-fd30-4d4b-9a5a-02b2d56bb5bc",
+    "node:plan-1:completed": "80cb0d54-cfbe-47a6-b445-4b7fea0c42f6"
   },
   "eventIds": {
     "8f4a2c50-a4a2-43e9-8677-7fe5092204e5": true,
@@ -113,6 +124,7 @@
     "40112892-37a2-494f-a55b-08dd7f5dcbf0": true,
     "12459116-bdf6-45f6-a33e-cfdebcfb947f": true,
     "09e5a36c-ac38-4d5c-b970-9efbbc69eed4": true,
-    "b8f22b44-fd30-4d4b-9a5a-02b2d56bb5bc": true
+    "b8f22b44-fd30-4d4b-9a5a-02b2d56bb5bc": true,
+    "80cb0d54-cfbe-47a6-b445-4b7fea0c42f6": true
   }
 }
