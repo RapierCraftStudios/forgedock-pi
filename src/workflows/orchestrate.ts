@@ -7,6 +7,7 @@ import type {
 
 import { FetchGitHubTransport } from "../adapters/github-api.ts";
 import { loadForgePolicy } from "../adapters/config.ts";
+import { resolveGitHubToken } from "../adapters/github-auth.ts";
 import { RunJournal } from "../adapters/run-journal.ts";
 import { GitWorktreeManager } from "../adapters/git.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
@@ -19,9 +20,10 @@ import {
 import { isLeaseExpired } from "../core/lease.ts";
 import { isProtectedBranch, type ForgePolicy } from "../core/policy.ts";
 import { OrchestrationJournal } from "./orchestration-journal.ts";
-import type {
-  ForgeWorkOnController,
-  WorkOnLifecycleEvent,
+import {
+  isProviderSubagentRunId,
+  type ForgeWorkOnController,
+  type WorkOnLifecycleEvent,
 } from "./work-on.ts";
 
 const ORCHESTRATION_LINK_ENTRY = "forgedock-orchestration-link/v1";
@@ -62,10 +64,12 @@ export class ForgeOrchestrationController {
   readonly #links = new Map<string, ActiveOrchestrationLink>();
   readonly #pumping = new Set<string>();
   readonly #pumpPending = new Set<string>();
+  readonly #cancelling = new Set<string>();
   readonly #heartbeating = new Set<string>();
   readonly #lifecycleQueues = new Map<string, Promise<void>>();
   #lifecycleUnsubscribe: (() => void) | undefined;
   #heartbeatTimer: NodeJS.Timeout | undefined;
+  #attachmentGeneration = 0;
 
   constructor(pi: ExtensionAPI, workOn: ForgeWorkOnController) {
     this.#pi = pi;
@@ -76,6 +80,7 @@ export class ForgeOrchestrationController {
   }
 
   async attach(ctx: ExtensionContext): Promise<void> {
+    const generation = ++this.#attachmentGeneration;
     this.#restoreLinks(ctx);
     this.#lifecycleUnsubscribe?.();
     this.#lifecycleUnsubscribe = this.#workOn.onLifecycle((event) => {
@@ -84,7 +89,7 @@ export class ForgeOrchestrationController {
     });
     if (!this.#heartbeatTimer) {
       this.#heartbeatTimer = setInterval(() => {
-        void this.#heartbeat(ctx);
+        void this.#heartbeat(ctx, generation);
       }, 5_000);
       this.#heartbeatTimer.unref();
     }
@@ -109,12 +114,14 @@ export class ForgeOrchestrationController {
   }
 
   dispose(): void {
+    this.#attachmentGeneration += 1;
     this.#lifecycleUnsubscribe?.();
     this.#lifecycleUnsubscribe = undefined;
     if (this.#heartbeatTimer) clearInterval(this.#heartbeatTimer);
     this.#heartbeatTimer = undefined;
     this.#heartbeating.clear();
     this.#pumpPending.clear();
+    this.#cancelling.clear();
     this.#lifecycleQueues.clear();
   }
 
@@ -253,30 +260,59 @@ export class ForgeOrchestrationController {
       policy.repository.name,
       policy.state.branch,
     );
-    const current = await store.readOrchestration(
-      orchestrationId,
-      ctx.signal,
-    );
-    if (!current.state)
-      throw new Error(`Orchestration ${orchestrationId} does not exist.`);
-    if (current.state.status !== "running") return current.state;
-    if (!current.lease || current.lease.ownerRunId !== orchestrationId)
-      throw new Error(
-        `Orchestration ${orchestrationId} does not own the active repository lease.`,
-      );
-    await this.#cancelDurableChildRuns(store, current.state, ctx, reason);
-    await this.#workOn.stopOrchestration(orchestrationId, ctx, reason);
-    const cancelled = await new OrchestrationJournal(store).cancel({
-      orchestrationId,
-      reason,
-      ...(ctx.signal ? { signal: ctx.signal } : {}),
-    });
     const link = this.#links.get(orchestrationId);
-    if (link) {
-      this.#syncLink(link, cancelled.state);
-      this.#persistLink(link);
+    if (this.#cancelling.has(orchestrationId))
+      throw new Error(
+        `Orchestration ${orchestrationId} cancellation is already in progress.`,
+      );
+    this.#cancelling.add(orchestrationId);
+    try {
+      await this.#workOn.quiesceOrchestration(orchestrationId);
+      await this.#waitForPump(orchestrationId, ctx.signal);
+      const current = await store.readOrchestration(
+        orchestrationId,
+        ctx.signal,
+      );
+      if (!current.state)
+        throw new Error(`Orchestration ${orchestrationId} does not exist.`);
+      const state = current.state;
+      if (state.status !== "running") {
+        if (link) {
+          this.#syncLink(link, state);
+          this.#persistLink(link);
+        }
+        return state;
+      }
+      if (!current.lease || current.lease.ownerRunId !== orchestrationId)
+        throw new Error(
+          `Orchestration ${orchestrationId} does not own the active repository lease.`,
+        );
+      const cancelled = await cancelChildrenBeforeParent({
+        cancelChildren: async () => {
+          await this.#cancelDurableChildRuns(store, state, ctx, reason);
+          await this.#workOn.stopOrchestration(orchestrationId, ctx, reason);
+        },
+        cancelParent: () =>
+          new OrchestrationJournal(store).cancel({
+            orchestrationId,
+            reason,
+            ...(ctx.signal ? { signal: ctx.signal } : {}),
+          }),
+      });
+      if (link) {
+        this.#syncLink(link, cancelled.state);
+        this.#persistLink(link);
+      }
+      return cancelled.state;
+    } catch (error) {
+      if (link?.status === "running") {
+        link.status = "needs-human";
+        this.#persistLink(link);
+      }
+      throw error;
+    } finally {
+      this.#cancelling.delete(orchestrationId);
     }
-    return cancelled.state;
   }
 
   async shutdown(ctx: ExtensionContext, reason: string): Promise<void> {
@@ -314,7 +350,6 @@ export class ForgeOrchestrationController {
           providerRunIds.push(node.subagentRunId);
       }
     }
-    await this.#workOn.stopProviderRuns(providerRunIds);
     const journal = new RunJournal(store);
     for (const runId of childRunIds) {
       const current = await store.readRun(runId, ctx.signal);
@@ -339,6 +374,9 @@ export class ForgeOrchestrationController {
           `Child ForgeDock run ${runId} did not durably reach cancelled state.`,
         );
     }
+    // Durable cancellation revokes child authority. Provider cleanup is a
+    // best-effort runtime projection and must not retain the repository lease.
+    await this.#workOn.stopProviderRuns(providerRunIds).catch(() => undefined);
   }
 
   async #recoverFalseFailures(
@@ -347,6 +385,7 @@ export class ForgeOrchestrationController {
     ctx: ExtensionContext,
   ): Promise<void> {
     for (const lane of state.lanes) {
+      if (this.#cancelling.has(link.orchestrationId)) return;
       if (
         !["failed", "blocked", "needs-human"].includes(lane.status) ||
         !lane.reason ||
@@ -355,10 +394,18 @@ export class ForgeOrchestrationController {
         )
       )
         continue;
+      if (this.#cancelling.has(link.orchestrationId)) return;
       const active = await this.#workOn.reactivateOrchestrationIssue(
         link.orchestrationId,
         lane.issueNumber,
       );
+      if (this.#cancelling.has(link.orchestrationId)) {
+        if (active)
+          await this.#workOn
+            .stopProviderRuns([active.subagentRunId])
+            .catch(() => undefined);
+        return;
+      }
       if (!active) continue;
       const current = await this.#read(link, ctx.signal);
       await current.journal.append({
@@ -383,7 +430,7 @@ export class ForgeOrchestrationController {
     ctx: ExtensionContext,
   ): Promise<void> {
     const orchestrationId = event.orchestrationId;
-    if (!orchestrationId) return;
+    if (!orchestrationId || this.#cancelling.has(orchestrationId)) return;
     const prior = this.#lifecycleQueues.get(orchestrationId) ?? Promise.resolve();
     const next = prior
       .catch(() => undefined)
@@ -405,7 +452,7 @@ export class ForgeOrchestrationController {
     ctx: ExtensionContext,
   ): Promise<void> {
     const orchestrationId = event.orchestrationId;
-    if (!orchestrationId) return;
+    if (!orchestrationId || this.#cancelling.has(orchestrationId)) return;
     const link = this.#links.get(orchestrationId);
     if (!link || link.status !== "running") return;
     const current = await this.#read(link, ctx.signal);
@@ -499,6 +546,7 @@ export class ForgeOrchestrationController {
     link: ActiveOrchestrationLink,
     ctx: ExtensionContext,
   ): Promise<void> {
+    if (this.#cancelling.has(link.orchestrationId)) return;
     if (this.#pumping.has(link.orchestrationId)) {
       this.#pumpPending.add(link.orchestrationId);
       return;
@@ -506,10 +554,15 @@ export class ForgeOrchestrationController {
     this.#pumping.add(link.orchestrationId);
     try {
       let progress = true;
-      while (progress && link.status === "running") {
+      while (
+        progress &&
+        link.status === "running" &&
+        !this.#cancelling.has(link.orchestrationId)
+      ) {
         progress = false;
         let current = await this.#read(link, ctx.signal);
         for (const lane of readyOrchestrationLanes(current.state)) {
+          if (this.#cancelling.has(link.orchestrationId)) break;
           const existing = this.#workOn
             .listRuns()
             .find(
@@ -572,6 +625,13 @@ export class ForgeOrchestrationController {
               }
             }
           }
+          if (!isPublishableLaneReceipt(result.subagentRunId)) {
+            ctx.ui.notify(
+              `ForgeDock issue #${lane.issueNumber} is still initializing; its lane will not publish internal receipt ${result.subagentRunId}.`,
+              "warning",
+            );
+            return;
+          }
           try {
             await current.journal.append({
               orchestrationId: link.orchestrationId,
@@ -596,6 +656,7 @@ export class ForgeOrchestrationController {
           current = await this.#read(link, ctx.signal);
         }
 
+        if (this.#cancelling.has(link.orchestrationId)) break;
         current = await this.#read(link, ctx.signal);
         const integration = nextIntegrationLane(current.state);
         if (integration?.forgeRunId) {
@@ -629,6 +690,7 @@ export class ForgeOrchestrationController {
           progress = true;
         }
 
+        if (this.#cancelling.has(link.orchestrationId)) break;
         current = await this.#read(link, ctx.signal);
         if (current.state.lanes.every(isTerminalLane)) {
           const completed = await current.journal.complete({
@@ -656,10 +718,33 @@ export class ForgeOrchestrationController {
     }
   }
 
-  async #heartbeat(ctx: ExtensionContext): Promise<void> {
+  async #waitForPump(
+    orchestrationId: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    while (
+      this.#pumping.has(orchestrationId) ||
+      this.#lifecycleQueues.has(orchestrationId)
+    ) {
+      if (signal?.aborted)
+        throw signal.reason ?? new Error("Orchestration cancellation aborted.");
+      await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    }
+  }
+
+  async #heartbeat(
+    ctx: ExtensionContext,
+    generation: number,
+  ): Promise<void> {
+    if (generation !== this.#attachmentGeneration) return;
     const now = new Date();
     for (const link of this.#links.values()) {
-      if (link.status !== "running") continue;
+      if (generation !== this.#attachmentGeneration) break;
+      if (
+        link.status !== "running" ||
+        this.#cancelling.has(link.orchestrationId)
+      )
+        continue;
       if (
         now.getTime() - Date.parse(link.lastHeartbeatAt) <
           link.heartbeatSeconds * 1_000 ||
@@ -676,14 +761,20 @@ export class ForgeOrchestrationController {
           now,
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
+        if (generation !== this.#attachmentGeneration) return;
         link.lastHeartbeatAt = result.lease.lastHeartbeatAt;
         link.sequence = result.state.sequence;
         this.#persistLink(link);
       } catch (error) {
-        ctx.ui.notify(
-          `ForgeDock orchestration ${link.orchestrationId} heartbeat failed: ${errorMessage(error)}`,
-          "warning",
-        );
+        if (generation === this.#attachmentGeneration) {
+          // Retry at the configured heartbeat cadence instead of every timer
+          // tick. The durable lease timestamp is unchanged until a write wins.
+          link.lastHeartbeatAt = now.toISOString();
+          ctx.ui.notify(
+            `ForgeDock orchestration ${link.orchestrationId} heartbeat failed: ${errorMessage(error)}`,
+            "warning",
+          );
+        }
       } finally {
         this.#heartbeating.delete(link.orchestrationId);
       }
@@ -756,23 +847,6 @@ function chooseIntegrationBranch(policy: ForgePolicy): string {
   return exact;
 }
 
-async function resolveGitHubToken(
-  pi: ExtensionAPI,
-  cwd: string,
-  signal?: AbortSignal,
-): Promise<string> {
-  const result = await pi.exec("gh", ["auth", "token"], {
-    cwd,
-    timeout: 30_000,
-    ...(signal ? { signal } : {}),
-  });
-  if (result.code !== 0 || !result.stdout.trim())
-    throw new Error(
-      `Unable to resolve GitHub token through gh: ${result.stderr || result.stdout}`,
-    );
-  return result.stdout.trim();
-}
-
 function validateIssueNumbers(issueNumbers: readonly number[]): void {
   if (issueNumbers.length === 0)
     throw new Error("Orchestration requires at least one issue number.");
@@ -816,6 +890,18 @@ function renderCompletion(state: OrchestrationState): string {
     .map(([status, count]) => `${status}=${count}`)
     .join(" · ");
   return `ForgeDock orchestration ${state.orchestrationId} finished: ${state.status}.\n${summary}`;
+}
+
+export async function cancelChildrenBeforeParent<T>(input: {
+  cancelChildren: () => Promise<void>;
+  cancelParent: () => Promise<T>;
+}): Promise<T> {
+  await input.cancelChildren();
+  return input.cancelParent();
+}
+
+export function isPublishableLaneReceipt(runId: string): boolean {
+  return isProviderSubagentRunId(runId);
 }
 
 export function lifecycleMatchesForgeRun(

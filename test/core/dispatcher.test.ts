@@ -70,6 +70,28 @@ test("dispatcher selects exactly one bounded node and gates review join on same 
   );
 });
 
+test("verify and prepare-pr inherit trusted predecessor heads", () => {
+  const prefix: WorkflowNodeRecord[] = [
+    completed("resolve"),
+    completed("investigate"),
+    completed("plan"),
+    completed("prepare-worktree"),
+    completed("implement", "implement-1", "implementation-head"),
+  ];
+  const verify = chooseNextExecutableNode({ nodes: prefix });
+  assert.equal(verify?.node, "verify");
+  assert.equal(verify?.headSha, "implementation-head");
+
+  const prepare = chooseNextExecutableNode({
+    nodes: [
+      ...prefix,
+      completed("verify", "verify-1", "implementation-head"),
+    ],
+  });
+  assert.equal(prepare?.node, "prepare-pr");
+  assert.equal(prepare?.headSha, "implementation-head");
+});
+
 test("both reviewer nodes become independently runnable at the frozen PR head", () => {
   const records: WorkflowNodeRecord[] = [
     completed("resolve"),

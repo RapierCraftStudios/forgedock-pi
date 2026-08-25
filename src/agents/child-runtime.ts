@@ -14,6 +14,7 @@ import {
 } from "pi-subagents/capability-ceiling";
 
 import { FetchGitHubTransport } from "../adapters/github-api.ts";
+import { resolveGitHubToken } from "../adapters/github-auth.ts";
 import { parseChangedGitPaths } from "../adapters/git.ts";
 import { GitHubIssueProjector } from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
@@ -53,6 +54,7 @@ import {
 const BINDING_ENV = "PI_SUBAGENT_EXTENSION_BINDINGS";
 const BINDING_NAMESPACE = "forgedock.pi/1";
 const MAX_OUTPUT_BYTES = 50 * 1024;
+const MAX_REVIEW_DIFF_BYTES = 96 * 1024;
 
 interface BoundVerificationCommand {
   argv: readonly string[];
@@ -78,6 +80,7 @@ interface ForgeChildBinding {
   nodeId?: string;
   node?: string;
   nodeAttempt?: number;
+  nodeHeadSha?: string;
   reviewHeadSha?: string;
   refresh: boolean;
   previousReviewRounds?: number;
@@ -166,6 +169,26 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
   let reviewDiffCoverage:
     | { headSha: string; sha256: string; bytes: number }
     | undefined;
+  const requireActiveAuthority = async (signal?: AbortSignal): Promise<string> => {
+    const token =
+      githubToken ??
+      (await resolveGitHubToken(pi, binding.worktreeRoot, signal));
+    githubToken = token;
+    const store = new GitHubStateBranchStore(
+      new FetchGitHubTransport({ token }),
+      binding.repository,
+      binding.stateBranch,
+    );
+    const current = await store.readRun(binding.runId, signal);
+    assertBoundRunAuthority({
+      status: current.state?.status,
+      runLease: current.state?.leaseBinding ?? current.state?.lease,
+      repositoryLease: current.lease,
+      leaseOwnerRunId: binding.leaseOwnerRunId,
+      leaseEpoch: binding.leaseEpoch,
+    });
+    return token;
+  };
 
   pi.on("session_start", async (_event, ctx) => {
     canonicalRoot = await realpath(binding.worktreeRoot);
@@ -246,6 +269,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         );
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
       const env = safeEnvironment(binding.runId);
+      await requireActiveAuthority(signal);
       const status = await runProcess(
         "git",
         ["-C", root, "status", "--porcelain"],
@@ -315,6 +339,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           "Cannot refresh a lane without the existing owned remote branch.",
         );
       refreshPushLeaseSha = remote.stdout.trim();
+      await requireActiveAuthority(signal);
       const rebased = await runProcess(
         "git",
         ["-C", root, "rebase", binding.baseSha],
@@ -423,7 +448,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         throw new Error(
           `git diff failed (${String(result.exitCode)}): ${result.stderr}`,
         );
-      assertCompleteReviewDiff(result, MAX_OUTPUT_BYTES);
+      assertCompleteReviewDiff(result, MAX_REVIEW_DIFF_BYTES);
       const headSha = reviewerHead ?? await gitHead(root, binding.runId, signal);
       const patchSha256 = createHash("sha256").update(result.stdout).digest("hex");
       if (reviewerHead)
@@ -463,6 +488,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
     async execute(_toolCallId, params, signal) {
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
       const env = safeEnvironment(binding.runId);
+      await requireActiveAuthority(signal);
       const ignoreCase =
         caseInsensitivePaths ?? (await checkoutIgnoresCase(root, binding.runId));
       const status = await runProcess(
@@ -494,6 +520,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         );
       if (binding.builderContract)
         assertBuilderContractPaths(binding.builderContract, changedPaths);
+      await requireActiveAuthority(signal);
       const added = await runProcess(
         "git",
         ["-C", root, "add", "-A", "--", ...changedPaths],
@@ -555,6 +582,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       const hooksPath = mkdtempSync(join(tmpdir(), "forgedock-empty-hooks-"));
       let committed: ProcessResult;
       try {
+        await requireActiveAuthority(signal);
         committed = await runProcess(
           "git",
           forgeCommitArguments(root, hooksPath, message),
@@ -670,6 +698,13 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           `Verification command '${params.name}' has an empty argv.`,
         );
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      await requireActiveAuthority(signal);
+      await assertBoundHeadAndClean(
+        root,
+        binding.runId,
+        binding.nodeHeadSha,
+        signal,
+      );
       onUpdate?.({
         content: [
           { type: "text", text: `Running approved check ${params.name}...` },
@@ -682,6 +717,13 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         env: safeEnvironment(binding.runId),
         ...(signal ? { signal } : {}),
       });
+      await requireActiveAuthority(signal);
+      await assertBoundHeadAndClean(
+        root,
+        binding.runId,
+        binding.nodeHeadSha,
+        signal,
+      );
       const status =
         result.timedOut || result.exitCode === null
           ? "unknown"
@@ -718,6 +760,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
     parameters: PrepareReviewParameters,
     async execute(_toolCallId, _params, signal) {
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      await requireActiveAuthority(signal);
       const status = await runProcess(
         "git",
         ["-C", root, "status", "--porcelain"],
@@ -750,6 +793,10 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       const headSha = head.stdout.trim();
       if (head.exitCode !== 0 || !headSha)
         throw new Error(`Unable to resolve review HEAD: ${head.stderr}`);
+      if (binding.nodeHeadSha && headSha !== binding.nodeHeadSha)
+        throw new Error(
+          `Prepare-review head ${headSha} does not match verified head ${binding.nodeHeadSha}.`,
+        );
       if (binding.builderContract) {
         const committedPaths = await runProcess(
           "git",
@@ -795,6 +842,13 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         "origin",
         binding.branch,
       ];
+      await requireActiveAuthority(signal);
+      await assertBoundHeadAndClean(
+        root,
+        binding.runId,
+        binding.nodeHeadSha,
+        signal,
+      );
       const push = await pi.exec("git", pushArgs, {
         cwd: root,
         timeout: 120_000,
@@ -805,13 +859,11 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           `Bound branch push failed: ${push.stderr || push.stdout}`,
         );
 
-      const token =
-        githubToken ??
-        (await resolveGitHubToken(pi, binding.worktreeRoot, signal));
-      githubToken = token;
+      const token = await requireActiveAuthority(signal);
       const transport = new FetchGitHubTransport({ token });
       const github = new GitHubWorkflowAdapter(transport, binding.repository);
       const issue = await github.getIssue(binding.issueNumber, signal);
+      await requireActiveAuthority(signal);
       const pull = await github.createPullRequest({
         title: issue.title,
         body: `## Summary\n\nImplements #${binding.issueNumber} through ForgeDock Pi run \`${binding.runId}\`.\n\n## Testing\n\nRequired checks passed before review.\n\nCloses #${binding.issueNumber}\n\n**Reviewed head**: \`${headSha}\``,
@@ -836,6 +888,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           "Cannot post review-started artifact without a run event.",
         );
       const projector = new GitHubIssueProjector(transport, binding.repository);
+      await requireActiveAuthority(signal);
       await projector.postArtifact({
         issueNumber: binding.issueNumber,
         runId: binding.runId,
@@ -844,11 +897,13 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         markdown: `PR #${pull.number} created targeting \`${binding.baseBranch}\`. The isolated review route is active for the required domains at commit \`${headSha}\`.\n\nReview will verify the builder contract, acceptance evidence, changed behavior, and absence of security/regression findings before merge.\n\n<!-- FORGE:REVIEW_STARTED -->`,
         ...(signal ? { signal } : {}),
       });
+      await requireActiveAuthority(signal);
       await projector.setWorkflowLabel(
         binding.issueNumber,
         "workflow:in-review",
         signal,
       );
+      await requireActiveAuthority(signal);
       await github.postPullArtifact({
         pullNumber: pull.number,
         marker: `<!-- FORGE:REVIEW_ROUTE mode=single-pr spec=review-pr.md sha=${headSha.slice(0, 7)} -->`,
@@ -879,7 +934,8 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
     description:
       "Persist one schema-valid read-only reviewer result at the trusted bound result path",
     parameters: FinalizeReviewerParameters,
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId, params, signal) {
+      await requireActiveAuthority(signal);
       if (!binding.nodeId || !binding.node?.startsWith("review-"))
         throw new Error(
           "forge_finalize_reviewer requires a bounded reviewer binding.",
@@ -929,7 +985,8 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
     description:
       "Persist one schema-valid bounded node result at the trusted bound result path",
     parameters: FinalizeNodeParameters,
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId, params, signal) {
+      await requireActiveAuthority(signal);
       if (!binding.nodeId || !binding.node || !binding.nodeAttempt)
         throw new Error("forge_finalize_node requires a bounded node binding.");
       if (!isForgeNodeResult(params.value)) {
@@ -980,7 +1037,8 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
     description:
       "Persist the schema-valid final work-on result for deterministic parent reconciliation",
     parameters: FinalizeWorkOnParameters,
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId, params, signal) {
+      await requireActiveAuthority(signal);
       if (!isForgeWorkOnResult(params.value))
         throw new Error("Final work-on result failed schema validation.");
       if (
@@ -1245,6 +1303,9 @@ function readBinding(): ForgeChildBinding {
           nodeId: value.nodeId as string,
           node,
           nodeAttempt: value.nodeAttempt as number,
+          ...(typeof value.nodeHeadSha === "string" && value.nodeHeadSha.trim()
+            ? { nodeHeadSha: value.nodeHeadSha }
+            : {}),
           ...(typeof value.reviewHeadSha === "string"
             ? { reviewHeadSha: value.reviewHeadSha }
             : {}),
@@ -1627,8 +1688,8 @@ export function boundedToolDenial(
   node: string | undefined,
   toolName: string,
 ): string | undefined {
-  if (toolName === "bash" && READ_ONLY_NODES.has(node ?? ""))
-    return `Shell execution is disabled for read-only ${node} nodes; use repository read tools and supplied context.`;
+  if (toolName === "bash" && node)
+    return `Shell execution is disabled for bounded ${node} nodes; use Forge tools and repository file tools.`;
   if (READ_ONLY_NODES.has(node ?? "") && (toolName === "write" || toolName === "edit"))
     return `${toolName} is not allowed for read-only ${node} nodes.`;
   return undefined;
@@ -1757,24 +1818,6 @@ async function checkoutIgnoresCase(
   return value === "true";
 }
 
-async function resolveGitHubToken(
-  pi: ExtensionAPI,
-  cwd: string,
-  signal?: AbortSignal,
-): Promise<string> {
-  const result = await pi.exec("gh", ["auth", "token"], {
-    cwd,
-    timeout: 10_000,
-    ...(signal ? { signal } : {}),
-  });
-  const token = result.stdout.trim();
-  if (result.code !== 0 || !token)
-    throw new Error(
-      "Unable to resolve GitHub authentication for Forge checkpoint writes.",
-    );
-  return token;
-}
-
 function safeEnvironment(runId: string): NodeJS.ProcessEnv {
   const home = resolve(tmpdir(), `forgedock-verify-${runId}`);
   mkdirSync(home, { recursive: true, mode: 0o700 });
@@ -1807,6 +1850,72 @@ function safeEnvironment(runId: string): NodeJS.ProcessEnv {
   return env;
 }
 
+export async function assertBoundHeadAndClean(
+  root: string,
+  runId: string,
+  expectedHeadSha: string | undefined,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!expectedHeadSha) return;
+  const actualHeadSha = await gitHead(root, runId, signal);
+  if (actualHeadSha !== expectedHeadSha)
+    throw new Error(
+      `Bound node head ${expectedHeadSha} changed to ${actualHeadSha}; refusing an unverified side effect.`,
+    );
+  const status = await runProcess(
+    "git",
+    ["-C", root, "status", "--porcelain"],
+    {
+      cwd: root,
+      timeoutMs: 30_000,
+      env: safeEnvironment(runId),
+      ...(signal ? { signal } : {}),
+    },
+  );
+  assertCompleteProcessOutput(status, "Bound node worktree status");
+  if (status.exitCode !== 0)
+    throw new Error(`Unable to verify bound node worktree: ${status.stderr}`);
+  const meaningful = nonRuntimeStatus(status.stdout);
+  if (meaningful)
+    throw new Error(
+      `Bound node worktree changed outside Forge runtime paths:\n${meaningful}`,
+    );
+}
+
+export function assertBoundRunAuthority(input: {
+  status: string | undefined;
+  runLease?: { ownerRunId: string; epoch: number };
+  repositoryLease?: {
+    ownerRunId: string;
+    epoch: number;
+    expiresAt: string;
+  };
+  leaseOwnerRunId: string;
+  leaseEpoch: number;
+  nowMs?: number;
+}): void {
+  if (input.status !== "active")
+    throw new Error(
+      `Bound Forge run is ${input.status ?? "missing"}; refusing a writer side effect.`,
+    );
+  if (
+    !input.runLease ||
+    !input.repositoryLease ||
+    input.runLease.ownerRunId !== input.leaseOwnerRunId ||
+    input.runLease.epoch !== input.leaseEpoch ||
+    input.repositoryLease.ownerRunId !== input.leaseOwnerRunId ||
+    input.repositoryLease.epoch !== input.leaseEpoch
+  )
+    throw new Error(
+      "Bound Forge lease no longer authorizes this writer side effect.",
+    );
+  const expiresAt = Date.parse(input.repositoryLease.expiresAt);
+  if (!Number.isFinite(expiresAt) || expiresAt <= (input.nowMs ?? Date.now()))
+    throw new Error(
+      "Bound Forge lease expired; refusing this writer side effect.",
+    );
+}
+
 export function assertCompleteProcessOutput(
   result: Pick<ProcessResult, "stdoutTruncated" | "stderrTruncated">,
   operation: string,
@@ -1817,7 +1926,7 @@ export function assertCompleteProcessOutput(
 
 export function assertCompleteReviewDiff(
   result: Pick<ProcessResult, "stdout" | "stdoutTruncated" | "stderrTruncated">,
-  maxBytes = MAX_OUTPUT_BYTES,
+  maxBytes = MAX_REVIEW_DIFF_BYTES,
 ): void {
   assertCompleteProcessOutput(result, "Forge review diff");
   if (Buffer.byteLength(result.stdout) > maxBytes)

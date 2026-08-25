@@ -3,12 +3,16 @@ import test from "node:test";
 
 import {
   canonicalReviewerName,
+  expectedHeadForNode,
   finalReviewDecisionMarker,
   findingPriority,
+  isProviderSubagentRunId,
   isTransientProviderFailure,
+  launchReceiptIdempotencyKey,
   lineWithinTolerance,
   parentNodeFromId,
   parseAsyncCompletion,
+  pendingInitializationRecoveryAction,
   reconcileLaunchState,
   reviewFindingMarker,
   reviewInstanceMarker,
@@ -33,6 +37,27 @@ test("restart recovery recognizes every parent-owned durable node", () => {
   assert.equal(parentNodeFromId("implement-1"), undefined);
 });
 
+test("legacy verify nodes derive their trusted head from implementation", () => {
+  const state = {
+    nodes: {
+      "implement-1": {
+        nodeId: "implement-1",
+        node: "implement",
+        attempt: 1,
+        status: "completed",
+        headSha: "implementation-head",
+      },
+    },
+  } as unknown as Parameters<typeof expectedHeadForNode>[0];
+  assert.equal(
+    expectedHeadForNode(state, {
+      node: "verify",
+      attempt: 1,
+    }),
+    "implementation-head",
+  );
+});
+
 test("provider completion is buffered until its launch receipt is durably bound", () => {
   assert.equal(shouldBufferLaunchCompletion(true, true), true);
   assert.equal(shouldBufferLaunchCompletion(false, false), true);
@@ -45,6 +70,64 @@ test("bounded parent nodes project every terminal workflow label", () => {
   assert.equal(workflowLabelForNode("merge", "merged"), "workflow:merged");
   assert.equal(workflowLabelForNode("close", "closed", "invalid"), "workflow:invalid");
   assert.equal(workflowLabelForNode("cleanup", "closed", "decomposed"), "workflow:decomposed");
+});
+
+test("internal sentinels are never eligible for provider RPCs", () => {
+  assert.equal(isProviderSubagentRunId("child-1"), true);
+  assert.equal(isProviderSubagentRunId("pending:forge-run-1"), false);
+  assert.equal(isProviderSubagentRunId("launch:resolve-1:nonce"), false);
+  assert.equal(isProviderSubagentRunId(""), false);
+});
+
+test("only the empty pre-resolve pending window is redispatched", () => {
+  const recoverable = {
+    forgeRunId: "forge-run-1",
+    subagentRunId: "pending:forge-run-1",
+    currentNodeId: "resolve-1",
+    activeNodeCount: 0,
+    durableNodeIds: [] as string[],
+  };
+  assert.equal(
+    pendingInitializationRecoveryAction(recoverable),
+    "dispatch-resolve",
+  );
+  assert.equal(
+    pendingInitializationRecoveryAction({
+      ...recoverable,
+      durableNodeIds: ["resolve-1"],
+    }),
+    "needs-human",
+  );
+  assert.equal(
+    pendingInitializationRecoveryAction({
+      ...recoverable,
+      currentNodeId: "plan-1",
+    }),
+    "needs-human",
+  );
+});
+
+test("all receipt bind paths share one provider receipt identity", () => {
+  const receipt = {
+    nodeId: "resolve-1",
+    attempt: 1,
+    launchNonce: "nonce-1",
+    providerRunId: "child-1",
+  };
+  const key = launchReceiptIdempotencyKey(receipt);
+  assert.equal(launchReceiptIdempotencyKey({ ...receipt }), key);
+  assert.notEqual(
+    launchReceiptIdempotencyKey({ ...receipt, providerRunId: "child-2" }),
+    key,
+  );
+  assert.throws(
+    () =>
+      launchReceiptIdempotencyKey({
+        ...receipt,
+        providerRunId: "launch:resolve-1:nonce-1",
+      }),
+    /provider run ID/,
+  );
 });
 
 test("normal matching provider receipts are inspected instead of escalated", () => {

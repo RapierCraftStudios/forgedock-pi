@@ -31,7 +31,6 @@ export const FORGE_READ_ONLY_NODE_TOOLS = [
 ] as const;
 export const FORGE_WORK_ON_TOOLS = [
   "read",
-  "bash",
   "edit",
   "write",
   "grep",
@@ -61,6 +60,7 @@ export const FORGE_REFRESH_REVIEW_TOOLS = [
 export const FORGE_WORK_ON_MAX_DEPTH = 2;
 export const FORGE_WORK_ON_TIMEOUT_MS = 14_400_000;
 export const FORGE_REVIEW_TIMEOUT_MS = 3_600_000;
+export const FORGE_READ_ONLY_NODE_COMPLETION_GUARD = false;
 
 const REVIEW_PROTOCOL = `
 Return only the required structured result. Call forge_diff first and review only behavior introduced or changed by that frozen patch. Surrounding code may be read for context, but pre-existing defects outside the patch are out of scope and must not become findings. Bind every finding to the supplied run ID and exact head SHA. A finding needs an exact changed file and line, observable impact, and concrete code-path or input evidence. Use confirmed only when the failure is demonstrated; otherwise use likely or possible. Do not edit files, launch subagents, access GitHub, or make merge decisions.
@@ -181,7 +181,7 @@ export function registerForgeAgents(
         defaultAsync: true,
         defaultTimeoutMs: FORGE_WORK_ON_TIMEOUT_MS,
         maxSubagentDepth: 1,
-        completionGuard: true,
+        completionGuard: FORGE_READ_ONLY_NODE_COMPLETION_GUARD,
       },
     }),
   );

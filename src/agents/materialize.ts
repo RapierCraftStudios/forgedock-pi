@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   FORGE_READ_ONLY_NODE_AGENT,
+  FORGE_READ_ONLY_NODE_COMPLETION_GUARD,
   FORGE_READ_ONLY_NODE_TOOLS,
   FORGE_REVIEW_CORRECTNESS_AGENT,
   FORGE_REVIEW_CORRECTNESS_PROMPT,
@@ -49,6 +50,7 @@ export async function materializeForgeAgents(
               prompt: FORGE_WORK_ON_PROMPT,
               maxDepth: 1,
               acceptanceRole: "read-only",
+              completionGuard: FORGE_READ_ONLY_NODE_COMPLETION_GUARD,
               async: true,
               extensions: [childRuntimePath],
               timeoutMs: FORGE_WORK_ON_TIMEOUT_MS,
@@ -325,6 +327,7 @@ function agentFile(input: {
   prompt: string;
   maxDepth: number;
   acceptanceRole: "read-only" | "writer";
+  completionGuard?: boolean;
   async: boolean;
   extensions?: readonly string[];
   timeoutMs?: number;
@@ -343,7 +346,7 @@ async: ${input.async}
 tools: ${input.tools.join(", ")}
 acceptanceRole: ${input.acceptanceRole}
 maxSubagentDepth: ${input.maxDepth}
-completionGuard: true
+completionGuard: ${input.completionGuard ?? true}
 ${input.timeoutMs ? `timeoutMs: ${input.timeoutMs}\n` : ""}${extensionBlock}---
 
 ${input.prompt}

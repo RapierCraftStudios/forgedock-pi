@@ -14,6 +14,7 @@ import { promisify } from "node:util";
 import test from "node:test";
 
 import {
+  cleanupForgeRuntime,
   GitWorktreeManager,
   parseChangedGitPaths,
   type CommandExecutor,
@@ -59,6 +60,35 @@ test("NUL-delimited changed paths retain rename sources, destinations, and delet
     ["src/gone.ts", "src/new.ts", "src/old.ts"],
   );
   assert.throws(() => parseChangedGitPaths("R100\0src/old.ts\0"));
+});
+
+test("runtime cleanup removes every generated Forge agent definition", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-runtime-cleanup-"));
+  try {
+    await mkdir(join(root, ".pi", "agents"), { recursive: true });
+    await mkdir(join(root, ".pi", "forge"), { recursive: true });
+    await writeFile(join(root, ".pi", "settings.json"), "{}\n");
+    await writeFile(
+      join(root, ".pi", "forge", "generated-settings"),
+      "settings.json\n",
+    );
+    for (const name of [
+      "forge-read-only-node.md",
+      "forge-work-on.md",
+      "forge-refresh-review.md",
+      "forge-review-correctness.md",
+      "forge-review-security.md",
+    ])
+      await writeFile(join(root, ".pi", "agents", name), "generated\n");
+
+    await cleanupForgeRuntime(root);
+
+    await assert.rejects(readFile(join(root, ".pi", "settings.json"), "utf8"));
+    await assert.rejects(readFile(join(root, ".pi", "agents", "forge-read-only-node.md"), "utf8"));
+    await assert.rejects(readFile(join(root, ".pi", "forge", "generated-settings"), "utf8"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("worktree manager creates an issue branch from integration and cleans it safely", async () => {

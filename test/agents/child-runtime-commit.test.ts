@@ -10,6 +10,8 @@ import {
   ForgeOutputLimitError,
   allowedNodeTools,
   appendBounded,
+  assertBoundHeadAndClean,
+  assertBoundRunAuthority,
   assertCommittedTree,
   assertCompleteProcessOutput,
   assertCompleteReviewDiff,
@@ -58,8 +60,79 @@ test("read-only nodes deny shell and file mutation tools", () => {
   assert.match(boundedToolDenial("investigate", "write") ?? "", /read-only/);
   assert.match(boundedToolDenial("plan", "edit") ?? "", /read-only/);
   assert.equal(boundedToolDenial("implement", "edit"), undefined);
-  assert.equal(boundedToolDenial("implement", "bash"), undefined);
-  assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("bash"), true);
+  assert.match(boundedToolDenial("implement", "bash") ?? "", /Shell execution/);
+  assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("bash"), false);
+});
+
+test("writer side effects require an active run and current lease", () => {
+  const active = {
+    status: "active",
+    runLease: { ownerRunId: "orchestration-1", epoch: 2 },
+    repositoryLease: {
+      ownerRunId: "orchestration-1",
+      epoch: 2,
+      expiresAt: "2026-08-25T01:00:00.000Z",
+    },
+    leaseOwnerRunId: "orchestration-1",
+    leaseEpoch: 2,
+    nowMs: Date.parse("2026-08-25T00:00:00.000Z"),
+  };
+  assert.doesNotThrow(() => assertBoundRunAuthority(active));
+  assert.throws(
+    () => assertBoundRunAuthority({ ...active, status: "cancelled" }),
+    /refusing a writer side effect/,
+  );
+  assert.throws(
+    () =>
+      assertBoundRunAuthority({
+        ...active,
+        repositoryLease: {
+          ownerRunId: "replacement",
+          epoch: 3,
+          expiresAt: "2026-08-25T01:00:00.000Z",
+        },
+      }),
+    /no longer authorizes/,
+  );
+  assert.throws(
+    () =>
+      assertBoundRunAuthority({
+        ...active,
+        repositoryLease: {
+          ...active.repositoryLease,
+          expiresAt: "2026-08-24T23:59:59.000Z",
+        },
+      }),
+    /lease expired/,
+  );
+});
+
+test("verify and prepare-review reject dirty or moved Git HEAD", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-bound-head-"));
+  try {
+    await git(root, "init", "-b", "main");
+    await git(root, "config", "user.name", "Test");
+    await git(root, "config", "user.email", "test@example.invalid");
+    await writeFile(join(root, "source.ts"), "before\n");
+    await git(root, "add", "source.ts");
+    await git(root, "commit", "-m", "initial");
+    const expectedHead = (await git(root, "rev-parse", "HEAD")).stdout.trim();
+
+    await assertBoundHeadAndClean(root, "run-head", expectedHead);
+    await writeFile(join(root, "source.ts"), "dirty\n");
+    await assert.rejects(
+      assertBoundHeadAndClean(root, "run-head", expectedHead),
+      /worktree changed/,
+    );
+    await git(root, "add", "source.ts");
+    await git(root, "commit", "-m", "moved head");
+    await assert.rejects(
+      assertBoundHeadAndClean(root, "run-head", expectedHead),
+      /changed to/,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("runtime path classification follows the checkout case contract", () => {
@@ -85,10 +158,17 @@ test("security evidence overflow stays typed across repeated output chunks", () 
       ),
     ForgeOutputLimitError,
   );
+  assert.doesNotThrow(() =>
+    assertCompleteReviewDiff({
+      stdout: "x".repeat(93_432),
+      stdoutTruncated: false,
+      stderrTruncated: false,
+    }),
+  );
   assert.throws(
     () =>
       assertCompleteReviewDiff({
-        stdout: "x".repeat(50 * 1024 + 1),
+        stdout: "x".repeat(96 * 1024 + 1),
         stdoutTruncated: false,
         stderrTruncated: false,
       }),

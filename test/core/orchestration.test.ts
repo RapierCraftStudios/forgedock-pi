@@ -7,7 +7,11 @@ import {
   type OrchestrationEventType,
   type OrchestrationState,
 } from "../../src/core/orchestration.ts";
-import { lifecycleMatchesForgeRun } from "../../src/workflows/orchestrate.ts";
+import {
+  cancelChildrenBeforeParent,
+  isPublishableLaneReceipt,
+  lifecycleMatchesForgeRun,
+} from "../../src/workflows/orchestrate.ts";
 
 const orchestrationId = "orchestration-1";
 const repository = "owner/repo";
@@ -46,6 +50,41 @@ function initialized(): OrchestrationState {
     ),
   );
 }
+
+test("cancellation revokes children before releasing the parent lease", async () => {
+  const order: string[] = [];
+  const result = await cancelChildrenBeforeParent({
+    cancelChildren: async () => {
+      order.push("children-cancelled");
+    },
+    cancelParent: async () => {
+      order.push("parent-cancelled");
+      return "cancelled";
+    },
+  });
+  assert.equal(result, "cancelled");
+  assert.deepEqual(order, ["children-cancelled", "parent-cancelled"]);
+
+  let parentCalled = false;
+  await assert.rejects(
+    cancelChildrenBeforeParent({
+      cancelChildren: async () => {
+        throw new Error("child revocation failed");
+      },
+      cancelParent: async () => {
+        parentCalled = true;
+      },
+    }),
+    /child revocation failed/,
+  );
+  assert.equal(parentCalled, false);
+});
+
+test("lanes publish only real provider receipts", () => {
+  assert.equal(isPublishableLaneReceipt("child-resolve-1"), true);
+  assert.equal(isPublishableLaneReceipt("pending:forge-run-1"), false);
+  assert.equal(isPublishableLaneReceipt("launch:resolve-1:nonce"), false);
+});
 
 test("lane lifecycle follows the stable Forge run instead of rotating child receipts", () => {
   assert.equal(

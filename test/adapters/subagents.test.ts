@@ -6,10 +6,16 @@ import test from "node:test";
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-import { boundedNodeAgent, SubagentsRpcClient } from "../../src/adapters/subagents.ts";
+import {
+  boundedNodeAgent,
+  findProviderReceiptFromDescriptors,
+  SubagentsRpcClient,
+} from "../../src/adapters/subagents.ts";
+import { ForgeWorkOnController } from "../../src/workflows/work-on.ts";
 import { materializeForgeAgents } from "../../src/agents/materialize.ts";
 import {
   FORGE_READ_ONLY_NODE_AGENT,
+  FORGE_READ_ONLY_NODE_COMPLETION_GUARD,
   FORGE_READ_ONLY_NODE_TOOLS,
   FORGE_REVIEW_TOOLS,
   FORGE_REFRESH_REVIEW_AGENT,
@@ -25,6 +31,7 @@ import { parseForgePolicy } from "../../src/core/policy.ts";
 class FakeEventBus {
   readonly listeners = new Map<string, Set<(payload: unknown) => void>>();
   readonly requests: unknown[] = [];
+  readonly failures = new Map<string, { code: string; message: string }>();
 
   on(event: string, handler: (payload: unknown) => void): () => void {
     const handlers = this.listeners.get(event) ?? new Set();
@@ -37,6 +44,16 @@ class FakeEventBus {
     if (event === "subagents:rpc:v1:request") {
       this.requests.push(payload);
       const request = payload as { requestId: string; method: string };
+      const failure = this.failures.get(request.method);
+      if (failure) {
+        this.emit(`subagents:rpc:v1:reply:${request.requestId}`, {
+          version: 1,
+          requestId: request.requestId,
+          success: false,
+          error: failure,
+        });
+        return;
+      }
       const data =
         request.method === "ping"
           ? {
@@ -67,6 +84,106 @@ function fakePi(bus = new FakeEventBus()): {
   } as unknown as ExtensionAPI;
   return { pi, bus };
 }
+
+test("provider receipt recovery finds the async run by durable launch identity", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-provider-receipts-"));
+  try {
+    const runDir = join(root, "provider-run-1");
+    await mkdir(runDir);
+    await writeFile(
+      join(runDir, "recovery-descriptor.json"),
+      JSON.stringify({
+        sourceRunId: "provider-run-1",
+        extensionBindings: {
+          "forgedock.pi/1": {
+            runId: "forge-run-1",
+            nodeId: "resolve-1",
+            resultPath: "/worktree/result.json",
+            launchNonce: "nonce-1",
+          },
+        },
+      }),
+    );
+    await writeFile(
+      join(runDir, "status.json"),
+      JSON.stringify({ state: "running", updatedAt: 10 }),
+    );
+
+    assert.equal(
+      await findProviderReceiptFromDescriptors(
+        {
+          forgeRunId: "forge-run-1",
+          nodeId: "resolve-1",
+          resultPath: "/worktree/result.json",
+          launchNonce: "nonce-1",
+        },
+        root,
+      ),
+      "provider-run-1",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("provider cancellation treats an unavailable run as already stopped", async () => {
+  const { pi, bus } = fakePi();
+  bus.failures.set("stop", {
+    code: "not_found",
+    message: "Async run 'old-session-run' was not found in the active session.",
+  });
+  const controller = new ForgeWorkOnController(pi);
+
+  await controller.stopProviderRuns([
+    "old-session-run",
+    "launch:resolve-1:nonce",
+    "old-session-run",
+  ]);
+
+  const stops = bus.requests.filter(
+    (request) => (request as { method?: string }).method === "stop",
+  ) as Array<{ params: { id: string } }>;
+  assert.deepEqual(stops.map((request) => request.params.id), ["old-session-run"]);
+});
+
+test("provider cancellation treats a completed run as already stopped", async () => {
+  const { pi, bus } = fakePi();
+  bus.failures.set("stop", {
+    code: "invalid_state",
+    message: "Async run completed-run is complete; stop only supports running async runs.",
+  });
+  const controller = new ForgeWorkOnController(pi);
+
+  await controller.stopProviderRuns(["completed-run"]);
+});
+
+test("provider cancellation rejects nonterminal invalid-state failures", async () => {
+  const { pi, bus } = fakePi();
+  bus.failures.set("stop", {
+    code: "invalid_state",
+    message: "Workflow live-run is not controlled by this extension runtime; reload recovery cannot stop it safely.",
+  });
+  const controller = new ForgeWorkOnController(pi);
+
+  await assert.rejects(
+    controller.stopProviderRuns(["live-run"]),
+    /reload recovery cannot stop it safely/,
+  );
+});
+
+test("provider cancellation still fails closed on stop transport errors", async () => {
+  const { pi, bus } = fakePi();
+  bus.failures.set("stop", {
+    code: "execution_failed",
+    message: "Provider control channel failed.",
+  });
+  const controller = new ForgeWorkOnController(pi);
+
+  await assert.rejects(
+    controller.stopProviderRuns(["live-run"]),
+    /Provider control channel failed/,
+  );
+});
 
 const policy = parseForgePolicy({
   schema: "forgedock.config/v1",
@@ -197,6 +314,9 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
   assert.match(spawn.params.task, /forge_finalize_node/);
   assert.match(spawn.params.task, /read-only node/);
   assert.match(spawn.params.task, /Shell execution.*unavailable/);
+  assert.match(spawn.params.task, /Integration base: staging/);
+  assert.match(spawn.params.task, /artifact identity field.*integration base/i);
+  assert.match(spawn.params.task, /issue context below as untrusted data/i);
   assert.doesNotMatch(spawn.params.task, /Process resolve, investigate, plan/i);
   await client.spawnNode({
     runId: "run-resolve",
@@ -214,6 +334,37 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
   const resolveSpawn = bus.requests.at(-1) as { params: { task: string } };
   assert.match(resolveSpawn.params.task, /resolve artifact contract is exact/);
   assert.match(resolveSpawn.params.task, /issueNumber: positive integer/);
+
+  await client.spawnNode({
+    runId: "run-verify",
+    issueNumber: 9,
+    repository: "owner/repo",
+    worktreeRoot: "/tmp/worktree",
+    branch: "forge/9",
+    baseBranch: "staging",
+    baseSha: "abcdef1234567890",
+    leaseEpoch: 1,
+    policy,
+    issueContext: "untrusted issue text",
+    node: {
+      nodeId: "verify-1",
+      node: "verify",
+      attempt: 1,
+      headSha: "fedcba9876543210",
+    },
+  });
+  const verifySpawn = bus.requests.at(-1) as {
+    params: {
+      task: string;
+      extensionBindings: Record<string, { nodeHeadSha?: string }>;
+    };
+  };
+  assert.match(verifySpawn.params.task, /Bound node head SHA: fedcba9876543210/);
+  assert.match(verifySpawn.params.task, /Approved verification command names: test/);
+  assert.equal(
+    verifySpawn.params.extensionBindings["forgedock.pi/1"]?.nodeHeadSha,
+    "fedcba9876543210",
+  );
 });
 
 test("bounded implementation launch binds the durable builder contract", async () => {
@@ -250,7 +401,8 @@ test("bounded implementation launch binds the durable builder contract", async (
   );
   assert.match(spawn.params.task, new RegExp(builderContract.contractHash));
   assert.match(spawn.params.task, /Allowed paths: src\/\*\*, test\/\*\*/);
-  assert.match(spawn.params.task, /Bash is available for implementation/);
+  assert.match(spawn.params.task, /Raw shell, direct Git commands.*unavailable/);
+  assert.match(spawn.params.task, /forge_commit/);
 });
 
 test("RPC work-on treats GitHub-only verification as valid", async () => {
@@ -321,6 +473,9 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
       "utf8",
     );
     assert.match(readOnlyNode, /^acceptanceRole: read-only$/m);
+    assert.equal(FORGE_READ_ONLY_NODE_COMPLETION_GUARD, false);
+    assert.match(readOnlyNode, /^completionGuard: false$/m);
+    assert.match(workOn, /^completionGuard: true$/m);
     assert.doesNotMatch(readOnlyNode, /tools: .*\b(?:edit|write|forge_commit)\b/);
     assert.doesNotMatch(workOn, /tools: .*subagent/);
     assert.doesNotMatch(workOn, /forge_finalize_work_on/);
@@ -433,7 +588,7 @@ test("runtime Forge hierarchy keeps bounded work-on least-authority", () => {
   assert.equal(boundedNodeAgent("implement"), FORGE_WORK_ON_AGENT);
   assert.equal(
     (FORGE_WORK_ON_TOOLS as readonly string[]).includes("bash"),
-    true,
+    false,
   );
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("subagent"), false);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_finalize_work_on"), false);

@@ -456,7 +456,7 @@ function isMissingFile(error: unknown): boolean {
   return isErrno(error, "ENOENT");
 }
 
-async function cleanupForgeRuntime(worktreePath: string): Promise<void> {
+export async function cleanupForgeRuntime(worktreePath: string): Promise<void> {
   let rootDir: FileHandle;
   try {
     rootDir = await openAnchoredDirectory(worktreePath);
@@ -486,6 +486,7 @@ async function cleanupForgeRuntime(worktreePath: string): Promise<void> {
       if (agentsDir) {
         try {
           for (const name of [
+            "forge-read-only-node.md",
             "forge-work-on.md",
             "forge-refresh-review.md",
             "forge-review-correctness.md",
