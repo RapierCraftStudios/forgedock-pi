@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 36,
-  "lastEventHash": "sha256:ea3d0829205ddde1f2964129c25c23de17552632260e96d94847ad1e6d405d5a",
+  "sequence": 37,
+  "lastEventHash": "sha256:7005e29aafe9da7bffdea033d4fb8915ca0a1f3bb3b65e6e9db5316599986224",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -286,7 +286,7 @@
       "node": "review-security",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/91fd4701-34b2-4f98-9c38-a66277301579/.pi/forge/91fd4701-34b2-4f98-9c38-a66277301579-review-security-1.json",
       "subagentRunId": "619306c6-1352-4e08-a32c-1ba67b179e66",
@@ -295,7 +295,54 @@
       "startedAt": "2026-08-25T19:57:17.812Z",
       "previousSubagentRunId": "launch:review-security-1:a16243d1-bdb4-41f8-92b4-c7241f5474c7",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "d923c7380dbec377a759cfd6a1189e379bc958cd",
+      "reviewerResult": {
+        "schema": "forgedock.reviewer-result/v1",
+        "runId": "91fd4701-34b2-4f98-9c38-a66277301579",
+        "reviewer": "security",
+        "headSha": "d923c7380dbec377a759cfd6a1189e379bc958cd",
+        "verdict": "findings",
+        "findings": [
+          {
+            "id": "SEC-001",
+            "reviewer": "security",
+            "runId": "91fd4701-34b2-4f98-9c38-a66277301579",
+            "headSha": "d923c7380dbec377a759cfd6a1189e379bc958cd",
+            "confidence": "confirmed",
+            "severity": "high",
+            "category": "security",
+            "file": "src/agents/child-runtime.ts",
+            "line": 1068,
+            "summary": "The new SHA binding trusts reported values and still permits an unverified HEAD to be pushed",
+            "evidence": [
+              "The patch propagates each node's expected head as nodeHeadSha and binds prepare-pr to the completed verify head via headForNode, but assertBoundNodeResultHead immediately returns for every node except verify, so the prepare-pr binding is never enforced.",
+              "For verify, the helper compares only result.headSha and artifact.headSha with the bound string; it never resolves Git HEAD or checks worktree cleanliness before or after forge_verify.",
+              "forge_verify executes an operator-approved command inside the repository. Repository-controlled commands such as an npm test script can run tests, create and commit an additional change (or move HEAD), and exit 0. The verify worker can then report the instructed bound SHA and pass finalization even though the worktree is now at another clean commit.",
+              "The subsequent forge_prepare_review accepts any clean worktree, resolves its current HEAD, and pushes it. Because prepare-pr ignores nodeHeadSha, that post-verification commit becomes the PR head without having passed the required local check attributed to the earlier SHA."
+            ]
+          }
+        ],
+        "filesReviewed": [
+          "src/adapters/subagents.ts",
+          "src/agents/child-runtime.ts",
+          "src/core/dispatcher.ts",
+          "src/workflows/work-on.ts",
+          "test/adapters/subagents.test.ts",
+          "test/agents/child-runtime-commit.test.ts",
+          "test/core/dispatcher.test.ts",
+          "test/core/state.test.ts"
+        ],
+        "limitations": [
+          "Static review only; verification commands and tests were not executed in this read-only reviewer environment."
+        ]
+      },
+      "publishedCommentId": 5415995744,
+      "evidence": [
+        "pr:61",
+        "comment:5415995744"
+      ],
+      "finishedAt": "2026-08-25T19:59:56.432Z"
     }
   },
   "effects": {},
@@ -335,7 +382,8 @@
     "node:review-security-1:queued": "a180072f-6526-4aac-99c1-facf9b8c5ccb",
     "node:review-security-1:started": "7eb2a983-4a8e-4e4a-a35a-d305716d36e3",
     "node:review-security-1:receipt-bound": "340b91db-384f-4571-81e2-4ad20e80d7a6",
-    "node:review-correctness-1:artifact-published": "0f817d14-7937-434e-a99f-7a215fc5f290"
+    "node:review-correctness-1:artifact-published": "0f817d14-7937-434e-a99f-7a215fc5f290",
+    "node:review-security-1:artifact-published": "681acbca-04f0-43e7-a23b-502dad651ab9"
   },
   "eventIds": {
     "ba49bd33-cd25-4d3a-8106-d3166e61f8e2": true,
@@ -373,6 +421,7 @@
     "a180072f-6526-4aac-99c1-facf9b8c5ccb": true,
     "7eb2a983-4a8e-4e4a-a35a-d305716d36e3": true,
     "340b91db-384f-4571-81e2-4ad20e80d7a6": true,
-    "0f817d14-7937-434e-a99f-7a215fc5f290": true
+    "0f817d14-7937-434e-a99f-7a215fc5f290": true,
+    "681acbca-04f0-43e7-a23b-502dad651ab9": true
   }
 }
