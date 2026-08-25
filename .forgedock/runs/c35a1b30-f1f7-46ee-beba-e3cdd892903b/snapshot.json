@@ -5,13 +5,13 @@
   "issueNumber": 44,
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "leaseBinding": {
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 12,
-  "lastEventHash": "sha256:ac2210d388f239e7b4d6d764d856c0f73d9d3d7bb3a87b312ea38ef4a3b9c061",
+  "sequence": 13,
+  "lastEventHash": "sha256:bd31aad5ed98cd8978913cdcab1e332ed2463c11ea0044eb2308036fa5ff81e5",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -75,7 +75,7 @@
       "node": "plan",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "failed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/c35a1b30-f1f7-46ee-beba-e3cdd892903b/.pi/forge/c35a1b30-f1f7-46ee-beba-e3cdd892903b-plan-1.json",
       "subagentRunId": "37a031f0-b9c5-47ec-af8b-c6cbeb1ca8d3",
@@ -84,7 +84,9 @@
       "startedAt": "2026-08-25T13:19:59.383Z",
       "previousSubagentRunId": "launch:plan-1:355a691b-0278-4e73-85be-409171703a06",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "reason": "Lease expired after its owning Pi session stopped heartbeating; takeover confirmed by operator session 01a03992-a251-78fc-b722-95aa7f4f9589.",
+      "finishedAt": "2026-08-25T16:00:55.961Z"
     }
   },
   "effects": {},
@@ -100,7 +102,8 @@
     "node:investigate-1:completed": "ebbc5cfe-9300-48c8-8c4d-569013194a67",
     "node:plan-1:queued": "428d414d-3979-42e1-a00e-1127b646545b",
     "node:plan-1:started": "1b0c972a-eebc-4205-ac1f-5ac72d4cea51",
-    "node:plan-1:receipt-bound": "2cae8ce4-6928-4ff3-be98-ce51132e8e91"
+    "node:plan-1:receipt-bound": "2cae8ce4-6928-4ff3-be98-ce51132e8e91",
+    "run:cancelled": "85468478-e421-43a7-91b6-7ff1d36e832f"
   },
   "eventIds": {
     "3ccb0018-858e-4ed2-b7d5-ccc785c984b0": true,
@@ -114,6 +117,8 @@
     "ebbc5cfe-9300-48c8-8c4d-569013194a67": true,
     "428d414d-3979-42e1-a00e-1127b646545b": true,
     "1b0c972a-eebc-4205-ac1f-5ac72d4cea51": true,
-    "2cae8ce4-6928-4ff3-be98-ce51132e8e91": true
-  }
+    "2cae8ce4-6928-4ff3-be98-ce51132e8e91": true,
+    "85468478-e421-43a7-91b6-7ff1d36e832f": true
+  },
+  "cancellationReason": "Lease expired after its owning Pi session stopped heartbeating; takeover confirmed by operator session 01a03992-a251-78fc-b722-95aa7f4f9589."
 }
