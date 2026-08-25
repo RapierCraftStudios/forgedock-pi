@@ -10,15 +10,15 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 4,
-  "lastEventHash": "sha256:5a6fc84dc5d827d9775fc0e8ed5193cab26f5946bcd0a525d2c17ef7a2baf8d1",
+  "sequence": 5,
+  "lastEventHash": "sha256:21d0bb9458c6408567b644ab5dad9c972319361b87a91672acc910cd7378b560",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/b7cb21a4-d184-4479-ba03-a97003b72d85/.pi/forge/b7cb21a4-d184-4479-ba03-a97003b72d85-resolve-1.json",
       "subagentRunId": "370e25d8-f761-4d31-8479-33588345ac69",
@@ -27,7 +27,24 @@
       "startedAt": "2026-08-25T13:05:02.658Z",
       "previousSubagentRunId": "launch:resolve-1:c5bf3aaa-fccf-4e7f-8ffc-6fcd8935da46",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "round": 1,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "GitHub issue #45 is open and its title and body describe the bounded read-only acceptance bug with six concrete acceptance criteria.",
+        "Issue #45 is labeled bug, workflow, priority:P1, and workflow:investigating; no closed-state or duplicate-PR condition prevents this run.",
+        "Tracked .forge/config.json selects dogfood as the exact integration branch, protects main, and requires GitHub verification for dogfood.",
+        "The durable run snapshot confirms issue 45, run b7cb21a4-d184-4479-ba03-a97003b72d85, and resolve-1 queued and started at the frozen base SHA.",
+        "At the frozen base, src/agents/register.ts:158-183 registers forge-work-on with acceptanceRole writer, checked changed-files/tests-added evidence, and completionGuard true.",
+        "At the frozen base, src/adapters/subagents.ts:255-285 dispatches bounded nodes through forge-work-on while requesting acceptance level none, leaving the static writer completion surface in play.",
+        "At the frozen base, src/agents/materialize.ts:35-49 materializes forge-work-on with acceptanceRole writer and completionGuard true; bounded launch coverage in test/adapters/subagents.test.ts does not assert no-diff acceptance behavior.",
+        "The assigned branch HEAD equals the frozen base and the worktree has no tracked or untracked changes.",
+        "npm run check completed successfully with TypeScript typechecking and 80 passing tests.",
+        "No open pull request currently references issue #45."
+      ],
+      "finishedAt": "2026-08-25T13:10:16.744Z"
     }
   },
   "effects": {},
@@ -35,12 +52,14 @@
     "run:create": "933f0a0d-574b-44fc-9a4f-0a2e9fd26406",
     "node:resolve-1:queued": "ecb85cb0-1434-4bd4-90db-d266a3140db1",
     "node:resolve-1:started": "1c2d9193-92ac-41f4-8a75-3c5dc40c4d3b",
-    "node:resolve-1:receipt-bound": "b345c206-cff7-4387-bf72-7cc3cdf081b6"
+    "node:resolve-1:receipt-bound": "b345c206-cff7-4387-bf72-7cc3cdf081b6",
+    "node:resolve-1:completed": "778adebe-47ee-43d0-b149-4091b7e4a384"
   },
   "eventIds": {
     "933f0a0d-574b-44fc-9a4f-0a2e9fd26406": true,
     "ecb85cb0-1434-4bd4-90db-d266a3140db1": true,
     "1c2d9193-92ac-41f4-8a75-3c5dc40c4d3b": true,
-    "b345c206-cff7-4387-bf72-7cc3cdf081b6": true
+    "b345c206-cff7-4387-bf72-7cc3cdf081b6": true,
+    "778adebe-47ee-43d0-b149-4091b7e4a384": true
   }
 }
