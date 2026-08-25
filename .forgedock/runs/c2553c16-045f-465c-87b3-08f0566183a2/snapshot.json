@@ -10,8 +10,8 @@
     "ownerRunId": "b67930fe-7de3-4597-87d0-2485bcd53932",
     "epoch": 1
   },
-  "sequence": 21,
-  "lastEventHash": "sha256:e93ec8673e48273aa8a00e8eaa17711997310d0a481eb106e2a1573e5a2a4d20",
+  "sequence": 22,
+  "lastEventHash": "sha256:79df57b41cda3d87c95e577c5ba1327b531f52643bf1d2e38792d1d2782fc092",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -156,6 +156,15 @@
         "npm run check passed TypeScript typechecking and all 84 tests."
       ],
       "finishedAt": "2026-08-25T17:03:10.830Z"
+    },
+    "verify-1": {
+      "nodeId": "verify-1",
+      "node": "verify",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/c2553c16-045f-465c-87b3-08f0566183a2/.pi/forge/c2553c16-045f-465c-87b3-08f0566183a2-verify-1.json"
     }
   },
   "effects": {},
@@ -180,7 +189,8 @@
     "node:implement-1:queued": "3003280b-f2f6-4122-bdc0-a7482ad3bc9e",
     "node:implement-1:started": "87657c01-e587-4723-86c0-fc8cf35f7397",
     "node:implement-1:receipt-bound": "7801142a-5ba7-423b-86c3-f5bc1d9a8d8e",
-    "node:implement-1:completed": "6ec9f0d6-2709-4d5c-8dfe-aaa9d10e7a8d"
+    "node:implement-1:completed": "6ec9f0d6-2709-4d5c-8dfe-aaa9d10e7a8d",
+    "node:verify-1:queued": "a6951aca-bb26-4989-991d-e35c6cbb5622"
   },
   "eventIds": {
     "26445051-7ba5-465e-8c7f-a17aa6f15137": true,
@@ -203,6 +213,7 @@
     "3003280b-f2f6-4122-bdc0-a7482ad3bc9e": true,
     "87657c01-e587-4723-86c0-fc8cf35f7397": true,
     "7801142a-5ba7-423b-86c3-f5bc1d9a8d8e": true,
-    "6ec9f0d6-2709-4d5c-8dfe-aaa9d10e7a8d": true
+    "6ec9f0d6-2709-4d5c-8dfe-aaa9d10e7a8d": true,
+    "a6951aca-bb26-4989-991d-e35c6cbb5622": true
   }
 }
