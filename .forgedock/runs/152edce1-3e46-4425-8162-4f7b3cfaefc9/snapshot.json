@@ -10,8 +10,8 @@
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:34025efb95ee4a0320d361a244f9555bd4a06002aa08f5905e9583079b4fdb0b",
+  "sequence": 9,
+  "lastEventHash": "sha256:f98486f5dc7af9f7486f7b0b8221539e26383a163ecb727f719cc1ef263c1819",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -45,7 +45,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/152edce1-3e46-4425-8162-4f7b3cfaefc9/.pi/forge/152edce1-3e46-4425-8162-4f7b3cfaefc9-investigate-1.json",
       "subagentRunId": "83e4605f-da22-46fb-925b-798c7d4f999d",
@@ -54,7 +54,18 @@
       "startedAt": "2026-08-25T18:49:23.201Z",
       "previousSubagentRunId": "launch:investigate-1:feeaef42-b8ea-410c-afd8-3ce990c2ec44",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "src/adapters/subagents.ts #spawn builds every bounded non-review child with agent: FORGE_WORK_ON_AGENT; there is no node-role selector in the frozen base.",
+        "src/agents/register.ts registers FORGE_WORK_ON_AGENT with acceptanceRole \"writer\" and completionGuard true, although the same agent executes resolve, investigate, plan, prepare-worktree, verify, and prepare-pr nodes that normally make no source edits.",
+        "src/agents/materialize.ts agentFile hardcodes `completionGuard: true` for every generated definition instead of accepting a role-specific guard value.",
+        "test/adapters/subagents.test.ts verifies bounded investigate task/schema behavior but does not assert the selected agent, acceptance role, completion guard, or successful zero-diff completion.",
+        "The supplied issue context reports two finalized resolve/investigate child results that were subsequently rejected solely for making no edits; the frozen source configuration exposes the matching failure mechanism."
+      ],
+      "finishedAt": "2026-08-25T18:52:10.194Z"
     }
   },
   "effects": {},
@@ -66,7 +77,8 @@
     "node:resolve-1:completed": "85713fde-ebb9-4abd-b71a-2c278470d517",
     "node:investigate-1:queued": "93be0e94-5466-4107-a528-476d1cc7350d",
     "node:investigate-1:started": "1d82008e-edbc-46a0-bf68-aac06b988029",
-    "node:investigate-1:receipt-bound": "1c7fe391-2a8c-4139-b839-bca0a44e190c"
+    "node:investigate-1:receipt-bound": "1c7fe391-2a8c-4139-b839-bca0a44e190c",
+    "node:investigate-1:completed": "74e87438-f74b-4391-9179-a3f1dc46dc4a"
   },
   "eventIds": {
     "e54b6411-60d6-4281-8801-6488bc2a6398": true,
@@ -76,6 +88,7 @@
     "85713fde-ebb9-4abd-b71a-2c278470d517": true,
     "93be0e94-5466-4107-a528-476d1cc7350d": true,
     "1d82008e-edbc-46a0-bf68-aac06b988029": true,
-    "1c7fe391-2a8c-4139-b839-bca0a44e190c": true
+    "1c7fe391-2a8c-4139-b839-bca0a44e190c": true,
+    "74e87438-f74b-4391-9179-a3f1dc46dc4a": true
   }
 }
