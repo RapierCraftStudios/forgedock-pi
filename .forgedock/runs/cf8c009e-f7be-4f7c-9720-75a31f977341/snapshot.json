@@ -10,8 +10,8 @@
     "ownerRunId": "5da43cdf-2ff6-479c-9bf8-d2241bbd78fe",
     "epoch": 1
   },
-  "sequence": 13,
-  "lastEventHash": "sha256:cc93b5f084c8d08dcd3ba43aac53b2e3ee7a4d63a65b81e63a6e629d09bc4331",
+  "sequence": 14,
+  "lastEventHash": "sha256:6d4bc0e1d8458306e93583c1abbee3e3ad962491671257905f318945587e1d04",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -94,6 +94,15 @@
         "src/adapters/github-workflow.ts lists at most one page of labeled issues and has create/read-back support but no safe issue-body metadata update operation, which must be bounded by the canonical finding identity."
       ],
       "finishedAt": "2026-08-25T08:17:40.685Z"
+    },
+    "prepare-worktree-1": {
+      "nodeId": "prepare-worktree-1",
+      "node": "prepare-worktree",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "4819168331da2a25f500a1d1436f231db8211f2b",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/cf8c009e-f7be-4f7c-9720-75a31f977341/.pi/forge/cf8c009e-f7be-4f7c-9720-75a31f977341-prepare-worktree-1.json"
     }
   },
   "effects": {},
@@ -110,7 +119,8 @@
     "node:plan-1:queued": "229bf808-e9b5-49a3-8027-b50f1de537a5",
     "node:plan-1:started": "6a759b11-c804-4aa9-aaed-aa36a112b965",
     "node:plan-1:receipt-bound": "02d02cb3-ef14-417f-b98c-cd1f17817cd8",
-    "node:plan-1:completed": "42fec860-d6d4-4cba-8fb7-99d2461d83af"
+    "node:plan-1:completed": "42fec860-d6d4-4cba-8fb7-99d2461d83af",
+    "node:prepare-worktree-1:queued": "94870547-d9fe-4836-b9c3-a6748541b77d"
   },
   "eventIds": {
     "3158194d-5ea4-46c8-b6f5-500304af5913": true,
@@ -125,6 +135,7 @@
     "229bf808-e9b5-49a3-8027-b50f1de537a5": true,
     "6a759b11-c804-4aa9-aaed-aa36a112b965": true,
     "02d02cb3-ef14-417f-b98c-cd1f17817cd8": true,
-    "42fec860-d6d4-4cba-8fb7-99d2461d83af": true
+    "42fec860-d6d4-4cba-8fb7-99d2461d83af": true,
+    "94870547-d9fe-4836-b9c3-a6748541b77d": true
   }
 }
