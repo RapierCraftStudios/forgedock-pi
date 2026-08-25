@@ -10,8 +10,8 @@
     "ownerRunId": "fd616696-4975-49a6-9d2a-9a782a49ed27",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:2f2ecd7a5d5214b19c2f975de72d326193227fca95345952d238b14598440164",
+  "sequence": 6,
+  "lastEventHash": "sha256:0729e5c95652344ded72308524126aa53aa30c1f61a01f196fdfef5daae12b2e",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -40,6 +40,15 @@
         "The production allowlist already returns only forge_finalize_reviewer for review-security, so the requested regression assertion is eligible for a focused test-only implementation."
       ],
       "finishedAt": "2026-08-25T08:57:13.410Z"
+    },
+    "investigate-1": {
+      "nodeId": "investigate-1",
+      "node": "investigate",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "86fff740db2e1ab31fc651fc80ea00ec7c5bdcbd",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a/.pi/forge/e3f125e3-2c3a-4c51-9a8c-e3254418ad9a-investigate-1.json"
     }
   },
   "effects": {},
@@ -48,13 +57,15 @@
     "node:resolve-1:queued": "4da5fbf9-e895-4632-84b6-1e1aeb639606",
     "node:resolve-1:started": "b2c30913-dcc8-4d03-87c5-a1a33dd28a4b",
     "node:resolve-1:receipt-bound": "95e44358-110f-4804-8f56-d1cf357d03e5",
-    "node:resolve-1:completed": "dfd34456-eac8-47c5-8dff-e1140875cfc8"
+    "node:resolve-1:completed": "dfd34456-eac8-47c5-8dff-e1140875cfc8",
+    "node:investigate-1:queued": "c86367d3-6344-4396-8df1-cae8e79bb36b"
   },
   "eventIds": {
     "a99b16b3-5107-4924-8a10-6bae25957c57": true,
     "4da5fbf9-e895-4632-84b6-1e1aeb639606": true,
     "b2c30913-dcc8-4d03-87c5-a1a33dd28a4b": true,
     "95e44358-110f-4804-8f56-d1cf357d03e5": true,
-    "dfd34456-eac8-47c5-8dff-e1140875cfc8": true
+    "dfd34456-eac8-47c5-8dff-e1140875cfc8": true,
+    "c86367d3-6344-4396-8df1-cae8e79bb36b": true
   }
 }
