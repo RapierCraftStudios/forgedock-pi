@@ -10,8 +10,8 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 9,
-  "lastEventHash": "sha256:8433ba721aa3a46908f0796072ad51ff5cd35ff075cefca9a9d8139b8e436c95",
+  "sequence": 10,
+  "lastEventHash": "sha256:80f86843296a18986deeb8afc83be9f48922aff5d81fd78245a40783c07a3da4",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -71,6 +71,15 @@
         "The same path-following pattern also covers .pi/settings.json and .pi/forge/generated-settings, so the remediation must protect every generated runtime path, not only agent markdown files."
       ],
       "finishedAt": "2026-08-25T13:19:39.612Z"
+    },
+    "plan-1": {
+      "nodeId": "plan-1",
+      "node": "plan",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/63c88c5f-9abf-46ab-8be0-f65381de7c26/.pi/forge/63c88c5f-9abf-46ab-8be0-f65381de7c26-plan-1.json"
     }
   },
   "effects": {},
@@ -83,7 +92,8 @@
     "node:investigate-1:queued": "13d90537-533c-4ef7-9062-a6b503802ef8",
     "node:investigate-1:started": "d58c0dab-1ba2-4463-b945-d7be0e5844ec",
     "node:investigate-1:receipt-bound": "b98308a9-fb49-417b-b954-18d9a15d032f",
-    "node:investigate-1:completed": "53bebb3c-08b9-4d40-9109-e45726ede3ae"
+    "node:investigate-1:completed": "53bebb3c-08b9-4d40-9109-e45726ede3ae",
+    "node:plan-1:queued": "70dca979-2ef1-4878-a5d3-797053fbd19b"
   },
   "eventIds": {
     "ffc52c6f-bd15-425f-8eed-03dd42ee40d4": true,
@@ -94,6 +104,7 @@
     "13d90537-533c-4ef7-9062-a6b503802ef8": true,
     "d58c0dab-1ba2-4463-b945-d7be0e5844ec": true,
     "b98308a9-fb49-417b-b954-18d9a15d032f": true,
-    "53bebb3c-08b9-4d40-9109-e45726ede3ae": true
+    "53bebb3c-08b9-4d40-9109-e45726ede3ae": true,
+    "70dca979-2ef1-4878-a5d3-797053fbd19b": true
   }
 }
