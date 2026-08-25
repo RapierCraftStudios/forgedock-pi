@@ -10,8 +10,8 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 9,
-  "lastEventHash": "sha256:4262263f82de712b53c9da60bfc26f3052f6c5dafd16e9828f1870f5d98fad7e",
+  "sequence": 10,
+  "lastEventHash": "sha256:a58a5022b5448b038a03756eb61a426c79da0275abae40053889094037518989",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -70,6 +70,15 @@
         "npm run check passed on the unchanged frozen worktree: typecheck succeeded and all 80 tests passed."
       ],
       "finishedAt": "2026-08-25T13:24:57.160Z"
+    },
+    "plan-1": {
+      "nodeId": "plan-1",
+      "node": "plan",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/78d73783-7ec4-466f-8a31-d3820e1a7ea2/.pi/forge/78d73783-7ec4-466f-8a31-d3820e1a7ea2-plan-1.json"
     }
   },
   "effects": {},
@@ -82,7 +91,8 @@
     "node:investigate-1:queued": "9ae9ba4d-fc1d-49a0-a98e-96d3d4b5bec2",
     "node:investigate-1:started": "126e5bcb-328b-47ca-acdf-4aa67beee463",
     "node:investigate-1:receipt-bound": "c86e43c6-f43c-4689-84af-bc2e167223c5",
-    "node:investigate-1:completed": "c4d0419f-bbc5-431d-83a4-c120c0f80683"
+    "node:investigate-1:completed": "c4d0419f-bbc5-431d-83a4-c120c0f80683",
+    "node:plan-1:queued": "77265c31-7f4d-4742-8089-8d58f1838ed4"
   },
   "eventIds": {
     "5925fc27-4668-475e-91fb-3a6462b0ab46": true,
@@ -93,6 +103,7 @@
     "9ae9ba4d-fc1d-49a0-a98e-96d3d4b5bec2": true,
     "126e5bcb-328b-47ca-acdf-4aa67beee463": true,
     "c86e43c6-f43c-4689-84af-bc2e167223c5": true,
-    "c4d0419f-bbc5-431d-83a4-c120c0f80683": true
+    "c4d0419f-bbc5-431d-83a4-c120c0f80683": true,
+    "77265c31-7f4d-4742-8089-8d58f1838ed4": true
   }
 }
