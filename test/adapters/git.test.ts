@@ -75,6 +75,17 @@ test("worktree manager creates an issue branch from integration and cleans it sa
       "base\n",
     );
     await manager.assertClean(prepared.worktreePath);
+    await git(prepared.worktreePath, "mv", "app.txt", "renamed.txt");
+    const staged = await manager.stagedPaths(prepared.worktreePath);
+    assert.deepEqual(staged, [
+      {
+        status: "renamed",
+        previousPath: "app.txt",
+        path: "renamed.txt",
+      },
+    ]);
+    await git(prepared.worktreePath, "reset", "--hard", "HEAD");
+    await manager.assertClean(prepared.worktreePath);
     await manager.push(prepared.worktreePath, prepared.branch);
     await manager.deleteRemoteBranch(prepared);
     const remoteBranch = await execFileAsync(

@@ -13,6 +13,12 @@ import { GitWorktreeManager, type PreparedWorktree } from "../adapters/git.ts";
 import { GitHubIssueProjector } from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
+import {
+  assertChangedPathsAllowed,
+  hashBuilderContract,
+  normalizeBuilderContract,
+  type BuilderContract,
+} from "../core/builder-contract.ts";
 import { SubagentsRpcClient } from "../adapters/subagents.ts";
 import {
   findForgeWorkOnResult,
@@ -263,6 +269,12 @@ export class ForgeWorkOnController {
     const github = new GitHubWorkflowAdapter(transport, link.repository);
     const projector = new GitHubIssueProjector(transport, link.repository);
     const sessionId = ctx.sessionManager.getSessionId();
+    let currentRun = await store.readRun(link.forgeRunId, ctx.signal);
+    const builderContract = requireBuilderContract(
+      currentRun.state?.builderContract,
+      currentRun.state?.builderContractHash,
+      link.prepared.baseSha,
+    );
 
     await this.#git.assertClean(link.prepared.worktreePath, ctx.signal);
     const actualHead = await this.#git.head(
@@ -283,6 +295,14 @@ export class ForgeWorkOnController {
       throw new Error(
         "Work-on changed-file result does not match the actual committed diff.",
       );
+    assertChangedPathsAllowed(
+      builderContract,
+      await this.#git.changedPaths(
+        link.prepared.worktreePath,
+        link.prepared.baseSha,
+        ctx.signal,
+      ),
+    );
 
     await appendPhase(
       journal,
@@ -369,7 +389,20 @@ export class ForgeWorkOnController {
         (domain) => `missing reviewer artifact ${domain}`,
       ),
     ];
-    const currentRun = await store.readRun(link.forgeRunId, ctx.signal);
+    currentRun = await store.readRun(link.forgeRunId, ctx.signal);
+    const mergeContract = requireBuilderContract(
+      currentRun.state?.builderContract,
+      currentRun.state?.builderContractHash,
+      link.prepared.baseSha,
+    );
+    assertChangedPathsAllowed(
+      mergeContract,
+      await this.#git.changedPaths(
+        link.prepared.worktreePath,
+        link.prepared.baseSha,
+        ctx.signal,
+      ),
+    );
     const checks = verificationForGate(policy, result);
     const findings = result.review.findings as readonly ReviewFinding[];
     const gate = evaluateReviewGate({
@@ -919,6 +952,28 @@ function assertResultIdentity(
     result.baseSha !== link.prepared.baseSha
   )
     throw new Error("Work-on result branch/base identity mismatch.");
+}
+
+function requireBuilderContract(
+  value: BuilderContract | undefined,
+  expectedHash: string | undefined,
+  baseSha: string,
+): BuilderContract {
+  if (!value || !expectedHash)
+    throw new Error(
+      "Authoritative run state is missing the accepted builder contract; refusing push or merge.",
+    );
+  const contract = normalizeBuilderContract(value);
+  const actualHash = hashBuilderContract(contract);
+  if (actualHash !== expectedHash)
+    throw new Error(
+      `Authoritative builder contract hash ${expectedHash} does not match ${actualHash}.`,
+    );
+  if (contract.baseSha !== baseSha)
+    throw new Error(
+      `Builder contract base ${contract.baseSha} does not match frozen base ${baseSha}.`,
+    );
+  return contract;
 }
 
 function digest(value: string): string {

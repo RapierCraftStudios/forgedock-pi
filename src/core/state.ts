@@ -1,4 +1,12 @@
 import {
+  extendBuilderContract,
+  hashBuilderContract,
+  normalizeBuilderContract,
+  normalizeBuilderContractExtension,
+  parseBuilderContractReport,
+  type BuilderContract,
+} from "./builder-contract.ts";
+import {
   hashRunEvent,
   isRunPhase,
   RUN_PHASES,
@@ -36,6 +44,7 @@ export interface PhaseAttempt {
   worktreePath?: string;
   branch?: string;
   baseSha?: string;
+  builderContractHash?: string;
   outputArtifactHash?: string;
   commitSha?: string;
   evidence: readonly string[];
@@ -71,6 +80,9 @@ export interface RunState {
   effects: Record<string, RecordedEffect>;
   idempotencyKeys: Record<string, string>;
   eventIds: Record<string, true>;
+  builderContract?: BuilderContract;
+  builderContractHash?: string;
+  builderContractBindingRequired?: boolean;
   outcome?: "merged" | "closed";
   cancellationReason?: string;
 }
@@ -347,10 +359,101 @@ function applyLeaseRelease(state: RunState, event: RunEvent): void {
   state.lease = undefined;
 }
 
+const CONTRACT_BOUND_PHASES: ReadonlySet<RunPhase> = new Set([
+  "implement",
+  "verify",
+  "review",
+]);
+
+function requireBuilderContractBinding(
+  state: RunState,
+  phase: RunPhase,
+  record: Record<string, unknown>,
+): string | undefined {
+  if (!CONTRACT_BOUND_PHASES.has(phase)) return undefined;
+  const expected = state.builderContractHash;
+  if (!expected)
+    throw new StateTransitionError(
+      "missing-builder-contract",
+      `Phase ${phase} requires an accepted builder contract.`,
+    );
+  if (
+    record.builderContractHash === undefined &&
+    state.builderContractBindingRequired === false
+  )
+    return expected;
+  if (record.builderContractHash !== expected)
+    throw new StateTransitionError(
+      "builder-contract-hash-mismatch",
+      `Phase ${phase} is bound to ${String(record.builderContractHash)}, expected ${expected}.`,
+    );
+  return expected;
+}
+
+function normalizeStateContract(value: unknown): BuilderContract {
+  try {
+    return normalizeBuilderContract(value);
+  } catch (error) {
+    throw new StateTransitionError(
+      "invalid-builder-contract",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
+function applyBuilderContractExtension(state: RunState, event: RunEvent): void {
+  assertLeaseEpoch(state, event);
+  const record = payloadRecord(event);
+  if (record.phase !== "review")
+    throw new StateTransitionError(
+      "invalid-builder-contract",
+      "Builder contract extensions are only valid during review.",
+    );
+  const attempt = requirePositiveInteger(record, "attempt");
+  assertCurrentAttempt(state, "review", attempt, ["running"]);
+  if (!state.builderContract || !state.builderContractHash)
+    throw new StateTransitionError(
+      "missing-builder-contract",
+      "Cannot extend a missing builder contract.",
+    );
+  let extension;
+  let suppliedContract;
+  try {
+    extension = normalizeBuilderContractExtension(record);
+    suppliedContract = normalizeBuilderContract(record.contract);
+    const next = extendBuilderContract(state.builderContract, extension);
+    if (hashBuilderContract(next) !== hashBuilderContract(suppliedContract))
+      throw new StateTransitionError(
+        "invalid-builder-contract",
+        "Contract extension event does not contain its deterministic resulting contract.",
+      );
+    if (suppliedContract.baseSha !== state.builderContract.baseSha)
+      throw new StateTransitionError(
+        "invalid-builder-contract",
+        "Contract extension cannot change the frozen base SHA.",
+      );
+    state.builderContract = next;
+    state.builderContractHash = hashBuilderContract(next);
+  } catch (error) {
+    if (error instanceof StateTransitionError) throw error;
+    throw new StateTransitionError(
+      error instanceof Error && "code" in error
+        ? String((error as { code?: unknown }).code)
+        : "invalid-builder-contract",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
 function applyPhaseQueued(state: RunState, event: RunEvent): void {
   assertLeaseEpoch(state, event);
   const { record, phase, attempt } = requirePhasePayload(event);
   const restartAction = requireString(record, "restartAction");
+  const builderContractHash = requireBuilderContractBinding(
+    state,
+    phase,
+    record,
+  );
   const prior = currentAttempt(state, phase);
 
   if (prior) {
@@ -397,6 +500,7 @@ function applyPhaseQueued(state: RunState, event: RunEvent): void {
     ...(typeof record.inputArtifactHash === "string"
       ? { inputArtifactHash: record.inputArtifactHash }
       : {}),
+    ...(builderContractHash ? { builderContractHash } : {}),
   };
   state.phases[phase] = {
     phase,
@@ -408,6 +512,11 @@ function applyPhaseQueued(state: RunState, event: RunEvent): void {
 function applyPhaseStarted(state: RunState, event: RunEvent): void {
   assertLeaseEpoch(state, event);
   const { record, phase, attempt } = requirePhasePayload(event);
+  const builderContractHash = requireBuilderContractBinding(
+    state,
+    phase,
+    record,
+  );
   const current = assertCurrentAttempt(state, phase, attempt, ["queued"]);
   const started: PhaseAttempt = {
     ...current,
@@ -422,6 +531,7 @@ function applyPhaseStarted(state: RunState, event: RunEvent): void {
       : {}),
     ...(typeof record.branch === "string" ? { branch: record.branch } : {}),
     ...(typeof record.baseSha === "string" ? { baseSha: record.baseSha } : {}),
+    ...(builderContractHash ? { builderContractHash } : {}),
   };
   replaceAttempt(state, phase, started);
 }
@@ -429,12 +539,47 @@ function applyPhaseStarted(state: RunState, event: RunEvent): void {
 function applyPhaseCompleted(state: RunState, event: RunEvent): void {
   assertLeaseEpoch(state, event);
   const { record, phase, attempt } = requirePhasePayload(event);
+  const builderContractHash = requireBuilderContractBinding(
+    state,
+    phase,
+    record,
+  );
   const current = assertCurrentAttempt(state, phase, attempt, ["running"]);
   const evidence = Array.isArray(record.evidence)
     ? record.evidence.filter(
         (entry): entry is string => typeof entry === "string",
       )
     : [];
+  if (phase === "plan") {
+    let contract: BuilderContract;
+    try {
+      contract =
+        record.builderContract !== undefined
+          ? normalizeBuilderContract(record.builderContract)
+          : parseBuilderContractReport(
+              typeof record.report === "string" ? record.report : "",
+            );
+    } catch (error) {
+      throw new StateTransitionError(
+        "invalid-builder-contract",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+    const contractHash = hashBuilderContract(contract);
+    if (
+      record.builderContractHash !== undefined &&
+      record.builderContractHash !== contractHash
+    )
+      throw new StateTransitionError(
+        "builder-contract-hash-mismatch",
+        `Plan contract hash ${String(record.builderContractHash)} does not match ${contractHash}.`,
+      );
+    state.builderContract = contract;
+    state.builderContractHash = contractHash;
+    state.builderContractBindingRequired =
+      record.builderContractHash !== undefined ||
+      record.builderContract !== undefined;
+  }
   const completed: PhaseAttempt = {
     ...current,
     status: "completed",
@@ -446,6 +591,11 @@ function applyPhaseCompleted(state: RunState, event: RunEvent): void {
     ...(typeof record.commitSha === "string"
       ? { commitSha: record.commitSha }
       : {}),
+    ...(builderContractHash
+      ? { builderContractHash }
+      : phase === "plan" && state.builderContractHash
+        ? { builderContractHash: state.builderContractHash }
+        : {}),
   };
   replaceAttempt(state, phase, completed);
 }
@@ -593,6 +743,9 @@ export function applyRunEvent(
     case "phase.needs-human":
     case "phase.abandoned":
       applyPhaseStopped(state, event);
+      break;
+    case "builder-contract.extended":
+      applyBuilderContractExtension(state, event);
       break;
     case "effect.recorded":
       applyEffect(state, event);

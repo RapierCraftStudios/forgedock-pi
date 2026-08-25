@@ -1,5 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 
+import type {
+  BuilderContract,
+  BuilderContractExtension,
+} from "./builder-contract.ts";
 import { FORGEDOCK_EVENT_SCHEMA } from "./version.ts";
 
 export const RUN_PHASES = [
@@ -42,6 +46,7 @@ export type RunEventType =
   | "phase.blocked"
   | "phase.needs-human"
   | "phase.abandoned"
+  | "builder-contract.extended"
   | "effect.recorded"
   | "run.completed"
   | "run.cancelled";
@@ -64,6 +69,7 @@ export interface PhaseQueuedPayload {
   attempt: number;
   restartAction: string;
   inputArtifactHash?: string;
+  builderContractHash?: string;
 }
 
 export interface PhaseStartedPayload {
@@ -74,6 +80,7 @@ export interface PhaseStartedPayload {
   worktreePath?: string;
   branch?: string;
   baseSha?: string;
+  builderContractHash?: string;
 }
 
 export interface PhaseCompletedPayload {
@@ -82,12 +89,22 @@ export interface PhaseCompletedPayload {
   outputArtifactHash?: string;
   commitSha?: string;
   evidence?: readonly string[];
+  report?: string;
+  builderContract?: BuilderContract;
+  builderContractHash?: string;
 }
 
 export interface PhaseStoppedPayload {
   phase: RunPhase;
   attempt: number;
   reason: string;
+}
+
+export interface BuilderContractExtendedPayload
+  extends BuilderContractExtension {
+  phase: "review";
+  attempt: number;
+  contract: BuilderContract;
 }
 
 export interface EffectRecordedPayload {
@@ -117,6 +134,7 @@ export type RunEventPayload =
   | PhaseStartedPayload
   | PhaseCompletedPayload
   | PhaseStoppedPayload
+  | BuilderContractExtendedPayload
   | EffectRecordedPayload
   | RunCompletedPayload
   | RunCancelledPayload
@@ -307,6 +325,7 @@ const RUN_EVENT_TYPES: ReadonlySet<RunEventType> = new Set([
   "phase.blocked",
   "phase.needs-human",
   "phase.abandoned",
+  "builder-contract.extended",
   "effect.recorded",
   "run.completed",
   "run.cancelled",

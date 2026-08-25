@@ -24,6 +24,20 @@ import { GitHubIssueProjector } from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
 import {
+  assertChangedPathsAllowed,
+  BUILDER_CONTRACT_EXTENSION_JSON_SCHEMA,
+  BUILDER_CONTRACT_JSON_SCHEMA,
+  extendBuilderContract,
+  findBuilderContractViolations,
+  hashBuilderContract,
+  normalizeBuilderContract,
+  normalizeBuilderContractExtension,
+  parseBuilderContractReport,
+  parseGitNameStatus,
+  type BuilderContract,
+  type BuilderContractExtension,
+} from "../core/builder-contract.ts";
+import {
   createRunEvent,
   RUN_PHASES,
   type RunEvent,
@@ -102,6 +116,7 @@ const CheckpointParameters = Type.Object({
   commitSha: Type.Optional(Type.String({ minLength: 7 })),
   evidence: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
   report: Type.Optional(Type.String({ minLength: 1, maxLength: 100_000 })),
+  contract: Type.Optional(Type.Unsafe(BUILDER_CONTRACT_JSON_SCHEMA)),
   reason: Type.Optional(Type.String({ minLength: 1 })),
 });
 
@@ -118,6 +133,9 @@ const DiffParameters = Type.Object({
 
 const CommitParameters = Type.Object({
   kind: StringEnum(["implementation", "review-fixes"] as const),
+  contractExtension: Type.Optional(
+    Type.Unsafe(BUILDER_CONTRACT_EXTENSION_JSON_SCHEMA),
+  ),
 });
 
 const PrepareReviewParameters = Type.Object({});
@@ -237,9 +255,17 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
     description:
       "Create an owned local commit from the assigned worktree without pushing",
     parameters: CommitParameters,
-    async execute(_toolCallId, params, signal) {
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
       const env = safeEnvironment(binding.runId);
+      const bound = await readBoundContract(
+        pi,
+        binding,
+        signal,
+        githubToken,
+      );
+      githubToken = bound.token;
+      let contract = bound.contract;
       const status = await runProcess(
         "git",
         ["-C", root, "status", "--porcelain"],
@@ -360,6 +386,53 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         );
       }
 
+      const stagedContract = await runProcess(
+        "git",
+        ["-C", root, "diff", "--cached", "--no-ext-diff", "--name-status", "-z", "--"],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          maxOutputBytes: MAX_RUNTIME_STATUS_BYTES,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (stagedContract.exitCode !== 0)
+        throw new Error(`git diff --cached contract check failed: ${stagedContract.stderr}`);
+      if (stagedContract.stdout.includes(TRUNCATED_OUTPUT_MARKER))
+        throw new Error(
+          "Forge commit refused to validate builder-contract paths because Git output was truncated.",
+        );
+      const stagedPaths = parseGitNameStatus(stagedContract.stdout);
+      const stagedViolations = findBuilderContractViolations(
+        contract,
+        stagedPaths,
+      );
+      if (stagedViolations.length > 0) {
+        if (params.kind !== "review-fixes" || params.contractExtension === undefined)
+          throw new Error(
+            `Forge commit refused out-of-contract staged paths: ${stagedViolations.join(", ")}.`,
+          );
+        const extension = normalizeBuilderContractExtension(
+          params.contractExtension,
+        );
+        const nextContract = extendBuilderContract(contract, extension);
+        await appendBuilderContractExtension(
+          bound,
+          binding,
+          nextContract,
+          extension,
+          ctx.sessionManager.getSessionId(),
+          signal,
+        );
+        contract = nextContract;
+        assertChangedPathsAllowed(contract, stagedPaths);
+      } else if (params.contractExtension !== undefined) {
+        throw new Error(
+          "Forge commit refused an unnecessary builder-contract extension; extensions must authorize an observed out-of-contract review fix.",
+        );
+      }
+
       const message =
         params.kind === "implementation"
           ? `forge: implement issue #${binding.issueNumber}`
@@ -394,6 +467,35 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       });
       if (head.exitCode !== 0 || !head.stdout.trim())
         throw new Error(`Unable to resolve committed HEAD: ${head.stderr}`);
+      const committedContract = await runProcess(
+        "git",
+        [
+          "-C",
+          root,
+          "diff",
+          "--no-ext-diff",
+          "--name-status",
+          "-z",
+          `${binding.baseSha}...HEAD`,
+          "--",
+        ],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          maxOutputBytes: MAX_RUNTIME_STATUS_BYTES,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (committedContract.exitCode !== 0)
+        throw new Error(
+          `Committed builder-contract check failed: ${committedContract.stderr}`,
+        );
+      if (committedContract.stdout.includes(TRUNCATED_OUTPUT_MARKER))
+        throw new Error(
+          "Forge commit refused to validate committed builder-contract paths because Git output was truncated.",
+        );
+      assertChangedPathsAllowed(contract, parseGitNameStatus(committedContract.stdout));
       return {
         content: [
           {
@@ -401,7 +503,13 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
             text: `Created ${params.kind} commit ${head.stdout.trim()}.`,
           },
         ],
-        details: { kind: params.kind, headSha: head.stdout.trim(), message },
+        details: {
+          kind: params.kind,
+          headSha: head.stdout.trim(),
+          message,
+          builderContractHash: hashBuilderContract(contract),
+          builderContractRevision: contract.revision,
+        },
       };
     },
   });
@@ -472,6 +580,13 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
     parameters: PrepareReviewParameters,
     async execute(_toolCallId, _params, signal) {
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const bound = await readBoundContract(
+        pi,
+        binding,
+        signal,
+        githubToken,
+      );
+      githubToken = bound.token;
       const status = await runProcess(
         "git",
         ["-C", root, "status", "--porcelain"],
@@ -498,6 +613,38 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       const headSha = head.stdout.trim();
       if (head.exitCode !== 0 || !headSha)
         throw new Error(`Unable to resolve review HEAD: ${head.stderr}`);
+      const committedContract = await runProcess(
+        "git",
+        [
+          "-C",
+          root,
+          "diff",
+          "--no-ext-diff",
+          "--name-status",
+          "-z",
+          `${binding.baseSha}...HEAD`,
+          "--",
+        ],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env: safeEnvironment(binding.runId),
+          maxOutputBytes: MAX_RUNTIME_STATUS_BYTES,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (committedContract.exitCode !== 0)
+        throw new Error(
+          `Review preparation builder-contract check failed: ${committedContract.stderr}`,
+        );
+      if (committedContract.stdout.includes(TRUNCATED_OUTPUT_MARKER))
+        throw new Error(
+          "Review preparation refused to validate builder-contract paths because Git output was truncated.",
+        );
+      assertChangedPathsAllowed(
+        bound.contract,
+        parseGitNameStatus(committedContract.stdout),
+      );
       const push = await pi.exec(
         "git",
         ["-C", root, "push", "--set-upstream", "origin", binding.branch],
@@ -652,6 +799,11 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           `Bound lease epoch ${binding.leaseEpoch} no longer owns run ${binding.runId}.`,
         );
       }
+      const checkpointContract = resolveCheckpointContract(
+        params,
+        current.state.builderContract,
+        binding,
+      );
       const idempotencyKey = `phase:${params.phase}:${params.attempt}:${params.action}`;
       const priorEventId = current.state.idempotencyKeys[idempotencyKey];
       let event: RunEvent;
@@ -683,7 +835,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
             leaseEpoch: binding.leaseEpoch,
           },
           idempotencyKey,
-          payload: checkpointPayload(params, binding),
+          payload: checkpointPayload(params, binding, checkpointContract),
         });
         const nextState = applyRunEvent(current.state, event);
         stateTip = await store.commitRunState({
@@ -745,6 +897,159 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
     ceiling = undefined;
     for (const registration of agentRegistrations) registration.dispose();
   });
+}
+
+interface BoundContractState {
+  token: string;
+  store: GitHubStateBranchStore;
+  current: import("../adapters/github-state.ts").ReadRunStateResult;
+  contract: BuilderContract;
+}
+
+async function readBoundContract(
+  pi: ExtensionAPI,
+  binding: ForgeChildBinding,
+  signal: AbortSignal | undefined,
+  existingToken: string | undefined,
+): Promise<BoundContractState> {
+  const token =
+    existingToken ?? (await resolveGitHubToken(pi, binding.worktreeRoot, signal));
+  const transport = new FetchGitHubTransport({ token });
+  const store = new GitHubStateBranchStore(
+    transport,
+    binding.repository,
+    binding.stateBranch,
+  );
+  const current = await store.readRun(binding.runId, signal);
+  if (!current.state || !current.lease)
+    throw new Error(
+      `Authoritative run ${binding.runId} has no accepted builder contract state.`,
+    );
+  if (
+    current.lease.epoch !== binding.leaseEpoch ||
+    current.lease.ownerRunId !== binding.runId
+  )
+    throw new Error(
+      `Bound lease epoch ${binding.leaseEpoch} no longer owns run ${binding.runId}.`,
+    );
+  const contractValue = current.state.builderContract;
+  if (!contractValue || !current.state.builderContractHash)
+    throw new Error(
+      `Authoritative run ${binding.runId} has no accepted builder contract; refusing to commit or review.`,
+    );
+  const contract = normalizeBuilderContract(contractValue);
+  const contractHash = hashBuilderContract(contract);
+  if (contractHash !== current.state.builderContractHash)
+    throw new Error(
+      `Authoritative builder contract hash ${current.state.builderContractHash} does not match ${contractHash}.`,
+    );
+  if (contract.baseSha !== binding.baseSha)
+    throw new Error(
+      `Builder contract base ${contract.baseSha} does not match frozen base ${binding.baseSha}.`,
+    );
+  return { token, store, current, contract };
+}
+
+async function appendBuilderContractExtension(
+  bound: BoundContractState,
+  binding: ForgeChildBinding,
+  nextContract: BuilderContract,
+  extensionValue: BuilderContractExtension,
+  sessionId: string,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  const current = bound.current;
+  if (!current.state || !current.lease)
+    throw new Error("Cannot extend a builder contract without active run state.");
+  const review = current.state.phases.review?.attempts.at(-1);
+  if (!review || review.status !== "running")
+    throw new Error(
+      "Out-of-contract review fixes require a running review attempt.",
+    );
+  const extension = normalizeBuilderContractExtension(extensionValue);
+  const expected = extendBuilderContract(bound.contract, extension);
+  if (hashBuilderContract(expected) !== hashBuilderContract(nextContract))
+    throw new Error(
+      "Builder-contract extension result does not match the supplied contract revision.",
+    );
+  const event = createRunEvent({
+    runId: binding.runId,
+    repository: binding.repository,
+    sequence: current.state.sequence + 1,
+    previousEventHash: current.state.lastEventHash,
+    type: "builder-contract.extended",
+    actor: {
+      kind: "extension",
+      sessionId,
+      leaseEpoch: binding.leaseEpoch,
+    },
+    idempotencyKey: `builder-contract:extend:${extension.revision}:${hashBuilderContract(expected)}`,
+    payload: {
+      ...extension,
+      phase: "review",
+      attempt: review.attempt,
+      contract: expected,
+    },
+  });
+  const nextState = applyRunEvent(current.state, event);
+  await bound.store.commitRunState({
+    expectedTip: current.tip,
+    events: [...current.events, event],
+    state: nextState,
+    lease: current.lease,
+    message: `Extend ForgeDock builder contract for run ${binding.runId}`,
+    ...(signal ? { signal } : {}),
+  });
+}
+
+function resolveCheckpointContract(
+  params: {
+    phase: RunPhase;
+    action:
+      | "queue"
+      | "start"
+      | "complete"
+      | "fail"
+      | "block"
+      | "needs-human"
+      | "abandon";
+    contract?: unknown;
+    report?: string;
+  },
+  current: BuilderContract | undefined,
+  binding: ForgeChildBinding,
+): BuilderContract | undefined {
+  const planComplete = params.phase === "plan" && params.action === "complete";
+  if (params.contract !== undefined && !planComplete)
+    throw new Error(
+      "A builder contract may only be supplied when completing the plan phase.",
+    );
+  if (planComplete) {
+    const contract =
+      params.contract !== undefined
+        ? normalizeBuilderContract(params.contract)
+        : current ?? parseBuilderContractReport(params.report ?? "");
+    if (contract.baseSha !== binding.baseSha)
+      throw new Error(
+        `Builder contract base ${contract.baseSha} does not match frozen base ${binding.baseSha}.`,
+      );
+    return contract;
+  }
+  if (
+    ["prepare-worktree", "implement", "verify", "review"].includes(
+      params.phase,
+    )
+  ) {
+    if (!current)
+      throw new Error(
+        `Phase ${params.phase} requires an accepted builder contract from plan.`,
+      );
+    if (current.baseSha !== binding.baseSha)
+      throw new Error(
+        `Builder contract base ${current.baseSha} does not match frozen base ${binding.baseSha}.`,
+      );
+  }
+  return current;
 }
 
 function readBinding(): ForgeChildBinding {
@@ -890,10 +1195,18 @@ function checkpointPayload(
     evidence?: string[];
     report?: string;
     reason?: string;
+    contract?: unknown;
   },
   binding: ForgeChildBinding,
+  contract?: BuilderContract,
 ): Record<string, unknown> {
-  const common = { phase: params.phase, attempt: params.attempt };
+  const common = {
+    phase: params.phase,
+    attempt: params.attempt,
+    ...(contract && params.phase !== "plan"
+      ? { builderContractHash: hashBuilderContract(contract) }
+      : {}),
+  };
   if (params.action === "queue") {
     return {
       ...common,
@@ -913,6 +1226,7 @@ function checkpointPayload(
       worktreePath: binding.worktreeRoot,
       branch: binding.branch,
       baseSha: binding.baseSha,
+      ...(contract ? { builderContractHash: hashBuilderContract(contract) } : {}),
     };
   }
   if (params.action === "complete") {
@@ -924,6 +1238,12 @@ function checkpointPayload(
         ? { outputArtifactHash: params.outputArtifactHash }
         : {}),
       ...(params.commitSha ? { commitSha: params.commitSha } : {}),
+      ...(params.phase === "plan" && contract
+        ? {
+            builderContract: contract,
+            builderContractHash: hashBuilderContract(contract),
+          }
+        : {}),
     };
   }
   return {
@@ -1144,6 +1464,7 @@ function validatePhaseReport(phase: RunPhase, report: string): void {
     plan: [
       "<!-- FORGE:CONTRACT -->",
       "## Builder Contract",
+      "<!-- FORGE:CONTRACT:COMPLETE -->",
       "<!-- FORGE:CONTEXT -->",
       "<!-- FORGE:CONTEXT:COMPLETE -->",
       "<!-- FORGE:ARCHITECT -->",

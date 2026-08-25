@@ -1,6 +1,11 @@
 import { access, mkdir, realpath, rm } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 
+import {
+  parseGitNameStatus,
+  type ChangedPath,
+} from "../core/builder-contract.ts";
+
 export interface ExecOptions {
   cwd?: string;
   timeout?: number;
@@ -140,6 +145,33 @@ export class GitWorktreeManager {
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean);
+  }
+
+  async changedPaths(
+    worktreePath: string,
+    baseSha: string,
+    signal?: AbortSignal,
+  ): Promise<ChangedPath[]> {
+    const result = await this.#git(
+      worktreePath,
+      ["diff", "--no-ext-diff", "--name-status", "-z", `${baseSha}...HEAD", "--"],
+      30_000,
+      signal,
+    );
+    return parseGitNameStatus(result.stdout);
+  }
+
+  async stagedPaths(
+    worktreePath: string,
+    signal?: AbortSignal,
+  ): Promise<ChangedPath[]> {
+    const result = await this.#git(
+      worktreePath,
+      ["diff", "--cached", "--no-ext-diff", "--name-status", "-z", "--"],
+      30_000,
+      signal,
+    );
+    return parseGitNameStatus(result.stdout);
   }
 
   async assertClean(worktreePath: string, signal?: AbortSignal): Promise<void> {

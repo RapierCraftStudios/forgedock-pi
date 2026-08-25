@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  hashBuilderContract,
+  type BuilderContract,
+} from "../../src/core/builder-contract.ts";
+import {
   createRunEvent,
   RUN_PHASES,
   type RunEvent,
@@ -19,6 +23,12 @@ const repository = "owner/repo";
 const runId = "run-1";
 const sessionId = "session-1";
 const occurredAt = "2026-01-01T00:00:00.000Z";
+const builderContract: BuilderContract = {
+  schema: "forgedock.builder-contract/v1",
+  revision: 1,
+  baseSha: "1234567890abcdef",
+  allowedPaths: ["src/**", "test/**"],
+};
 
 function nextEvent(
   state: RunState | undefined,
@@ -67,6 +77,50 @@ function initializedState(): RunState {
     nextEvent(state, "lease.acquired", { lease }, "lease:1", 1),
   );
   return state;
+}
+
+function completePlan(state: RunState): RunState {
+  let next = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "phase.queued",
+      {
+        phase: "plan",
+        attempt: 1,
+        restartAction: "retry plan",
+      },
+      "plan:queue",
+    ),
+  );
+  next = applyRunEvent(
+    next,
+    nextEvent(
+      next,
+      "phase.started",
+      {
+        phase: "plan",
+        attempt: 1,
+        logicalNodeId: "plan-1",
+      },
+      "plan:start",
+    ),
+  );
+  return applyRunEvent(
+    next,
+    nextEvent(
+      next,
+      "phase.completed",
+      {
+        phase: "plan",
+        attempt: 1,
+        builderContract,
+        builderContractHash: hashBuilderContract(builderContract),
+        evidence: ["typed contract accepted"],
+      },
+      "plan:complete",
+    ),
+  );
 }
 
 function completeResolve(state: RunState): RunState {
@@ -190,8 +244,18 @@ test("hash chain and idempotency conflicts fail closed", () => {
 });
 
 test("terminal runs release their repository lease", () => {
-  let state = initializedState();
-  for (const phase of RUN_PHASES) {
+  let state = completePlan(completeResolve(initializedState()));
+  const contractHash = state.builderContractHash;
+  assert.ok(contractHash);
+  for (const phase of RUN_PHASES.slice(3)) {
+    const contractBinding = [
+      "prepare-worktree",
+      "implement",
+      "verify",
+      "review",
+    ].includes(phase)
+      ? { builderContractHash: contractHash }
+      : {};
     state = applyRunEvent(
       state,
       nextEvent(
@@ -201,6 +265,7 @@ test("terminal runs release their repository lease", () => {
           phase,
           attempt: 1,
           restartAction: `retry ${phase}`,
+          ...contractBinding,
         },
         `${phase}:queue`,
       ),
@@ -214,6 +279,7 @@ test("terminal runs release their repository lease", () => {
           phase,
           attempt: 1,
           logicalNodeId: `${phase}-1`,
+          ...contractBinding,
         },
         `${phase}:start`,
       ),
@@ -227,6 +293,7 @@ test("terminal runs release their repository lease", () => {
           phase,
           attempt: 1,
           evidence: [],
+          ...contractBinding,
         },
         `${phase}:complete`,
       ),
@@ -250,6 +317,110 @@ test("terminal runs release their repository lease", () => {
   );
   assert.equal(state.status, "completed");
   assert.equal(state.lease, undefined);
+});
+
+test("contract-bound phases reject missing or stale hashes", () => {
+  const state = completePlan(completeResolve(initializedState()));
+  assert.throws(
+    () =>
+      applyRunEvent(
+        state,
+        nextEvent(
+          state,
+          "phase.queued",
+          {
+            phase: "prepare-worktree",
+            attempt: 1,
+            restartAction: "retry prepare",
+          },
+          "prepare:queue",
+        ),
+      ),
+    (error) =>
+      error instanceof StateTransitionError &&
+      error.code === "builder-contract-hash-mismatch",
+  );
+  assert.equal(state.builderContractHash, hashBuilderContract(builderContract));
+});
+
+test("review extensions advance the durable contract revision only from the current hash", () => {
+  let state = completePlan(completeResolve(initializedState()));
+  const contractHash = state.builderContractHash;
+  assert.ok(contractHash);
+  for (const phase of ["prepare-worktree", "implement", "verify", "review"] as const) {
+    state = applyRunEvent(
+      state,
+      nextEvent(
+        state,
+        "phase.queued",
+        {
+          phase,
+          attempt: 1,
+          restartAction: `retry ${phase}`,
+          builderContractHash: state.builderContractHash,
+        },
+        `${phase}:queue`,
+      ),
+    );
+    state = applyRunEvent(
+      state,
+      nextEvent(
+        state,
+        "phase.started",
+        {
+          phase,
+          attempt: 1,
+          logicalNodeId: `${phase}-1`,
+          builderContractHash: state.builderContractHash,
+        },
+        `${phase}:start`,
+      ),
+    );
+    if (phase !== "review")
+      state = applyRunEvent(
+        state,
+        nextEvent(
+          state,
+          "phase.completed",
+          {
+            phase,
+            attempt: 1,
+            evidence: [],
+            builderContractHash: state.builderContractHash,
+          },
+          `${phase}:complete`,
+        ),
+      );
+  }
+  const extension = {
+    schema: "forgedock.builder-contract-extension/v1" as const,
+    baseContractHash: contractHash,
+    revision: 2,
+    addedPaths: ["src/new.ts"],
+    reason: "Reviewer finding requires a new source file.",
+    findingIds: ["CORRECTNESS-1"],
+  };
+  const nextContract = {
+    ...builderContract,
+    revision: 2,
+    allowedPaths: [...builderContract.allowedPaths, "src/new.ts"],
+  };
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "builder-contract.extended",
+      {
+        ...extension,
+        phase: "review",
+        attempt: 1,
+        contract: nextContract,
+      },
+      "contract:extend:2",
+    ),
+  );
+  assert.equal(state.builderContract?.revision, 2);
+  assert.equal(state.builderContractHash, hashBuilderContract(nextContract));
 });
 
 test("needs-human retry requires a human-authorized newer lease epoch", () => {
