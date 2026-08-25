@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 9,
-  "lastEventHash": "sha256:44dc995f05fc9b059361667aab5d9eae3225731d9cfd594cb650e2e1f1fbbb5f",
+  "sequence": 10,
+  "lastEventHash": "sha256:f03dad2ca0e7d1bd52dfeb10b90679e9829fd62f16c5c9a1374bc0e48bde03cb",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -67,6 +67,15 @@
         "The supplied issue context reports a real implementation head 88589c4b0593879d2ce2fb4e817b703cc780189b, a running verify snapshot with headSha null, repeated rejected command-name guesses, and supervisor intervention to provide head and command name test."
       ],
       "finishedAt": "2026-08-25T21:29:57.805Z"
+    },
+    "plan-1": {
+      "nodeId": "plan-1",
+      "node": "plan",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/d6d1cc96-417c-4fc5-99e3-a6064b1188ca/.pi/forge/d6d1cc96-417c-4fc5-99e3-a6064b1188ca-plan-1.json"
     }
   },
   "effects": {},
@@ -79,7 +88,8 @@
     "node:investigate-1:queued": "676cd499-a678-4317-b817-21ef091da3f2",
     "node:investigate-1:started": "20dd06ce-cadf-4f03-93c9-6c1cacc9b47e",
     "node:investigate-1:receipt-bound": "9126dc0a-b5d9-4872-a011-4aed3dea10fd",
-    "node:investigate-1:completed": "136b4230-cb00-47cf-aea6-1527e5be3993"
+    "node:investigate-1:completed": "136b4230-cb00-47cf-aea6-1527e5be3993",
+    "node:plan-1:queued": "8a117cb5-33a6-4f54-804b-b67ab21cef45"
   },
   "eventIds": {
     "d170fe65-a4bc-4853-b400-9293cdbfe1a8": true,
@@ -90,6 +100,7 @@
     "676cd499-a678-4317-b817-21ef091da3f2": true,
     "20dd06ce-cadf-4f03-93c9-6c1cacc9b47e": true,
     "9126dc0a-b5d9-4872-a011-4aed3dea10fd": true,
-    "136b4230-cb00-47cf-aea6-1527e5be3993": true
+    "136b4230-cb00-47cf-aea6-1527e5be3993": true,
+    "8a117cb5-33a6-4f54-804b-b67ab21cef45": true
   }
 }
