@@ -3,11 +3,11 @@
   "orchestrationId": "88697068-2f3e-4339-a599-99e31f17c5b9",
   "repository": "RapierCraftStudios/forgedock-pi",
   "integrationBranch": "dogfood",
-  "status": "running",
+  "status": "cancelled",
   "maxConcurrent": 1,
   "leaseEpoch": 1,
-  "sequence": 12,
-  "lastEventHash": "sha256:1bdc0993dac0fdeef4cf8dc5d3ecf0fc88c7b1287f5714fd706f925d6dff425a",
+  "sequence": 13,
+  "lastEventHash": "sha256:2a3ac9c4fae5c1c0206111769f9d925c977d51824ac74fff296cdb92be844c8b",
   "lanes": [
     {
       "issueNumber": 16,
@@ -84,7 +84,10 @@
     "lease:heartbeat:2026-08-25T04:32:18.246Z": "0e6e8296-39c2-4a8a-8e88-3cf5d9bf2c97",
     "lease:heartbeat:2026-08-25T04:33:18.246Z": "7b9833c8-7f0c-4040-927b-64e5efcda57c",
     "lease:heartbeat:2026-08-25T04:34:18.248Z": "596b7fff-bc07-4580-8a98-c026eaa6a235",
-    "lease:heartbeat:2026-08-25T04:35:18.249Z": "9d3c3333-fe1d-493a-8298-104c5773cbce"
+    "lease:heartbeat:2026-08-25T04:35:18.249Z": "9d3c3333-fe1d-493a-8298-104c5773cbce",
+    "orchestration:cancel": "7bb139a9-2031-4709-8714-4ce2b5a1062e"
   },
-  "createdAt": "2026-08-25T04:25:17.324Z"
+  "createdAt": "2026-08-25T04:25:17.324Z",
+  "reason": "Stopped after two full security-review WebSocket failures caused a third fresh replay.",
+  "completedAt": "2026-08-25T05:32:02.872Z"
 }
