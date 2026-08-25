@@ -10,8 +10,8 @@
     "ownerRunId": "fb57ad35-42ba-44e7-a81a-f9dc6f08c0c6",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:a18785084bd37950ddf62d6aa270c35e6a5818153218d1e489855c76e274dbca",
+  "sequence": 9,
+  "lastEventHash": "sha256:94b871a06884263996fa4160f1c4ed7d78a3296bbc1f3cf09437e18100887d57",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -45,7 +45,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/dbd13ca3-392c-4bd6-ac07-3c925e9b3c7c/.pi/forge/dbd13ca3-392c-4bd6-ac07-3c925e9b3c7c-investigate-1.json",
       "subagentRunId": "83bc6359-6c1e-4ce2-9c39-f4b2145807ff",
@@ -54,7 +54,18 @@
       "startedAt": "2026-08-25T17:59:14.843Z",
       "previousSubagentRunId": "launch:investigate-1:ff8adae3-b9ae-42a8-930a-5ab2afc70683",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "src/workflows/work-on.ts:641-668 persists an ActiveRunLink with subagentRunId `pending:${runId}`, status `running`, currentNodeId `resolve-1`, and empty activeNodes before awaiting #dispatchNode.",
+        "src/workflows/work-on.ts:239-305 restores running links and, when activeNodes is empty and the current node is not parent-owned, calls provider status unless isLaunchSentinel(link.subagentRunId) is true; isLaunchSentinel at 3692-3694 recognizes only `launch:` IDs, not `pending:` IDs.",
+        "src/workflows/orchestrate.ts:450-522 treats any matching listRuns() entry as a completed lane-start result and durably appends lane.started with its subagentRunId without rejecting an internal placeholder.",
+        "src/index.ts:14-17 attaches the orchestrator listener before work-on restoration/reconciliation and then resumes orchestration, so restart handling can project a restored initializing link into orchestration lifecycle.",
+        "The only `pending:` occurrence in the repository is the initial placeholder in src/workflows/work-on.ts; no test contains `pending:`, leaving this crash/restart boundary uncovered."
+      ],
+      "finishedAt": "2026-08-25T18:02:32.315Z"
     }
   },
   "effects": {},
@@ -66,7 +77,8 @@
     "node:resolve-1:completed": "d5a031aa-430f-4ab1-9dcf-3cd7aa529d14",
     "node:investigate-1:queued": "c03bffee-7fb9-4d7f-b89c-4bb04434f1a4",
     "node:investigate-1:started": "cd9d4d15-0357-4d3c-b711-bbe75a79cbd6",
-    "node:investigate-1:receipt-bound": "9e109074-332b-4472-9862-db2b22071bbf"
+    "node:investigate-1:receipt-bound": "9e109074-332b-4472-9862-db2b22071bbf",
+    "node:investigate-1:completed": "675099c0-b5a8-4b20-8237-fc06c761b41a"
   },
   "eventIds": {
     "1cd4340a-93f7-40fe-93bc-bfe9ddbe6f4f": true,
@@ -76,6 +88,7 @@
     "d5a031aa-430f-4ab1-9dcf-3cd7aa529d14": true,
     "c03bffee-7fb9-4d7f-b89c-4bb04434f1a4": true,
     "cd9d4d15-0357-4d3c-b711-bbe75a79cbd6": true,
-    "9e109074-332b-4472-9862-db2b22071bbf": true
+    "9e109074-332b-4472-9862-db2b22071bbf": true,
+    "675099c0-b5a8-4b20-8237-fc06c761b41a": true
   }
 }
