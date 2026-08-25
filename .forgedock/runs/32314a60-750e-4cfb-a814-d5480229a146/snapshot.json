@@ -10,8 +10,8 @@
     "ownerRunId": "90e86f6c-27d5-4545-a6f7-31c44865faf3",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:3abc75300d57cb050de37b5595632446097367d0dfbbcbeaeccd08e0a1cbb0a0",
+  "sequence": 9,
+  "lastEventHash": "sha256:f04a5041aeec00e2fbed25ee6ea4d4690263f69b216ee9eca64fb46d2083f50b",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -46,7 +46,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/32314a60-750e-4cfb-a814-d5480229a146/.pi/forge/32314a60-750e-4cfb-a814-d5480229a146-investigate-1.json",
       "subagentRunId": "fb7611b5-10ae-41bc-b8fc-bd5ebf3aef38",
@@ -55,7 +55,18 @@
       "startedAt": "2026-08-25T16:33:09.110Z",
       "previousSubagentRunId": "launch:investigate-1:0f102b90-9444-4604-825b-b42a394897f2",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "At frozen base 03e6133becc50ba8509b976743ea76ffeaab2c4d, src/adapters/subagents.ts unconditionally sets child.agent to FORGE_WORK_ON_AGENT for bounded non-review nodes.",
+        "src/agents/register.ts defines FORGE_WORK_ON_AGENT with acceptanceRole \"writer\" and completionGuard true; it defines no dedicated FORGE_READ_ONLY_NODE_AGENT.",
+        "src/agents/materialize.ts agentFile emits completionGuard: true for every generated definition and accepts no completion-guard input.",
+        "src/agents/child-runtime.ts permits investigate to persist a trusted result with forge_finalize_node, so trusted persistence and the outer no-edit completion guard are independent stages.",
+        "test/adapters/subagents.test.ts checks the bounded-node schema and task but does not assert the selected bounded agent or role-specific completionGuard behavior."
+      ],
+      "finishedAt": "2026-08-25T16:35:56.714Z"
     }
   },
   "effects": {},
@@ -67,7 +78,8 @@
     "node:resolve-1:completed": "d68d7bc1-d6f9-490b-92d7-0ce1292f15e6",
     "node:investigate-1:queued": "36a2aae6-91c3-4a90-92e8-cff4b5581954",
     "node:investigate-1:started": "b134d631-1c5d-4ed5-bb4c-b9445d736fcf",
-    "node:investigate-1:receipt-bound": "62745712-2955-4d23-8cd6-5c25650354e4"
+    "node:investigate-1:receipt-bound": "62745712-2955-4d23-8cd6-5c25650354e4",
+    "node:investigate-1:completed": "3835f222-6f89-446a-b4d9-61e3a0aa22b9"
   },
   "eventIds": {
     "7eed9207-da0e-4400-abe2-4146c8435a67": true,
@@ -77,6 +89,7 @@
     "d68d7bc1-d6f9-490b-92d7-0ce1292f15e6": true,
     "36a2aae6-91c3-4a90-92e8-cff4b5581954": true,
     "b134d631-1c5d-4ed5-bb4c-b9445d736fcf": true,
-    "62745712-2955-4d23-8cd6-5c25650354e4": true
+    "62745712-2955-4d23-8cd6-5c25650354e4": true,
+    "3835f222-6f89-446a-b4d9-61e3a0aa22b9": true
   }
 }
