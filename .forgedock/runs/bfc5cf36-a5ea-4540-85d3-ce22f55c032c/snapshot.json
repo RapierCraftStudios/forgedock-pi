@@ -10,8 +10,8 @@
     "ownerRunId": "94b8f0fc-7517-470a-b91d-94bbff3e2d6f",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:e07b3b1dea87286cbb0c80eba4b1b7c4ccd341770efe2e422303815f045ec99d",
+  "sequence": 9,
+  "lastEventHash": "sha256:11fef426b430e5b56193575dc01a31f3f0327787913f29367c5c4eaf1fd07a01",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -46,7 +46,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/bfc5cf36-a5ea-4540-85d3-ce22f55c032c/.pi/forge/bfc5cf36-a5ea-4540-85d3-ce22f55c032c-investigate-1.json",
       "subagentRunId": "428243db-b5a4-4c07-93d1-ed33cd56f7ca",
@@ -55,7 +55,17 @@
       "startedAt": "2026-08-25T21:24:31.400Z",
       "previousSubagentRunId": "launch:investigate-1:3847b1bc-2110-4846-a8fb-eeef1340465a",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "src/workflows/work-on.ts:1889-1907 publishes the real provider run ID into the mutable session link before the authoritative node.resumed receipt event is appended, exposing the receipt to asynchronous completion reconciliation.",
+        "src/workflows/work-on.ts:794-814 and 1908-1928 bind the same logical launch receipt through two concurrent paths with different idempotency keys (`receipt-bound-recovery` versus `receipt-bound`).",
+        "src/core/state.ts:594-600 requires node.resumed to start from a running node, so a racing completion/terminal event makes the later bind fail with the reported `cannot transition to running` error.",
+        "test/workflows/work-on.test.ts:27-54 covers only pure reconciliation classifications; test/core/state.test.ts:410-476 covers sequential transport-resume binding, but neither test exercises concurrent live receipt binding and completion recovery."
+      ],
+      "finishedAt": "2026-08-25T21:28:00.531Z"
     }
   },
   "effects": {},
@@ -67,7 +77,8 @@
     "node:resolve-1:completed": "3244fdde-7f46-4637-b1a1-32c288b19090",
     "node:investigate-1:queued": "503d5498-0eca-4b49-9271-dcefdb989ff0",
     "node:investigate-1:started": "12ef7ce3-f37b-4a00-be26-f39c77a6811b",
-    "node:investigate-1:receipt-bound": "b114890c-0efe-468b-8062-70f55c875e55"
+    "node:investigate-1:receipt-bound": "b114890c-0efe-468b-8062-70f55c875e55",
+    "node:investigate-1:completed": "c7cb4880-92fb-4f52-8c17-f5ac2f546c38"
   },
   "eventIds": {
     "0ce6a9d0-87b1-44c6-943d-8393cb560926": true,
@@ -77,6 +88,7 @@
     "3244fdde-7f46-4637-b1a1-32c288b19090": true,
     "503d5498-0eca-4b49-9271-dcefdb989ff0": true,
     "12ef7ce3-f37b-4a00-be26-f39c77a6811b": true,
-    "b114890c-0efe-468b-8062-70f55c875e55": true
+    "b114890c-0efe-468b-8062-70f55c875e55": true,
+    "c7cb4880-92fb-4f52-8c17-f5ac2f546c38": true
   }
 }
