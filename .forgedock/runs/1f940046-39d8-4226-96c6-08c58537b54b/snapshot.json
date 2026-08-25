@@ -10,15 +10,15 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 4,
-  "lastEventHash": "sha256:ba8ac51c855c0c9f44bee5822dd02502d538bb97b45896c5e8797051e629ce78",
+  "sequence": 5,
+  "lastEventHash": "sha256:df6ea87df2bdd0040ee28bf3eed1992d4cae6747332907c8e47075c86421b754",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/1f940046-39d8-4226-96c6-08c58537b54b/.pi/forge/1f940046-39d8-4226-96c6-08c58537b54b-resolve-1.json",
       "subagentRunId": "86c3d389-e0d4-401c-9093-feb17054812c",
@@ -27,7 +27,21 @@
       "startedAt": "2026-08-25T13:12:06.687Z",
       "previousSubagentRunId": "launch:resolve-1:0c30ca6c-0c63-4ab6-a2ba-e076b8d8f03d",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "round": 1,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "Issue #39 is open and carries review-finding, needs-validation, and priority:P1 labels.",
+        "The configured integration branch is dogfood and the bound base SHA is 03e6133becc50ba8509b976743ea76ffeaab2c4d; HEAD equals the bound base.",
+        "The bound worktree is clean and has no changed files.",
+        "Finding classification is confirmed: child-runtime.ts lines 170-210 perform path containment and runtime-control checks but do not deny write or edit for read-only resolve, investigate, or plan nodes.",
+        "register.ts lines 21-34 expose edit and write in the common FORGE_WORK_ON_TOOLS list for every bounded work-on node.",
+        "child-runtime.ts forge_commit stages all changed paths reported by git status, so pre-implementation edits can be included in a later implementation commit.",
+        "npm run check exited 0 with typecheck success and 80 passing tests."
+      ],
+      "finishedAt": "2026-08-25T13:16:09.719Z"
     }
   },
   "effects": {},
@@ -35,12 +49,14 @@
     "run:create": "fc911d56-c8ae-4402-8e04-c3f18fa5eb5e",
     "node:resolve-1:queued": "91ad6008-4be9-49f3-81cf-17d3ebae73cf",
     "node:resolve-1:started": "e57d9dd1-a634-44df-8e9d-0028a4c2e6cd",
-    "node:resolve-1:receipt-bound": "0ae7058f-2d9e-4e4d-a512-ef256b96812c"
+    "node:resolve-1:receipt-bound": "0ae7058f-2d9e-4e4d-a512-ef256b96812c",
+    "node:resolve-1:completed": "050b701e-bfae-4106-b519-789845fa8d2e"
   },
   "eventIds": {
     "fc911d56-c8ae-4402-8e04-c3f18fa5eb5e": true,
     "91ad6008-4be9-49f3-81cf-17d3ebae73cf": true,
     "e57d9dd1-a634-44df-8e9d-0028a4c2e6cd": true,
-    "0ae7058f-2d9e-4e4d-a512-ef256b96812c": true
+    "0ae7058f-2d9e-4e4d-a512-ef256b96812c": true,
+    "050b701e-bfae-4106-b519-789845fa8d2e": true
   }
 }
