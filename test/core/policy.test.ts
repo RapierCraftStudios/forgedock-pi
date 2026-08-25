@@ -42,6 +42,7 @@ test("tracked policy enables only non-protected integration auto-merge", () => {
   const policy = parseForgePolicy(rawPolicy);
   assert.equal(canAutoMerge(policy, "staging"), true);
   assert.equal(canAutoMerge(policy, "milestone/auth"), true);
+  assert.equal(canAutoMerge(policy, "release/1.0"), false);
   assert.equal(canAutoMerge(policy, "main"), false);
   assert.equal(isProtectedBranch(policy, "main"), true);
   assert.equal(isGitHubCiRequired(policy, "main"), true);
