@@ -10,8 +10,8 @@
     "ownerRunId": "5da43cdf-2ff6-479c-9bf8-d2241bbd78fe",
     "epoch": 1
   },
-  "sequence": 25,
-  "lastEventHash": "sha256:ef8b25d888e9d246b11100f8878d1def1ce49e35b8620c85f733fa0ba22e12a6",
+  "sequence": 26,
+  "lastEventHash": "sha256:61b94835862580028d174bae3b35a79d4ea3f9837b532de1db9885b70b3cb481",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -177,6 +177,15 @@
         "Required GitHub CI acceptance remains parent-owned for the exact implementation head."
       ],
       "finishedAt": "2026-08-25T08:44:41.169Z"
+    },
+    "prepare-pr-1": {
+      "nodeId": "prepare-pr-1",
+      "node": "prepare-pr",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "4819168331da2a25f500a1d1436f231db8211f2b",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/cf8c009e-f7be-4f7c-9720-75a31f977341/.pi/forge/cf8c009e-f7be-4f7c-9720-75a31f977341-prepare-pr-1.json"
     }
   },
   "effects": {},
@@ -205,7 +214,8 @@
     "node:verify-1:queued": "f94b2e02-3263-45bd-9596-cd81897a3849",
     "node:verify-1:started": "3a0cbcaf-00a3-465d-9c1f-73927b8ad154",
     "node:verify-1:receipt-bound": "ba0fa5af-e607-4388-9c23-8589b491a7f4",
-    "node:verify-1:completed": "cdd0d2d3-e4a2-4435-a813-6473c9cbffb8"
+    "node:verify-1:completed": "cdd0d2d3-e4a2-4435-a813-6473c9cbffb8",
+    "node:prepare-pr-1:queued": "d2d495fb-bb31-483d-bdc4-db96ebb00ec0"
   },
   "eventIds": {
     "3158194d-5ea4-46c8-b6f5-500304af5913": true,
@@ -232,6 +242,7 @@
     "f94b2e02-3263-45bd-9596-cd81897a3849": true,
     "3a0cbcaf-00a3-465d-9c1f-73927b8ad154": true,
     "ba0fa5af-e607-4388-9c23-8589b491a7f4": true,
-    "cdd0d2d3-e4a2-4435-a813-6473c9cbffb8": true
+    "cdd0d2d3-e4a2-4435-a813-6473c9cbffb8": true,
+    "d2d495fb-bb31-483d-bdc4-db96ebb00ec0": true
   }
 }
