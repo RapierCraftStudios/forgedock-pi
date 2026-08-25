@@ -10,15 +10,15 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 4,
-  "lastEventHash": "sha256:5e1c733b56b11e27608cc67f08e228bee1d81e9fb5448d16ebed3c1f0e0db803",
+  "sequence": 5,
+  "lastEventHash": "sha256:a8218b4caff974cb6596fd2ce1ef22844c1c2e72008dae5a7d1c83b6734a7de1",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/c35a1b30-f1f7-46ee-beba-e3cdd892903b/.pi/forge/c35a1b30-f1f7-46ee-beba-e3cdd892903b-resolve-1.json",
       "subagentRunId": "2f6c1b89-e3d9-4cd9-a887-c0726451a434",
@@ -27,7 +27,20 @@
       "startedAt": "2026-08-25T13:06:09.138Z",
       "previousSubagentRunId": "launch:resolve-1:bf96b7c6-4063-4baf-b48a-de8f43a4a4a7",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "round": 1,
+      "headSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "Issue #44 is open in RapierCraftStudios/forgedock-pi with the requested cancellation title and bug/workflow/priority:P1 labels.",
+        "The tracked .forge/config.json identifies RapierCraftStudios/forgedock-pi and configures dogfood as the exact integration branch, with main protected.",
+        "The dogfood branch resolves to frozen base SHA 03e6133becc50ba8509b976743ea76ffeaab2c4d; the assigned branch HEAD is the same SHA.",
+        "GitHub CLI authentication is available for the configured repository, and the issue/policy/base-branch read checks completed successfully.",
+        "The worktree is clean and resolve introduced no source changes; investigation and later workflow nodes remain deferred to their durable dispatcher order.",
+        "The issue is eligible for ForgeDock processing: it is open, repository identity and policy match, an allowed integration base is available, and the requested behavior is within the workflow-state codebase."
+      ],
+      "finishedAt": "2026-08-25T13:10:08.906Z"
     }
   },
   "effects": {},
@@ -35,12 +48,14 @@
     "run:create": "3ccb0018-858e-4ed2-b7d5-ccc785c984b0",
     "node:resolve-1:queued": "01f5828f-ea92-4f52-a4c9-f31eea1ea587",
     "node:resolve-1:started": "6276eff0-ff8c-4016-a1c9-e9310ea1d076",
-    "node:resolve-1:receipt-bound": "e55cd811-ab1b-4fc0-8a86-3b37f2ac55a7"
+    "node:resolve-1:receipt-bound": "e55cd811-ab1b-4fc0-8a86-3b37f2ac55a7",
+    "node:resolve-1:completed": "81ea4383-f925-499e-9405-bdd6ed7e1d0f"
   },
   "eventIds": {
     "3ccb0018-858e-4ed2-b7d5-ccc785c984b0": true,
     "01f5828f-ea92-4f52-a4c9-f31eea1ea587": true,
     "6276eff0-ff8c-4016-a1c9-e9310ea1d076": true,
-    "e55cd811-ab1b-4fc0-8a86-3b37f2ac55a7": true
+    "e55cd811-ab1b-4fc0-8a86-3b37f2ac55a7": true,
+    "81ea4383-f925-499e-9405-bdd6ed7e1d0f": true
   }
 }
