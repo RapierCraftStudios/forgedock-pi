@@ -10,8 +10,8 @@
     "ownerRunId": "b4376f87-07d2-416b-a8d1-8e3dd5f7d35e",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:1a3460415fddd5025af400dbee6ca86aabfafeb037005659be0795478e0b0d29",
+  "sequence": 6,
+  "lastEventHash": "sha256:5044535e1a0cd6ac159c91bddf3f670a78877a62671a9259d7275bbb04b92fa5",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -39,6 +39,15 @@
         "The current base contains commit 320ad98 normalization in aggregateFromState and focused alias regression coverage; substantive finding classification is deferred to the investigate node."
       ],
       "finishedAt": "2026-08-25T13:20:25.658Z"
+    },
+    "investigate-1": {
+      "nodeId": "investigate-1",
+      "node": "investigate",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/60698a6f-c159-4f2b-88a0-7f6552382e83/.pi/forge/60698a6f-c159-4f2b-88a0-7f6552382e83-investigate-1.json"
     }
   },
   "effects": {},
@@ -47,13 +56,15 @@
     "node:resolve-1:queued": "2034673d-1a6f-421d-8842-1f0e0d5d4271",
     "node:resolve-1:started": "923832ce-63d5-455e-af28-606aaaf72193",
     "node:resolve-1:receipt-bound": "7ebe5af5-97bc-42f1-92a1-1f998e7cd149",
-    "node:resolve-1:completed": "2d905a9c-34c6-4a14-a695-5059a5a43deb"
+    "node:resolve-1:completed": "2d905a9c-34c6-4a14-a695-5059a5a43deb",
+    "node:investigate-1:queued": "9d27afd2-5aaa-456e-9db8-bb0cb4deeadb"
   },
   "eventIds": {
     "87099038-93e7-477f-a866-f5ecd3967037": true,
     "2034673d-1a6f-421d-8842-1f0e0d5d4271": true,
     "923832ce-63d5-455e-af28-606aaaf72193": true,
     "7ebe5af5-97bc-42f1-92a1-1f998e7cd149": true,
-    "2d905a9c-34c6-4a14-a695-5059a5a43deb": true
+    "2d905a9c-34c6-4a14-a695-5059a5a43deb": true,
+    "9d27afd2-5aaa-456e-9db8-bb0cb4deeadb": true
   }
 }
