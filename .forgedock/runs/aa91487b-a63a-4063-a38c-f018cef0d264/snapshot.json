@@ -5,13 +5,13 @@
   "issueNumber": 50,
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "leaseBinding": {
     "ownerRunId": "1b1ff5b3-213a-4c1f-97f3-bc25242fef32",
     "epoch": 1
   },
-  "sequence": 39,
-  "lastEventHash": "sha256:d3078a82e1d25522dfd911fa46b6306da922fa4b5a4d9e8fe00fc50e519f9e1c",
+  "sequence": 40,
+  "lastEventHash": "sha256:7c8f40ff979148a1fd891c51aeff8c06cfd8336796e69f86fd39428e6d24bda7",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -296,9 +296,11 @@
       "node": "review-join",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "failed",
       "baseSha": "03e6133becc50ba8509b976743ea76ffeaab2c4d",
-      "startedAt": "2026-08-25T19:11:19.654Z"
+      "startedAt": "2026-08-25T19:11:19.654Z",
+      "reason": "Cancelled by the operator through /forge:cancel.",
+      "finishedAt": "2026-08-25T21:18:10.564Z"
     }
   },
   "effects": {},
@@ -341,7 +343,8 @@
     "node:review-correctness-1:artifact-published": "8dea1959-0a14-4eda-8292-d68e9ba36f8a",
     "node:review-security-1:artifact-published": "b03fedf9-4920-41b0-aa40-b8bc2f38f94a",
     "node:review-join-1:queued": "0c085bfd-ed94-4bff-a687-04708cbb508b",
-    "node:review-join-1:started": "5089b925-050d-4e02-af0c-d1995721058f"
+    "node:review-join-1:started": "5089b925-050d-4e02-af0c-d1995721058f",
+    "run:cancelled": "bf8a25b9-0c89-4496-ad8e-d84eba2d5236"
   },
   "eventIds": {
     "30e6ac91-cb34-47e5-ba6f-432ab5cf60ea": true,
@@ -382,6 +385,8 @@
     "8dea1959-0a14-4eda-8292-d68e9ba36f8a": true,
     "b03fedf9-4920-41b0-aa40-b8bc2f38f94a": true,
     "0c085bfd-ed94-4bff-a687-04708cbb508b": true,
-    "5089b925-050d-4e02-af0c-d1995721058f": true
-  }
+    "5089b925-050d-4e02-af0c-d1995721058f": true,
+    "bf8a25b9-0c89-4496-ad8e-d84eba2d5236": true
+  },
+  "cancellationReason": "Cancelled by the operator through /forge:cancel."
 }
