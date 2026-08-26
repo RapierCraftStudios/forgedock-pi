@@ -5,13 +5,13 @@
   "issueNumber": 90,
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "completed",
   "leaseBinding": {
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 17,
-  "lastEventHash": "sha256:b574a80bd7134a366fa793ee1d0234cea7214277d50a463eda676f51b0e9db8c",
+  "sequence": 18,
+  "lastEventHash": "sha256:cd1182b2a608ce52bcd008360ab298089145b624f00021e42c1b191d242e31f8",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -130,7 +130,8 @@
     "node:cleanup-1:queued": "ccab8ca5-b205-45f7-a9a1-5ad0397e2757",
     "node:cleanup-1:started": "59e49344-9d83-4bbc-b078-59d5ecfd90c5",
     "effect:cleanup:67b03cd1-4582-44b6-859c-8b223fd57ecc": "5ef518c3-390f-4fc9-b684-70c50d64269b",
-    "node:cleanup-1:complete": "a9194205-6af4-407e-9d26-d0b9bb482559"
+    "node:cleanup-1:complete": "a9194205-6af4-407e-9d26-d0b9bb482559",
+    "run:complete": "a0c933a8-c9c9-4643-8d4f-36c2d2541157"
   },
   "eventIds": {
     "4c885062-171c-4391-a8e6-3f9f65c74aa9": true,
@@ -149,6 +150,8 @@
     "ccab8ca5-b205-45f7-a9a1-5ad0397e2757": true,
     "59e49344-9d83-4bbc-b078-59d5ecfd90c5": true,
     "5ef518c3-390f-4fc9-b684-70c50d64269b": true,
-    "a9194205-6af4-407e-9d26-d0b9bb482559": true
-  }
+    "a9194205-6af4-407e-9d26-d0b9bb482559": true,
+    "a0c933a8-c9c9-4643-8d4f-36c2d2541157": true
+  },
+  "outcome": "closed"
 }
