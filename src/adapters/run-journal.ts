@@ -173,7 +173,12 @@ export class RunJournal {
   }): Promise<JournalSnapshot> {
     for (let attempt = 1; attempt <= MAX_CAS_ATTEMPTS; attempt += 1) {
       const current = await this.#store.readRun(input.runId, input.signal);
-      if (!current.state) throw new Error(`Run ${input.runId} does not exist.`);
+      if (!current.state) {
+        if (attempt === MAX_CAS_ATTEMPTS)
+          throw new Error(`Run ${input.runId} does not exist.`);
+        await casBackoff(attempt, input.signal);
+        continue;
+      }
       assertCurrentAuthority(current.state, current.lease);
       const epoch = current.state.lease?.epoch ?? current.state.leaseBinding?.epoch;
       if (epoch === undefined)

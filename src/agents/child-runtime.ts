@@ -1252,13 +1252,17 @@ export function registerForgeRuntime(
         binding.stateBranch,
       );
       const current = await store.readRun(binding.runId, signal);
-      if (!current.state || !current.lease)
+      const authority =
+        current.state?.authorityMode === "run-scoped"
+          ? current.state.lease
+          : current.lease;
+      if (!current.state || !authority)
         throw new Error(
           `Authoritative run ${binding.runId} is not initialized.`,
         );
       if (
-        current.lease.epoch !== binding.leaseEpoch ||
-        current.lease.ownerRunId !== binding.leaseOwnerRunId
+        authority.epoch !== binding.leaseEpoch ||
+        authority.ownerRunId !== binding.leaseOwnerRunId
       ) {
         throw new Error(
           `Bound lease epoch ${binding.leaseEpoch} no longer authorizes run ${binding.runId}.`,

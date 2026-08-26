@@ -67,6 +67,7 @@ export class FetchGitHubTransport implements GitHubTransport {
           Authorization: `Bearer ${this.#token}`,
           "User-Agent": this.#userAgent,
           "X-GitHub-Api-Version": "2022-11-28",
+          ...(request.method === "GET" ? { "Cache-Control": "no-cache" } : {}),
           ...(request.body === undefined
             ? {}
             : { "Content-Type": "application/json" }),

@@ -125,7 +125,7 @@ export class GitHubStateBranchStore {
   }
 
   async getTip(signal?: AbortSignal): Promise<string | undefined> {
-    const path = `${this.#apiRoot}/git/ref/heads/${encodePath(this.#branch)}`;
+    const path = `${this.#apiRoot}/git/ref/heads/${encodePath(this.#branch)}?cache_bust=${Date.now()}`;
     const response = await this.#transport.request<GitRefResponse>({
       method: "GET",
       path,
