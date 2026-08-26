@@ -10,8 +10,8 @@
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 9,
-  "lastEventHash": "sha256:17662dc141f80a2dfc00ebf0ec3410d96d4e923cd9c4191a15469477dd2e9498",
+  "sequence": 10,
+  "lastEventHash": "sha256:cad2575e5bae2de6f61f45cd0a1c25a4eb533e6f135b1cf9331cf1357b7ea576",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -67,6 +67,13 @@
         "The supplied recent history binds the assigned branch HEAD to frozen base 1b018483cd94b8324ae7e34eaa07293861f4f491."
       ],
       "finishedAt": "2026-08-26T02:03:14.640Z"
+    },
+    "close-1": {
+      "nodeId": "close-1",
+      "node": "close",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued"
     }
   },
   "effects": {},
@@ -79,7 +86,8 @@
     "node:investigate-1:queued": "e9b3ba2b-d97c-4bc8-9b82-df94118ed62f",
     "node:investigate-1:started": "16c2bab1-3f90-43f6-ab07-0b716529fa49",
     "node:investigate-1:attempt:1:launch-receipt:2351b5b8-e534-46d3-99a5-e9f6404ec72c:784a4c72-fbf1-4507-9006-f4da0eb1fead": "da9522c9-87a7-46a7-8037-68e2627b4b57",
-    "node:investigate-1:completed": "8b580bd8-c731-4d17-90c9-e11a5a2b7b35"
+    "node:investigate-1:completed": "8b580bd8-c731-4d17-90c9-e11a5a2b7b35",
+    "node:close-1:queued": "6b88eefb-0166-475f-8368-706d6d0bfd35"
   },
   "eventIds": {
     "8b9c2c93-ab24-4751-ab72-b8158f83ed64": true,
@@ -90,6 +98,7 @@
     "e9b3ba2b-d97c-4bc8-9b82-df94118ed62f": true,
     "16c2bab1-3f90-43f6-ab07-0b716529fa49": true,
     "da9522c9-87a7-46a7-8037-68e2627b4b57": true,
-    "8b580bd8-c731-4d17-90c9-e11a5a2b7b35": true
+    "8b580bd8-c731-4d17-90c9-e11a5a2b7b35": true,
+    "6b88eefb-0166-475f-8368-706d6d0bfd35": true
   }
 }
