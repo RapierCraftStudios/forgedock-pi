@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:f26230c87a66168de10b06330739b285bfcfce98ff9b89b72416e6cc397e8cbd",
+  "sequence": 8,
+  "lastEventHash": "sha256:2f898edf1b934860861fd009231d80b46007756b3682a608ea3028522fc2be8f",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -37,15 +37,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/verification-preflight.ts` resolves and validates the configured `cwd`, then inspects `command.argv`; it does not reject npm location options.",
+            "`packageScriptName` only recognizes `test`, `run`, or `run-script` at `argv[1]`, so `npm --prefix <path> test` skips package-script validation entirely.",
+            "`src/agents/child-runtime.ts` passes the bound argv to `spawn` with the resolved cwd, while `validateBoundCommand` currently validates only argv shape, cwd normalization, required, and timeout.",
+            "`test/adapters/verification-preflight.test.ts` covers cwd containment and package-script selection but has no location-flag regression.",
+            "Issue #112 cites source finding `SEC-001` from PR #110 and requests focused remediation plus exact-head re-review."
+          ],
           "logicalNodeId": "investigate",
           "startedAt": "2026-08-26T23:50:39.139Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/9751c4f3-603f-4bf0-8e84-52e5c1d00d71",
           "branch": "forge/issue-112-9751c4f3",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T23:51:25.993Z"
         }
       ]
     }
@@ -59,7 +66,8 @@
     "phase:resolve:1:start": "573657a1-971a-4e7d-beed-bed420df8da3",
     "phase:resolve:1:complete": "c6611256-0c44-4efc-916d-94098269640f",
     "phase:investigate:1:queue": "86b7a69b-e654-4c40-86fd-491b8b48dcae",
-    "phase:investigate:1:start": "8d015327-afc7-4476-a36f-2118b6e37416"
+    "phase:investigate:1:start": "8d015327-afc7-4476-a36f-2118b6e37416",
+    "phase:investigate:1:complete": "abf7677a-64cd-45d5-bb24-17d544a3a2cc"
   },
   "eventIds": {
     "8109ba08-dcc1-449b-9ee8-3b5402453dc9": true,
@@ -68,7 +76,8 @@
     "573657a1-971a-4e7d-beed-bed420df8da3": true,
     "c6611256-0c44-4efc-916d-94098269640f": true,
     "86b7a69b-e654-4c40-86fd-491b8b48dcae": true,
-    "8d015327-afc7-4476-a36f-2118b6e37416": true
+    "8d015327-afc7-4476-a36f-2118b6e37416": true,
+    "abf7677a-64cd-45d5-bb24-17d544a3a2cc": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
