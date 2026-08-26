@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 10,
-  "lastEventHash": "sha256:864320fafeed1340642674c14227366aa89781cd32652a9ecb55bc8d9cefbca9",
+  "sequence": 11,
+  "lastEventHash": "sha256:195f86186f599938e020aaa20fcd11614b24f7b2a01b50a28d80294dc1cc73d5",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -62,16 +62,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Bounded contract permits only `src/workflows/work-on.ts` and `test/workflows/work-on.test.ts`.",
+            "Implementation will add an explicit compensation helper with a dedicated non-aborted signal, bounded retries, and surfaced rollback exhaustion; the merge authority and label vocabulary remain unchanged.",
+            "Verification is the policy-approved named `check` command."
+          ],
           "inputArtifactHash": "sha256:investigation-issue-120",
           "logicalNodeId": "work-on/plan",
           "startedAt": "2026-08-26T19:27:14.599Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/29452f87-b448-4d22-89a4-e1713851fd72",
           "branch": "forge/issue-120-29452f87",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T19:28:07.222Z",
+          "outputArtifactHash": "sha256:plan-issue-120"
         }
       ]
     }
@@ -88,7 +94,8 @@
     "phase:investigate:1:start": "1027941b-57d9-4957-9af4-bdd211613202",
     "phase:investigate:1:complete": "35c8b905-e3b8-4e2d-a11e-2a890c58776d",
     "phase:plan:1:queue": "3387fd9f-dc53-4db5-8f1d-3a0db4fcfcd0",
-    "phase:plan:1:start": "7c88833f-86eb-49f0-ada8-26c71484f416"
+    "phase:plan:1:start": "7c88833f-86eb-49f0-ada8-26c71484f416",
+    "phase:plan:1:complete": "ad122c66-c22e-41fc-8b9b-5bbad467b7e0"
   },
   "eventIds": {
     "49e8e69d-ffef-42b3-a5c2-abe6b87d784b": true,
@@ -100,7 +107,8 @@
     "1027941b-57d9-4957-9af4-bdd211613202": true,
     "35c8b905-e3b8-4e2d-a11e-2a890c58776d": true,
     "3387fd9f-dc53-4db5-8f1d-3a0db4fcfcd0": true,
-    "7c88833f-86eb-49f0-ada8-26c71484f416": true
+    "7c88833f-86eb-49f0-ada8-26c71484f416": true,
+    "ad122c66-c22e-41fc-8b9b-5bbad467b7e0": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
