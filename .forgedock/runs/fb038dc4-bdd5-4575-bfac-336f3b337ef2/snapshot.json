@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:262f1c11f216c64450636a5cdae95108a9a3e8537052c2ed0feb346b5623fe63",
+  "sequence": 8,
+  "lastEventHash": "sha256:ea37b8c6ecc5542bc7c15738140dca4bbd85fa62d15ee467d332b3951ddf1109",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -40,15 +40,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/github-projection.ts#setWorkflowLabel` already performs a GET/PUT reconciliation: it removes labels beginning with `workflow:` and preserves unrelated labels (except the intentional `needs-human` policy label).",
+            "`src/workflows/work-on.ts#workflowStageForNodeTransition` covers the orchestrated node lifecycle and calls `#projectWorkflowStage` at parent/child node boundaries.",
+            "`src/agents/child-runtime.ts#workflowLabelForCheckpoint` only projects labels for investigation start/completion, build-phase starts, and review start; it returns no label for resolve start, build completion, review completion, or terminal checkpoint actions.",
+            "`src/agents/child-runtime.ts` direct checkpoint handling invokes `workflowLabelForCheckpoint` after every non-queue transition, so omitted mappings leave stale labels in standalone/direct runs.",
+            "Existing projection coverage verifies stale workflow labels are replaced and unrelated labels (`bug`, `priority:P1`) survive, but no automated coverage exercises the direct checkpoint mapping across the lifecycle."
+          ],
           "logicalNodeId": "work-on-investigate-1",
           "startedAt": "2026-08-26T22:09:28.327Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/fb038dc4-bdd5-4575-bfac-336f3b337ef2",
           "branch": "forge/issue-92-fb038dc4",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T22:12:26.121Z",
+          "outputArtifactHash": "sha256:investigation-issue-92-label-projection-gap"
         }
       ]
     }
@@ -62,7 +70,8 @@
     "phase:resolve:1:start": "f9c8929c-6755-499a-a8aa-93f183b4f20f",
     "phase:resolve:1:complete": "e0269b3c-8a82-4982-be3b-f4ac4339a299",
     "phase:investigate:1:queue": "4f1060c4-4874-498c-bbf3-2e4b542363dc",
-    "phase:investigate:1:start": "4404b48d-e837-437c-a989-4814ab74cc7e"
+    "phase:investigate:1:start": "4404b48d-e837-437c-a989-4814ab74cc7e",
+    "phase:investigate:1:complete": "d6ec9854-d635-4dac-b16f-44b1a2510bed"
   },
   "eventIds": {
     "81af842e-b849-4d4d-9c3f-357d89c1e2f6": true,
@@ -71,7 +80,8 @@
     "f9c8929c-6755-499a-a8aa-93f183b4f20f": true,
     "e0269b3c-8a82-4982-be3b-f4ac4339a299": true,
     "4f1060c4-4874-498c-bbf3-2e4b542363dc": true,
-    "4404b48d-e837-437c-a989-4814ab74cc7e": true
+    "4404b48d-e837-437c-a989-4814ab74cc7e": true,
+    "d6ec9854-d635-4dac-b16f-44b1a2510bed": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
