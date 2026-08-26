@@ -5,10 +5,10 @@
   "issueNumber": 94,
   "integrationBranch": "staging",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "blocked",
   "authorityMode": "run-scoped",
-  "sequence": 22,
-  "lastEventHash": "sha256:faae6fa1536119be3f471f7d3e630039d62c98095ea8e39b0b35451c91e48ebb",
+  "sequence": 23,
+  "lastEventHash": "sha256:f03b2b7c0516bdf7fe11b6122f1f8a3ee13f49b93246bbd8610230abb6c595b6",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -163,7 +163,7 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "blocked",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 1",
           "evidence": [],
@@ -172,7 +172,9 @@
           "startedAt": "2026-08-26T13:48:40.873Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/bf82a71f-8207-4647-9897-c9b2628ed9ee",
           "branch": "forge/issue-94-bf82a71f",
-          "baseSha": "26139ba278b95578a300c597ec35495a7d502eb6"
+          "baseSha": "26139ba278b95578a300c597ec35495a7d502eb6",
+          "reason": "Required nested reviewer forge-review-correctness exceeded its configured timeout before returning a schema-valid result; the frozen head cannot be approved without complete reviewer evidence.",
+          "finishedAt": "2026-08-26T13:59:47.715Z"
         }
       ]
     }
@@ -201,7 +203,8 @@
     "phase:verify:1:start": "d9f954ba-6100-44cb-9852-fcf0e1fa96ff",
     "phase:verify:1:complete": "69a35d03-8dfc-482a-9a14-777a77bb22bc",
     "phase:review:1:queue": "326494e2-0f73-420d-b4b3-12a67511a2ad",
-    "phase:review:1:start": "89b71e65-58ec-40f9-bc4a-a32fb4088534"
+    "phase:review:1:start": "89b71e65-58ec-40f9-bc4a-a32fb4088534",
+    "phase:review:1:block": "38210267-75fb-4465-b40a-974db6c344c3"
   },
   "eventIds": {
     "6bf70f63-8815-4672-8e98-4f0e70b9004e": true,
@@ -225,7 +228,8 @@
     "d9f954ba-6100-44cb-9852-fcf0e1fa96ff": true,
     "69a35d03-8dfc-482a-9a14-777a77bb22bc": true,
     "326494e2-0f73-420d-b4b3-12a67511a2ad": true,
-    "89b71e65-58ec-40f9-bc4a-a32fb4088534": true
+    "89b71e65-58ec-40f9-bc4a-a32fb4088534": true,
+    "38210267-75fb-4465-b40a-974db6c344c3": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
