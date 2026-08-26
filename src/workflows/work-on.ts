@@ -399,6 +399,24 @@ export class ForgeWorkOnController {
           process.env.PI_SUBAGENT_EXTENSION_BINDINGS = JSON.stringify({
             "forgedock.pi/1": this.#directBinding,
           });
+          const recoveredResult = await this.#loadResult(link).catch(
+            () => undefined,
+          );
+          const mergeCompleted =
+            directState.state.phases.merge?.attempts.at(-1)?.status ===
+            "completed";
+          const closeCompleted =
+            directState.state.phases.close?.attempts.at(-1)?.status ===
+            "completed";
+          if (recoveredResult && mergeCompleted && closeCompleted) {
+            await this.#resumeTerminalCleanup(
+              link,
+              recoveredResult,
+              directState.state,
+              ctx,
+            );
+            continue;
+          }
           this.#pi.sendUserMessage(
             directRunResumeTask(link, directState.state),
           );
@@ -3142,6 +3160,135 @@ export class ForgeWorkOnController {
       "info",
     );
     return true;
+  }
+
+  async #resumeTerminalCleanup(
+    link: ActiveRunLink,
+    result: ForgeWorkOnResult,
+    state: import("../core/state.ts").RunState,
+    ctx: ExtensionContext,
+  ): Promise<void> {
+    assertResultIdentity(result, link);
+    const pullEffect = Object.values(state.effects).find(
+      (effect) => effect.effectType === "pull-request",
+    );
+    const pullNumber = pullEffect?.effectId.match(/^pr:(\d+)$/)?.[1];
+    const mergeSha = state.phases.merge?.attempts
+      .at(-1)
+      ?.evidence.find((entry) => /^[0-9a-f]{40}$/i.test(entry));
+    if (!pullNumber || !mergeSha)
+      throw new Error(
+        "Terminal cleanup recovery requires durable PR and merge SHA evidence.",
+      );
+
+    link.status = "finalizing";
+    this.#persistLink(link);
+    const token = await resolveGitHubToken(
+      this.#pi,
+      link.prepared.repositoryRoot,
+      ctx.signal,
+    );
+    const transport = new FetchGitHubTransport({ token });
+    const github = new GitHubWorkflowAdapter(transport, link.repository);
+    const projector = new GitHubIssueProjector(transport, link.repository);
+    const store = new GitHubStateBranchStore(
+      transport,
+      link.repository,
+      link.stateBranch,
+    );
+    const journal = new RunJournal(store);
+    const sessionId = ctx.sessionManager.getSessionId();
+
+    await appendPhase(
+      journal,
+      link.forgeRunId,
+      "cleanup",
+      "queue",
+      1,
+      sessionId,
+      ctx.signal,
+    );
+    await appendPhase(
+      journal,
+      link.forgeRunId,
+      "cleanup",
+      "start",
+      1,
+      sessionId,
+      ctx.signal,
+    );
+    await github.deleteBranch(link.prepared.branch, ctx.signal);
+    await this.#git.cleanup(link.prepared, ctx.signal);
+    await appendEffect(
+      journal,
+      link.forgeRunId,
+      "cleanup",
+      `worktree:${link.forgeRunId}`,
+      digest(link.prepared.worktreePath),
+      sessionId,
+      ctx.signal,
+    );
+    await appendPhase(
+      journal,
+      link.forgeRunId,
+      "cleanup",
+      "complete",
+      1,
+      sessionId,
+      ctx.signal,
+      undefined,
+      ["owned worktree removed", "remote feature branch deleted"],
+    );
+    const completed = await journal.append({
+      runId: link.forgeRunId,
+      type: "run.completed",
+      payload: { outcome: "merged", pullNumber: Number(pullNumber) },
+      idempotencyKey: "run:completed",
+      sessionId,
+      message: `Complete recovered ForgeDock run ${link.forgeRunId}`,
+      ...(ctx.signal ? { signal: ctx.signal } : {}),
+    });
+    const terminal = await journal.append({
+      runId: link.forgeRunId,
+      type: "lease.released",
+      payload: {
+        ownerRunId: link.leaseOwnerRunId,
+        epoch: link.leaseEpoch,
+      },
+      idempotencyKey: "lease:release",
+      sessionId,
+      message: `Release recovered ForgeDock authority ${link.forgeRunId}`,
+      ...(ctx.signal ? { signal: ctx.signal } : {}),
+    });
+    const terminalEvent = terminal.events.at(-1) ?? completed.events.at(-1);
+    if (terminalEvent) {
+      await projector
+        .projectEvent({
+          issueNumber: link.issueNumber,
+          event: terminalEvent,
+          markdown: `## ForgeDock Pi complete\n\nPR #${pullNumber} merged into \`${link.prepared.baseBranch}\`.\nNested review completed at \`${result.review.headSha}\`.\nRun: \`${link.forgeRunId}\`.`,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        })
+        .catch(() => undefined);
+      await this.#projectWorkflowStage(link, "merged", ctx, projector).catch(
+        () => undefined,
+      );
+    }
+
+    this.#directBinding = undefined;
+    delete process.env.PI_SUBAGENT_EXTENSION_BINDINGS;
+    link.status = "completed";
+    this.#persistLink(link);
+    this.#emitLifecycle(link, {
+      headSha: result.headSha,
+      baseSha: result.baseSha,
+      pullNumber: Number(pullNumber),
+    });
+    ctx.ui.setStatus("forgedock", undefined);
+    ctx.ui.notify(
+      `ForgeDock issue #${link.issueNumber} recovered terminal cleanup for PR #${pullNumber}.`,
+      "info",
+    );
   }
 
   async #finalize(

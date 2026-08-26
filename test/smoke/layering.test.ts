@@ -17,6 +17,8 @@ test("session shutdown detaches active runs instead of cancelling durable work",
   assert.match(entrypoint, /orchestrator\.dispose\(\)/);
   const workOn = await readFile("src/workflows/work-on.ts", "utf8");
   assert.match(workOn, /sendUserMessage\(\s*directRunResumeTask/);
+  assert.match(workOn, /#resumeTerminalCleanup\(/);
+  assert.match(workOn, /recoveredResult && mergeCompleted && closeCompleted/);
   assert.match(workOn, /Do not create another run, worktree, branch, commit, or PR/);
 });
 
