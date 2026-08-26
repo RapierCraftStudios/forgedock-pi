@@ -122,6 +122,21 @@ async function executableAvailable(
   return false;
 }
 
+const NPM_PACKAGE_SELECTION_OPTIONS = new Set([
+  "prefix",
+  "C",
+  "workspace",
+  "workspaces",
+  "ws",
+  "w",
+  "include-workspace-root",
+  "iwr",
+  "global",
+  "g",
+  "location",
+  "L",
+]);
+
 function npmPackageSelectionOption(argv: readonly string[]): string | undefined {
   const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
   if (manager !== "npm") return undefined;
@@ -129,27 +144,16 @@ function npmPackageSelectionOption(argv: readonly string[]): string | undefined 
   for (let index = 1; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === undefined || argument === "--") return undefined;
-    const option = argument.split("=", 1)[0] ?? argument;
+    if (!argument.startsWith("-")) continue;
+    const normalized = argument.replace(/^-+/, "");
+    const option = normalized.split("=", 1)[0] ?? normalized;
+    if (NPM_PACKAGE_SELECTION_OPTIONS.has(option)) return argument;
     if (
-      option === "--prefix" ||
-      option === "-C" ||
-      option.startsWith("-C") ||
-      option === "--workspace" ||
-      option === "-w" ||
-      option.startsWith("-w") ||
-      option === "--workspaces" ||
-      option === "--include-workspace-root" ||
-      option === "--global" ||
-      option === "-g"
+      argument.startsWith("-") &&
+      !argument.startsWith("--") &&
+      ["C", "g", "L", "w"].includes(option[0] ?? "")
     )
       return argument;
-    if (option === "--location") {
-      const value = argument.includes("=")
-        ? argument.slice(argument.indexOf("=") + 1)
-        : argv[index + 1];
-      if (value?.toLowerCase() === "global")
-        return argument.includes("=") ? argument : `${argument} ${value}`;
-    }
   }
   return undefined;
 }
