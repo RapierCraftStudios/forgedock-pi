@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 10,
-  "lastEventHash": "sha256:b9228b7788ca21b09a8848de73a84daf06d70a3e42db07588a298d37223e8df8",
+  "sequence": 11,
+  "lastEventHash": "sha256:5d444cba28af514b01b9fd01689feed8af4b24012e4306d60b4e789c70dd6ff1",
   "lanes": [
     {
       "issueNumber": 92,
@@ -44,10 +44,12 @@
     {
       "issueNumber": 113,
       "ordinal": 4,
-      "status": "running",
+      "status": "ready",
       "refreshes": 0,
       "forgeRunId": "e5c63044-b058-4d5e-af2a-b4f01d0bd48c",
-      "subagentRunId": "916869a8-04d8-41e9-8f59-99d630a13844"
+      "subagentRunId": "916869a8-04d8-41e9-8f59-99d630a13844",
+      "headSha": "1ae7a9c4d1f212419f4d79fd895965135b0f9551",
+      "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
     },
     {
       "issueNumber": 114,
@@ -92,7 +94,8 @@
     "lane:114:started": "aeff7304-2c59-4914-a4ab-2704b88716d1",
     "lane:115:started": "6f1150a6-0bdb-4d1e-ad63-7601ede11072",
     "lane:119:started": "69a0e05c-76b9-4d43-a149-b52594e10b50",
-    "lane:120:started": "9e10e214-f684-4790-bf12-180edaf8679b"
+    "lane:120:started": "9e10e214-f684-4790-bf12-180edaf8679b",
+    "lane:113:ready:0": "cf05dd99-112d-44dc-88cc-dda29265d55a"
   },
   "createdAt": "2026-08-26T20:01:21.510Z"
 }
