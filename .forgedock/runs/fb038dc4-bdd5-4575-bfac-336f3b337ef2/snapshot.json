@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 16,
-  "lastEventHash": "sha256:c3ad386d5e8f7eaadacafefba6ff6c45a65f4013572efe4ae8110fac45534fcc",
+  "sequence": 17,
+  "lastEventHash": "sha256:d7092cdd7d81da68d758ffe0405dc319faced4b2e8e3e20e3e0a6675d9d21a79",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -113,15 +113,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Updated `src/agents/child-runtime.ts` so every non-queued direct checkpoint transition selects a canonical lifecycle label, with report-aware invalid/decomposed investigation outcomes.",
+            "Updated `src/adapters/github-projection.ts` so replacement removes only prior `workflow:*` labels and preserves `needs-human` and all other unrelated labels.",
+            "Added direct lifecycle mapping coverage in `test/agents/child-runtime-commit.test.ts`.",
+            "Extended adapter coverage in `test/adapters/github-projection.test.ts` for stale workflow-label removal and unrelated-label preservation.",
+            "Implementation commit is intentionally deferred until the required `check` gate passes during verify."
+          ],
           "logicalNodeId": "work-on-implement-1",
           "startedAt": "2026-08-26T22:18:45.768Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/fb038dc4-bdd5-4575-bfac-336f3b337ef2",
           "branch": "forge/issue-92-fb038dc4",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T22:22:05.984Z",
+          "outputArtifactHash": "sha256:implementation-issue-92-label-projection-mapping"
         }
       ]
     }
@@ -144,7 +152,8 @@
     "phase:prepare-worktree:1:start": "e387f26e-6881-405b-afaa-cdeac38f392a",
     "phase:prepare-worktree:1:complete": "28e3ecf3-61b9-4f0b-9bd8-fe660ec918a9",
     "phase:implement:1:queue": "8b1c7129-a6ce-4d59-a0d1-cac4a4fbdd43",
-    "phase:implement:1:start": "38db3fc9-43d2-4e9d-adbf-b9f9df1dde39"
+    "phase:implement:1:start": "38db3fc9-43d2-4e9d-adbf-b9f9df1dde39",
+    "phase:implement:1:complete": "7bf575cb-e5cb-48aa-81f1-6cf215d964cd"
   },
   "eventIds": {
     "81af842e-b849-4d4d-9c3f-357d89c1e2f6": true,
@@ -162,7 +171,8 @@
     "e387f26e-6881-405b-afaa-cdeac38f392a": true,
     "28e3ecf3-61b9-4f0b-9bd8-fe660ec918a9": true,
     "8b1c7129-a6ce-4d59-a0d1-cac4a4fbdd43": true,
-    "38db3fc9-43d2-4e9d-adbf-b9f9df1dde39": true
+    "38db3fc9-43d2-4e9d-adbf-b9f9df1dde39": true,
+    "7bf575cb-e5cb-48aa-81f1-6cf215d964cd": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
