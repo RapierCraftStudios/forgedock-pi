@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:223c3a0244acfb3de0ebae9a1d090e6239dcade9ad667e44f640eb156d6e3ea5",
+  "sequence": 8,
+  "lastEventHash": "sha256:e2ac725516222767dbdec80ab2e382ad8a179daf34d0a5c9085cb41958c37932",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -39,15 +39,21 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "src/agents/child-runtime.ts invokes workflowLabelForCheckpoint after each non-queue checkpoint, but the helper currently maps only investigate/start, build-phase/start, review/start, and investigate/complete.",
+            "src/adapters/github-projection.ts setWorkflowLabel already replaces workflow:* labels through the GitHub labels PUT endpoint while retaining ordinary issue labels.",
+            "src/workflows/work-on.ts maps parent-owned node transitions, but direct phase checkpoints use the child-runtime mapping and do not receive those node-transition projections.",
+            "Existing tests cover one projector transition and partial node-stage mapping, but not the complete checkpoint lifecycle."
+          ],
           "logicalNodeId": "investigate-1",
           "startedAt": "2026-08-26T17:59:01.908Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/ed1f9760-d489-4a79-b26c-2613a5129081",
           "branch": "forge/issue-92-ed1f9760",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T18:02:50.722Z"
         }
       ]
     }
@@ -61,7 +67,8 @@
     "phase:resolve:1:start": "f59cceb4-bcf4-4658-8e28-bd13fed7fb88",
     "phase:resolve:1:complete": "bc67e66c-5a7b-4db6-b93a-daa4ee8a715e",
     "phase:investigate:1:queue": "4f93cf6e-d1cb-4869-882b-e4283e126f9a",
-    "phase:investigate:1:start": "e7cb1eaf-f7aa-44cf-bb32-07592d904f6f"
+    "phase:investigate:1:start": "e7cb1eaf-f7aa-44cf-bb32-07592d904f6f",
+    "phase:investigate:1:complete": "83eddf46-32a9-4865-873b-ae83ebe35f40"
   },
   "eventIds": {
     "91ef4ca7-b746-4bad-9122-cb1a7159aa3b": true,
@@ -70,7 +77,8 @@
     "f59cceb4-bcf4-4658-8e28-bd13fed7fb88": true,
     "bc67e66c-5a7b-4db6-b93a-daa4ee8a715e": true,
     "4f93cf6e-d1cb-4869-882b-e4283e126f9a": true,
-    "e7cb1eaf-f7aa-44cf-bb32-07592d904f6f": true
+    "e7cb1eaf-f7aa-44cf-bb32-07592d904f6f": true,
+    "83eddf46-32a9-4865-873b-ae83ebe35f40": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
