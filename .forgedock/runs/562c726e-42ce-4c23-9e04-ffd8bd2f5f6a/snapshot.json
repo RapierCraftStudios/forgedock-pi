@@ -5,10 +5,10 @@
   "issueNumber": 92,
   "integrationBranch": "staging",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "blocked",
   "authorityMode": "run-scoped",
-  "sequence": 27,
-  "lastEventHash": "sha256:c99a7133dd525cb76d3d66246215d1c91d23a2fcad079ad8a281cd04437669c7",
+  "sequence": 28,
+  "lastEventHash": "sha256:f97c1a1eb384951a3fe0de8e7faa1d69b1b6c9d71171010419c010a11343ae70",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -191,12 +191,14 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "blocked",
           "leaseEpoch": 1,
           "restartAction": "reconcile and retry parent-owned merge",
           "evidence": [],
           "logicalNodeId": "parent-merge-1",
-          "startedAt": "2026-08-26T12:32:04.821Z"
+          "startedAt": "2026-08-26T12:32:04.821Z",
+          "reason": "Malformed review or gate result: missing issue artifact <!-- FORGE:ACCEPTANCE_GATE:COMPLETE -->",
+          "finishedAt": "2026-08-26T12:32:40.939Z"
         }
       ]
     }
@@ -243,7 +245,8 @@
     "phase:merge:1:queue": "de1f30e4-a6d8-4da2-9e54-1134385df06a",
     "phase:merge:1:start": "16e54d0d-4df3-45c6-8715-ac94517ff270",
     "effect:branch:forge/issue-92-562c726e": "71cb0b88-80e9-46c4-8f70-e687f1639541",
-    "effect:pr:109": "dbd60320-8276-4105-b51f-0472c4a13a86"
+    "effect:pr:109": "dbd60320-8276-4105-b51f-0472c4a13a86",
+    "phase:merge:1:block": "d4499faa-02c7-4e7b-974f-145d52ae2b5c"
   },
   "eventIds": {
     "2d6b4799-e254-4339-9dcb-219a49010664": true,
@@ -272,7 +275,8 @@
     "de1f30e4-a6d8-4da2-9e54-1134385df06a": true,
     "16e54d0d-4df3-45c6-8715-ac94517ff270": true,
     "71cb0b88-80e9-46c4-8f70-e687f1639541": true,
-    "dbd60320-8276-4105-b51f-0472c4a13a86": true
+    "dbd60320-8276-4105-b51f-0472c4a13a86": true,
+    "d4499faa-02c7-4e7b-974f-145d52ae2b5c": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
