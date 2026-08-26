@@ -63,17 +63,41 @@ function command(
 test("required monorepo verification preflight selects the package cwd", async () => {
   const testFixture = await fixture();
   try {
-    await assert.rejects(
-      preflightRequiredVerificationCommands(
-        testFixture.root,
-        { test: command(".") },
-        { path: testFixture.path, configPath: "/repo/.forge/config.json" },
-      ),
-      (error: unknown) =>
-        error instanceof VerificationPreflightError &&
-        error.path === "/repo/.forge/config.json verification.commands.test.argv" &&
-        /no 'test' script/.test(error.message),
-    );
+    const rootConfig = {
+      path: testFixture.path,
+      configPath: "/repo/.forge/config.json",
+    };
+    const assertRootScriptRejected = async (): Promise<void> => {
+      await assert.rejects(
+        preflightRequiredVerificationCommands(
+          testFixture.root,
+          { test: command(".") },
+          rootConfig,
+        ),
+        (error: unknown) =>
+          error instanceof VerificationPreflightError &&
+          error.path ===
+            "/repo/.forge/config.json verification.commands.test.argv" &&
+          /no 'test' script/.test(error.message) &&
+          /use CI-only verification/.test(error.message),
+      );
+    };
+
+    await assertRootScriptRejected();
+
+    for (const scripts of [
+      { test: null },
+      { test: [] },
+      { test: { command: "vitest run" } },
+      { test: "   " },
+      [],
+    ] as const) {
+      await writeFile(
+        join(testFixture.root, "package.json"),
+        JSON.stringify({ scripts }),
+      );
+      await assertRootScriptRejected();
+    }
 
     await preflightRequiredVerificationCommands(
       testFixture.root,
