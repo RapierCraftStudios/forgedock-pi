@@ -86,6 +86,8 @@ import {
 } from "./remediation.ts";
 
 const RUN_LINK_ENTRY = "forgedock-run-link/v1";
+const MERGE_ROLLBACK_ATTEMPTS = 3;
+const MERGE_ROLLBACK_TIMEOUT_MS = 30_000;
 
 export type WorkflowStage = keyof typeof WORKFLOW_LABEL_BY_STAGE;
 export type WorkflowTransition = "started" | "resumed" | "completed";
@@ -221,6 +223,38 @@ export function directTerminalEvidence(
   );
   if (!mergeEffect || mergeEffect.digest !== digest(mergeSha)) return undefined;
   return { pullNumber, mergeSha };
+}
+
+/**
+ * Restore the review label after a merge attempt fails.
+ *
+ * This projection is a compensating operation: it must not inherit the merge
+ * request's cancellation signal, and its failure must remain visible to the
+ * parent-node reconciler instead of being treated as disposable cleanup.
+ */
+export async function restoreReviewWorkflowLabel(
+  projector: Pick<GitHubIssueProjector, "setWorkflowLabel">,
+  issueNumber: number,
+): Promise<void> {
+  const rollbackSignal = AbortSignal.timeout(MERGE_ROLLBACK_TIMEOUT_MS);
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MERGE_ROLLBACK_ATTEMPTS; attempt += 1) {
+    try {
+      await projector.setWorkflowLabel(
+        issueNumber,
+        WORKFLOW_LABEL_BY_STAGE.review,
+        rollbackSignal,
+      );
+      return;
+    } catch (error) {
+      lastError = error;
+      if (rollbackSignal.aborted) break;
+    }
+  }
+  throw new Error(
+    `Failed to restore ${WORKFLOW_LABEL_BY_STAGE.review} after ${MERGE_ROLLBACK_ATTEMPTS} attempts: ${errorMessage(lastError)}`,
+    { cause: lastError },
+  );
 }
 
 export function directRunResumeTask(
@@ -2164,12 +2198,14 @@ export class ForgeWorkOnController {
       try {
         merged = await github.mergePullRequest({ pullNumber: pull.number, expectedHeadSha: pull.headSha, method: "squash", ...(ctx.signal ? { signal: ctx.signal } : {}) });
       } catch (error) {
-        await projector
-          .setWorkflowLabel(
-            link.issueNumber,
-            WORKFLOW_LABEL_BY_STAGE.review,
-          )
-          .catch(() => undefined);
+        try {
+          await restoreReviewWorkflowLabel(projector, link.issueNumber);
+        } catch (rollbackError) {
+          throw new AggregateError(
+            [error, rollbackError],
+            `Merge failed and restoring ${WORKFLOW_LABEL_BY_STAGE.review} also failed: ${errorMessage(error)}; ${errorMessage(rollbackError)}`,
+          );
+        }
         throw error;
       }
       headSha = merged.sha;

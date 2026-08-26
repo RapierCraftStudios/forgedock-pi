@@ -13,6 +13,7 @@ import {
   parentNodeFromId,
   parseAsyncCompletion,
   reconcileLaunchState,
+  restoreReviewWorkflowLabel,
   reviewFindingMarker,
   reviewInstanceMarker,
   reviewSummaryInstanceMarker,
@@ -271,6 +272,61 @@ test("detached workflow continuation failure remains distinguishable for durable
         "unsupported-continuation: detached workflow child settled, but JavaScript workflow continuation was not persisted.",
     },
   );
+});
+
+test("merge-label rollback remains independent after merge cancellation and retries", async () => {
+  const mergeController = new AbortController();
+  mergeController.abort(new Error("merge request cancelled"));
+  const signals: AbortSignal[] = [];
+  let calls = 0;
+  const projector = {
+    async setWorkflowLabel(
+      issueNumber: number,
+      workflowLabel: string,
+      signal?: AbortSignal,
+    ): Promise<void> {
+      assert.equal(issueNumber, 42);
+      assert.equal(workflowLabel, "workflow:in-review");
+      assert.ok(signal);
+      signals.push(signal);
+      calls += 1;
+      if (calls < 3) throw new Error(`temporary label failure ${calls}`);
+    },
+  };
+
+  await restoreReviewWorkflowLabel(projector, 42);
+
+  assert.equal(calls, 3);
+  assert.equal(signals.every((signal) => signal !== mergeController.signal), true);
+  assert.equal(signals.every((signal) => !signal.aborted), true);
+});
+
+test("merge-label rollback surfaces permanent projection failure", async () => {
+  let calls = 0;
+  const rollbackError = new Error("labels endpoint unavailable");
+  const projector = {
+    async setWorkflowLabel(
+      _issueNumber: number,
+      _workflowLabel: string,
+      _signal?: AbortSignal,
+    ): Promise<void> {
+      calls += 1;
+      throw rollbackError;
+    },
+  };
+
+  await assert.rejects(
+    restoreReviewWorkflowLabel(projector, 42),
+    (error: unknown) => {
+      assert.match(
+        error instanceof Error ? error.message : String(error),
+        /Failed to restore workflow:in-review after 3 attempts/,
+      );
+      assert.equal(error instanceof Error ? error.cause : undefined, rollbackError);
+      return true;
+    },
+  );
+  assert.equal(calls, 3);
 });
 
 test("provider retry classification includes WebSocket failures but excludes quota", () => {
