@@ -7,6 +7,11 @@ import {
   type RepositoryLease,
   validateRepositoryLease,
 } from "../core/lease.ts";
+import {
+  replayOrchestrationEvents,
+  type OrchestrationEvent,
+  type OrchestrationState,
+} from "../core/orchestration.ts";
 import { replayRunEvents, type RunState } from "../core/state.ts";
 import {
   GitHubApiError,
@@ -68,6 +73,25 @@ export interface CommitRunStateInput {
   events: readonly RunEvent[];
   state: RunState;
   lease?: RepositoryLease;
+  preserveRepositoryLease?: boolean;
+  runScopedAuthority?: boolean;
+  message: string;
+  signal?: AbortSignal;
+}
+
+export interface ReadOrchestrationStateResult {
+  tip: string;
+  events: readonly OrchestrationEvent[];
+  state?: OrchestrationState;
+  snapshotMatchesJournal: boolean;
+  lease?: RepositoryLease;
+}
+
+export interface CommitOrchestrationStateInput {
+  expectedTip: string;
+  events: readonly OrchestrationEvent[];
+  state: OrchestrationState;
+  leaseUpdate?: RepositoryLease | null;
   message: string;
   signal?: AbortSignal;
 }
@@ -101,7 +125,7 @@ export class GitHubStateBranchStore {
   }
 
   async getTip(signal?: AbortSignal): Promise<string | undefined> {
-    const path = `${this.#apiRoot}/git/ref/heads/${encodePath(this.#branch)}`;
+    const path = `${this.#apiRoot}/git/ref/heads/${encodePath(this.#branch)}?cache_bust=${Date.now()}`;
     const response = await this.#transport.request<GitRefResponse>({
       method: "GET",
       path,
@@ -198,6 +222,137 @@ export class GitHubStateBranchStore {
     };
   }
 
+  async readOrchestration(
+    orchestrationId: string,
+    signal?: AbortSignal,
+  ): Promise<ReadOrchestrationStateResult> {
+    assertRunId(orchestrationId);
+    const tip = await this.getTip(signal);
+    if (!tip)
+      throw new GitHubApiError(
+        404,
+        `${this.#apiRoot}/git/ref/heads/${this.#branch}`,
+        { message: "State branch missing" },
+      );
+    const entries = await this.#readTree(tip, signal);
+    const eventText = await this.#readPath(
+      entries,
+      orchestrationEventsPath(orchestrationId),
+      signal,
+    );
+    const snapshotText = await this.#readPath(
+      entries,
+      orchestrationSnapshotPath(orchestrationId),
+      signal,
+    );
+    const leaseText = await this.#readPath(entries, leasePath(), signal);
+    const events = parseOrchestrationJournal(eventText ?? "");
+    const state =
+      events.length > 0 ? replayOrchestrationEvents(events) : undefined;
+    const snapshot = snapshotText
+      ? parseJson(snapshotText, "orchestration snapshot")
+      : undefined;
+    const snapshotMatchesJournal =
+      state !== undefined && snapshot !== undefined
+        ? canonicalJson(snapshot) === canonicalJson(state)
+        : state === undefined && snapshot === undefined;
+    let lease: RepositoryLease | undefined;
+    if (leaseText) {
+      const parsedLease = parseJson(leaseText, "repository lease");
+      validateRepositoryLease(parsedLease);
+      lease = parsedLease;
+    }
+    return {
+      tip,
+      events,
+      snapshotMatchesJournal,
+      ...(state ? { state } : {}),
+      ...(lease ? { lease } : {}),
+    };
+  }
+
+  async commitOrchestrationState(
+    input: CommitOrchestrationStateInput,
+  ): Promise<string> {
+    if (!input.expectedTip.trim())
+      throw new TypeError("expectedTip must be non-empty.");
+    if (!input.message.trim())
+      throw new TypeError("State commit message must be non-empty.");
+    if (input.events.length === 0)
+      throw new TypeError("Cannot commit an empty orchestration journal.");
+    const reduced = replayOrchestrationEvents(input.events);
+    if (canonicalJson(reduced) !== canonicalJson(input.state))
+      throw new TypeError(
+        "Orchestration snapshot does not match the supplied journal.",
+      );
+    if (input.state.repository !== this.#repository)
+      throw new TypeError(
+        "Orchestration repository does not match this store.",
+      );
+    if (input.leaseUpdate) {
+      validateRepositoryLease(input.leaseUpdate);
+      if (
+        input.leaseUpdate.repository !== this.#repository ||
+        input.leaseUpdate.ownerRunId !== input.state.orchestrationId ||
+        input.leaseUpdate.epoch !== input.state.leaseEpoch
+      ) {
+        throw new TypeError(
+          "Orchestration does not own the supplied repository lease.",
+        );
+      }
+    }
+
+    const commit = await this.#getCommit(input.expectedTip, input.signal);
+    const orchestrationId = input.state.orchestrationId;
+    assertRunId(orchestrationId);
+    const journal = `${input.events.map((event) => JSON.stringify(event)).join("\n")}\n`;
+    const files = [
+      { path: orchestrationEventsPath(orchestrationId), content: journal },
+      {
+        path: orchestrationSnapshotPath(orchestrationId),
+        content: `${JSON.stringify(input.state, null, 2)}\n`,
+      },
+      ...(input.leaseUpdate
+        ? [
+            {
+              path: leasePath(),
+              content: `${JSON.stringify(input.leaseUpdate, null, 2)}\n`,
+            },
+          ]
+        : []),
+    ];
+    const treeEntries: Array<{ path: string; sha: string | null }> =
+      await Promise.all(
+        files.map(async (file) => ({
+          path: file.path,
+          sha: await this.#createBlob(file.content, input.signal),
+        })),
+      );
+    if (input.leaseUpdate === null)
+      treeEntries.push({ path: leasePath(), sha: null });
+    const treeSha = await this.#createTree(
+      commit.tree.sha,
+      treeEntries,
+      input.signal,
+    );
+    const newCommit = await this.#createCommit(
+      input.message,
+      treeSha,
+      [input.expectedTip],
+      input.signal,
+    );
+    const refPath = `${this.#apiRoot}/git/refs/heads/${encodePath(this.#branch)}`;
+    const response = await this.#transport.request<GitRefResponse>({
+      method: "PATCH",
+      path: refPath,
+      body: { sha: newCommit, force: false },
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
+    if (response.status === 409 || response.status === 422)
+      throw new StateBranchConflictError(input.expectedTip);
+    return requireGitHubSuccess(response, refPath, [200]).object.sha;
+  }
+
   async commitRunState(input: CommitRunStateInput): Promise<string> {
     if (!input.expectedTip.trim())
       throw new TypeError("expectedTip must be non-empty.");
@@ -217,17 +372,44 @@ export class GitHubStateBranchStore {
     ) {
       throw new TypeError("State/lease repository does not match this store.");
     }
-    if (input.lease && input.state.runId !== input.lease.ownerRunId) {
+    if (input.preserveRepositoryLease && input.lease)
+      throw new TypeError(
+        "A run cannot preserve and update the repository lease together.",
+      );
+    if (input.runScopedAuthority && (input.lease || input.preserveRepositoryLease))
+      throw new TypeError(
+        "Run-scoped authority cannot read or update the repository lock.",
+      );
+    if (input.lease && input.state.runId !== input.lease.ownerRunId)
       throw new TypeError(
         "Run state does not own the supplied repository lease.",
       );
-    }
     if (input.lease) validateRepositoryLease(input.lease);
-    if (Boolean(input.state.lease) !== Boolean(input.lease)) {
+    if (input.runScopedAuthority) {
+      if (input.state.authorityMode !== "run-scoped")
+        throw new TypeError("Run-scoped commit requires run-scoped state.");
+      if (input.state.lease) {
+        if (input.state.lease.ownerRunId !== input.state.runId)
+          throw new TypeError(
+            "Run-scoped authority identity does not match run state.",
+          );
+      } else if (
+        input.state.status !== "completed" &&
+        input.state.status !== "cancelled"
+      ) {
+        throw new TypeError(
+          "Active run-scoped state requires its own embedded authority record.",
+        );
+      }
+    } else if (Boolean(input.state.lease) !== Boolean(input.lease)) {
       throw new TypeError(
         "Snapshot lease and supplied lease presence must match.",
       );
     }
+    if (input.preserveRepositoryLease && !input.state.leaseBinding)
+      throw new TypeError(
+        "Only an orchestration-bound run may preserve the repository lease.",
+      );
 
     const commit = await this.#getCommit(input.expectedTip, input.signal);
     const runId = input.state.runId;
@@ -255,7 +437,12 @@ export class GitHubStateBranchStore {
           sha: await this.#createBlob(file.content, input.signal),
         })),
       );
-    if (!input.lease) treeEntries.push({ path: leasePath(), sha: null });
+    if (
+      !input.runScopedAuthority &&
+      !input.lease &&
+      !input.preserveRepositoryLease
+    )
+      treeEntries.push({ path: leasePath(), sha: null });
     const treeSha = await this.#createTree(
       commit.tree.sha,
       treeEntries,
@@ -336,7 +523,7 @@ export class GitHubStateBranchStore {
     const response = await this.#transport.request<CreatedShaResponse>({
       method: "POST",
       path,
-      body: { message, tree, parents },
+      body: { message: sanitizeStateCommitMessage(message), tree, parents },
       ...(signal ? { signal } : {}),
     });
     return requireGitHubSuccess(response, path, [201]).sha;
@@ -400,6 +587,29 @@ function parseEventJournal(text: string): RunEvent[] {
     });
 }
 
+function parseOrchestrationJournal(text: string): OrchestrationEvent[] {
+  if (!text.trim()) return [];
+  return text
+    .trimEnd()
+    .split("\n")
+    .map((line, index) => {
+      const value = parseJson(
+        line,
+        `orchestration journal line ${index + 1}`,
+      );
+      if (
+        !value ||
+        typeof value !== "object" ||
+        Array.isArray(value) ||
+        (value as { schema?: unknown }).schema !==
+          "forgedock.orchestration-event/v1"
+      ) {
+        throw new TypeError("Invalid orchestration event journal entry.");
+      }
+      return value as unknown as OrchestrationEvent;
+    });
+}
+
 type JsonValue =
   | null
   | boolean
@@ -429,6 +639,10 @@ function isJsonValue(value: unknown): value is JsonValue {
   return Object.values(value as Record<string, unknown>).every(isJsonValue);
 }
 
+function sanitizeStateCommitMessage(message: string): string {
+  return message.replace(/#(?=\d)/g, "");
+}
+
 function encodePath(value: string): string {
   return value.split("/").map(encodeURIComponent).join("/");
 }
@@ -444,6 +658,14 @@ function runEventsPath(runId: string): string {
 
 function runSnapshotPath(runId: string): string {
   return `${STATE_ROOT}/runs/${runId}/snapshot.json`;
+}
+
+function orchestrationEventsPath(orchestrationId: string): string {
+  return `${STATE_ROOT}/orchestrations/${orchestrationId}/events.ndjson`;
+}
+
+function orchestrationSnapshotPath(orchestrationId: string): string {
+  return `${STATE_ROOT}/orchestrations/${orchestrationId}/snapshot.json`;
 }
 
 function leasePath(): string {

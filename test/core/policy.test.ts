@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   applyLocalOverrides,
   canAutoMerge,
+  isGitHubCiRequired,
   isProtectedBranch,
   parseForgePolicy,
   PolicyValidationError,
@@ -23,6 +24,12 @@ const rawPolicy = {
     autoMergeIntegration: true,
   },
   verification: {
+    github: {
+      required: true,
+      requiredBranches: ["main"],
+      waitTimeoutMs: 1_800_000,
+      pollIntervalMs: 10_000,
+    },
     commands: {
       test: { argv: ["npm", "test"], required: true, timeoutMs: 600_000 },
     },
@@ -35,8 +42,32 @@ test("tracked policy enables only non-protected integration auto-merge", () => {
   const policy = parseForgePolicy(rawPolicy);
   assert.equal(canAutoMerge(policy, "staging"), true);
   assert.equal(canAutoMerge(policy, "milestone/auth"), true);
+  assert.equal(canAutoMerge(policy, "release/1.0"), false);
   assert.equal(canAutoMerge(policy, "main"), false);
   assert.equal(isProtectedBranch(policy, "main"), true);
+  assert.equal(isGitHubCiRequired(policy, "main"), true);
+  assert.equal(isGitHubCiRequired(policy, "staging"), false);
+  assert.equal(policy.verification.commands.test?.cwd, ".");
+  assert.equal(policy.subagents.reviewerTimeoutMs, 900_000);
+});
+
+test("verification command cwd is portable, relative, and normalized", () => {
+  const withCwd = (cwd: string) => ({
+    ...structuredClone(rawPolicy),
+    verification: {
+      ...structuredClone(rawPolicy.verification),
+      commands: {
+        test: { ...rawPolicy.verification.commands.test, cwd },
+      },
+    },
+  });
+  assert.equal(
+    parseForgePolicy(withCwd("./web")).verification.commands.test?.cwd,
+    "web",
+  );
+
+  for (const cwd of ["/tmp", "C:/tmp", "\\\\server\\share", "../web", "web/../api", "web\\api", "bad\0path"])
+    assert.throws(() => parseForgePolicy(withCwd(cwd)), PolicyValidationError);
 });
 
 test("local overrides can only tighten tracked policy", () => {

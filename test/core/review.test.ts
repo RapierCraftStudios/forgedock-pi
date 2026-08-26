@@ -54,8 +54,12 @@ function finding(overrides: Partial<ReviewFinding> = {}): ReviewFinding {
 
 test("clean integration review is approved", () => {
   assert.deepEqual(evaluateReviewGate(input()), {
+    headSha: "head",
+    baseSha: "base",
     decision: "approved",
     blockingFindingIds: [],
+    followUpFindingIds: [],
+    checkResults: [{ name: "test", required: true, status: "passed", exitCode: 0 }],
     reasons: [],
   });
 });
@@ -87,8 +91,32 @@ test("blocking findings request changes while likely findings do not", () => {
   );
   assert.equal(
     evaluateReviewGate(input({ findings: [likely] })).decision,
-    "approved",
+    "approved-with-follow-ups",
   );
+});
+
+test("verification distinguishes absent, unconfigured, and policy-exempt suites", () => {
+  assert.equal(evaluateReviewGate(input({ checks: [] })).decision, "blocked");
+  assert.equal(
+    evaluateReviewGate(
+      input({
+        checks: [
+          { name: "github:dogfood", required: true, status: "not-configured" },
+        ],
+      }),
+    ).decision,
+    "blocked",
+  );
+  const exempt = evaluateReviewGate(
+    input({
+      checks: [
+        { name: "local verification", required: false, status: "not-configured" },
+        { name: "github:staging", required: false, status: "policy-exempt" },
+      ],
+    }),
+  );
+  assert.equal(exempt.decision, "approved");
+  assert.equal(exempt.checkResults[1]?.status, "policy-exempt");
 });
 
 test("protected branches always require a human", () => {
@@ -96,4 +124,10 @@ test("protected branches always require a human", () => {
     input({ baseBranch: "main", autoMergeAuthorized: true }),
   );
   assert.equal(result.decision, "needs-human");
+});
+
+test("disabled auto-merge on an integration branch requires a human", () => {
+  const result = evaluateReviewGate(input({ autoMergeAuthorized: false }));
+  assert.equal(result.decision, "needs-human");
+  assert.ok(result.reasons.some((reason) => reason.includes("staging")));
 });

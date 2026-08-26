@@ -32,6 +32,15 @@ class ProjectionTransport implements GitHubTransport {
       status = 201;
       data = comment;
     } else if (
+      request.method === "PATCH" &&
+      request.path.includes("/issues/comments/")
+    ) {
+      const id = Number(request.path.split("/").at(-1));
+      const comment = this.comments.find((entry) => entry.id === id);
+      if (!comment) throw new Error(`Missing comment ${id}`);
+      comment.body = (request.body as { body: string }).body;
+      data = comment;
+    } else if (
       request.method === "GET" &&
       /\/issues\/\d+$/.test(request.path)
     ) {
@@ -89,8 +98,99 @@ test("issue projection is marker-idempotent and only adds missing labels", async
   assert.deepEqual(first.labelsAdded, ["workflow:investigating"]);
   assert.equal(transport.labels.has("workflow:investigating"), true);
 
+  transport.labels.add("priority:P1");
+  await projector.setWorkflowLabel(42, "workflow:merged");
   await projector.setWorkflowLabel(42, "workflow:merged");
   assert.equal(transport.labels.has("workflow:investigating"), false);
   assert.equal(transport.labels.has("workflow:merged"), true);
   assert.equal(transport.labels.has("bug"), true);
+  assert.equal(transport.labels.has("priority:P1"), true);
+});
+
+test("logical issue artifacts are idempotent by revision and supersede older revisions", async () => {
+  const transport = new ProjectionTransport();
+  const projector = new GitHubIssueProjector(transport, "owner/repo");
+  const first = await projector.postArtifact({
+    issueNumber: 42,
+    runId: "run-1",
+    eventId: "head-a",
+    artifactKey: "review-started",
+    markdown: "Review A",
+  });
+  const repeated = await projector.postArtifact({
+    issueNumber: 42,
+    runId: "run-1",
+    eventId: "head-a",
+    artifactKey: "review-started",
+    markdown: "Review A",
+  });
+  const second = await projector.postArtifact({
+    issueNumber: 42,
+    runId: "run-1",
+    eventId: "head-b",
+    artifactKey: "review-started",
+    markdown: "Review B",
+  });
+  assert.equal(first, repeated);
+  assert.notEqual(first, second);
+  assert.equal(transport.commentPosts, 2);
+  assert.match(
+    transport.comments[1]?.body ?? "",
+    /FORGEDOCK-ARTIFACT-IDENTITY run=run-1 key=review-started/,
+  );
+  assert.match(
+    transport.comments[1]?.body ?? "",
+    /FORGEDOCK-SUPERSEDES comment=1/,
+  );
+});
+
+test("artifact identity is scoped to the Forge run even when node revisions repeat", async () => {
+  const transport = new ProjectionTransport();
+  const projector = new GitHubIssueProjector(transport, "owner/repo");
+  const oldRun = await projector.postArtifact({
+    issueNumber: 42,
+    runId: "run-old",
+    eventId: "node-resolve-1",
+    artifactKey: "node-resolve",
+    markdown: "Old resolve",
+  });
+  const newRun = await projector.postArtifact({
+    issueNumber: 42,
+    runId: "run-new",
+    eventId: "node-resolve-1",
+    artifactKey: "node-resolve",
+    markdown: "New resolve",
+  });
+  const repeated = await projector.postArtifact({
+    issueNumber: 42,
+    runId: "run-new",
+    eventId: "node-resolve-1",
+    artifactKey: "node-resolve",
+    markdown: "New resolve",
+  });
+  assert.notEqual(oldRun, newRun);
+  assert.equal(newRun, repeated);
+  assert.equal(transport.commentPosts, 2);
+  assert.match(transport.comments[1]?.body ?? "", /FORGEDOCK-ARTIFACT:run-new:node-resolve-1:node-resolve/);
+  assert.match(transport.comments[1]?.body ?? "", /New resolve/);
+});
+
+test("comment append is idempotent when the marker is already present", async () => {
+  const transport = new ProjectionTransport();
+  transport.comments.push({
+    id: 1,
+    body: "<!-- FORGE:BUILDER -->\nImplementation\n\n<!-- FORGE:BUILDER:COMPLETE -->\n",
+  });
+  const projector = new GitHubIssueProjector(transport, "owner/repo");
+  const id = await projector.appendToLatestComment({
+    issueNumber: 42,
+    marker: "<!-- FORGE:BUILDER -->",
+    append: "<!-- FORGE:BUILDER:COMPLETE -->",
+    skipIfContains: "<!-- FORGE:BUILDER:COMPLETE -->",
+  });
+  assert.equal(id, 1);
+  assert.equal(
+    transport.comments[0]?.body.match(/FORGE:BUILDER:COMPLETE/g)?.length,
+    1,
+  );
 });

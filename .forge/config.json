@@ -1,0 +1,58 @@
+{
+  "schema": "forgedock.config/v1",
+  "repository": {
+    "provider": "github",
+    "name": "RapierCraftStudios/forgedock-pi"
+  },
+  "state": {
+    "branch": "forgedock/state/v1"
+  },
+  "branches": {
+    "integration": [
+      "staging"
+    ],
+    "protected": [
+      "main"
+    ],
+    "autoMergeIntegration": true
+  },
+  "verification": {
+    "github": {
+      "required": true,
+      "requiredBranches": [
+        "staging"
+      ],
+      "waitTimeoutMs": 1800000,
+      "pollIntervalMs": 10000
+    },
+    "commands": {
+      "check": {
+        "argv": [
+          "npm",
+          "run",
+          "check"
+        ],
+        "cwd": ".",
+        "required": true,
+        "timeoutMs": 600000
+      }
+    }
+  },
+  "review": {
+    "required": [
+      "forge-review-correctness",
+      "forge-review-security"
+    ],
+    "maxRounds": 3
+  },
+  "orchestration": {
+    "maxConcurrent": 16,
+    "maxIssues": 20
+  },
+  "subagents": {
+    "maxConcurrent": 2,
+    "maxDepth": 2,
+    "workOnTimeoutMs": 14400000,
+    "reviewerTimeoutMs": 900000
+  }
+}

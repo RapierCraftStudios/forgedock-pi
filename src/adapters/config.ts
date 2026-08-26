@@ -71,6 +71,28 @@ function parseLocalOverrides(value: unknown): LocalForgeOverrides {
     overrides.branches =
       autoMerge === false ? { autoMergeIntegration: false } : {};
   }
+  if (root.orchestration !== undefined) {
+    if (
+      !root.orchestration ||
+      typeof root.orchestration !== "object" ||
+      Array.isArray(root.orchestration)
+    )
+      throw new TypeError("local orchestration must be an object");
+    const maxConcurrent = (root.orchestration as Record<string, unknown>)
+      .maxConcurrent;
+    if (
+      maxConcurrent !== undefined &&
+      (!Number.isSafeInteger(maxConcurrent) || (maxConcurrent as number) < 1)
+    ) {
+      throw new TypeError(
+        "local orchestration.maxConcurrent must be a positive safe integer",
+      );
+    }
+    overrides.orchestration =
+      maxConcurrent === undefined
+        ? {}
+        : { maxConcurrent: maxConcurrent as number };
+  }
   if (root.subagents !== undefined) {
     if (
       !root.subagents ||

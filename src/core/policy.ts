@@ -1,7 +1,10 @@
+import { posix } from "node:path";
+
 export const FORGEDOCK_CONFIG_SCHEMA = "forgedock.config/v1" as const;
 
 export interface VerificationCommandPolicy {
   argv: readonly string[];
+  cwd: string;
   required: boolean;
   timeoutMs: number;
 }
@@ -23,15 +26,27 @@ export interface ForgePolicy {
     autoMergeIntegration: boolean;
   };
   verification: {
+    github: {
+      required: boolean;
+      requiredBranches: readonly string[];
+      waitTimeoutMs: number;
+      pollIntervalMs: number;
+    };
     commands: Readonly<Record<string, VerificationCommandPolicy>>;
   };
   review: {
     required: readonly string[];
     maxRounds: number;
   };
+  orchestration: {
+    maxConcurrent: number;
+    maxIssues: number;
+  };
   subagents: {
     maxConcurrent: number;
     maxDepth: number;
+    workOnTimeoutMs: number;
+    reviewerTimeoutMs: number;
   };
 }
 
@@ -41,6 +56,9 @@ export interface LocalForgeOverrides {
   };
   verification?: {
     commands?: Readonly<Record<string, { timeoutMs?: number }>>;
+  };
+  orchestration?: {
+    maxConcurrent?: number;
   };
   subagents?: {
     maxConcurrent?: number;
@@ -104,9 +122,85 @@ function stringArray(value: unknown, path: string): string[] {
   ];
 }
 
+export function normalizeVerificationCommandCwd(
+  value: unknown,
+  path = "verification command cwd",
+): string {
+  if (value === undefined) return ".";
+  const cwd = string(value, path);
+  if (cwd.includes("\0"))
+    throw new PolicyValidationError(path, "must not contain NUL bytes");
+  if (cwd.includes("\\"))
+    throw new PolicyValidationError(
+      path,
+      "must use portable forward-slash separators",
+    );
+  if (
+    cwd.startsWith("/") ||
+    cwd.startsWith("//") ||
+    /^[A-Za-z]:/.test(cwd)
+  ) {
+    throw new PolicyValidationError(path, "must be repository-relative");
+  }
+  if (cwd.split("/").includes(".."))
+    throw new PolicyValidationError(path, "must not contain '..' traversal");
+  const normalized = posix.normalize(cwd);
+  if (
+    normalized === ".." ||
+    normalized.startsWith("../") ||
+    normalized.startsWith("/")
+  ) {
+    throw new PolicyValidationError(path, "must stay within the repository");
+  }
+  return normalized || ".";
+}
+
+function parseGitHubVerification(value: unknown): ForgePolicy["verification"]["github"] {
+  if (value === undefined)
+    return {
+      required: true,
+      requiredBranches: ["*"],
+      waitTimeoutMs: 1_800_000,
+      pollIntervalMs: 10_000,
+    };
+  const github = record(value, "verification.github");
+  return {
+    required:
+      github.required === undefined
+        ? true
+        : boolean(github.required, "verification.github.required"),
+    requiredBranches:
+      github.requiredBranches === undefined
+        ? ["*"]
+        : stringArray(
+            github.requiredBranches,
+            "verification.github.requiredBranches",
+          ),
+    waitTimeoutMs:
+      github.waitTimeoutMs === undefined
+        ? 1_800_000
+        : integer(
+            github.waitTimeoutMs,
+            "verification.github.waitTimeoutMs",
+            10_000,
+            7_200_000,
+          ),
+    pollIntervalMs:
+      github.pollIntervalMs === undefined
+        ? 10_000
+        : integer(
+            github.pollIntervalMs,
+            "verification.github.pollIntervalMs",
+            1_000,
+            60_000,
+          ),
+  };
+}
+
 function parseVerificationCommands(
   value: unknown,
 ): Record<string, VerificationCommandPolicy> {
+  if (value === undefined) return {};
   const source = record(value, "verification.commands");
   const commands: Record<string, VerificationCommandPolicy> = {};
   for (const [name, raw] of Object.entries(source)) {
@@ -123,6 +217,10 @@ function parseVerificationCommands(
     );
     commands[name] = {
       argv,
+      cwd: normalizeVerificationCommandCwd(
+        command.cwd,
+        `verification.commands.${name}.cwd`,
+      ),
       required: boolean(
         command.required,
         `verification.commands.${name}.required`,
@@ -134,12 +232,6 @@ function parseVerificationCommands(
         3_600_000,
       ),
     };
-  }
-  if (Object.keys(commands).length === 0) {
-    throw new PolicyValidationError(
-      "verification.commands",
-      "must define at least one approved command",
-    );
   }
   return commands;
 }
@@ -167,19 +259,24 @@ export function parseForgePolicy(value: unknown): ForgePolicy {
   const branches = record(root.branches, "branches");
   const verification = record(root.verification, "verification");
   const review = record(root.review, "review");
+  const orchestration =
+    root.orchestration === undefined
+      ? undefined
+      : record(root.orchestration, "orchestration");
   const subagents = record(root.subagents, "subagents");
-  const leaseSeconds = integer(
-    state.leaseSeconds,
-    "state.leaseSeconds",
-    30,
-    86_400,
-  );
-  const heartbeatSeconds = integer(
-    state.heartbeatSeconds,
-    "state.heartbeatSeconds",
-    5,
-    leaseSeconds - 1,
-  );
+  const leaseSeconds =
+    state.leaseSeconds === undefined
+      ? 31_536_000
+      : integer(state.leaseSeconds, "state.leaseSeconds", 30, 31_536_000);
+  const heartbeatSeconds =
+    state.heartbeatSeconds === undefined
+      ? 60
+      : integer(
+          state.heartbeatSeconds,
+          "state.heartbeatSeconds",
+          5,
+          leaseSeconds - 1,
+        );
 
   return {
     schema: FORGEDOCK_CONFIG_SCHEMA,
@@ -198,6 +295,7 @@ export function parseForgePolicy(value: unknown): ForgePolicy {
       ),
     },
     verification: {
+      github: parseGitHubVerification(verification.github),
       commands: parseVerificationCommands(verification.commands),
     },
     review: {
@@ -206,6 +304,26 @@ export function parseForgePolicy(value: unknown): ForgePolicy {
         review.maxRounds === undefined
           ? 3
           : integer(review.maxRounds, "review.maxRounds", 1, 5),
+    },
+    orchestration: {
+      maxConcurrent:
+        orchestration?.maxConcurrent === undefined
+          ? 2
+          : integer(
+              orchestration.maxConcurrent,
+              "orchestration.maxConcurrent",
+              1,
+              16,
+            ),
+      maxIssues:
+        orchestration?.maxIssues === undefined
+          ? 20
+          : integer(
+              orchestration.maxIssues,
+              "orchestration.maxIssues",
+              1,
+              100,
+            ),
     },
     subagents: {
       maxConcurrent: integer(
@@ -218,6 +336,24 @@ export function parseForgePolicy(value: unknown): ForgePolicy {
         subagents.maxDepth === undefined
           ? 2
           : integer(subagents.maxDepth, "subagents.maxDepth", 2, 4),
+      workOnTimeoutMs:
+        subagents.workOnTimeoutMs === undefined
+          ? 14_400_000
+          : integer(
+              subagents.workOnTimeoutMs,
+              "subagents.workOnTimeoutMs",
+              600_000,
+              21_600_000,
+            ),
+      reviewerTimeoutMs:
+        subagents.reviewerTimeoutMs === undefined
+          ? 900_000
+          : integer(
+              subagents.reviewerTimeoutMs,
+              "subagents.reviewerTimeoutMs",
+              300_000,
+              7_200_000,
+            ),
     },
   };
 }
@@ -279,17 +415,41 @@ export function canAutoMerge(policy: ForgePolicy, branch: string): boolean {
   );
 }
 
+export function isGitHubCiRequired(
+  policy: ForgePolicy,
+  branch: string,
+): boolean {
+  return (
+    policy.verification.github.required &&
+    policy.verification.github.requiredBranches.some((pattern) =>
+      branchMatches(pattern, branch),
+    )
+  );
+}
+
 export function applyLocalOverrides(
   policy: ForgePolicy,
   overrides: LocalForgeOverrides,
 ): ForgePolicy {
   const maxConcurrent = overrides.subagents?.maxConcurrent;
+  const orchestrationMaxConcurrent =
+    overrides.orchestration?.maxConcurrent;
   if (
     maxConcurrent !== undefined &&
     (!Number.isSafeInteger(maxConcurrent) || maxConcurrent < 1)
   ) {
     throw new PolicyValidationError(
       "local.subagents.maxConcurrent",
+      "must be a positive safe integer",
+    );
+  }
+  if (
+    orchestrationMaxConcurrent !== undefined &&
+    (!Number.isSafeInteger(orchestrationMaxConcurrent) ||
+      orchestrationMaxConcurrent < 1)
+  ) {
+    throw new PolicyValidationError(
+      "local.orchestration.maxConcurrent",
       "must be a positive safe integer",
     );
   }
@@ -330,7 +490,17 @@ export function applyLocalOverrides(
           ? false
           : policy.branches.autoMergeIntegration,
     },
-    verification: { commands },
+    verification: { ...policy.verification, commands },
+    orchestration: {
+      ...policy.orchestration,
+      maxConcurrent:
+        orchestrationMaxConcurrent === undefined
+          ? policy.orchestration.maxConcurrent
+          : Math.min(
+              policy.orchestration.maxConcurrent,
+              orchestrationMaxConcurrent,
+            ),
+    },
     subagents: {
       ...policy.subagents,
       maxConcurrent:

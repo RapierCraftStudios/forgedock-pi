@@ -8,11 +8,16 @@ import {
   type PhaseQueuedPayload,
   type PhaseStartedPayload,
   type PhaseStoppedPayload,
+  type NodeEventPayload,
   type RunCreatedPayload,
   type RunEvent,
   type RunPhase,
   validateRunEvent,
 } from "./events.ts";
+import {
+  type BuilderPathContract,
+  validateBuilderPathContract,
+} from "./builder-contract.ts";
 import { type RepositoryLease, validateRepositoryLease } from "./lease.ts";
 
 export const RUN_STATE_SCHEMA = "forgedock.run-state/v1" as const;
@@ -49,11 +54,28 @@ export interface PhaseState {
   attempts: readonly PhaseAttempt[];
 }
 
+export interface NodeState extends NodeEventPayload {
+  status:
+    | "queued"
+    | "running"
+    | "completed"
+    | "failed"
+    | "blocked"
+    | "needs-human";
+  startedAt?: string;
+  finishedAt?: string;
+}
+
 export interface RecordedEffect {
   effectType: EffectRecordedPayload["effectType"];
   effectId: string;
   digest: string;
   eventId: string;
+}
+
+export interface RunLeaseBinding {
+  ownerRunId: string;
+  epoch: number;
 }
 
 export interface RunState {
@@ -64,14 +86,18 @@ export interface RunState {
   integrationBranch: string;
   protectedBranch: string;
   status: RunStatus;
+  authorityMode?: "run-scoped" | "legacy-lease";
   sequence: number;
   lastEventHash: string;
   lease?: RepositoryLease;
+  leaseBinding?: RunLeaseBinding;
   phases: Partial<Record<RunPhase, PhaseState>>;
+  nodes: Record<string, NodeState>;
   effects: Record<string, RecordedEffect>;
   idempotencyKeys: Record<string, string>;
   eventIds: Record<string, true>;
   outcome?: "merged" | "closed";
+  pullNumber?: number;
   cancellationReason?: string;
 }
 
@@ -181,6 +207,22 @@ function cloneState(state: RunState): RunState {
   return {
     ...state,
     phases,
+    nodes: Object.fromEntries(
+      Object.entries(state.nodes).map(([id, node]) => [
+        id,
+        {
+          ...node,
+          ...(node.evidence ? { evidence: [...node.evidence] } : {}),
+          ...(node.verificationResults
+            ? {
+                verificationResults: node.verificationResults.map((result) => ({
+                  ...result,
+                })),
+              }
+            : {}),
+        },
+      ]),
+    ),
     effects: { ...state.effects },
     idempotencyKeys: { ...state.idempotencyKeys },
     eventIds: { ...state.eventIds },
@@ -222,21 +264,23 @@ function assertEnvelopeContinuation(state: RunState, event: RunEvent): void {
 }
 
 function assertLeaseEpoch(state: RunState, event: RunEvent): void {
-  if (!state.lease)
+  const epoch = state.lease?.epoch ?? state.leaseBinding?.epoch;
+  const ownerRunId = state.lease?.ownerRunId ?? state.leaseBinding?.ownerRunId;
+  if (epoch === undefined || ownerRunId === undefined)
     throw new StateTransitionError(
       "missing-lease",
-      `${event.type} requires an active repository lease.`,
+      `${event.type} requires active repository lease authority.`,
     );
-  if (event.actor.leaseEpoch !== state.lease.epoch) {
+  if (event.actor.leaseEpoch !== epoch) {
     throw new StateTransitionError(
       "stale-lease-epoch",
-      `Event lease epoch ${event.actor.leaseEpoch} does not match ${state.lease.epoch}.`,
+      `Event lease epoch ${event.actor.leaseEpoch} does not match ${epoch}.`,
     );
   }
-  if (event.runId !== state.lease.ownerRunId) {
+  if (state.lease && event.runId !== ownerRunId) {
     throw new StateTransitionError(
       "lease-owner-mismatch",
-      "Event run does not own the repository lease.",
+      "Standalone event run does not own the repository lease.",
     );
   }
 }
@@ -273,6 +317,11 @@ function replaceAttempt(
 }
 
 function applyLeaseEvent(state: RunState, event: RunEvent): void {
+  if (state.leaseBinding)
+    throw new StateTransitionError(
+      "bound-run-lease-mutation",
+      "An orchestration-bound child cannot mutate the repository lease.",
+    );
   const lease = payloadRecord(event).lease;
   validateRepositoryLease(lease);
   if (
@@ -327,6 +376,11 @@ function applyLeaseEvent(state: RunState, event: RunEvent): void {
 }
 
 function applyLeaseRelease(state: RunState, event: RunEvent): void {
+  if (state.leaseBinding)
+    throw new StateTransitionError(
+      "bound-run-lease-release",
+      "An orchestration-bound child cannot release the repository lease.",
+    );
   assertLeaseEpoch(state, event);
   if (state.status !== "completed" && state.status !== "cancelled") {
     throw new StateTransitionError(
@@ -483,6 +537,218 @@ function applyPhaseStopped(state: RunState, event: RunEvent): void {
         : "failed";
 }
 
+function applyNodeEvent(state: RunState, event: RunEvent): void {
+  assertLeaseEpoch(state, event);
+  const record = payloadRecord(event) as Partial<NodeEventPayload>;
+  if (
+    typeof record.nodeId !== "string" ||
+    !record.nodeId.trim() ||
+    typeof record.node !== "string" ||
+    !record.node.trim()
+  )
+    throw new StateTransitionError(
+      "invalid-node",
+      "Node events require nodeId and node.",
+    );
+  if (!Number.isSafeInteger(record.attempt) || (record.attempt as number) < 1)
+    throw new StateTransitionError(
+      "invalid-node",
+      "Node attempt must be positive.",
+    );
+  const prior = state.nodes[record.nodeId];
+  if (
+    record.round !== undefined &&
+    (!Number.isSafeInteger(record.round) || (record.round as number) < 1)
+  )
+    throw new StateTransitionError(
+      "invalid-node",
+      `Node ${record.nodeId} round must be positive.`,
+    );
+  const statusByType = {
+    "node.queued": "queued",
+    "node.started": "running",
+    "node.resumed": "running",
+    "node.completed": "completed",
+    "node.failed": "failed",
+    "node.blocked": "blocked",
+    "node.needs-human": "needs-human",
+    "reviewer.artifact-published": "completed",
+  } as const;
+  const status = statusByType[event.type as keyof typeof statusByType];
+  if (!status)
+    throw new StateTransitionError(
+      "invalid-node-event",
+      `Unsupported node event ${event.type}.`,
+    );
+  if (event.type === "node.queued") {
+    if (prior && prior.status === "running")
+      throw new StateTransitionError(
+        "node-running",
+        `Node ${record.nodeId} is already running.`,
+      );
+    if (prior && prior.status === "completed")
+      throw new StateTransitionError(
+        "node-completed",
+        `Node ${record.nodeId} is already complete.`,
+      );
+    if (prior && ["failed", "blocked", "needs-human"].includes(prior.status))
+      throw new StateTransitionError(
+        "node-terminal",
+        `Node ${record.nodeId} is immutable after ${prior.status}.`,
+      );
+  } else if (
+    !prior ||
+    prior.status !== (event.type === "node.started" ? "queued" : "running")
+  ) {
+    throw new StateTransitionError(
+      "illegal-node-transition",
+      `Node ${record.nodeId} cannot transition to ${status}.`,
+    );
+  }
+  if (event.type === "node.started" && record.launchIntent) {
+    if (
+      typeof record.subagentRunId !== "string" ||
+      typeof record.resultPath !== "string" ||
+      typeof record.launchNonce !== "string"
+    )
+      throw new StateTransitionError(
+        "invalid-launch-intent",
+        `Node ${record.nodeId} launch intent requires sentinel, resultPath, and nonce.`,
+      );
+  }
+  if (event.type === "reviewer.artifact-published") {
+    if (
+      prior?.node !== "review-correctness" &&
+      prior?.node !== "review-security"
+    )
+      throw new StateTransitionError(
+        "invalid-reviewer-artifact",
+        `Node ${record.nodeId} is not a reviewer node.`,
+      );
+    if (
+      !Number.isSafeInteger(record.publishedCommentId) ||
+      (record.publishedCommentId as number) < 1
+    )
+      throw new StateTransitionError(
+        "invalid-reviewer-artifact",
+        `Node ${record.nodeId} requires a published GitHub comment ID.`,
+      );
+  }
+  if (event.type === "node.resumed") {
+    const duplicateReceiptBinding =
+      record.launchReceipt === true &&
+      prior?.launchReceipt === true &&
+      prior.subagentRunId === record.subagentRunId &&
+      prior.previousSubagentRunId === record.previousSubagentRunId &&
+      prior.launchNonce === record.launchNonce;
+    if (
+      typeof record.subagentRunId !== "string" ||
+      typeof record.previousSubagentRunId !== "string" ||
+      (!duplicateReceiptBinding &&
+        record.previousSubagentRunId !== prior?.subagentRunId)
+    )
+      throw new StateTransitionError(
+        "invalid-node-resume",
+        `Node ${record.nodeId} resume must replace its current subagent run.`,
+      );
+    const launchReceipt = record.launchReceipt === true;
+    if (launchReceipt && !prior?.launchIntent)
+      throw new StateTransitionError(
+        "invalid-node-resume",
+        `Node ${record.nodeId} receipt cannot bind without a durable launch intent.`,
+      );
+    const expectedRetries = launchReceipt
+      ? (prior.transportRetries ?? 0)
+      : (prior.transportRetries ?? 0) + 1;
+    if (record.transportRetries !== expectedRetries)
+      throw new StateTransitionError(
+        "invalid-node-resume",
+        `Node ${record.nodeId} expected transport retry ${expectedRetries}.`,
+      );
+  }
+  state.nodes[record.nodeId] = {
+    ...(prior ?? {}),
+    nodeId: record.nodeId,
+    node: record.node,
+    attempt: record.attempt as number,
+    ...(Number.isSafeInteger(record.round)
+      ? { round: record.round as number }
+      : {}),
+    status,
+    ...(typeof record.headSha === "string" ? { headSha: record.headSha } : {}),
+    ...(typeof record.baseSha === "string" ? { baseSha: record.baseSha } : {}),
+    ...(typeof record.subagentRunId === "string"
+      ? { subagentRunId: record.subagentRunId }
+      : {}),
+    ...(typeof record.previousSubagentRunId === "string"
+      ? { previousSubagentRunId: record.previousSubagentRunId }
+      : {}),
+    ...(Number.isSafeInteger(record.transportRetries) &&
+    (record.transportRetries as number) >= 0
+      ? { transportRetries: record.transportRetries as number }
+      : {}),
+    ...(typeof record.resultPath === "string"
+      ? { resultPath: record.resultPath }
+      : {}),
+    ...(typeof record.launchNonce === "string"
+      ? { launchNonce: record.launchNonce }
+      : {}),
+    ...(record.launchIntent === true ? { launchIntent: true } : {}),
+    ...(record.launchReceipt === true ? { launchReceipt: true } : {}),
+    ...(record.reviewerResult && typeof record.reviewerResult === "object"
+      ? { reviewerResult: record.reviewerResult }
+      : {}),
+    ...(Number.isSafeInteger(record.publishedCommentId)
+      ? { publishedCommentId: record.publishedCommentId as number }
+      : {}),
+    ...(record.finalReviewDecision &&
+    typeof record.finalReviewDecision === "object"
+      ? { finalReviewDecision: record.finalReviewDecision }
+      : {}),
+    ...(Array.isArray(record.verificationResults)
+      ? {
+          verificationResults: record.verificationResults.map((result) => ({
+            ...result,
+          })),
+        }
+      : {}),
+    ...validatedBuilderContract(record.builderContract),
+    ...(typeof record.outcome === "string" ? { outcome: record.outcome } : {}),
+    ...(Array.isArray(record.evidence)
+      ? {
+          evidence: record.evidence.filter(
+            (entry): entry is string => typeof entry === "string",
+          ),
+        }
+      : {}),
+    ...(typeof record.reason === "string" ? { reason: record.reason } : {}),
+    ...(status === "running" && !prior?.startedAt
+      ? { startedAt: event.occurredAt }
+      : {}),
+    ...(status !== "queued" && status !== "running"
+      ? { finishedAt: event.occurredAt }
+      : {}),
+  };
+  if (status === "failed") state.status = "failed";
+  if (status === "blocked") state.status = "blocked";
+  if (status === "needs-human") state.status = "needs-human";
+}
+
+function validatedBuilderContract(
+  value: unknown,
+): { builderContract?: BuilderPathContract } {
+  if (value === undefined) return {};
+  try {
+    validateBuilderPathContract(value);
+  } catch (error) {
+    throw new StateTransitionError(
+      "invalid-builder-contract",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+  return { builderContract: value };
+}
+
 function applyEffect(state: RunState, event: RunEvent): void {
   assertLeaseEpoch(state, event);
   const record = payloadRecord(event);
@@ -538,6 +804,13 @@ function createInitialState(event: RunEvent): RunState {
   const issueNumber = requirePositiveInteger(payload, "issueNumber");
   const integrationBranch = requireString(payload, "integrationBranch");
   const protectedBranch = requireString(payload, "protectedBranch");
+  const orchestrationRunId =
+    typeof payload.orchestrationRunId === "string"
+      ? requireString(payload, "orchestrationRunId")
+      : undefined;
+  const leaseEpoch = orchestrationRunId
+    ? requirePositiveInteger(payload, "leaseEpoch")
+    : undefined;
   const eventHash = hashRunEvent(event);
   return {
     schema: RUN_STATE_SCHEMA,
@@ -547,9 +820,17 @@ function createInitialState(event: RunEvent): RunState {
     integrationBranch,
     protectedBranch,
     status: "active",
+    authorityMode:
+      payload.authorityMode === "run-scoped"
+        ? "run-scoped"
+        : "legacy-lease",
+    ...(orchestrationRunId && leaseEpoch
+      ? { leaseBinding: { ownerRunId: orchestrationRunId, epoch: leaseEpoch } }
+      : {}),
     sequence: event.sequence,
     lastEventHash: eventHash,
     phases: {},
+    nodes: {},
     effects: {},
     idempotencyKeys: { [event.idempotencyKey]: event.eventId },
     eventIds: { [event.eventId]: true },
@@ -563,6 +844,13 @@ export function applyRunEvent(
   validateRunEvent(event);
   if (!current) return createInitialState(event);
   assertEnvelopeContinuation(current, event);
+  if (current.status === "completed" || current.status === "cancelled") {
+    if (event.type !== "lease.released")
+      throw new StateTransitionError(
+        "terminal-run",
+        "Terminal runs reject further mutations.",
+      );
+  }
   const state = cloneState(current);
 
   switch (event.type) {
@@ -594,34 +882,92 @@ export function applyRunEvent(
     case "phase.abandoned":
       applyPhaseStopped(state, event);
       break;
+    case "node.queued":
+    case "node.started":
+    case "node.resumed":
+    case "node.completed":
+    case "node.failed":
+    case "node.blocked":
+    case "node.needs-human":
+    case "reviewer.artifact-published":
+      applyNodeEvent(state, event);
+      break;
     case "effect.recorded":
       applyEffect(state, event);
       break;
     case "run.completed": {
       assertLeaseEpoch(state, event);
+      if (state.status !== "active")
+        throw new StateTransitionError(
+          "run-not-active",
+          "Only an active nonterminal run can complete.",
+        );
       const cleanup = currentAttempt(state, "cleanup");
-      if (!cleanup || cleanup.status !== "completed") {
+      const cleanupNode = Object.values(state.nodes).find(
+        (node) => node.node === "cleanup" && node.status === "completed",
+      );
+      if ((!cleanup || cleanup.status !== "completed") && !cleanupNode) {
         throw new StateTransitionError(
           "cleanup-incomplete",
           "Run cannot complete before cleanup completes.",
         );
       }
-      const outcome = payloadRecord(event).outcome;
+      const payload = payloadRecord(event);
+      const outcome = payload.outcome;
       if (outcome !== "merged" && outcome !== "closed") {
         throw new StateTransitionError(
           "invalid-outcome",
           `Unsupported run outcome: ${String(outcome)}.`,
         );
       }
+      if (outcome === "merged") {
+        if (
+          !Number.isSafeInteger(payload.pullNumber) ||
+          (payload.pullNumber as number) < 1
+        )
+          throw new StateTransitionError(
+            "missing-pull-number",
+            "Merged completion requires a pull number.",
+          );
+        state.pullNumber = payload.pullNumber as number;
+      }
       state.status = "completed";
       state.outcome = outcome;
       break;
     }
-    case "run.cancelled":
+    case "run.cancelled": {
       assertLeaseEpoch(state, event);
+      const reason = requireString(payloadRecord(event), "reason");
+      for (const [phase, phaseState] of Object.entries(state.phases) as Array<
+        [RunPhase, PhaseState]
+      >) {
+        state.phases[phase] = {
+          phase,
+          attempts: phaseState.attempts.map((attempt) =>
+            attempt.status === "queued" || attempt.status === "running"
+              ? {
+                  ...attempt,
+                  status: "abandoned" as const,
+                  reason,
+                  finishedAt: event.occurredAt,
+                }
+              : attempt,
+          ),
+        };
+      }
+      for (const [nodeId, node] of Object.entries(state.nodes)) {
+        if (node.status !== "queued" && node.status !== "running") continue;
+        state.nodes[nodeId] = {
+          ...node,
+          status: "failed",
+          reason,
+          finishedAt: event.occurredAt,
+        };
+      }
       state.status = "cancelled";
-      state.cancellationReason = requireString(payloadRecord(event), "reason");
+      state.cancellationReason = reason;
       break;
+    }
   }
 
   state.sequence = event.sequence;

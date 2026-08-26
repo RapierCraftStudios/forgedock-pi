@@ -1,5 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 
+import type { BuilderPathContract } from "./builder-contract.ts";
+import type {
+  FinalReviewDecision,
+  VerificationResult,
+} from "./review.ts";
 import { FORGEDOCK_EVENT_SCHEMA } from "./version.ts";
 
 export const RUN_PHASES = [
@@ -42,6 +47,14 @@ export type RunEventType =
   | "phase.blocked"
   | "phase.needs-human"
   | "phase.abandoned"
+  | "node.queued"
+  | "node.started"
+  | "node.resumed"
+  | "node.completed"
+  | "node.failed"
+  | "node.blocked"
+  | "node.needs-human"
+  | "reviewer.artifact-published"
   | "effect.recorded"
   | "run.completed"
   | "run.cancelled";
@@ -57,6 +70,8 @@ export interface RunCreatedPayload {
   issueNumber: number;
   integrationBranch: string;
   protectedBranch: string;
+  orchestrationRunId?: string;
+  leaseEpoch?: number;
 }
 
 export interface PhaseQueuedPayload {
@@ -90,6 +105,30 @@ export interface PhaseStoppedPayload {
   reason: string;
 }
 
+export interface NodeEventPayload {
+  nodeId: string;
+  node: string;
+  attempt: number;
+  round?: number;
+  headSha?: string;
+  baseSha?: string;
+  subagentRunId?: string;
+  previousSubagentRunId?: string;
+  resultPath?: string;
+  launchNonce?: string;
+  launchIntent?: boolean;
+  launchReceipt?: boolean;
+  transportRetries?: number;
+  reviewerResult?: unknown;
+  publishedCommentId?: number;
+  finalReviewDecision?: FinalReviewDecision;
+  verificationResults?: readonly VerificationResult[];
+  builderContract?: BuilderPathContract;
+  outcome?: string;
+  evidence?: readonly string[];
+  reason?: string;
+}
+
 export interface EffectRecordedPayload {
   effectType:
     | "github-comment"
@@ -105,6 +144,7 @@ export interface EffectRecordedPayload {
 
 export interface RunCompletedPayload {
   outcome: "merged" | "closed";
+  pullNumber?: number;
 }
 
 export interface RunCancelledPayload {
@@ -117,6 +157,7 @@ export type RunEventPayload =
   | PhaseStartedPayload
   | PhaseCompletedPayload
   | PhaseStoppedPayload
+  | NodeEventPayload
   | EffectRecordedPayload
   | RunCompletedPayload
   | RunCancelledPayload
@@ -307,6 +348,14 @@ const RUN_EVENT_TYPES: ReadonlySet<RunEventType> = new Set([
   "phase.blocked",
   "phase.needs-human",
   "phase.abandoned",
+  "node.queued",
+  "node.started",
+  "node.resumed",
+  "node.completed",
+  "node.failed",
+  "node.blocked",
+  "node.needs-human",
+  "reviewer.artifact-published",
   "effect.recorded",
   "run.completed",
   "run.cancelled",
