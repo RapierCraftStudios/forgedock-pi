@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 22,
-  "lastEventHash": "sha256:b5abef5dc1f9d7ecb8bd43aa38ff0a55328c32965d60abc900d37bf379b3dcb0",
+  "sequence": 23,
+  "lastEventHash": "sha256:da71822c27fcafb5d939dcdd18087e80cb5be0055a89f3ee626200a156f3894a",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -163,16 +163,24 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 1",
-          "evidence": [],
+          "evidence": [
+            "PR #131 remains at unchanged frozen head 7c3f2f9465c4bcf026f499e869ff5ebd6e4460f6.",
+            "The trusted panel invocation exhausted the bounded retry allowance after six transient `pi-subagents RPC ping timed out` responses.",
+            "No substitute reviewers were launched and no reviewer result was produced.",
+            "Review identity is preserved; merge must remain blocked until a fresh parent-authorized review completes."
+          ],
           "inputArtifactHash": "verification-111-check-passed-7c3f2f9",
           "logicalNodeId": "review",
           "startedAt": "2026-08-26T19:30:28.269Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/ce7f65c2-9592-4836-91b1-5bcf721a39f5",
           "branch": "forge/issue-111-ce7f65c2",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T19:36:03.754Z",
+          "outputArtifactHash": "review-111-blocked-rpc-timeout-7c3f2f9",
+          "commitSha": "7c3f2f9465c4bcf026f499e869ff5ebd6e4460f6"
         }
       ]
     }
@@ -201,7 +209,8 @@
     "phase:verify:1:start": "c3019dda-19f3-4e7e-8920-264a309a3434",
     "phase:verify:1:complete": "9bc21a94-f643-4e06-9e4e-a53532fbe203",
     "phase:review:1:queue": "6740ded7-4872-43e4-aea7-d73194b7f0eb",
-    "phase:review:1:start": "aedf2e8c-6299-4d46-b6cc-7adfe4ae6c8c"
+    "phase:review:1:start": "aedf2e8c-6299-4d46-b6cc-7adfe4ae6c8c",
+    "phase:review:1:complete": "bf06611f-e340-42db-befe-fc955f41bbcd"
   },
   "eventIds": {
     "eee3d593-c568-4a9a-9e1f-9d5fce12eca3": true,
@@ -225,7 +234,8 @@
     "c3019dda-19f3-4e7e-8920-264a309a3434": true,
     "9bc21a94-f643-4e06-9e4e-a53532fbe203": true,
     "6740ded7-4872-43e4-aea7-d73194b7f0eb": true,
-    "aedf2e8c-6299-4d46-b6cc-7adfe4ae6c8c": true
+    "aedf2e8c-6299-4d46-b6cc-7adfe4ae6c8c": true,
+    "bf06611f-e340-42db-befe-fc955f41bbcd": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
