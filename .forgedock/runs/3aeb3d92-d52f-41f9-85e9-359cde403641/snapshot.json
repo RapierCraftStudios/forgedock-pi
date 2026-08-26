@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 10,
-  "lastEventHash": "sha256:7937bef6a1f5b8a8701ddd5f6c889a9e04d7e58ef3cb97135c534af9fadcf3c4",
+  "sequence": 11,
+  "lastEventHash": "sha256:54234266868617462150a5a428c95f814bad8a5abd67ce558fe74565b12f041e",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -61,15 +61,19 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Accepted scope is limited to setup policy reconstruction, static preflight invocation, setup-mode reporting, documentation, and regression tests",
+            "No protected branch, product scope, UX authority, or security authority decision is required"
+          ],
           "logicalNodeId": "work-on/plan",
           "startedAt": "2026-08-26T20:13:42.629Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/3aeb3d92-d52f-41f9-85e9-359cde403641",
           "branch": "forge/issue-94-3aeb3d92",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T20:15:09.426Z"
         }
       ]
     }
@@ -86,7 +90,8 @@
     "phase:investigate:1:start": "6080c007-3c7a-4b0b-af68-9111deb2e384",
     "phase:investigate:1:complete": "2b356015-d476-4d56-9f2b-1444ca51f39f",
     "phase:plan:1:queue": "347043d6-a7fe-4ad2-9667-1e004098e562",
-    "phase:plan:1:start": "e364828e-b96e-4619-9a2c-ce3557196ac6"
+    "phase:plan:1:start": "e364828e-b96e-4619-9a2c-ce3557196ac6",
+    "phase:plan:1:complete": "af74e405-9617-4b4e-8129-712aa2fac474"
   },
   "eventIds": {
     "fe96d16b-f181-41a1-82ae-a1bb61ad4205": true,
@@ -98,7 +103,8 @@
     "6080c007-3c7a-4b0b-af68-9111deb2e384": true,
     "2b356015-d476-4d56-9f2b-1444ca51f39f": true,
     "347043d6-a7fe-4ad2-9667-1e004098e562": true,
-    "e364828e-b96e-4619-9a2c-ce3557196ac6": true
+    "e364828e-b96e-4619-9a2c-ce3557196ac6": true,
+    "af74e405-9617-4b4e-8129-712aa2fac474": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
