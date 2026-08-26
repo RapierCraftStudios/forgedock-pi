@@ -9,7 +9,12 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-import { parseForgePolicy, type ForgePolicy } from "../core/policy.ts";
+import { preflightRequiredVerificationCommands } from "../adapters/verification-preflight.ts";
+import {
+  parseForgePolicy,
+  type ForgePolicy,
+  type VerificationCommandPolicy,
+} from "../core/policy.ts";
 import type { ForgeOrchestrationController } from "../workflows/orchestrate.ts";
 import type { ForgeWorkOnController } from "../workflows/work-on.ts";
 import {
@@ -219,7 +224,7 @@ export function registerForgeCommands(
       });
       await reconcileWorkflowLabels(pi, root, config.repository.name);
       ctx.ui.notify(
-        `ForgeDock setup complete.\nPolicy: ${configPath}\nIntegration: ${config.branches.integration[0]}\nCI-required PR targets: ${config.verification.github.requiredBranches.join(", ")}\nAuto-merge: ${config.branches.autoMergeIntegration ? "enabled" : "disabled"}\nParallel lanes: ${config.orchestration.maxConcurrent}\nReview and commit the tracked policy.`,
+        `ForgeDock setup complete.\nPolicy: ${configPath}\nIntegration: ${config.branches.integration[0]}\nCI-required PR targets: ${config.verification.github.requiredBranches.join(", ")}\n${summarizeVerificationCommands(config.verification.commands)}\nAuto-merge: ${config.branches.autoMergeIntegration ? "enabled" : "disabled"}\nParallel lanes: ${config.orchestration.maxConcurrent}\nReview and commit the tracked policy.`,
         "info",
       );
       await orchestrator.resume(ctx);
@@ -352,6 +357,17 @@ async function configureForgePolicy(input: {
     ...source,
     repository: { provider: "github", name: input.repository },
   };
+  // Setup may rewrite branch and CI settings, but it must not silently erase
+  // an existing package-bound local check. Validate the tracked command map
+  // statically before creating a remote branch or writing the new policy.
+  // The preflight only reads executable metadata and package manifests; it
+  // never runs repository scripts. An empty map is the explicit CI-only mode.
+  const verificationCommands = config.verification.commands;
+  await preflightRequiredVerificationCommands(
+    input.root,
+    verificationCommands,
+    { configPath: input.configPath },
+  );
 
   const defaultBranch = await resolveDefaultBranch(
     input.pi,
@@ -442,7 +458,7 @@ async function configureForgePolicy(input: {
         waitTimeoutMs: config.verification.github.waitTimeoutMs,
         pollIntervalMs: config.verification.github.pollIntervalMs,
       },
-      commands: {},
+      commands: verificationCommands,
     },
     orchestration: {
       ...config.orchestration,
@@ -700,6 +716,19 @@ async function requiredSelection(
   const selected = await ctx.ui.select(title, options);
   if (!selected) throw new Error("ForgeDock setup was cancelled.");
   return selected;
+}
+
+export function summarizeVerificationCommands(
+  commands: Readonly<Record<string, VerificationCommandPolicy>>,
+): string {
+  const configured = Object.entries(commands).sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
+  if (configured.length === 0)
+    return "Local verification: CI-only (`verification.commands: {}`).";
+  return `Local verification: ${configured
+    .map(([name, command]) => `\`${name}\` at \`${command.cwd}\``)
+    .join(", ")}.`;
 }
 
 function uniqueStrings(values: readonly string[]): string[] {

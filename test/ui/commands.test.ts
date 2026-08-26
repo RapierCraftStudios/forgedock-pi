@@ -12,6 +12,7 @@ import {
   confirmWorkOnDispatch,
   issueResolverPrompt,
   registerForgeCommands,
+  summarizeVerificationCommands,
 } from "../../src/ui/commands.ts";
 
 const input = {
@@ -19,6 +20,30 @@ const input = {
   sourceExpression: "https://github.com/owner/repo/issues",
   resolutionSummary: "Three eligible open issues; active-owned lanes excluded.",
 };
+
+test("setup verification summary distinguishes local and CI-only modes", () => {
+  assert.equal(
+    summarizeVerificationCommands({}),
+    "Local verification: CI-only (`verification.commands: {}`).",
+  );
+  assert.equal(
+    summarizeVerificationCommands({
+      typecheck: {
+        argv: ["npm", "run", "typecheck"],
+        cwd: ".",
+        required: true,
+        timeoutMs: 60_000,
+      },
+      "web-test": {
+        argv: ["npm", "test"],
+        cwd: "web",
+        required: true,
+        timeoutMs: 60_000,
+      },
+    }),
+    "Local verification: `typecheck` at `.`, `web-test` at `web`.",
+  );
+});
 
 test("model-callable orchestration fails closed without interactive confirmation", async () => {
   const ui = {

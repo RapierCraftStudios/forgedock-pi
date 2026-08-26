@@ -268,8 +268,8 @@ The production/default branch is never auto-merged.
 {
   "verification": {
     "commands": {
-      "test": { "argv": ["npm", "test"], "required": true, "timeoutMs": 600000 },
-      "typecheck": { "argv": ["npm", "run", "typecheck"], "required": true, "timeoutMs": 300000 }
+      "test": { "argv": ["npm", "test"], "cwd": ".", "required": true, "timeoutMs": 600000 },
+      "typecheck": { "argv": ["npm", "run", "typecheck"], "cwd": ".", "required": true, "timeoutMs": 300000 }
     }
   }
 }
