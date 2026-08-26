@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 10,
-  "lastEventHash": "sha256:faf1482518241f249f5989af5c0b2cae43275f67f4db2b1bdefff01300ce2ecc",
+  "sequence": 11,
+  "lastEventHash": "sha256:d7822e4824bec8159291f2f5a3e5309ccb63c76ab06060c26f151d87c16fc680",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -61,15 +61,21 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Builder scope is limited to `src/workflows/work-on.ts` and `test/workflows/work-on.test.ts`.",
+            "The existing projector API already accepts an optional `AbortSignal`; no adapter or GitHub API contract change is needed.",
+            "The active merge error remains the primary failure; rollback diagnostics are additive and must not turn a merge failure into success.",
+            "The required local check remains `check`."
+          ],
           "logicalNodeId": "plan",
           "startedAt": "2026-08-26T23:11:37.918Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/31673b4f-b07a-4669-9751-cdee2a8d4703",
           "branch": "forge/issue-120-31673b4f",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T23:12:14.077Z"
         }
       ]
     }
@@ -86,7 +92,8 @@
     "phase:investigate:1:start": "b212a546-702e-46c1-819d-d2ee02ece47e",
     "phase:investigate:1:complete": "f04a7940-6fa7-4f3e-8e9f-675223b780f3",
     "phase:plan:1:queue": "539dfd7c-acbf-4a1f-bc06-a8e25b2b4102",
-    "phase:plan:1:start": "89be2fcc-213a-4313-a330-401c07b3e443"
+    "phase:plan:1:start": "89be2fcc-213a-4313-a330-401c07b3e443",
+    "phase:plan:1:complete": "3ee2558b-8f1c-4295-a8f7-ec0b04505b44"
   },
   "eventIds": {
     "d4a51eb6-c4dc-40eb-92ab-1c559768dde8": true,
@@ -98,7 +105,8 @@
     "b212a546-702e-46c1-819d-d2ee02ece47e": true,
     "f04a7940-6fa7-4f3e-8e9f-675223b780f3": true,
     "539dfd7c-acbf-4a1f-bc06-a8e25b2b4102": true,
-    "89be2fcc-213a-4313-a330-401c07b3e443": true
+    "89be2fcc-213a-4313-a330-401c07b3e443": true,
+    "3ee2558b-8f1c-4295-a8f7-ec0b04505b44": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
