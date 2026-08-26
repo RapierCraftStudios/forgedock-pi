@@ -5,9 +5,9 @@
   "issueNumber": 95,
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
-  "status": "failed",
-  "sequence": 10,
-  "lastEventHash": "sha256:142166631d0e2eeaea35936190f76bec973e9e8424db3a71f87fb28ba104bc0e",
+  "status": "cancelled",
+  "sequence": 11,
+  "lastEventHash": "sha256:32ce710c870cbf2085260aea871b78fc7d0e1943e817ca28ffac57748103161d",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -68,7 +68,8 @@
     "node:investigate-1:queued": "eb716e1f-6247-45d3-bf01-f53fdc1c626e",
     "node:investigate-1:started": "92597ad9-c7bf-4940-b229-841f1cfdedd2",
     "node:investigate-1:receipt-bound": "6c466358-0348-4dd0-9d18-5df50cfeb082",
-    "node:investigate-1:failed": "606abee5-76f4-4b8c-a22d-8a80983a0140"
+    "node:investigate-1:failed": "606abee5-76f4-4b8c-a22d-8a80983a0140",
+    "run:cancelled": "86515f56-17e9-4794-9bf1-a6a521ddecab"
   },
   "eventIds": {
     "d6beb5a1-8ff7-435d-bb9d-bf2f2733d517": true,
@@ -80,7 +81,8 @@
     "eb716e1f-6247-45d3-bf01-f53fdc1c626e": true,
     "92597ad9-c7bf-4940-b229-841f1cfdedd2": true,
     "6c466358-0348-4dd0-9d18-5df50cfeb082": true,
-    "606abee5-76f4-4b8c-a22d-8a80983a0140": true
+    "606abee5-76f4-4b8c-a22d-8a80983a0140": true,
+    "86515f56-17e9-4794-9bf1-a6a521ddecab": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
@@ -92,5 +94,6 @@
     "lastHeartbeatAt": "2026-08-26T04:35:01.642Z",
     "expiresAt": "2026-08-26T05:35:01.642Z",
     "takeoverRequired": false
-  }
+  },
+  "cancellationReason": "Cancelled because standalone work-on used the wrong bounded-subagent architecture."
 }
