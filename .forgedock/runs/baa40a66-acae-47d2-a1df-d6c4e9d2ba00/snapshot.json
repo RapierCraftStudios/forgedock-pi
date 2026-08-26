@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 15,
-  "lastEventHash": "sha256:a740e0c2c58c805cd5f83c58e2c1a2bc7bd17c19179503161dd056c44a90a496",
+  "sequence": 16,
+  "lastEventHash": "sha256:8db82547937c39a3444bfd0f9c70337a2fdbaa6a5f8bb6230d231fd91e373483",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -113,11 +113,16 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
           "evidence": [],
-          "inputArtifactHash": "sha256:prepare-111-bound-worktree"
+          "inputArtifactHash": "sha256:prepare-111-bound-worktree",
+          "logicalNodeId": "implement-1",
+          "startedAt": "2026-08-26T23:53:51.106Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/baa40a66-acae-47d2-a1df-d6c4e9d2ba00",
+          "branch": "forge/issue-111-baa40a66",
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
         }
       ]
     }
@@ -139,7 +144,8 @@
     "phase:prepare-worktree:1:queue": "6b839207-b3e6-454f-8be6-b48b5ca143e4",
     "phase:prepare-worktree:1:start": "4a25b5dc-746b-4101-ad52-4dabee972b85",
     "phase:prepare-worktree:1:complete": "ab50fdf8-b525-490e-9733-ceb3c86b8fcc",
-    "phase:implement:1:queue": "8407dd6c-a6d7-4097-97e0-3a56d66af878"
+    "phase:implement:1:queue": "8407dd6c-a6d7-4097-97e0-3a56d66af878",
+    "phase:implement:1:start": "d363186c-c282-45cc-893e-46469bf63001"
   },
   "eventIds": {
     "50317c52-ef4b-4b9d-ab89-8ce65c8af8aa": true,
@@ -156,7 +162,8 @@
     "6b839207-b3e6-454f-8be6-b48b5ca143e4": true,
     "4a25b5dc-746b-4101-ad52-4dabee972b85": true,
     "ab50fdf8-b525-490e-9733-ceb3c86b8fcc": true,
-    "8407dd6c-a6d7-4097-97e0-3a56d66af878": true
+    "8407dd6c-a6d7-4097-97e0-3a56d66af878": true,
+    "d363186c-c282-45cc-893e-46469bf63001": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
