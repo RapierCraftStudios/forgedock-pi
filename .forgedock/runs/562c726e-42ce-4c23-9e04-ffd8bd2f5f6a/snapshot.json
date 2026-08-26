@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:9f173542391588008e47d4ff05d0f0b2db4d07b2d9253db1265e887d636b2982",
+  "sequence": 8,
+  "lastEventHash": "sha256:4d8993ec48bc3dced0198f6153ecd1585cb8fc058ec9d64a98100f330c72ce07",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -38,16 +38,24 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/github-projection.ts:161-189` already removes every workflow:* label, preserves unrelated labels, and replaces the label set through one PUT.",
+            "`src/core/artifact-protocol.ts:1-10` already owns canonical labels, but no shared checkpoint-to-label mapping is exported.",
+            "`src/agents/child-runtime.ts:1102-1132` contains a local partial mapping: it updates investigation, build, review, and investigation completion only; it omits shared canonical reuse and parent-owned merge transitions.",
+            "`src/workflows/work-on.ts:97-215` initializes investigating, while the parent-owned merge path queues/starts and completes merge without projecting awaiting-merge or merged until terminal cleanup.",
+            "`test/adapters/github-projection.test.ts:54-97` covers only one isolated investigating-to-merged replacement; `test/core/artifact-protocol.test.ts:60-69` checks one exact label but not lifecycle mapping."
+          ],
           "inputArtifactHash": "sha256:resolve-92-eligible",
           "logicalNodeId": "work-on/92/investigate",
           "startedAt": "2026-08-26T12:07:09.758Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/562c726e-42ce-4c23-9e04-ffd8bd2f5f6a",
           "branch": "forge/issue-92-562c726e",
-          "baseSha": "26139ba278b95578a300c597ec35495a7d502eb6"
+          "baseSha": "26139ba278b95578a300c597ec35495a7d502eb6",
+          "finishedAt": "2026-08-26T12:07:56.875Z",
+          "outputArtifactHash": "sha256:investigate-92-label-projection"
         }
       ]
     }
@@ -61,7 +69,8 @@
     "phase:resolve:1:start": "22a64cdf-2f15-463d-9adf-596b7b985d61",
     "phase:resolve:1:complete": "7f342754-a018-473c-9b45-19a6853e55af",
     "phase:investigate:1:queue": "6c1376cf-4dde-42e3-9d1b-ce750636c2b9",
-    "phase:investigate:1:start": "4f998ef2-fd89-40a5-8b02-089d8bd3ee3d"
+    "phase:investigate:1:start": "4f998ef2-fd89-40a5-8b02-089d8bd3ee3d",
+    "phase:investigate:1:complete": "63073139-3cf1-4149-95a4-e8d9b8ee336c"
   },
   "eventIds": {
     "2d6b4799-e254-4339-9dcb-219a49010664": true,
@@ -70,7 +79,8 @@
     "22a64cdf-2f15-463d-9adf-596b7b985d61": true,
     "7f342754-a018-473c-9b45-19a6853e55af": true,
     "6c1376cf-4dde-42e3-9d1b-ce750636c2b9": true,
-    "4f998ef2-fd89-40a5-8b02-089d8bd3ee3d": true
+    "4f998ef2-fd89-40a5-8b02-089d8bd3ee3d": true,
+    "63073139-3cf1-4149-95a4-e8d9b8ee336c": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
