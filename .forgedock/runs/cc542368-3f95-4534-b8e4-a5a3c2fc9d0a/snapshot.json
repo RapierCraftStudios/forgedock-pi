@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:1e1ed9e75d8b9996bf04c15908329c105b41f3c8b18d34fa32ae453aa903c5a2",
+  "sequence": 8,
+  "lastEventHash": "sha256:f00cf6c747723dc63dea76de7b51708c3832d47fe399fbd0844b05ac0737a302",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -39,15 +39,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/verification-preflight.ts:119-128` only recognizes the package command at argv[1] and otherwise skips script validation",
+            "`src/adapters/verification-preflight.ts:40-43,131-175` always reads `package.json` from configured cwd",
+            "`src/agents/child-runtime.ts:807-824` executes the original argv from that same cwd without resolving npm package selectors",
+            "`test/adapters/verification-preflight.test.ts:63-85` covers explicit cwd selection but not npm package-location flags"
+          ],
           "logicalNodeId": "work-on-investigate",
           "startedAt": "2026-08-26T22:09:17.523Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/cc542368-3f95-4534-b8e4-a5a3c2fc9d0a",
           "branch": "forge/issue-111-cc542368",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T22:11:17.869Z",
+          "outputArtifactHash": "sha256:issue-111-investigation-validated"
         }
       ]
     }
@@ -61,7 +68,8 @@
     "phase:resolve:1:start": "cd952372-c387-4df8-a52d-5e4566e3f40a",
     "phase:resolve:1:complete": "811e2539-f998-4f9d-b04e-5b6096acc003",
     "phase:investigate:1:queue": "16ffc431-8f0f-4ff1-af56-bb7575848d82",
-    "phase:investigate:1:start": "c144b756-9874-424d-808c-c6f3cbfccea7"
+    "phase:investigate:1:start": "c144b756-9874-424d-808c-c6f3cbfccea7",
+    "phase:investigate:1:complete": "72cfe525-4c81-4f15-b5d9-1d9086867cb9"
   },
   "eventIds": {
     "3bf3d776-e658-43fe-bc96-7616eb777351": true,
@@ -70,7 +78,8 @@
     "cd952372-c387-4df8-a52d-5e4566e3f40a": true,
     "811e2539-f998-4f9d-b04e-5b6096acc003": true,
     "16ffc431-8f0f-4ff1-af56-bb7575848d82": true,
-    "c144b756-9874-424d-808c-c6f3cbfccea7": true
+    "c144b756-9874-424d-808c-c6f3cbfccea7": true,
+    "72cfe525-4c81-4f15-b5d9-1d9086867cb9": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
