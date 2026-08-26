@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:05541e3a464ad0a39db343c0c49fc58237f761725b2c5f1986c93f8a2f0780ea",
+  "sequence": 8,
+  "lastEventHash": "sha256:1d103dc28801150f2af6624e3862b0d66e8e9cca8f2e4e56bbed5b744dae33d2",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -38,15 +38,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "core/policy.ts already normalizes a repository-relative verification command cwd, defaulting to '.'.",
+            "adapters/verification-preflight.ts statically checks required executables, package directories, package.json files, and npm/pnpm/yarn/bun script names without spawning repository commands.",
+            "workflows/work-on.ts invokes required-command preflight on the frozen prepared worktree before materializing agents or spawning a writer and cleans up on failure.",
+            "ui/commands.ts configureForgePolicy currently rewrites verification.commands to {} on every /forge:init run, does not inspect package manifests, and provides no explicit local-check/CI-only choice.",
+            "Existing verification-preflight.test.ts covers a root-without-test-script and web-with-test-script fixture, executable absence, missing cwd, control-directory rejection, and symlink escape."
+          ],
           "logicalNodeId": "forge-work-on/investigate",
           "startedAt": "2026-08-26T19:16:19.068Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/3c473486-3066-4291-a8a5-5f2602e5a928",
           "branch": "forge/issue-94-3c473486",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T19:20:19.724Z"
         }
       ]
     }
@@ -60,7 +67,8 @@
     "phase:resolve:1:start": "c6205e8e-ad81-411c-87e6-9a9d3c83bcce",
     "phase:resolve:1:complete": "64ff3795-25a0-4e74-b9de-f12421a59946",
     "phase:investigate:1:queue": "e5749a4f-2dfb-490f-8f43-ccab4585a514",
-    "phase:investigate:1:start": "b8e919ba-5b0a-4eef-9f70-6df3f9677875"
+    "phase:investigate:1:start": "b8e919ba-5b0a-4eef-9f70-6df3f9677875",
+    "phase:investigate:1:complete": "7aeb3b4f-357a-4980-aedd-01b81deb2479"
   },
   "eventIds": {
     "526a7329-ef9d-4f13-94f4-69332bbc41a0": true,
@@ -69,7 +77,8 @@
     "c6205e8e-ad81-411c-87e6-9a9d3c83bcce": true,
     "64ff3795-25a0-4e74-b9de-f12421a59946": true,
     "e5749a4f-2dfb-490f-8f43-ccab4585a514": true,
-    "b8e919ba-5b0a-4eef-9f70-6df3f9677875": true
+    "b8e919ba-5b0a-4eef-9f70-6df3f9677875": true,
+    "7aeb3b4f-357a-4980-aedd-01b81deb2479": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
