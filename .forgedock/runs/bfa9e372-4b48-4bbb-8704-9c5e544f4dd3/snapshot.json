@@ -5,10 +5,10 @@
   "issueNumber": 119,
   "integrationBranch": "staging",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "blocked",
   "authorityMode": "run-scoped",
-  "sequence": 22,
-  "lastEventHash": "sha256:e0329dbed0398d3dac1a95fb22275bc2f85e1d8300983d80b1b3ccb8a7c8a634",
+  "sequence": 23,
+  "lastEventHash": "sha256:08cc9a5aac9d84f0fbb5e942c875f852cc16cc210993cf25be15df7df03df96b",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -123,7 +123,7 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "blocked",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 1",
           "evidence": [],
@@ -131,7 +131,9 @@
           "startedAt": "2026-08-26T18:16:30.933Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/bfa9e372-4b48-4bbb-8704-9c5e544f4dd3",
           "branch": "forge/issue-119-bfa9e372",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "reason": "Required synchronous review panel timed out after 900000 ms before the security reviewer returned structured evidence; fail closed.",
+          "finishedAt": "2026-08-26T18:33:27.641Z"
         }
       ]
     }
@@ -160,7 +162,8 @@
     "phase:verify:1:start": "31cda64d-1dca-43ea-ab47-62a2044c42ea",
     "phase:verify:1:complete": "9b5c0bd2-5150-4e91-a147-3e800683ee40",
     "phase:review:1:queue": "a310bc78-69c5-447b-b78e-571021737e30",
-    "phase:review:1:start": "4cd4a0dd-0e55-4986-8dbc-efad36586668"
+    "phase:review:1:start": "4cd4a0dd-0e55-4986-8dbc-efad36586668",
+    "phase:review:1:block": "52a9529e-b0ee-4103-8c9f-870c5e622b80"
   },
   "eventIds": {
     "41646fe7-5c85-4e53-b469-87de61308886": true,
@@ -184,7 +187,8 @@
     "31cda64d-1dca-43ea-ab47-62a2044c42ea": true,
     "9b5c0bd2-5150-4e91-a147-3e800683ee40": true,
     "a310bc78-69c5-447b-b78e-571021737e30": true,
-    "4cd4a0dd-0e55-4986-8dbc-efad36586668": true
+    "4cd4a0dd-0e55-4986-8dbc-efad36586668": true,
+    "52a9529e-b0ee-4103-8c9f-870c5e622b80": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
