@@ -6,8 +6,8 @@
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
   "status": "active",
-  "sequence": 7,
-  "lastEventHash": "sha256:42c21651967293ef2c789965f4c0cc5cd741964dd67573134ff465c5feea5116",
+  "sequence": 8,
+  "lastEventHash": "sha256:273c5e309a9193289370cff01ba6679f0415da05d77b557008db28f3484eb51e",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -38,15 +38,21 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "package.json defines `npm test` as `tsx --test \"test/**/*.test.ts\"` and `npm run check` as typecheck followed by tests.",
+            "tsconfig.json uses strict NodeNext settings and includes test/**/*.ts.",
+            "Existing `test/smoke/package.test.ts` imports `node:assert/strict` and `node:test`, establishing repository conventions.",
+            "Both approved target paths are absent in the assigned worktree; `forge_diff` reports no pre-existing changes."
+          ],
           "logicalNodeId": "investigate-1",
           "startedAt": "2026-08-26T05:25:56.374Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/5fbd22c9-cf53-48f7-95c7-3258fcc8452c",
           "branch": "forge/issue-95-5fbd22c9",
-          "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491"
+          "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+          "finishedAt": "2026-08-26T05:27:04.048Z"
         }
       ]
     }
@@ -60,7 +66,8 @@
     "phase:resolve:1:start": "506c86cb-73e2-46a6-924e-67c2a31c94a1",
     "phase:resolve:1:complete": "b61efa02-3170-4ec8-874e-e7b76cee1368",
     "phase:investigate:1:queue": "15bf41f5-39c7-49e8-b4a0-159fa08faae5",
-    "phase:investigate:1:start": "9797b1cc-2623-44c1-8189-42589259a970"
+    "phase:investigate:1:start": "9797b1cc-2623-44c1-8189-42589259a970",
+    "phase:investigate:1:complete": "d33f1e0e-991e-4c91-a31e-2d4f5d25af52"
   },
   "eventIds": {
     "194412ac-e384-4835-94fd-cee5a8867930": true,
@@ -69,7 +76,8 @@
     "506c86cb-73e2-46a6-924e-67c2a31c94a1": true,
     "b61efa02-3170-4ec8-874e-e7b76cee1368": true,
     "15bf41f5-39c7-49e8-b4a0-159fa08faae5": true,
-    "9797b1cc-2623-44c1-8189-42589259a970": true
+    "9797b1cc-2623-44c1-8189-42589259a970": true,
+    "d33f1e0e-991e-4c91-a31e-2d4f5d25af52": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
