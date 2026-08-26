@@ -613,6 +613,11 @@ export class ForgeWorkOnController {
   ): Promise<void> {
     const snapshot = await store.readRun(link.forgeRunId, ctx.signal);
     if (!snapshot.state) return;
+    const durableMergeStage = workflowStageForDurableMerge(snapshot.state);
+    if (durableMergeStage) {
+      await this.#projectWorkflowStage(link, durableMergeStage, ctx);
+      return;
+    }
     if (
       snapshot.state.status === "completed" &&
       snapshot.state.outcome === "merged"
@@ -4687,6 +4692,16 @@ export function shouldBufferLaunchCompletion(
   linkKnown: boolean,
 ): boolean {
   return receiptBindingInFlight || !linkKnown;
+}
+
+export function workflowStageForDurableMerge(
+  state: Pick<import("../core/state.ts").RunState, "effects">,
+): WorkflowStage | undefined {
+  return Object.values(state.effects).some(
+    (effect) => effect.effectType === "merge",
+  )
+    ? "merged"
+    : undefined;
 }
 
 export function workflowStageForNodeTransition(

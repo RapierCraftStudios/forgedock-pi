@@ -20,6 +20,7 @@ import {
   shouldBufferLaunchCompletion,
   similarFindingTitle,
   workflowLabelForNode,
+  workflowStageForDurableMerge,
   workflowStageForNodeTransition,
 } from "../../src/workflows/work-on.ts";
 
@@ -112,6 +113,26 @@ test("provider completion is buffered until its launch receipt is durably bound"
   assert.equal(shouldBufferLaunchCompletion(true, true), true);
   assert.equal(shouldBufferLaunchCompletion(false, false), true);
   assert.equal(shouldBufferLaunchCompletion(false, true), false);
+});
+
+test("durable merge evidence wins over an interrupted parent merge node", () => {
+  const mergeState = {
+    effects: {
+      "merge:119": {
+        effectType: "merge",
+        effectId: "merge:119",
+        digest: "sha256:merge",
+        eventId: "event-merge",
+      },
+    },
+  } as Pick<import("../../src/core/state.ts").RunState, "effects">;
+
+  assert.equal(workflowStageForDurableMerge(mergeState), "merged");
+  assert.equal(
+    workflowStageForNodeTransition("merge", "started"),
+    "awaitingMerge",
+  );
+  assert.equal(workflowStageForDurableMerge({ effects: {} }), undefined);
 });
 
 test("workflow transitions cover the complete canonical label lifecycle", () => {
