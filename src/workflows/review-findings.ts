@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import type { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
 import type {
   ForgeReviewFindingResult,
@@ -7,6 +9,7 @@ import type {
 export interface ReviewFindingRunIdentity {
   forgeRunId: string;
   issueNumber: number;
+  repository?: string;
 }
 
 export async function publishReviewFindingIssues(input: {
@@ -28,7 +31,17 @@ export async function publishReviewFindingIssues(input: {
       finding.id,
       input.result.review.headSha,
     );
-    const exact = existing.find((issue) => issue.body.includes(marker));
+    const fingerprint = reviewFindingFingerprint({
+      repository: input.link.repository ?? "unknown/unknown",
+      sourceIssueNumber: input.link.issueNumber,
+      sourcePullNumber: input.pullNumber,
+      finding,
+    });
+    const fingerprintMarker = `<!-- FORGE:REVIEW_FINDING_FINGERPRINT ${fingerprint} -->`;
+    const exact = existing.find(
+      (issue) =>
+        issue.body.includes(marker) || issue.body.includes(fingerprintMarker),
+    );
     if (exact?.state === "open") {
       issueMap[finding.id] = exact.number;
       continue;
@@ -52,14 +65,14 @@ export async function publishReviewFindingIssues(input: {
       0,
       240,
     );
-    const body = renderFindingIssueBody({
+    const body = `${fingerprintMarker}\n${renderFindingIssueBody({
       finding,
       pullNumber: input.pullNumber,
       link: input.link,
       headSha: input.result.review.headSha,
       marker,
       regressionIssue: regression ? exact?.number : undefined,
-    });
+    })}`;
     const created = await input.github.createIssue({
       title,
       body,
@@ -91,6 +104,24 @@ export function reviewFindingMarker(
   headSha: string,
 ): string {
   return `<!-- FORGE:REVIEW_FINDING source-pr=${pullNumber} finding=${encodeURIComponent(findingId)} head=${headSha} -->`;
+}
+
+export function reviewFindingFingerprint(input: {
+  repository: string;
+  sourceIssueNumber: number;
+  sourcePullNumber: number;
+  finding: ForgeReviewFindingResult;
+}): string {
+  const normalized = JSON.stringify({
+    repository: input.repository.toLowerCase(),
+    sourceIssueNumber: input.sourceIssueNumber,
+    sourcePullNumber: input.sourcePullNumber,
+    category: input.finding.category.toLowerCase(),
+    file: input.finding.file.toLowerCase(),
+    lineBucket: Math.floor(Math.max(1, input.finding.line) / 5),
+    summary: input.finding.summary.toLowerCase().replace(/\s+/g, " ").trim(),
+  });
+  return `sha256:${createHash("sha256").update(normalized).digest("hex")}`;
 }
 
 export function findingPriority(

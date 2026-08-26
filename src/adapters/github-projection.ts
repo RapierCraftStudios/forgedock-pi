@@ -205,7 +205,10 @@ export class GitHubIssueProjector {
     const labels = [
       ...issue.labels
         .map((label) => label.name)
-        .filter((label) => !label.startsWith("workflow:")),
+        .filter(
+          (label) =>
+            !label.startsWith("workflow:") && label !== "needs-human",
+        ),
       workflowLabel,
     ];
     const labelsPath = `${this.#apiRoot}/issues/${issueNumber}/labels`;

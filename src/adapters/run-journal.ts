@@ -8,7 +8,12 @@ import {
   type RunEventPayload,
   type RunEventType,
 } from "../core/events.ts";
-import { acquireLease, isLeaseExpired, type RepositoryLease } from "../core/lease.ts";
+import {
+  acquireLease,
+  heartbeatLease,
+  isLeaseExpired,
+  type RepositoryLease,
+} from "../core/lease.ts";
 import { applyRunEvent, type RunState } from "../core/state.ts";
 
 const MAX_CAS_ATTEMPTS = 12;
@@ -52,7 +57,7 @@ export class RunJournal {
       const now = input.now ?? new Date();
       const lease = input.orchestration
         ? validateOrchestrationLease(existing.lease, input.orchestration, now)
-        : acquireLease(existing.lease, {
+        : acquireLease(undefined, {
             repository: input.repository,
             owner: { runId: input.runId, sessionId: input.sessionId },
             now,
@@ -70,6 +75,7 @@ export class RunJournal {
           issueNumber: input.issueNumber,
           integrationBranch: input.integrationBranch,
           protectedBranch: input.protectedBranch,
+          authorityMode: input.orchestration ? "legacy-lease" : "run-scoped",
           ...(input.orchestration
             ? {
                 orchestrationRunId: input.orchestration.ownerRunId,
@@ -107,7 +113,7 @@ export class RunJournal {
           state,
           ...(input.orchestration
             ? { preserveRepositoryLease: true }
-            : { lease }),
+            : { runScopedAuthority: true }),
           message: `Initialize ForgeDock run ${input.runId}`,
           ...(input.signal ? { signal: input.signal } : {}),
         });
@@ -122,6 +128,37 @@ export class RunJournal {
       }
     }
     throw new Error(`Unable to initialize run ${input.runId}.`);
+  }
+
+  async heartbeat(input: {
+    runId: string;
+    sessionId: string;
+    leaseSeconds: number;
+    now?: Date;
+    signal?: AbortSignal;
+  }): Promise<JournalSnapshot> {
+    const current = await this.#store.readRun(input.runId, input.signal);
+    if (!current.state || !current.lease)
+      throw new Error(`Standalone run ${input.runId} has no renewable lease.`);
+    if (current.state.leaseBinding)
+      throw new Error("Orchestration-bound child runs cannot heartbeat the repository lease.");
+    const now = input.now ?? new Date();
+    const lease = heartbeatLease(current.lease, {
+      repository: current.state.repository,
+      owner: { runId: input.runId, sessionId: input.sessionId },
+      epoch: current.lease.epoch,
+      now,
+      ttlSeconds: input.leaseSeconds,
+    });
+    return this.append({
+      runId: input.runId,
+      type: "lease.heartbeat",
+      payload: { lease },
+      idempotencyKey: `lease:heartbeat:${now.toISOString()}`,
+      sessionId: input.sessionId,
+      message: `Heartbeat ForgeDock run ${input.runId}`,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
   }
 
   async append(input: {
@@ -170,11 +207,13 @@ export class RunJournal {
           expectedTip: current.tip,
           events,
           state,
-          ...(state.lease
-            ? { lease: state.lease }
-            : state.leaseBinding
-              ? { preserveRepositoryLease: true }
-              : {}),
+          ...(state.authorityMode === "run-scoped"
+            ? { runScopedAuthority: true }
+            : state.lease
+              ? { lease: state.lease }
+              : state.leaseBinding
+                ? { preserveRepositoryLease: true }
+                : {}),
           message: input.message,
           ...(input.signal ? { signal: input.signal } : {}),
         });
@@ -237,6 +276,11 @@ function assertCurrentAuthority(
   state: RunState,
   repositoryLease: RepositoryLease | undefined,
 ): void {
+  if (state.authorityMode === "run-scoped") {
+    if (!state.lease || state.lease.ownerRunId !== state.runId)
+      throw new Error(`Run ${state.runId} has invalid run-scoped authority.`);
+    return;
+  }
   if (state.lease) {
     if (
       !repositoryLease ||

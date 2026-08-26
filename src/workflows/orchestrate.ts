@@ -6,6 +6,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 
 import { FetchGitHubTransport } from "../adapters/github-api.ts";
+import { resolveGitHubToken } from "../adapters/github-auth.ts";
 import { loadForgePolicy } from "../adapters/config.ts";
 import { RunJournal } from "../adapters/run-journal.ts";
 import { GitWorktreeManager } from "../adapters/git.ts";
@@ -16,7 +17,6 @@ import {
   readyOrchestrationLanes,
   type OrchestrationState,
 } from "../core/orchestration.ts";
-import { isLeaseExpired } from "../core/lease.ts";
 import { isProtectedBranch, type ForgePolicy } from "../core/policy.ts";
 import { OrchestrationJournal } from "./orchestration-journal.ts";
 import type {
@@ -62,10 +62,8 @@ export class ForgeOrchestrationController {
   readonly #links = new Map<string, ActiveOrchestrationLink>();
   readonly #pumping = new Set<string>();
   readonly #pumpPending = new Set<string>();
-  readonly #heartbeating = new Set<string>();
   readonly #lifecycleQueues = new Map<string, Promise<void>>();
   #lifecycleUnsubscribe: (() => void) | undefined;
-  #heartbeatTimer: NodeJS.Timeout | undefined;
 
   constructor(pi: ExtensionAPI, workOn: ForgeWorkOnController) {
     this.#pi = pi;
@@ -82,12 +80,6 @@ export class ForgeOrchestrationController {
       if (!event.orchestrationId) return;
       void this.#enqueueLifecycle(event, ctx);
     });
-    if (!this.#heartbeatTimer) {
-      this.#heartbeatTimer = setInterval(() => {
-        void this.#heartbeat(ctx);
-      }, 5_000);
-      this.#heartbeatTimer.unref();
-    }
   }
 
   async resume(ctx: ExtensionContext): Promise<void> {
@@ -111,9 +103,6 @@ export class ForgeOrchestrationController {
   dispose(): void {
     this.#lifecycleUnsubscribe?.();
     this.#lifecycleUnsubscribe = undefined;
-    if (this.#heartbeatTimer) clearInterval(this.#heartbeatTimer);
-    this.#heartbeatTimer = undefined;
-    this.#heartbeating.clear();
     this.#pumpPending.clear();
     this.#lifecycleQueues.clear();
   }
@@ -121,7 +110,7 @@ export class ForgeOrchestrationController {
   async start(
     issueNumbers: readonly number[],
     ctx: ExtensionContext,
-    options: {
+    _options: {
       confirmExpiredTakeover?: (ownerRunId: string) => Promise<boolean>;
     } = {},
   ): Promise<StartOrchestrationResult> {
@@ -151,38 +140,6 @@ export class ForgeOrchestrationController {
     );
     const orchestrationId = randomUUID();
     await store.ensureBranch(new Date(), ctx.signal);
-    const leaseProbe = await store.readOrchestration(
-      orchestrationId,
-      ctx.signal,
-    );
-    if (leaseProbe.lease && isLeaseExpired(leaseProbe.lease, new Date())) {
-      const expiredId = leaseProbe.lease.ownerRunId;
-      if (
-        !options.confirmExpiredTakeover ||
-        !(await options.confirmExpiredTakeover(expiredId))
-      )
-        throw new Error(
-          `Repository lease ${expiredId} expired and requires confirmed takeover.`,
-        );
-      const expired = await store.readOrchestration(expiredId, ctx.signal);
-      if (!expired.state || expired.state.status !== "running")
-        throw new Error(
-          `Expired repository lease ${expiredId} has no cancellable orchestration state.`,
-        );
-      const takeoverReason = `Lease expired after its owning Pi session stopped heartbeating; takeover confirmed by operator session ${ctx.sessionManager.getSessionId()}.`;
-      await this.#cancelDurableChildRuns(
-        store,
-        expired.state,
-        ctx,
-        takeoverReason,
-      );
-      await this.#workOn.stopOrchestration(expiredId, ctx, takeoverReason);
-      await new OrchestrationJournal(store).cancel({
-        orchestrationId: expiredId,
-        reason: takeoverReason,
-        ...(ctx.signal ? { signal: ctx.signal } : {}),
-      });
-    }
     const journal = new OrchestrationJournal(store);
     const initialized = await journal.initialize({
       orchestrationId,
@@ -202,12 +159,12 @@ export class ForgeOrchestrationController {
       issueNumbers: [...issueNumbers],
       integrationBranch,
       maxConcurrent: policy.orchestration.maxConcurrent,
-      leaseEpoch: initialized.lease.epoch,
+      leaseEpoch: initialized.state.leaseEpoch,
       leaseSeconds: policy.state.leaseSeconds,
       heartbeatSeconds: policy.state.heartbeatSeconds,
       status: "running",
       sequence: initialized.state.sequence,
-      lastHeartbeatAt: initialized.lease.lastHeartbeatAt,
+      lastHeartbeatAt: initialized.state.createdAt,
     };
     this.#links.set(orchestrationId, link);
     this.#persistLink(link);
@@ -260,10 +217,6 @@ export class ForgeOrchestrationController {
     if (!current.state)
       throw new Error(`Orchestration ${orchestrationId} does not exist.`);
     if (current.state.status !== "running") return current.state;
-    if (!current.lease || current.lease.ownerRunId !== orchestrationId)
-      throw new Error(
-        `Orchestration ${orchestrationId} does not own the active repository lease.`,
-      );
     await this.#cancelDurableChildRuns(store, current.state, ctx, reason);
     await this.#workOn.stopOrchestration(orchestrationId, ctx, reason);
     const cancelled = await new OrchestrationJournal(store).cancel({
@@ -280,8 +233,6 @@ export class ForgeOrchestrationController {
   }
 
   async shutdown(ctx: ExtensionContext, reason: string): Promise<void> {
-    if (this.#heartbeatTimer) clearInterval(this.#heartbeatTimer);
-    this.#heartbeatTimer = undefined;
     const active = [...this.#links.values()].filter(
       (link) => link.status === "running",
     );
@@ -631,12 +582,26 @@ export class ForgeOrchestrationController {
 
         current = await this.#read(link, ctx.signal);
         if (current.state.lanes.every(isTerminalLane)) {
+          const reason = childCleanupReason(current.state);
+          if (reason) {
+            await this.#cancelDurableChildRuns(
+              current.store,
+              current.state,
+              ctx,
+              reason,
+            );
+            await this.#workOn.stopOrchestration(
+              link.orchestrationId,
+              ctx,
+              reason,
+            );
+            current = await this.#read(link, ctx.signal);
+          }
           const completed = await current.journal.complete({
             orchestrationId: link.orchestrationId,
             ...(ctx.signal ? { signal: ctx.signal } : {}),
           });
           this.#syncLink(link, completed.state);
-          link.lastHeartbeatAt = completed.lease.lastHeartbeatAt;
           this.#persistLink(link);
           ctx.ui.setStatus("forgedock", undefined);
           ctx.ui.notify(
@@ -656,46 +621,13 @@ export class ForgeOrchestrationController {
     }
   }
 
-  async #heartbeat(ctx: ExtensionContext): Promise<void> {
-    const now = new Date();
-    for (const link of this.#links.values()) {
-      if (link.status !== "running") continue;
-      if (
-        now.getTime() - Date.parse(link.lastHeartbeatAt) <
-          link.heartbeatSeconds * 1_000 ||
-        this.#heartbeating.has(link.orchestrationId)
-      )
-        continue;
-      this.#heartbeating.add(link.orchestrationId);
-      try {
-        const { journal } = await this.#read(link, ctx.signal);
-        const result = await journal.heartbeat({
-          orchestrationId: link.orchestrationId,
-          sessionId: ctx.sessionManager.getSessionId(),
-          leaseSeconds: link.leaseSeconds,
-          now,
-          ...(ctx.signal ? { signal: ctx.signal } : {}),
-        });
-        link.lastHeartbeatAt = result.lease.lastHeartbeatAt;
-        link.sequence = result.state.sequence;
-        this.#persistLink(link);
-      } catch (error) {
-        ctx.ui.notify(
-          `ForgeDock orchestration ${link.orchestrationId} heartbeat failed: ${errorMessage(error)}`,
-          "warning",
-        );
-      } finally {
-        this.#heartbeating.delete(link.orchestrationId);
-      }
-    }
-  }
-
   async #read(
     link: ActiveOrchestrationLink,
     signal?: AbortSignal,
   ): Promise<{
     state: OrchestrationState;
     journal: OrchestrationJournal;
+    store: GitHubStateBranchStore;
   }> {
     const token = await resolveGitHubToken(
       this.#pi,
@@ -715,7 +647,11 @@ export class ForgeOrchestrationController {
       throw new Error(
         `Orchestration ${link.orchestrationId} is missing authoritative state.`,
       );
-    return { state: current.state, journal: new OrchestrationJournal(store) };
+    return {
+      state: current.state,
+      journal: new OrchestrationJournal(store),
+      store,
+    };
   }
 
   #syncLink(
@@ -754,23 +690,6 @@ function chooseIntegrationBranch(policy: ForgePolicy): string {
       "Forge policy needs at least one exact integration branch for work-on.",
     );
   return exact;
-}
-
-async function resolveGitHubToken(
-  pi: ExtensionAPI,
-  cwd: string,
-  signal?: AbortSignal,
-): Promise<string> {
-  const result = await pi.exec("gh", ["auth", "token"], {
-    cwd,
-    timeout: 30_000,
-    ...(signal ? { signal } : {}),
-  });
-  if (result.code !== 0 || !result.stdout.trim())
-    throw new Error(
-      `Unable to resolve GitHub token through gh: ${result.stderr || result.stdout}`,
-    );
-  return result.stdout.trim();
 }
 
 function validateIssueNumbers(issueNumbers: readonly number[]): void {
@@ -816,6 +735,19 @@ function renderCompletion(state: OrchestrationState): string {
     .map(([status, count]) => `${status}=${count}`)
     .join(" · ");
   return `ForgeDock orchestration ${state.orchestrationId} finished: ${state.status}.\n${summary}`;
+}
+
+export function childCleanupReason(
+  state: Pick<OrchestrationState, "lanes">,
+): string | undefined {
+  if (!state.lanes.every(isTerminalLane)) return undefined;
+  const unsuccessful = state.lanes.filter(
+    (lane) => lane.status !== "merged" && lane.status !== "closed",
+  );
+  if (unsuccessful.length === 0) return undefined;
+  return `Orchestration is terminal with ${unsuccessful
+    .map((lane) => `#${lane.issueNumber}:${lane.status}`)
+    .join(", ")}; cancelling nonterminal child runs before lease release.`;
 }
 
 export function lifecycleMatchesForgeRun(

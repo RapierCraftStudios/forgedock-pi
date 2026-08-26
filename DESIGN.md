@@ -21,8 +21,8 @@ Multi-issue orchestration is added only after the single-issue lifecycle survive
 - Machine-local overrides may live in `.pi/forge.local.json`; they cannot weaken tracked safety policy.
 - Runs must resume on another machine.
 - GitHub-native typed state is authoritative; local state is a cache.
-- Exactly one orchestrator owns a repository run. Automatic failover is out of scope for v1.
-- Lease takeover after expiry requires explicit human authorization and starts a new lease epoch.
+- Independent runs use run-scoped authority, unique worktrees/branches, state CAS, and idempotent effect receipts; no renewable repository-wide lease exists.
+- Staging integration is guarded only at merge time by current base/head/review/CI validation and recoverable CAS state.
 - Automatic merge is allowed only for configured integration branches after all typed gates pass.
 - The protected/default production branch remains human-only.
 
@@ -33,7 +33,7 @@ Multi-issue orchestration is added only after the single-issue lifecycle survive
 - run and phase state machines;
 - legal transitions and terminal-state rules;
 - event schemas, validation, hashes, sequence numbers, and idempotency keys;
-- repository/run leases, epochs, expiry, heartbeat, and takeover;
+- run-scoped authority, optimistic state CAS, integration receipts, and idempotent effects;
 - review blocking policy and merge authorization;
 - dependency graph and ready-queue computation;
 - worktree, branch, commit, PR, merge, close, and cleanup policy;
@@ -55,19 +55,19 @@ The core must be testable without Pi, an LLM, a checkout, or network access.
 
 ### Required delegation hierarchy
 
-The work-on pipeline is itself a top-level subagent and must preserve nested review fanout:
+Work-on is the single-issue coordinator. Standalone work-on uses the visible Pi session as coordinator; orchestration launches one coordinator child per issue. Each coordinator launches sibling contexts so nesting remains bounded:
 
 ```text
-Pi session / Forge extension
-└── forge-work-on agent (single issue, single writer, nesting enabled)
-    ├── forge-reviewer-correctness (fresh, read-only, no recursion)
-    ├── forge-reviewer-security    (fresh, read-only, no recursion)
-    └── optional domain reviewers  (fresh, read-only, no recursion)
+work-on coordinator (root standalone, depth 1 when orchestrated)
+├── investigator/architect (fresh, read-only)
+├── retained builder        (writer, resumed for verify/remediation, no recursion)
+├── correctness reviewer    (fresh every round, read-only)
+└── security reviewer       (fresh every round, read-only)
 ```
 
-`forge-work-on` owns the issue-level reasoning loop from investigation through implementation and review. At the review phase it invokes `pi-subagents` itself, waits for the complete required panel, synthesizes the structured results, applies accepted fixes in its own worktree when authorized, and may repeat a bounded fix/re-review loop. The target depth is two child levels: work-on at depth 1 and reviewers at depth 2. Nested reviewers never receive the `subagent` tool.
+The coordinator owns typed context capsules, durable transitions, reviewer joining, finding disposition, integration requests, and escalation. The retained builder owns implementation, verification, PR preparation, and in-contract remediation on the same PR. Reviewers are always fresh siblings bound to the exact head SHA and never receive the builder transcript or `subagent` tool.
 
-Later, `/forge:orchestrate` launches multiple independent `forge-work-on` children. Each work-on child retains the same nested reviewer fanout; orchestration does not replace review with a parent-side shortcut.
+Later, `/forge:orchestrate` launches multiple independent work-on coordinators. Orchestration schedules lanes and integration order; it does not replace or bypass each lane’s work-on, review, or remediation workflow.
 
 The runtime definition for `forge-work-on` must therefore load the `pi-subagents` extension/tool in the child, set an explicit nesting/spawn budget, and restrict nested launches to registered Forge reviewer roles. This hierarchy is a tested contract, not a prompt convention.
 
@@ -168,7 +168,7 @@ Every event contains at least:
   "actor": {
     "kind": "extension",
     "sessionId": "...",
-    "leaseEpoch": 3
+    "authorityRevision": 1
   },
   "occurredAt": "RFC3339 timestamp",
   "idempotencyKey": "...",

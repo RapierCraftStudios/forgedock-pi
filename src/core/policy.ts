@@ -1,7 +1,10 @@
+import { posix } from "node:path";
+
 export const FORGEDOCK_CONFIG_SCHEMA = "forgedock.config/v1" as const;
 
 export interface VerificationCommandPolicy {
   argv: readonly string[];
+  cwd: string;
   required: boolean;
   timeoutMs: number;
 }
@@ -119,6 +122,39 @@ function stringArray(value: unknown, path: string): string[] {
   ];
 }
 
+export function normalizeVerificationCommandCwd(
+  value: unknown,
+  path = "verification command cwd",
+): string {
+  if (value === undefined) return ".";
+  const cwd = string(value, path);
+  if (cwd.includes("\0"))
+    throw new PolicyValidationError(path, "must not contain NUL bytes");
+  if (cwd.includes("\\"))
+    throw new PolicyValidationError(
+      path,
+      "must use portable forward-slash separators",
+    );
+  if (
+    cwd.startsWith("/") ||
+    cwd.startsWith("//") ||
+    /^[A-Za-z]:/.test(cwd)
+  ) {
+    throw new PolicyValidationError(path, "must be repository-relative");
+  }
+  if (cwd.split("/").includes(".."))
+    throw new PolicyValidationError(path, "must not contain '..' traversal");
+  const normalized = posix.normalize(cwd);
+  if (
+    normalized === ".." ||
+    normalized.startsWith("../") ||
+    normalized.startsWith("/")
+  ) {
+    throw new PolicyValidationError(path, "must stay within the repository");
+  }
+  return normalized || ".";
+}
+
 function parseGitHubVerification(value: unknown): ForgePolicy["verification"]["github"] {
   if (value === undefined)
     return {
@@ -181,6 +217,10 @@ function parseVerificationCommands(
     );
     commands[name] = {
       argv,
+      cwd: normalizeVerificationCommandCwd(
+        command.cwd,
+        `verification.commands.${name}.cwd`,
+      ),
       required: boolean(
         command.required,
         `verification.commands.${name}.required`,
@@ -224,18 +264,19 @@ export function parseForgePolicy(value: unknown): ForgePolicy {
       ? undefined
       : record(root.orchestration, "orchestration");
   const subagents = record(root.subagents, "subagents");
-  const leaseSeconds = integer(
-    state.leaseSeconds,
-    "state.leaseSeconds",
-    30,
-    86_400,
-  );
-  const heartbeatSeconds = integer(
-    state.heartbeatSeconds,
-    "state.heartbeatSeconds",
-    5,
-    leaseSeconds - 1,
-  );
+  const leaseSeconds =
+    state.leaseSeconds === undefined
+      ? 31_536_000
+      : integer(state.leaseSeconds, "state.leaseSeconds", 30, 31_536_000);
+  const heartbeatSeconds =
+    state.heartbeatSeconds === undefined
+      ? 60
+      : integer(
+          state.heartbeatSeconds,
+          "state.heartbeatSeconds",
+          5,
+          leaseSeconds - 1,
+        );
 
   return {
     schema: FORGEDOCK_CONFIG_SCHEMA,

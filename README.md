@@ -32,7 +32,7 @@ Issue
 - **Typed execution authority:** hash-chained events and snapshots on a dedicated GitHub state branch.
 - **Machine-visible memory:** canonical `FORGE:*` comments on issues and PRs.
 - **Nested review hierarchy:** one work-on writer launches fresh, read-only reviewer subagents.
-- **Fail-closed merge policy:** stale SHAs, failed checks, incomplete reviewers, missing audit artifacts, conflicts, protected branches, and invalid leases block merge.
+- **Fail-closed merge policy:** stale SHAs, failed checks, incomplete reviewers, missing audit artifacts, conflicts, protected branches, and invalid run/integration authority block merge.
 - **Isolated Git worktrees:** one issue, one branch, one writer.
 - **Exact workflow labels:** `investigating → ready-to-build → building → in-review → merged`.
 - **Idempotent side effects:** event IDs, idempotency keys, read-back verification, and optimistic non-force state updates.
@@ -42,9 +42,9 @@ Issue
 ### Implemented
 
 - `/forge:init`
-- `/forge:work-on <issue>`
+- `/forge:work-on <issue intent>`
 - `/forge:status`
-- Durable GitHub state journal and repository lease
+- Durable GitHub state journal, run-scoped authority, and CAS-backed integration gating
 - Canonical issue phase reports
 - PR-before-review ordering
 - Nested correctness and security reviewers
@@ -56,7 +56,7 @@ Issue
 
 - Multi-issue `/forge:orchestrate`
 - Full legacy Forge history recall and relevance ranking
-- Live cross-machine takeover validation
+- Live cross-machine run reconciliation validation
 - Container/OS sandboxing for repository test execution
 - Staging-to-production deployment review
 
@@ -101,10 +101,29 @@ For an initial production pilot, set:
 }
 ```
 
+For monorepo-local checks, bind each tracked command to the package that owns its script:
+
+```json
+{
+  "verification": {
+    "commands": {
+      "web-test": {
+        "argv": ["npm", "test"],
+        "cwd": "web",
+        "required": true,
+        "timeoutMs": 600000
+      }
+    }
+  }
+}
+```
+
+`cwd` is optional and defaults to the repository root. It must be a safe repository-relative directory. ForgeDock statically preflights required executables and package scripts against the frozen integration worktree before launching a writer; absolute paths, traversal, missing scripts, and symlink escapes fail closed with the exact policy path to fix. Use `commands: {}` for CI-only verification.
+
 Then run:
 
 ```text
-/forge:work-on 123
+/forge:work-on "the oldest eligible workflow bug"
 /forge:status
 ```
 
@@ -114,7 +133,7 @@ Then run:
 |---|---|
 | `/forge:about` | Show extension, schema, and `pi-subagents` availability |
 | `/forge:init` | Create tracked policy and canonical labels |
-| `/forge:work-on <issue>` | Launch one issue through work-on and nested review |
+| `/forge:work-on <issue intent>` | Resolve exactly one issue from a number, URL, or natural-language selector, then launch work-on |
 | `/forge:status` | Show ForgeDock runs linked to the Pi session |
 
 ## GitHub audit trail

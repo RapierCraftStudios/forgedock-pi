@@ -74,6 +74,7 @@ export interface CommitRunStateInput {
   state: RunState;
   lease?: RepositoryLease;
   preserveRepositoryLease?: boolean;
+  runScopedAuthority?: boolean;
   message: string;
   signal?: AbortSignal;
 }
@@ -375,13 +376,23 @@ export class GitHubStateBranchStore {
       throw new TypeError(
         "A run cannot preserve and update the repository lease together.",
       );
-    if (input.lease && input.state.runId !== input.lease.ownerRunId) {
+    if (input.runScopedAuthority && (input.lease || input.preserveRepositoryLease))
+      throw new TypeError(
+        "Run-scoped authority cannot read or update the repository lock.",
+      );
+    if (input.lease && input.state.runId !== input.lease.ownerRunId)
       throw new TypeError(
         "Run state does not own the supplied repository lease.",
       );
-    }
     if (input.lease) validateRepositoryLease(input.lease);
-    if (Boolean(input.state.lease) !== Boolean(input.lease)) {
+    if (input.runScopedAuthority) {
+      if (input.state.authorityMode !== "run-scoped" || !input.state.lease)
+        throw new TypeError(
+          "Run-scoped state requires its own embedded authority record.",
+        );
+      if (input.state.lease.ownerRunId !== input.state.runId)
+        throw new TypeError("Run-scoped authority identity does not match run state.");
+    } else if (Boolean(input.state.lease) !== Boolean(input.lease)) {
       throw new TypeError(
         "Snapshot lease and supplied lease presence must match.",
       );
