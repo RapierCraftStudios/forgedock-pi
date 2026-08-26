@@ -10,8 +10,8 @@
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 6,
-  "lastEventHash": "sha256:a53db59a0859e44dd1a4a4ca50cf5431106cb2b41f30d059304103dfec68bbb1",
+  "sequence": 7,
+  "lastEventHash": "sha256:eebbfd562031fd12259dd9ed67b8fc2301ee99e7be7c1267d4d9384611739739",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -45,9 +45,13 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "queued",
+      "status": "running",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
-      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/9bcaf7e9-19d8-4001-bdf9-da2e903d3240/.pi/forge/9bcaf7e9-19d8-4001-bdf9-da2e903d3240-investigate-1.json"
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/9bcaf7e9-19d8-4001-bdf9-da2e903d3240/.pi/forge/9bcaf7e9-19d8-4001-bdf9-da2e903d3240-investigate-1.json",
+      "subagentRunId": "launch:investigate-1:270ed409-1c59-4ca0-8950-a157beb91e8d",
+      "launchNonce": "270ed409-1c59-4ca0-8950-a157beb91e8d",
+      "launchIntent": true,
+      "startedAt": "2026-08-26T01:52:43.274Z"
     }
   },
   "effects": {},
@@ -57,7 +61,8 @@
     "node:resolve-1:started": "e5ae8a91-b081-46e7-a5fa-2ec14369ca75",
     "node:resolve-1:attempt:1:launch-receipt:bb3b9cc9-d121-4c4f-a5fb-467155ebd66f:0ec7f5a7-ec61-4f86-b5de-00b1f26ac68e": "39ad195f-628d-432f-ac71-9485aef274c4",
     "node:resolve-1:completed": "3ea789f7-2c18-4f19-9a68-a5d2c35d234c",
-    "node:investigate-1:queued": "45508e01-850d-45a3-add3-c8b81ce17317"
+    "node:investigate-1:queued": "45508e01-850d-45a3-add3-c8b81ce17317",
+    "node:investigate-1:started": "1f1bec6d-a4b9-4bcc-bf98-5b1d0cc6f9d5"
   },
   "eventIds": {
     "9cda0aad-8c41-4767-a9d5-95c16a88ebf2": true,
@@ -65,6 +70,7 @@
     "e5ae8a91-b081-46e7-a5fa-2ec14369ca75": true,
     "39ad195f-628d-432f-ac71-9485aef274c4": true,
     "3ea789f7-2c18-4f19-9a68-a5d2c35d234c": true,
-    "45508e01-850d-45a3-add3-c8b81ce17317": true
+    "45508e01-850d-45a3-add3-c8b81ce17317": true,
+    "1f1bec6d-a4b9-4bcc-bf98-5b1d0cc6f9d5": true
   }
 }
