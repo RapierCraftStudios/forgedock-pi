@@ -5,10 +5,10 @@
   "issueNumber": 93,
   "integrationBranch": "staging",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "authorityMode": "run-scoped",
-  "sequence": 22,
-  "lastEventHash": "sha256:e2b53bc7735aae00304c137a2ddf189779f8279a65f78f60faaf4dc6a73d6653",
+  "sequence": 23,
+  "lastEventHash": "sha256:20b240a6b3c6402c3b5df06ef2682e76501b6c6baaff669e5d5bb008b3a43010",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -157,7 +157,7 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "abandoned",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 1",
           "evidence": [],
@@ -166,7 +166,9 @@
           "startedAt": "2026-08-26T09:19:42.294Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/f791b2fc-4b7e-4c12-ada3-334716c38220",
           "branch": "forge/issue-93-f791b2fc",
-          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4"
+          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4",
+          "reason": "Owning Pi session ended (quit); cancel direct work-on and release its lease.",
+          "finishedAt": "2026-08-26T09:50:18.481Z"
         }
       ]
     }
@@ -195,7 +197,8 @@
     "phase:verify:1:start": "ad733dd8-d21f-438b-934c-6f658fca418f",
     "phase:verify:1:complete": "7b2651e7-5df4-4284-8158-e474c231f640",
     "phase:review:1:queue": "43de46cb-1273-454f-8389-79e009c68947",
-    "phase:review:1:start": "cf2cfae0-f5c9-4e27-846e-0a9f4d646345"
+    "phase:review:1:start": "cf2cfae0-f5c9-4e27-846e-0a9f4d646345",
+    "run:cancelled": "8e551b83-df26-48d9-8cab-db21599c33bb"
   },
   "eventIds": {
     "6b23cbe2-b6e1-4442-9263-5f6f78ad21ce": true,
@@ -219,7 +222,8 @@
     "ad733dd8-d21f-438b-934c-6f658fca418f": true,
     "7b2651e7-5df4-4284-8158-e474c231f640": true,
     "43de46cb-1273-454f-8389-79e009c68947": true,
-    "cf2cfae0-f5c9-4e27-846e-0a9f4d646345": true
+    "cf2cfae0-f5c9-4e27-846e-0a9f4d646345": true,
+    "8e551b83-df26-48d9-8cab-db21599c33bb": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
@@ -231,5 +235,6 @@
     "lastHeartbeatAt": "2026-08-26T08:46:59.235Z",
     "expiresAt": "2027-08-26T08:46:59.235Z",
     "takeoverRequired": false
-  }
+  },
+  "cancellationReason": "Owning Pi session ended (quit); cancel direct work-on and release its lease."
 }
