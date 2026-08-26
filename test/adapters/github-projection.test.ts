@@ -16,7 +16,11 @@ interface Comment {
 
 class ProjectionTransport implements GitHubTransport {
   readonly comments: Comment[] = [];
-  readonly labels = new Set<string>(["bug"]);
+  readonly labels = new Set<string>([
+    "bug",
+    "documentation",
+    "workflow:stale",
+  ]);
   commentPosts = 0;
 
   async request<T>(request: GitHubRequest): Promise<GitHubResponse<T>> {
@@ -91,6 +95,8 @@ test("issue projection is marker-idempotent and only adds missing labels", async
 
   await projector.setWorkflowLabel(42, "workflow:merged");
   assert.equal(transport.labels.has("workflow:investigating"), false);
+  assert.equal(transport.labels.has("workflow:stale"), false);
   assert.equal(transport.labels.has("workflow:merged"), true);
   assert.equal(transport.labels.has("bug"), true);
+  assert.equal(transport.labels.has("documentation"), true);
 });

@@ -1,3 +1,5 @@
+import type { RunPhase } from "./events.ts";
+
 export const WORKFLOW_LABEL_BY_STAGE = {
   investigation: "workflow:investigating",
   readyToBuild: "workflow:ready-to-build",
@@ -8,6 +10,60 @@ export const WORKFLOW_LABEL_BY_STAGE = {
   invalid: "workflow:invalid",
   decomposed: "workflow:decomposed",
 } as const;
+
+export type CheckpointAction =
+  | "queue"
+  | "start"
+  | "complete"
+  | "fail"
+  | "block"
+  | "needs-human"
+  | "abandon";
+
+export function workflowLabelForCheckpoint(params: {
+  phase: RunPhase;
+  action: CheckpointAction;
+  report?: string;
+}): string | undefined {
+  if (
+    (params.phase === "resolve" || params.phase === "investigate") &&
+    params.action === "start"
+  ) {
+    return WORKFLOW_LABEL_BY_STAGE.investigation;
+  }
+  if (params.phase === "resolve" && params.action === "complete") {
+    return WORKFLOW_LABEL_BY_STAGE.investigation;
+  }
+  if (params.phase === "investigate" && params.action === "complete") {
+    if (params.report?.includes("**Verdict**: INVALID"))
+      return WORKFLOW_LABEL_BY_STAGE.invalid;
+    if (params.report?.includes("**Verdict**: DECOMPOSED"))
+      return WORKFLOW_LABEL_BY_STAGE.decomposed;
+    return WORKFLOW_LABEL_BY_STAGE.readyToBuild;
+  }
+  if (
+    (params.phase === "plan" ||
+      params.phase === "prepare-worktree" ||
+      params.phase === "implement" ||
+      params.phase === "verify") &&
+    (params.action === "start" || params.action === "complete")
+  ) {
+    return WORKFLOW_LABEL_BY_STAGE.build;
+  }
+  if (
+    params.phase === "review" &&
+    (params.action === "start" || params.action === "complete")
+  ) {
+    return WORKFLOW_LABEL_BY_STAGE.review;
+  }
+  if (params.phase === "merge" && params.action === "start") {
+    return WORKFLOW_LABEL_BY_STAGE.awaitingMerge;
+  }
+  if (params.phase === "merge" && params.action === "complete") {
+    return WORKFLOW_LABEL_BY_STAGE.merged;
+  }
+  return undefined;
+}
 
 export const PRE_MERGE_ISSUE_MARKERS = [
   "<!-- FORGE:INVESTIGATOR -->",

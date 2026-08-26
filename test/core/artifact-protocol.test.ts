@@ -6,6 +6,8 @@ import {
   checkPostMergeAuditTrail,
   checkPreMergeAuditTrail,
   POST_MERGE_ISSUE_MARKERS,
+  WORKFLOW_LABEL_BY_STAGE,
+  workflowLabelForCheckpoint,
   POST_MERGE_PR_MARKERS,
   PRE_MERGE_ISSUE_MARKERS,
   PRE_MERGE_PR_MARKERS,
@@ -66,5 +68,60 @@ test("workflow labels are exact stage projections", () => {
   assert.throws(
     () => assertWorkflowLabel("workflow:investigating", "review"),
     /workflow:in-review/,
+  );
+});
+
+test("checkpoint labels cover the complete workflow lifecycle", () => {
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "resolve", action: "start" }),
+    WORKFLOW_LABEL_BY_STAGE.investigation,
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "investigate", action: "start" }),
+    WORKFLOW_LABEL_BY_STAGE.investigation,
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({
+      phase: "investigate",
+      action: "complete",
+      report: "**Verdict**: CONFIRMED",
+    }),
+    WORKFLOW_LABEL_BY_STAGE.readyToBuild,
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({
+      phase: "investigate",
+      action: "complete",
+      report: "**Verdict**: INVALID",
+    }),
+    WORKFLOW_LABEL_BY_STAGE.invalid,
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "plan", action: "start" }),
+    WORKFLOW_LABEL_BY_STAGE.build,
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "verify", action: "complete" }),
+    WORKFLOW_LABEL_BY_STAGE.build,
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "review", action: "start" }),
+    WORKFLOW_LABEL_BY_STAGE.review,
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "review", action: "complete" }),
+    WORKFLOW_LABEL_BY_STAGE.review,
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "merge", action: "start" }),
+    WORKFLOW_LABEL_BY_STAGE.awaitingMerge,
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "merge", action: "complete" }),
+    WORKFLOW_LABEL_BY_STAGE.merged,
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "merge", action: "queue" }),
+    undefined,
   );
 });
