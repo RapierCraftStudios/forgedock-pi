@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -298,5 +299,60 @@ test("terminal workflow completion is matched only by top-level run ID", () => {
       results: [{ runId: "nested-child", status: "paused" }],
     }),
     undefined,
+  );
+});
+
+test("successful merge projects merged state before bookkeeping and post-merge work", async () => {
+  const source = await readFile("src/workflows/work-on.ts", "utf8");
+  const assertMergeBoundary = (
+    section: string,
+    name: string,
+    bookkeepingMarker: string,
+  ) => {
+    const merge = section.indexOf("mergePullRequest");
+    const projection = section.indexOf(
+      'await this.#projectWorkflowStage(link, "merged"',
+    );
+    const bookkeeping = section.indexOf(bookkeepingMarker);
+    const postMerge = section.indexOf("postReviewCompletionArtifacts");
+    assert.ok(merge >= 0, `${name} must invoke mergePullRequest`);
+    assert.ok(projection >= 0, `${name} must project workflow:merged`);
+    assert.ok(bookkeeping >= 0, `${name} must record the merge effect`);
+    assert.ok(postMerge >= 0, `${name} must retain post-merge artifacts`);
+    assert.ok(merge < projection, `${name} projects before merge succeeds`);
+    assert.ok(
+      projection < bookkeeping,
+      `${name} records merge bookkeeping before the merged projection`,
+    );
+    assert.ok(
+      projection < postMerge,
+      `${name} performs post-merge work before the merged projection`,
+    );
+  };
+
+  const parentStart = source.indexOf('} else if (node.node === "merge") {');
+  const parentEnd = source.indexOf(
+    '} else if (node.node === "close") {',
+    parentStart,
+  );
+  assert.ok(parentStart >= 0 && parentEnd > parentStart);
+  assertMergeBoundary(
+    source.slice(parentStart, parentEnd),
+    "parent merge",
+    'type: "effect.recorded"',
+  );
+
+  const finalizeStart = source.indexOf("async #finalize(");
+  const directStart = source.indexOf("const merged = currentPull.merged", finalizeStart);
+  const directEnd = source.indexOf(
+    'await appendPhase(\n      journal,\n      link.forgeRunId,\n      "close"',
+    directStart,
+  );
+  assert.ok(finalizeStart >= 0 && directStart > finalizeStart);
+  assert.ok(directEnd > directStart);
+  assertMergeBoundary(
+    source.slice(directStart, directEnd),
+    "direct merge",
+    "await appendEffect(",
   );
 });

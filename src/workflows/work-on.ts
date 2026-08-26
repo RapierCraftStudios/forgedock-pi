@@ -2172,13 +2172,15 @@ export class ForgeWorkOnController {
           .catch(() => undefined);
         throw error;
       }
+      // Project the merged state before any durable bookkeeping or post-merge
+      // work can fail and leave the issue projected as awaiting merge.
+      await this.#projectWorkflowStage(link, "merged", ctx, projector).catch(
+        () => undefined,
+      );
       headSha = merged.sha;
       outcome = "merged";
       evidence = [`merge:${merged.sha}`];
       await journal.append({ runId: link.forgeRunId, type: "effect.recorded", payload: { effectType: "merge", effectId: `merge:${pull.number}`, digest: digest(merged.sha) }, idempotencyKey: `effect:merge:${pull.number}`, sessionId, message: `Record merge effect for ${pull.number}`, ...(ctx.signal ? { signal: ctx.signal } : {}) });
-      await this.#projectWorkflowStage(link, "merged", ctx, projector).catch(
-        () => undefined,
-      );
       const aggregate = await this.#aggregateFromState(
         link,
         authority.state as import("../core/state.ts").RunState,
@@ -3885,6 +3887,9 @@ export class ForgeWorkOnController {
           method: "squash",
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
+    // Project the merged state immediately after the successful merge API
+    // result, before bookkeeping and all later post-merge operations.
+    await this.#projectWorkflowStage(link, "merged", ctx, projector);
     await appendEffect(
       journal,
       link.forgeRunId,
@@ -3905,7 +3910,6 @@ export class ForgeWorkOnController {
       undefined,
       [merged.sha],
     );
-    await this.#projectWorkflowStage(link, "merged", ctx, projector);
     if (!currentPull.merged)
       await postReviewCompletionArtifacts({
         github,
