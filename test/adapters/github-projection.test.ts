@@ -59,7 +59,7 @@ class ProjectionTransport implements GitHubTransport {
   }
 }
 
-test("issue projection is marker-idempotent and only adds missing labels", async () => {
+test("issue projection is marker-idempotent and reconciles the workflow-label lifecycle", async () => {
   const transport = new ProjectionTransport();
   const projector = new GitHubIssueProjector(transport, "owner/repo");
   const event = createRunEvent({
@@ -99,7 +99,21 @@ test("issue projection is marker-idempotent and only adds missing labels", async
   assert.equal(transport.labels.has("workflow:investigating"), true);
 
   transport.labels.add("priority:P1");
-  await projector.setWorkflowLabel(42, "workflow:merged");
+  for (const workflowLabel of [
+    "workflow:ready-to-build",
+    "workflow:building",
+    "workflow:in-review",
+    "workflow:awaiting-merge",
+    "workflow:merged",
+  ]) {
+    await projector.setWorkflowLabel(42, workflowLabel);
+    assert.deepEqual(
+      [...transport.labels].filter((label) => label.startsWith("workflow:")),
+      [workflowLabel],
+    );
+    assert.equal(transport.labels.has("bug"), true);
+    assert.equal(transport.labels.has("priority:P1"), true);
+  }
   await projector.setWorkflowLabel(42, "workflow:merged");
   assert.equal(transport.labels.has("workflow:investigating"), false);
   assert.equal(transport.labels.has("workflow:merged"), true);
