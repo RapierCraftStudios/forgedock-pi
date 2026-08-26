@@ -133,6 +133,7 @@ export class SubagentsRpcClient {
       baseBranch: input.baseBranch,
       baseSha: input.baseSha,
       maxReviewRounds: input.policy.review.maxRounds,
+      reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
       nodeId: input.node.nodeId,
       node: input.node.node,
@@ -209,6 +210,7 @@ export class SubagentsRpcClient {
       baseBranch: input.baseBranch,
       baseSha: input.baseSha,
       maxReviewRounds: input.policy.review.maxRounds,
+      reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
       nodeId: input.node.nodeId,
       node: `review-${domain}`,
@@ -294,6 +296,7 @@ export class SubagentsRpcClient {
       baseBranch: input.baseBranch,
       baseSha: input.baseSha,
       maxReviewRounds: input.policy.review.maxRounds,
+      reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
       ...(input.builderContract
         ? { builderContract: input.builderContract }
@@ -412,6 +415,7 @@ export class SubagentsRpcClient {
       baseBranch: input.baseBranch,
       baseSha: input.baseSha,
       maxReviewRounds: input.policy.review.maxRounds,
+      reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
       refresh: true,
       leaseOwnerRunId: input.leaseOwnerRunId ?? input.runId,

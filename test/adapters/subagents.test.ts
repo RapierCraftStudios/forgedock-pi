@@ -153,7 +153,10 @@ test("RPC dedicated reviewer launch uses the registered reviewer and reviewer sc
     params: {
       agent: string;
       task: string;
-      extensionBindings: Record<string, { nodeId: string; reviewHeadSha: string }>;
+      extensionBindings: Record<
+        string,
+        { nodeId: string; reviewHeadSha: string; reviewerTimeoutMs: number }
+      >;
       outputSchema: { properties: { schema: { const: string } } };
     };
   };
@@ -170,6 +173,10 @@ test("RPC dedicated reviewer launch uses the registered reviewer and reviewer sc
   assert.equal(
     spawn.params.extensionBindings["forgedock.pi/1"]?.reviewHeadSha,
     "fedcba9876543210",
+  );
+  assert.equal(
+    spawn.params.extensionBindings["forgedock.pi/1"]?.reviewerTimeoutMs,
+    600_000,
   );
   assert.doesNotMatch(spawn.params.task, /runs\.all/);
 });
@@ -202,7 +209,10 @@ test("RPC domain reviewer must finalize its bound result", async () => {
     params: {
       agent: string;
       task: string;
-      extensionBindings: Record<string, { nodeId: string; reviewHeadSha: string }>;
+      extensionBindings: Record<
+        string,
+        { nodeId: string; reviewHeadSha: string; reviewerTimeoutMs: number }
+      >;
     };
   };
   assert.equal(spawn.params.agent, "forge-review-domain");

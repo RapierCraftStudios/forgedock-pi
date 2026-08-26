@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  lstat,
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -14,12 +23,14 @@ import {
   assertCompleteProcessOutput,
   assertCompleteReviewDiff,
   assertReviewerDiffCoverage,
+  assertUniqueReviewerProfileIds,
   boundedToolDenial,
   forgeCommitArguments,
   isForgeRuntimePath,
   parseBoundReviewerResult,
   parseGitStatusPaths,
   reviewerStatusIsTerminal,
+  writeTrustedResultFile,
 } from "../../src/agents/child-runtime.ts";
 import { FORGE_WORK_ON_TOOLS } from "../../src/agents/register.ts";
 
@@ -119,6 +130,60 @@ test("review polling recognizes textual terminal states from pi-subagents RPC", 
   );
   assert.equal(reviewerStatusIsTerminal({ state: "failed" }), true);
   assert.equal(reviewerStatusIsTerminal({ text: "State: running" }), false);
+  assert.equal(reviewerStatusIsTerminal({ text: "State: paused" }), false);
+  assert.equal(
+    reviewerStatusIsTerminal({
+      text: "State: running\nError context included: State: failed",
+    }),
+    false,
+  );
+});
+
+test("dynamic reviewer IDs are unique and cannot shadow baselines", () => {
+  assert.doesNotThrow(() =>
+    assertUniqueReviewerProfileIds([{ id: "architecture" }, { id: "api" }]),
+  );
+  assert.throws(
+    () =>
+      assertUniqueReviewerProfileIds([
+        { id: "architecture" },
+        { id: "architecture" },
+      ]),
+    /reserved or duplicated/,
+  );
+  assert.throws(
+    () => assertUniqueReviewerProfileIds([{ id: "security" }]),
+    /reserved or duplicated/,
+  );
+});
+
+test("trusted result publication replaces final symlinks and rejects parent symlinks", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-result-root-"));
+  const outside = await mkdtemp(join(tmpdir(), "forgedock-result-outside-"));
+  try {
+    const protectedRoot = join(root, ".pi", "forge");
+    await mkdir(protectedRoot, { recursive: true });
+    const outsideFile = join(outside, "outside.json");
+    const resultPath = join(protectedRoot, "review.json");
+    await writeFile(outsideFile, "outside\n");
+    await symlink(outsideFile, resultPath);
+
+    await writeTrustedResultFile(root, resultPath, "trusted\n");
+    assert.equal(await readFile(resultPath, "utf8"), "trusted\n");
+    assert.equal(await readFile(outsideFile, "utf8"), "outside\n");
+    assert.equal((await lstat(resultPath)).isSymbolicLink(), false);
+
+    await rm(protectedRoot, { recursive: true, force: true });
+    await symlink(outside, protectedRoot);
+    await assert.rejects(
+      writeTrustedResultFile(root, join(protectedRoot, "escaped.json"), "no\n"),
+      /real directory|cannot traverse symlinks/,
+    );
+    await assert.rejects(readFile(join(outside, "escaped.json"), "utf8"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  }
 });
 
 test("review result files are schema and identity bound", () => {

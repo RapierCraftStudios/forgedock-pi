@@ -365,6 +365,7 @@ export class ForgeWorkOnController {
             baseBranch: link.prepared.baseBranch,
             baseSha: link.prepared.baseSha,
             maxReviewRounds: policy.review.maxRounds,
+            reviewerTimeoutMs: policy.subagents.reviewerTimeoutMs,
             verificationCommands: policy.verification.commands,
             refresh: false,
           };
@@ -922,6 +923,7 @@ export class ForgeWorkOnController {
           baseBranch: prepared.baseBranch,
           baseSha: prepared.baseSha,
           maxReviewRounds: policy.review.maxRounds,
+          reviewerTimeoutMs: policy.subagents.reviewerTimeoutMs,
           verificationCommands: policy.verification.commands,
           refresh: false,
         };
