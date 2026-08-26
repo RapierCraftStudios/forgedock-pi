@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "cancelled",
   "authorityMode": "run-scoped",
-  "sequence": 23,
-  "lastEventHash": "sha256:20b240a6b3c6402c3b5df06ef2682e76501b6c6baaff669e5d5bb008b3a43010",
+  "sequence": 24,
+  "lastEventHash": "sha256:1b0512658eab4009681cbcafa20fce2a271322b28a5824aee71fa0c749287d8d",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -198,7 +198,8 @@
     "phase:verify:1:complete": "7b2651e7-5df4-4284-8158-e474c231f640",
     "phase:review:1:queue": "43de46cb-1273-454f-8389-79e009c68947",
     "phase:review:1:start": "cf2cfae0-f5c9-4e27-846e-0a9f4d646345",
-    "run:cancelled": "8e551b83-df26-48d9-8cab-db21599c33bb"
+    "run:cancelled": "8e551b83-df26-48d9-8cab-db21599c33bb",
+    "lease:release": "0af30ca2-a16c-404e-852c-3c523e5176ae"
   },
   "eventIds": {
     "6b23cbe2-b6e1-4442-9263-5f6f78ad21ce": true,
@@ -223,18 +224,8 @@
     "7b2651e7-5df4-4284-8158-e474c231f640": true,
     "43de46cb-1273-454f-8389-79e009c68947": true,
     "cf2cfae0-f5c9-4e27-846e-0a9f4d646345": true,
-    "8e551b83-df26-48d9-8cab-db21599c33bb": true
-  },
-  "lease": {
-    "schema": "forgedock.repository-lease/v1",
-    "repository": "RapierCraftStudios/forgedock-pi",
-    "ownerRunId": "f791b2fc-4b7e-4c12-ada3-334716c38220",
-    "ownerSessionId": "01a03d3d-2812-74ee-83ac-c88265bc2263",
-    "epoch": 1,
-    "acquiredAt": "2026-08-26T08:46:59.235Z",
-    "lastHeartbeatAt": "2026-08-26T08:46:59.235Z",
-    "expiresAt": "2027-08-26T08:46:59.235Z",
-    "takeoverRequired": false
+    "8e551b83-df26-48d9-8cab-db21599c33bb": true,
+    "0af30ca2-a16c-404e-852c-3c523e5176ae": true
   },
   "cancellationReason": "Owning Pi session ended (quit); cancel direct work-on and release its lease."
 }
