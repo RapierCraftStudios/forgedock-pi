@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:f25141fbd5d5eef5b14978e0a2ce2ad0b0e74dabda0f987198292ccad43df78b",
+  "sequence": 8,
+  "lastEventHash": "sha256:6fac8fab98d84e02e89295ad34df526d257a70cc88bf1d518aedb33970afc1a6",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -36,15 +36,21 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/verification-preflight.ts:119-129` recognizes package managers and direct `test`, `run`, and `run-script` forms, but not npm's `tst` alias.",
+            "The required preflight calls `packageScriptName` before `assertPackageScript`; an unrecognized alias returns `undefined`, so no package.json script existence check runs.",
+            "`test/adapters/verification-preflight.test.ts` currently covers direct `npm test`, executable availability, and cwd containment, but has no alias regression case. The fixture root intentionally lacks a test script while `web/package.json` defines one, proving the existing test can distinguish validation when invoked.",
+            "Tracked `.forge/config.json` has required `check` verification and review policy; no unrelated files are implicated."
+          ],
           "logicalNodeId": "investigate-1",
           "startedAt": "2026-08-26T19:17:11.959Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/eaa81a29-de7e-4fab-899a-7b7ac90bf652",
           "branch": "forge/issue-113-eaa81a29",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T19:17:51.368Z"
         }
       ]
     }
@@ -58,7 +64,8 @@
     "phase:resolve:1:start": "fd4a864d-aa8c-48ff-b961-d46305556cd1",
     "phase:resolve:1:complete": "6914d6b8-f1fb-4527-8efd-91f320ca5294",
     "phase:investigate:1:queue": "135878c2-4d4b-4ce1-8e36-37d36b4bc874",
-    "phase:investigate:1:start": "c59d6adb-9d41-4586-bfb4-df07632562e1"
+    "phase:investigate:1:start": "c59d6adb-9d41-4586-bfb4-df07632562e1",
+    "phase:investigate:1:complete": "81e6ea5a-53ef-48a2-8d17-ec548a3fdd31"
   },
   "eventIds": {
     "0902b4d5-bc43-4cbf-8a30-9d7fd570986a": true,
@@ -67,7 +74,8 @@
     "fd4a864d-aa8c-48ff-b961-d46305556cd1": true,
     "6914d6b8-f1fb-4527-8efd-91f320ca5294": true,
     "135878c2-4d4b-4ce1-8e36-37d36b4bc874": true,
-    "c59d6adb-9d41-4586-bfb4-df07632562e1": true
+    "c59d6adb-9d41-4586-bfb4-df07632562e1": true,
+    "81e6ea5a-53ef-48a2-8d17-ec548a3fdd31": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
