@@ -5,10 +5,10 @@
   "issueNumber": 94,
   "integrationBranch": "staging",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "blocked",
   "authorityMode": "run-scoped",
-  "sequence": 22,
-  "lastEventHash": "sha256:2cb2d3a4346f4ce1c793b6a6b3cf0e8f7a0c29b133897be2b67d21bfd9eb54cf",
+  "sequence": 23,
+  "lastEventHash": "sha256:d22bc15b4fd5aac72b48cc29c5243cf6d3d1514f3e5ff854c64c7a39315d56db",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -162,7 +162,7 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "blocked",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 1",
           "evidence": [],
@@ -171,7 +171,9 @@
           "startedAt": "2026-08-26T12:23:56.820Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/3b8e41dc-a26a-43eb-9e15-d8ce3eae0414",
           "branch": "forge/issue-94-3b8e41dc",
-          "baseSha": "26139ba278b95578a300c597ec35495a7d502eb6"
+          "baseSha": "26139ba278b95578a300c597ec35495a7d502eb6",
+          "reason": "Review-fix commit d174f8e9d8ff88c1a40b8a75c99489c76ef52e92 was created and diagnostics were clean, but forge_prepare_review could not return a trusted refreshed PR identity: GitHub API 422 was returned for /repos/RapierCraftStudios/forgedock-pi/issues/94/comments on two idempotent recovery attempts. The current head therefore cannot be launched into a fresh bound review panel without fabricating the required PR/comment evidence.",
+          "finishedAt": "2026-08-26T12:47:04.121Z"
         }
       ]
     }
@@ -200,7 +202,8 @@
     "phase:verify:1:start": "402fb7b7-a41d-4c28-85eb-6af2a22939c1",
     "phase:verify:1:complete": "9cd20832-d509-4197-b96b-1baad18273d8",
     "phase:review:1:queue": "ef8b22dc-8d85-45f1-a536-ae6fb4700ab4",
-    "phase:review:1:start": "059915a0-c549-4f3c-8be5-1c5c5a0c0a6e"
+    "phase:review:1:start": "059915a0-c549-4f3c-8be5-1c5c5a0c0a6e",
+    "phase:review:1:block": "819759e7-7964-4eb6-96de-eb2d5f6d6270"
   },
   "eventIds": {
     "dea8530b-0f60-4fbf-8188-84e3df4b2153": true,
@@ -224,7 +227,8 @@
     "402fb7b7-a41d-4c28-85eb-6af2a22939c1": true,
     "9cd20832-d509-4197-b96b-1baad18273d8": true,
     "ef8b22dc-8d85-45f1-a536-ae6fb4700ab4": true,
-    "059915a0-c549-4f3c-8be5-1c5c5a0c0a6e": true
+    "059915a0-c549-4f3c-8be5-1c5c5a0c0a6e": true,
+    "819759e7-7964-4eb6-96de-eb2d5f6d6270": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
