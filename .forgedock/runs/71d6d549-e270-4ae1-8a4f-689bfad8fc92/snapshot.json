@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 19,
-  "lastEventHash": "sha256:3681b16c37e224399bf0efe82a98c0608eb0c1c170348d4845ec6e0962a497db",
+  "sequence": 20,
+  "lastEventHash": "sha256:b06b27a2925eb3cb07676bd13a998c41b24d8e8754f20cc148c2583ac589ed8a",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -134,16 +134,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume verify attempt 1",
-          "evidence": [],
+          "evidence": [
+            "The trusted verification command map is empty, which is a valid explicit GitHub-CI-only policy; there are no required local commands to invoke through forge_verify.",
+            "Primary LSP diagnostics are clean for all changed TypeScript files.",
+            "The implementation preserves post-implementation required-check fail-closed behavior; any configured required check remains represented by its named forge_verify result and gate status."
+          ],
           "inputArtifactHash": "a4347eeb03b2b7bae5a4cfef919ae1815355aabe",
           "logicalNodeId": "verify-1",
           "startedAt": "2026-08-26T11:05:05.445Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/71d6d549-e270-4ae1-8a4f-689bfad8fc92",
           "branch": "forge/issue-94-71d6d549",
-          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4"
+          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4",
+          "finishedAt": "2026-08-26T11:05:27.837Z",
+          "commitSha": "a4347eeb03b2b7bae5a4cfef919ae1815355aabe"
         }
       ]
     }
@@ -169,7 +175,8 @@
     "phase:implement:1:start": "a6e0ea5d-1f0c-427d-873d-569216ff1a8d",
     "phase:implement:1:complete": "ccf534c5-47e8-4df9-9eef-e2e2d5bdea53",
     "phase:verify:1:queue": "e7c08ce4-7b1c-4ad5-a3ed-0921d75f2ea6",
-    "phase:verify:1:start": "ff70be4c-ef64-42e3-836f-6c54157c538e"
+    "phase:verify:1:start": "ff70be4c-ef64-42e3-836f-6c54157c538e",
+    "phase:verify:1:complete": "2c164053-8918-4e10-915a-3d39eb7f6a0c"
   },
   "eventIds": {
     "74b94345-a812-40a3-af2c-143b38e194b4": true,
@@ -190,7 +197,8 @@
     "a6e0ea5d-1f0c-427d-873d-569216ff1a8d": true,
     "ccf534c5-47e8-4df9-9eef-e2e2d5bdea53": true,
     "e7c08ce4-7b1c-4ad5-a3ed-0921d75f2ea6": true,
-    "ff70be4c-ef64-42e3-836f-6c54157c538e": true
+    "ff70be4c-ef64-42e3-836f-6c54157c538e": true,
+    "2c164053-8918-4e10-915a-3d39eb7f6a0c": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
