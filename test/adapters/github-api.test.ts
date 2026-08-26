@@ -36,6 +36,28 @@ test("GitHub mutation transport revalidates authority for every write", async ()
   );
 });
 
+test("GitHub mutation retries revalidate authority after backoff", async () => {
+  let retrySent = false;
+  const inner: GitHubTransport = {
+    async request<T>(request: GitHubRequest): Promise<GitHubResponse<T>> {
+      await request.beforeRetry?.();
+      retrySent = true;
+      return { status: 200, data: {} as T, headers: {} };
+    },
+  };
+  let checks = 0;
+  const transport = new AuthorityGuardedGitHubTransport(inner, async () => {
+    checks += 1;
+    if (checks > 1) throw new Error("authority revoked during backoff");
+  });
+  await assert.rejects(
+    transport.request({ method: "POST", path: "/write" }),
+    /authority revoked during backoff/,
+  );
+  assert.equal(checks, 2);
+  assert.equal(retrySent, false);
+});
+
 test("GitHub transient retry honors rate-limit and server failures", () => {
   const now = 1_000_000;
   assert.equal(

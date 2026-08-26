@@ -3,6 +3,7 @@ export interface GitHubRequest {
   path: string;
   body?: unknown;
   signal?: AbortSignal;
+  beforeRetry?: () => Promise<void>;
 }
 
 export interface GitHubResponse<T> {
@@ -46,8 +47,16 @@ export class AuthorityGuardedGitHubTransport implements GitHubTransport {
   }
 
   async request<T>(request: GitHubRequest): Promise<GitHubResponse<T>> {
-    if (request.method !== "GET") await this.#assertAuthority();
-    return this.#inner.request<T>(request);
+    if (request.method === "GET") return this.#inner.request<T>(request);
+    await this.#assertAuthority();
+    const priorBeforeRetry = request.beforeRetry;
+    return this.#inner.request<T>({
+      ...request,
+      beforeRetry: async () => {
+        await priorBeforeRetry?.();
+        await this.#assertAuthority();
+      },
+    });
   }
 }
 
@@ -109,6 +118,7 @@ export class FetchGitHubTransport implements GitHubTransport {
       )
         return result;
       await retryDelay(delayMs, request.signal);
+      await request.beforeRetry?.();
     }
     throw new Error("GitHub retry loop exhausted unexpectedly.");
   }
