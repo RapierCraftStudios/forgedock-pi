@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:bc83e9bf5304d744fff2a3e3f511e5937d745782ca84a30d1e137620c7d9fc96",
+  "sequence": 8,
+  "lastEventHash": "sha256:a982a155609392bca63351f5a515124ef6a211c4c4c1d01c5853ec05c24285c2",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -40,16 +40,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/verification-preflight.ts` maps only direct `test` and `run`/`run-script` commands to package scripts.",
+            "For an argv of `[\"npm\", \"tst\"]`, `packageScriptName` returns `undefined`, so `assertPackageScript` is skipped.",
+            "The existing monorepo fixture has no root `test` script but has `web`/`test`, providing a focused reproduction.",
+            "The issue fingerprint and source finding identify this as confirmed finding VP-003."
+          ],
           "inputArtifactHash": "sha256:resolve-113-89f2fa1c7e7020b695803e9a1b556d55076f2302",
           "logicalNodeId": "investigate-1",
           "startedAt": "2026-08-26T23:05:04.103Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/0a5f25bc-f48f-4607-a43d-2f9f490df1dc",
           "branch": "forge/issue-113-0a5f25bc",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T23:05:50.979Z",
+          "outputArtifactHash": "sha256:7b2ef0f6e0f7892f8a3dbfbaf5d647bf9c905c3f24f5d2c7a5c3d8f1a2b4e6c8"
         }
       ]
     }
@@ -63,7 +70,8 @@
     "phase:resolve:1:start": "60819b71-ce5e-424c-b5d0-fc270e6cb32e",
     "phase:resolve:1:complete": "3e2f6e47-ba03-4208-a795-43e5e8350a57",
     "phase:investigate:1:queue": "7ca20b85-20ed-4e7b-ab97-b1de51dbc620",
-    "phase:investigate:1:start": "db484ae3-2f06-4051-a1fd-ea63a40254d5"
+    "phase:investigate:1:start": "db484ae3-2f06-4051-a1fd-ea63a40254d5",
+    "phase:investigate:1:complete": "932781be-b97d-49bd-a71c-656877b52eb2"
   },
   "eventIds": {
     "e63377ed-a50b-4ad0-881a-36b1f97825a3": true,
@@ -72,7 +80,8 @@
     "60819b71-ce5e-424c-b5d0-fc270e6cb32e": true,
     "3e2f6e47-ba03-4208-a795-43e5e8350a57": true,
     "7ca20b85-20ed-4e7b-ab97-b1de51dbc620": true,
-    "db484ae3-2f06-4051-a1fd-ea63a40254d5": true
+    "db484ae3-2f06-4051-a1fd-ea63a40254d5": true,
+    "932781be-b97d-49bd-a71c-656877b52eb2": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
