@@ -153,7 +153,10 @@ test("RPC dedicated reviewer launch uses the registered reviewer and reviewer sc
     params: {
       agent: string;
       task: string;
-      extensionBindings: Record<string, { nodeId: string; reviewHeadSha: string }>;
+      extensionBindings: Record<
+        string,
+        { nodeId: string; reviewHeadSha: string; reviewerTimeoutMs: number }
+      >;
       outputSchema: { properties: { schema: { const: string } } };
     };
   };
@@ -171,7 +174,54 @@ test("RPC dedicated reviewer launch uses the registered reviewer and reviewer sc
     spawn.params.extensionBindings["forgedock.pi/1"]?.reviewHeadSha,
     "fedcba9876543210",
   );
+  assert.equal(
+    spawn.params.extensionBindings["forgedock.pi/1"]?.reviewerTimeoutMs,
+    600_000,
+  );
   assert.doesNotMatch(spawn.params.task, /runs\.all/);
+});
+
+test("RPC domain reviewer must finalize its bound result", async () => {
+  const { pi, bus } = fakePi();
+  const client = new SubagentsRpcClient(pi);
+  await client.spawnDomainReviewNode(
+    {
+      runId: "run-domain-review",
+      issueNumber: 10,
+      repository: "owner/repo",
+      worktreeRoot: "/tmp/worktree",
+      branch: "forge/10",
+      baseBranch: "staging",
+      baseSha: "abcdef1234567890",
+      reviewHeadSha: "fedcba9876543210",
+      leaseEpoch: 1,
+      policy,
+      issueContext: "architecture profile",
+      node: {
+        nodeId: "review-architecture-1",
+        node: "review-architecture",
+        attempt: 1,
+      },
+    },
+    "architecture",
+  );
+  const spawn = bus.requests.at(-1) as {
+    params: {
+      agent: string;
+      task: string;
+      extensionBindings: Record<
+        string,
+        { nodeId: string; reviewHeadSha: string; reviewerTimeoutMs: number }
+      >;
+    };
+  };
+  assert.equal(spawn.params.agent, "forge-review-domain");
+  assert.match(spawn.params.task, /forge_finalize_reviewer/);
+  assert.match(spawn.params.task, /structured_output with the identical value/);
+  assert.equal(
+    spawn.params.extensionBindings["forgedock.pi/1"]?.nodeId,
+    "review-architecture-1",
+  );
 });
 
 test("RPC bounded node launch delegates one node without child checkpoints", async () => {

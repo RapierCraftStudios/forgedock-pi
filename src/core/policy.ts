@@ -347,7 +347,7 @@ export function parseForgePolicy(value: unknown): ForgePolicy {
             ),
       reviewerTimeoutMs:
         subagents.reviewerTimeoutMs === undefined
-          ? 3_600_000
+          ? 600_000
           : integer(
               subagents.reviewerTimeoutMs,
               "subagents.reviewerTimeoutMs",

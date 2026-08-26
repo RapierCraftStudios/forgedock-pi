@@ -221,6 +221,91 @@ test("run-scoped state commits do not update the global repository lock", async 
   );
 });
 
+test("run-scoped terminal state can release embedded authority without a global lock", async () => {
+  const events: RunEvent[] = [];
+  const created = next(
+    undefined,
+    "run.created",
+    {
+      issueNumber: 42,
+      integrationBranch: "staging",
+      protectedBranch: "main",
+      authorityMode: "run-scoped",
+    },
+    "terminal-create",
+  );
+  events.push(created);
+  let state = applyRunEvent(undefined, created);
+  const authority = acquireLease(undefined, {
+    repository,
+    owner: { runId, sessionId },
+    now: new Date(timestamp),
+    ttlSeconds: 300,
+  });
+  const acquired = next(
+    state,
+    "lease.acquired",
+    { lease: authority },
+    "terminal-authority",
+    authority.epoch,
+  );
+  events.push(acquired);
+  state = applyRunEvent(state, acquired);
+  const cancelled = next(
+    state,
+    "run.cancelled",
+    { reason: "explicit cancellation" },
+    "terminal-cancel",
+    authority.epoch,
+  );
+  events.push(cancelled);
+  state = applyRunEvent(state, cancelled);
+  const released = next(
+    state,
+    "lease.released",
+    { ownerRunId: runId, epoch: authority.epoch },
+    "terminal-release",
+    authority.epoch,
+  );
+  events.push(released);
+  state = applyRunEvent(state, released);
+  assert.equal(state.status, "cancelled");
+  assert.equal(state.lease, undefined);
+
+  let treeBody: unknown;
+  let blobCounter = 0;
+  const transport = new MockTransport((request) => {
+    if (request.method === "GET" && request.path.endsWith("/git/commits/tip-1"))
+      return response(200, { sha: "tip-1", tree: { sha: "base-tree" } });
+    if (request.method === "POST" && request.path.endsWith("/git/blobs"))
+      return response(201, { sha: `blob-${++blobCounter}` });
+    if (request.method === "POST" && request.path.endsWith("/git/trees")) {
+      treeBody = request.body;
+      return response(201, { sha: "tree-terminal" });
+    }
+    if (request.method === "POST" && request.path.endsWith("/git/commits"))
+      return response(201, { sha: "commit-terminal" });
+    if (request.method === "PATCH" && request.path.includes("/git/refs/heads/"))
+      return response(200, { object: { sha: "commit-terminal" } });
+    throw new Error(`Unexpected request ${request.method} ${request.path}`);
+  });
+  const store = new GitHubStateBranchStore(transport, repository);
+  await store.commitRunState({
+    expectedTip: "tip-1",
+    events,
+    state,
+    runScopedAuthority: true,
+    message: "Release terminal run authority",
+  });
+  const entries = (treeBody as {
+    tree: Array<{ path: string; sha: string | null }>;
+  }).tree;
+  assert.equal(
+    entries.some((entry) => entry.path === ".forgedock/locks/repository.json"),
+    false,
+  );
+});
+
 test("non-fast-forward state update becomes a CAS conflict", async () => {
   const { events, state, lease } = journal();
   let blobCounter = 0;

@@ -386,12 +386,21 @@ export class GitHubStateBranchStore {
       );
     if (input.lease) validateRepositoryLease(input.lease);
     if (input.runScopedAuthority) {
-      if (input.state.authorityMode !== "run-scoped" || !input.state.lease)
+      if (input.state.authorityMode !== "run-scoped")
+        throw new TypeError("Run-scoped commit requires run-scoped state.");
+      if (input.state.lease) {
+        if (input.state.lease.ownerRunId !== input.state.runId)
+          throw new TypeError(
+            "Run-scoped authority identity does not match run state.",
+          );
+      } else if (
+        input.state.status !== "completed" &&
+        input.state.status !== "cancelled"
+      ) {
         throw new TypeError(
-          "Run-scoped state requires its own embedded authority record.",
+          "Active run-scoped state requires its own embedded authority record.",
         );
-      if (input.state.lease.ownerRunId !== input.state.runId)
-        throw new TypeError("Run-scoped authority identity does not match run state.");
+      }
     } else if (Boolean(input.state.lease) !== Boolean(input.lease)) {
       throw new TypeError(
         "Snapshot lease and supplied lease presence must match.",
