@@ -136,6 +136,24 @@ const NPM_PACKAGE_SELECTION_OPTIONS = new Set([
   "location",
   "L",
 ]);
+const NPM_SHORT_OPTIONS = new Set([
+  "a",
+  "C",
+  "d",
+  "f",
+  "g",
+  "h",
+  "l",
+  "L",
+  "m",
+  "n",
+  "p",
+  "q",
+  "s",
+  "v",
+  "w",
+]);
+const NPM_SHORT_PACKAGE_SELECTION_OPTIONS = new Set(["C", "g", "L", "w"]);
 
 function npmPackageSelectionOption(argv: readonly string[]): string | undefined {
   const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
@@ -149,9 +167,23 @@ function npmPackageSelectionOption(argv: readonly string[]): string | undefined 
     const option = normalized.split("=", 1)[0] ?? normalized;
     if (NPM_PACKAGE_SELECTION_OPTIONS.has(option)) return argument;
     if (
-      argument.startsWith("-") &&
+      option.length >= 2 &&
+      [...NPM_PACKAGE_SELECTION_OPTIONS].some((name) => name.startsWith(option))
+    )
+      return argument;
+    if (
       !argument.startsWith("--") &&
-      ["C", "g", "L", "w"].includes(option[0] ?? "")
+      [...NPM_SHORT_PACKAGE_SELECTION_OPTIONS].some((character) =>
+        option.startsWith(character),
+      )
+    )
+      return argument;
+    if (
+      option.length > 1 &&
+      [...option].every((character) => NPM_SHORT_OPTIONS.has(character)) &&
+      [...option].some((character) =>
+        NPM_SHORT_PACKAGE_SELECTION_OPTIONS.has(character),
+      )
     )
       return argument;
   }
