@@ -51,6 +51,7 @@ export async function materializeForgeAgents(
         prompt: FORGE_WORK_ON_PROMPT,
         maxDepth: FORGE_WORK_ON_MAX_DEPTH,
         acceptanceRole: "writer",
+        completionGuard: true,
         extensions: [subagentsExtensionPath, childRuntimePath],
         timeoutMs: 3_600_000,
       }),
@@ -64,6 +65,7 @@ export async function materializeForgeAgents(
         prompt: FORGE_REVIEW_CORRECTNESS_PROMPT,
         maxDepth: 1,
         acceptanceRole: "read-only",
+        completionGuard: false,
       }),
     },
     {
@@ -76,6 +78,7 @@ export async function materializeForgeAgents(
         prompt: FORGE_REVIEW_SECURITY_PROMPT,
         maxDepth: 1,
         acceptanceRole: "read-only",
+        completionGuard: false,
       }),
     },
   ];
@@ -213,6 +216,7 @@ function agentFile(input: {
   prompt: string;
   maxDepth: number;
   acceptanceRole: "read-only" | "writer";
+  completionGuard: boolean;
   extensions?: readonly string[];
   timeoutMs?: number;
 }): string {
@@ -230,7 +234,7 @@ async: true
 tools: ${input.tools.join(", ")}
 acceptanceRole: ${input.acceptanceRole}
 maxSubagentDepth: ${input.maxDepth}
-completionGuard: true
+completionGuard: ${String(input.completionGuard)}
 ${input.timeoutMs ? `timeoutMs: ${input.timeoutMs}\n` : ""}${extensionBlock}---
 
 ${input.prompt}
