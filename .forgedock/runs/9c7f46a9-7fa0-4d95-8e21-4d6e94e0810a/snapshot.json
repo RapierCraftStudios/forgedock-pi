@@ -10,15 +10,15 @@
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 4,
-  "lastEventHash": "sha256:080aefd394e4716d71f8bfd6d94bebd7d19d6ff31e2fa2c7e185315e9ac2ad35",
+  "sequence": 5,
+  "lastEventHash": "sha256:9523b0a09ba4303fc6a11185d4c3bb696aed30fde7730a3be33d3479a3c1d5dd",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/9c7f46a9-7fa0-4d95-8e21-4d6e94e0810a/.pi/forge/9c7f46a9-7fa0-4d95-8e21-4d6e94e0810a-resolve-1.json",
       "subagentRunId": "979db8be-47ad-41fd-9441-c44a77481df4",
@@ -27,7 +27,19 @@
       "startedAt": "2026-08-26T01:45:27.586Z",
       "previousSubagentRunId": "launch:resolve-1:c81ad7fb-07dc-409d-8ac5-1db9199980fd",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "round": 1,
+      "headSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "Supplied issue context identifies issue #72 with the non-empty title \"test: disposable 20-lane dogfood probe 02\".",
+        "The supplied issue comment records ForgeDock run 9c7f46a9-7fa0-4d95-8e21-4d6e94e0810a started against integration base dogfood, matching this node's bound run identity.",
+        "Repository .forge/config.json names dogfood as an integration branch and protects main only, so the bound integration base is configured and non-protected.",
+        "The issue body explicitly reserves invalid/no-code classification for investigation; it does not make the issue ineligible for the resolve node.",
+        "The supplied recent history binds the assigned branch HEAD to frozen base 1b018483cd94b8324ae7e34eaa07293861f4f491."
+      ],
+      "finishedAt": "2026-08-26T01:46:54.727Z"
     }
   },
   "effects": {},
@@ -35,12 +47,14 @@
     "run:create": "366b353d-0477-4064-9a24-f5fad1bec3dd",
     "node:resolve-1:queued": "c086af21-1c9a-4c2b-ae38-f4635daa9c0e",
     "node:resolve-1:started": "94141d1f-263c-4160-b68e-f27dbe456243",
-    "node:resolve-1:attempt:1:launch-receipt:c81ad7fb-07dc-409d-8ac5-1db9199980fd:979db8be-47ad-41fd-9441-c44a77481df4": "93371bf5-b778-4b4c-ac3b-a617680109e3"
+    "node:resolve-1:attempt:1:launch-receipt:c81ad7fb-07dc-409d-8ac5-1db9199980fd:979db8be-47ad-41fd-9441-c44a77481df4": "93371bf5-b778-4b4c-ac3b-a617680109e3",
+    "node:resolve-1:completed": "8da245ae-13fc-4d11-98b7-d67fed04092e"
   },
   "eventIds": {
     "366b353d-0477-4064-9a24-f5fad1bec3dd": true,
     "c086af21-1c9a-4c2b-ae38-f4635daa9c0e": true,
     "94141d1f-263c-4160-b68e-f27dbe456243": true,
-    "93371bf5-b778-4b4c-ac3b-a617680109e3": true
+    "93371bf5-b778-4b4c-ac3b-a617680109e3": true,
+    "8da245ae-13fc-4d11-98b7-d67fed04092e": true
   }
 }
