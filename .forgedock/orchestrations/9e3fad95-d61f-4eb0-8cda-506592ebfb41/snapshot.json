@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 11,
-  "lastEventHash": "sha256:155d1a28badae4bbe675d79d965f187bf32450996ca9ed273be248a3c1007059",
+  "sequence": 12,
+  "lastEventHash": "sha256:6591069a3e474709932a1dc5b23c108d091fa79d75d671aa74fccc778b5aba5d",
   "lanes": [
     {
       "issueNumber": 92,
@@ -68,11 +68,10 @@
     {
       "issueNumber": 119,
       "ordinal": 7,
-      "status": "blocked",
+      "status": "running",
       "refreshes": 0,
       "forgeRunId": "ad827cb4-7de8-404c-8bff-5e293257f2da",
-      "subagentRunId": "3aad594f-a7c3-48c5-922d-c562b61643d4",
-      "reason": "Investigation complete checkpoint failed validation because the report omitted the required canonical `### Acceptance Spec` section; workflow stopped before implementation."
+      "subagentRunId": "30c70082-af31-4d20-8b00-fcb9c4de0e1a"
     },
     {
       "issueNumber": 120,
@@ -94,7 +93,8 @@
     "lane:115:started": "46e3afb2-185c-4f72-af93-33f633f95b20",
     "lane:119:started": "6eae96ef-e6b2-4ad5-be4e-82367c4eb597",
     "lane:120:started": "fa9c80df-e451-40d9-a09d-36a2ca5d7d7c",
-    "lane:119:blocked": "48366b69-71fd-4902-9dc6-339d533c3495"
+    "lane:119:blocked": "48366b69-71fd-4902-9dc6-339d533c3495",
+    "lane:119:recovered:ad827cb4-7de8-404c-8bff-5e293257f2da": "a3a3ab62-d1ac-4ea6-a97b-3e9b343ba199"
   },
   "createdAt": "2026-08-26T19:11:47.026Z"
 }
