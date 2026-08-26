@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 22,
-  "lastEventHash": "sha256:9bd2121956fd38362e479757dd41f70de85373da99209a3cc08ea9e7010624a5",
+  "sequence": 23,
+  "lastEventHash": "sha256:ac97735fc1085adcd71db7d8e32b79f007e9b7b3469fb38b8c1956c65f6476c3",
   "lanes": [
     {
       "issueNumber": 92,
@@ -54,10 +54,11 @@
     {
       "issueNumber": 114,
       "ordinal": 5,
-      "status": "running",
+      "status": "blocked",
       "refreshes": 0,
       "forgeRunId": "b2442731-9897-4ff7-8b26-82a2c9b1571a",
-      "subagentRunId": "0f049cfd-f3dc-44ce-9041-1087005d15b3"
+      "subagentRunId": "0f049cfd-f3dc-44ce-9041-1087005d15b3",
+      "reason": "Required forge-review-security did not return a schema-valid result after transient retry, so the trusted review panel is incomplete and merge authorization is blocked."
     },
     {
       "issueNumber": 115,
@@ -106,7 +107,8 @@
     "lane:92:blocked": "f5e52ff2-9320-407f-b8f8-7d688a0266d2",
     "lane:92:recovered:ed1f9760-d489-4a79-b26c-2613a5129081": "b3b652e0-a6d5-4669-944e-e9d4582c5011",
     "lane:113:blocked": "dd3e2c84-38a6-466e-b2f4-6c6465485599",
-    "lane:113:recovered:9c864f56-0e45-4324-acb5-3759374d3bc9": "9eb187d6-3d4a-4e87-968a-e35e2e34836b"
+    "lane:113:recovered:9c864f56-0e45-4324-acb5-3759374d3bc9": "9eb187d6-3d4a-4e87-968a-e35e2e34836b",
+    "lane:114:blocked": "9beb33fa-09e5-4f42-9245-de752e43396f"
   },
   "createdAt": "2026-08-26T17:53:19.264Z"
 }
