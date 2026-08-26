@@ -6,8 +6,8 @@
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
   "status": "cancelled",
-  "sequence": 76,
-  "lastEventHash": "sha256:ee149b0155d5684985d07c69ef92163aca9d20f74852538c7338f4f45c9dafcc",
+  "sequence": 77,
+  "lastEventHash": "sha256:7cb0ecdd20aba927fab593651d69089480b832f3d95bfc689d68736f11f18ad4",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -342,7 +342,8 @@
     "lease:heartbeat:2026-08-26T06:12:35.304Z": "70a111e3-3767-4702-a59c-3e2231cdff26",
     "lease:heartbeat:2026-08-26T06:13:35.307Z": "52ba710a-df69-4668-ad08-a4bde4fc6266",
     "lease:heartbeat:2026-08-26T06:14:35.430Z": "60277510-fc59-490f-bc62-3d08bfe33a48",
-    "run:cancelled": "c6b4714d-fcd0-40a1-ab9d-50ffe42d7493"
+    "run:cancelled": "c6b4714d-fcd0-40a1-ab9d-50ffe42d7493",
+    "lease:release": "98165712-6da2-4726-a7d9-f640f077d86d"
   },
   "eventIds": {
     "194412ac-e384-4835-94fd-cee5a8867930": true,
@@ -420,18 +421,8 @@
     "70a111e3-3767-4702-a59c-3e2231cdff26": true,
     "52ba710a-df69-4668-ad08-a4bde4fc6266": true,
     "60277510-fc59-490f-bc62-3d08bfe33a48": true,
-    "c6b4714d-fcd0-40a1-ab9d-50ffe42d7493": true
-  },
-  "lease": {
-    "schema": "forgedock.repository-lease/v1",
-    "repository": "RapierCraftStudios/forgedock-pi",
-    "ownerRunId": "5fbd22c9-cf53-48f7-95c7-3258fcc8452c",
-    "ownerSessionId": "01a03c84-a546-7f67-8e6b-f473f501ebcf",
-    "epoch": 1,
-    "acquiredAt": "2026-08-26T05:23:43.307Z",
-    "lastHeartbeatAt": "2026-08-26T06:14:35.430Z",
-    "expiresAt": "2026-08-26T07:14:35.430Z",
-    "takeoverRequired": false
+    "c6b4714d-fcd0-40a1-ab9d-50ffe42d7493": true,
+    "98165712-6da2-4726-a7d9-f640f077d86d": true
   },
   "cancellationReason": "Owning tmux session was closed after PR merge and issue closure; release remaining terminal resources."
 }
