@@ -111,6 +111,50 @@ test("preflight checks executable availability without running the command", asy
   }
 });
 
+test("package-selection flags cannot override the configured package cwd", async () => {
+  const testFixture = await fixture();
+  const errorPath =
+    "/repo/.forge/config.json verification.commands.test.argv";
+  try {
+    for (const argv of [
+      ["npm", "--prefix", "web", "test"],
+      ["npm", "--prefix=web", "test"],
+      ["npm", "test", "--prefix", "web"],
+      ["npm", "--workspace", "web", "test"],
+      ["npm", "test", "--workspace=web"],
+      ["npm", "-w", "web", "test"],
+      ["npm", "--workspaces", "test"],
+      ["npm", "test", "--include-workspace-root"],
+      ["npm", "test", "--global"],
+    ]) {
+      await assert.rejects(
+        preflightRequiredVerificationCommands(
+          testFixture.root,
+          { test: command("web", { argv }) },
+          { path: testFixture.path, configPath: "/repo/.forge/config.json" },
+        ),
+        (error: unknown) =>
+          error instanceof VerificationPreflightError &&
+          error.path === errorPath &&
+          /package-selection option/.test(error.message) &&
+          /set cwd/.test(error.message),
+      );
+    }
+
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      {
+        test: command("web", {
+          argv: ["npm", "test", "--", "--prefix", "not-a-package"],
+        }),
+      },
+      { path: testFixture.path },
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
 test("verification cwd rejects missing, control, and symlink-escape directories", async () => {
   const testFixture = await fixture();
   try {

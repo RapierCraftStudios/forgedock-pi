@@ -48,6 +48,12 @@ export async function preflightRequiredVerificationCommands(
         `${basePath}.argv`,
         "must name an executable",
       );
+    const packageSelection = packageSelectionArgument(command.argv);
+    if (packageSelection)
+      throw new VerificationPreflightError(
+        `${basePath}.argv`,
+        `package-selection option '${packageSelection}' is not supported; set cwd to the package that defines the verification script`,
+      );
     if (!(await executableAvailable(program, cwd, options.path ?? process.env.PATH))) {
       throw new VerificationPreflightError(
         `${basePath}.argv`,
@@ -116,9 +122,63 @@ async function executableAvailable(
   return false;
 }
 
-function packageScriptName(argv: readonly string[]): string | undefined {
+type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
+
+const PACKAGE_SELECTION_OPTIONS: Readonly<
+  Record<PackageManager, ReadonlySet<string>>
+> = {
+  npm: new Set([
+    "--prefix",
+    "--workspace",
+    "-w",
+    "--workspaces",
+    "--include-workspace-root",
+    "--global",
+    "-g",
+  ]),
+  pnpm: new Set([
+    "--dir",
+    "-C",
+    "--filter",
+    "--workspace-root",
+    "--recursive",
+    "-r",
+  ]),
+  yarn: new Set(["--cwd"]),
+  bun: new Set(["--cwd", "--filter"]),
+};
+
+function packageManagerName(argv: readonly string[]): PackageManager | undefined {
   const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
-  if (!["npm", "pnpm", "yarn", "bun"].includes(manager)) return undefined;
+  return manager === "npm" ||
+    manager === "pnpm" ||
+    manager === "yarn" ||
+    manager === "bun"
+    ? manager
+    : undefined;
+}
+
+function packageSelectionArgument(argv: readonly string[]): string | undefined {
+  const manager = packageManagerName(argv);
+  if (!manager) return undefined;
+  const options = PACKAGE_SELECTION_OPTIONS[manager];
+  for (const argument of argv.slice(1)) {
+    if (argument === "--") break;
+    const option = argument.split("=", 1)[0];
+    if (option && options.has(option)) return argument;
+    if (
+      manager === "yarn" &&
+      (argument === "workspace" || argument === "workspaces")
+    ) {
+      return argument;
+    }
+  }
+  return undefined;
+}
+
+function packageScriptName(argv: readonly string[]): string | undefined {
+  const manager = packageManagerName(argv);
+  if (!manager) return undefined;
   const command = argv[1];
   if (command === "test") return "test";
   if (command === "run" || command === "run-script") {
