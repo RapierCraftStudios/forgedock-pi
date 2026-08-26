@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 19,
-  "lastEventHash": "sha256:be58bbfdb6aca60aa7465a2346e2de83aaf553d146e25b3b1897558c4e49882a",
+  "sequence": 20,
+  "lastEventHash": "sha256:3a6593dd2f5f94bc2433e1c1f10b59d13ee11e5fd49ff7de6f1846b43a3b6618",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -133,15 +133,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume verify attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Named Forge verification `check` passed: `npm run check` completed with typecheck and 149 passing tests.",
+            "The focused alias regression test passed for npm `test`, `t`, and `tst`, including rejection when the selected package lacks `test` and acceptance when it defines `test`.",
+            "Implementation commit: `0d9ea163d527dfea56a38bbbd571737a20594b28`.",
+            "The required local check is complete; GitHub CI remains deferred to the parent after PR preparation."
+          ],
           "logicalNodeId": "work-on-verify-1",
           "startedAt": "2026-08-26T22:24:13.722Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/ca069ddb-eee3-4756-b8af-75e67c4d302d",
           "branch": "forge/issue-113-ca069ddb",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T22:25:21.991Z",
+          "outputArtifactHash": "sha256:issue-113-verify-output",
+          "commitSha": "0d9ea163d527dfea56a38bbbd571737a20594b28"
         }
       ]
     }
@@ -167,7 +175,8 @@
     "phase:implement:1:start": "c1407656-2049-41ab-bd33-33c2f7d86684",
     "phase:implement:1:complete": "a8ebbedd-1947-4631-8ba6-a77ecb3ab43d",
     "phase:verify:1:queue": "1aaf8a99-dda2-4db7-8ac1-aa379a75d85a",
-    "phase:verify:1:start": "082107ca-e17d-4f86-aca6-fd4e3eda982b"
+    "phase:verify:1:start": "082107ca-e17d-4f86-aca6-fd4e3eda982b",
+    "phase:verify:1:complete": "c2423ac0-5f2b-4b34-96dc-a5c539383bdb"
   },
   "eventIds": {
     "a2962e35-8af0-43f3-bd4f-611d73dd4d1e": true,
@@ -188,7 +197,8 @@
     "c1407656-2049-41ab-bd33-33c2f7d86684": true,
     "a8ebbedd-1947-4631-8ba6-a77ecb3ab43d": true,
     "1aaf8a99-dda2-4db7-8ac1-aa379a75d85a": true,
-    "082107ca-e17d-4f86-aca6-fd4e3eda982b": true
+    "082107ca-e17d-4f86-aca6-fd4e3eda982b": true,
+    "c2423ac0-5f2b-4b34-96dc-a5c539383bdb": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
