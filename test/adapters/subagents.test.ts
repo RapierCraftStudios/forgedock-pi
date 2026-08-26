@@ -150,12 +150,16 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
     );
     assert.match(workOn, /tools: .*subagent/);
     assert.match(workOn, /maxSubagentDepth: 2/);
+    assert.match(workOn, /^acceptanceRole: writer$/m);
+    assert.match(workOn, /^completionGuard: true$/m);
     assert.match(workOn, /^extensions:/m);
     assert.doesNotMatch(workOn, /subagentOnlyExtensions:/);
     assert.match(workOn, /  - \/.*pi-subagents\/index\.ts/);
     assert.match(workOn, /  - \/.*agents\/child-runtime\.ts/);
     assert.doesNotMatch(workOn, /  - "\/.*"/);
     assert.doesNotMatch(reviewer, /tools: .*subagent/);
+    assert.match(reviewer, /^acceptanceRole: read-only$/m);
+    assert.match(reviewer, /^completionGuard: false$/m);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

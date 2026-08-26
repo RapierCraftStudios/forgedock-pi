@@ -68,7 +68,7 @@ export function registerForgeAgents(
         acceptanceRole: "read-only",
         defaultAsync: true,
         maxSubagentDepth: 1,
-        completionGuard: true,
+        completionGuard: false,
       },
     }),
   );
@@ -89,7 +89,7 @@ export function registerForgeAgents(
         acceptanceRole: "read-only",
         defaultAsync: true,
         maxSubagentDepth: 1,
-        completionGuard: true,
+        completionGuard: false,
       },
     }),
   );
