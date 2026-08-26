@@ -5,20 +5,23 @@
   "issueNumber": 84,
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "leaseBinding": {
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 1,
-  "lastEventHash": "sha256:a06234707e99f5f0662a98c1f63525b953883fc4004fdab8b552c0b80a3f5d46",
+  "sequence": 2,
+  "lastEventHash": "sha256:0050938b04713724eae1ea6e0caee695eceb6a3708905f8a5c47b9c22fe82742",
   "phases": {},
   "nodes": {},
   "effects": {},
   "idempotencyKeys": {
-    "run:create": "f8dfad0c-b766-4402-8f71-848c1f16cec9"
+    "run:create": "f8dfad0c-b766-4402-8f71-848c1f16cec9",
+    "run:cancelled": "512072c2-5296-428b-a4b2-43b8f31827fe"
   },
   "eventIds": {
-    "f8dfad0c-b766-4402-8f71-848c1f16cec9": true
-  }
+    "f8dfad0c-b766-4402-8f71-848c1f16cec9": true,
+    "512072c2-5296-428b-a4b2-43b8f31827fe": true
+  },
+  "cancellationReason": "Cancelled by the operator through /forge:cancel."
 }
