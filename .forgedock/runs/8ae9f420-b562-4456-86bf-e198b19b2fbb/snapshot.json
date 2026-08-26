@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 16,
-  "lastEventHash": "sha256:52c0119d3431b1e680c2b1caa9fb0be5d301e6d8d09b6032c644f3477e08e0b8",
+  "sequence": 17,
+  "lastEventHash": "sha256:a92306fcc1522976e3470d86665f54a5d4ac0e9e30c58cdd117e53d94d44ebb3",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -111,16 +111,24 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`/forge:init` now retains the loaded parsed command map after static required-command preflight instead of overwriting it.",
+            "Empty command maps remain explicit CI-only verification and are shown in setup output.",
+            "Missing cwd/package metadata errors now include concrete package-cwd or CI-only remediation while preserving config-path identity.",
+            "Regression coverage exercises a root without `test`, `web/package.json` with `test`, exact diagnostics, and empty CI-only validation.",
+            "Implementation commit is intentionally deferred until the required verify check passes."
+          ],
           "inputArtifactHash": "sha256:plan-94-8ae9f420",
           "logicalNodeId": "implement",
           "startedAt": "2026-08-26T23:55:34.681Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/8ae9f420-b562-4456-86bf-e198b19b2fbb",
           "branch": "forge/issue-94-8ae9f420",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T23:59:46.589Z",
+          "outputArtifactHash": "sha256:implementation-94-8ae9f420"
         }
       ]
     }
@@ -143,7 +151,8 @@
     "phase:prepare-worktree:1:start": "93c4da28-8af5-4429-897e-525813174a81",
     "phase:prepare-worktree:1:complete": "2a555688-e792-4884-91ec-cc16573d127f",
     "phase:implement:1:queue": "33fa248c-11a7-4c0a-b976-3c95ea2b286e",
-    "phase:implement:1:start": "39dfd231-bf54-4888-9d62-eab68a0bf3f5"
+    "phase:implement:1:start": "39dfd231-bf54-4888-9d62-eab68a0bf3f5",
+    "phase:implement:1:complete": "3d6e34ad-8650-4afd-ad46-17f7013f8d31"
   },
   "eventIds": {
     "cdfc2cf2-129f-426b-b121-636b968c18c9": true,
@@ -161,7 +170,8 @@
     "93c4da28-8af5-4429-897e-525813174a81": true,
     "2a555688-e792-4884-91ec-cc16573d127f": true,
     "33fa248c-11a7-4c0a-b976-3c95ea2b286e": true,
-    "39dfd231-bf54-4888-9d62-eab68a0bf3f5": true
+    "39dfd231-bf54-4888-9d62-eab68a0bf3f5": true,
+    "3d6e34ad-8650-4afd-ad46-17f7013f8d31": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
