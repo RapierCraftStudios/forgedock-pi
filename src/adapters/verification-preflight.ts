@@ -54,6 +54,7 @@ export async function preflightRequiredVerificationCommands(
         `executable '${program}' is unavailable; install it or update the tracked command`,
       );
     }
+    assertNpmPackageSelectionUsesCwd(command.argv, basePath);
     const script = packageScriptName(command.argv);
     if (script)
       await assertPackageScript(canonicalRoot, cwd, script, basePath);
@@ -114,6 +115,42 @@ async function executableAvailable(
     }
   }
   return false;
+}
+
+const NPM_PACKAGE_LOCATION_OPTIONS = new Set([
+  "--global",
+  "--include-workspace-root",
+  "--location",
+  "--prefix",
+  "--workspace",
+  "--workspaces",
+  "--ws",
+  "-C",
+  "-g",
+  "-w",
+]);
+
+function assertNpmPackageSelectionUsesCwd(
+  argv: readonly string[],
+  basePath: string,
+): void {
+  const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
+  if (manager !== "npm") return;
+  for (const argument of argv.slice(1)) {
+    if (argument === "--") break;
+    const option = argument.split("=", 1)[0] ?? argument;
+    const packageLocationOption =
+      NPM_PACKAGE_LOCATION_OPTIONS.has(option) ||
+      (argument.startsWith("-C") && !argument.startsWith("--"))
+        ? option
+        : undefined;
+    if (packageLocationOption) {
+      throw new VerificationPreflightError(
+        `${basePath}.argv`,
+        `npm package-selection option '${packageLocationOption}' is unsupported; set verification command cwd to the selected package (working directory) instead`,
+      );
+    }
+  }
 }
 
 function packageScriptName(argv: readonly string[]): string | undefined {

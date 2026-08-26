@@ -85,6 +85,55 @@ test("required monorepo verification preflight selects the package cwd", async (
   }
 });
 
+test("npm package-selection options must use the explicit verification cwd", async () => {
+  const testFixture = await fixture();
+  try {
+    const packageSelectionArgv = [
+      ["npm", "--prefix", "web", "test"],
+      ["npm", "--prefix=web", "test"],
+      ["npm", "test", "--prefix", "web"],
+      ["npm", "-C", "web", "test"],
+      ["npm", "test", "-Cweb"],
+      ["npm", "--workspace", "web", "test"],
+      ["npm", "test", "--workspace=web"],
+      ["npm", "-w", "web", "test"],
+      ["npm", "test", "--workspaces"],
+      ["npm", "test", "--ws"],
+      ["npm", "test", "--include-workspace-root"],
+      ["npm", "test", "--global"],
+      ["npm", "test", "-g"],
+      ["npm", "test", "--location=global"],
+    ];
+    for (const argv of packageSelectionArgv) {
+      await assert.rejects(
+        preflightRequiredVerificationCommands(
+          testFixture.root,
+          { test: command("web", { argv }) },
+          { path: testFixture.path },
+        ),
+        (error: unknown) =>
+          error instanceof VerificationPreflightError &&
+          error.path.endsWith("verification.commands.test.argv") &&
+          /package-selection option/.test(error.message) &&
+          /cwd/.test(error.message),
+        `expected npm package-selection options to be rejected: ${argv.join(" ")}`,
+      );
+    }
+
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      {
+        test: command("web", {
+          argv: ["npm", "test", "--", "--workspace=web"],
+        }),
+      },
+      { path: testFixture.path },
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
 test("preflight checks executable availability without running the command", async () => {
   const testFixture = await fixture();
   try {
