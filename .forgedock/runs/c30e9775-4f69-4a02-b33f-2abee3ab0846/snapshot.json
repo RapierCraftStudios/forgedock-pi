@@ -7,23 +7,28 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 4,
-  "lastEventHash": "sha256:d74973763a6fbb265abb8c8041f242ba3553f64caf269acbaf750779bc5e2de0",
+  "sequence": 5,
+  "lastEventHash": "sha256:a83a0470fdf12ff745ba55e86a55a588f3de1ca5270aad83430af6edb8de9ea8",
   "phases": {
     "resolve": {
       "phase": "resolve",
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume resolve attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Issue #93 is open, unassigned, and currently has no workflow ownership label.",
+            "No open PR references issue #93; prior #49 is closed and PR #57 is merged into dogfood, so this is a distinct shipping-branch regression.",
+            "Trusted policy snapshot and repository state bind the integration base to staging."
+          ],
           "logicalNodeId": "resolve-1",
           "startedAt": "2026-08-26T10:36:12.854Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/c30e9775-4f69-4a02-b33f-2abee3ab0846",
           "branch": "forge/issue-93-c30e9775",
-          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4"
+          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4",
+          "finishedAt": "2026-08-26T10:37:16.473Z"
         }
       ]
     }
@@ -34,13 +39,15 @@
     "run:create": "c9339e85-e4dc-47ef-8416-edc58e3220c6",
     "lease:acquire:1": "cd8e694d-3950-47a3-9195-810c2f40b0d8",
     "phase:resolve:1:queue": "9476b5ae-2fdf-43a9-b8db-9bfabc393c11",
-    "phase:resolve:1:start": "971be9f9-c0d1-4dd6-9ae9-f725af7ef641"
+    "phase:resolve:1:start": "971be9f9-c0d1-4dd6-9ae9-f725af7ef641",
+    "phase:resolve:1:complete": "704e70e0-4a4f-4193-a254-3d18a5593465"
   },
   "eventIds": {
     "c9339e85-e4dc-47ef-8416-edc58e3220c6": true,
     "cd8e694d-3950-47a3-9195-810c2f40b0d8": true,
     "9476b5ae-2fdf-43a9-b8db-9bfabc393c11": true,
-    "971be9f9-c0d1-4dd6-9ae9-f725af7ef641": true
+    "971be9f9-c0d1-4dd6-9ae9-f725af7ef641": true,
+    "704e70e0-4a4f-4193-a254-3d18a5593465": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
