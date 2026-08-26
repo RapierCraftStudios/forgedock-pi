@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 13,
-  "lastEventHash": "sha256:5533b684bab950962ffb0bfb6d67a5107c58976784e789de0b5266c82b18ec06",
+  "sequence": 14,
+  "lastEventHash": "sha256:203c41c080e3ba72219fd3cd41b3e3939ff30ee23aac96bd87894e222a7de0cb",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -81,16 +81,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume prepare-worktree attempt 1",
-          "evidence": [],
+          "evidence": [
+            "assigned worktree is clean before implementation",
+            "frozen base SHA 89f2fa1c7e7020b695803e9a1b556d55076f2302",
+            "contract paths confined to src/adapters/verification-preflight.ts, test/adapters/verification-preflight.test.ts, README.md"
+          ],
           "inputArtifactHash": "sha256:plan-94-preflight-hardening",
           "logicalNodeId": "prepare-worktree-1",
           "startedAt": "2026-08-26T23:10:34.225Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/fcf854d3-cad5-4ed5-8649-2eba554b522d",
           "branch": "forge/issue-94-fcf854d3",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T23:11:05.778Z",
+          "outputArtifactHash": "sha256:worktree-94-clean-bound-89f2fa1c"
         }
       ]
     }
@@ -110,7 +116,8 @@
     "phase:plan:1:start": "95897fdb-826d-49a1-9543-120dae06e93d",
     "phase:plan:1:complete": "bfad7b6c-58aa-4f54-ac8e-44a31f190a8d",
     "phase:prepare-worktree:1:queue": "6b785b98-9100-4e52-adec-36a340696230",
-    "phase:prepare-worktree:1:start": "60652f95-ca93-432b-9a9d-2f72aeb956a8"
+    "phase:prepare-worktree:1:start": "60652f95-ca93-432b-9a9d-2f72aeb956a8",
+    "phase:prepare-worktree:1:complete": "78b741d8-5aaa-4d15-9d84-562b3a74a3d3"
   },
   "eventIds": {
     "c855f386-448f-4d45-90ad-71051c747a27": true,
@@ -125,7 +132,8 @@
     "95897fdb-826d-49a1-9543-120dae06e93d": true,
     "bfad7b6c-58aa-4f54-ac8e-44a31f190a8d": true,
     "6b785b98-9100-4e52-adec-36a340696230": true,
-    "60652f95-ca93-432b-9a9d-2f72aeb956a8": true
+    "60652f95-ca93-432b-9a9d-2f72aeb956a8": true,
+    "78b741d8-5aaa-4d15-9d84-562b3a74a3d3": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
