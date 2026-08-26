@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 15,
-  "lastEventHash": "sha256:ca30d000cb30782d628d1268acb4fa9085f0482146b803623e3b1024fe679422",
+  "sequence": 16,
+  "lastEventHash": "sha256:7d6a4f1f3c97a969be749370b334a903b62d2fc2bf2cbdabdedf2b546d351f9b",
   "lanes": [
     {
       "issueNumber": 92,
@@ -74,10 +74,11 @@
     {
       "issueNumber": 119,
       "ordinal": 7,
-      "status": "running",
+      "status": "needs-human",
       "refreshes": 0,
       "forgeRunId": "7a25e70c-87d2-49cd-88dc-255d85e847de",
-      "subagentRunId": "57bfcc5f-88ed-4495-a9a6-214aecdf693c"
+      "subagentRunId": "57bfcc5f-88ed-4495-a9a6-214aecdf693c",
+      "reason": "Needs human: restore bound GitHub push/state-branch authentication, resume the existing run, update PR #145 to 098eb7c221e82186f65e806be3a5bf352878aa2d, and launch a fresh full review panel."
     },
     {
       "issueNumber": 120,
@@ -104,7 +105,8 @@
     "lane:120:failed": "c9052b24-c0dd-4498-a33d-05f3152b8c35",
     "lane:114:ready:0": "c87f1be8-0b3b-4039-8094-3154dc9f47a3",
     "lane:94:blocked": "bd916f89-5dac-45ef-babf-b9a77386e5ac",
-    "lane:115:blocked": "bb444516-d5df-44a4-ad9e-a826ec1c7c13"
+    "lane:115:blocked": "bb444516-d5df-44a4-ad9e-a826ec1c7c13",
+    "lane:119:needs-human": "3990b56a-d565-4447-800d-faf578d88dc3"
   },
   "createdAt": "2026-08-26T20:01:21.510Z"
 }
