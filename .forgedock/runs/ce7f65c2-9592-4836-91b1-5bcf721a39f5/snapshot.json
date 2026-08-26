@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 15,
-  "lastEventHash": "sha256:6d029413277c1b08d938fad806dd0e141a2e476bd11f56b3681c29fd56863bc0",
+  "sequence": 16,
+  "lastEventHash": "sha256:5fd1281d6adc4686b31917d0446912b35c0cd938061e84c8bf6257a8311827dc",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -112,11 +112,16 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
           "evidence": [],
-          "inputArtifactHash": "plan-111-package-selection-cwd"
+          "inputArtifactHash": "plan-111-package-selection-cwd",
+          "logicalNodeId": "implement",
+          "startedAt": "2026-08-26T19:23:12.666Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/ce7f65c2-9592-4836-91b1-5bcf721a39f5",
+          "branch": "forge/issue-111-ce7f65c2",
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
         }
       ]
     }
@@ -138,7 +143,8 @@
     "phase:prepare-worktree:1:queue": "e536a254-7e82-4c8f-8059-f1b15221580f",
     "phase:prepare-worktree:1:start": "3bb16dc8-73c2-4a75-86ad-dab51961dd02",
     "phase:prepare-worktree:1:complete": "0bbcbce7-1da6-4ffa-8b40-051f881fdd18",
-    "phase:implement:1:queue": "a29f2483-5a8b-4b29-b724-2c61b4e49c84"
+    "phase:implement:1:queue": "a29f2483-5a8b-4b29-b724-2c61b4e49c84",
+    "phase:implement:1:start": "6634e7b7-d352-4ec9-a087-5184379bacb9"
   },
   "eventIds": {
     "eee3d593-c568-4a9a-9e1f-9d5fce12eca3": true,
@@ -155,7 +161,8 @@
     "e536a254-7e82-4c8f-8059-f1b15221580f": true,
     "3bb16dc8-73c2-4a75-86ad-dab51961dd02": true,
     "0bbcbce7-1da6-4ffa-8b40-051f881fdd18": true,
-    "a29f2483-5a8b-4b29-b724-2c61b4e49c84": true
+    "a29f2483-5a8b-4b29-b724-2c61b4e49c84": true,
+    "6634e7b7-d352-4ec9-a087-5184379bacb9": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
