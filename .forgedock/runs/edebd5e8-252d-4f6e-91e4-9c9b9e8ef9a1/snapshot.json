@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 18,
-  "lastEventHash": "sha256:d4c3b4368279f3bb6440c9c9568c02cac35a12d29a72f2ee3eb7c657b5ce2e88",
+  "sequence": 19,
+  "lastEventHash": "sha256:84a138cc30d0ea4484c81352b60a2aca9f1011849a07d5fcfe568b108740891f",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -114,11 +114,16 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "resume verify attempt 1",
           "evidence": [],
-          "inputArtifactHash": "sha256:implementation-issue-120-rollback"
+          "inputArtifactHash": "sha256:implementation-issue-120-rollback",
+          "logicalNodeId": "work-on/verify",
+          "startedAt": "2026-08-26T21:44:14.737Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/edebd5e8-252d-4f6e-91e4-9c9b9e8ef9a1",
+          "branch": "forge/issue-120-edebd5e8",
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
         }
       ]
     }
@@ -143,7 +148,8 @@
     "phase:implement:1:queue": "27500caf-82c1-448f-988f-91516eb49734",
     "phase:implement:1:start": "7211200a-5502-4494-952e-2b6796f6f5fb",
     "phase:implement:1:complete": "486c994b-3049-4ee2-9328-06349550ef1d",
-    "phase:verify:1:queue": "adabc86a-b28e-46f4-bd9b-27e35904b77d"
+    "phase:verify:1:queue": "adabc86a-b28e-46f4-bd9b-27e35904b77d",
+    "phase:verify:1:start": "90812b3a-0acd-4eee-b2f8-6c7a535d2d6e"
   },
   "eventIds": {
     "08b77f0c-dbe4-4104-9eba-2f2233d275af": true,
@@ -163,7 +169,8 @@
     "27500caf-82c1-448f-988f-91516eb49734": true,
     "7211200a-5502-4494-952e-2b6796f6f5fb": true,
     "486c994b-3049-4ee2-9328-06349550ef1d": true,
-    "adabc86a-b28e-46f4-bd9b-27e35904b77d": true
+    "adabc86a-b28e-46f4-bd9b-27e35904b77d": true,
+    "90812b3a-0acd-4eee-b2f8-6c7a535d2d6e": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
