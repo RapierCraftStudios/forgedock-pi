@@ -6,8 +6,8 @@
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
   "status": "active",
-  "sequence": 10,
-  "lastEventHash": "sha256:10c2b44946c04465d71faa742671d1324039684743b5a2cbc8716ce9c29aa54e",
+  "sequence": 11,
+  "lastEventHash": "sha256:39e51d1dfbab8221d4dd2e4acee66e02fda612764301e8048c83747389d3a373",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -61,15 +61,21 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Allowed paths are exactly `test/fixtures/work-on-e2e-receipt.txt` and `test/smoke/work-on-e2e-receipt.test.ts`.",
+            "Fixture invariant is exactly one receipt token line with one trailing newline.",
+            "Smoke test will use local path-relative reading and strict equality with node:test and node:assert/strict.",
+            "Verification is the named `npm run check` command; no production, policy, workflow, package metadata, or unrelated test changes are allowed."
+          ],
           "logicalNodeId": "plan-1",
           "startedAt": "2026-08-26T05:28:15.282Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/5fbd22c9-cf53-48f7-95c7-3258fcc8452c",
           "branch": "forge/issue-95-5fbd22c9",
-          "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491"
+          "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+          "finishedAt": "2026-08-26T05:28:38.492Z"
         }
       ]
     }
@@ -86,7 +92,8 @@
     "phase:investigate:1:start": "9797b1cc-2623-44c1-8189-42589259a970",
     "phase:investigate:1:complete": "d33f1e0e-991e-4c91-a31e-2d4f5d25af52",
     "phase:plan:1:queue": "2316eeb8-56c0-4891-9522-c7a03b064e5f",
-    "phase:plan:1:start": "ac5941ca-682b-4fea-abd1-e6799fb23c69"
+    "phase:plan:1:start": "ac5941ca-682b-4fea-abd1-e6799fb23c69",
+    "phase:plan:1:complete": "f91d1b34-f8b5-47e2-a497-cabc5a8e6858"
   },
   "eventIds": {
     "194412ac-e384-4835-94fd-cee5a8867930": true,
@@ -98,7 +105,8 @@
     "9797b1cc-2623-44c1-8189-42589259a970": true,
     "d33f1e0e-991e-4c91-a31e-2d4f5d25af52": true,
     "2316eeb8-56c0-4891-9522-c7a03b064e5f": true,
-    "ac5941ca-682b-4fea-abd1-e6799fb23c69": true
+    "ac5941ca-682b-4fea-abd1-e6799fb23c69": true,
+    "f91d1b34-f8b5-47e2-a497-cabc5a8e6858": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
