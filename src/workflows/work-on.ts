@@ -461,11 +461,6 @@ export class ForgeWorkOnController {
       undefined,
       [merged.sha],
     );
-    await projector.setWorkflowLabel(
-      link.issueNumber,
-      mergedWorkflowLabel,
-      ctx.signal,
-    );
     await postReviewCompletionArtifacts({
       github,
       projector,
