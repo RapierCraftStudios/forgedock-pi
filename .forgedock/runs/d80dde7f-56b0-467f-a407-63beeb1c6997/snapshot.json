@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:61cfb986afd6d603f8d27915e3d19ad5dfe09dfb3220dc3182535e2a76edfe58",
+  "sequence": 8,
+  "lastEventHash": "sha256:aaea504cf74f7dc7bb45ed595a7458e398f4519c6cfaefddcba6437599b063ca",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -39,15 +39,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "src/adapters/verification-preflight.ts resolves the configured cwd exactly, canonicalizes it, and reads only cwd/package.json.",
+            "assertPackageScript rejects a missing, non-object, array, non-string, or blank scripts.test value instead of searching descendant packages.",
+            "test/adapters/verification-preflight.test.ts already proves a root cwd cannot fall through to a nested web package when the root has no test script; an explicit web cwd is accepted.",
+            "The cited source finding is supplied as PR #110 / finding INIT-MONO-001 at reviewed head 3503e27b5ddaf401411e9fe8c4d35beac0f5c95f; the issue records remediation commit d174f8e9d8ff88c1a40b8a75c99489c76ef52e92."
+          ],
           "logicalNodeId": "work-on-investigate",
           "startedAt": "2026-08-26T19:18:42.052Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/d80dde7f-56b0-467f-a407-63beeb1c6997",
           "branch": "forge/issue-114-d80dde7f",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T19:20:49.101Z",
+          "outputArtifactHash": "sha256:investigate-114-preflight-guard"
         }
       ]
     }
@@ -61,7 +68,8 @@
     "phase:resolve:1:start": "3193e0c5-dffe-4706-a5aa-e58c3ad81777",
     "phase:resolve:1:complete": "d1fa68ad-0a64-4792-850c-9092e2825db1",
     "phase:investigate:1:queue": "106c9b7b-b0e8-48dd-8564-c09a3b167706",
-    "phase:investigate:1:start": "3aac1e84-11e1-43a5-ad99-f0de187274a1"
+    "phase:investigate:1:start": "3aac1e84-11e1-43a5-ad99-f0de187274a1",
+    "phase:investigate:1:complete": "ca54eaec-ac1f-4ad4-aae1-bc610e57927e"
   },
   "eventIds": {
     "533c2019-3105-4632-818c-999aaa247610": true,
@@ -70,7 +78,8 @@
     "3193e0c5-dffe-4706-a5aa-e58c3ad81777": true,
     "d1fa68ad-0a64-4792-850c-9092e2825db1": true,
     "106c9b7b-b0e8-48dd-8564-c09a3b167706": true,
-    "3aac1e84-11e1-43a5-ad99-f0de187274a1": true
+    "3aac1e84-11e1-43a5-ad99-f0de187274a1": true,
+    "ca54eaec-ac1f-4ad4-aae1-bc610e57927e": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
