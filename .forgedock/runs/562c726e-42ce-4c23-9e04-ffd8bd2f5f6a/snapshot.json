@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 12,
-  "lastEventHash": "sha256:58952c79ac927df701b999a553ef9801b664f2ce2ffde0dd92821212de2c94c9",
+  "sequence": 13,
+  "lastEventHash": "sha256:72ec78c1383a9f5fc70d2f47cd36f09c6dd09db264741eaf79e9eab1e448ecef",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -88,11 +88,16 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "resume prepare-worktree attempt 1",
           "evidence": [],
-          "inputArtifactHash": "sha256:plan-92-label-projection"
+          "inputArtifactHash": "sha256:plan-92-label-projection",
+          "logicalNodeId": "work-on/92/prepare-worktree",
+          "startedAt": "2026-08-26T12:10:29.939Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/562c726e-42ce-4c23-9e04-ffd8bd2f5f6a",
+          "branch": "forge/issue-92-562c726e",
+          "baseSha": "26139ba278b95578a300c597ec35495a7d502eb6"
         }
       ]
     }
@@ -111,7 +116,8 @@
     "phase:plan:1:queue": "eeeffe2c-fb28-4695-9aae-c912ef2e9303",
     "phase:plan:1:start": "839cf1b1-ed23-4a6f-9e68-767247a11615",
     "phase:plan:1:complete": "031cad9e-e5df-4ce6-900d-f81a82316ada",
-    "phase:prepare-worktree:1:queue": "eb929dde-c16f-4221-9f78-851e50ef97cc"
+    "phase:prepare-worktree:1:queue": "eb929dde-c16f-4221-9f78-851e50ef97cc",
+    "phase:prepare-worktree:1:start": "3c63205f-afcb-4352-afda-5b6fc3a82d28"
   },
   "eventIds": {
     "2d6b4799-e254-4339-9dcb-219a49010664": true,
@@ -125,7 +131,8 @@
     "eeeffe2c-fb28-4695-9aae-c912ef2e9303": true,
     "839cf1b1-ed23-4a6f-9e68-767247a11615": true,
     "031cad9e-e5df-4ce6-900d-f81a82316ada": true,
-    "eb929dde-c16f-4221-9f78-851e50ef97cc": true
+    "eb929dde-c16f-4221-9f78-851e50ef97cc": true,
+    "3c63205f-afcb-4352-afda-5b6fc3a82d28": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
