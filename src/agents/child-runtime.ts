@@ -1025,63 +1025,101 @@ export function registerForgeRuntime(
       };
       const profiles = params.profiles ?? [];
       assertUniqueReviewerProfileIds(profiles);
+      const panelAttemptId = randomUUID();
       const launchedReceipts: SubagentSpawnReceipt[] = [];
-      const trackLaunch = async (
-        launch: Promise<SubagentSpawnReceipt>,
-      ): Promise<SubagentSpawnReceipt> => {
-        const receipt = await launch;
-        launchedReceipts.push(receipt);
-        return receipt;
-      };
       try {
-        const [correctness, security] = await Promise.all([
-          trackLaunch(
-            rpc.spawnReviewNode({
-              ...common,
-              node: {
-                nodeId: `review-correctness-${params.round}`,
-                node: "review-correctness",
-                attempt: params.round,
-              },
-            }),
-          ),
-          trackLaunch(
-            rpc.spawnReviewNode({
-              ...common,
-              node: {
-                nodeId: `review-security-${params.round}`,
-                node: "review-security",
-                attempt: params.round,
-              },
-            }),
-          ),
+        const baselineSettled = await Promise.allSettled([
+          rpc.spawnReviewNode({
+            ...common,
+            node: {
+              nodeId: `review-correctness-${params.round}-${panelAttemptId}`,
+              node: "review-correctness",
+              attempt: params.round,
+            },
+          }),
+          rpc.spawnReviewNode({
+            ...common,
+            node: {
+              nodeId: `review-security-${params.round}-${panelAttemptId}`,
+              node: "review-security",
+              attempt: params.round,
+            },
+          }),
         ]);
-        const specialists = await Promise.all(
+        for (const settled of baselineSettled) {
+          if (settled.status === "fulfilled")
+            launchedReceipts.push(settled.value);
+        }
+        const baselineFailure = baselineSettled.find(
+          (settled): settled is PromiseRejectedResult =>
+            settled.status === "rejected",
+        );
+        if (baselineFailure) throw baselineFailure.reason;
+        const correctnessSettled = baselineSettled[0];
+        const securitySettled = baselineSettled[1];
+        if (
+          correctnessSettled.status !== "fulfilled" ||
+          securitySettled.status !== "fulfilled"
+        ) {
+          throw new Error("Required reviewer launch failed without a reason.");
+        }
+        const correctness = correctnessSettled.value;
+        const security = securitySettled.value;
+
+        const specialistSettled = await Promise.allSettled(
           profiles.map((profile) =>
-            trackLaunch(
-              rpc.spawnDomainReviewNode(
-                {
-                  ...common,
-                  issueContext: `Reviewer profile: ${JSON.stringify(profile)}\nReview only this profile scope against the frozen patch.`,
-                  node: {
-                    nodeId: `review-${profile.id}-${params.round}`,
-                    node: `review-${profile.id}`,
-                    attempt: params.round,
-                  },
+            rpc.spawnDomainReviewNode(
+              {
+                ...common,
+                issueContext: `Reviewer profile: ${JSON.stringify(profile)}\nReview only this profile scope against the frozen patch.`,
+                node: {
+                  nodeId: `review-${profile.id}-${params.round}-${panelAttemptId}`,
+                  node: `review-${profile.id}`,
+                  attempt: params.round,
                 },
-                profile.id,
-              ),
+              },
+              profile.id,
             ),
           ),
         );
+        const optionalFailures: Array<{
+          reviewer: string;
+          reason: string;
+        }> = [];
+        const specialistLaunches: Array<{
+          receipt: SubagentSpawnReceipt;
+          reviewer: string;
+          required: boolean;
+        }> = [];
+        let requiredSpecialistFailure: unknown;
+        for (const [index, settled] of specialistSettled.entries()) {
+          const profile = profiles[index]!;
+          if (settled.status === "fulfilled") {
+            launchedReceipts.push(settled.value);
+            specialistLaunches.push({
+              receipt: settled.value,
+              reviewer: profile.id,
+              required: profile.required,
+            });
+          } else if (profile.required) {
+            requiredSpecialistFailure ??= settled.reason;
+          } else {
+            optionalFailures.push({
+              reviewer: profile.id,
+              reason:
+                settled.reason instanceof Error
+                  ? settled.reason.message
+                  : String(settled.reason),
+            });
+          }
+        }
+        if (requiredSpecialistFailure !== undefined)
+          throw requiredSpecialistFailure;
+
         const launches = [
           { receipt: correctness, reviewer: "correctness", required: true },
           { receipt: security, reviewer: "security", required: true },
-          ...specialists.map((receipt, index) => ({
-            receipt,
-            reviewer: profiles[index]!.id,
-            required: profiles[index]!.required,
-          })),
+          ...specialistLaunches,
         ];
         const joined = await Promise.all(
           launches.map(async (launch) => {
@@ -1100,6 +1138,8 @@ export function registerForgeRuntime(
               );
               return { result };
             } catch (error) {
+              if (signal?.aborted)
+                throw signal.reason ?? new Error("Reviewer panel was aborted.");
               if (launch.required) throw error;
               await rpc.stop(launch.receipt.runId).catch(() => undefined);
               return {
@@ -1114,8 +1154,10 @@ export function registerForgeRuntime(
         const reviewerResults = joined.flatMap((entry) =>
           entry.result ? [entry.result] : [],
         );
-        const optionalFailures = joined.flatMap((entry) =>
-          entry.optionalFailure ? [entry.optionalFailure] : [],
+        optionalFailures.push(
+          ...joined.flatMap((entry) =>
+            entry.optionalFailure ? [entry.optionalFailure] : [],
+          ),
         );
         return {
           content: [
@@ -1127,6 +1169,7 @@ export function registerForgeRuntime(
           details: {
             headSha: params.headSha,
             round: params.round,
+            panelAttemptId,
             reviewerRunIds: launchedReceipts.map((receipt) => receipt.runId),
             reviewerResults,
             optionalFailures,

@@ -173,6 +173,29 @@ export interface ParsedAsyncCompletion {
   error?: string;
 }
 
+export function directRunResumeTask(
+  link: ActiveRunLink,
+  state: import("../core/state.ts").RunState,
+): string {
+  const phases = Object.fromEntries(
+    Object.entries(state.phases).map(([phase, value]) => [
+      phase,
+      value.attempts.at(-1)?.status ?? "unknown",
+    ]),
+  );
+  return [
+    "Resume the existing ForgeDock direct work-on run after its owning Pi session restarted. This is recovery of the same run, not a new work request.",
+    `Run ID: ${link.forgeRunId}`,
+    `Issue: #${link.issueNumber}`,
+    `Assigned worktree: ${link.prepared.worktreePath}`,
+    `Branch: ${link.prepared.branch}`,
+    `Integration base: ${link.prepared.baseBranch} at ${link.prepared.baseSha}`,
+    `Durable status: ${state.status}; sequence: ${state.sequence}; phase attempts: ${JSON.stringify(phases)}`,
+    `Known review head: ${link.reviewHeadSha ?? "not yet prepared"}`,
+    "Do not create another run, worktree, branch, commit, or PR merely because the session restarted. Reconcile the existing durable phase, trusted result files, current git head, and bound PR before retrying any side effect. Idempotently continue the complete work-on pipeline from the first unfinished phase. If review was interrupted, launch a fresh risk-derived panel for the current frozen head. Continue through merge, issue closure, labels, and cleanup, using only Forge tools.",
+  ].join("\n\n");
+}
+
 export class ForgeWorkOnController {
   readonly #pi: ExtensionAPI;
   readonly #rpc: SubagentsRpcClient;
@@ -333,8 +356,11 @@ export class ForgeWorkOnController {
           link.stateBranch,
         );
         await this.#reconcileWorkflowProjection(link, projectionStore, ctx);
+        let directState:
+          | import("../adapters/github-state.ts").ReadRunStateResult
+          | undefined;
         if (link.executionMode === "direct") {
-          const directState = await projectionStore.readRun(
+          directState = await projectionStore.readRun(
             link.forgeRunId,
             ctx.signal,
           );
@@ -349,6 +375,7 @@ export class ForgeWorkOnController {
         }
         if (link.status !== "running" && link.status !== "refreshing") continue;
         if (link.executionMode === "direct") {
+          if (!directState?.state) continue;
           const { policy } = await loadForgePolicy(
             link.prepared.repositoryRoot,
           );
@@ -372,6 +399,9 @@ export class ForgeWorkOnController {
           process.env.PI_SUBAGENT_EXTENSION_BINDINGS = JSON.stringify({
             "forgedock.pi/1": this.#directBinding,
           });
+          this.#pi.sendUserMessage(
+            directRunResumeTask(link, directState.state),
+          );
           continue;
         }
         const activeNodes = Object.values(link.activeNodes);
@@ -2820,9 +2850,11 @@ export class ForgeWorkOnController {
   }
 
   async stopProviderRuns(runIds: readonly string[]): Promise<void> {
-    for (const runId of new Set(runIds)) {
-      if (!isLaunchSentinel(runId)) await this.#rpc.stop(runId);
-    }
+    await Promise.allSettled(
+      [...new Set(runIds)]
+        .filter((runId) => !isLaunchSentinel(runId))
+        .map((runId) => this.#rpc.stop(runId)),
+    );
   }
 
   async stopOrchestration(

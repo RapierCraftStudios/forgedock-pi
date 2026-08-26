@@ -15,6 +15,9 @@ test("session shutdown detaches active runs instead of cancelling durable work",
   assert.doesNotMatch(entrypoint, /orchestrator\.shutdown/);
   assert.match(entrypoint, /controller\.dispose\(\)/);
   assert.match(entrypoint, /orchestrator\.dispose\(\)/);
+  const workOn = await readFile("src/workflows/work-on.ts", "utf8");
+  assert.match(workOn, /sendUserMessage\(\s*directRunResumeTask/);
+  assert.match(workOn, /Do not create another run, worktree, branch, commit, or PR/);
 });
 
 test("authority-sensitive seams are source-discoverable modules", async () => {
