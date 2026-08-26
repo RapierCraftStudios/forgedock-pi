@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 19,
-  "lastEventHash": "sha256:76e4f9aae8acb594c4b0916672c3d8b125ca771d5b9c83a7ea4966feba614bff",
+  "sequence": 20,
+  "lastEventHash": "sha256:d92ee0afd820eab6791f15438e67c3ab23983e55862c6040744252defbc41faf",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -127,15 +127,20 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume verify attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Primary LSP diagnostics passed with zero diagnostics on register.ts, materialize.ts, and the regression test.",
+            "Forge Diff shows exactly three changed paths: the two agent definition modules and test/agents-materialize.test.ts.",
+            "The trusted policy exposes no local verification commands; no unapproved command was invented, and GitHub CI is deferred to the parent after PR creation."
+          ],
           "logicalNodeId": "verify-1",
           "startedAt": "2026-08-26T10:48:06.053Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/c30e9775-4f69-4a02-b33f-2abee3ab0846",
           "branch": "forge/issue-93-c30e9775",
-          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4"
+          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4",
+          "finishedAt": "2026-08-26T10:48:48.594Z"
         }
       ]
     }
@@ -161,7 +166,8 @@
     "phase:implement:1:start": "7838d27b-b1c0-4dc6-a0ca-774d66af37df",
     "phase:implement:1:complete": "962c0c2f-9dbf-4376-a0de-8745d38f5da9",
     "phase:verify:1:queue": "b80a9e76-1e8f-4617-a3f8-fc1bd5297624",
-    "phase:verify:1:start": "0e7dc519-ff24-498d-a0b0-09a49a746d97"
+    "phase:verify:1:start": "0e7dc519-ff24-498d-a0b0-09a49a746d97",
+    "phase:verify:1:complete": "99f0afa2-67be-46cf-b3cf-3bc028301d4d"
   },
   "eventIds": {
     "c9339e85-e4dc-47ef-8416-edc58e3220c6": true,
@@ -182,7 +188,8 @@
     "7838d27b-b1c0-4dc6-a0ca-774d66af37df": true,
     "962c0c2f-9dbf-4376-a0de-8745d38f5da9": true,
     "b80a9e76-1e8f-4617-a3f8-fc1bd5297624": true,
-    "0e7dc519-ff24-498d-a0b0-09a49a746d97": true
+    "0e7dc519-ff24-498d-a0b0-09a49a746d97": true,
+    "99f0afa2-67be-46cf-b3cf-3bc028301d4d": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
