@@ -10,8 +10,8 @@
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 9,
-  "lastEventHash": "sha256:6c11a2fd9ba8c9c352472287f6cdfcf9794126ad56bd867a54156b73431ecbf1",
+  "sequence": 10,
+  "lastEventHash": "sha256:47332d3db023f645a3c6849325b090833707d595152cb7a86c40bd86bedeef89",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -67,6 +67,13 @@
         "src/workflows/orchestrate.ts:386-393 records a closed lane with the reason that invalid/decomposed investigations close without code."
       ],
       "finishedAt": "2026-08-26T01:49:50.541Z"
+    },
+    "close-1": {
+      "nodeId": "close-1",
+      "node": "close",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued"
     }
   },
   "effects": {},
@@ -79,7 +86,8 @@
     "node:investigate-1:queued": "ce02d33a-2635-4c20-b64d-c2a4f3f6942e",
     "node:investigate-1:started": "3bf13a08-f8f2-48e6-9ae9-aba9a0ac7024",
     "node:investigate-1:attempt:1:launch-receipt:788bd458-b328-48af-bcbb-7e35ebb1e57f:73d1d681-5912-4308-9810-a62b9aaee87e": "33098981-7546-4068-9bc0-012b2353852b",
-    "node:investigate-1:completed": "80898ac3-77c6-4f97-ac57-446aa1a4fd38"
+    "node:investigate-1:completed": "80898ac3-77c6-4f97-ac57-446aa1a4fd38",
+    "node:close-1:queued": "9693bbb7-1aeb-40aa-bd44-47e9651cf62c"
   },
   "eventIds": {
     "366b353d-0477-4064-9a24-f5fad1bec3dd": true,
@@ -90,6 +98,7 @@
     "ce02d33a-2635-4c20-b64d-c2a4f3f6942e": true,
     "3bf13a08-f8f2-48e6-9ae9-aba9a0ac7024": true,
     "33098981-7546-4068-9bc0-012b2353852b": true,
-    "80898ac3-77c6-4f97-ac57-446aa1a4fd38": true
+    "80898ac3-77c6-4f97-ac57-446aa1a4fd38": true,
+    "9693bbb7-1aeb-40aa-bd44-47e9651cf62c": true
   }
 }
