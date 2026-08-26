@@ -3285,13 +3285,15 @@ export class ForgeWorkOnController {
     );
 
     const issue = await github.getIssue(link.issueNumber, ctx.signal);
-    const pull = await github.createPullRequest({
-      title: issue.title,
-      body: buildPullBody(link, result),
-      head: link.prepared.branch,
-      base: link.prepared.baseBranch,
-      ...(ctx.signal ? { signal: ctx.signal } : {}),
-    });
+    const pull =
+      existingPull ??
+      (await github.createPullRequest({
+        title: issue.title,
+        body: buildPullBody(link, result),
+        head: link.prepared.branch,
+        base: link.prepared.baseBranch,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      }));
     await appendEffect(
       journal,
       link.forgeRunId,
@@ -3517,12 +3519,25 @@ export class ForgeWorkOnController {
       return;
     }
 
-    const merged = await github.mergePullRequest({
-      pullNumber: pull.number,
-      expectedHeadSha: result.review.headSha,
-      method: "squash",
-      ...(ctx.signal ? { signal: ctx.signal } : {}),
-    });
+    const durableMergeSha = currentRun.state?.phases.merge?.attempts
+      .filter((attempt) => attempt.status === "completed")
+      .at(-1)?.evidence[0];
+    if (currentPull.merged && !durableMergeSha)
+      throw new Error(
+        "Merged pull request has no durable merge-complete SHA evidence.",
+      );
+    const merged = currentPull.merged
+      ? {
+          merged: true,
+          sha: durableMergeSha as string,
+          message: "Pull request was already merged by this run.",
+        }
+      : await github.mergePullRequest({
+          pullNumber: pull.number,
+          expectedHeadSha: result.review.headSha,
+          method: "squash",
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
     await appendEffect(
       journal,
       link.forgeRunId,
