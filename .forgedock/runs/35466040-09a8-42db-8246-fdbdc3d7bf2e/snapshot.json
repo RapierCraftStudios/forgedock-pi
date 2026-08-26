@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:9c70e4e704cebf6ac9d905ae7a9e71d948787e92100534abc5030196ae9b979a",
+  "sequence": 8,
+  "lastEventHash": "sha256:5e17433ddec82b0b9e4cb2077f86890220320c62a4b3129271501b38219caf03",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -37,16 +37,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/agents/child-runtime.ts` applies workflow labels for direct checkpoint starts and only investigation completion; plan/prepare-worktree/implement/verify/review completion mappings are absent, and `prepare-pr` has no mapping.",
+            "`src/workflows/work-on.ts` has a separate parent-node mapping for orchestrated runs, while `src/adapters/github-projection.ts` already replaces prior `workflow:*` labels and preserves ordinary labels.",
+            "The direct checkpoint path persists durable state before projections but currently posts completion artifacts before attempting the label, so an artifact projection failure can leave the visible label stale despite an authoritative phase transition.",
+            "Existing projection coverage verifies one investigating-to-merged replacement, but does not exercise the complete direct checkpoint lifecycle."
+          ],
           "inputArtifactHash": "sha256:89f2fa1c7e7020b695803e9a1b556d55076f2302",
           "logicalNodeId": "investigate-1",
           "startedAt": "2026-08-26T23:48:21.865Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/35466040-09a8-42db-8246-fdbdc3d7bf2e",
           "branch": "forge/issue-92-35466040",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T23:52:42.314Z"
         }
       ]
     }
@@ -60,7 +66,8 @@
     "phase:resolve:1:start": "bb079e6a-c61c-4707-b2de-aa804c6a24bc",
     "phase:resolve:1:complete": "bb61ce2c-b318-4b08-be0e-7c13d572f687",
     "phase:investigate:1:queue": "8b8b7f8e-0c8c-4519-87b9-06604a96ee52",
-    "phase:investigate:1:start": "c870d763-f8a7-4f36-b0ec-4feaa4891cb5"
+    "phase:investigate:1:start": "c870d763-f8a7-4f36-b0ec-4feaa4891cb5",
+    "phase:investigate:1:complete": "0f1f4ffd-8383-4207-9e9d-be6419cfdb03"
   },
   "eventIds": {
     "2f9de7d7-ccbc-4ec8-b273-57d93d8d88fd": true,
@@ -69,7 +76,8 @@
     "bb079e6a-c61c-4707-b2de-aa804c6a24bc": true,
     "bb61ce2c-b318-4b08-be0e-7c13d572f687": true,
     "8b8b7f8e-0c8c-4519-87b9-06604a96ee52": true,
-    "c870d763-f8a7-4f36-b0ec-4feaa4891cb5": true
+    "c870d763-f8a7-4f36-b0ec-4feaa4891cb5": true,
+    "0f1f4ffd-8383-4207-9e9d-be6419cfdb03": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
