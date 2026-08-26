@@ -85,6 +85,30 @@ test("required monorepo verification preflight selects the package cwd", async (
   }
 });
 
+test("malformed root test metadata cannot fall back to a nested package", async () => {
+  const testFixture = await fixture();
+  try {
+    await writeFile(
+      join(testFixture.root, "package.json"),
+      JSON.stringify({ scripts: { test: { command: "vitest run" } } }),
+    );
+    await assert.rejects(
+      preflightRequiredVerificationCommands(
+        testFixture.root,
+        { test: command(".") },
+        { path: testFixture.path, configPath: "/repo/.forge/config.json" },
+      ),
+      (error: unknown) =>
+        error instanceof VerificationPreflightError &&
+        error.path === "/repo/.forge/config.json verification.commands.test.argv" &&
+        /no 'test' script/.test(error.message) &&
+        /CI-only verification/.test(error.message),
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
 test("preflight checks executable availability without running the command", async () => {
   const testFixture = await fixture();
   try {
