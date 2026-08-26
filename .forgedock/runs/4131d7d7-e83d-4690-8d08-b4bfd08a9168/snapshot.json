@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 21,
-  "lastEventHash": "sha256:8d87262508ce64adbc892e6436295d9bdd00dce60b704931a5826388e248c170",
+  "sequence": 22,
+  "lastEventHash": "sha256:a8b5e2fd9a0312ff8058a93a1299747c2e877f9f687478e1747751ad0db5c4ba",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -166,11 +166,16 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 1",
           "evidence": [],
-          "inputArtifactHash": "sha256:verify-490f38bbb974255eabe2fa3645d98df24c6e88b5"
+          "inputArtifactHash": "sha256:verify-490f38bbb974255eabe2fa3645d98df24c6e88b5",
+          "logicalNodeId": "work-on/92/review",
+          "startedAt": "2026-08-26T13:33:42.720Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/4131d7d7-e83d-4690-8d08-b4bfd08a9168",
+          "branch": "forge/issue-92-4131d7d7",
+          "baseSha": "26139ba278b95578a300c597ec35495a7d502eb6"
         }
       ]
     }
@@ -198,7 +203,8 @@
     "phase:verify:1:queue": "c1565da6-8132-4c1d-8340-84e9cc12b1d7",
     "phase:verify:1:start": "d5163b67-23aa-4adb-8064-5e0e34559f7c",
     "phase:verify:1:complete": "e1db423c-026a-40cb-a5c8-500c8d9d7325",
-    "phase:review:1:queue": "0b69cb04-83b2-40c3-a256-4ae4019e305d"
+    "phase:review:1:queue": "0b69cb04-83b2-40c3-a256-4ae4019e305d",
+    "phase:review:1:start": "d244e89b-2a8c-4a25-9bd8-21249e001a03"
   },
   "eventIds": {
     "d4bc0456-c63a-47b8-83b8-0bcee88aab3b": true,
@@ -221,7 +227,8 @@
     "c1565da6-8132-4c1d-8340-84e9cc12b1d7": true,
     "d5163b67-23aa-4adb-8064-5e0e34559f7c": true,
     "e1db423c-026a-40cb-a5c8-500c8d9d7325": true,
-    "0b69cb04-83b2-40c3-a256-4ae4019e305d": true
+    "0b69cb04-83b2-40c3-a256-4ae4019e305d": true,
+    "d244e89b-2a8c-4a25-9bd8-21249e001a03": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
