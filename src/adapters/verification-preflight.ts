@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { access, readFile, realpath, stat } from "node:fs/promises";
+import { access, lstat, readFile, realpath, stat } from "node:fs/promises";
 import {
   basename,
   delimiter,
@@ -135,6 +135,25 @@ async function assertPackageScript(
   basePath: string,
 ): Promise<void> {
   const manifestPath = join(cwd, "package.json");
+  let manifestStat: Awaited<ReturnType<typeof lstat>>;
+  try {
+    manifestStat = await lstat(manifestPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT")
+      throw new VerificationPreflightError(
+        `${basePath}.cwd`,
+        `selected package directory has no package.json for script '${script}'`,
+      );
+    throw new VerificationPreflightError(
+      `${basePath}.cwd`,
+      `unable to inspect selected package.json: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (manifestStat.isSymbolicLink())
+    throw new VerificationPreflightError(
+      `${basePath}.cwd`,
+      "selected package.json is a symbolic link; configure cwd to a package with a real manifest",
+    );
   let canonicalManifest: string;
   try {
     canonicalManifest = await realpath(manifestPath);

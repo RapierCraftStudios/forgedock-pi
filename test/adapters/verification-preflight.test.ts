@@ -111,6 +111,48 @@ test("preflight checks executable availability without running the command", asy
   }
 });
 
+test("preflight rejects nested and dangling package manifest symlinks", async () => {
+  const testFixture = await fixture();
+  try {
+    await rm(join(testFixture.root, "package.json"));
+    await symlink("web/package.json", join(testFixture.root, "package.json"));
+    await assert.rejects(
+      preflightRequiredVerificationCommands(
+        testFixture.root,
+        { test: command(".") },
+        { path: testFixture.path },
+      ),
+      /package.json is a symbolic link/,
+    );
+
+    await rm(join(testFixture.root, "package.json"));
+    await symlink(
+      "web/missing-package.json",
+      join(testFixture.root, "package.json"),
+    );
+    await assert.rejects(
+      preflightRequiredVerificationCommands(
+        testFixture.root,
+        { test: command(".") },
+        { path: testFixture.path },
+      ),
+      /package.json is a symbolic link/,
+    );
+
+    await rm(join(testFixture.root, "package.json"));
+    await assert.rejects(
+      preflightRequiredVerificationCommands(
+        testFixture.root,
+        { test: command(".") },
+        { path: testFixture.path },
+      ),
+      /has no package.json/,
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
 test("verification cwd rejects missing, control, and symlink-escape directories", async () => {
   const testFixture = await fixture();
   try {
