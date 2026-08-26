@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 10,
-  "lastEventHash": "sha256:ac24bd3f111f662fb33cf87116b22a484c6cdca788d89cde509df3c919116f0d",
+  "sequence": 11,
+  "lastEventHash": "sha256:e019643ffa6f5c51fc2e9719905e57e58882def52e9a359c1fcd7c7c80e6893f",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -60,15 +60,20 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
-          "evidence": [],
+          "evidence": [
+            "The plan constrains changes to the two agent definition paths plus one focused regression test.",
+            "Writer/read-only guard behavior, generated/in-process parity, and no unrelated workflow authority changes are explicit invariants.",
+            "The trusted policy has no configured local verification commands; parent-owned GitHub CI remains the authoritative required gate."
+          ],
           "logicalNodeId": "plan-1",
           "startedAt": "2026-08-26T10:42:35.587Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/c30e9775-4f69-4a02-b33f-2abee3ab0846",
           "branch": "forge/issue-93-c30e9775",
-          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4"
+          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4",
+          "finishedAt": "2026-08-26T10:43:14.663Z"
         }
       ]
     }
@@ -85,7 +90,8 @@
     "phase:investigate:1:start": "9563950f-985f-4ce9-9994-dc8d18084570",
     "phase:investigate:1:complete": "450497d4-ca51-427c-ad7b-ec766b65b94f",
     "phase:plan:1:queue": "9e207630-ff3f-4473-9b58-170afa498c56",
-    "phase:plan:1:start": "2a683c0a-a6dd-42ba-a106-5df092d2a1e2"
+    "phase:plan:1:start": "2a683c0a-a6dd-42ba-a106-5df092d2a1e2",
+    "phase:plan:1:complete": "5919cecc-623a-4332-992c-042cc42d1f06"
   },
   "eventIds": {
     "c9339e85-e4dc-47ef-8416-edc58e3220c6": true,
@@ -97,7 +103,8 @@
     "9563950f-985f-4ce9-9994-dc8d18084570": true,
     "450497d4-ca51-427c-ad7b-ec766b65b94f": true,
     "9e207630-ff3f-4473-9b58-170afa498c56": true,
-    "2a683c0a-a6dd-42ba-a106-5df092d2a1e2": true
+    "2a683c0a-a6dd-42ba-a106-5df092d2a1e2": true,
+    "5919cecc-623a-4332-992c-042cc42d1f06": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
