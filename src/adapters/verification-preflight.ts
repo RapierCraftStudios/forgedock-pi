@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { access, readFile, realpath, stat } from "node:fs/promises";
+import { access, lstat, readFile, realpath, stat } from "node:fs/promises";
 import {
   basename,
   delimiter,
@@ -135,13 +135,46 @@ async function assertPackageScript(
   basePath: string,
 ): Promise<void> {
   const manifestPath = join(cwd, "package.json");
+  let manifestEntry: Awaited<ReturnType<typeof lstat>>;
+  try {
+    manifestEntry = await lstat(manifestPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT")
+      throw new VerificationPreflightError(
+        `${basePath}.cwd`,
+        `selected package directory has no package.json for script '${script}'`,
+      );
+    throw new VerificationPreflightError(
+      `${basePath}.cwd`,
+      `unable to inspect package.json: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (manifestEntry.isSymbolicLink()) {
+    let dangling = false;
+    try {
+      await realpath(manifestPath);
+    } catch (error) {
+      dangling = (error as NodeJS.ErrnoException).code === "ENOENT";
+    }
+    throw new VerificationPreflightError(
+      `${basePath}.cwd`,
+      dangling
+        ? "package.json is a dangling symlink and cannot select another package"
+        : "package.json is a symlink and cannot select another package",
+    );
+  }
+  if (!manifestEntry.isFile())
+    throw new VerificationPreflightError(
+      `${basePath}.cwd`,
+      "package.json must be a regular file",
+    );
   let canonicalManifest: string;
   try {
     canonicalManifest = await realpath(manifestPath);
-  } catch {
+  } catch (error) {
     throw new VerificationPreflightError(
       `${basePath}.cwd`,
-      `selected package directory has no package.json for script '${script}'`,
+      `unable to resolve package.json: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
   if (!pathWithin(repositoryRoot, canonicalManifest))
