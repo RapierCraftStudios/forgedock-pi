@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 11,
-  "lastEventHash": "sha256:5771b4f5b27718b2240fef4e8695acbadbde53ba15e7c46b98672cc486c0df7f",
+  "sequence": 12,
+  "lastEventHash": "sha256:de32cf7032059faf422045d3e1e26c9f5556c8892a31f1a4f4b2ca138631a8cf",
   "lanes": [
     {
       "issueNumber": 92,
@@ -28,10 +28,11 @@
     {
       "issueNumber": 111,
       "ordinal": 2,
-      "status": "running",
+      "status": "blocked",
       "refreshes": 0,
       "forgeRunId": "49086086-fe49-4436-bdd1-3bc1a2623607",
-      "subagentRunId": "cfb77591-e6d2-460f-8c9f-4ad71a18511e"
+      "subagentRunId": "cfb77591-e6d2-460f-8c9f-4ad71a18511e",
+      "reason": "Investigation start checkpoint failed because the state branch changed after the preceding checkpoint. Per ForgeDock instructions, the run stopped immediately."
     },
     {
       "issueNumber": 112,
@@ -94,7 +95,8 @@
     "lane:115:started": "af456da0-20c3-41eb-8c31-51beede94f40",
     "lane:119:started": "eb5f171e-61e3-42a1-b8b5-64cdcd3887ba",
     "lane:120:started": "914ee5b9-fbba-4f92-a19e-e1ccf18ca906",
-    "lane:112:failed": "7b5a5002-fa0c-4fad-85e1-9799a9c35064"
+    "lane:112:failed": "7b5a5002-fa0c-4fad-85e1-9799a9c35064",
+    "lane:111:blocked": "cc0e7392-c407-4808-af08-b44b1ed78003"
   },
   "createdAt": "2026-08-26T17:53:19.264Z"
 }
