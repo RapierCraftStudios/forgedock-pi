@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:8a426b140d66bfe841ec6ff817dc916756e29f990a2b89049fc189f7282b476d",
+  "sequence": 8,
+  "lastEventHash": "sha256:ebad2370b5f6c4434549a41e38d39eda3b116a448305924cd26999fb1b88e526",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -39,15 +39,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/verification-preflight.ts` derives package scripts from `cwd` but does not reject npm package selectors before preflight.",
+            "`packageScriptName` only recognizes `argv[1]` as the npm command, so selectors such as `--prefix` or `--workspace` bypass the script-manifest assertion; a selector-aware implementation could also inspect the wrong manifest.",
+            "`test/adapters/verification-preflight.test.ts` covers package cwd selection, executable checks, and directory containment, but has no npm package-selector regression.",
+            "The cited issue links source issue #94, source PR #110, and prior remediation commit `d174f8e9d8ff88c1a40b8a75c99489c76ef52e92`; the frozen base still lacks the described fail-closed guard."
+          ],
           "logicalNodeId": "work-on-45e360ae-investigate",
           "startedAt": "2026-08-26T20:06:37.358Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/45e360ae-b2d8-45e4-b60e-91b3de2d54c4",
           "branch": "forge/issue-111-45e360ae",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T20:09:18.408Z",
+          "outputArtifactHash": "sha256:investigation-111-verification-preflight"
         }
       ]
     }
@@ -61,7 +68,8 @@
     "phase:resolve:1:start": "965602a3-e5a3-4bec-a574-88948978a599",
     "phase:resolve:1:complete": "055fc861-d32e-4181-998f-a58ffecdb27c",
     "phase:investigate:1:queue": "b540a07c-ed46-4041-b1cf-6843172e81e6",
-    "phase:investigate:1:start": "2a06d092-2752-4568-b3b0-94899ffc19bf"
+    "phase:investigate:1:start": "2a06d092-2752-4568-b3b0-94899ffc19bf",
+    "phase:investigate:1:complete": "2ce02b4b-a12e-4b49-9a1c-c317f1911b3b"
   },
   "eventIds": {
     "330270d3-5b01-4464-ba3e-607b0840f474": true,
@@ -70,7 +78,8 @@
     "965602a3-e5a3-4bec-a574-88948978a599": true,
     "055fc861-d32e-4181-998f-a58ffecdb27c": true,
     "b540a07c-ed46-4041-b1cf-6843172e81e6": true,
-    "2a06d092-2752-4568-b3b0-94899ffc19bf": true
+    "2a06d092-2752-4568-b3b0-94899ffc19bf": true,
+    "2ce02b4b-a12e-4b49-9a1c-c317f1911b3b": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
