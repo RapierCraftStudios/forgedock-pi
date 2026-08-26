@@ -91,9 +91,13 @@ test("npm package-selection options must use the explicit verification cwd", asy
     const packageSelectionArgv = [
       ["npm", "--prefix", "web", "test"],
       ["npm", "--prefix=web", "test"],
+      ["npm", "-prefix", "web", "test"],
+      ["npm", "-pref=web", "test"],
       ["npm", "test", "--prefix", "web"],
       ["npm", "-C", "web", "test"],
       ["npm", "test", "-Cweb"],
+      ["npm", "-L", "global", "test"],
+      ["npm", "test", "-Lglobal"],
       ["npm", "--workspace", "web", "test"],
       ["npm", "test", "--workspace=web"],
       ["npm", "-w", "web", "test"],

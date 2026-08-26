@@ -126,6 +126,7 @@ const NPM_PACKAGE_LOCATION_OPTIONS = new Set([
   "--workspaces",
   "--ws",
   "-C",
+  "-L",
   "-g",
   "-w",
 ]);
@@ -139,9 +140,20 @@ function assertNpmPackageSelectionUsesCwd(
   for (const argument of argv.slice(1)) {
     if (argument === "--") break;
     const option = argument.split("=", 1)[0] ?? argument;
+    const longAlias =
+      option.startsWith("-") && !option.startsWith("--")
+        ? `--${option.slice(1)}`
+        : undefined;
     const packageLocationOption =
       NPM_PACKAGE_LOCATION_OPTIONS.has(option) ||
-      (argument.startsWith("-C") && !argument.startsWith("--"))
+      (longAlias !== undefined &&
+        [...NPM_PACKAGE_LOCATION_OPTIONS].some((candidate) =>
+          candidate.startsWith("--") && candidate.startsWith(longAlias),
+        )) ||
+      (argument.startsWith("-C") && !argument.startsWith("--")) ||
+      (argument.startsWith("-L") && !argument.startsWith("--")) ||
+      (argument.startsWith("-g") && !argument.startsWith("--")) ||
+      (argument.startsWith("-w") && !argument.startsWith("--"))
         ? option
         : undefined;
     if (packageLocationOption) {
