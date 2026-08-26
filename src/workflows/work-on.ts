@@ -578,30 +578,32 @@ export class ForgeWorkOnController {
     if (!stage) return;
     const label = WORKFLOW_LABEL_BY_STAGE[stage];
     assertWorkflowLabel(label, stage);
-    try {
-      const activeProjector =
-        projector ??
-        new GitHubIssueProjector(
-          new FetchGitHubTransport({
-            token: await resolveGitHubToken(
-              this.#pi,
-              link.prepared.repositoryRoot,
-              ctx.signal,
-            ),
-          }),
-          link.repository,
-        );
-      await activeProjector.setWorkflowLabel(
-        link.issueNumber,
-        label,
-        ctx.signal,
-      );
-    } catch (error) {
-      ctx.ui.notify(
-        `ForgeDock issue #${link.issueNumber} durable state advanced, but workflow label projection will retry: ${errorMessage(error)}`,
-        "warning",
-      );
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const activeProjector =
+          projector ??
+          new GitHubIssueProjector(
+            new FetchGitHubTransport({
+              token: await resolveGitHubToken(
+                this.#pi,
+                link.prepared.repositoryRoot,
+              ),
+            }),
+            link.repository,
+          );
+        await activeProjector.setWorkflowLabel(link.issueNumber, label);
+        return;
+      } catch (error) {
+        lastError = error;
+        if (attempt < 3)
+          await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
+      }
     }
+    ctx.ui.notify(
+      `ForgeDock issue #${link.issueNumber} durable state advanced, but workflow label projection will retry: ${errorMessage(lastError)}`,
+      "warning",
+    );
   }
 
   async #reconcileWorkflowProjection(
@@ -611,6 +613,13 @@ export class ForgeWorkOnController {
   ): Promise<void> {
     const snapshot = await store.readRun(link.forgeRunId, ctx.signal);
     if (!snapshot.state) return;
+    if (
+      snapshot.state.status === "completed" &&
+      snapshot.state.outcome === "merged"
+    ) {
+      await this.#projectWorkflowStage(link, "merged", ctx);
+      return;
+    }
     const nodes = Object.values(snapshot.state.nodes);
     const latest = nodes.at(-1);
     if (!latest) {
