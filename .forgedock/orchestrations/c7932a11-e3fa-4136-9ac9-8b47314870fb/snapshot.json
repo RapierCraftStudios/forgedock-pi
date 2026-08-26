@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 19,
-  "lastEventHash": "sha256:d2c646de9ba987e768bb92ebd33a664f5fc90dc656490a400aa2c821fc7f2b8b",
+  "sequence": 20,
+  "lastEventHash": "sha256:7dfeef5e989bcfe7fb68cf50663d2e0705f2af354377e987d9435ccdcce06d8e",
   "lanes": [
     {
       "issueNumber": 92,
@@ -85,10 +85,11 @@
     {
       "issueNumber": 120,
       "ordinal": 8,
-      "status": "running",
+      "status": "failed",
       "refreshes": 0,
       "forgeRunId": "11ce1515-6091-4362-8360-f8c5b9cc73dc",
-      "subagentRunId": "57104a30-b865-4ed7-8a4a-8a2bbcddf478"
+      "subagentRunId": "57104a30-b865-4ed7-8a4a-8a2bbcddf478",
+      "reason": "Subagent stopped by user."
     }
   ],
   "idempotencyKeys": {
@@ -110,7 +111,8 @@
     "lane:112:failed": "61066202-b73b-4ccf-aa88-185a0911b686",
     "lane:113:integrate:0": "2be2a3bd-f070-46de-9e00-1b31f8c565fe",
     "lane:113:integration-failed": "1e463041-8a0e-4a6e-9081-23cebed43f41",
-    "lane:115:failed": "f28aa87c-e22d-401e-9e4d-61652b046bf1"
+    "lane:115:failed": "f28aa87c-e22d-401e-9e4d-61652b046bf1",
+    "lane:120:failed": "85d18f8c-1f42-4943-bce5-c5375d28a4b9"
   },
   "createdAt": "2026-08-26T22:06:38.675Z"
 }
