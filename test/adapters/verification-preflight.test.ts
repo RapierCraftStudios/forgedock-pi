@@ -12,6 +12,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  assertNoPackageLocationOptions,
   preflightRequiredVerificationCommands,
   resolveVerificationCommandDirectory,
   VerificationPreflightError,
@@ -78,6 +79,61 @@ test("required monorepo verification preflight selects the package cwd", async (
     await preflightRequiredVerificationCommands(
       testFixture.root,
       { test: command("web") },
+      { path: testFixture.path },
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
+test("package-manager location options cannot override the bound package", async () => {
+  const testFixture = await fixture();
+  try {
+    const locationCommands: readonly (readonly string[])[] = [
+      ["npm", "--prefix", ".", "test"],
+      ["npm", "--prefix=.", "test"],
+      ["npm", "--workspace", "other", "test"],
+      ["npm", "--workspace=other", "test"],
+      ["npm", "--workspaces", "test"],
+      ["npm", "--workspace-root", "test"],
+      ["npm", "--global", "test"],
+      ["npm", "--location=global", "test"],
+      ["npm", "test", "--prefix", "."],
+      ["npm", "test", "--prefix=."],
+      ["npm", "test", "--workspace=other"],
+      ["pnpm", "--dir", ".", "test"],
+      ["pnpm", "-C", ".", "test"],
+      ["yarn", "--cwd", ".", "test"],
+      ["bun", "--cwd=.", "test"],
+    ];
+    for (const argv of locationCommands) {
+      assert.throws(
+        () => assertNoPackageLocationOptions(argv, "verification.argv"),
+        (error: unknown) =>
+          error instanceof VerificationPreflightError &&
+          error.path === "verification.argv" &&
+          /package-location option/.test(error.message),
+        `expected ${argv.join(" ")} to be rejected`,
+      );
+      await assert.rejects(
+        preflightRequiredVerificationCommands(
+          testFixture.root,
+          { test: command("web", { argv }) },
+          { path: testFixture.path },
+        ),
+        (error: unknown) =>
+          error instanceof VerificationPreflightError &&
+          /package-location option/.test(error.message),
+      );
+    }
+
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      {
+        test: command("web", {
+          argv: ["npm", "test", "--", "--prefix=/outside"],
+        }),
+      },
       { path: testFixture.path },
     );
   } finally {

@@ -30,6 +30,7 @@ import {
   isForgeRuntimePath,
   parseBoundReviewerResult,
   parseGitStatusPaths,
+  validateBoundCommand,
   reviewerStatusIsTerminal,
   writeTrustedResultFile,
 } from "../../src/agents/child-runtime.ts";
@@ -223,6 +224,33 @@ test("trusted result publication replaces final symlinks and rejects parent syml
   } finally {
     await rm(root, { recursive: true, force: true });
     await rm(outside, { recursive: true, force: true });
+  }
+});
+
+test("bound verification commands reject package-manager location options", () => {
+  const safe = {
+    argv: ["npm", "test", "--", "--prefix=/outside"],
+    cwd: ".",
+    required: true,
+    timeoutMs: 60_000,
+  };
+  assert.doesNotThrow(() => validateBoundCommand("test", safe));
+
+  for (const argv of [
+    ["npm", "--prefix", ".", "test"],
+    ["npm", "--prefix=.", "test"],
+    ["npm", "test", "--prefix", "."],
+    ["npm", "--workspace=other", "test"],
+  ]) {
+    assert.throws(
+      () =>
+        validateBoundCommand("test", {
+          ...safe,
+          argv,
+        }),
+      /package-location option/,
+      `expected ${argv.join(" ")} to be rejected`,
+    );
   }
 });
 

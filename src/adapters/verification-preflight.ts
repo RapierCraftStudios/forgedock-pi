@@ -1,7 +1,6 @@
 import { constants } from "node:fs";
 import { access, readFile, realpath, stat } from "node:fs/promises";
 import {
-  basename,
   delimiter,
   isAbsolute,
   join,
@@ -24,6 +23,51 @@ export class VerificationPreflightError extends Error {
   }
 }
 
+const PACKAGE_LOCATION_OPTIONS: Readonly<
+  Record<string, readonly string[]>
+> = {
+  npm: [
+    "--prefix",
+    "--workspace",
+    "--workspaces",
+    "--workspace-root",
+    "--include-workspace-root",
+    "--global",
+    "--location",
+    "-g",
+    "-w",
+  ],
+  pnpm: [
+    "--dir",
+    "--filter",
+    "--workspace-root",
+    "--global",
+    "--recursive",
+    "-C",
+    "-r",
+  ],
+  yarn: ["--cwd", "--workspace", "--focus"],
+  bun: ["--cwd", "--filter"],
+};
+
+export function assertNoPackageLocationOptions(
+  argv: readonly string[],
+  path = "verification command argv",
+): void {
+  const manager = packageManagerName(argv[0]);
+  if (!manager) return;
+  const options = PACKAGE_LOCATION_OPTIONS[manager];
+  if (!options) return;
+  for (const argument of argv.slice(1)) {
+    if (argument === "--") break;
+    if (options.some((option) => matchesPackageLocationOption(argument, option)))
+      throw new VerificationPreflightError(
+        path,
+        `must not use package-location option '${argument}'`,
+      );
+  }
+}
+
 export async function preflightRequiredVerificationCommands(
   repositoryRoot: string,
   commands: Readonly<Record<string, VerificationCommandPolicy>>,
@@ -37,6 +81,7 @@ export async function preflightRequiredVerificationCommands(
   for (const [name, command] of Object.entries(commands)) {
     if (!command.required) continue;
     const basePath = `${configPath} verification.commands.${name}`;
+    assertNoPackageLocationOptions(command.argv, `${basePath}.argv`);
     const cwd = await resolveVerificationCommandDirectory(
       canonicalRoot,
       command.cwd,
@@ -116,9 +161,26 @@ async function executableAvailable(
   return false;
 }
 
+function packageManagerName(program: string | undefined): string | undefined {
+  const manager = (program?.split(/[\\/]/).at(-1) ?? "")
+    .replace(/\.(?:cmd|exe)$/i, "")
+    .toLowerCase();
+  return manager || undefined;
+}
+
+function matchesPackageLocationOption(
+  argument: string,
+  option: string,
+): boolean {
+  if (option.startsWith("--"))
+    return argument === option || argument.startsWith(`${option}=`);
+  return argument === option || argument.startsWith(option);
+}
+
 function packageScriptName(argv: readonly string[]): string | undefined {
-  const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
-  if (!["npm", "pnpm", "yarn", "bun"].includes(manager)) return undefined;
+  const manager = packageManagerName(argv[0]);
+  if (!manager || !["npm", "pnpm", "yarn", "bun"].includes(manager))
+    return undefined;
   const command = argv[1];
   if (command === "test") return "test";
   if (command === "run" || command === "run-script") {
