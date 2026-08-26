@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 16,
-  "lastEventHash": "sha256:554a3b43d24019cbdb0674c8d0a35328281ab6ebc998813486b75905f44f847e",
+  "sequence": 17,
+  "lastEventHash": "sha256:f261b6ba2669a71d7751cceb1fba9b40bcd052a8a6db77d56f2967a7b868313f",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -113,15 +113,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Added restoreReviewWorkflowLabel in src/workflows/work-on.ts; it targets workflow:in-review and deliberately omits an AbortSignal.",
+            "Updated the merge failure catch to use the named compensation helper and preserve the original merge error.",
+            "Added a focused regression in test/workflows/work-on.test.ts that runs while an operation signal is aborted and asserts no signal is forwarded.",
+            "No files outside the accepted builder contract were changed.",
+            "Implementation commit is deferred until the required verify check passes, per the work-on contract."
+          ],
           "logicalNodeId": "work-on/implement",
           "startedAt": "2026-08-26T20:19:08.292Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/9490f6a2-208c-459e-b62c-8041983b4505",
           "branch": "forge/issue-120-9490f6a2",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T20:20:30.512Z",
+          "outputArtifactHash": "sha256:implementation-issue-120-uncommitted"
         }
       ]
     }
@@ -144,7 +152,8 @@
     "phase:prepare-worktree:1:start": "fd839ab2-be99-4d0a-aa65-31750fbbe9c2",
     "phase:prepare-worktree:1:complete": "2e040e48-b5a1-4513-a6f4-84b6dd418e76",
     "phase:implement:1:queue": "f640ffe3-5d2f-4d56-b38a-8b8a395339a8",
-    "phase:implement:1:start": "284edfdb-276a-49af-88b7-1796ba11ee5c"
+    "phase:implement:1:start": "284edfdb-276a-49af-88b7-1796ba11ee5c",
+    "phase:implement:1:complete": "75cc80a7-9c85-4ec6-8b50-55eef621ac05"
   },
   "eventIds": {
     "57e65b56-0ba9-4db8-a3a5-0e883f0add56": true,
@@ -162,7 +171,8 @@
     "fd839ab2-be99-4d0a-aa65-31750fbbe9c2": true,
     "2e040e48-b5a1-4513-a6f4-84b6dd418e76": true,
     "f640ffe3-5d2f-4d56-b38a-8b8a395339a8": true,
-    "284edfdb-276a-49af-88b7-1796ba11ee5c": true
+    "284edfdb-276a-49af-88b7-1796ba11ee5c": true,
+    "75cc80a7-9c85-4ec6-8b50-55eef621ac05": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
