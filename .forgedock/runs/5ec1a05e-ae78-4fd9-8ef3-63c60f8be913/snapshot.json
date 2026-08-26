@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:70ee02cf29cfbb7cff78f2f77688ea8f573b7f3c97094ad0549cf0ed5994ad8c",
+  "sequence": 8,
+  "lastEventHash": "sha256:eeec46ed16e7853a3ade6fccbbf6dc6a63a111975403e308efac522e8fc21017",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -38,16 +38,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/verification-preflight.ts:137-146` resolves `package.json` with `realpath`, which follows symlinks and catches a dangling-link failure as an ordinary missing manifest.",
+            "The canonical target is only checked with `pathWithin`; an in-repository root `package.json` symlink to a nested package manifest can therefore satisfy the nested package's script check while the configured cwd remains the repository root.",
+            "`test/adapters/verification-preflight.test.ts` covers missing/control/escape directories but has no package-manifest symlink regression.",
+            "The issue cites source finding `INIT-MONO-002` from PR #110 and remediation commit `d174f8e9d8ff88c1a40b8a75c99489c76ef52e92`; current integration code has no `lstat` manifest guard, so the remediation is not present at the bound base."
+          ],
           "inputArtifactHash": "sha256:issue115-resolve-89f2fa1c7e7020b695803e9a1b556d55076f2302",
           "logicalNodeId": "investigate",
           "startedAt": "2026-08-26T18:00:24.019Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/5ec1a05e-ae78-4fd9-8ef3-63c60f8be913",
           "branch": "forge/issue-115-5ec1a05e",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T18:03:40.997Z",
+          "outputArtifactHash": "sha256:issue115-investigation-current-base"
         }
       ]
     }
@@ -61,7 +68,8 @@
     "phase:resolve:1:start": "194a0cef-48d6-4edb-b5cc-e6e726c85ce4",
     "phase:resolve:1:complete": "1b83a89c-976e-4987-998b-014f416ca1f7",
     "phase:investigate:1:queue": "a821dae4-e385-493b-903d-d5fc60a225ea",
-    "phase:investigate:1:start": "c6b5fc9b-10c3-42a9-8aa7-a6aa3278b5dc"
+    "phase:investigate:1:start": "c6b5fc9b-10c3-42a9-8aa7-a6aa3278b5dc",
+    "phase:investigate:1:complete": "b1ffe18f-aeda-4490-9692-8216509377ba"
   },
   "eventIds": {
     "cb910872-25c5-4ad7-afad-cf0c4cb6639a": true,
@@ -70,7 +78,8 @@
     "194a0cef-48d6-4edb-b5cc-e6e726c85ce4": true,
     "1b83a89c-976e-4987-998b-014f416ca1f7": true,
     "a821dae4-e385-493b-903d-d5fc60a225ea": true,
-    "c6b5fc9b-10c3-42a9-8aa7-a6aa3278b5dc": true
+    "c6b5fc9b-10c3-42a9-8aa7-a6aa3278b5dc": true,
+    "b1ffe18f-aeda-4490-9692-8216509377ba": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
