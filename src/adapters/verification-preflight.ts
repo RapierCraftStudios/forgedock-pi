@@ -120,7 +120,8 @@ function packageScriptName(argv: readonly string[]): string | undefined {
   const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
   if (!["npm", "pnpm", "yarn", "bun"].includes(manager)) return undefined;
   const command = argv[1];
-  if (command === "test") return "test";
+  if (command === "test" || command === "t" || command === "tst")
+    return "test";
   if (command === "run" || command === "run-script") {
     const script = argv.slice(2).find((argument) => !argument.startsWith("-"));
     return script || undefined;
