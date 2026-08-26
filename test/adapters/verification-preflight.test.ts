@@ -18,7 +18,7 @@ import {
 } from "../../src/adapters/verification-preflight.ts";
 import type { VerificationCommandPolicy } from "../../src/core/policy.ts";
 
-async function fixture(): Promise<{
+async function fixture(rootPackage: unknown = { dependencies: {} }): Promise<{
   root: string;
   outside: string;
   path: string;
@@ -29,7 +29,7 @@ async function fixture(): Promise<{
   const bin = join(root, "bin");
   await mkdir(join(root, "web"), { recursive: true });
   await mkdir(bin);
-  await writeFile(join(root, "package.json"), JSON.stringify({ dependencies: {} }));
+  await writeFile(join(root, "package.json"), JSON.stringify(rootPackage));
   await writeFile(
     join(root, "web", "package.json"),
     JSON.stringify({ scripts: { test: "vitest run" } }),
@@ -79,6 +79,50 @@ test("required monorepo verification preflight selects the package cwd", async (
       testFixture.root,
       { test: command("web") },
       { path: testFixture.path },
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
+test("malformed root test metadata falls back to CI-only without selecting a nested package", async () => {
+  for (const rootPackage of [
+    { scripts: { test: { command: "vitest run" } } },
+    { scripts: { test: ["vitest", "run"] } },
+    { scripts: ["test"] },
+  ]) {
+    const testFixture = await fixture(rootPackage);
+    try {
+      const result = await preflightRequiredVerificationCommands(
+        testFixture.root,
+        { test: command(".") },
+        { path: testFixture.path },
+      );
+      assert.equal(result.mode, "ci-only");
+      assert.deepEqual(result.commands, {});
+      assert.match(result.reason ?? "", /root test script metadata is malformed/);
+    } finally {
+      await testFixture.cleanup();
+    }
+  }
+});
+
+test("malformed nested package test metadata remains fail-closed", async () => {
+  const testFixture = await fixture();
+  try {
+    await writeFile(
+      join(testFixture.root, "web", "package.json"),
+      JSON.stringify({ scripts: { test: { command: "vitest run" } } }),
+    );
+    await assert.rejects(
+      preflightRequiredVerificationCommands(
+        testFixture.root,
+        { test: command("web") },
+        { path: testFixture.path },
+      ),
+      (error: unknown) =>
+        error instanceof VerificationPreflightError &&
+        /no 'test' script/.test(error.message),
     );
   } finally {
     await testFixture.cleanup();

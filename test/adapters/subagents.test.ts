@@ -123,6 +123,7 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
   assert.match(spawn.params.task, /async:\s*false/);
   assert.match(spawn.params.task, /const results = await runs\.all/);
   assert.match(spawn.params.task, /return results/);
+  assert.match(serialized, /"verificationMode":"local"/);
   assert.match(
     spawn.params.task,
     /do not continue until both results have returned/i,
@@ -352,15 +353,24 @@ test("RPC work-on treats GitHub-only verification as valid", async () => {
     baseSha: "abcdef1234567890",
     leaseEpoch: 1,
     policy: githubOnlyPolicy,
+    verificationMode: "ci-only",
     issueContext: "Issue body",
   });
   const spawn = bus.requests.at(-1) as {
-    params: { task: string; workflowScript?: string };
+    params: {
+      task: string;
+      workflowScript?: string;
+      extensionBindings: Record<string, { verificationMode?: string }>;
+    };
   };
   assert.equal(spawn.params.workflowScript, undefined);
+  assert.equal(
+    spawn.params.extensionBindings["forgedock.pi/1"]?.verificationMode,
+    "ci-only",
+  );
   assert.match(
     spawn.params.task,
-    /No local verification commands are configured\. This is valid/,
+    /Local verification is explicitly disabled.*CI-only mode/,
   );
   assert.match(spawn.params.task, /parent enforce GitHub-configured CI/);
 });

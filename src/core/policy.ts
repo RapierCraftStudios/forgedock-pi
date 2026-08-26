@@ -9,6 +9,8 @@ export interface VerificationCommandPolicy {
   timeoutMs: number;
 }
 
+export type VerificationMode = "local" | "ci-only";
+
 export interface ForgePolicy {
   schema: typeof FORGEDOCK_CONFIG_SCHEMA;
   repository: {
@@ -234,6 +236,19 @@ function parseVerificationCommands(
     };
   }
   return commands;
+}
+
+export function withVerificationCommands(
+  policy: ForgePolicy,
+  commands: Readonly<Record<string, VerificationCommandPolicy>>,
+): ForgePolicy {
+  return {
+    ...policy,
+    verification: {
+      ...policy.verification,
+      commands,
+    },
+  };
 }
 
 export function parseForgePolicy(value: unknown): ForgePolicy {

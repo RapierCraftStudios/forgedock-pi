@@ -12,7 +12,16 @@ import {
 import {
   normalizeVerificationCommandCwd,
   type VerificationCommandPolicy,
+  type VerificationMode,
 } from "../core/policy.ts";
+
+export interface VerificationPreflightResult {
+  mode: VerificationMode;
+  commands: Readonly<Record<string, VerificationCommandPolicy>>;
+  reason?: string;
+}
+
+type PackageScriptResult = "valid" | "ci-only";
 
 export class VerificationPreflightError extends Error {
   readonly path: string;
@@ -31,9 +40,12 @@ export async function preflightRequiredVerificationCommands(
     path?: string;
     configPath?: string;
   } = {},
-): Promise<void> {
+): Promise<VerificationPreflightResult> {
   const canonicalRoot = await realpath(repositoryRoot);
   const configPath = options.configPath ?? ".forge/config.json";
+  let mode: VerificationMode =
+    Object.keys(commands).length === 0 ? "ci-only" : "local";
+  let reason: string | undefined;
   for (const [name, command] of Object.entries(commands)) {
     if (!command.required) continue;
     const basePath = `${configPath} verification.commands.${name}`;
@@ -55,9 +67,23 @@ export async function preflightRequiredVerificationCommands(
       );
     }
     const script = packageScriptName(command.argv);
-    if (script)
-      await assertPackageScript(canonicalRoot, cwd, script, basePath);
+    if (!script) continue;
+    const packageResult = await assertPackageScript(
+      canonicalRoot,
+      cwd,
+      script,
+      basePath,
+    );
+    if (packageResult === "ci-only") {
+      mode = "ci-only";
+      reason ??= `Required root ${script} script metadata is malformed; local verification is disabled and GitHub CI is authoritative.`;
+    }
   }
+  return {
+    mode,
+    commands: mode === "ci-only" ? {} : commands,
+    ...(reason ? { reason } : {}),
+  };
 }
 
 export async function resolveVerificationCommandDirectory(
@@ -133,7 +159,7 @@ async function assertPackageScript(
   cwd: string,
   script: string,
   basePath: string,
-): Promise<void> {
+): Promise<PackageScriptResult> {
   const manifestPath = join(cwd, "package.json");
   let canonicalManifest: string;
   try {
@@ -158,20 +184,41 @@ async function assertPackageScript(
       "selected package.json is not valid JSON",
     );
   }
-  const scripts =
+  const rootTestScript = script === "test" && relative(repositoryRoot, cwd) === "";
+  const manifestObject =
     manifest && typeof manifest === "object" && !Array.isArray(manifest)
-      ? (manifest as { scripts?: unknown }).scripts
+      ? (manifest as Record<string, unknown>)
       : undefined;
-  const value =
-    scripts && typeof scripts === "object" && !Array.isArray(scripts)
-      ? (scripts as Record<string, unknown>)[script]
-      : undefined;
-  if (typeof value !== "string" || !value.trim()) {
-    throw new VerificationPreflightError(
-      `${basePath}.argv`,
-      `package.json in '${relative(repositoryRoot, cwd) || "."}' has no '${script}' script; set cwd to the package that defines it or use CI-only verification`,
-    );
+  const scripts = manifestObject?.scripts;
+  if (!Object.prototype.hasOwnProperty.call(manifestObject ?? {}, "scripts")) {
+    throw missingPackageScript(repositoryRoot, cwd, script, basePath);
   }
+  if (!scripts || typeof scripts !== "object" || Array.isArray(scripts)) {
+    if (rootTestScript) return "ci-only";
+    throw missingPackageScript(repositoryRoot, cwd, script, basePath);
+  }
+  const scriptRecord = scripts as Record<string, unknown>;
+  if (!Object.prototype.hasOwnProperty.call(scriptRecord, script)) {
+    throw missingPackageScript(repositoryRoot, cwd, script, basePath);
+  }
+  const value = scriptRecord[script];
+  if (typeof value !== "string" || !value.trim()) {
+    if (rootTestScript) return "ci-only";
+    throw missingPackageScript(repositoryRoot, cwd, script, basePath);
+  }
+  return "valid";
+}
+
+function missingPackageScript(
+  repositoryRoot: string,
+  cwd: string,
+  script: string,
+  basePath: string,
+): VerificationPreflightError {
+  return new VerificationPreflightError(
+    `${basePath}.argv`,
+    `package.json in '${relative(repositoryRoot, cwd) || "."}' has no '${script}' script; set cwd to the package that defines it or use CI-only verification`,
+  );
 }
 
 function pathWithin(root: string, target: string): boolean {

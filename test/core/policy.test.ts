@@ -8,6 +8,7 @@ import {
   isProtectedBranch,
   parseForgePolicy,
   PolicyValidationError,
+  withVerificationCommands,
 } from "../../src/core/policy.ts";
 
 const rawPolicy = {
@@ -68,6 +69,15 @@ test("verification command cwd is portable, relative, and normalized", () => {
 
   for (const cwd of ["/tmp", "C:/tmp", "\\\\server\\share", "../web", "web/../api", "web\\api", "bad\0path"])
     assert.throws(() => parseForgePolicy(withCwd(cwd)), PolicyValidationError);
+});
+
+test("effective CI-only verification commands do not mutate the trusted policy", () => {
+  const policy = parseForgePolicy(rawPolicy);
+  const effective = withVerificationCommands(policy, {});
+  assert.deepEqual(effective.verification.commands, {});
+  assert.deepEqual(policy.verification.commands.test?.argv, ["npm", "test"]);
+  assert.equal(effective.branches, policy.branches);
+  assert.equal(effective.review, policy.review);
 });
 
 test("local overrides can only tighten tracked policy", () => {

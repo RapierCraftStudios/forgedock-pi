@@ -18,7 +18,10 @@ import {
   FORGE_WORK_ON_AGENT,
 } from "../agents/register.ts";
 import type { BuilderPathContract } from "../core/builder-contract.ts";
-import type { ForgePolicy } from "../core/policy.ts";
+import type {
+  ForgePolicy,
+  VerificationMode,
+} from "../core/policy.ts";
 import type { WorkflowNode } from "../core/dispatcher.ts";
 
 const RPC_REQUEST = "subagents:rpc:v1:request";
@@ -58,6 +61,7 @@ export interface WorkOnLaunchInput {
   leaseEpoch: number;
   leaseOwnerRunId?: string;
   policy: ForgePolicy;
+  verificationMode?: VerificationMode;
   issueContext: string;
   builderContract?: BuilderPathContract;
 }
@@ -135,6 +139,8 @@ export class SubagentsRpcClient {
       maxReviewRounds: input.policy.review.maxRounds,
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
+      verificationMode:
+        input.verificationMode ?? verificationModeForPolicy(input.policy),
       nodeId: input.node.nodeId,
       node: input.node.node,
       nodeAttempt: input.node.attempt,
@@ -212,6 +218,8 @@ export class SubagentsRpcClient {
       maxReviewRounds: input.policy.review.maxRounds,
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
+      verificationMode:
+        input.verificationMode ?? verificationModeForPolicy(input.policy),
       nodeId: input.node.nodeId,
       node: `review-${domain}`,
       nodeAttempt: input.node.attempt,
@@ -298,6 +306,8 @@ export class SubagentsRpcClient {
       maxReviewRounds: input.policy.review.maxRounds,
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
+      verificationMode:
+        input.verificationMode ?? verificationModeForPolicy(input.policy),
       ...(input.builderContract
         ? { builderContract: input.builderContract }
         : {}),
@@ -317,7 +327,9 @@ export class SubagentsRpcClient {
       .map(([name]) => name);
     const verificationTask = requiredLocalChecks.length
       ? `During verify, run these required bound checks through forge_verify: ${requiredLocalChecks.join(", ")}. After they pass, create the implementation commit through forge_commit.`
-      : "No local verification commands are configured. This is valid: do not call forge_verify and do not block or ask the supervisor. Create the implementation commit through forge_commit, prepare the PR, and let the parent enforce GitHub-configured CI on the exact reviewed SHA before merge.";
+      : input.verificationMode === "ci-only"
+        ? "Local verification is explicitly disabled because the trusted root test metadata is malformed. This is valid CI-only mode with no local verification commands configured: do not call forge_verify and do not block or ask the supervisor. Create the implementation commit, prepare the PR, and let the parent enforce GitHub-configured CI on the exact reviewed SHA before merge."
+        : "No local verification commands are configured. This is valid: do not call forge_verify and do not block or ask the supervisor. Create the implementation commit through forge_commit, prepare the PR, and let the parent enforce GitHub-configured CI on the exact reviewed SHA before merge.";
     const task = [
       `Run ForgeDock work-on for issue #${input.issueNumber} in ${input.repository}.`,
       `Run ID: ${input.runId}`,
@@ -417,6 +429,8 @@ export class SubagentsRpcClient {
       maxReviewRounds: input.policy.review.maxRounds,
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
+      verificationMode:
+        input.verificationMode ?? verificationModeForPolicy(input.policy),
       refresh: true,
       leaseOwnerRunId: input.leaseOwnerRunId ?? input.runId,
       previousReviewRounds: input.previousResult.review.rounds,
@@ -554,6 +568,12 @@ export class SubagentsRpcClient {
       });
     });
   }
+}
+
+function verificationModeForPolicy(policy: ForgePolicy): VerificationMode {
+  return Object.keys(policy.verification.commands).length === 0
+    ? "ci-only"
+    : "local";
 }
 
 function validatePing(value: unknown): SubagentsPing {

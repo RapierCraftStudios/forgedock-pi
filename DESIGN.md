@@ -275,7 +275,7 @@ The production/default branch is never auto-merged.
 }
 ```
 
-The run snapshots policy from the trusted base commit. A PR/worktree modification to policy cannot change the active run. Models request checks by name and cannot supply shell source. The runner uses argv spawning, scrubs secrets, preserves the child exit code separately from truncated output, records hashes/artifacts, and fails closed for required checks.
+The run snapshots policy from the trusted base commit. A PR/worktree modification to policy cannot change the active run. Models request checks by name and cannot supply shell source. The runner uses argv spawning, scrubs secrets, preserves the child exit code separately from truncated output, records hashes/artifacts, and fails closed for required checks. A present but malformed `scripts.test` value in the explicitly selected repository-root package is classified before launch as CI-only: no nested package is inferred, the effective local command map is empty, and required GitHub CI remains authoritative. Missing scripts, invalid manifests, unavailable executables, unsafe paths, and malformed non-root package metadata remain fail-closed.
 
 Executing repository code is still a security boundary. Production writer/verification runs require a containment mode. The first implementation must at minimum provide child environment scrubbing, worktree-root enforcement, no GitHub credentials, and a child-side guard against GitHub writes/push/merge. A stronger container/sandbox backend remains an explicit production-hardening option.
 
