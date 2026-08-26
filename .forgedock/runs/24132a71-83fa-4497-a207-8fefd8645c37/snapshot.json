@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:ff087149b8dfa389cc5032885060241fb6fd7ece67251b163926dc62794c443e",
+  "sequence": 8,
+  "lastEventHash": "sha256:0050b8ea468d8240a4bb458f426cae3fa244bb2d0df55b9d41242660dc85f215",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -39,16 +39,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/verification-preflight.ts:119-128` recognizes npm/pnpm/yarn/bun but only maps the literal second argument `test` to package script `test`.",
+            "For `argv: [\"npm\", \"tst\"]`, executable availability is checked but `packageScriptName` returns `undefined`, so `assertPackageScript` is skipped.",
+            "`test/adapters/verification-preflight.test.ts` covers literal `npm test` and executable/path failures but has no `npm tst` regression case.",
+            "Issue #113 cites source PR #110 finding VP-003 and requires focused remediation plus exact-head re-review."
+          ],
           "inputArtifactHash": "sha256:issue113-resolve",
           "logicalNodeId": "work-on/investigate",
           "startedAt": "2026-08-26T21:30:39.686Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/24132a71-83fa-4497-a207-8fefd8645c37",
           "branch": "forge/issue-113-24132a71",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T21:31:36.151Z",
+          "outputArtifactHash": "sha256:issue113-investigation"
         }
       ]
     }
@@ -62,7 +69,8 @@
     "phase:resolve:1:start": "0f3002b9-a818-45af-bb36-590b04d3efdc",
     "phase:resolve:1:complete": "7d2e86f4-8bb2-4f26-8055-b1be9ba43f59",
     "phase:investigate:1:queue": "6fb6c44f-b2a4-445d-a563-19ecab136ab1",
-    "phase:investigate:1:start": "291d6dba-1d7f-42fc-9a13-185a4e5caba0"
+    "phase:investigate:1:start": "291d6dba-1d7f-42fc-9a13-185a4e5caba0",
+    "phase:investigate:1:complete": "c088bd25-2b8e-45d7-be2e-19f0cafb01de"
   },
   "eventIds": {
     "45aade21-61f3-4bed-a5c5-654fe528d429": true,
@@ -71,7 +79,8 @@
     "0f3002b9-a818-45af-bb36-590b04d3efdc": true,
     "7d2e86f4-8bb2-4f26-8055-b1be9ba43f59": true,
     "6fb6c44f-b2a4-445d-a563-19ecab136ab1": true,
-    "291d6dba-1d7f-42fc-9a13-185a4e5caba0": true
+    "291d6dba-1d7f-42fc-9a13-185a4e5caba0": true,
+    "c088bd25-2b8e-45d7-be2e-19f0cafb01de": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
