@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 19,
-  "lastEventHash": "sha256:797c06900ca00ab1f36275504db9dbd98e1f53fd4ea75672dcefadaa5703d364",
+  "sequence": 20,
+  "lastEventHash": "sha256:f6cac8daa5a7478d059c6239487727c7981f2ce582950333546e3e9c6d31be6b",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -139,16 +139,24 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume verify attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Primary LSP diagnostics found zero diagnostics for all five changed TypeScript source/test files.",
+            "forge_diff stat and name-only inspection confirmed exactly five approved changed paths and the expected 145 insertions/38 deletions.",
+            "The trusted policy has an empty verification command allowlist, so no forge_verify command is available; GitHub CI remains parent-owned.",
+            "The committed tests cover canonical lifecycle mapping, invalid/ready investigation outcomes, workflow-label replacement, and unrelated-label preservation."
+          ],
           "inputArtifactHash": "sha256:implement-532a18c5ef0538e2e36826890247ef71340e5a72",
           "logicalNodeId": "work-on/92/verify",
           "startedAt": "2026-08-26T12:15:47.365Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/562c726e-42ce-4c23-9e04-ffd8bd2f5f6a",
           "branch": "forge/issue-92-562c726e",
-          "baseSha": "26139ba278b95578a300c597ec35495a7d502eb6"
+          "baseSha": "26139ba278b95578a300c597ec35495a7d502eb6",
+          "finishedAt": "2026-08-26T12:16:18.836Z",
+          "outputArtifactHash": "sha256:verify-532a18c5ef0538e2e36826890247ef71340e5a72",
+          "commitSha": "532a18c5ef0538e2e36826890247ef71340e5a72"
         }
       ]
     }
@@ -174,7 +182,8 @@
     "phase:implement:1:start": "452054b8-7ace-4b47-b792-94eb0e1499b6",
     "phase:implement:1:complete": "7335726c-985d-499f-8b13-e3a4c23d5925",
     "phase:verify:1:queue": "d1a5e7ed-c300-4116-ab85-006d107bd46a",
-    "phase:verify:1:start": "3037482b-3674-4f76-894f-d8d162c1fa6a"
+    "phase:verify:1:start": "3037482b-3674-4f76-894f-d8d162c1fa6a",
+    "phase:verify:1:complete": "2cf34b40-856b-41cb-95ba-529abdf6a525"
   },
   "eventIds": {
     "2d6b4799-e254-4339-9dcb-219a49010664": true,
@@ -195,7 +204,8 @@
     "452054b8-7ace-4b47-b792-94eb0e1499b6": true,
     "7335726c-985d-499f-8b13-e3a4c23d5925": true,
     "d1a5e7ed-c300-4116-ab85-006d107bd46a": true,
-    "3037482b-3674-4f76-894f-d8d162c1fa6a": true
+    "3037482b-3674-4f76-894f-d8d162c1fa6a": true,
+    "2cf34b40-856b-41cb-95ba-529abdf6a525": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
