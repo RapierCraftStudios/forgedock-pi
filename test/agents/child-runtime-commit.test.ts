@@ -64,6 +64,14 @@ test("every bounded non-review node can persist its trusted result", () => {
     false,
   );
   assert.equal(allowedNodeTools("review-security").has("forge_diff"), true);
+  assert.equal(
+    allowedNodeTools("review-architecture").has("forge_finalize_reviewer"),
+    true,
+  );
+  assert.equal(
+    allowedNodeTools("review-architecture").has("forge_finalize_node"),
+    false,
+  );
 });
 
 test("read-only nodes deny shell and file mutation tools", () => {
