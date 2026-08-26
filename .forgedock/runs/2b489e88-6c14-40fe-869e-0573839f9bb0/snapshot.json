@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 9,
-  "lastEventHash": "sha256:5d7f2b3a245bf345e3fdd1c3b0c960f0975b0bbf67a72f1a49817062397d7b21",
+  "sequence": 10,
+  "lastEventHash": "sha256:f49d3ddf95f58fc2e71ed5303204fc344d91acd1ea5364e2be0745190b525442",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -65,11 +65,16 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
           "evidence": [],
-          "inputArtifactHash": "sha256:investigation-issue-112-npm-location-options"
+          "inputArtifactHash": "sha256:investigation-issue-112-npm-location-options",
+          "logicalNodeId": "work-on-plan",
+          "startedAt": "2026-08-26T18:23:08.758Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/2b489e88-6c14-40fe-869e-0573839f9bb0",
+          "branch": "forge/issue-112-2b489e88",
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
         }
       ]
     }
@@ -85,7 +90,8 @@
     "phase:investigate:1:queue": "4f944136-e338-4bb2-a1d2-cc2945dc53d4",
     "phase:investigate:1:start": "bff33dc8-8d2c-412c-8a66-dd556450bff7",
     "phase:investigate:1:complete": "02335a40-d299-448d-bd92-13906ae89b3a",
-    "phase:plan:1:queue": "679490e4-658b-47d0-98d6-ccc6bb79868b"
+    "phase:plan:1:queue": "679490e4-658b-47d0-98d6-ccc6bb79868b",
+    "phase:plan:1:start": "e03c9c17-916e-456b-8739-435978cfe66c"
   },
   "eventIds": {
     "f349b52b-b125-43dd-b940-b6b8f8bfd776": true,
@@ -96,7 +102,8 @@
     "4f944136-e338-4bb2-a1d2-cc2945dc53d4": true,
     "bff33dc8-8d2c-412c-8a66-dd556450bff7": true,
     "02335a40-d299-448d-bd92-13906ae89b3a": true,
-    "679490e4-658b-47d0-98d6-ccc6bb79868b": true
+    "679490e4-658b-47d0-98d6-ccc6bb79868b": true,
+    "e03c9c17-916e-456b-8739-435978cfe66c": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
