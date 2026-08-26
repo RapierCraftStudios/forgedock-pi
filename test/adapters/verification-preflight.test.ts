@@ -85,6 +85,56 @@ test("required monorepo verification preflight selects the package cwd", async (
   }
 });
 
+test("npm package-selection options must use the configured cwd", async () => {
+  const testFixture = await fixture();
+  try {
+    const packageSelectionArgv = [
+      ["npm", "--prefix", "web", "test"],
+      ["npm", "--prefix=web", "test"],
+      ["npm", "--workspace", "web", "test"],
+      ["npm", "--workspace=web", "test"],
+      ["npm", "-w", "web", "test"],
+      ["npm", "--workspaces", "test"],
+      ["npm", "--include-workspace-root", "test"],
+      ["npm", "test", "--prefix", "web"],
+    ];
+    for (const argv of packageSelectionArgv) {
+      await assert.rejects(
+        preflightRequiredVerificationCommands(
+          testFixture.root,
+          { test: command(".", { argv }) },
+          { path: testFixture.path, configPath: "/repo/.forge/config.json" },
+        ),
+        (error: unknown) =>
+          error instanceof VerificationPreflightError &&
+          error.path === "/repo/.forge/config.json verification.commands.test.argv" &&
+          /npm package-selection option.*cwd/.test(error.message),
+      );
+    }
+
+    await assert.rejects(
+      preflightRequiredVerificationCommands(
+        testFixture.root,
+        { test: command(".", { argv: ["npm", "--silent", "test"] }) },
+        { path: testFixture.path },
+      ),
+      /no 'test' script/,
+    );
+
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      {
+        test: command("web", {
+          argv: ["npm", "test", "--", "--prefix", "other"],
+        }),
+      },
+      { path: testFixture.path },
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
 test("preflight checks executable availability without running the command", async () => {
   const testFixture = await fixture();
   try {

@@ -54,6 +54,12 @@ export async function preflightRequiredVerificationCommands(
         `executable '${program}' is unavailable; install it or update the tracked command`,
       );
     }
+    const packageSelection = npmPackageSelectionOption(command.argv);
+    if (packageSelection)
+      throw new VerificationPreflightError(
+        `${basePath}.argv`,
+        `npm package-selection option '${packageSelection}' is unsupported; set cwd to the package that owns the verification script`,
+      );
     const script = packageScriptName(command.argv);
     if (script)
       await assertPackageScript(canonicalRoot, cwd, script, basePath);
@@ -116,13 +122,59 @@ async function executableAvailable(
   return false;
 }
 
+function npmPackageSelectionOption(argv: readonly string[]): string | undefined {
+  const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
+  if (manager !== "npm") return undefined;
+
+  for (let index = 1; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument === undefined) continue;
+    if (argument === "--") break;
+    if (
+      argument === "--prefix" ||
+      argument.startsWith("--prefix=") ||
+      argument === "--workspace" ||
+      argument.startsWith("--workspace=") ||
+      argument === "-w" ||
+      argument.startsWith("-w=") ||
+      argument === "--workspaces" ||
+      argument.startsWith("--workspaces=") ||
+      argument === "--include-workspace-root" ||
+      argument.startsWith("--include-workspace-root=") ||
+      argument === "--global" ||
+      argument === "-g" ||
+      argument === "--location=global" ||
+      (argument === "--location" && argv[index + 1] === "global")
+    ) {
+      return argument === "--location" ? `${argument} global` : argument;
+    }
+  }
+  return undefined;
+}
+
 function packageScriptName(argv: readonly string[]): string | undefined {
   const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
   if (!["npm", "pnpm", "yarn", "bun"].includes(manager)) return undefined;
-  const command = argv[1];
+  const argumentsBeforeCommand = argv.slice(1);
+  let commandIndex = -1;
+  for (let index = 0; index < argumentsBeforeCommand.length; index += 1) {
+    const argument = argumentsBeforeCommand[index];
+    if (argument === undefined) continue;
+    if (argument === "--") break;
+    if (!argument.startsWith("-")) {
+      commandIndex = index;
+      break;
+    }
+  }
+  if (commandIndex < 0) return undefined;
+  const command = argumentsBeforeCommand[commandIndex];
   if (command === "test") return "test";
   if (command === "run" || command === "run-script") {
-    const script = argv.slice(2).find((argument) => !argument.startsWith("-"));
+    const script = argumentsBeforeCommand
+      .slice(commandIndex + 1)
+      .find(
+        (argument) => typeof argument === "string" && !argument.startsWith("-"),
+      );
     return script || undefined;
   }
   return undefined;
