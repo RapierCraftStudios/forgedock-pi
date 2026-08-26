@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 16,
-  "lastEventHash": "sha256:7d6a4f1f3c97a969be749370b334a903b62d2fc2bf2cbdabdedf2b546d351f9b",
+  "sequence": 17,
+  "lastEventHash": "sha256:232c2a8bc33763a2233898b80fdd103f6187512a74acea8703e2829edfd13fcb",
   "lanes": [
     {
       "issueNumber": 92,
@@ -20,11 +20,10 @@
     {
       "issueNumber": 94,
       "ordinal": 1,
-      "status": "blocked",
+      "status": "running",
       "refreshes": 0,
       "forgeRunId": "3aeb3d92-d52f-41f9-85e9-359cde403641",
-      "subagentRunId": "71cdd413-29c7-424c-9373-c6e8c8cb5e87",
-      "reason": "Bound branch push and PR refresh failed with GitHub Invalid username or token; remain blocked and do not merge or mark ready-for-merge."
+      "subagentRunId": "ddb7f470-6375-4146-becb-4f3d8611b412"
     },
     {
       "issueNumber": 111,
@@ -106,7 +105,8 @@
     "lane:114:ready:0": "c87f1be8-0b3b-4039-8094-3154dc9f47a3",
     "lane:94:blocked": "bd916f89-5dac-45ef-babf-b9a77386e5ac",
     "lane:115:blocked": "bb444516-d5df-44a4-ad9e-a826ec1c7c13",
-    "lane:119:needs-human": "3990b56a-d565-4447-800d-faf578d88dc3"
+    "lane:119:needs-human": "3990b56a-d565-4447-800d-faf578d88dc3",
+    "lane:94:recovered:3aeb3d92-d52f-41f9-85e9-359cde403641": "534ba3b5-0d92-46eb-ba4e-3278c0b11daf"
   },
   "createdAt": "2026-08-26T20:01:21.510Z"
 }
