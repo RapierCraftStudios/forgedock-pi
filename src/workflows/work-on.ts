@@ -2164,12 +2164,19 @@ export class ForgeWorkOnController {
       try {
         merged = await github.mergePullRequest({ pullNumber: pull.number, expectedHeadSha: pull.headSha, method: "squash", ...(ctx.signal ? { signal: ctx.signal } : {}) });
       } catch (error) {
-        await projector
-          .setWorkflowLabel(
+        try {
+          await restoreWorkflowLabelAfterMergeFailure(
+            projector,
             link.issueNumber,
             WORKFLOW_LABEL_BY_STAGE.review,
-          )
-          .catch(() => undefined);
+            { mergeSignal: ctx.signal },
+          );
+        } catch (rollbackError) {
+          throw new Error(
+            `Merge failed (${errorMessage(error)}), and restoring the workflow label to ${WORKFLOW_LABEL_BY_STAGE.review} failed: ${errorMessage(rollbackError)}`,
+            { cause: error },
+          );
+        }
         throw error;
       }
       headSha = merged.sha;
@@ -4521,6 +4528,88 @@ export function reviewInstanceMarker(
 
 export function canonicalReviewerName(reviewer: string): string {
   return `forge-review-${reviewerDomain(reviewer)}`;
+}
+
+const WORKFLOW_LABEL_ROLLBACK_ATTEMPTS = 3;
+const WORKFLOW_LABEL_ROLLBACK_TIMEOUT_MS = 30_000;
+const WORKFLOW_LABEL_ROLLBACK_RETRY_DELAY_MS = 250;
+
+/**
+ * Restore the pre-merge label after an uncertain merge failure.
+ *
+ * The merge request may abort its caller signal after the remote request has
+ * started. Compensation therefore gets a separate, bounded signal and must
+ * not inherit that cancellation. Label replacement is idempotent, so retries
+ * are safe; exhaustion is surfaced to durable reconciliation instead of being
+ * silently discarded.
+ */
+export async function restoreWorkflowLabelAfterMergeFailure(
+  projector: Pick<GitHubIssueProjector, "setWorkflowLabel">,
+  issueNumber: number,
+  workflowLabel: string,
+  options: {
+    mergeSignal?: AbortSignal;
+    attempts?: number;
+    timeoutMs?: number;
+    retryDelayMs?: number;
+  } = {},
+): Promise<void> {
+  const attempts = options.attempts ?? WORKFLOW_LABEL_ROLLBACK_ATTEMPTS;
+  const timeoutMs = options.timeoutMs ?? WORKFLOW_LABEL_ROLLBACK_TIMEOUT_MS;
+  const retryDelayMs =
+    options.retryDelayMs ?? WORKFLOW_LABEL_ROLLBACK_RETRY_DELAY_MS;
+  if (!Number.isSafeInteger(attempts) || attempts < 1)
+    throw new RangeError("Workflow label rollback attempts must be positive.");
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0)
+    throw new RangeError("Workflow label rollback timeout must be positive.");
+  if (!Number.isFinite(retryDelayMs) || retryDelayMs < 0)
+    throw new RangeError("Workflow label rollback delay cannot be negative.");
+
+  // Deliberately do not compose this controller with mergeSignal. The merge
+  // operation's cancellation cannot cancel its compensating label update.
+  const rollbackController = new AbortController();
+  const timeout = setTimeout(
+    () =>
+      rollbackController.abort(
+        new Error("Workflow label rollback timed out."),
+      ),
+    timeoutMs,
+  );
+  timeout.unref();
+  let lastError: unknown;
+  try {
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        await projector.setWorkflowLabel(
+          issueNumber,
+          workflowLabel,
+          rollbackController.signal,
+        );
+        return;
+      } catch (error) {
+        lastError = error;
+        if (attempt === attempts) break;
+        await delayWithoutSignal(retryDelayMs);
+      }
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+  const cancellationContext = options.mergeSignal?.aborted
+    ? " The merge operation was cancelled; compensation used an independent signal."
+    : "";
+  throw new Error(
+    `Unable to restore workflow label ${workflowLabel} after ${attempts} attempts.${cancellationContext}`,
+    { cause: lastError },
+  );
+}
+
+async function delayWithoutSignal(milliseconds: number): Promise<void> {
+  if (milliseconds === 0) return;
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, milliseconds);
+    timer.unref();
+  });
 }
 
 function reviewerDomain(reviewer: string): string {

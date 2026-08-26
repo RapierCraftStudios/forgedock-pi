@@ -13,6 +13,7 @@ import {
   parentNodeFromId,
   parseAsyncCompletion,
   reconcileLaunchState,
+  restoreWorkflowLabelAfterMergeFailure,
   reviewFindingMarker,
   reviewInstanceMarker,
   reviewSummaryInstanceMarker,
@@ -29,6 +30,79 @@ test("short reviewer aliases normalize to configured agent names", () => {
     canonicalReviewerName("forge-review-correctness"),
     "forge-review-correctness",
   );
+});
+
+test("merge rollback uses an independent signal and retries after cancellation", async () => {
+  const mergeController = new AbortController();
+  mergeController.abort(new Error("merge cancelled"));
+  const receivedSignals: (AbortSignal | undefined)[] = [];
+  let attempts = 0;
+  const projector = {
+    async setWorkflowLabel(
+      _issueNumber: number,
+      _workflowLabel: string,
+      signal?: AbortSignal,
+    ): Promise<void> {
+      attempts += 1;
+      receivedSignals.push(signal);
+      if (attempts < 3) throw new Error("temporary label projection failure");
+    },
+  };
+
+  await restoreWorkflowLabelAfterMergeFailure(
+    projector,
+    120,
+    "workflow:in-review",
+    {
+      mergeSignal: mergeController.signal,
+      attempts: 3,
+      timeoutMs: 1_000,
+      retryDelayMs: 0,
+    },
+  );
+
+  assert.equal(attempts, 3);
+  assert.equal(
+    receivedSignals.every(
+      (signal) =>
+        signal !== undefined &&
+        signal !== mergeController.signal &&
+        !signal.aborted,
+    ),
+    true,
+  );
+});
+
+test("merge rollback surfaces exhausted projection failure", async () => {
+  let attempts = 0;
+  const projector = {
+    async setWorkflowLabel(): Promise<void> {
+      attempts += 1;
+      throw new Error("label permission denied");
+    },
+  };
+
+  await assert.rejects(
+    restoreWorkflowLabelAfterMergeFailure(
+      projector,
+      120,
+      "workflow:in-review",
+      {
+        mergeSignal: AbortSignal.abort(new Error("merge cancelled")),
+        attempts: 2,
+        timeoutMs: 1_000,
+        retryDelayMs: 0,
+      },
+    ),
+    (error: unknown) => {
+      if (!(error instanceof Error)) return false;
+      assert.match(error.message, /Unable to restore workflow label/);
+      assert.match(error.message, /after 2 attempts/);
+      assert.ok(error.cause instanceof Error);
+      return true;
+    },
+  );
+  assert.equal(attempts, 2);
 });
 
 test("restart recovery recognizes every parent-owned durable node", () => {
