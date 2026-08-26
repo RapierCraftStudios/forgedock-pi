@@ -7,23 +7,29 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 4,
-  "lastEventHash": "sha256:8ce4a514b340b74b81414ac74676091f048385ad5bc0d0d165d1ae5fa501d63a",
+  "sequence": 5,
+  "lastEventHash": "sha256:85b1eb6f7ce1198292693c244402c4a267e6df606886b3f6b3e34d99b279bcd1",
   "phases": {
     "resolve": {
       "phase": "resolve",
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume resolve attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Repository policy identifies `RapierCraftStudios/forgedock-pi`.",
+            "Issue #120 is an in-scope review-finding remediation task.",
+            "Integration branch is `staging`; protected branch is `main`; auto-merge is enabled only for configured integration branches.",
+            "Required local verification is `check` (`npm run check`)."
+          ],
           "logicalNodeId": "resolve",
           "startedAt": "2026-08-26T23:04:58.144Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/31673b4f-b07a-4669-9751-cdee2a8d4703",
           "branch": "forge/issue-120-31673b4f",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T23:06:09.917Z"
         }
       ]
     }
@@ -34,13 +40,15 @@
     "run:create": "d4a51eb6-c4dc-40eb-92ab-1c559768dde8",
     "lease:acquire:1": "c95115b1-73fb-42ec-b5ba-dfd4a0e79f8b",
     "phase:resolve:1:queue": "a4a69be6-0e1b-4d2e-b8c6-c345b590847d",
-    "phase:resolve:1:start": "9e45d14a-8033-40f5-8c49-119b233880df"
+    "phase:resolve:1:start": "9e45d14a-8033-40f5-8c49-119b233880df",
+    "phase:resolve:1:complete": "85e2bcc5-9b68-4993-bedf-75c39b6cf865"
   },
   "eventIds": {
     "d4a51eb6-c4dc-40eb-92ab-1c559768dde8": true,
     "c95115b1-73fb-42ec-b5ba-dfd4a0e79f8b": true,
     "a4a69be6-0e1b-4d2e-b8c6-c345b590847d": true,
-    "9e45d14a-8033-40f5-8c49-119b233880df": true
+    "9e45d14a-8033-40f5-8c49-119b233880df": true,
+    "85e2bcc5-9b68-4993-bedf-75c39b6cf865": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
