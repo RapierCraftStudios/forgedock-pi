@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:5adf4f7db7ffafc969d19f5727ddb3479ce6da800d583bed243e97de7a7624f0",
+  "sequence": 8,
+  "lastEventHash": "sha256:539ae0626faaaf1fa13345ac7b6b615021bf63fe9663edd62c06784f0c35ccf0",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -39,16 +39,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/core/policy.ts` already models and validates repository-relative verification `cwd`, defaulting omitted values to `.`.",
+            "`src/adapters/verification-preflight.ts` already checks required command directories, executables, and npm-family package scripts without running them.",
+            "`src/workflows/work-on.ts` invokes static preflight before materializing agents or launching a repository writer.",
+            "`src/ui/commands.ts` currently writes `verification.commands: {}` during `/forge:init`, discarding existing commands and never inspecting package manifests.",
+            "There is no init/package-discovery regression test; existing adapter tests cover a root-without-test-script versus web-with-test-script fixture."
+          ],
           "inputArtifactHash": "resolve-1",
           "logicalNodeId": "investigate-1",
           "startedAt": "2026-08-26T22:11:37.759Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/73eb948f-3d83-46a2-87d9-86aec0ce35d1",
           "branch": "forge/issue-94-73eb948f",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T22:14:14.307Z"
         }
       ]
     }
@@ -62,7 +69,8 @@
     "phase:resolve:1:start": "1e07add4-7a30-4c83-abfe-9e68a500423c",
     "phase:resolve:1:complete": "7697dbc7-a312-4009-b2e4-563de3677ee4",
     "phase:investigate:1:queue": "576f5be0-1621-4d60-b41a-c1d0f3a4c68c",
-    "phase:investigate:1:start": "cad6402e-93c2-4145-8a31-e1ff4e8fe61f"
+    "phase:investigate:1:start": "cad6402e-93c2-4145-8a31-e1ff4e8fe61f",
+    "phase:investigate:1:complete": "70f11731-c566-4fd3-871c-fd6c4d1988e8"
   },
   "eventIds": {
     "2e7b5622-0693-4b51-b96b-9d9a27598b35": true,
@@ -71,7 +79,8 @@
     "1e07add4-7a30-4c83-abfe-9e68a500423c": true,
     "7697dbc7-a312-4009-b2e4-563de3677ee4": true,
     "576f5be0-1621-4d60-b41a-c1d0f3a4c68c": true,
-    "cad6402e-93c2-4145-8a31-e1ff4e8fe61f": true
+    "cad6402e-93c2-4145-8a31-e1ff4e8fe61f": true,
+    "70f11731-c566-4fd3-871c-fd6c4d1988e8": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
