@@ -118,17 +118,26 @@ async function executableAvailable(
 }
 
 const NPM_PACKAGE_SELECTION_OPTIONS = new Set([
-  "--prefix",
-  "--workspace",
-  "-w",
-  "--workspaces",
-  "--ws",
-  "--include-workspace-root",
-  "--workspace-root",
-  "--global",
-  "-g",
-  "--location",
+  "prefix",
+  "workspace",
+  "workspaces",
+  "ws",
+  "include-workspace-root",
+  "workspace-root",
+  "iwr",
+  "global",
+  "location",
+  "c",
+  "l",
+  "g",
 ]);
+const NPM_PACKAGE_SELECTION_OPTION_NAMES = [
+  "prefix",
+  "workspace",
+  "workspaces",
+  "global",
+  "location",
+] as const;
 
 function assertNpmPackageSelectionIsBound(
   argv: readonly string[],
@@ -139,14 +148,56 @@ function assertNpmPackageSelectionIsBound(
 
   for (const argument of argv.slice(1)) {
     if (argument === "--") break;
-    const equals = argument.indexOf("=");
-    const option = equals < 0 ? argument : argument.slice(0, equals);
-    if (!NPM_PACKAGE_SELECTION_OPTIONS.has(option)) continue;
+    const option = npmPackageSelectionOption(argument);
+    if (!option) continue;
     throw new VerificationPreflightError(
       `${basePath}.argv`,
       `npm package-selection option '${option}' is unsupported; set cwd to the package that defines the script instead`,
     );
   }
+}
+
+function npmPackageSelectionOption(argument: string): string | undefined {
+  const equals = argument.indexOf("=");
+  const option = equals < 0 ? argument : argument.slice(0, equals);
+  if (!option.startsWith("-")) return undefined;
+
+  const name = option.replace(/^-+/, "");
+  const normalized = name.toLowerCase();
+  if (!name) return undefined;
+  if (NPM_PACKAGE_SELECTION_OPTIONS.has(normalized)) return option;
+
+  // npm's nopt parser accepts unambiguous long-option abbreviations, including
+  // --pref/--loc, and accepts the same names with one leading dash.
+  if (
+    normalized.length >= 3 &&
+    NPM_PACKAGE_SELECTION_OPTION_NAMES.some((candidate) =>
+      candidate.startsWith(normalized),
+    )
+  ) {
+    return option;
+  }
+
+  // npm also exposes -C/--C for prefix and -L/--L for location. Preserve
+  // attached values and grouped short forms such as -gs as package selectors.
+  if (
+    (option.startsWith("-C") || option.startsWith("-L")) &&
+    !option.startsWith("--")
+  ) {
+    return option;
+  }
+  if (option.startsWith("-") && !option.startsWith("--")) {
+    const shortName = option.slice(1);
+    if (
+      shortName.length <= 4 &&
+      [...shortName.toLowerCase()].some((character) =>
+        ["g", "w"].includes(character),
+      )
+    ) {
+      return option;
+    }
+  }
+  return undefined;
 }
 
 function packageScriptName(argv: readonly string[]): string | undefined {

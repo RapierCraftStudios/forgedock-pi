@@ -98,6 +98,19 @@ test("npm package-selection flags cannot bypass configured cwd preflight", async
       ["npm", "run", "test", "--workspaces"],
       ["npm", "--global", "test"],
       ["npm", "test", "--location=global"],
+      ["npm", "-C", "..", "test"],
+      ["npm", "test", "-C=.."],
+      ["npm", "--C", "..", "test"],
+      ["npm", "-L", "global", "test"],
+      ["npm", "test", "--L=global"],
+      ["npm", "--iwr", "run", "test"],
+      ["npm", "-iwr", "run", "test"],
+      ["npm", "--pref=..", "test"],
+      ["npm", "test", "--loc=global"],
+      ["npm", "-gs", "test"],
+      ["npm", "-sg", "test"],
+      ["npm", "-prefix", "web", "test"],
+      ["npm", "-location", "global", "test"],
     ];
     for (const argv of selectors) {
       await assert.rejects(
