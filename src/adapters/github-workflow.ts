@@ -412,7 +412,7 @@ export class GitHubWorkflowAdapter {
     signal?: AbortSignal,
   ): Promise<CommentApiResponse[]> {
     assertNumber(issueOrPullNumber, "issue or pull request");
-    const path = `${this.#apiRoot}/issues/${issueOrPullNumber}/comments?per_page=100`;
+    const path = `${this.#apiRoot}/issues/${issueOrPullNumber}/comments?per_page=100&cache_bust=${Date.now()}`;
     const response = await this.#transport.request<CommentApiResponse[]>({
       method: "GET",
       path,

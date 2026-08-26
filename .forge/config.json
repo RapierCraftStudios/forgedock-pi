@@ -25,7 +25,18 @@
       "waitTimeoutMs": 1800000,
       "pollIntervalMs": 10000
     },
-    "commands": {}
+    "commands": {
+      "check": {
+        "argv": [
+          "npm",
+          "run",
+          "check"
+        ],
+        "cwd": ".",
+        "required": true,
+        "timeoutMs": 600000
+      }
+    }
   },
   "review": {
     "required": [
