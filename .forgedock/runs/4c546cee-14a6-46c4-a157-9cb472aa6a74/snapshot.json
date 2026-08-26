@@ -10,8 +10,8 @@
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 9,
-  "lastEventHash": "sha256:f7b37313ef0e76c3f470692487a582e6cd05057f1a49ca2c47076748802f3eb1",
+  "sequence": 10,
+  "lastEventHash": "sha256:2e18b299ac948bddc97ecabd622da4cb2a7dc44e04e2328c0d42a7a4f30e6003",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -65,6 +65,13 @@
         "test/core/dispatcher.test.ts:111-121 verifies that an invalid investigation outcome routes directly to close and cleanup without implementation."
       ],
       "finishedAt": "2026-08-26T02:12:21.864Z"
+    },
+    "close-1": {
+      "nodeId": "close-1",
+      "node": "close",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued"
     }
   },
   "effects": {},
@@ -77,7 +84,8 @@
     "node:investigate-1:queued": "e8568343-9c79-473c-8b3a-f3596e17ccb2",
     "node:investigate-1:started": "c73e8132-cac7-4c77-83d4-e3dcebfcfda5",
     "node:investigate-1:attempt:1:launch-receipt:1f4ecb59-cd82-46b6-9629-c3e5e14563fa:77466db5-cd61-46d6-b577-8ab490ab3993": "dc80024b-ac18-4e7d-a8a5-11914774397c",
-    "node:investigate-1:completed": "0a2b7d0e-226c-4abd-8c9b-b4aa48585f92"
+    "node:investigate-1:completed": "0a2b7d0e-226c-4abd-8c9b-b4aa48585f92",
+    "node:close-1:queued": "746867b3-826c-4772-8781-3bf7defd3b3d"
   },
   "eventIds": {
     "41af59ca-b55c-458c-931f-6e12ec64dc74": true,
@@ -88,6 +96,7 @@
     "e8568343-9c79-473c-8b3a-f3596e17ccb2": true,
     "c73e8132-cac7-4c77-83d4-e3dcebfcfda5": true,
     "dc80024b-ac18-4e7d-a8a5-11914774397c": true,
-    "0a2b7d0e-226c-4abd-8c9b-b4aa48585f92": true
+    "0a2b7d0e-226c-4abd-8c9b-b4aa48585f92": true,
+    "746867b3-826c-4772-8781-3bf7defd3b3d": true
   }
 }
