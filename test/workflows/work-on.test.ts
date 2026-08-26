@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   canonicalReviewerName,
+  directRunRecoveryAction,
   finalReviewDecisionMarker,
   findingPriority,
   isTransientProviderFailure,
@@ -32,6 +33,43 @@ test("restart recovery recognizes every parent-owned durable node", () => {
   for (const node of ["review-join", "ci", "decision", "merge", "close", "cleanup"] as const)
     assert.equal(parentNodeFromId(`${node}-2`), node);
   assert.equal(parentNodeFromId("implement-1"), undefined);
+});
+
+test("direct restart selects terminal cleanup and authority release windows", () => {
+  const state = (
+    status: "active" | "completed" | "blocked",
+    completedPhases: readonly string[] = [],
+  ) =>
+    ({
+      status,
+      phases: Object.fromEntries(
+        completedPhases.map((phase) => [
+          phase,
+          { attempts: [{ status: "completed" }] },
+        ]),
+      ),
+    }) as unknown as import("../../src/core/state.ts").RunState;
+
+  assert.equal(
+    directRunRecoveryAction(state("active", ["merge", "close"]), true),
+    "terminal-cleanup",
+  );
+  assert.equal(
+    directRunRecoveryAction(state("completed", ["cleanup"]), true),
+    "release-authority",
+  );
+  assert.equal(
+    directRunRecoveryAction(state("active", ["verify"]), true),
+    "resume-work",
+  );
+  assert.equal(
+    directRunRecoveryAction(state("active", ["merge", "close"]), false),
+    "none",
+  );
+  assert.equal(
+    directRunRecoveryAction(state("blocked", ["merge", "close"]), true),
+    "none",
+  );
 });
 
 test("provider completion is buffered until its launch receipt is durably bound", () => {
