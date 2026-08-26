@@ -122,7 +122,23 @@ test("checkpoint labels cover every direct workflow lifecycle boundary", () => {
     workflowLabelForCheckpoint({
       phase: "investigate",
       action: "complete",
+      report: "| Verdict | INVALID |",
+    }),
+    "workflow:invalid",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({
+      phase: "investigate",
+      action: "complete",
       report: "**Verdict**: DECOMPOSED",
+    }),
+    "workflow:decomposed",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({
+      phase: "investigate",
+      action: "complete",
+      report: "| Verdict | DECOMPOSE |",
     }),
     "workflow:decomposed",
   );
@@ -148,14 +164,6 @@ test("checkpoint labels cover every direct workflow lifecycle boundary", () => {
   assert.equal(
     workflowLabelForCheckpoint({ phase: "review", action: "complete" }),
     "workflow:in-review",
-  );
-  assert.equal(
-    workflowLabelForCheckpoint({ phase: "merge", action: "start" }),
-    "workflow:awaiting-merge",
-  );
-  assert.equal(
-    workflowLabelForCheckpoint({ phase: "merge", action: "complete" }),
-    "workflow:merged",
   );
   assert.equal(
     workflowLabelForCheckpoint({ phase: "verify", action: "block" }),

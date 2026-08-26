@@ -1453,6 +1453,9 @@ export function registerForgeRuntime(
           transport,
           binding.repository,
         );
+        if (params.action !== "start") {
+          await projectPhaseReport(projector, event, params, binding, signal);
+        }
         const workflowLabel = workflowLabelForCheckpoint(params);
         if (workflowLabel)
           await projector.setWorkflowLabel(
@@ -1460,9 +1463,6 @@ export function registerForgeRuntime(
             workflowLabel,
             signal,
           );
-        if (params.action !== "start") {
-          await projectPhaseReport(projector, event, params, binding, signal);
-        }
         await postDerivedPhaseArtifacts(
           projector,
           event,
@@ -1947,15 +1947,11 @@ export function workflowLabelForCheckpoint(params: {
     stage = "investigation";
   } else if (params.phase === "investigate") {
     if (params.action === "complete") {
-      const verdict = params.report?.match(
-        /(?:\*\*Verdict\*\*|###?\s*Verdict)\s*:\s*([A-Z][A-Z -]*)/i,
-      )?.[1]
-        ?.trim()
-        .toLowerCase();
+      const verdict = investigationVerdict(params.report);
       stage =
         verdict === "invalid"
           ? "invalid"
-          : verdict === "decomposed"
+          : verdict === "decompose" || verdict === "decomposed"
             ? "decomposed"
             : "readyToBuild";
     } else {
@@ -1970,11 +1966,24 @@ export function workflowLabelForCheckpoint(params: {
     stage = "build";
   } else if (params.phase === "review") {
     stage = "review";
-  } else if (params.phase === "merge") {
-    stage = params.action === "complete" ? "merged" : "awaitingMerge";
   }
 
   return stage ? WORKFLOW_LABEL_BY_STAGE[stage] : undefined;
+}
+
+function investigationVerdict(report: string | undefined): string | undefined {
+  if (!report) return undefined;
+  const verdict =
+    report.match(
+      /\*\*Verdict\*\*\s*:\s*\**(invalid|decompose(?:d)?|confirmed)\b/i,
+    )?.[1] ??
+    report.match(
+      /^\s*\|\s*Verdict\s*\|\s*\**(invalid|decompose(?:d)?|confirmed)\b/im,
+    )?.[1] ??
+    report.match(
+      /^#{2,3}\s*Verdict\s*:\s*\**(invalid|decompose(?:d)?|confirmed)\b/im,
+    )?.[1];
+  return verdict?.toLowerCase();
 }
 
 function validatePhaseReport(phase: RunPhase, report: string): void {
