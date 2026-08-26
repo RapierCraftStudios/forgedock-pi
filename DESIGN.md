@@ -268,16 +268,16 @@ The production/default branch is never auto-merged.
 {
   "verification": {
     "commands": {
-      "test": { "argv": ["npm", "test"], "required": true, "timeoutMs": 600000 },
-      "typecheck": { "argv": ["npm", "run", "typecheck"], "required": true, "timeoutMs": 300000 }
+      "test": { "argv": ["npm", "test"], "cwd": ".", "required": true, "timeoutMs": 600000 },
+      "typecheck": { "argv": ["npm", "run", "typecheck"], "cwd": ".", "required": true, "timeoutMs": 300000 }
     }
   }
 }
 ```
 
-The run snapshots policy from the trusted base commit. A PR/worktree modification to policy cannot change the active run. Models request checks by name and cannot supply shell source. The runner uses argv spawning, scrubs secrets, preserves the child exit code separately from truncated output, records hashes/artifacts, and fails closed for required checks.
+The run snapshots policy from the trusted base commit. A PR/worktree modification to policy cannot change the active run. Models request checks by name and cannot supply shell source. The runner uses argv spawning from each command's validated repository-relative `cwd`, scrubs secrets, preserves the child exit code separately from truncated output, records hashes/artifacts, and fails closed for required checks. `/forge:init` may inspect bounded package manifests without executing scripts; it configures a package-scoped `npm test` only for one unambiguous package candidate and otherwise writes an explicit CI-only local command set (`commands: {}`).
 
-Executing repository code is still a security boundary. Production writer/verification runs require a containment mode. The first implementation must at minimum provide child environment scrubbing, worktree-root enforcement, no GitHub credentials, and a child-side guard against GitHub writes/push/merge. A stronger container/sandbox backend remains an explicit production-hardening option.
+Executing repository code is still a security boundary. Production writer/verification runs require a containment mode. The first implementation must at minimum provide child environment scrubbing, worktree-root enforcement, no GitHub credentials, and a child-side guard against GitHub writes/push/merge. Package discovery is metadata-only, bounded, excludes dependency/control/artifact directories, and never invokes package-manager scripts. A stronger container/sandbox backend remains an explicit production-hardening option.
 
 ## Pi and plugin integration
 

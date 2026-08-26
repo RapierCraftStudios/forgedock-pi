@@ -118,7 +118,7 @@ For monorepo-local checks, bind each tracked command to the package that owns it
 }
 ```
 
-`cwd` is optional and defaults to the repository root. It must be a safe repository-relative directory. ForgeDock statically preflights required executables and package scripts against the frozen integration worktree before launching a writer; absolute paths, traversal, missing scripts, and symlink escapes fail closed with the exact policy path to fix. Use `commands: {}` for CI-only verification.
+`cwd` is optional and defaults to the repository root. It must be a safe repository-relative directory. ForgeDock statically preflights required executables and package scripts against the frozen integration worktree before launching a writer; absolute paths, traversal, missing scripts, and symlink escapes fail closed with the exact policy path to fix. `/forge:init` reads bounded package manifests without running scripts: it configures `npm test` only when exactly one package declares a non-empty `scripts.test`, preserves valid tracked commands, and writes `commands: {}` with a warning when no package or multiple packages are candidates. Use `commands: {}` for CI-only verification when a package must be selected manually.
 
 Then run:
 

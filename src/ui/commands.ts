@@ -10,6 +10,10 @@ import type {
 import { Type } from "typebox";
 
 import { parseForgePolicy, type ForgePolicy } from "../core/policy.ts";
+import {
+  discoverPackageManifests,
+  selectInitVerificationCommands,
+} from "../adapters/verification-preflight.ts";
 import type { ForgeOrchestrationController } from "../workflows/orchestrate.ts";
 import type { ForgeWorkOnController } from "../workflows/work-on.ts";
 import {
@@ -348,6 +352,11 @@ async function configureForgePolicy(input: {
   );
   const sourcePath = existing ? input.configPath : templatePath;
   const source = parsePolicyText(await readFile(sourcePath, "utf8"), sourcePath);
+  const packageManifests = await discoverPackageManifests(input.root);
+  const verificationSelection = selectInitVerificationCommands(
+    source.verification.commands,
+    packageManifests,
+  );
   let config: ForgePolicy = {
     ...source,
     repository: { provider: "github", name: input.repository },
@@ -442,7 +451,7 @@ async function configureForgePolicy(input: {
         waitTimeoutMs: config.verification.github.waitTimeoutMs,
         pollIntervalMs: config.verification.github.pollIntervalMs,
       },
-      commands: {},
+      commands: verificationSelection.commands,
     },
     orchestration: {
       ...config.orchestration,
@@ -462,6 +471,12 @@ async function configureForgePolicy(input: {
     input.configPath,
     `${JSON.stringify(serializedPolicy, null, 2)}\n`,
     "utf8",
+  );
+  input.ctx.ui.notify(
+    verificationSelection.mode === "local"
+      ? `Local verification: ${verificationSelection.reason}`
+      : `Local verification disabled; GitHub CI-only policy written. ${verificationSelection.reason}`,
+    verificationSelection.mode === "local" ? "info" : "warning",
   );
   return config;
 }

@@ -12,8 +12,11 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  discoverPackageManifests,
   preflightRequiredVerificationCommands,
   resolveVerificationCommandDirectory,
+  selectInitVerificationCommands,
+  verificationScriptName,
   VerificationPreflightError,
 } from "../../src/adapters/verification-preflight.ts";
 import type { VerificationCommandPolicy } from "../../src/core/policy.ts";
@@ -85,6 +88,74 @@ test("required monorepo verification preflight selects the package cwd", async (
   }
 });
 
+test("init discovers the only package test script and binds its cwd", async () => {
+  const testFixture = await fixture();
+  try {
+    const manifests = await discoverPackageManifests(testFixture.root);
+    assert.deepEqual(
+      manifests.map((manifest) => manifest.cwd),
+      [".", "web"],
+    );
+    assert.equal(manifests.find((manifest) => manifest.cwd === ".")?.scripts.test, undefined);
+    assert.equal(manifests.find((manifest) => manifest.cwd === "web")?.scripts.test, "vitest run");
+
+    const selection = selectInitVerificationCommands({}, manifests);
+    assert.equal(selection.mode, "local");
+    assert.deepEqual(selection.commands.test, {
+      argv: ["npm", "test"],
+      cwd: "web",
+      required: true,
+      timeoutMs: 600_000,
+    });
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
+test("init falls back to explicit CI-only verification for ambiguous packages", async () => {
+  const testFixture = await fixture();
+  try {
+    await writeFile(
+      join(testFixture.root, "package.json"),
+      JSON.stringify({ scripts: { test: "node test.js" } }),
+    );
+    const selection = selectInitVerificationCommands(
+      {},
+      await discoverPackageManifests(testFixture.root),
+    );
+    assert.equal(selection.mode, "ci-only");
+    assert.deepEqual(selection.commands, {});
+    assert.match(selection.reason, /Multiple packages/);
+    assert.match(selection.reason, /web/);
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
+test("init preserves valid commands and disables impossible required npm scripts", async () => {
+  const testFixture = await fixture();
+  try {
+    const manifests = await discoverPackageManifests(testFixture.root);
+    const valid = selectInitVerificationCommands(
+      { test: command("web") },
+      manifests,
+    );
+    assert.equal(valid.mode, "local");
+    assert.equal(valid.commands.test?.cwd, "web");
+
+    const invalid = selectInitVerificationCommands(
+      { test: command(".") },
+      manifests,
+    );
+    assert.equal(invalid.mode, "ci-only");
+    assert.deepEqual(invalid.commands, {});
+    assert.match(invalid.reason, /\.forge\/config\.json verification\.commands\.test\.argv/);
+    assert.match(invalid.reason, /set cwd/);
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
 test("preflight checks executable availability without running the command", async () => {
   const testFixture = await fixture();
   try {
@@ -124,10 +195,27 @@ test("verification cwd rejects missing, control, and symlink-escape directories"
       /runtime control directories/,
     );
     await assert.rejects(
+      resolveVerificationCommandDirectory(testFixture.root, "web/.pi"),
+      /runtime control directories/,
+    );
+    await assert.rejects(
       resolveVerificationCommandDirectory(testFixture.root, "escaped"),
       /outside the repository/,
     );
   } finally {
     await testFixture.cleanup();
   }
+});
+
+test("npm-family script detection tolerates safe command-line flags", () => {
+  assert.equal(verificationScriptName(["npm", "--silent", "test"]), "test");
+  assert.equal(
+    verificationScriptName(["npm", "--prefix", "web", "run", "test"]),
+    "test",
+  );
+  assert.equal(
+    verificationScriptName(["pnpm", "run", "--if-present", "check"]),
+    "check",
+  );
+  assert.equal(verificationScriptName(["node", "test.js"]), undefined);
 });
