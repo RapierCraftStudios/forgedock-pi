@@ -1,3 +1,5 @@
+import type { RunPhase } from "./events.ts";
+
 export const WORKFLOW_LABEL_BY_STAGE = {
   investigation: "workflow:investigating",
   readyToBuild: "workflow:ready-to-build",
@@ -8,6 +10,46 @@ export const WORKFLOW_LABEL_BY_STAGE = {
   invalid: "workflow:invalid",
   decomposed: "workflow:decomposed",
 } as const;
+
+type WorkflowCheckpointAction =
+  | "queue"
+  | "start"
+  | "complete"
+  | "fail"
+  | "block"
+  | "needs-human"
+  | "abandon";
+
+export function workflowLabelForCheckpoint(params: {
+  phase: RunPhase;
+  action: WorkflowCheckpointAction;
+  report?: string;
+}): string | undefined {
+  if (params.action === "start") {
+    if (params.phase === "investigate")
+      return WORKFLOW_LABEL_BY_STAGE.investigation;
+    if (
+      params.phase === "plan" ||
+      params.phase === "prepare-worktree" ||
+      params.phase === "implement" ||
+      params.phase === "verify"
+    ) {
+      return WORKFLOW_LABEL_BY_STAGE.build;
+    }
+    if (params.phase === "review") return WORKFLOW_LABEL_BY_STAGE.review;
+    if (params.phase === "merge")
+      return WORKFLOW_LABEL_BY_STAGE.awaitingMerge;
+  }
+  if (params.action === "complete") {
+    if (params.phase === "investigate") {
+      return params.report?.includes("**Verdict**: INVALID")
+        ? WORKFLOW_LABEL_BY_STAGE.invalid
+        : WORKFLOW_LABEL_BY_STAGE.readyToBuild;
+    }
+    if (params.phase === "merge") return WORKFLOW_LABEL_BY_STAGE.merged;
+  }
+  return undefined;
+}
 
 export const PRE_MERGE_ISSUE_MARKERS = [
   "<!-- FORGE:INVESTIGATOR -->",

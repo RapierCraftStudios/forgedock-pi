@@ -20,7 +20,10 @@ import {
   type ForgeWorkOnResult,
 } from "../agents/contracts.ts";
 import { materializeForgeAgents } from "../agents/materialize.ts";
-import { checkPreMergeAuditTrail } from "../core/artifact-protocol.ts";
+import {
+  checkPreMergeAuditTrail,
+  workflowLabelForCheckpoint,
+} from "../core/artifact-protocol.ts";
 import {
   canAutoMerge,
   isProtectedBranch,
@@ -416,6 +419,22 @@ export class ForgeWorkOnController {
       return;
     }
 
+    const awaitingMergeLabel = workflowLabelForCheckpoint({
+      phase: "merge",
+      action: "start",
+    });
+    const mergedWorkflowLabel = workflowLabelForCheckpoint({
+      phase: "merge",
+      action: "complete",
+    });
+    if (!awaitingMergeLabel || !mergedWorkflowLabel)
+      throw new Error("Missing canonical workflow label for merge transition.");
+    await projector.setWorkflowLabel(
+      link.issueNumber,
+      awaitingMergeLabel,
+      ctx.signal,
+    );
+
     const merged = await github.mergePullRequest({
       pullNumber: pull.number,
       expectedHeadSha: result.review.headSha,
@@ -441,6 +460,11 @@ export class ForgeWorkOnController {
       ctx.signal,
       undefined,
       [merged.sha],
+    );
+    await projector.setWorkflowLabel(
+      link.issueNumber,
+      mergedWorkflowLabel,
+      ctx.signal,
     );
     await postReviewCompletionArtifacts({
       github,
@@ -573,7 +597,7 @@ export class ForgeWorkOnController {
       });
       await projector.setWorkflowLabel(
         link.issueNumber,
-        "workflow:merged",
+        mergedWorkflowLabel,
         ctx.signal,
       );
     }

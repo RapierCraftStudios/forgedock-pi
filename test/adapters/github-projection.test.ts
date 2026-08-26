@@ -89,8 +89,18 @@ test("issue projection is marker-idempotent and only adds missing labels", async
   assert.deepEqual(first.labelsAdded, ["workflow:investigating"]);
   assert.equal(transport.labels.has("workflow:investigating"), true);
 
-  await projector.setWorkflowLabel(42, "workflow:merged");
+  await projector.setWorkflowLabel(42, "workflow:building");
   assert.equal(transport.labels.has("workflow:investigating"), false);
+  assert.equal(transport.labels.has("workflow:building"), true);
+  assert.equal(transport.labels.has("bug"), true);
+
+  await projector.setWorkflowLabel(42, "workflow:in-review");
+  assert.equal(transport.labels.has("workflow:building"), false);
+  assert.equal(transport.labels.has("workflow:in-review"), true);
+  assert.equal(transport.labels.has("bug"), true);
+
+  await projector.setWorkflowLabel(42, "workflow:merged");
+  assert.equal(transport.labels.has("workflow:in-review"), false);
   assert.equal(transport.labels.has("workflow:merged"), true);
   assert.equal(transport.labels.has("bug"), true);
 });

@@ -25,11 +25,11 @@ import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
 import {
   createRunEvent,
-  RUN_PHASES,
   type RunEvent,
   type RunEventType,
   type RunPhase,
 } from "../core/events.ts";
+import { workflowLabelForCheckpoint } from "../core/artifact-protocol.ts";
 import { applyRunEvent } from "../core/state.ts";
 import {
   FORGE_WORK_ON_OUTPUT_SCHEMA,
@@ -50,6 +50,15 @@ import {
 const BINDING_ENV = "PI_SUBAGENT_EXTENSION_BINDINGS";
 const BINDING_NAMESPACE = "forgedock.pi/1";
 const MAX_OUTPUT_BYTES = 50 * 1024;
+const CHILD_RUN_PHASES = [
+  "resolve",
+  "investigate",
+  "plan",
+  "prepare-worktree",
+  "implement",
+  "verify",
+  "review",
+] as const;
 
 interface BoundVerificationCommand {
   argv: readonly string[];
@@ -84,7 +93,7 @@ const TRUNCATED_OUTPUT_MARKER = "[output truncated to last";
 const MAX_RUNTIME_STATUS_BYTES = 1_024 * 1_024;
 
 const CheckpointParameters = Type.Object({
-  phase: StringEnum(RUN_PHASES),
+  phase: StringEnum(CHILD_RUN_PHASES),
   attempt: Type.Integer({ minimum: 1 }),
   action: StringEnum([
     "queue",
@@ -1097,38 +1106,6 @@ async function postDerivedPhaseArtifacts(
       ...(signal ? { signal } : {}),
     });
   }
-}
-
-function workflowLabelForCheckpoint(params: {
-  phase: RunPhase;
-  action:
-    | "queue"
-    | "start"
-    | "complete"
-    | "fail"
-    | "block"
-    | "needs-human"
-    | "abandon";
-  report?: string;
-}): string | undefined {
-  if (params.action === "start") {
-    if (params.phase === "investigate") return "workflow:investigating";
-    if (
-      params.phase === "plan" ||
-      params.phase === "prepare-worktree" ||
-      params.phase === "implement" ||
-      params.phase === "verify"
-    ) {
-      return "workflow:building";
-    }
-    if (params.phase === "review") return "workflow:in-review";
-  }
-  if (params.action === "complete" && params.phase === "investigate") {
-    return params.report?.includes("**Verdict**: INVALID")
-      ? "workflow:invalid"
-      : "workflow:ready-to-build";
-  }
-  return undefined;
 }
 
 function validatePhaseReport(phase: RunPhase, report: string): void {

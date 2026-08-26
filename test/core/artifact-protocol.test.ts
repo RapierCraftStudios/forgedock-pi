@@ -9,6 +9,8 @@ import {
   POST_MERGE_PR_MARKERS,
   PRE_MERGE_ISSUE_MARKERS,
   PRE_MERGE_PR_MARKERS,
+  workflowLabelForCheckpoint,
+  WORKFLOW_LABEL_BY_STAGE,
 } from "../../src/core/artifact-protocol.ts";
 
 function comments(markers: readonly string[]): string[] {
@@ -66,5 +68,48 @@ test("workflow labels are exact stage projections", () => {
   assert.throws(
     () => assertWorkflowLabel("workflow:investigating", "review"),
     /workflow:in-review/,
+  );
+});
+
+test("workflow checkpoint mapping covers child and parent lifecycle boundaries", () => {
+  const starts = [
+    ["investigate", WORKFLOW_LABEL_BY_STAGE.investigation],
+    ["plan", WORKFLOW_LABEL_BY_STAGE.build],
+    ["prepare-worktree", WORKFLOW_LABEL_BY_STAGE.build],
+    ["implement", WORKFLOW_LABEL_BY_STAGE.build],
+    ["verify", WORKFLOW_LABEL_BY_STAGE.build],
+    ["review", WORKFLOW_LABEL_BY_STAGE.review],
+    ["merge", WORKFLOW_LABEL_BY_STAGE.awaitingMerge],
+  ] as const;
+  for (const [phase, expected] of starts) {
+    assert.equal(
+      workflowLabelForCheckpoint({ phase, action: "start" }),
+      expected,
+    );
+  }
+
+  assert.equal(
+    workflowLabelForCheckpoint({
+      phase: "investigate",
+      action: "complete",
+      report: "**Verdict**: INVALID",
+    }),
+    WORKFLOW_LABEL_BY_STAGE.invalid,
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "investigate", action: "complete" }),
+    WORKFLOW_LABEL_BY_STAGE.readyToBuild,
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "merge", action: "complete" }),
+    WORKFLOW_LABEL_BY_STAGE.merged,
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "verify", action: "complete" }),
+    undefined,
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "merge", action: "queue" }),
+    undefined,
   );
 });
