@@ -107,7 +107,7 @@ test("workflow checkpoint mapping covers the child and parent lifecycle", () => 
   );
   assert.equal(
     workflowLabelForCheckpoint({ phase: "review", action: "complete" }),
-    WORKFLOW_LABEL_BY_STAGE.awaitingMerge,
+    undefined,
   );
   assert.equal(
     workflowLabelForCheckpoint({ phase: "merge", action: "complete" }),

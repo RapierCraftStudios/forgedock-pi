@@ -305,17 +305,6 @@ export class ForgeWorkOnController {
       sessionId,
       ctx.signal,
     );
-    const awaitingMergeWorkflowLabel = workflowLabelForCheckpoint({
-      phase: "merge",
-      action: "start",
-    });
-    if (awaitingMergeWorkflowLabel) {
-      await projector.setWorkflowLabel(
-        link.issueNumber,
-        awaitingMergeWorkflowLabel,
-        ctx.signal,
-      );
-    }
     await this.#git.push(
       link.prepared.worktreePath,
       link.prepared.branch,
@@ -430,6 +419,18 @@ export class ForgeWorkOnController {
       return;
     }
 
+    const awaitingMergeWorkflowLabel = workflowLabelForCheckpoint({
+      phase: "merge",
+      action: "start",
+    });
+    if (awaitingMergeWorkflowLabel) {
+      await projector.setWorkflowLabel(
+        link.issueNumber,
+        awaitingMergeWorkflowLabel,
+        ctx.signal,
+      );
+    }
+
     const merged = await github.mergePullRequest({
       pullNumber: pull.number,
       expectedHeadSha: result.review.headSha,
@@ -456,17 +457,6 @@ export class ForgeWorkOnController {
       undefined,
       [merged.sha],
     );
-    const mergedWorkflowLabel = workflowLabelForCheckpoint({
-      phase: "merge",
-      action: "complete",
-    });
-    if (mergedWorkflowLabel) {
-      await projector.setWorkflowLabel(
-        link.issueNumber,
-        mergedWorkflowLabel,
-        ctx.signal,
-      );
-    }
     await postReviewCompletionArtifacts({
       github,
       projector,

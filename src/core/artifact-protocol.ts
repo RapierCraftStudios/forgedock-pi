@@ -50,7 +50,6 @@ export function workflowLabelForCheckpoint(input: {
         ? WORKFLOW_LABEL_BY_STAGE.invalid
         : WORKFLOW_LABEL_BY_STAGE.readyToBuild;
     }
-    if (input.phase === "review") return WORKFLOW_LABEL_BY_STAGE.awaitingMerge;
     if (input.phase === "merge") return WORKFLOW_LABEL_BY_STAGE.merged;
   }
 
