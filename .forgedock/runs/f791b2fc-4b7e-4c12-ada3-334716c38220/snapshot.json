@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 19,
-  "lastEventHash": "sha256:6dd1f521fff5dbc06f69033489666ab8392ff62ba2897bf65e4ef54cd8b40195",
+  "sequence": 20,
+  "lastEventHash": "sha256:bbc1e13c7ac5f70315f1698dce0481b71579909693300a3307a3e47145f75958",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -132,16 +132,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume verify attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Implementation commit created through forge_commit: 99422e62c0731d5b0efd0904238a158d2672e606.",
+            "forge_diff confirms exactly src/agents/register.ts, src/agents/materialize.ts, and test/adapters/subagents.test.ts changed.",
+            "No local verification commands are configured in the bound policy; GitHub CI remains the parent-owned verification authority.",
+            "Generated runtime and .forge policy files are absent from the implementation diff."
+          ],
           "inputArtifactHash": "implement-1",
           "logicalNodeId": "verify-1",
           "startedAt": "2026-08-26T09:17:43.705Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/f791b2fc-4b7e-4c12-ada3-334716c38220",
           "branch": "forge/issue-93-f791b2fc",
-          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4"
+          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4",
+          "finishedAt": "2026-08-26T09:18:25.717Z",
+          "commitSha": "99422e62c0731d5b0efd0904238a158d2672e606"
         }
       ]
     }
@@ -167,7 +174,8 @@
     "phase:implement:1:start": "78576757-98a6-4bf0-8ba5-d99d7cf37745",
     "phase:implement:1:complete": "9f772649-69e8-4031-ba50-781fb7611b0d",
     "phase:verify:1:queue": "f4b98c05-7731-46a7-b08e-eeeca8e180b5",
-    "phase:verify:1:start": "ad733dd8-d21f-438b-934c-6f658fca418f"
+    "phase:verify:1:start": "ad733dd8-d21f-438b-934c-6f658fca418f",
+    "phase:verify:1:complete": "7b2651e7-5df4-4284-8158-e474c231f640"
   },
   "eventIds": {
     "6b23cbe2-b6e1-4442-9263-5f6f78ad21ce": true,
@@ -188,7 +196,8 @@
     "78576757-98a6-4bf0-8ba5-d99d7cf37745": true,
     "9f772649-69e8-4031-ba50-781fb7611b0d": true,
     "f4b98c05-7731-46a7-b08e-eeeca8e180b5": true,
-    "ad733dd8-d21f-438b-934c-6f658fca418f": true
+    "ad733dd8-d21f-438b-934c-6f658fca418f": true,
+    "7b2651e7-5df4-4284-8158-e474c231f640": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
