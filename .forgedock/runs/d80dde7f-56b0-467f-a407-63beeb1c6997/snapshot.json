@@ -5,10 +5,10 @@
   "issueNumber": 114,
   "integrationBranch": "staging",
   "protectedBranch": "main",
-  "status": "blocked",
+  "status": "cancelled",
   "authorityMode": "run-scoped",
-  "sequence": 23,
-  "lastEventHash": "sha256:949ec72a9728032d49f43f23b87be16b77a97fcde1bf6630d18da0b33be37431",
+  "sequence": 24,
+  "lastEventHash": "sha256:8ed22d67b32b9857e889b3efa57e3bcde7a10f9e3e6a0159de99b06da0a90f11",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -200,7 +200,8 @@
     "phase:verify:1:complete": "6437d7cf-69e9-4cbc-b4e8-daa7e336360e",
     "phase:review:1:queue": "ce3e508f-f4dc-45cb-a111-af2a88446a3a",
     "phase:review:1:start": "d94caabf-4a98-40e0-bc1a-79ba9193246b",
-    "phase:review:1:block": "c0511d08-0995-4fcc-81de-4331941c5f4d"
+    "phase:review:1:block": "c0511d08-0995-4fcc-81de-4331941c5f4d",
+    "run:cancelled": "6f561588-8bf2-41e7-aea5-87b842aa38b1"
   },
   "eventIds": {
     "533c2019-3105-4632-818c-999aaa247610": true,
@@ -225,7 +226,8 @@
     "6437d7cf-69e9-4cbc-b4e8-daa7e336360e": true,
     "ce3e508f-f4dc-45cb-a111-af2a88446a3a": true,
     "d94caabf-4a98-40e0-bc1a-79ba9193246b": true,
-    "c0511d08-0995-4fcc-81de-4331941c5f4d": true
+    "c0511d08-0995-4fcc-81de-4331941c5f4d": true,
+    "6f561588-8bf2-41e7-aea5-87b842aa38b1": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
@@ -237,5 +239,6 @@
     "lastHeartbeatAt": "2026-08-26T19:14:10.621Z",
     "expiresAt": "2027-08-26T19:14:10.621Z",
     "takeoverRequired": false
-  }
+  },
+  "cancellationReason": "Cancelled by the operator through /forge:cancel."
 }
