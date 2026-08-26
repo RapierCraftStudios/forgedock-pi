@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 28,
-  "lastEventHash": "sha256:cdb960bc9354e9c2ce7fa12dea4cb7719a9388683eb7835d51ceb0bd22c76ecf",
+  "sequence": 29,
+  "lastEventHash": "sha256:48d9a4a81c1ad697bb9d0026611b666e13649062ee2f141ed54f37d2dd73dd54",
   "lanes": [
     {
       "issueNumber": 92,
@@ -79,11 +79,10 @@
     {
       "issueNumber": 120,
       "ordinal": 8,
-      "status": "blocked",
+      "status": "running",
       "refreshes": 0,
       "forgeRunId": "195fe0bb-35f6-493a-ba12-932d5d3d7cd5",
-      "subagentRunId": "74aa30e2-e5a1-4249-9de1-8733205f66dd",
-      "reason": "Trusted Forge reviewer panel unavailable after three transient RPC ping timeouts; supervisor confirmed blocked status and manual reviewer bypass is prohibited."
+      "subagentRunId": "9f33afd0-17bf-4b63-bcbf-d1c39ca16ba4"
     }
   ],
   "idempotencyKeys": {
@@ -114,7 +113,8 @@
     "lane:115:recovered:5ec1a05e-ae78-4fd9-8ef3-63c60f8be913": "14f742d5-3e1f-4396-84f1-4ba10f219429",
     "lane:119:blocked": "94abbea6-6ad4-480f-badc-3145fedab14a",
     "lane:119:recovered:bfa9e372-4b48-4bbb-8704-9c5e544f4dd3": "00b24623-0ab0-4875-aeec-eb9a82f34275",
-    "lane:120:blocked": "40da0085-9810-4ee3-a6c1-44f356f0c079"
+    "lane:120:blocked": "40da0085-9810-4ee3-a6c1-44f356f0c079",
+    "lane:120:recovered:195fe0bb-35f6-493a-ba12-932d5d3d7cd5": "bf619b51-b2a5-435d-866d-0370b53f28fb"
   },
   "createdAt": "2026-08-26T17:53:19.264Z"
 }
