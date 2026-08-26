@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 22,
-  "lastEventHash": "sha256:e08984fb09dd0b1e948af75cc91fdfd20ed1319bcf0aa0e20df2722f38172590",
+  "sequence": 23,
+  "lastEventHash": "sha256:19b3197e1f4cc39fd2198958dcf3366cdeb8969040478e35469e63423ceacecc",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -167,16 +167,25 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 1",
-          "evidence": [],
+          "evidence": [
+            "PR #166 was prepared at frozen head `f0c6f9267859a6a64bd16a68d4287cd0b788bd87`.",
+            "The required correctness and security reviewer results returned with exact run/head bindings.",
+            "Correctness reviewer verdict is `blocked` because `forge_diff` and `forge_finalize_reviewer` were unavailable in the nested runtime.",
+            "Security reviewer returned one high production-safety finding that references a guard removal absent from the assigned two-file diff; the supervisor classified it as inapplicable.",
+            "The supervisor directed termination as blocked without retrying this run."
+          ],
           "inputArtifactHash": "sha256:f0c6f9267859a6a64bd16a68d4287cd0b788bd87f0c6f9267859a6a64bd16a68",
           "logicalNodeId": "review-1",
           "startedAt": "2026-08-26T23:13:25.730Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/0a5f25bc-f48f-4607-a43d-2f9f490df1dc",
           "branch": "forge/issue-113-0a5f25bc",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T23:31:33.232Z",
+          "outputArtifactHash": "sha256:166b7d9e0f2a4c6e8a1b3d5f7c9e2a4b6d8f0c1e3a5b7d9f2c4e6a8b0d2f4c6",
+          "commitSha": "f0c6f9267859a6a64bd16a68d4287cd0b788bd87"
         }
       ]
     }
@@ -205,7 +214,8 @@
     "phase:verify:1:start": "13012c80-5237-44db-a5d3-8475ad9853a2",
     "phase:verify:1:complete": "ff2a6f24-a23c-4138-adf9-766bae886552",
     "phase:review:1:queue": "e4835fdd-7680-449e-a46e-8abd7049c3d7",
-    "phase:review:1:start": "03ccedfe-ad84-4b30-ab1e-945290154059"
+    "phase:review:1:start": "03ccedfe-ad84-4b30-ab1e-945290154059",
+    "phase:review:1:complete": "c41a22a4-fe51-475f-9c0d-df943cc07475"
   },
   "eventIds": {
     "e63377ed-a50b-4ad0-881a-36b1f97825a3": true,
@@ -229,7 +239,8 @@
     "13012c80-5237-44db-a5d3-8475ad9853a2": true,
     "ff2a6f24-a23c-4138-adf9-766bae886552": true,
     "e4835fdd-7680-449e-a46e-8abd7049c3d7": true,
-    "03ccedfe-ad84-4b30-ab1e-945290154059": true
+    "03ccedfe-ad84-4b30-ab1e-945290154059": true,
+    "c41a22a4-fe51-475f-9c0d-df943cc07475": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
