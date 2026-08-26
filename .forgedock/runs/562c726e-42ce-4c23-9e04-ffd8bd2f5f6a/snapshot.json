@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 22,
-  "lastEventHash": "sha256:1ccc80d9d826b4aa94fbadf386eb49041d1cb4dddd0636f45941daccc4b85982",
+  "sequence": 23,
+  "lastEventHash": "sha256:60575d623e77679e83fb68be4a5b4094dbc6d91e2b9b1aed85462f5c8bdac024",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -165,16 +165,24 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Fresh round-3 correctness, security, and workflow-integration reviewers all passed at exact head 3fd617160f3f4b9fc13cf703905af52ddf952ed7 with no findings.",
+            "Round-1 and round-2 findings were remediated: awaiting-merge now follows gate approval, merged projection remains terminally ordered, and child checkpoint schema excludes parent-owned merge/close/cleanup phases.",
+            "Primary LSP diagnostics remain clean for all five changed files.",
+            "Reviewer limitation: nested reviewers could not execute tests; the trusted local verification allowlist is empty and GitHub CI is parent-owned."
+          ],
           "inputArtifactHash": "sha256:verify-532a18c5ef0538e2e36826890247ef71340e5a72",
           "logicalNodeId": "work-on/92/review",
           "startedAt": "2026-08-26T12:17:18.964Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/562c726e-42ce-4c23-9e04-ffd8bd2f5f6a",
           "branch": "forge/issue-92-562c726e",
-          "baseSha": "26139ba278b95578a300c597ec35495a7d502eb6"
+          "baseSha": "26139ba278b95578a300c597ec35495a7d502eb6",
+          "finishedAt": "2026-08-26T12:30:06.749Z",
+          "outputArtifactHash": "sha256:review-3fd617160f3f4b9fc13cf703905af52ddf952ed7",
+          "commitSha": "3fd617160f3f4b9fc13cf703905af52ddf952ed7"
         }
       ]
     }
@@ -203,7 +211,8 @@
     "phase:verify:1:start": "3037482b-3674-4f76-894f-d8d162c1fa6a",
     "phase:verify:1:complete": "2cf34b40-856b-41cb-95ba-529abdf6a525",
     "phase:review:1:queue": "a897b343-ff42-4dce-ae31-8ed1de9246fd",
-    "phase:review:1:start": "32add1dd-47ec-4d82-a9fe-0292eeca0171"
+    "phase:review:1:start": "32add1dd-47ec-4d82-a9fe-0292eeca0171",
+    "phase:review:1:complete": "d6d7db72-e17f-466a-8e91-141da78dae92"
   },
   "eventIds": {
     "2d6b4799-e254-4339-9dcb-219a49010664": true,
@@ -227,7 +236,8 @@
     "3037482b-3674-4f76-894f-d8d162c1fa6a": true,
     "2cf34b40-856b-41cb-95ba-529abdf6a525": true,
     "a897b343-ff42-4dce-ae31-8ed1de9246fd": true,
-    "32add1dd-47ec-4d82-a9fe-0292eeca0171": true
+    "32add1dd-47ec-4d82-a9fe-0292eeca0171": true,
+    "d6d7db72-e17f-466a-8e91-141da78dae92": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
