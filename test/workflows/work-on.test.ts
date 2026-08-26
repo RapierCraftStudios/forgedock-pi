@@ -10,6 +10,7 @@ import {
   findingPriority,
   isTransientProviderFailure,
   lineWithinTolerance,
+  mergeThenProjectWorkflowStage,
   parentNodeFromId,
   parseAsyncCompletion,
   reconcileLaunchState,
@@ -271,6 +272,32 @@ test("detached workflow continuation failure remains distinguishable for durable
         "unsupported-continuation: detached workflow child settled, but JavaScript workflow continuation was not persisted.",
     },
   );
+});
+
+test("merged projection is settled before follow-up merge work", async () => {
+  const order: string[] = [];
+  const merged = await mergeThenProjectWorkflowStage(
+    async () => {
+      order.push("merge-api");
+      return { sha: "merge-sha" };
+    },
+    async () => {
+      order.push("workflow:merged");
+    },
+  );
+
+  await assert.rejects(
+    (async () => {
+      order.push(`post-merge:${merged.sha}`);
+      throw new Error("post-merge artifact failure");
+    })(),
+    /post-merge artifact failure/,
+  );
+  assert.deepEqual(order, [
+    "merge-api",
+    "workflow:merged",
+    "post-merge:merge-sha",
+  ]);
 });
 
 test("provider retry classification includes WebSocket failures but excludes quota", () => {

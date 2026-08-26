@@ -2158,27 +2158,26 @@ export class ForgeWorkOnController {
         this.#emitLifecycle(link, { reason, nodeId: node.nodeId, pullNumber: pull.number });
         return;
       }
-      let merged: Awaited<
-        ReturnType<GitHubWorkflowAdapter["mergePullRequest"]>
-      >;
-      try {
-        merged = await github.mergePullRequest({ pullNumber: pull.number, expectedHeadSha: pull.headSha, method: "squash", ...(ctx.signal ? { signal: ctx.signal } : {}) });
-      } catch (error) {
-        await projector
-          .setWorkflowLabel(
-            link.issueNumber,
-            WORKFLOW_LABEL_BY_STAGE.review,
-          )
-          .catch(() => undefined);
-        throw error;
-      }
+      const merged = await mergeThenProjectWorkflowStage(
+        async () => {
+          try {
+            return await github.mergePullRequest({ pullNumber: pull.number, expectedHeadSha: pull.headSha, method: "squash", ...(ctx.signal ? { signal: ctx.signal } : {}) });
+          } catch (error) {
+            await projector
+              .setWorkflowLabel(
+                link.issueNumber,
+                WORKFLOW_LABEL_BY_STAGE.review,
+              )
+              .catch(() => undefined);
+            throw error;
+          }
+        },
+        () => this.#projectWorkflowStage(link, "merged", ctx, projector),
+      );
       headSha = merged.sha;
       outcome = "merged";
       evidence = [`merge:${merged.sha}`];
       await journal.append({ runId: link.forgeRunId, type: "effect.recorded", payload: { effectType: "merge", effectId: `merge:${pull.number}`, digest: digest(merged.sha) }, idempotencyKey: `effect:merge:${pull.number}`, sessionId, message: `Record merge effect for ${pull.number}`, ...(ctx.signal ? { signal: ctx.signal } : {}) });
-      await this.#projectWorkflowStage(link, "merged", ctx, projector).catch(
-        () => undefined,
-      );
       const aggregate = await this.#aggregateFromState(
         link,
         authority.state as import("../core/state.ts").RunState,
@@ -3873,18 +3872,22 @@ export class ForgeWorkOnController {
       throw new Error(
         "Merged pull request has no durable merge-complete SHA evidence.",
       );
-    const merged = currentPull.merged
-      ? {
-          merged: true,
-          sha: durableMergeSha as string,
-          message: "Pull request was already merged by this run.",
-        }
-      : await github.mergePullRequest({
-          pullNumber: pull.number,
-          expectedHeadSha: result.review.headSha,
-          method: "squash",
-          ...(ctx.signal ? { signal: ctx.signal } : {}),
-        });
+    const merged = await mergeThenProjectWorkflowStage(
+      async () =>
+        currentPull.merged
+          ? {
+              merged: true,
+              sha: durableMergeSha as string,
+              message: "Pull request was already merged by this run.",
+            }
+          : github.mergePullRequest({
+              pullNumber: pull.number,
+              expectedHeadSha: result.review.headSha,
+              method: "squash",
+              ...(ctx.signal ? { signal: ctx.signal } : {}),
+            }),
+      () => this.#projectWorkflowStage(link, "merged", ctx, projector),
+    );
     await appendEffect(
       journal,
       link.forgeRunId,
@@ -3905,7 +3908,6 @@ export class ForgeWorkOnController {
       undefined,
       [merged.sha],
     );
-    await this.#projectWorkflowStage(link, "merged", ctx, projector);
     if (!currentPull.merged)
       await postReviewCompletionArtifacts({
         github,
@@ -4115,6 +4117,20 @@ export class ForgeWorkOnController {
     for (const runId of Object.keys(link.activeNodes))
       this.#links.set(runId, link);
   }
+}
+
+/**
+ * Keep the merged workflow projection at the merge API success boundary.
+ * Follow-up bookkeeping and post-merge artifacts are independently throwable,
+ * so they must never precede this idempotent projection attempt.
+ */
+export async function mergeThenProjectWorkflowStage<T>(
+  merge: () => Promise<T>,
+  projectMerged: () => Promise<void>,
+): Promise<T> {
+  const result = await merge();
+  await projectMerged();
+  return result;
 }
 
 async function appendPhase(
