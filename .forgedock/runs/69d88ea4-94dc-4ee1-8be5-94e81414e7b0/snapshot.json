@@ -6,8 +6,8 @@
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
   "status": "cancelled",
-  "sequence": 24,
-  "lastEventHash": "sha256:9ff8ff85ca68b389aa7e80728a92acf373904c36e3190cf26c5d5dbedae140ed",
+  "sequence": 25,
+  "lastEventHash": "sha256:a17f1df30b24de7494a26c12b587bcc733ded7c43185ae2d4b1c7aa31ff60613",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -194,7 +194,8 @@
     "phase:review:1:queue": "94a841dc-85a0-433f-997c-f403bcd3034e",
     "phase:review:1:start": "5feb849e-162e-469e-94f6-e166fda007f0",
     "phase:review:1:fail": "270efb26-f089-4425-9803-cd59197e2b5f",
-    "run:cancelled": "cef263a9-df4e-4a0c-93f8-03e10f2cf287"
+    "run:cancelled": "cef263a9-df4e-4a0c-93f8-03e10f2cf287",
+    "lease:release": "7e3120da-6a2d-4e61-bf67-b50b65a63df3"
   },
   "eventIds": {
     "b1395e28-212e-45b6-a67c-66af8f796d7d": true,
@@ -220,18 +221,8 @@
     "94a841dc-85a0-433f-997c-f403bcd3034e": true,
     "5feb849e-162e-469e-94f6-e166fda007f0": true,
     "270efb26-f089-4425-9803-cd59197e2b5f": true,
-    "cef263a9-df4e-4a0c-93f8-03e10f2cf287": true
-  },
-  "lease": {
-    "schema": "forgedock.repository-lease/v1",
-    "repository": "RapierCraftStudios/forgedock-pi",
-    "ownerRunId": "69d88ea4-94dc-4ee1-8be5-94e81414e7b0",
-    "ownerSessionId": "01a03c73-a5c6-77c7-a622-ad858003aa20",
-    "epoch": 1,
-    "acquiredAt": "2026-08-26T05:05:27.282Z",
-    "lastHeartbeatAt": "2026-08-26T05:05:27.282Z",
-    "expiresAt": "2026-08-26T06:05:27.282Z",
-    "takeoverRequired": false
+    "cef263a9-df4e-4a0c-93f8-03e10f2cf287": true,
+    "7e3120da-6a2d-4e61-bf67-b50b65a63df3": true
   },
   "cancellationReason": "Owning Pi session ended (quit); cancel direct work-on and release its lease."
 }
