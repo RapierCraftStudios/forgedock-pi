@@ -28,6 +28,7 @@ import {
   diffChunk,
   forgeCommitArguments,
   isForgeRuntimePath,
+  workflowLabelForCheckpoint,
   parseBoundReviewerResult,
   parseGitStatusPaths,
   reviewerStatusIsTerminal,
@@ -86,6 +87,84 @@ test("read-only nodes deny shell and file mutation tools", () => {
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_checkpoint"), true);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_run_review_panel"), true);
   assert.equal(allowedNodeTools(undefined).has("forge_run_review_panel"), true);
+});
+
+test("checkpoint labels cover every direct workflow lifecycle boundary", () => {
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "resolve", action: "start" }),
+    "workflow:investigating",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "resolve", action: "complete" }),
+    "workflow:investigating",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "investigate", action: "start" }),
+    "workflow:investigating",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({
+      phase: "investigate",
+      action: "complete",
+      report: "**Verdict**: CONFIRMED",
+    }),
+    "workflow:ready-to-build",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({
+      phase: "investigate",
+      action: "complete",
+      report: "**Verdict**: INVALID",
+    }),
+    "workflow:invalid",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({
+      phase: "investigate",
+      action: "complete",
+      report: "**Verdict**: DECOMPOSED",
+    }),
+    "workflow:decomposed",
+  );
+  for (const phase of [
+    "plan",
+    "prepare-worktree",
+    "implement",
+    "verify",
+  ] as const) {
+    assert.equal(
+      workflowLabelForCheckpoint({ phase, action: "start" }),
+      "workflow:building",
+    );
+    assert.equal(
+      workflowLabelForCheckpoint({ phase, action: "complete" }),
+      "workflow:building",
+    );
+  }
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "review", action: "start" }),
+    "workflow:in-review",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "review", action: "complete" }),
+    "workflow:in-review",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "merge", action: "start" }),
+    "workflow:awaiting-merge",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "merge", action: "complete" }),
+    "workflow:merged",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "verify", action: "block" }),
+    undefined,
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "review", action: "queue" }),
+    undefined,
+  );
 });
 
 test("runtime path classification follows the checkout case contract", () => {

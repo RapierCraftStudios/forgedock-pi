@@ -146,6 +146,14 @@ test("workflow transitions cover the complete canonical label lifecycle", () => 
     workflowLabelForNode("decision", "remediation-required"),
     "workflow:building",
   );
+  assert.equal(
+    workflowStageForNodeTransition("merge", "started"),
+    "awaitingMerge",
+  );
+  assert.equal(
+    workflowStageForNodeTransition("merge", "completed", "merged"),
+    "merged",
+  );
   assert.equal(workflowLabelForNode("merge", "merged"), "workflow:merged");
   assert.equal(
     workflowLabelForNode("investigate", "invalid"),

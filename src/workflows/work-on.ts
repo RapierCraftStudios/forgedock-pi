@@ -592,7 +592,7 @@ export class ForgeWorkOnController {
             }),
             link.repository,
           );
-        await activeProjector.setWorkflowLabel(link.issueNumber, label);
+        await activeProjector.setWorkflowLabel(link.issueNumber, label, ctx.signal);
         return;
       } catch (error) {
         lastError = error;
@@ -3866,6 +3866,7 @@ export class ForgeWorkOnController {
       return;
     }
 
+    await this.#projectWorkflowStage(link, "awaitingMerge", ctx, projector);
     const durableMergeSha = currentRun.state?.phases.merge?.attempts
       .filter((attempt) => attempt.status === "completed")
       .at(-1)?.evidence[0];
