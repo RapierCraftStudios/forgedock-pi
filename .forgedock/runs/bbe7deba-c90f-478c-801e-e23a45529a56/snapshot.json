@@ -10,8 +10,8 @@
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:251bdb206cad3343cd8c3e20c491c5df61cdc40e57ff59c14a1138216682e76b",
+  "sequence": 9,
+  "lastEventHash": "sha256:dc76dc8a96d8aa5fe2e2d1928c50d90b56f9c00e993664b32e9e5a44b5ba0c3a",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -45,7 +45,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/bbe7deba-c90f-478c-801e-e23a45529a56/.pi/forge/bbe7deba-c90f-478c-801e-e23a45529a56-investigate-1.json",
       "subagentRunId": "dc18de30-ad9a-4310-915b-295750b08a60",
@@ -54,7 +54,19 @@
       "startedAt": "2026-08-26T01:47:19.222Z",
       "previousSubagentRunId": "launch:investigate-1:bb46a40e-ac62-4a46-9c77-b087423d6803",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "verificationResults": [],
+      "outcome": "invalid",
+      "evidence": [
+        "Issue #71 states that it is a disposable concurrency probe, is intentionally not an actionable product change, and should be classified invalid/no-code.",
+        "The issue explicitly requests closure without repository edits after the lane is observed.",
+        "src/core/dispatcher.ts routes completed investigations with outcome invalid directly to close and then cleanup, bypassing implementation phases.",
+        "test/core/dispatcher.test.ts covers invalid and decomposed investigations routing to close without implementation.",
+        "src/workflows/orchestrate.ts records completed closed lanes as closed without code after invalid/decomposed investigation.",
+        "This read-only investigation made no repository changes; head remains the frozen base SHA 1b018483cd94b8324ae7e34eaa07293861f4f491."
+      ],
+      "finishedAt": "2026-08-26T01:49:33.784Z"
     }
   },
   "effects": {},
@@ -66,7 +78,8 @@
     "node:resolve-1:completed": "c0ebbb07-b962-4493-be87-8b84e21ca520",
     "node:investigate-1:queued": "ffa77def-fa0f-46b0-9c08-f825e180141c",
     "node:investigate-1:started": "21bba0dd-8ffb-43b6-af4d-00ee83b339ee",
-    "node:investigate-1:attempt:1:launch-receipt:bb46a40e-ac62-4a46-9c77-b087423d6803:dc18de30-ad9a-4310-915b-295750b08a60": "5d358460-eebb-46c7-973e-b44468997e02"
+    "node:investigate-1:attempt:1:launch-receipt:bb46a40e-ac62-4a46-9c77-b087423d6803:dc18de30-ad9a-4310-915b-295750b08a60": "5d358460-eebb-46c7-973e-b44468997e02",
+    "node:investigate-1:completed": "5aca24b8-868f-4569-b86f-19b3655c2fd9"
   },
   "eventIds": {
     "43057633-25bd-4eb6-859d-2ee202b50f8e": true,
@@ -76,6 +89,7 @@
     "c0ebbb07-b962-4493-be87-8b84e21ca520": true,
     "ffa77def-fa0f-46b0-9c08-f825e180141c": true,
     "21bba0dd-8ffb-43b6-af4d-00ee83b339ee": true,
-    "5d358460-eebb-46c7-973e-b44468997e02": true
+    "5d358460-eebb-46c7-973e-b44468997e02": true,
+    "5aca24b8-868f-4569-b86f-19b3655c2fd9": true
   }
 }
