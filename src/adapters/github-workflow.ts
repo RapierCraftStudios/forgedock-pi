@@ -446,6 +446,15 @@ export class GitHubWorkflowAdapter {
       ...(signal ? { signal } : {}),
     });
     if (response.status === 404) return;
+    if (response.status === 422) {
+      const readPath = `${this.#apiRoot}/git/ref/heads/${encodeURIComponent(branch)}`;
+      const readBack = await this.#transport.request<unknown>({
+        method: "GET",
+        path: readPath,
+        ...(signal ? { signal } : {}),
+      });
+      if (readBack.status === 404) return;
+    }
     requireGitHubSuccess(response, path, [204]);
   }
 

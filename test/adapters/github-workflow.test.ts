@@ -73,6 +73,36 @@ test("PR lookup qualifies and exactly matches the bound head branch", async () =
   assert.equal(pull?.headSha, "right-sha");
 });
 
+test("branch deletion reconciles a missing auto-deleted ref", async () => {
+  const transport = new MockTransport((request) => {
+    if (request.method === "DELETE")
+      return response(422, { message: "Reference does not exist" });
+    if (request.method === "GET" && request.path.includes("/git/ref/heads/"))
+      return response(404, { message: "Not Found" });
+    throw new Error(`Unexpected request ${request.method} ${request.path}`);
+  });
+  const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
+  await assert.doesNotReject(
+    adapter.deleteBranch("forge/issue-2-run"),
+  );
+  assert.equal(transport.requests.length, 2);
+});
+
+test("branch deletion keeps a real 422 failure", async () => {
+  const transport = new MockTransport((request) => {
+    if (request.method === "DELETE")
+      return response(422, { message: "Validation Failed" });
+    if (request.method === "GET" && request.path.includes("/git/ref/heads/"))
+      return response(200, { object: { sha: "still-present" } });
+    throw new Error(`Unexpected request ${request.method} ${request.path}`);
+  });
+  const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
+  await assert.rejects(
+    adapter.deleteBranch("forge/issue-2-run"),
+    /GitHub API 422/,
+  );
+});
+
 test("GitHub CI gate follows required checks on the exact reviewed SHA", async () => {
   const transport = new MockTransport((request) => {
     const shared = common(request);
