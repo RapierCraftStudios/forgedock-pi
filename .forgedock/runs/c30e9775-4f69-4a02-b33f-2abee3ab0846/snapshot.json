@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 35,
-  "lastEventHash": "sha256:e5bb9225ac05655180f4c0e2f877cce42905297245f0c923881c7b0dfc4d9237",
+  "sequence": 36,
+  "lastEventHash": "sha256:6b019e5e3d28c2ac715eda76a5d7f3ac551974267eee425e30392893cccdb3e8",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -206,12 +206,17 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "reconcile and retry parent-owned cleanup",
-          "evidence": [],
+          "evidence": [
+            "Reconciled the existing run binding c30e9775-4f69-4a02-b33f-2abee3ab0846; no new run, worktree, branch, commit, or PR was created.",
+            "The bound worktree diff remains limited to the previously committed implementation and regression-test paths: src/agents/materialize.ts, src/agents/register.ts, and test/agents-materialize.test.ts.",
+            "Merge and issue-close phases are already durably complete; cleanup is now marked complete for the existing run."
+          ],
           "logicalNodeId": "parent-cleanup-1",
-          "startedAt": "2026-08-26T10:56:11.084Z"
+          "startedAt": "2026-08-26T10:56:11.084Z",
+          "finishedAt": "2026-08-26T11:08:34.928Z"
         }
       ]
     }
@@ -278,7 +283,8 @@
     "effect:issue:93:close": "3e6257b6-5941-423b-9480-c20d9e11b6e4",
     "phase:close:1:complete": "8cdb759d-6e0e-4867-8beb-41615c0c3e2a",
     "phase:cleanup:1:queue": "81192251-8b24-4448-b4b3-d83d70d9984e",
-    "phase:cleanup:1:start": "86ed41f8-3c34-4165-af76-73c431d71a85"
+    "phase:cleanup:1:start": "86ed41f8-3c34-4165-af76-73c431d71a85",
+    "phase:cleanup:1:complete": "7876ccc6-6bba-4fa9-a618-f3f8240ac5a7"
   },
   "eventIds": {
     "c9339e85-e4dc-47ef-8416-edc58e3220c6": true,
@@ -315,7 +321,8 @@
     "3e6257b6-5941-423b-9480-c20d9e11b6e4": true,
     "8cdb759d-6e0e-4867-8beb-41615c0c3e2a": true,
     "81192251-8b24-4448-b4b3-d83d70d9984e": true,
-    "86ed41f8-3c34-4165-af76-73c431d71a85": true
+    "86ed41f8-3c34-4165-af76-73c431d71a85": true,
+    "7876ccc6-6bba-4fa9-a618-f3f8240ac5a7": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
