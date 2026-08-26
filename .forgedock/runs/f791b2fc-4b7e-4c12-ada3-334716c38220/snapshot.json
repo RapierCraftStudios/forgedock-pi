@@ -7,23 +7,28 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 4,
-  "lastEventHash": "sha256:fe253f9cf888ae7f7b9e3864583307cf719bf24e9741b82ec09bbdea677f7849",
+  "sequence": 5,
+  "lastEventHash": "sha256:83929361631bfbc893cb0f8145a40f83f52342ca953a7d3bb34408e7f3698db1",
   "phases": {
     "resolve": {
       "phase": "resolve",
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume resolve attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Resolve preflight completed for the bound repository and issue.",
+            ".forge/config.json was validated by the trusted parent before worktree creation; origin/staging is the bound integration branch and main is protected.",
+            "Issue #93 is open, unassigned, non-terminal, and has no active ForgeDock ownership marker; related issue #49 is closed and distinct because it targeted dogfood."
+          ],
           "logicalNodeId": "resolve-1",
           "startedAt": "2026-08-26T09:09:10.625Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/f791b2fc-4b7e-4c12-ada3-334716c38220",
           "branch": "forge/issue-93-f791b2fc",
-          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4"
+          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4",
+          "finishedAt": "2026-08-26T09:09:40.054Z"
         }
       ]
     }
@@ -34,13 +39,15 @@
     "run:create": "6b23cbe2-b6e1-4442-9263-5f6f78ad21ce",
     "lease:acquire:1": "93bde2e5-2353-4e35-a4a8-30722e9e2799",
     "phase:resolve:1:queue": "f9d63e43-430b-431c-be87-05050603a592",
-    "phase:resolve:1:start": "e7c22eb3-81ce-43c8-94ef-df58e992647d"
+    "phase:resolve:1:start": "e7c22eb3-81ce-43c8-94ef-df58e992647d",
+    "phase:resolve:1:complete": "f9548ecf-1c60-42d7-b7f9-e190480cb683"
   },
   "eventIds": {
     "6b23cbe2-b6e1-4442-9263-5f6f78ad21ce": true,
     "93bde2e5-2353-4e35-a4a8-30722e9e2799": true,
     "f9d63e43-430b-431c-be87-05050603a592": true,
-    "e7c22eb3-81ce-43c8-94ef-df58e992647d": true
+    "e7c22eb3-81ce-43c8-94ef-df58e992647d": true,
+    "f9548ecf-1c60-42d7-b7f9-e190480cb683": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
