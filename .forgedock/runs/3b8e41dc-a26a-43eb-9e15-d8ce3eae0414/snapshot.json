@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:ce3a22dd51aba1740b45dd644567f7a5c70667a15e25657b9f2cca6cc705ad52",
+  "sequence": 8,
+  "lastEventHash": "sha256:e8df5673c3962e5f007a379e52afc66afb28717fededbdea0f9a5c8d01f2db44",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -38,15 +38,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/core/policy.ts` models verification commands as argv, required, and timeout only, and rejects an empty command map even though the trusted run policy uses empty commands for CI-parent-owned verification.",
+            "`src/workflows/work-on.ts` loads policy and performs GitHub/state setup, then prepares the writer worktree and materializes agents without a local command feasibility preflight.",
+            "`src/agents/child-runtime.ts` executes every approved check with the assigned worktree root as cwd; the binding has no command working-directory field.",
+            "`src/ui/commands.ts` copies the template without inspecting package manifests; `templates/config.json` unconditionally names root `npm test`.",
+            "No verification-preflight adapter or monorepo fixture exists in the assigned base. Existing gate mapping in `verificationForGate` already treats missing/failed required results as blocking unknown/failed evidence.",
+            "Repository guidance requires deterministic fail-closed behavior, one writer per worktree, and regression tests for safety or recovery fixes."
+          ],
           "logicalNodeId": "investigate-1",
           "startedAt": "2026-08-26T12:03:31.070Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/3b8e41dc-a26a-43eb-9e15-d8ce3eae0414",
           "branch": "forge/issue-94-3b8e41dc",
-          "baseSha": "26139ba278b95578a300c597ec35495a7d502eb6"
+          "baseSha": "26139ba278b95578a300c597ec35495a7d502eb6",
+          "finishedAt": "2026-08-26T12:06:19.188Z"
         }
       ]
     }
@@ -60,7 +68,8 @@
     "phase:resolve:1:start": "bc892dfb-c17a-4aca-a4b8-7ea988a48504",
     "phase:resolve:1:complete": "55413754-2308-4942-93ea-e14d2c3fdea3",
     "phase:investigate:1:queue": "650769b5-6c48-4547-a057-83738c649a09",
-    "phase:investigate:1:start": "6bd3059f-0643-4e35-ab60-8284fab73bfb"
+    "phase:investigate:1:start": "6bd3059f-0643-4e35-ab60-8284fab73bfb",
+    "phase:investigate:1:complete": "65d24edb-9575-4960-9d93-d6d9a7036c0e"
   },
   "eventIds": {
     "dea8530b-0f60-4fbf-8188-84e3df4b2153": true,
@@ -69,7 +78,8 @@
     "bc892dfb-c17a-4aca-a4b8-7ea988a48504": true,
     "55413754-2308-4942-93ea-e14d2c3fdea3": true,
     "650769b5-6c48-4547-a057-83738c649a09": true,
-    "6bd3059f-0643-4e35-ab60-8284fab73bfb": true
+    "6bd3059f-0643-4e35-ab60-8284fab73bfb": true,
+    "65d24edb-9575-4960-9d93-d6d9a7036c0e": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
