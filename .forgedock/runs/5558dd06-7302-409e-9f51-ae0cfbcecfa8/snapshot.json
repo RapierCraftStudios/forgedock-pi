@@ -10,8 +10,8 @@
     "ownerRunId": "44d1a4f5-72e7-4376-bb09-d18ec16a6296",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:7e7ed5ed731c03d1772a0b491d1fb7d0c993e56f8cc63d219294375b48b24024",
+  "sequence": 9,
+  "lastEventHash": "sha256:29d7a05844c9bcaf5adc88d8d8e8b01ee68ae153c1894aaa932ea45b2e41cf13",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -47,7 +47,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/5558dd06-7302-409e-9f51-ae0cfbcecfa8/.pi/forge/5558dd06-7302-409e-9f51-ae0cfbcecfa8-investigate-1.json",
       "subagentRunId": "f456cc07-2a04-4f57-88af-e2b556b83518",
@@ -56,7 +56,20 @@
       "startedAt": "2026-08-26T03:02:07.472Z",
       "previousSubagentRunId": "launch:investigate-1:3af10abb-be19-48e7-9190-587d663cd255",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "verificationResults": [],
+      "outcome": "confirmed",
+      "evidence": [
+        "src/workflows/work-on.ts:1736-1810 durably queues and starts bounded child nodes without projecting a workflow label.",
+        "src/workflows/work-on.ts:889-958 publishes completed node artifacts and appends node.completed without projecting a workflow label.",
+        "src/workflows/work-on.ts:1253-1258 and 1614 append parent-owned node start/completion events but do not reconcile workflow labels.",
+        "src/workflows/work-on.ts:625-629 and 2800-2804 only set investigating at legacy run initialization and merged in the legacy finalization path; the bounded parent-node cleanup path at 1614-1635 does not set merged.",
+        "src/agents/child-runtime.ts:647-651 sets in-review only as a prepare-PR side effect, while allowedNodeTools at 1049-1058 excludes forge_checkpoint from bounded nodes, leaving the legacy checkpoint label mapping at 1340-1369 unused by this workflow.",
+        "src/adapters/github-projection.ts:182-211 already provides the required replacement primitive: it filters every workflow:* label, retains unrelated labels, adds the requested canonical label, and PUTs the full label set.",
+        "test/adapters/github-projection.test.ts:101-104 verifies one isolated investigating-to-merged replacement and preservation of bug, but no test drives canonical labels across the bounded node lifecycle."
+      ],
+      "finishedAt": "2026-08-26T03:05:26.336Z"
     }
   },
   "effects": {},
@@ -68,7 +81,8 @@
     "node:resolve-1:completed": "d733bca2-c330-4ce1-8082-6b6498ffcdd0",
     "node:investigate-1:queued": "3e267c8e-64d2-4a22-a8b2-99cb9a8f45be",
     "node:investigate-1:started": "692e4225-bb46-45cc-8612-e4e8073e1ab9",
-    "node:investigate-1:receipt-bound": "b9780f05-b9d3-411b-969e-323a5e8c6304"
+    "node:investigate-1:receipt-bound": "b9780f05-b9d3-411b-969e-323a5e8c6304",
+    "node:investigate-1:completed": "363cbcb3-f622-431a-9152-30366d6df428"
   },
   "eventIds": {
     "d8eb0bc8-a4c7-4555-8f31-2e126e776afc": true,
@@ -78,6 +92,7 @@
     "d733bca2-c330-4ce1-8082-6b6498ffcdd0": true,
     "3e267c8e-64d2-4a22-a8b2-99cb9a8f45be": true,
     "692e4225-bb46-45cc-8612-e4e8073e1ab9": true,
-    "b9780f05-b9d3-411b-969e-323a5e8c6304": true
+    "b9780f05-b9d3-411b-969e-323a5e8c6304": true,
+    "363cbcb3-f622-431a-9152-30366d6df428": true
   }
 }
