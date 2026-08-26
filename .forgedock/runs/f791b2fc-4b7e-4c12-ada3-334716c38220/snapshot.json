@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:61639d5597b3f8aaa052cb1f5f633c2e4273b8d015e053f4b0a84967f71c2563",
+  "sequence": 8,
+  "lastEventHash": "sha256:e6499d1d4f6209ab5054d30783d0b202f370e0ec39f0de2fa4572e117fa20f29",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -37,16 +37,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Frozen base inspection found read-only reviewer registrations with completionGuard: true in src/agents/register.ts.",
+            "src/agents/materialize.ts hardcodes completionGuard: true in generated agent front matter for every role.",
+            "The writer forge-work-on role must retain completionGuard: true; the defect is role-specific guard configuration, not the trusted checkpoint or result schema.",
+            "The related closed issue #49 and merged PR #57 describe the same failure mode but targeted a different branch; issue #93 tracks shipping the equivalent fix on the consumer path."
+          ],
           "inputArtifactHash": "resolve-1",
           "logicalNodeId": "investigate-1",
           "startedAt": "2026-08-26T09:10:10.987Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/f791b2fc-4b7e-4c12-ada3-334716c38220",
           "branch": "forge/issue-93-f791b2fc",
-          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4"
+          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4",
+          "finishedAt": "2026-08-26T09:12:14.530Z"
         }
       ]
     }
@@ -60,7 +66,8 @@
     "phase:resolve:1:start": "e7c22eb3-81ce-43c8-94ef-df58e992647d",
     "phase:resolve:1:complete": "f9548ecf-1c60-42d7-b7f9-e190480cb683",
     "phase:investigate:1:queue": "cdcfa946-877e-46af-ab89-3f675ffe22e4",
-    "phase:investigate:1:start": "30da9f0a-577d-4003-ac3b-c41c3622cc29"
+    "phase:investigate:1:start": "30da9f0a-577d-4003-ac3b-c41c3622cc29",
+    "phase:investigate:1:complete": "36d84552-b53d-4a1f-96a4-b337374783ff"
   },
   "eventIds": {
     "6b23cbe2-b6e1-4442-9263-5f6f78ad21ce": true,
@@ -69,7 +76,8 @@
     "e7c22eb3-81ce-43c8-94ef-df58e992647d": true,
     "f9548ecf-1c60-42d7-b7f9-e190480cb683": true,
     "cdcfa946-877e-46af-ab89-3f675ffe22e4": true,
-    "30da9f0a-577d-4003-ac3b-c41c3622cc29": true
+    "30da9f0a-577d-4003-ac3b-c41c3622cc29": true,
+    "36d84552-b53d-4a1f-96a4-b337374783ff": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
