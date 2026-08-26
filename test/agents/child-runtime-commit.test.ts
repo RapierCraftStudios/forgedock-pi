@@ -31,6 +31,7 @@ import {
   parseBoundReviewerResult,
   parseGitStatusPaths,
   reviewerStatusIsTerminal,
+  workflowLabelForCheckpoint,
   writeTrustedResultFile,
 } from "../../src/agents/child-runtime.ts";
 import { FORGE_WORK_ON_TOOLS } from "../../src/agents/register.ts";
@@ -73,6 +74,47 @@ test("every bounded non-review node can persist its trusted result", () => {
     allowedNodeTools("review-architecture").has("forge_finalize_node"),
     false,
   );
+});
+
+test("direct checkpoint transitions project the canonical workflow lifecycle", () => {
+  const label = (
+    phase: Parameters<typeof workflowLabelForCheckpoint>[0]["phase"],
+    action: Parameters<typeof workflowLabelForCheckpoint>[0]["action"],
+    report?: string,
+  ) => workflowLabelForCheckpoint({ phase, action, ...(report ? { report } : {}) });
+
+  assert.equal(label("resolve", "start"), "workflow:investigating");
+  assert.equal(label("resolve", "complete"), "workflow:investigating");
+  assert.equal(label("investigate", "start"), "workflow:investigating");
+  assert.equal(
+    label("investigate", "complete", "**Verdict**: CONFIRMED"),
+    "workflow:ready-to-build",
+  );
+  assert.equal(
+    label("investigate", "complete", "**Verdict**: INVALID"),
+    "workflow:invalid",
+  );
+  assert.equal(
+    label("investigate", "complete", "**Verdict**: DECOMPOSED"),
+    "workflow:decomposed",
+  );
+
+  for (const phase of [
+    "plan",
+    "prepare-worktree",
+    "implement",
+    "verify",
+  ] as const) {
+    assert.equal(label(phase, "start"), "workflow:building");
+    assert.equal(label(phase, "complete"), "workflow:building");
+  }
+  assert.equal(label("review", "start"), "workflow:in-review");
+  assert.equal(label("review", "complete"), "workflow:awaiting-merge");
+  assert.equal(label("merge", "start"), "workflow:awaiting-merge");
+  assert.equal(label("merge", "complete"), "workflow:merged");
+  assert.equal(label("close", "complete"), "workflow:merged");
+  assert.equal(label("cleanup", "complete"), "workflow:merged");
+  assert.equal(label("verify", "queue"), undefined);
 });
 
 test("read-only nodes deny shell and file mutation tools", () => {

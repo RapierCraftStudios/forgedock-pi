@@ -41,6 +41,7 @@ import {
   normalizeVerificationCommandCwd,
   type ForgePolicy,
 } from "../core/policy.ts";
+import { WORKFLOW_LABEL_BY_STAGE } from "../core/artifact-protocol.ts";
 import {
   RUN_PHASES,
   type RunEvent,
@@ -1926,36 +1927,70 @@ async function postDerivedPhaseArtifacts(
   }
 }
 
-function workflowLabelForCheckpoint(params: {
+type CheckpointAction =
+  | "queue"
+  | "start"
+  | "complete"
+  | "fail"
+  | "block"
+  | "needs-human"
+  | "abandon";
+
+type WorkflowLabelStage = keyof typeof WORKFLOW_LABEL_BY_STAGE;
+
+const WORKFLOW_STAGE_BY_CHECKPOINT_PHASE: Readonly<
+  Record<RunPhase, WorkflowLabelStage>
+> = {
+  resolve: "investigation",
+  investigate: "investigation",
+  plan: "build",
+  "prepare-worktree": "build",
+  implement: "build",
+  verify: "build",
+  review: "review",
+  merge: "awaitingMerge",
+  close: "merged",
+  cleanup: "merged",
+};
+
+export function workflowLabelForCheckpoint(params: {
   phase: RunPhase;
-  action:
-    | "queue"
-    | "start"
-    | "complete"
-    | "fail"
-    | "block"
-    | "needs-human"
-    | "abandon";
+  action: CheckpointAction;
   report?: string;
 }): string | undefined {
-  if (params.action === "start") {
-    if (params.phase === "investigate") return "workflow:investigating";
-    if (
-      params.phase === "plan" ||
-      params.phase === "prepare-worktree" ||
-      params.phase === "implement" ||
-      params.phase === "verify"
-    ) {
-      return "workflow:building";
-    }
-    if (params.phase === "review") return "workflow:in-review";
+  // Queued phases are durable scheduling records, not active workflow state.
+  if (params.action === "queue") return undefined;
+
+  if (params.phase === "investigate" && params.action === "complete") {
+    const investigationOutcome = investigationOutcomeFromReport(params.report);
+    if (investigationOutcome)
+      return WORKFLOW_LABEL_BY_STAGE[investigationOutcome];
+    return WORKFLOW_LABEL_BY_STAGE.readyToBuild;
   }
-  if (params.action === "complete" && params.phase === "investigate") {
-    return params.report?.includes("**Verdict**: INVALID")
-      ? "workflow:invalid"
-      : "workflow:ready-to-build";
-  }
-  return undefined;
+
+  // A completed merge is the only terminal success boundary. The other
+  // merge actions retain awaiting-merge so a failed/paused merge is visible as
+  // pending integration rather than falsely projected as merged.
+  const stage =
+    params.phase === "merge" && params.action === "complete"
+      ? "merged"
+      : params.phase === "review" && params.action === "complete"
+        ? "awaitingMerge"
+        : WORKFLOW_STAGE_BY_CHECKPOINT_PHASE[params.phase];
+  return WORKFLOW_LABEL_BY_STAGE[stage];
+}
+
+function investigationOutcomeFromReport(
+  report: string | undefined,
+): Extract<WorkflowLabelStage, "invalid" | "decomposed"> | "readyToBuild" | undefined {
+  if (!report) return undefined;
+  const verdict = report.match(
+    /(?:^|\n)\s*(?:#{1,6}\s*)?(?:\*\*)?Verdict(?:\*\*)?\s*:?\s*(?:\*\*)?([a-z-]+)/i,
+  )?.[1]?.toLowerCase();
+  if (verdict === "invalid") return "invalid";
+  if (verdict === "decompose" || verdict === "decomposed")
+    return "decomposed";
+  return "readyToBuild";
 }
 
 function validatePhaseReport(phase: RunPhase, report: string): void {

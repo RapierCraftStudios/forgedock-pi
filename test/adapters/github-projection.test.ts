@@ -99,11 +99,19 @@ test("issue projection is marker-idempotent and only adds missing labels", async
   assert.equal(transport.labels.has("workflow:investigating"), true);
 
   transport.labels.add("priority:P1");
+  transport.labels.add("needs-human");
+  transport.labels.add("workflow:stale");
   await projector.setWorkflowLabel(42, "workflow:merged");
   await projector.setWorkflowLabel(42, "workflow:merged");
   assert.equal(transport.labels.has("workflow:investigating"), false);
+  assert.equal(transport.labels.has("workflow:stale"), false);
   assert.equal(transport.labels.has("workflow:merged"), true);
+  assert.equal(
+    [...transport.labels].filter((label) => label.startsWith("workflow:")).length,
+    1,
+  );
   assert.equal(transport.labels.has("bug"), true);
+  assert.equal(transport.labels.has("needs-human"), true);
   assert.equal(transport.labels.has("priority:P1"), true);
 });
 
