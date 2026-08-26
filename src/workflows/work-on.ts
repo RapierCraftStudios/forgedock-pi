@@ -3602,6 +3602,12 @@ export class ForgeWorkOnController {
       sessionId,
       ctx.signal,
     );
+    await this.#projectWorkflowStage(
+      link,
+      workflowStageForNodeTransition("merge", "started"),
+      ctx,
+      projector,
+    );
     if (!existingPull || existingPull.headSha !== actualHead)
       await this.#git.push(
         link.prepared.worktreePath,
