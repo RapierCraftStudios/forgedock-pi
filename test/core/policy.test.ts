@@ -37,6 +37,41 @@ test("tracked policy enables only non-protected integration auto-merge", () => {
   assert.equal(canAutoMerge(policy, "milestone/auth"), true);
   assert.equal(canAutoMerge(policy, "main"), false);
   assert.equal(isProtectedBranch(policy, "main"), true);
+  assert.equal(policy.verification.commands.test?.cwd, ".");
+});
+
+test("verification cwd is portable, relative, and normalized", () => {
+  const withCwd = (cwd: string) => ({
+    ...rawPolicy,
+    verification: {
+      commands: {
+        test: { ...rawPolicy.verification.commands.test, cwd },
+      },
+    },
+  });
+  assert.equal(
+    parseForgePolicy(withCwd("./web")).verification.commands.test?.cwd,
+    "web",
+  );
+  for (const cwd of [
+    "/tmp",
+    "C:/tmp",
+    "\\\\server\\share",
+    "../web",
+    "web/../api",
+    "web\\api",
+    "bad\0path",
+  ]) {
+    assert.throws(() => parseForgePolicy(withCwd(cwd)), PolicyValidationError);
+  }
+});
+
+test("empty local verification is valid for CI-owned checks", () => {
+  const policy = parseForgePolicy({
+    ...rawPolicy,
+    verification: { commands: {} },
+  });
+  assert.deepEqual(policy.verification.commands, {});
 });
 
 test("local overrides can only tighten tracked policy", () => {

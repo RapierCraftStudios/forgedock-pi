@@ -19,7 +19,8 @@
       "test": {
         "argv": ["npm", "test"],
         "required": true,
-        "timeoutMs": 600000
+        "timeoutMs": 600000,
+        "cwd": "."
       }
     }
   },

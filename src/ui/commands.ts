@@ -1,5 +1,5 @@
-import { access, copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { access, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -62,10 +62,12 @@ export function registerForgeCommands(
       const templatePath = fileURLToPath(
         new URL("../../templates/config.json", import.meta.url),
       );
-      await mkdir(dirname(configPath), { recursive: true });
-      await copyFile(templatePath, configPath);
-      const config = parseTemplateConfig(await readFile(configPath, "utf8"));
+      const config = parseTemplateConfig(await readFile(templatePath, "utf8"));
       config.repository.name = repoResult.stdout.trim();
+      config.verification = {
+        commands: await discoverVerificationCommands(root),
+      };
+      await mkdir(dirname(configPath), { recursive: true });
       await writeFile(
         configPath,
         `${JSON.stringify(config, null, 2)}\n`,
@@ -178,6 +180,9 @@ export function registerForgeCommands(
 
 interface TemplateConfig {
   repository: { name: string };
+  verification?: {
+    commands?: Record<string, unknown>;
+  };
   [key: string]: unknown;
 }
 
@@ -212,6 +217,86 @@ function parseTemplateConfig(text: string): TemplateConfig {
       name: (repository as Record<string, unknown>).name as string,
     },
   };
+}
+
+interface InitVerificationCommand {
+  argv: string[];
+  required: boolean;
+  timeoutMs: number;
+  cwd: string;
+}
+
+export async function discoverVerificationCommands(
+  repositoryRoot: string,
+): Promise<Record<string, InitVerificationCommand>> {
+  const packageDirectories = await packageManifestDirectories(repositoryRoot);
+  for (const directory of packageDirectories) {
+    const manifest = await readPackageManifest(directory);
+    if (hasScript(manifest, "test")) {
+      const cwd = relative(repositoryRoot, directory).split("\\").join("/") || ".";
+      return {
+        test: {
+          argv: ["npm", "test"],
+          required: true,
+          timeoutMs: 600_000,
+          cwd,
+        },
+      };
+    }
+  }
+  return {};
+}
+
+async function packageManifestDirectories(repositoryRoot: string): Promise<string[]> {
+  const directories: string[] = [];
+  const visit = async (directory: string, depth: number): Promise<void> => {
+    directories.push(directory);
+    if (depth >= 3) return;
+    let entries;
+    try {
+      entries = await readdir(directory, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries
+      .filter(
+        (candidate) =>
+          candidate.isDirectory() &&
+          !candidate.name.startsWith(".") &&
+          !["node_modules", "dist", "build", "coverage"].includes(candidate.name),
+      )
+      .sort((left, right) => left.name.localeCompare(right.name))) {
+      await visit(join(directory, entry.name), depth + 1);
+    }
+  };
+  await visit(repositoryRoot, 0);
+  return directories;
+}
+
+async function readPackageManifest(
+  directory: string,
+): Promise<Record<string, unknown> | undefined> {
+  try {
+    const value: unknown = JSON.parse(
+      await readFile(join(directory, "package.json"), "utf8"),
+    );
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      return undefined;
+    return value as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+}
+
+function hasScript(
+  manifest: Record<string, unknown> | undefined,
+  name: string,
+): boolean {
+  const scripts = manifest?.scripts;
+  if (!scripts || typeof scripts !== "object" || Array.isArray(scripts))
+    return false;
+  const value = (scripts as Record<string, unknown>)[name];
+  return typeof value === "string" && value.trim().length > 0;
 }
 
 async function pathExists(path: string): Promise<boolean> {

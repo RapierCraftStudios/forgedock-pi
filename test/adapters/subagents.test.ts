@@ -132,6 +132,7 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
   assert.match(spawn.params.workflowScript, /forge-review-correctness/);
   assert.match(spawn.params.workflowScript, /forge-review-security/);
   assert.match(spawn.params.workflowScript, /forgedock\.pi\/1/);
+  assert.match(spawn.params.workflowScript, /verificationCommands.*cwd/);
   assert.doesNotMatch(spawn.params.workflowScript, /gh auth token/);
 });
 

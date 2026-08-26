@@ -55,6 +55,7 @@ interface BoundVerificationCommand {
   argv: readonly string[];
   required: boolean;
   timeoutMs: number;
+  cwd: string;
 }
 
 interface ForgeChildBinding {
@@ -424,14 +425,20 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           `Verification command '${params.name}' has an empty argv.`,
         );
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const commandCwd = await canonicalizePotentialPath(root, command.cwd);
+      if (!isPathWithin(root, commandCwd)) {
+        throw new Error(
+          `Verification command '${params.name}' cwd escapes the assigned worktree.`,
+        );
+      }
       onUpdate?.({
         content: [
           { type: "text", text: `Running approved check ${params.name}...` },
         ],
-        details: { name: params.name, status: "running" },
+        details: { name: params.name, cwd: command.cwd, status: "running" },
       });
       const result = await runProcess(program, args, {
-        cwd: root,
+        cwd: commandCwd,
         timeoutMs: command.timeoutMs,
         env: safeEnvironment(binding.runId),
         ...(signal ? { signal } : {}),
@@ -454,6 +461,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         ],
         details: {
           name: params.name,
+          cwd: command.cwd,
           required: command.required,
           status,
           exitCode: result.exitCode,
@@ -838,6 +846,18 @@ function validateBoundCommand(
   }
   if (typeof command.required !== "boolean")
     throw new Error(`Verification binding ${name}.required must be boolean.`);
+  if (typeof command.cwd !== "string" || !command.cwd.trim())
+    throw new Error(`Verification binding ${name}.cwd must be a non-empty string.`);
+  if (
+    isAbsolute(command.cwd) ||
+    command.cwd.includes("\\") ||
+    command.cwd.includes("\0") ||
+    command.cwd.split("/").includes("..")
+  ) {
+    throw new Error(
+      `Verification binding ${name}.cwd must be a repository-relative POSIX path.`,
+    );
+  }
   if (
     !Number.isSafeInteger(command.timeoutMs) ||
     (command.timeoutMs as number) < 1_000

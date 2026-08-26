@@ -1,0 +1,7 @@
+{
+  "name": "verification-monorepo-web",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  }
+}

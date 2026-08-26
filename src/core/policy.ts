@@ -1,9 +1,12 @@
+import { posix } from "node:path";
+
 export const FORGEDOCK_CONFIG_SCHEMA = "forgedock.config/v1" as const;
 
 export interface VerificationCommandPolicy {
   argv: readonly string[];
   required: boolean;
   timeoutMs: number;
+  cwd: string;
 }
 
 export interface ForgePolicy {
@@ -104,6 +107,32 @@ function stringArray(value: unknown, path: string): string[] {
   ];
 }
 
+function normalizeVerificationCommandCwd(
+  value: unknown,
+  path: string,
+): string {
+  const cwd = value === undefined ? "." : string(value, path);
+  if (cwd.includes("\0"))
+    throw new PolicyValidationError(path, "must not contain NUL bytes");
+  if (
+    cwd.includes("\\") ||
+    cwd.startsWith("/") ||
+    cwd.startsWith("//") ||
+    /^[A-Za-z]:/.test(cwd)
+  ) {
+    throw new PolicyValidationError(
+      path,
+      "must be a repository-relative POSIX path",
+    );
+  }
+  if (cwd.split("/").includes(".."))
+    throw new PolicyValidationError(path, "must not contain parent traversal");
+  const normalized = posix.normalize(cwd);
+  if (normalized === ".." || normalized.startsWith("../"))
+    throw new PolicyValidationError(path, "must remain inside the repository");
+  return normalized;
+}
+
 function parseVerificationCommands(
   value: unknown,
 ): Record<string, VerificationCommandPolicy> {
@@ -116,30 +145,20 @@ function parseVerificationCommands(
         "name must be lowercase kebab-case",
       );
     }
-    const command = record(raw, `verification.commands.${name}`);
-    const argv = stringArray(
-      command.argv,
-      `verification.commands.${name}.argv`,
-    );
+    const basePath = `verification.commands.${name}`;
+    const command = record(raw, basePath);
+    const argv = stringArray(command.argv, `${basePath}.argv`);
     commands[name] = {
       argv,
-      required: boolean(
-        command.required,
-        `verification.commands.${name}.required`,
-      ),
+      required: boolean(command.required, `${basePath}.required`),
       timeoutMs: integer(
         command.timeoutMs,
-        `verification.commands.${name}.timeoutMs`,
+        `${basePath}.timeoutMs`,
         1_000,
         3_600_000,
       ),
+      cwd: normalizeVerificationCommandCwd(command.cwd, `${basePath}.cwd`),
     };
-  }
-  if (Object.keys(commands).length === 0) {
-    throw new PolicyValidationError(
-      "verification.commands",
-      "must define at least one approved command",
-    );
   }
   return commands;
 }

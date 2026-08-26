@@ -10,6 +10,7 @@ import type {
 import { FetchGitHubTransport } from "../adapters/github-api.ts";
 import { loadForgePolicy } from "../adapters/config.ts";
 import { GitWorktreeManager, type PreparedWorktree } from "../adapters/git.ts";
+import { preflightVerificationCommands } from "../adapters/verification-preflight.ts";
 import { GitHubIssueProjector } from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
@@ -104,10 +105,15 @@ export class ForgeWorkOnController {
       ctx.cwd,
       ctx.signal,
     );
-    const { policy } = await loadForgePolicy(repositoryRoot);
+    const { policy, trackedPath } = await loadForgePolicy(repositoryRoot);
     const integrationBranch = chooseIntegrationBranch(policy);
     if (isProtectedBranch(policy, integrationBranch))
       throw new Error(`Integration branch ${integrationBranch} is protected.`);
+    await preflightVerificationCommands({
+      repositoryRoot,
+      configPath: trackedPath,
+      commands: policy.verification.commands,
+    });
     const token = await resolveGitHubToken(
       this.#pi,
       repositoryRoot,
