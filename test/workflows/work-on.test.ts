@@ -13,6 +13,7 @@ import {
   parentNodeFromId,
   parseAsyncCompletion,
   reconcileLaunchState,
+  retryWorkflowLabelProjection,
   reviewFindingMarker,
   reviewInstanceMarker,
   reviewSummaryInstanceMarker,
@@ -112,6 +113,46 @@ test("provider completion is buffered until its launch receipt is durably bound"
   assert.equal(shouldBufferLaunchCompletion(true, true), true);
   assert.equal(shouldBufferLaunchCompletion(false, false), true);
   assert.equal(shouldBufferLaunchCompletion(false, true), false);
+});
+
+test("workflow label compensation retries without the aborted merge signal", async () => {
+  const mergeController = new AbortController();
+  mergeController.abort(new Error("merge request aborted"));
+  const receivedSignals: (AbortSignal | undefined)[] = [];
+  let attempts = 0;
+
+  await retryWorkflowLabelProjection(
+    async (signal) => {
+      receivedSignals.push(signal);
+      attempts += 1;
+      if (attempts === 1) throw new Error("transient label failure");
+    },
+    { attempts: 2, delayMs: 0 },
+  );
+
+  assert.equal(attempts, 2);
+  assert.deepEqual(receivedSignals, [undefined, undefined]);
+  assert.equal(mergeController.signal.aborted, true);
+});
+
+test("workflow label compensation reports an exhausted rollback", async () => {
+  const rollbackFailure = new Error("labels unavailable");
+  let attempts = 0;
+
+  await assert.rejects(
+    retryWorkflowLabelProjection(
+      async () => {
+        attempts += 1;
+        throw rollbackFailure;
+      },
+      { attempts: 2, delayMs: 0 },
+    ),
+    (error: unknown) =>
+      error instanceof Error &&
+      error.message === "Workflow label projection failed after 2 attempts." &&
+      error.cause === rollbackFailure,
+  );
+  assert.equal(attempts, 2);
 });
 
 test("workflow transitions cover the complete canonical label lifecycle", () => {

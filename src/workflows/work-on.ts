@@ -574,36 +574,41 @@ export class ForgeWorkOnController {
     stage: WorkflowStage | undefined,
     ctx: ExtensionContext,
     projector?: GitHubIssueProjector,
+    options: { required?: boolean } = {},
   ): Promise<void> {
     if (!stage) return;
     const label = WORKFLOW_LABEL_BY_STAGE[stage];
     assertWorkflowLabel(label, stage);
     let lastError: unknown;
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
-      try {
-        const activeProjector =
-          projector ??
-          new GitHubIssueProjector(
-            new FetchGitHubTransport({
-              token: await resolveGitHubToken(
-                this.#pi,
-                link.prepared.repositoryRoot,
-              ),
-            }),
-            link.repository,
+    try {
+      await retryWorkflowLabelProjection(
+        async (signal) => {
+          const activeProjector =
+            projector ??
+            new GitHubIssueProjector(
+              new FetchGitHubTransport({
+                token: await resolveGitHubToken(
+                  this.#pi,
+                  link.prepared.repositoryRoot,
+                ),
+              }),
+              link.repository,
+            );
+          await activeProjector.setWorkflowLabel(
+            link.issueNumber,
+            label,
+            signal,
           );
-        await activeProjector.setWorkflowLabel(link.issueNumber, label);
-        return;
-      } catch (error) {
-        lastError = error;
-        if (attempt < 3)
-          await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
-      }
+        },
+      );
+      return;
+    } catch (error) {
+      lastError = error;
     }
-    ctx.ui.notify(
-      `ForgeDock issue #${link.issueNumber} durable state advanced, but workflow label projection will retry: ${errorMessage(lastError)}`,
-      "warning",
-    );
+    const message = `ForgeDock issue #${link.issueNumber} durable state advanced, but workflow label projection will retry: ${errorMessage(lastError)}`;
+    if (options.required)
+      throw new Error(message, { cause: lastError });
+    ctx.ui.notify(message, "warning");
   }
 
   async #reconcileWorkflowProjection(
@@ -2164,12 +2169,21 @@ export class ForgeWorkOnController {
       try {
         merged = await github.mergePullRequest({ pullNumber: pull.number, expectedHeadSha: pull.headSha, method: "squash", ...(ctx.signal ? { signal: ctx.signal } : {}) });
       } catch (error) {
-        await projector
-          .setWorkflowLabel(
-            link.issueNumber,
-            WORKFLOW_LABEL_BY_STAGE.review,
-          )
-          .catch(() => undefined);
+        try {
+          await this.#projectWorkflowStage(
+            link,
+            "review",
+            ctx,
+            projector,
+            { required: true },
+          );
+        } catch (rollbackError) {
+          throw new AggregateError(
+            [error, rollbackError],
+            "Merge failed and workflow label rollback failed.",
+            { cause: error },
+          );
+        }
         throw error;
       }
       headSha = merged.sha;
@@ -4115,6 +4129,46 @@ export class ForgeWorkOnController {
     for (const runId of Object.keys(link.activeNodes))
       this.#links.set(runId, link);
   }
+}
+
+export interface WorkflowLabelProjectionRetryOptions {
+  attempts?: number;
+  delayMs?: number;
+}
+
+/**
+ * Retry a label projection across the merge cancellation boundary.
+ *
+ * The callback is deliberately invoked with no caller signal. A merge request
+ * may be cancelled after its awaiting-merge label write becomes uncertain, but
+ * its compensating in-review projection must still be allowed to complete.
+ */
+export async function retryWorkflowLabelProjection(
+  project: (signal?: AbortSignal) => Promise<void>,
+  options: WorkflowLabelProjectionRetryOptions = {},
+): Promise<void> {
+  const attempts = options.attempts ?? 3;
+  const delayMs = options.delayMs ?? 500;
+  if (!Number.isSafeInteger(attempts) || attempts < 1)
+    throw new RangeError("Workflow label projection attempts must be positive.");
+  if (!Number.isFinite(delayMs) || delayMs < 0)
+    throw new RangeError("Workflow label projection delay must be non-negative.");
+
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await project(undefined);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts && delayMs > 0)
+        await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw new Error(
+    `Workflow label projection failed after ${attempts} attempt${attempts === 1 ? "" : "s"}.`,
+    { cause: lastError },
+  );
 }
 
 async function appendPhase(
