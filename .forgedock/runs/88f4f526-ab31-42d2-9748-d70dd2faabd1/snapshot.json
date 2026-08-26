@@ -5,10 +5,10 @@
   "issueNumber": 114,
   "integrationBranch": "staging",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "authorityMode": "run-scoped",
-  "sequence": 22,
-  "lastEventHash": "sha256:b412cb5311bbf13c0e33fb75bdb0c9f8427d55df41d375c1dad107cd9eb3d7d3",
+  "sequence": 23,
+  "lastEventHash": "sha256:30da51740f10d49b747b0a3b92cbf5077a3cc1e3ec7e20ffa7abda59be805f12",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -151,7 +151,7 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "abandoned",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 1",
           "evidence": [],
@@ -159,7 +159,9 @@
           "startedAt": "2026-08-26T23:29:52.579Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/88f4f526-ab31-42d2-9748-d70dd2faabd1",
           "branch": "forge/issue-114-88f4f526",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "reason": "Cancelled by the operator through /forge:cancel.",
+          "finishedAt": "2026-08-26T23:40:33.901Z"
         }
       ]
     }
@@ -188,7 +190,8 @@
     "phase:verify:1:start": "1c7a4765-49c8-4d48-bb24-6aaf38eaf71f",
     "phase:verify:1:complete": "ae75cb59-dc2c-4fe5-96bd-7d5495c0d842",
     "phase:review:1:queue": "56926567-5f63-4e66-a6c2-4e36d0f25d32",
-    "phase:review:1:start": "02285b6f-64f6-40e7-bef9-4145c16392b8"
+    "phase:review:1:start": "02285b6f-64f6-40e7-bef9-4145c16392b8",
+    "run:cancelled": "27547075-9c70-43fc-866f-01f8c144b371"
   },
   "eventIds": {
     "8164e76b-1828-4998-af32-c413ea50fb97": true,
@@ -212,7 +215,8 @@
     "1c7a4765-49c8-4d48-bb24-6aaf38eaf71f": true,
     "ae75cb59-dc2c-4fe5-96bd-7d5495c0d842": true,
     "56926567-5f63-4e66-a6c2-4e36d0f25d32": true,
-    "02285b6f-64f6-40e7-bef9-4145c16392b8": true
+    "02285b6f-64f6-40e7-bef9-4145c16392b8": true,
+    "27547075-9c70-43fc-866f-01f8c144b371": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
@@ -224,5 +228,6 @@
     "lastHeartbeatAt": "2026-08-26T23:01:51.841Z",
     "expiresAt": "2027-08-26T23:01:51.841Z",
     "takeoverRequired": false
-  }
+  },
+  "cancellationReason": "Cancelled by the operator through /forge:cancel."
 }
