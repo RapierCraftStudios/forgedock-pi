@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 16,
-  "lastEventHash": "sha256:e9f1dceb371d4041c1ec179106028068cca6c022ebc3774d562d46beecf9ece6",
+  "sequence": 17,
+  "lastEventHash": "sha256:235e0416e4dbf548019481b89431c7860ebed7eb1dd2eac90166745272f6851e",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -107,16 +107,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Implementation commit `64e69b05729c0ba69f3ab80776e034854f154d69` was created in the assigned worktree.",
+            "The shared checkpoint mapping is used by child-runtime label projection and parent-owned merge transitions now project awaiting-merge and merged.",
+            "Focused tests cover lifecycle mapping and replacement/preservation of stale workflow labels.",
+            "The patch is limited to the five allowed paths."
+          ],
           "inputArtifactHash": "sha256:prepare-worktree-complete",
           "logicalNodeId": "work-on/92/implement",
           "startedAt": "2026-08-26T10:43:38.949Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/58de845f-ff95-41f2-ad99-28f754518c40",
           "branch": "forge/issue-92-58de845f",
-          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4"
+          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4",
+          "finishedAt": "2026-08-26T10:47:09.497Z",
+          "commitSha": "64e69b05729c0ba69f3ab80776e034854f154d69"
         }
       ]
     }
@@ -139,7 +146,8 @@
     "phase:prepare-worktree:1:start": "f97f126e-26f1-47f0-bbf7-e673f4194abf",
     "phase:prepare-worktree:1:complete": "d3ad03f5-6860-45a1-b959-b3e0f7e91b1b",
     "phase:implement:1:queue": "c6279cc4-cf4c-4bcb-915f-9b1a1f4a320b",
-    "phase:implement:1:start": "44c79d27-dcb3-48f1-9322-a8f04690b18f"
+    "phase:implement:1:start": "44c79d27-dcb3-48f1-9322-a8f04690b18f",
+    "phase:implement:1:complete": "a55c6115-73da-442a-abfd-40b4e054e341"
   },
   "eventIds": {
     "74b757d4-9b6a-4e8c-94a7-4cdfa78371cc": true,
@@ -157,7 +165,8 @@
     "f97f126e-26f1-47f0-bbf7-e673f4194abf": true,
     "d3ad03f5-6860-45a1-b959-b3e0f7e91b1b": true,
     "c6279cc4-cf4c-4bcb-915f-9b1a1f4a320b": true,
-    "44c79d27-dcb3-48f1-9322-a8f04690b18f": true
+    "44c79d27-dcb3-48f1-9322-a8f04690b18f": true,
+    "a55c6115-73da-442a-abfd-40b4e054e341": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
