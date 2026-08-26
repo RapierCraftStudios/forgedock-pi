@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 10,
-  "lastEventHash": "sha256:cbf02b1f160eb6de84e66918300349ef0565b75b14611a80a54b08b665abaa10",
+  "sequence": 11,
+  "lastEventHash": "sha256:783152b08bb8db98e73e2602ec2df0c8b5bf228e9db4300ee526b4d2af33a7ab",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -60,16 +60,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Allowed paths are limited to the direct controller, workflow tests, and projection tests.",
+            "The existing stage mapping already defines merge-start as `awaitingMerge`; the missing operation is the direct-path invocation.",
+            "The adapter's read/replace/write behavior is retained as the label projection authority."
+          ],
           "inputArtifactHash": "investigate-92-labels",
           "logicalNodeId": "work-on/plan",
           "startedAt": "2026-08-26T19:20:13.619Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/fc4c825b-6b02-463b-bd23-efd3109643a0",
           "branch": "forge/issue-92-fc4c825b",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T19:21:11.006Z",
+          "outputArtifactHash": "plan-92-labels"
         }
       ]
     }
@@ -86,7 +92,8 @@
     "phase:investigate:1:start": "ae0acf78-7c6f-41e8-bac3-573aba20cf60",
     "phase:investigate:1:complete": "57b7b025-75fb-4f30-a845-85bf94d0526b",
     "phase:plan:1:queue": "dea0a7a6-5455-493c-a853-519252f96ecd",
-    "phase:plan:1:start": "8fd83c34-2c2b-4c58-8247-95f4a60f22d0"
+    "phase:plan:1:start": "8fd83c34-2c2b-4c58-8247-95f4a60f22d0",
+    "phase:plan:1:complete": "93b062b4-0174-46d1-8b7d-d80803b5b263"
   },
   "eventIds": {
     "4c861e72-4cff-47cc-b247-e917fe5fb5a8": true,
@@ -98,7 +105,8 @@
     "ae0acf78-7c6f-41e8-bac3-573aba20cf60": true,
     "57b7b025-75fb-4f30-a845-85bf94d0526b": true,
     "dea0a7a6-5455-493c-a853-519252f96ecd": true,
-    "8fd83c34-2c2b-4c58-8247-95f4a60f22d0": true
+    "8fd83c34-2c2b-4c58-8247-95f4a60f22d0": true,
+    "93b062b4-0174-46d1-8b7d-d80803b5b263": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
