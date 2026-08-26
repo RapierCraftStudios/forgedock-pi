@@ -135,6 +135,41 @@ test("uses CI-only mode when root package metadata is malformed", async () => {
       scripts: { test: "node --version" },
     });
     assert.equal(await discoverNpmTestPackage(root), undefined);
+
+    const malformedValueRoot = await mkdtemp(
+      join(tmpdir(), "forge-invalid-script-root-"),
+    );
+    try {
+      await packageJson(malformedValueRoot, ".", {
+        name: "invalid-root-package",
+        scripts: { test: 42 },
+      });
+      await packageJson(malformedValueRoot, "web", {
+        name: "web-package",
+        scripts: { test: "node --version" },
+      });
+      assert.equal(await discoverNpmTestPackage(malformedValueRoot), undefined);
+    } finally {
+      await rm(malformedValueRoot, { recursive: true, force: true });
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("uses CI-only mode for a dangling root package manifest symlink", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("requires symlink support");
+    return;
+  }
+  const root = await mkdtemp(join(tmpdir(), "forge-dangling-root-"));
+  try {
+    await symlink("missing-package.json", join(root, "package.json"));
+    await packageJson(root, "web", {
+      name: "web-package",
+      scripts: { test: "node --version" },
+    });
+    assert.equal(await discoverNpmTestPackage(root), undefined);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -174,6 +209,7 @@ test("preflight recognizes npm test aliases and global options", async () => {
     await packageJson(root, ".", { name: "missing-script-package" });
     for (const argv of [
       ["npm", "t"],
+      ["npm", "tst"],
       ["npm", "--silent", "test"],
       ["npm", "--loglevel", "silent", "run", "test"],
     ]) {
@@ -191,6 +227,41 @@ test("preflight recognizes npm test aliases and global options", async () => {
           { configPath: ".forge/config.json", env: fakeNpm.env },
         ),
         /npm script 'test' is not defined/,
+      );
+    }
+  } finally {
+    await rm(fakeNpm.directory, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("rejects npm package-location options instead of validating the wrong package", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forge-npm-location-"));
+  const fakeNpm = await fakeNpmEnvironment();
+  try {
+    await packageJson(root, ".", {
+      name: "root-package",
+      scripts: { test: "node --version" },
+    });
+    for (const argv of [
+      ["npm", "--prefix", "../outside", "test"],
+      ["npm", "--prefix=../outside", "test"],
+      ["npm", "test", "--workspace", "outside"],
+    ]) {
+      await assert.rejects(
+        preflightVerificationCommands(
+          root,
+          {
+            test: {
+              argv,
+              required: true,
+              timeoutMs: TIMEOUT_MS,
+              workingDirectory: ".",
+            },
+          },
+          { configPath: ".forge/config.json", env: fakeNpm.env },
+        ),
+        /package-location options are not supported/,
       );
     }
   } finally {

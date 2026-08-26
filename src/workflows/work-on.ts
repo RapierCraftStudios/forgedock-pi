@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 import type {
   ExtensionAPI,
@@ -8,7 +9,10 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 
 import { FetchGitHubTransport } from "../adapters/github-api.ts";
-import { loadForgePolicy } from "../adapters/config.ts";
+import {
+  loadForgePolicy,
+  type LoadedForgePolicy,
+} from "../adapters/config.ts";
 import { GitWorktreeManager, type PreparedWorktree } from "../adapters/git.ts";
 import { GitHubIssueProjector } from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
@@ -142,10 +146,22 @@ export class ForgeWorkOnController {
     });
 
     try {
+      const preparedPolicy = await loadPreparedForgePolicy(
+        prepared.worktreePath,
+      );
+      if (
+        preparedPolicy &&
+        !sameVerificationCommands(policy, preparedPolicy.policy)
+      ) {
+        throw new Error(
+          `Tracked verification policy differs between ${trackedPath} and ${preparedPolicy.trackedPath}; refresh the integration branch and retry the run.`,
+        );
+      }
+      const preflightPolicy = preparedPolicy?.policy ?? policy;
       await preflightVerificationCommands(
         prepared.worktreePath,
-        policy.verification.commands,
-        { configPath: trackedPath },
+        preflightPolicy.verification.commands,
+        { configPath: preparedPolicy?.trackedPath ?? trackedPath },
       );
       await materializeForgeAgents(prepared.worktreePath);
       const journal = new RunJournal(store);
@@ -895,6 +911,52 @@ function buildPullBody(link: ActiveRunLink, result: ForgeWorkOnResult): string {
   ].join("\n");
 }
 
+async function loadPreparedForgePolicy(
+  worktreeRoot: string,
+): Promise<LoadedForgePolicy | undefined> {
+  const trackedPath = join(worktreeRoot, ".forge", "config.json");
+  try {
+    await readFile(trackedPath, "utf8");
+  } catch (error) {
+    if (isMissingFile(error)) return undefined;
+    throw new Error(
+      `Unable to inspect the prepared Forge policy ${trackedPath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  return loadForgePolicy(worktreeRoot);
+}
+
+function isMissingFile(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "ENOENT",
+  );
+}
+
+function sameVerificationCommands(
+  callerPolicy: ForgePolicy,
+  basePolicy: ForgePolicy,
+): boolean {
+  const callerCommands = callerPolicy.verification.commands;
+  const baseCommands = basePolicy.verification.commands;
+  const names = Object.keys(callerCommands);
+  if (!sameStrings(names, Object.keys(baseCommands))) return false;
+  return names.every((name) => {
+    const caller = callerCommands[name];
+    const base = baseCommands[name];
+    return Boolean(
+      caller &&
+        base &&
+        sameOrderedStrings(caller.argv, base.argv) &&
+        caller.required === base.required &&
+        caller.workingDirectory === base.workingDirectory &&
+        caller.timeoutMs <= base.timeoutMs,
+    );
+  });
+}
+
 async function resolveGitHubToken(
   pi: ExtensionAPI,
   cwd: string,
@@ -929,6 +991,13 @@ function assertResultIdentity(
 
 function digest(value: string): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+}
+
+function sameOrderedStrings(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function sameStrings(

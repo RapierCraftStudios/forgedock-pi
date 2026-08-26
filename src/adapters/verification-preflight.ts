@@ -1,6 +1,7 @@
 import { constants } from "node:fs";
 import {
   access,
+  lstat,
   readdir,
   readFile,
   realpath,
@@ -298,13 +299,22 @@ function npmScriptName(
     "--cache",
     "--location",
     "--loglevel",
-    "--prefix",
     "--registry",
     "--script-shell",
     "--userconfig",
-    "--workspace",
-    "-w",
   ]);
+  const locationOptions = ["--prefix", "--workspace", "-w"];
+  const hasLocationOption = args.some(
+    (arg) =>
+      locationOptions.includes(arg) ||
+      locationOptions.some((prefix) => arg.startsWith(`${prefix}=`)),
+  );
+  if (hasLocationOption) {
+    throw new CommandPreflightFailure(
+      argvPath,
+      "npm package-location options are not supported; set workingDirectory instead",
+    );
+  }
   let commandIndex = 0;
   while (commandIndex < args.length && args[commandIndex]?.startsWith("-")) {
     const option = args[commandIndex];
@@ -319,7 +329,8 @@ function npmScriptName(
   }
 
   const npmCommand = args[commandIndex];
-  if (npmCommand === "test" || npmCommand === "t") return "test";
+  if (npmCommand === "test" || npmCommand === "t" || npmCommand === "tst")
+    return "test";
   if (npmCommand === "run" || npmCommand === "run-script") {
     const script = args[commandIndex + 1];
     if (!script || script.startsWith("-")) {
@@ -408,7 +419,12 @@ async function inspectNpmPackage(
     canonicalManifest = await realpath(manifestPath);
     if (!isPathWithin(root, canonicalManifest)) return "invalid";
   } catch (error) {
-    return isMissingFile(error) ? "none" : "invalid";
+    if (!isMissingFile(error)) return "invalid";
+    try {
+      return (await lstat(manifestPath)).isSymbolicLink() ? "invalid" : "none";
+    } catch (statError) {
+      return isMissingFile(statError) ? "none" : "invalid";
+    }
   }
   try {
     const parsed: unknown = JSON.parse(await readFile(canonicalManifest, "utf8"));
@@ -419,9 +435,10 @@ async function inspectNpmPackage(
     if (!scripts || typeof scripts !== "object" || Array.isArray(scripts))
       return "invalid";
     const testScript = (scripts as Record<string, unknown>).test;
+    if (testScript === undefined) return "none";
     return typeof testScript === "string" && testScript.trim().length > 0
       ? "test"
-      : "none";
+      : "invalid";
   } catch {
     return "invalid";
   }

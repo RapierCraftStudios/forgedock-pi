@@ -846,6 +846,16 @@ function validateBoundCommand(
       `Verification binding ${name}.argv must be a non-empty string array.`,
     );
   }
+  const [program, ...args] = command.argv;
+  if (
+    typeof program === "string" &&
+    isNpmProgram(program) &&
+    args.some(isNpmPackageLocationOption)
+  ) {
+    throw new Error(
+      `Verification binding ${name}.argv cannot use npm package-location options; set workingDirectory instead.`,
+    );
+  }
   if (typeof command.required !== "boolean")
     throw new Error(`Verification binding ${name}.required must be boolean.`);
   if (
@@ -876,11 +886,27 @@ function validateBoundCommand(
     );
   }
   return {
-    argv: command.argv,
-    required: command.required,
-    timeoutMs: command.timeoutMs,
+    argv: command.argv as string[],
+    required: command.required as boolean,
+    timeoutMs: command.timeoutMs as number,
     workingDirectory,
   };
+}
+
+function isNpmProgram(program: string): boolean {
+  const executable = program.replaceAll("\\", "/").split("/").at(-1) ?? "";
+  return /^npm(?:\.cmd)?$/i.test(executable);
+}
+
+function isNpmPackageLocationOption(argument: string): boolean {
+  return (
+    argument === "--prefix" ||
+    argument === "--workspace" ||
+    argument === "-w" ||
+    argument.startsWith("--prefix=") ||
+    argument.startsWith("--workspace=") ||
+    argument.startsWith("-w=")
+  );
 }
 
 function checkpointEventType(
