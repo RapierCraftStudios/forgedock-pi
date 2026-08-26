@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 15,
-  "lastEventHash": "sha256:bcd2d03400aef20fd83ab3583666a652f4409f4cf9ef128423c6f1506a187087",
+  "sequence": 16,
+  "lastEventHash": "sha256:4e60817c7b996ce125105b026ad922f74670e28845d473cbbe2d154f95dbb6c2",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -107,11 +107,16 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
           "evidence": [],
-          "inputArtifactHash": "sha256:plan-92-direct-labels"
+          "inputArtifactHash": "sha256:plan-92-direct-labels",
+          "logicalNodeId": "implement-1",
+          "startedAt": "2026-08-26T23:57:26.229Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/35466040-09a8-42db-8246-fdbdc3d7bf2e",
+          "branch": "forge/issue-92-35466040",
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
         }
       ]
     }
@@ -133,7 +138,8 @@
     "phase:prepare-worktree:1:queue": "fcfa5dd9-860b-49a3-a17b-c9c2dab24154",
     "phase:prepare-worktree:1:start": "119f4b83-5f62-4526-86e2-a958fae7eb98",
     "phase:prepare-worktree:1:complete": "97d5c225-d992-4d1a-9724-52b5b1f61b85",
-    "phase:implement:1:queue": "43fd6a1f-7845-451a-ae56-7d5bdec7e17d"
+    "phase:implement:1:queue": "43fd6a1f-7845-451a-ae56-7d5bdec7e17d",
+    "phase:implement:1:start": "cd06bd96-dcaa-4ce3-b8a9-f976b90f97ee"
   },
   "eventIds": {
     "2f9de7d7-ccbc-4ec8-b273-57d93d8d88fd": true,
@@ -150,7 +156,8 @@
     "fcfa5dd9-860b-49a3-a17b-c9c2dab24154": true,
     "119f4b83-5f62-4526-86e2-a958fae7eb98": true,
     "97d5c225-d992-4d1a-9724-52b5b1f61b85": true,
-    "43fd6a1f-7845-451a-ae56-7d5bdec7e17d": true
+    "43fd6a1f-7845-451a-ae56-7d5bdec7e17d": true,
+    "cd06bd96-dcaa-4ce3-b8a9-f976b90f97ee": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
