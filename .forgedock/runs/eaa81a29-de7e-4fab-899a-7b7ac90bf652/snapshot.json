@@ -7,18 +7,33 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 2,
-  "lastEventHash": "sha256:ae6d5b3c4581d40e304133ba2bb9a8a33eac6297f650e43eee376deeb170ca94",
-  "phases": {},
+  "sequence": 3,
+  "lastEventHash": "sha256:2793beda85d1ca644043c01af315e451a1c571844d0fda2a8d95dffb58ea1183",
+  "phases": {
+    "resolve": {
+      "phase": "resolve",
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "queued",
+          "leaseEpoch": 1,
+          "restartAction": "resume resolve attempt 1",
+          "evidence": []
+        }
+      ]
+    }
+  },
   "nodes": {},
   "effects": {},
   "idempotencyKeys": {
     "run:create": "0902b4d5-bc43-4cbf-8a30-9d7fd570986a",
-    "lease:acquire:1": "436d90ab-571c-4268-8df5-d3a3cd4ea03d"
+    "lease:acquire:1": "436d90ab-571c-4268-8df5-d3a3cd4ea03d",
+    "phase:resolve:1:queue": "2aefbcf5-d85d-4583-9023-1867ff6b5385"
   },
   "eventIds": {
     "0902b4d5-bc43-4cbf-8a30-9d7fd570986a": true,
-    "436d90ab-571c-4268-8df5-d3a3cd4ea03d": true
+    "436d90ab-571c-4268-8df5-d3a3cd4ea03d": true,
+    "2aefbcf5-d85d-4583-9023-1867ff6b5385": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
