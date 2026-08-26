@@ -10,15 +10,15 @@
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 4,
-  "lastEventHash": "sha256:a60c9caada4635b9400eef06ddf21dd175e961e88de9e226dc2136a2970939fe",
+  "sequence": 5,
+  "lastEventHash": "sha256:854cd4d84b45d078caa9a4b8751eb2b9e73c7cb3cad876d39f448b983d01f117",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/0bb53cad-9b4e-46c6-8464-ff944e9a379d/.pi/forge/0bb53cad-9b4e-46c6-8464-ff944e9a379d-resolve-1.json",
       "subagentRunId": "d79c1264-c76e-4e84-af91-c766affd9169",
@@ -27,7 +27,19 @@
       "startedAt": "2026-08-26T01:55:11.628Z",
       "previousSubagentRunId": "launch:resolve-1:fd776db0-8d43-4857-bb49-fbe1bc3f2bb4",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "round": 1,
+      "headSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "verificationResults": [],
+      "outcome": "completed",
+      "evidence": [
+        "Issue context identifies issue #79 with the non-empty title \"test: disposable 20-lane dogfood probe 09\".",
+        "The supplied issue has no labels and its only supplied comment records the current ForgeDock run 0bb53cad-9b4e-46c6-8464-ff944e9a379d; no terminal or conflicting ownership marker is present.",
+        "Repository policy at .forge/config.json names RapierCraftStudios/forgedock-pi, configures dogfood as the integration branch, and protects main rather than dogfood.",
+        "The assigned worktree is readable, and the bound branch and frozen base identity match the supplied current-history entry at 1b018483cd94b8324ae7e34eaa07293861f4f491.",
+        "The issue's stated no-code probe purpose is an investigation concern rather than a resolve-stage identity or policy failure, so it remains eligible for investigation."
+      ],
+      "finishedAt": "2026-08-26T01:57:01.349Z"
     }
   },
   "effects": {},
@@ -35,12 +47,14 @@
     "run:create": "7452539d-3344-4e3a-b89a-9a69431f83f0",
     "node:resolve-1:queued": "f073d89e-8379-4c44-ad31-4056c9f34eee",
     "node:resolve-1:started": "8e256c10-269f-4b7e-992a-89d247b8793d",
-    "node:resolve-1:attempt:1:launch-receipt:fd776db0-8d43-4857-bb49-fbe1bc3f2bb4:d79c1264-c76e-4e84-af91-c766affd9169": "a26e3211-0d3e-4320-9d10-fc6ac009aa5f"
+    "node:resolve-1:attempt:1:launch-receipt:fd776db0-8d43-4857-bb49-fbe1bc3f2bb4:d79c1264-c76e-4e84-af91-c766affd9169": "a26e3211-0d3e-4320-9d10-fc6ac009aa5f",
+    "node:resolve-1:completed": "4fa6c6cd-83c7-4423-9e58-9cdafcd0ac7f"
   },
   "eventIds": {
     "7452539d-3344-4e3a-b89a-9a69431f83f0": true,
     "f073d89e-8379-4c44-ad31-4056c9f34eee": true,
     "8e256c10-269f-4b7e-992a-89d247b8793d": true,
-    "a26e3211-0d3e-4320-9d10-fc6ac009aa5f": true
+    "a26e3211-0d3e-4320-9d10-fc6ac009aa5f": true,
+    "4fa6c6cd-83c7-4423-9e58-9cdafcd0ac7f": true
   }
 }
