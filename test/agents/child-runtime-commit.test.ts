@@ -25,6 +25,7 @@ import {
   assertReviewerDiffCoverage,
   assertUniqueReviewerProfileIds,
   boundedToolDenial,
+  diffChunk,
   forgeCommitArguments,
   isForgeRuntimePath,
   parseBoundReviewerResult,
@@ -125,10 +126,41 @@ test("security evidence overflow stays typed across repeated output chunks", () 
   );
   assert.doesNotThrow(() =>
     assertReviewerDiffCoverage(
-      { headSha: "abcdef1234567890", sha256: "a".repeat(64), bytes: 42 },
+      {
+        headSha: "abcdef1234567890",
+        sha256: "a".repeat(64),
+        bytes: 42,
+        coveredBytes: 42,
+      },
       "abcdef1234567890",
     ),
   );
+  assert.throws(
+    () =>
+      assertReviewerDiffCoverage(
+        {
+          headSha: "abcdef1234567890",
+          sha256: "a".repeat(64),
+          bytes: 42,
+          coveredBytes: 21,
+        },
+        "abcdef1234567890",
+      ),
+    /requires complete forge_diff coverage/,
+  );
+});
+
+test("diff chunks preserve UTF-8 boundaries and contiguous cursors", () => {
+  const value = `start-${"é".repeat(20)}-end`;
+  const chunks: string[] = [];
+  let cursor = 0;
+  while (cursor < Buffer.byteLength(value)) {
+    const chunk = diffChunk(value, cursor, 7);
+    chunks.push(chunk.text);
+    assert.ok(chunk.end > cursor);
+    cursor = chunk.end;
+  }
+  assert.equal(chunks.join(""), value);
 });
 
 test("review polling recognizes textual terminal states from pi-subagents RPC", () => {

@@ -255,13 +255,37 @@ export class GitHubWorkflowAdapter {
     signal?: AbortSignal,
   ): Promise<GitHubPullRequestData> {
     assertNumber(pullNumber, "pull request");
-    const path = `${this.#apiRoot}/pulls/${pullNumber}`;
+    const path = `${this.#apiRoot}/pulls/${pullNumber}?cache_bust=${Date.now()}`;
     const response = await this.#transport.request<PullApiResponse>({
       method: "GET",
       path,
       ...(signal ? { signal } : {}),
     });
     return normalizePull(requireGitHubSuccess(response, path, [200]));
+  }
+
+  async waitForPullRequestHead(input: {
+    pullNumber: number;
+    headSha: string;
+    headRef: string;
+    timeoutMs?: number;
+    pollIntervalMs?: number;
+    signal?: AbortSignal;
+  }): Promise<GitHubPullRequestData> {
+    const deadline = Date.now() + (input.timeoutMs ?? 30_000);
+    while (true) {
+      const pull = await this.getPullRequest(input.pullNumber, input.signal);
+      if (pull.headRef !== input.headRef)
+        throw new Error(
+          `PR #${input.pullNumber} head ref ${pull.headRef} does not match ${input.headRef}.`,
+        );
+      if (pull.headSha === input.headSha) return pull;
+      if (Date.now() >= deadline)
+        throw new Error(
+          `PR #${input.pullNumber} did not observe pushed head ${input.headSha}; latest was ${pull.headSha}.`,
+        );
+      await abortableDelay(input.pollIntervalMs ?? 1_000, input.signal);
+    }
   }
 
   async waitForPullRequestChecks(input: {

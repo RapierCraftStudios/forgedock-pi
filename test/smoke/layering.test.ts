@@ -17,6 +17,17 @@ test("session shutdown detaches active runs instead of cancelling durable work",
   assert.match(entrypoint, /orchestrator\.dispose\(\)/);
   const workOn = await readFile("src/workflows/work-on.ts", "utf8");
   assert.match(workOn, /sendUserMessage\(\s*directRunResumeTask/);
+  assert.match(workOn, /#recoverDirectTerminal\(/);
+  assert.match(workOn, /directRunRecoveryAction/);
+  const terminalRecovery = workOn.slice(
+    workOn.indexOf("async #recoverDirectTerminal"),
+    workOn.indexOf("async #finalize"),
+  );
+  assert.ok(
+    terminalRecovery.indexOf('if (action === "release-authority")') <
+      terminalRecovery.indexOf("const evidence = directTerminalEvidence"),
+    "completed authority release must not require PR or merge evidence",
+  );
   assert.match(workOn, /Do not create another run, worktree, branch, commit, or PR/);
 });
 

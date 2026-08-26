@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 
 import {
   canonicalReviewerName,
+  directRunRecoveryAction,
+  directTerminalEvidence,
   finalReviewDecisionMarker,
   findingPriority,
   isTransientProviderFailure,
@@ -32,6 +35,77 @@ test("restart recovery recognizes every parent-owned durable node", () => {
   for (const node of ["review-join", "ci", "decision", "merge", "close", "cleanup"] as const)
     assert.equal(parentNodeFromId(`${node}-2`), node);
   assert.equal(parentNodeFromId("implement-1"), undefined);
+});
+
+test("direct restart selects terminal cleanup and authority release windows", () => {
+  const state = (
+    status: "active" | "completed" | "blocked",
+    completedPhases: readonly string[] = [],
+  ) =>
+    ({
+      status,
+      phases: Object.fromEntries(
+        completedPhases.map((phase) => [
+          phase,
+          { attempts: [{ status: "completed" }] },
+        ]),
+      ),
+    }) as unknown as import("../../src/core/state.ts").RunState;
+
+  assert.equal(
+    directRunRecoveryAction(state("active", ["merge", "close"]), true),
+    "terminal-cleanup",
+  );
+  assert.equal(
+    directRunRecoveryAction(state("completed", ["cleanup"]), true),
+    "release-authority",
+  );
+  assert.equal(
+    directRunRecoveryAction(state("active", ["verify"]), true),
+    "resume-work",
+  );
+  assert.equal(
+    directRunRecoveryAction(state("active", ["merge", "close"]), false),
+    "none",
+  );
+  assert.equal(
+    directRunRecoveryAction(state("blocked", ["merge", "close"]), true),
+    "none",
+  );
+});
+
+test("direct terminal evidence binds PR, merge phase, and merge effect", () => {
+  const mergeSha = "a".repeat(40);
+  const mergeDigest = `sha256:${createHash("sha256").update(mergeSha).digest("hex")}`;
+  const state = {
+    status: "active",
+    phases: {
+      merge: {
+        attempts: [{ status: "completed", evidence: [`merge:${mergeSha}`] }],
+      },
+    },
+    effects: {
+      pr: {
+        effectType: "pull-request",
+        effectId: "pr:105",
+        digest: "sha256:pr",
+        eventId: "event-pr",
+      },
+      merge: {
+        effectType: "merge",
+        effectId: "merge:105",
+        digest: mergeDigest,
+        eventId: "event-merge",
+      },
+    },
+  } as unknown as import("../../src/core/state.ts").RunState;
+
+  assert.deepEqual(directTerminalEvidence(state), {
+    pullNumber: 105,
+    mergeSha,
+  });
+  state.effects.merge!.digest = "sha256:wrong";
+  assert.equal(directTerminalEvidence(state), undefined);
 });
 
 test("provider completion is buffered until its launch receipt is durably bound", () => {
