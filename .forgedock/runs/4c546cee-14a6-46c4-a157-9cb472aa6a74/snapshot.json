@@ -10,8 +10,8 @@
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 7,
-  "lastEventHash": "sha256:3192dec4305be16546126e6014147c825f47044c2e9a329a8d7cbf0791d18d02",
+  "sequence": 8,
+  "lastEventHash": "sha256:193398201c82fb2ed04147df5c9e29088640921406f806103629fa1dc2a38109",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -48,10 +48,13 @@
       "status": "running",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/4c546cee-14a6-46c4-a157-9cb472aa6a74/.pi/forge/4c546cee-14a6-46c4-a157-9cb472aa6a74-investigate-1.json",
-      "subagentRunId": "launch:investigate-1:1f4ecb59-cd82-46b6-9629-c3e5e14563fa",
+      "subagentRunId": "77466db5-cd61-46d6-b577-8ab490ab3993",
       "launchNonce": "1f4ecb59-cd82-46b6-9629-c3e5e14563fa",
       "launchIntent": true,
-      "startedAt": "2026-08-26T02:10:02.068Z"
+      "startedAt": "2026-08-26T02:10:02.068Z",
+      "previousSubagentRunId": "launch:investigate-1:1f4ecb59-cd82-46b6-9629-c3e5e14563fa",
+      "transportRetries": 0,
+      "launchReceipt": true
     }
   },
   "effects": {},
@@ -62,7 +65,8 @@
     "node:resolve-1:attempt:1:launch-receipt:81aee581-376a-43c2-9432-fb480bf8d445:536dc3ff-6222-4190-8c20-c95c8037e1fb": "a2f51696-ff6f-4aec-96c3-9026420130e9",
     "node:resolve-1:completed": "2bc5cfcf-7108-45ed-bb00-6e5a5de68057",
     "node:investigate-1:queued": "e8568343-9c79-473c-8b3a-f3596e17ccb2",
-    "node:investigate-1:started": "c73e8132-cac7-4c77-83d4-e3dcebfcfda5"
+    "node:investigate-1:started": "c73e8132-cac7-4c77-83d4-e3dcebfcfda5",
+    "node:investigate-1:attempt:1:launch-receipt:1f4ecb59-cd82-46b6-9629-c3e5e14563fa:77466db5-cd61-46d6-b577-8ab490ab3993": "dc80024b-ac18-4e7d-a8a5-11914774397c"
   },
   "eventIds": {
     "41af59ca-b55c-458c-931f-6e12ec64dc74": true,
@@ -71,6 +75,7 @@
     "a2f51696-ff6f-4aec-96c3-9026420130e9": true,
     "2bc5cfcf-7108-45ed-bb00-6e5a5de68057": true,
     "e8568343-9c79-473c-8b3a-f3596e17ccb2": true,
-    "c73e8132-cac7-4c77-83d4-e3dcebfcfda5": true
+    "c73e8132-cac7-4c77-83d4-e3dcebfcfda5": true,
+    "dc80024b-ac18-4e7d-a8a5-11914774397c": true
   }
 }
