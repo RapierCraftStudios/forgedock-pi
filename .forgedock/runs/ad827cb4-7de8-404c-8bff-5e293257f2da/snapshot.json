@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 9,
-  "lastEventHash": "sha256:2fc638bfa7347652cb1ab87b2559f2264af0c97479a90865a7d997ea1ecb99b9",
+  "sequence": 10,
+  "lastEventHash": "sha256:eb02d77913706f4bcd84f51e65a553507ccde9abc23acc3a8d8959e61e99ab2f",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -61,11 +61,16 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
           "evidence": [],
-          "inputArtifactHash": "sha256:investigation-issue-119-current-staging"
+          "inputArtifactHash": "sha256:investigation-issue-119-current-staging",
+          "logicalNodeId": "forge-work-on/plan",
+          "startedAt": "2026-08-26T19:32:18.320Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/ad827cb4-7de8-404c-8bff-5e293257f2da",
+          "branch": "forge/issue-119-ad827cb4",
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
         }
       ]
     }
@@ -81,7 +86,8 @@
     "phase:investigate:1:queue": "581d85ff-ff75-4988-9586-564487bd5e38",
     "phase:investigate:1:start": "1b7ea895-a75a-49c6-b1cb-0011aed0fd3f",
     "phase:investigate:1:complete": "94e508b9-0a10-46ca-82a1-01eded67f737",
-    "phase:plan:1:queue": "d4a270f2-c280-42b5-857c-997b4f447463"
+    "phase:plan:1:queue": "d4a270f2-c280-42b5-857c-997b4f447463",
+    "phase:plan:1:start": "3ba5122c-45ba-4ea1-89f1-02e22e2c04ee"
   },
   "eventIds": {
     "220aa3d2-625c-49bb-87a5-ffc6fa49d1a8": true,
@@ -92,7 +98,8 @@
     "581d85ff-ff75-4988-9586-564487bd5e38": true,
     "1b7ea895-a75a-49c6-b1cb-0011aed0fd3f": true,
     "94e508b9-0a10-46ca-82a1-01eded67f737": true,
-    "d4a270f2-c280-42b5-857c-997b4f447463": true
+    "d4a270f2-c280-42b5-857c-997b4f447463": true,
+    "3ba5122c-45ba-4ea1-89f1-02e22e2c04ee": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
