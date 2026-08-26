@@ -7,23 +7,29 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 4,
-  "lastEventHash": "sha256:b0bafd91bcd9f6c58182851348d2f3171b700302f10ef6008ea430f1e50b2e39",
+  "sequence": 5,
+  "lastEventHash": "sha256:41071e8aabbea2458d775ee58d12c8e67429b694c49be04d74ed863c0119166a",
   "phases": {
     "resolve": {
       "phase": "resolve",
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume resolve attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`.forge/config.json` identifies `RapierCraftStudios/forgedock-pi`, permits `staging` as an integration branch, and requires the named `check` verification command.",
+            "The assigned branch and worktree are present and match the bound run metadata.",
+            "Issue #119 is a bounded correctness remediation with an explicit regression-test acceptance requirement."
+          ],
           "logicalNodeId": "forge-work-on/resolve",
           "startedAt": "2026-08-26T19:16:07.004Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/ad827cb4-7de8-404c-8bff-5e293257f2da",
           "branch": "forge/issue-119-ad827cb4",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T19:16:43.324Z",
+          "outputArtifactHash": "sha256:resolve-issue-119-89f2fa1c7e7020b695803e9a1b556d55076f2302"
         }
       ]
     }
@@ -34,13 +40,15 @@
     "run:create": "220aa3d2-625c-49bb-87a5-ffc6fa49d1a8",
     "lease:acquire:1": "cbb2f795-2647-47cb-bf96-ccc289b88cad",
     "phase:resolve:1:queue": "72f5e24e-a0f6-4c0d-8ade-e3112c9d0036",
-    "phase:resolve:1:start": "a6192c85-1789-457e-bf96-e79288e23264"
+    "phase:resolve:1:start": "a6192c85-1789-457e-bf96-e79288e23264",
+    "phase:resolve:1:complete": "3c947a6a-5254-4997-8b22-d0cd96843409"
   },
   "eventIds": {
     "220aa3d2-625c-49bb-87a5-ffc6fa49d1a8": true,
     "cbb2f795-2647-47cb-bf96-ccc289b88cad": true,
     "72f5e24e-a0f6-4c0d-8ade-e3112c9d0036": true,
-    "a6192c85-1789-457e-bf96-e79288e23264": true
+    "a6192c85-1789-457e-bf96-e79288e23264": true,
+    "3c947a6a-5254-4997-8b22-d0cd96843409": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
