@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 16,
-  "lastEventHash": "sha256:8d045b6a153973f509c2ef05e39759421b40385f5f314e370a5e4591d76c737d",
+  "sequence": 17,
+  "lastEventHash": "sha256:67b588700401b6b021589be5db8149e13f02639b57ffac776f22db45f3a33c04",
   "lanes": [
     {
       "issueNumber": 92,
@@ -20,10 +20,11 @@
     {
       "issueNumber": 94,
       "ordinal": 1,
-      "status": "running",
+      "status": "failed",
       "refreshes": 0,
       "forgeRunId": "6604bfab-e63e-4546-9296-7f5951b09711",
-      "subagentRunId": "launch:orchestration-resume-1:eaa36c5e-8e34-445c-8019-924425098a51"
+      "subagentRunId": "launch:orchestration-resume-1:eaa36c5e-8e34-445c-8019-924425098a51",
+      "reason": "Provider continuation did not return a durable receipt; rerun this issue in a new orchestration."
     },
     {
       "issueNumber": 111,
@@ -98,7 +99,8 @@
     "lane:111:recovered:49086086-fe49-4436-bdd1-3bc1a2623607": "c915bfc8-5349-4c49-bd9f-eb0006762532",
     "lane:94:failed": "79218243-94b1-454e-89ec-144d8545c8d2",
     "lane:94:recovered:6604bfab-e63e-4546-9296-7f5951b09711": "d47b9a0d-af6e-47aa-9a1c-86d9e25f307f",
-    "lane:112:recovered:2b489e88-6c14-40fe-869e-0573839f9bb0": "21d4a394-19a3-492e-9d56-5aa8af8e58d4"
+    "lane:112:recovered:2b489e88-6c14-40fe-869e-0573839f9bb0": "21d4a394-19a3-492e-9d56-5aa8af8e58d4",
+    "lane:94:continuation-unbound": "59332ace-24a0-473c-9656-018259110771"
   },
   "createdAt": "2026-08-26T17:53:19.264Z"
 }
