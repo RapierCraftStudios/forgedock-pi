@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 10,
-  "lastEventHash": "sha256:bc2b2faa41225d774aeea7f25c25730af209ec7da76a0c3f7115ec7185f9ad8c",
+  "sequence": 11,
+  "lastEventHash": "sha256:edb2c73ea698694e813d8c26f05736c5a9667996739f9f26543dcdd5d70cdf81",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -65,15 +65,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
-          "evidence": [],
+          "evidence": [
+            "The builder contract limits edits to the direct checkpoint mapping, the label replacement adapter, and their focused tests.",
+            "The canonical labels remain sourced from `WORKFLOW_LABEL_BY_STAGE`; no new label names or authority paths are introduced.",
+            "The existing `setWorkflowLabel` GET/PUT projection remains the sole replacement side effect.",
+            "The required `check` command is the only local verification gate and will run after implementation commit."
+          ],
           "logicalNodeId": "work-on-plan-1",
           "startedAt": "2026-08-26T22:14:25.882Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/fb038dc4-bdd5-4575-bfac-336f3b337ef2",
           "branch": "forge/issue-92-fb038dc4",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T22:15:54.173Z",
+          "outputArtifactHash": "sha256:plan-issue-92-direct-label-lifecycle"
         }
       ]
     }
@@ -90,7 +97,8 @@
     "phase:investigate:1:start": "4404b48d-e837-437c-a989-4814ab74cc7e",
     "phase:investigate:1:complete": "d6ec9854-d635-4dac-b16f-44b1a2510bed",
     "phase:plan:1:queue": "3ea14edc-4755-4e3a-ae56-b800f22ac20d",
-    "phase:plan:1:start": "ce77288e-9533-4830-989c-e1b450e18165"
+    "phase:plan:1:start": "ce77288e-9533-4830-989c-e1b450e18165",
+    "phase:plan:1:complete": "a9285cd7-a0db-4b23-a9aa-f2bf0c1a1593"
   },
   "eventIds": {
     "81af842e-b849-4d4d-9c3f-357d89c1e2f6": true,
@@ -102,7 +110,8 @@
     "4404b48d-e837-437c-a989-4814ab74cc7e": true,
     "d6ec9854-d635-4dac-b16f-44b1a2510bed": true,
     "3ea14edc-4755-4e3a-ae56-b800f22ac20d": true,
-    "ce77288e-9533-4830-989c-e1b450e18165": true
+    "ce77288e-9533-4830-989c-e1b450e18165": true,
+    "a9285cd7-a0db-4b23-a9aa-f2bf0c1a1593": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
