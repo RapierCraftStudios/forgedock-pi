@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 22,
-  "lastEventHash": "sha256:75d409716693393b9dc2c6cbb540899298548c55a6b4557e3c61b63c73ca0429",
+  "sequence": 23,
+  "lastEventHash": "sha256:49ffaf38de086ee8dd453f4abb5adf2e2e972364dc8f916690079a9f2c6b6766",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -157,15 +157,21 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 1",
-          "evidence": [],
+          "evidence": [
+            "PR #149 was prepared before review and frozen at head `be5b6d52a043add41b76112b7893375f8ea84289` against base `89f2fa1c7e7020b695803e9a1b556d55076f2302`.",
+            "The first complete panel attempt encountered a transient WebSocket provider failure for correctness; it was discarded and a fresh complete panel was run at the same frozen head.",
+            "Fresh correctness and security reviewers both returned schema-valid `pass` results with no findings."
+          ],
           "logicalNodeId": "work-on/review",
           "startedAt": "2026-08-26T21:44:29.656Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/9a79fe3a-8130-41bb-81ed-b1c8a7d1a349",
           "branch": "forge/issue-114-9a79fe3a",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T21:57:42.588Z",
+          "outputArtifactHash": "review-114-be5b6d52"
         }
       ]
     }
@@ -194,7 +200,8 @@
     "phase:verify:1:start": "1affc7e6-b2c0-4439-bb34-5a1aebf5612d",
     "phase:verify:1:complete": "0b14d7a6-afca-4a04-80ca-c0a896b5bc60",
     "phase:review:1:queue": "68e5704f-ca4c-4228-862b-7b22c8e6bfe5",
-    "phase:review:1:start": "5fc5ee4e-6900-46fe-8d80-e829c746a08a"
+    "phase:review:1:start": "5fc5ee4e-6900-46fe-8d80-e829c746a08a",
+    "phase:review:1:complete": "4833d24c-833c-4547-bf33-578e4d7a0c68"
   },
   "eventIds": {
     "29c332fc-f98a-44d2-aea6-4c213b8f72a8": true,
@@ -218,7 +225,8 @@
     "1affc7e6-b2c0-4439-bb34-5a1aebf5612d": true,
     "0b14d7a6-afca-4a04-80ca-c0a896b5bc60": true,
     "68e5704f-ca4c-4228-862b-7b22c8e6bfe5": true,
-    "5fc5ee4e-6900-46fe-8d80-e829c746a08a": true
+    "5fc5ee4e-6900-46fe-8d80-e829c746a08a": true,
+    "4833d24c-833c-4547-bf33-578e4d7a0c68": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
