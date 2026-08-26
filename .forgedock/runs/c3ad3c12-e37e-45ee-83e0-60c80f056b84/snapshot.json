@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:4055b56d1096990e8cb52a6ebfe6f3702da36ef9caa8f378d968d72841b41959",
+  "sequence": 8,
+  "lastEventHash": "sha256:0e9d4aa763f399d9fa3776a4831d03144ed84b91971943cbe2198af8d49792e7",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -34,7 +34,7 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
           "evidence": [],
@@ -43,7 +43,9 @@
           "startedAt": "2026-08-26T23:50:47.266Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/c3ad3c12-e37e-45ee-83e0-60c80f056b84",
           "branch": "forge/issue-119-c3ad3c12",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T23:55:29.359Z",
+          "outputArtifactHash": "sha256:issue119-investigation"
         }
       ]
     }
@@ -57,7 +59,8 @@
     "phase:resolve:1:start": "1e0db670-72d9-4dd8-bce5-3fa42501612a",
     "phase:resolve:1:complete": "416bfeaf-9215-42aa-bcdb-86b96d3f1d46",
     "phase:investigate:1:queue": "25f26029-bfaf-490a-9714-f3f336092468",
-    "phase:investigate:1:start": "9ad49676-21a7-4953-a7d0-da14d3553db7"
+    "phase:investigate:1:start": "9ad49676-21a7-4953-a7d0-da14d3553db7",
+    "phase:investigate:1:complete": "6df1585a-419e-45a9-9583-5f60b185cbe7"
   },
   "eventIds": {
     "cbb983a9-a1a7-43ab-90c9-c0de01b14f8a": true,
@@ -66,7 +69,8 @@
     "1e0db670-72d9-4dd8-bce5-3fa42501612a": true,
     "416bfeaf-9215-42aa-bcdb-86b96d3f1d46": true,
     "25f26029-bfaf-490a-9714-f3f336092468": true,
-    "9ad49676-21a7-4953-a7d0-da14d3553db7": true
+    "9ad49676-21a7-4953-a7d0-da14d3553db7": true,
+    "6df1585a-419e-45a9-9583-5f60b185cbe7": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
