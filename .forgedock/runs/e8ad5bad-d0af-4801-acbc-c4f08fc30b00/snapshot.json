@@ -7,23 +7,30 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 4,
-  "lastEventHash": "sha256:a633ce219fb728a9c0c6c63b94bcd6990eca85299dc1291cd24a1b55b75e390a",
+  "sequence": 5,
+  "lastEventHash": "sha256:4394da6e9a3f2be07e0541ad1d98dc20a189aece58d21fdf3a1c32c5d6d9177a",
   "phases": {
     "resolve": {
       "phase": "resolve",
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume resolve attempt 1",
-          "evidence": [],
+          "evidence": [
+            ".forge/config.json",
+            "assigned worktree present",
+            "issue #92 bound to run",
+            "frozen base SHA 89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          ],
           "logicalNodeId": "work-on/resolve",
           "startedAt": "2026-08-26T20:02:31.354Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/e8ad5bad-d0af-4801-acbc-c4f08fc30b00",
           "branch": "forge/issue-92-e8ad5bad",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T20:03:22.358Z",
+          "outputArtifactHash": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
         }
       ]
     }
@@ -34,13 +41,15 @@
     "run:create": "b7923a81-6986-4ea3-938c-fc863884b46c",
     "lease:acquire:1": "963ed0f0-86de-4614-ae7c-927c3edd67f5",
     "phase:resolve:1:queue": "818de860-5f6f-44fe-9169-4c026e245863",
-    "phase:resolve:1:start": "b9b0168d-2c71-4c58-b5c3-5203653a0d60"
+    "phase:resolve:1:start": "b9b0168d-2c71-4c58-b5c3-5203653a0d60",
+    "phase:resolve:1:complete": "f05c2cd0-1f53-4786-9258-81064fb5ed59"
   },
   "eventIds": {
     "b7923a81-6986-4ea3-938c-fc863884b46c": true,
     "963ed0f0-86de-4614-ae7c-927c3edd67f5": true,
     "818de860-5f6f-44fe-9169-4c026e245863": true,
-    "b9b0168d-2c71-4c58-b5c3-5203653a0d60": true
+    "b9b0168d-2c71-4c58-b5c3-5203653a0d60": true,
+    "f05c2cd0-1f53-4786-9258-81064fb5ed59": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
