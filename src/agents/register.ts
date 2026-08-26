@@ -63,7 +63,7 @@ export const FORGE_REFRESH_REVIEW_TOOLS = [
 ] as const;
 export const FORGE_WORK_ON_MAX_DEPTH = 2;
 export const FORGE_WORK_ON_TIMEOUT_MS = 14_400_000;
-export const FORGE_REVIEW_TIMEOUT_MS = 600_000;
+export const FORGE_REVIEW_TIMEOUT_MS = 900_000;
 
 const REVIEW_PROTOCOL = `
 Return only the required structured result. Call forge_diff first and review only behavior introduced or changed by that frozen patch. If forge_diff returns a nextCursor, call forge_diff again in patch mode with that exact cursor and repeat until coverage.complete is true; finalization is forbidden before every chunk is read. Surrounding code may be read for context, but pre-existing defects outside the patch are out of scope and must not become findings. Bind every finding to the supplied run ID and exact head SHA. A finding needs an exact changed file and line, observable impact, and concrete code-path or input evidence. Use confirmed only when the failure is demonstrated; otherwise use likely or possible. Do not edit files, launch subagents, access GitHub, or make merge decisions.

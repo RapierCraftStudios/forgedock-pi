@@ -2149,11 +2149,27 @@ export class ForgeWorkOnController {
         this.#emitLifecycle(link, { reason, nodeId: node.nodeId, pullNumber: pull.number });
         return;
       }
-      const merged = await github.mergePullRequest({ pullNumber: pull.number, expectedHeadSha: pull.headSha, method: "squash", ...(ctx.signal ? { signal: ctx.signal } : {}) });
+      let merged: Awaited<
+        ReturnType<GitHubWorkflowAdapter["mergePullRequest"]>
+      >;
+      try {
+        merged = await github.mergePullRequest({ pullNumber: pull.number, expectedHeadSha: pull.headSha, method: "squash", ...(ctx.signal ? { signal: ctx.signal } : {}) });
+      } catch (error) {
+        await projector
+          .setWorkflowLabel(
+            link.issueNumber,
+            WORKFLOW_LABEL_BY_STAGE.review,
+          )
+          .catch(() => undefined);
+        throw error;
+      }
       headSha = merged.sha;
       outcome = "merged";
       evidence = [`merge:${merged.sha}`];
       await journal.append({ runId: link.forgeRunId, type: "effect.recorded", payload: { effectType: "merge", effectId: `merge:${pull.number}`, digest: digest(merged.sha) }, idempotencyKey: `effect:merge:${pull.number}`, sessionId, message: `Record merge effect for ${pull.number}`, ...(ctx.signal ? { signal: ctx.signal } : {}) });
+      await this.#projectWorkflowStage(link, "merged", ctx, projector).catch(
+        () => undefined,
+      );
       const aggregate = await this.#aggregateFromState(
         link,
         authority.state as import("../core/state.ts").RunState,
@@ -2304,6 +2320,10 @@ export class ForgeWorkOnController {
       }
       const event = terminalSnapshot.events.at(-1);
       if (event) await projector.projectEvent({ issueNumber: link.issueNumber, event, markdown: `## ForgeDock Pi complete\n\nRun: ${link.forgeRunId}`,  ...(ctx.signal ? { signal: ctx.signal } : {}) });
+      if (link.terminalOutcome === "merged")
+        await this.#projectWorkflowStage(link, "merged", ctx, projector).catch(
+          () => undefined,
+        );
       link.status = "completed";
       this.#persistLink(link);
       this.#emitLifecycle(link, { headSha, nodeId: node.nodeId, outcome: link.terminalOutcome, pullNumber: link.terminalOutcome === "merged" ? pull?.number : undefined });

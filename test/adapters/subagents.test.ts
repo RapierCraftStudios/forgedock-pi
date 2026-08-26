@@ -176,7 +176,7 @@ test("RPC dedicated reviewer launch uses the registered reviewer and reviewer sc
   );
   assert.equal(
     spawn.params.extensionBindings["forgedock.pi/1"]?.reviewerTimeoutMs,
-    600_000,
+    900_000,
   );
   assert.doesNotMatch(spawn.params.task, /runs\.all/);
 });
