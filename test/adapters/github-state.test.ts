@@ -164,7 +164,7 @@ test("state append uses a non-force compare-and-set ref update", async () => {
   );
 });
 
-test("run-scoped state commits remove the global repository lock", async () => {
+test("run-scoped state commits do not update the global repository lock", async () => {
   const events: RunEvent[] = [];
   const created = next(
     undefined,
@@ -216,11 +216,8 @@ test("run-scoped state commits remove the global repository lock", async () => {
   });
   const entries = (treeBody as { tree: Array<{ path: string; sha: string | null }> }).tree;
   assert.equal(
-    entries.some(
-      (entry) =>
-        entry.path === ".forgedock/locks/repository.json" && entry.sha === null,
-    ),
-    true,
+    entries.some((entry) => entry.path === ".forgedock/locks/repository.json"),
+    false,
   );
 });
 
