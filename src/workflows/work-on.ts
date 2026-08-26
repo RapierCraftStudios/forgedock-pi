@@ -3559,16 +3559,17 @@ export class ForgeWorkOnController {
       [merged.sha],
     );
     await this.#projectWorkflowStage(link, "merged", ctx, projector);
-    await postReviewCompletionArtifacts({
-      github,
-      projector,
-      link,
-      result,
-      pullNumber: pull.number,
-      mergedSha: merged.sha,
-      decision: gate,
-      signal: ctx.signal,
-    });
+    if (!currentPull.merged)
+      await postReviewCompletionArtifacts({
+        github,
+        projector,
+        link,
+        result,
+        pullNumber: pull.number,
+        mergedSha: merged.sha,
+        decision: gate,
+        signal: ctx.signal,
+      });
 
     await appendPhase(
       journal,
@@ -3651,15 +3652,22 @@ export class ForgeWorkOnController {
       ["owned worktree removed", "remote feature branch deleted"],
     );
 
-    await postTerminalIssueArtifacts({
-      projector,
-      link,
-      result,
-      pullNumber: pull.number,
-      mergedSha: merged.sha,
-      decision: gate,
-      signal: ctx.signal,
-    });
+    try {
+      await postTerminalIssueArtifacts({
+        projector,
+        link,
+        result,
+        pullNumber: pull.number,
+        mergedSha: merged.sha,
+        decision: gate,
+        signal: ctx.signal,
+      });
+    } catch (error) {
+      ctx.ui.notify(
+        `ForgeDock terminal issue projection will require reconciliation: ${errorMessage(error)}`,
+        "warning",
+      );
+    }
 
     const completed = await journal.append({
       runId: link.forgeRunId,
