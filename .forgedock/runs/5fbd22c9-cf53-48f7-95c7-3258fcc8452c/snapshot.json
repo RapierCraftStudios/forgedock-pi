@@ -6,8 +6,8 @@
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
   "status": "active",
-  "sequence": 18,
-  "lastEventHash": "sha256:f599024aeda4aa7f8c72504fe18c9c1b4e1b9be58415579de5d80fc1d367ec34",
+  "sequence": 19,
+  "lastEventHash": "sha256:f7167126ccb7570e769fa1e9b1e6eb55641df8560f383fef6a12d0962e869ab9",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -106,15 +106,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Created exactly `test/fixtures/work-on-e2e-receipt.txt` with `forgedock-work-on-e2e-v1` and one trailing newline.",
+            "Created exactly `test/smoke/work-on-e2e-receipt.test.ts` using node:test, node:assert/strict, and a local fixture read with no network or writes.",
+            "`forge_diff` confirms only the two issue-approved files changed: 1 insertion in the fixture and 12 insertions in the smoke test.",
+            "LSP diagnostics for the new smoke test are clean.",
+            "`forge_verify` correctly reported `npm run check` as not approved because the local verification allowlist is empty; parent-owned GitHub CI remains required."
+          ],
           "logicalNodeId": "implement-1",
           "startedAt": "2026-08-26T05:32:03.468Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/5fbd22c9-cf53-48f7-95c7-3258fcc8452c",
           "branch": "forge/issue-95-5fbd22c9",
-          "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491"
+          "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+          "finishedAt": "2026-08-26T05:33:21.269Z",
+          "commitSha": "399ed953c00e612086c6228c3b33c0fac6af07a7"
         }
       ]
     }
@@ -139,7 +147,8 @@
     "phase:prepare-worktree:1:complete": "f2537860-bfc2-4359-bfcd-4095727f55af",
     "phase:implement:1:queue": "aeecdfec-a5ad-4099-8b20-15f2f1935d12",
     "phase:implement:1:start": "569cb753-6417-4474-b5d8-e3354e9a45ad",
-    "lease:heartbeat:2026-08-26T05:32:30.790Z": "8ab9a3d8-96e3-4339-b43b-009c71bb09fc"
+    "lease:heartbeat:2026-08-26T05:32:30.790Z": "8ab9a3d8-96e3-4339-b43b-009c71bb09fc",
+    "phase:implement:1:complete": "9162d6d4-66fa-46ce-8785-ad8e0e6d2bf3"
   },
   "eventIds": {
     "194412ac-e384-4835-94fd-cee5a8867930": true,
@@ -159,7 +168,8 @@
     "f2537860-bfc2-4359-bfcd-4095727f55af": true,
     "aeecdfec-a5ad-4099-8b20-15f2f1935d12": true,
     "569cb753-6417-4474-b5d8-e3354e9a45ad": true,
-    "8ab9a3d8-96e3-4339-b43b-009c71bb09fc": true
+    "8ab9a3d8-96e3-4339-b43b-009c71bb09fc": true,
+    "9162d6d4-66fa-46ce-8785-ad8e0e6d2bf3": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
