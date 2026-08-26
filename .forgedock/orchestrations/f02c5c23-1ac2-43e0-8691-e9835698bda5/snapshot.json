@@ -6,16 +6,17 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 18,
-  "lastEventHash": "sha256:30a79a5ed0046a259486d54ec4a82d76ed938d8be5ac15dbc7a865d084f997b8",
+  "sequence": 19,
+  "lastEventHash": "sha256:da32732873e7e92ebf1c5c3aeea9987b437d5c7505ab90b55df29ece1ac21e9c",
   "lanes": [
     {
       "issueNumber": 92,
       "ordinal": 0,
-      "status": "running",
+      "status": "blocked",
       "refreshes": 0,
       "forgeRunId": "ed1f9760-d489-4a79-b26c-2613a5129081",
-      "subagentRunId": "f3e3f49d-db21-413e-9b2e-f8e488f50c34"
+      "subagentRunId": "f3e3f49d-db21-413e-9b2e-f8e488f50c34",
+      "reason": "Review is blocked: forge_run_review_panel failed after three consecutive pi-subagents RPC ping timeouts. PR #126 remains unchanged at the frozen head."
     },
     {
       "issueNumber": 94,
@@ -102,7 +103,8 @@
     "lane:94:recovered:6604bfab-e63e-4546-9296-7f5951b09711": "d47b9a0d-af6e-47aa-9a1c-86d9e25f307f",
     "lane:112:recovered:2b489e88-6c14-40fe-869e-0573839f9bb0": "21d4a394-19a3-492e-9d56-5aa8af8e58d4",
     "lane:94:continuation-unbound": "59332ace-24a0-473c-9656-018259110771",
-    "lane:112:continuation-unbound": "cb566292-fec3-450e-9a2d-417c4b0d1e75"
+    "lane:112:continuation-unbound": "cb566292-fec3-450e-9a2d-417c4b0d1e75",
+    "lane:92:blocked": "f5e52ff2-9320-407f-b8f8-7d688a0266d2"
   },
   "createdAt": "2026-08-26T17:53:19.264Z"
 }
