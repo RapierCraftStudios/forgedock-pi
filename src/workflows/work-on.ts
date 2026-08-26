@@ -2216,7 +2216,21 @@ export class ForgeWorkOnController {
         terminalSnapshot = await journal.append({ runId: link.forgeRunId, type: "lease.released", payload: { ownerRunId: link.leaseOwnerRunId, epoch: terminal.state.lease.epoch }, idempotencyKey: "lease:release", sessionId, message: `Release ForgeDock lease ${link.forgeRunId}`, ...(ctx.signal ? { signal: ctx.signal } : {}) });
       }
       const event = terminalSnapshot.events.at(-1);
-      if (event) await projector.projectEvent({ issueNumber: link.issueNumber, event, markdown: `## ForgeDock Pi complete\n\nRun: ${link.forgeRunId}`,  ...(ctx.signal ? { signal: ctx.signal } : {}) });
+      if (event) {
+        // The run is now durably terminal (and direct leases are released), so
+        // the active-run guard must reject further effects. Project only this
+        // exact terminal event through its marker-idempotent projection path.
+        const terminalProjector = new GitHubIssueProjector(
+          baseTransport,
+          link.repository,
+        );
+        await terminalProjector.projectEvent({
+          issueNumber: link.issueNumber,
+          event,
+          markdown: `## ForgeDock Pi complete\n\nRun: ${link.forgeRunId}`,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+      }
       link.status = "completed";
       this.#persistLink(link);
       this.#emitLifecycle(link, { headSha, nodeId: node.nodeId, outcome: link.terminalOutcome, pullNumber: link.terminalOutcome === "merged" ? pull?.number : undefined });
@@ -2765,6 +2779,36 @@ export class ForgeWorkOnController {
       (candidate) => candidate.forgeRunId === forgeRunId,
     );
     if (!link || link.status !== "running") return;
+    const parentNode = parentNodeFromId(link.currentNodeId);
+    if (parentNode && link.currentNodeId) {
+      const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
+      const token = await resolveGitHubToken(
+        this.#pi,
+        link.prepared.repositoryRoot,
+        ctx.signal,
+      );
+      const store = new GitHubStateBranchStore(
+        new FetchGitHubTransport({ token }),
+        link.repository,
+        link.stateBranch,
+      );
+      const current = await store.readRun(link.forgeRunId, ctx.signal);
+      const durableNode = current.state?.nodes[link.currentNodeId];
+      await this.#runParentNode(
+        link,
+        {
+          nodeId: link.currentNodeId,
+          node: parentNode,
+          attempt: durableNode?.attempt ?? nodeAttempt(link.currentNodeId),
+          ...(durableNode?.round ? { round: durableNode.round } : {}),
+          ...(durableNode?.headSha ? { headSha: durableNode.headSha } : {}),
+        },
+        policy,
+        store,
+        ctx,
+      );
+      return;
+    }
     const result = await this.#loadResult(link).catch(() => undefined);
     if (!result) return;
     link.status = "finalizing";
