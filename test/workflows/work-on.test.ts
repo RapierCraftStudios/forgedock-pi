@@ -105,6 +105,42 @@ test("merge rollback surfaces exhausted projection failure", async () => {
   assert.equal(attempts, 2);
 });
 
+test("merge rollback enforces hard bounds and stops after its timeout", async () => {
+  let attempts = 0;
+  const projector = {
+    async setWorkflowLabel(
+      _issueNumber: number,
+      _workflowLabel: string,
+      _signal?: AbortSignal,
+    ): Promise<void> {
+      attempts += 1;
+      throw new Error("temporary label projection failure");
+    },
+  };
+
+  await assert.rejects(
+    restoreWorkflowLabelAfterMergeFailure(
+      projector,
+      120,
+      "workflow:in-review",
+      { attempts: Number.MAX_SAFE_INTEGER, timeoutMs: 1, retryDelayMs: 0 },
+    ),
+    /between 1 and 3/,
+  );
+  assert.equal(attempts, 0);
+
+  await assert.rejects(
+    restoreWorkflowLabelAfterMergeFailure(
+      projector,
+      120,
+      "workflow:in-review",
+      { attempts: 3, timeoutMs: 1, retryDelayMs: 250 },
+    ),
+    /after 1 of 3 attempts/,
+  );
+  assert.equal(attempts, 1);
+});
+
 test("restart recovery recognizes every parent-owned durable node", () => {
   for (const node of ["review-join", "ci", "decision", "merge", "close", "cleanup"] as const)
     assert.equal(parentNodeFromId(`${node}-2`), node);

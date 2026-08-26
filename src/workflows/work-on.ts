@@ -4558,12 +4558,30 @@ export async function restoreWorkflowLabelAfterMergeFailure(
   const timeoutMs = options.timeoutMs ?? WORKFLOW_LABEL_ROLLBACK_TIMEOUT_MS;
   const retryDelayMs =
     options.retryDelayMs ?? WORKFLOW_LABEL_ROLLBACK_RETRY_DELAY_MS;
-  if (!Number.isSafeInteger(attempts) || attempts < 1)
-    throw new RangeError("Workflow label rollback attempts must be positive.");
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0)
-    throw new RangeError("Workflow label rollback timeout must be positive.");
-  if (!Number.isFinite(retryDelayMs) || retryDelayMs < 0)
-    throw new RangeError("Workflow label rollback delay cannot be negative.");
+  if (
+    !Number.isSafeInteger(attempts) ||
+    attempts < 1 ||
+    attempts > WORKFLOW_LABEL_ROLLBACK_ATTEMPTS
+  )
+    throw new RangeError(
+      `Workflow label rollback attempts must be between 1 and ${WORKFLOW_LABEL_ROLLBACK_ATTEMPTS}.`,
+    );
+  if (
+    !Number.isFinite(timeoutMs) ||
+    timeoutMs <= 0 ||
+    timeoutMs > WORKFLOW_LABEL_ROLLBACK_TIMEOUT_MS
+  )
+    throw new RangeError(
+      `Workflow label rollback timeout must be between 1 and ${WORKFLOW_LABEL_ROLLBACK_TIMEOUT_MS} milliseconds.`,
+    );
+  if (
+    !Number.isFinite(retryDelayMs) ||
+    retryDelayMs < 0 ||
+    retryDelayMs > WORKFLOW_LABEL_ROLLBACK_RETRY_DELAY_MS
+  )
+    throw new RangeError(
+      `Workflow label rollback delay must be between 0 and ${WORKFLOW_LABEL_ROLLBACK_RETRY_DELAY_MS} milliseconds.`,
+    );
 
   // Deliberately do not compose this controller with mergeSignal. The merge
   // operation's cancellation cannot cancel its compensating label update.
@@ -4577,8 +4595,11 @@ export async function restoreWorkflowLabelAfterMergeFailure(
   );
   timeout.unref();
   let lastError: unknown;
+  let completedAttempts = 0;
   try {
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      if (rollbackController.signal.aborted) break;
+      completedAttempts = attempt;
       try {
         await projector.setWorkflowLabel(
           issueNumber,
@@ -4588,8 +4609,8 @@ export async function restoreWorkflowLabelAfterMergeFailure(
         return;
       } catch (error) {
         lastError = error;
-        if (attempt === attempts) break;
-        await delayWithoutSignal(retryDelayMs);
+        if (attempt === attempts || rollbackController.signal.aborted) break;
+        await delayWithSignal(retryDelayMs, rollbackController.signal);
       }
     }
   } finally {
@@ -4598,17 +4619,33 @@ export async function restoreWorkflowLabelAfterMergeFailure(
   const cancellationContext = options.mergeSignal?.aborted
     ? " The merge operation was cancelled; compensation used an independent signal."
     : "";
+  const attemptSummary =
+    completedAttempts === attempts
+      ? `${attempts} attempts`
+      : `${completedAttempts} of ${attempts} attempts`;
   throw new Error(
-    `Unable to restore workflow label ${workflowLabel} after ${attempts} attempts.${cancellationContext}`,
+    `Unable to restore workflow label ${workflowLabel} after ${attemptSummary}.${cancellationContext}`,
     { cause: lastError },
   );
 }
 
-async function delayWithoutSignal(milliseconds: number): Promise<void> {
-  if (milliseconds === 0) return;
+async function delayWithSignal(
+  milliseconds: number,
+  signal: AbortSignal,
+): Promise<void> {
+  if (milliseconds === 0 || signal.aborted) return;
   await new Promise<void>((resolve) => {
-    const timer = setTimeout(resolve, milliseconds);
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, milliseconds);
     timer.unref();
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
   });
 }
 
