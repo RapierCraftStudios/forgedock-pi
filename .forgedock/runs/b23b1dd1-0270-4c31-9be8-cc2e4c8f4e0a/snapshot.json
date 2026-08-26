@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 10,
-  "lastEventHash": "sha256:3582b5f8960de7c121c95dacc7c5ba8aa5cf3debe6b03a29e15bad48aed60da3",
+  "sequence": 11,
+  "lastEventHash": "sha256:18287497b298c4b43e05035726ae0650a757cd0cb2f0d17d8cd17103deac4fa8",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -64,15 +64,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Builder contract is limited to src/adapters/verification-preflight.ts and test/adapters/verification-preflight.test.ts.",
+            "Implementation will use lstat to identify the final manifest entry before realpath; missing entries retain the existing missing-manifest diagnostic, while dangling symlinks fail closed with a dedicated diagnostic.",
+            "Valid in-repository package.json symlinks retain canonical target and JSON/script validation; outside-repository targets remain rejected.",
+            "Regression fixture will include a nested package script plus a dangling root package.json symlink and assert root preflight rejects rather than selecting nested content.",
+            "No policy, workflow, public API, UX, dependency, or protected-branch changes are in scope."
+          ],
           "logicalNodeId": "work-on-plan",
           "startedAt": "2026-08-26T23:07:06.394Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/b23b1dd1-0270-4c31-9be8-cc2e4c8f4e0a",
           "branch": "forge/issue-115-b23b1dd1",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T23:08:06.595Z",
+          "outputArtifactHash": "sha256:issue-115-plan-output-lstat-regression"
         }
       ]
     }
@@ -89,7 +97,8 @@
     "phase:investigate:1:start": "2589702b-2d66-4958-9688-79f628260842",
     "phase:investigate:1:complete": "d10e2527-e1bb-4fda-b391-1860f829f9a9",
     "phase:plan:1:queue": "3ddc3fb9-ca9b-450a-a59c-968939f6af3b",
-    "phase:plan:1:start": "cbd65ecf-cc92-4fb7-b14c-6ad73f73e380"
+    "phase:plan:1:start": "cbd65ecf-cc92-4fb7-b14c-6ad73f73e380",
+    "phase:plan:1:complete": "d1a827e1-a40f-4653-91ba-ee6419f08a4d"
   },
   "eventIds": {
     "268d1542-2116-474c-957d-cf47a3b629a2": true,
@@ -101,7 +110,8 @@
     "2589702b-2d66-4958-9688-79f628260842": true,
     "d10e2527-e1bb-4fda-b391-1860f829f9a9": true,
     "3ddc3fb9-ca9b-450a-a59c-968939f6af3b": true,
-    "cbd65ecf-cc92-4fb7-b14c-6ad73f73e380": true
+    "cbd65ecf-cc92-4fb7-b14c-6ad73f73e380": true,
+    "d1a827e1-a40f-4653-91ba-ee6419f08a4d": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
