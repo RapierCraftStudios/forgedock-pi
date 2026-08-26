@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:227cc6d41ef71c24af02cb52f04e337ae502f16f5322a86a6439f6c3224e92ec",
+  "sequence": 8,
+  "lastEventHash": "sha256:13a47fd492b1b8eef00511ab31c4f8ca01f19c5b11b57f7f08bfcdf7475eceb8",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -38,15 +38,21 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "current merge-node catch restores workflow:in-review through GitHubIssueProjector but suppresses rollback failures",
+            "current integration checkout omits ctx.signal from the rollback call, so the cited same-signal detail is stale for this exact base; rollback remains unbounded and best-effort because errors are swallowed",
+            "GitHubIssueProjector.setWorkflowLabel performs GET then PUT and accepts an optional AbortSignal",
+            "no focused merge-failure rollback regression coverage exists in the current tests"
+          ],
           "logicalNodeId": "work-on/investigate",
           "startedAt": "2026-08-26T18:01:19.008Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/195fe0bb-35f6-493a-ba12-932d5d3d7cd5",
           "branch": "forge/issue-120-195fe0bb",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T18:02:57.026Z"
         }
       ]
     }
@@ -60,7 +66,8 @@
     "phase:resolve:1:start": "db8a99e6-5fcb-4f92-826f-2ec7ca3f4d4b",
     "phase:resolve:1:complete": "54d97185-3455-4853-bc57-7bf6f78b8bce",
     "phase:investigate:1:queue": "8e79e54a-24b1-46a0-b41c-df5d8778bd2c",
-    "phase:investigate:1:start": "8d6f9e27-ba1c-4d09-a080-eaba500dc440"
+    "phase:investigate:1:start": "8d6f9e27-ba1c-4d09-a080-eaba500dc440",
+    "phase:investigate:1:complete": "76e95942-1697-4668-88ef-69a0c1d7442b"
   },
   "eventIds": {
     "09d91549-cdb4-4496-98c7-bfde838d3371": true,
@@ -69,7 +76,8 @@
     "db8a99e6-5fcb-4f92-826f-2ec7ca3f4d4b": true,
     "54d97185-3455-4853-bc57-7bf6f78b8bce": true,
     "8e79e54a-24b1-46a0-b41c-df5d8778bd2c": true,
-    "8d6f9e27-ba1c-4d09-a080-eaba500dc440": true
+    "8d6f9e27-ba1c-4d09-a080-eaba500dc440": true,
+    "76e95942-1697-4668-88ef-69a0c1d7442b": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
