@@ -48,6 +48,7 @@ export async function preflightRequiredVerificationCommands(
         `${basePath}.argv`,
         "must name an executable",
       );
+    assertNoPackageLocationOptions(command.argv, `${basePath}.argv`);
     if (!(await executableAvailable(program, cwd, options.path ?? process.env.PATH))) {
       throw new VerificationPreflightError(
         `${basePath}.argv`,
@@ -114,6 +115,40 @@ async function executableAvailable(
     }
   }
   return false;
+}
+
+const NPM_PACKAGE_LOCATION_OPTIONS = new Set([
+  "--prefix",
+  "--global",
+  "-g",
+  "--location",
+  "-L",
+  "--workspace",
+  "-w",
+  "--workspaces",
+  "--ws",
+  "--include-workspace-root",
+  "--workspace-root",
+  "--globalconfig",
+  "--userconfig",
+]);
+
+/** Reject npm options that can select a package other than the bound cwd. */
+export function assertNoPackageLocationOptions(
+  argv: readonly string[],
+  path = "verification command argv",
+): void {
+  const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
+  if (manager !== "npm") return;
+  for (const argument of argv.slice(1)) {
+    if (argument === "--") return;
+    const option = argument.split("=", 1)[0] ?? "";
+    if (NPM_PACKAGE_LOCATION_OPTIONS.has(option))
+      throw new VerificationPreflightError(
+        path,
+        `npm package-location option '${argument}' is not allowed; verification cwd is bound`,
+      );
+  }
 }
 
 function packageScriptName(argv: readonly string[]): string | undefined {

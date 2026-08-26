@@ -111,6 +111,53 @@ test("preflight checks executable availability without running the command", asy
   }
 });
 
+test("preflight rejects npm package-location options around the package command", async () => {
+  const testFixture = await fixture();
+  try {
+    const locationOptions = [
+      ["npm", "--prefix", "web", "test"],
+      ["npm", "test", "--prefix", "web"],
+      ["npm", "--prefix=web", "test"],
+      ["npm", "test", "--prefix=web"],
+      ["npm", "-g", "test"],
+      ["npm", "test", "--location=global"],
+      ["npm", "--workspace", "web", "test"],
+      ["npm", "test", "-w", "web"],
+      ["npm", "--workspaces", "test"],
+      ["npm", "test", "--include-workspace-root"],
+      ["npm", "--globalconfig", "config", "test"],
+      ["npm", "test", "--userconfig=config"],
+    ];
+    for (const argv of locationOptions) {
+      await assert.rejects(
+        preflightRequiredVerificationCommands(
+          testFixture.root,
+          { test: command("web", { argv }) },
+          { path: testFixture.path, configPath: "/repo/.forge/config.json" },
+        ),
+        (error: unknown) =>
+          error instanceof VerificationPreflightError &&
+          error.path ===
+            "/repo/.forge/config.json verification.commands.test.argv" &&
+          /package-location option/.test(error.message),
+        JSON.stringify(argv),
+      );
+    }
+
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      {
+        test: command("web", {
+          argv: ["npm", "test", "--", "--prefix", "outside"],
+        }),
+      },
+      { path: testFixture.path },
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
 test("verification cwd rejects missing, control, and symlink-escape directories", async () => {
   const testFixture = await fixture();
   try {
