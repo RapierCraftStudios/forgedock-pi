@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import type {
@@ -10,6 +13,7 @@ import {
   confirmExpiredLeaseTakeover,
   confirmOrchestrationDispatch,
   confirmWorkOnDispatch,
+  configureForgePolicy,
   issueResolverPrompt,
   registerForgeCommands,
 } from "../../src/ui/commands.ts";
@@ -132,6 +136,86 @@ test("work-on resolver accepts free-form intent but requires exactly one issue",
   assert.match(prompt, /interactive exact-issue confirmation/);
   assert.match(prompt, /Original expression:/);
   assert.doesNotMatch(prompt, /call forge_orchestrate exactly once/);
+});
+
+test("forge:init preserves configured monorepo verification commands", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-init-test-"));
+  const configPath = join(root, ".forge", "config.json");
+  const commands = {
+    "web-test": {
+      argv: ["npm", "test"],
+      cwd: "web",
+      required: true,
+      timeoutMs: 600_000,
+    },
+  };
+  try {
+    await mkdir(join(root, ".forge"), { recursive: true });
+    await writeFile(
+      configPath,
+      `${JSON.stringify(
+        {
+          schema: "forgedock.config/v1",
+          repository: { provider: "github", name: "owner/repo" },
+          state: { branch: "forgedock/state/v1" },
+          branches: {
+            integration: ["staging"],
+            protected: ["main"],
+            autoMergeIntegration: true,
+          },
+          verification: {
+            github: {
+              required: true,
+              requiredBranches: ["main"],
+              waitTimeoutMs: 1_800_000,
+              pollIntervalMs: 10_000,
+            },
+            commands,
+          },
+          review: { required: ["correctness", "security"], maxRounds: 3 },
+          orchestration: { maxConcurrent: 2, maxIssues: 20 },
+          subagents: {
+            maxConcurrent: 2,
+            maxDepth: 2,
+            workOnTimeoutMs: 14_400_000,
+            reviewerTimeoutMs: 900_000,
+          },
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    const selections = {
+      select: async (title: string, options: string[]) => {
+        if (title.startsWith("Which integration"))
+          return "Keep staging (current)";
+        if (title.startsWith("Which PR target"))
+          return "Integration and default (staging, main)";
+        return options[0] ?? "";
+      },
+    };
+    const exec = async (_command: string, args: readonly string[]) => {
+      if (args[0] === "repo")
+        return { code: 0, stdout: "main\n", stderr: "" };
+      return { code: 0, stdout: "main\nstaging\n", stderr: "" };
+    };
+    const result = await configureForgePolicy({
+      pi: { exec } as never,
+      ctx: { hasUI: true, ui: selections } as never,
+      root,
+      repository: "owner/repo",
+      configPath,
+    });
+    const serialized = JSON.parse(await readFile(configPath, "utf8")) as {
+      verification: { commands: unknown };
+    };
+    assert.deepEqual(serialized.verification.commands, commands);
+    assert.deepEqual(result.verification.commands, commands);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("work-on slash command sends free-form intent to the resolver", async () => {

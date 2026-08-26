@@ -72,7 +72,9 @@ test("required monorepo verification preflight selects the package cwd", async (
       (error: unknown) =>
         error instanceof VerificationPreflightError &&
         error.path === "/repo/.forge/config.json verification.commands.test.argv" &&
-        /no 'test' script/.test(error.message),
+        /no 'test' script/.test(error.message) &&
+        /\/repo\/\.forge\/config\.json verification\.commands\.test\.argv/.test(error.message) &&
+        /\/forge:init/.test(error.message),
     );
 
     await preflightRequiredVerificationCommands(
@@ -92,9 +94,16 @@ test("preflight checks executable availability without running the command", asy
       preflightRequiredVerificationCommands(
         testFixture.root,
         { test: command("web", { argv: ["missing-tool", "test"] }) },
-        { path: testFixture.path },
+        {
+          path: testFixture.path,
+          configPath: "/repo/.forge/config.json",
+        },
       ),
-      /executable 'missing-tool' is unavailable/,
+      (error: unknown) =>
+        error instanceof VerificationPreflightError &&
+        error.path === "/repo/.forge/config.json verification.commands.test.argv" &&
+        /executable 'missing-tool' is unavailable/.test(error.message) &&
+        /\/forge:init/.test(error.message),
     );
     await preflightRequiredVerificationCommands(
       testFixture.root,
@@ -116,8 +125,16 @@ test("verification cwd rejects missing, control, and symlink-escape directories"
   try {
     await symlink(testFixture.outside, join(testFixture.root, "escaped"), "dir");
     await assert.rejects(
-      resolveVerificationCommandDirectory(testFixture.root, "missing"),
-      /does not exist/,
+      resolveVerificationCommandDirectory(
+        testFixture.root,
+        "missing",
+        "/repo/.forge/config.json verification.commands.test.cwd",
+      ),
+      (error: unknown) =>
+        error instanceof VerificationPreflightError &&
+        error.path === "/repo/.forge/config.json verification.commands.test.cwd" &&
+        /does not exist/.test(error.message) &&
+        /\/forge:init/.test(error.message),
     );
     await assert.rejects(
       resolveVerificationCommandDirectory(testFixture.root, ".pi"),

@@ -46,12 +46,20 @@ export async function preflightRequiredVerificationCommands(
     if (!program)
       throw new VerificationPreflightError(
         `${basePath}.argv`,
-        "must name an executable",
+        withRemediation(
+          "must name an executable",
+          `${basePath}.argv`,
+          "set an executable argv[0]",
+        ),
       );
     if (!(await executableAvailable(program, cwd, options.path ?? process.env.PATH))) {
       throw new VerificationPreflightError(
         `${basePath}.argv`,
-        `executable '${program}' is unavailable; install it or update the tracked command`,
+        withRemediation(
+          `executable '${program}' is unavailable`,
+          `${basePath}.argv`,
+          `install '${program}' or update the approved argv`,
+        ),
       );
     }
     const script = packageScriptName(command.argv);
@@ -69,12 +77,23 @@ export async function resolveVerificationCommandDirectory(
   const canonicalRoot = await realpath(repositoryRoot);
   const lexical = resolve(canonicalRoot, normalized);
   if (!pathWithin(canonicalRoot, lexical))
-    throw new VerificationPreflightError(path, "escapes the repository");
+    throw new VerificationPreflightError(
+      path,
+      withRemediation(
+        "escapes the repository",
+        path,
+        "set a repository-relative cwd within the checkout",
+      ),
+    );
   const firstSegment = relative(canonicalRoot, lexical).split(/[\\/]/, 1)[0];
   if (firstSegment === ".git" || firstSegment === ".pi")
     throw new VerificationPreflightError(
       path,
-      "must not target Git or Forge runtime control directories",
+      withRemediation(
+        "must not target Git or Forge runtime control directories",
+        path,
+        "set cwd to the source package directory",
+      ),
     );
   let canonical: string;
   try {
@@ -82,13 +101,31 @@ export async function resolveVerificationCommandDirectory(
   } catch {
     throw new VerificationPreflightError(
       path,
-      `directory '${normalized}' does not exist`,
+      withRemediation(
+        `directory '${normalized}' does not exist`,
+        path,
+        "set cwd to an existing package directory",
+      ),
     );
   }
   if (!pathWithin(canonicalRoot, canonical))
-    throw new VerificationPreflightError(path, "resolves outside the repository");
+    throw new VerificationPreflightError(
+      path,
+      withRemediation(
+        "resolves outside the repository",
+        path,
+        "set cwd to a repository-relative package directory",
+      ),
+    );
   if (!(await stat(canonical)).isDirectory())
-    throw new VerificationPreflightError(path, "must resolve to a directory");
+    throw new VerificationPreflightError(
+      path,
+      withRemediation(
+        "must resolve to a directory",
+        path,
+        "set cwd to an existing package directory",
+      ),
+    );
   return canonical;
 }
 
@@ -141,13 +178,21 @@ async function assertPackageScript(
   } catch {
     throw new VerificationPreflightError(
       `${basePath}.cwd`,
-      `selected package directory has no package.json for script '${script}'`,
+      withRemediation(
+        `selected package directory has no package.json for script '${script}'`,
+        `${basePath}.cwd`,
+        `set cwd to the package that defines '${script}'`,
+      ),
     );
   }
   if (!pathWithin(repositoryRoot, canonicalManifest))
     throw new VerificationPreflightError(
       `${basePath}.cwd`,
-      "package.json resolves outside the repository",
+      withRemediation(
+        "package.json resolves outside the repository",
+        `${basePath}.cwd`,
+        "set cwd to a package inside the repository",
+      ),
     );
   let manifest: unknown;
   try {
@@ -155,7 +200,11 @@ async function assertPackageScript(
   } catch {
     throw new VerificationPreflightError(
       `${basePath}.cwd`,
-      "selected package.json is not valid JSON",
+      withRemediation(
+        "selected package.json is not valid JSON",
+        `${basePath}.cwd`,
+        "fix the package manifest or select another package",
+      ),
     );
   }
   const scripts =
@@ -169,9 +218,21 @@ async function assertPackageScript(
   if (typeof value !== "string" || !value.trim()) {
     throw new VerificationPreflightError(
       `${basePath}.argv`,
-      `package.json in '${relative(repositoryRoot, cwd) || "."}' has no '${script}' script; set cwd to the package that defines it or use CI-only verification`,
+      withRemediation(
+        `package.json in '${relative(repositoryRoot, cwd) || "."}' has no '${script}' script`,
+        `${basePath}.argv`,
+        `set ${basePath}.cwd to the package that defines '${script}'`,
+      ),
     );
   }
+}
+
+function withRemediation(
+  message: string,
+  policyPath: string,
+  action: string,
+): string {
+  return `${message}; update ${policyPath} in the tracked policy to ${action}, or run /forge:init to configure GitHub-CI-only verification`;
 }
 
 function pathWithin(root: string, target: string): boolean {

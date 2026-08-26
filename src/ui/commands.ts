@@ -219,7 +219,7 @@ export function registerForgeCommands(
       });
       await reconcileWorkflowLabels(pi, root, config.repository.name);
       ctx.ui.notify(
-        `ForgeDock setup complete.\nPolicy: ${configPath}\nIntegration: ${config.branches.integration[0]}\nCI-required PR targets: ${config.verification.github.requiredBranches.join(", ")}\nAuto-merge: ${config.branches.autoMergeIntegration ? "enabled" : "disabled"}\nParallel lanes: ${config.orchestration.maxConcurrent}\nReview and commit the tracked policy.`,
+        `ForgeDock setup complete.\nPolicy: ${configPath}\nIntegration: ${config.branches.integration[0]}\nCI-required PR targets: ${config.verification.github.requiredBranches.join(", ")}\nLocal verification: ${Object.keys(config.verification.commands).length > 0 ? "tracked commands preserved" : "GitHub CI only (no local commands)"}\nAuto-merge: ${config.branches.autoMergeIntegration ? "enabled" : "disabled"}\nParallel lanes: ${config.orchestration.maxConcurrent}\nReview and commit the tracked policy.`,
         "info",
       );
       await orchestrator.resume(ctx);
@@ -333,7 +333,7 @@ export function issueResolverPrompt(
   ].join("\n\n");
 }
 
-async function configureForgePolicy(input: {
+export async function configureForgePolicy(input: {
   pi: ExtensionAPI;
   ctx: ExtensionCommandContext;
   root: string;
@@ -442,7 +442,7 @@ async function configureForgePolicy(input: {
         waitTimeoutMs: config.verification.github.waitTimeoutMs,
         pollIntervalMs: config.verification.github.pollIntervalMs,
       },
-      commands: {},
+      commands: config.verification.commands,
     },
     orchestration: {
       ...config.orchestration,
