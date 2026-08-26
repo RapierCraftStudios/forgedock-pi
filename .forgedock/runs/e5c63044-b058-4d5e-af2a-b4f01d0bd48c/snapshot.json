@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:23adcc4caf9546423f7b265836dee06afb7370acf049b472e07e6dc8d499b04c",
+  "sequence": 8,
+  "lastEventHash": "sha256:344f559970786ca095e2f8c6e59727159a48a4def9d9580e20dfb9f02e98d954",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -38,15 +38,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "src/adapters/verification-preflight.ts:119-128 only maps the npm-manager command token 'test' to package script 'test'",
+            "Unknown npm test aliases return undefined and skip assertPackageScript",
+            "test/adapters/verification-preflight.test.ts currently covers npm test but has no npm t/tst alias regression",
+            "The issue fingerprint identifies VP-003 as a confirmed correctness finding from PR #110"
+          ],
           "logicalNodeId": "work-on/investigate",
           "startedAt": "2026-08-26T20:06:21.048Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/e5c63044-b058-4d5e-af2a-b4f01d0bd48c",
           "branch": "forge/issue-113-e5c63044",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T20:07:31.927Z",
+          "outputArtifactHash": "sha256:investigation-issue-113-vp003"
         }
       ]
     }
@@ -60,7 +67,8 @@
     "phase:resolve:1:start": "9869594a-5990-4901-9b98-fec04101fc0f",
     "phase:resolve:1:complete": "c28b8a1e-654f-4822-8314-dedce1db8507",
     "phase:investigate:1:queue": "c445a31f-ffd9-4b01-8217-e3cc3a0b9b37",
-    "phase:investigate:1:start": "b6b78b1f-038c-4e15-893a-03d709ad4626"
+    "phase:investigate:1:start": "b6b78b1f-038c-4e15-893a-03d709ad4626",
+    "phase:investigate:1:complete": "8b7aeef6-2c0b-4a44-93bd-7fdfbc7b0eb4"
   },
   "eventIds": {
     "448b5312-5db8-4e0c-86ae-d97453fbcf33": true,
@@ -69,7 +77,8 @@
     "9869594a-5990-4901-9b98-fec04101fc0f": true,
     "c28b8a1e-654f-4822-8314-dedce1db8507": true,
     "c445a31f-ffd9-4b01-8217-e3cc3a0b9b37": true,
-    "b6b78b1f-038c-4e15-893a-03d709ad4626": true
+    "b6b78b1f-038c-4e15-893a-03d709ad4626": true,
+    "8b7aeef6-2c0b-4a44-93bd-7fdfbc7b0eb4": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
