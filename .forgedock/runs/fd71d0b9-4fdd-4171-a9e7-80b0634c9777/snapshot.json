@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 16,
-  "lastEventHash": "sha256:530edf6d3037892b8b447dfe3cd88f3a9f9e287c60e2296fb399ee21057ad5e2",
+  "sequence": 17,
+  "lastEventHash": "sha256:910002f6e22028fc9e51bd688c49c471d61a21a063a16a9d3ad74cc0fbfae6b1",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -107,15 +107,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Policy now normalizes a repository-relative command cwd, defaults legacy commands to '.', and accepts an empty local-command map for CI-owned verification.",
+            "The new verification preflight reads package.json, checks required executables and npm scripts, rejects missing/escaping cwd paths, and reports config-path remediation before writer launch.",
+            "forge:init discovers a package-scoped npm test or emits CI-only commands; forge_verify uses the bound cwd and independently rejects unsafe cwd bindings.",
+            "Monorepo fixture, policy, preflight, init-discovery, and binding regression coverage were added.",
+            "LSP diagnostics are clean for all changed source and test files; no .forge/config.json was added."
+          ],
           "logicalNodeId": "implement-1",
           "startedAt": "2026-08-26T09:18:45.039Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/fd71d0b9-4fdd-4171-a9e7-80b0634c9777",
           "branch": "forge/issue-94-fd71d0b9",
-          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4"
+          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4",
+          "finishedAt": "2026-08-26T09:25:31.646Z"
         }
       ]
     }
@@ -138,7 +145,8 @@
     "phase:prepare-worktree:1:start": "e4f19180-7214-40e4-a781-de36a346695a",
     "phase:prepare-worktree:1:complete": "9b9195e2-bffd-42c4-a0e2-15d2d30b8c38",
     "phase:implement:1:queue": "b6761377-a156-464b-b9e5-c1851e9aaf26",
-    "phase:implement:1:start": "3e4fa65f-386f-40e9-bf62-f1b8e1aeaa70"
+    "phase:implement:1:start": "3e4fa65f-386f-40e9-bf62-f1b8e1aeaa70",
+    "phase:implement:1:complete": "3b98e075-451c-462a-9dff-7d21b18f8441"
   },
   "eventIds": {
     "79512ac9-4bad-48a9-99d8-5466decdac7f": true,
@@ -156,7 +164,8 @@
     "e4f19180-7214-40e4-a781-de36a346695a": true,
     "9b9195e2-bffd-42c4-a0e2-15d2d30b8c38": true,
     "b6761377-a156-464b-b9e5-c1851e9aaf26": true,
-    "3e4fa65f-386f-40e9-bf62-f1b8e1aeaa70": true
+    "3e4fa65f-386f-40e9-bf62-f1b8e1aeaa70": true,
+    "3b98e075-451c-462a-9dff-7d21b18f8441": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
