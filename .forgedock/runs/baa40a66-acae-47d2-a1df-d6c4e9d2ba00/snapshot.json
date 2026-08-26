@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 6,
-  "lastEventHash": "sha256:1847b53d7460fb5ff3b19bf721367b8b2157c23771184dc0b227b00054b501bf",
+  "sequence": 7,
+  "lastEventHash": "sha256:3ce7a03214dd6995194b0ed6e1edfb0735a911e39b8482668de5d26080824eb9",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -39,11 +39,16 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
           "evidence": [],
-          "inputArtifactHash": "sha256:resolve-111-config-verified"
+          "inputArtifactHash": "sha256:resolve-111-config-verified",
+          "logicalNodeId": "investigate-1",
+          "startedAt": "2026-08-26T23:46:16.163Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/baa40a66-acae-47d2-a1df-d6c4e9d2ba00",
+          "branch": "forge/issue-111-baa40a66",
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
         }
       ]
     }
@@ -56,7 +61,8 @@
     "phase:resolve:1:queue": "eeac2832-d4b7-4d36-bc1c-80497cc86cce",
     "phase:resolve:1:start": "01bc0f78-bb1a-4636-b46f-c315572a46d6",
     "phase:resolve:1:complete": "25ad5e59-ff6b-4377-bebf-6ed8eb5527c7",
-    "phase:investigate:1:queue": "5238271c-cebb-4afe-b995-43191f8aad22"
+    "phase:investigate:1:queue": "5238271c-cebb-4afe-b995-43191f8aad22",
+    "phase:investigate:1:start": "dcb7b781-c4b7-40cb-ab6e-ab4a91562749"
   },
   "eventIds": {
     "50317c52-ef4b-4b9d-ab89-8ce65c8af8aa": true,
@@ -64,7 +70,8 @@
     "eeac2832-d4b7-4d36-bc1c-80497cc86cce": true,
     "01bc0f78-bb1a-4636-b46f-c315572a46d6": true,
     "25ad5e59-ff6b-4377-bebf-6ed8eb5527c7": true,
-    "5238271c-cebb-4afe-b995-43191f8aad22": true
+    "5238271c-cebb-4afe-b995-43191f8aad22": true,
+    "dcb7b781-c4b7-40cb-ab6e-ab4a91562749": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
