@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   assertWorkflowLabel,
   checkPostMergeAuditTrail,
+  workflowLabelForCheckpoint,
   checkPreMergeAuditTrail,
   POST_MERGE_ISSUE_MARKERS,
   POST_MERGE_PR_MARKERS,
@@ -66,5 +67,36 @@ test("workflow labels are exact stage projections", () => {
   assert.throws(
     () => assertWorkflowLabel("workflow:investigating", "review"),
     /workflow:in-review/,
+  );
+});
+
+test("checkpoint transitions reconcile the workflow label across the lifecycle", () => {
+  const transitions = [
+    ["resolve", "start", "workflow:investigating"],
+    ["investigate", "complete", "workflow:ready-to-build"],
+    ["plan", "complete", "workflow:building"],
+    ["prepare-worktree", "start", "workflow:building"],
+    ["implement", "complete", "workflow:building"],
+    ["verify", "start", "workflow:building"],
+    ["review", "start", "workflow:in-review"],
+    ["review", "complete", "workflow:awaiting-merge"],
+    ["merge", "start", "workflow:awaiting-merge"],
+    ["merge", "complete", "workflow:merged"],
+  ] as const;
+
+  for (const [phase, action, expected] of transitions) {
+    assert.equal(workflowLabelForCheckpoint({ phase, action }), expected);
+  }
+  assert.equal(
+    workflowLabelForCheckpoint({
+      phase: "investigate",
+      action: "complete",
+      report: "**Verdict**: INVALID",
+    }),
+    "workflow:invalid",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "verify", action: "queue" }),
+    undefined,
   );
 });

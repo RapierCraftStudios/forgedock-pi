@@ -20,7 +20,10 @@ import {
   type ForgeWorkOnResult,
 } from "../agents/contracts.ts";
 import { materializeForgeAgents } from "../agents/materialize.ts";
-import { checkPreMergeAuditTrail } from "../core/artifact-protocol.ts";
+import {
+  checkPreMergeAuditTrail,
+  WORKFLOW_LABEL_BY_STAGE,
+} from "../core/artifact-protocol.ts";
 import {
   canAutoMerge,
   isProtectedBranch,
@@ -302,6 +305,11 @@ export class ForgeWorkOnController {
       sessionId,
       ctx.signal,
     );
+    await projector.setWorkflowLabel(
+      link.issueNumber,
+      WORKFLOW_LABEL_BY_STAGE.awaitingMerge,
+      ctx.signal,
+    );
     await this.#git.push(
       link.prepared.worktreePath,
       link.prepared.branch,
@@ -442,6 +450,11 @@ export class ForgeWorkOnController {
       undefined,
       [merged.sha],
     );
+    await projector.setWorkflowLabel(
+      link.issueNumber,
+      WORKFLOW_LABEL_BY_STAGE.merged,
+      ctx.signal,
+    );
     await postReviewCompletionArtifacts({
       github,
       projector,
@@ -573,7 +586,7 @@ export class ForgeWorkOnController {
       });
       await projector.setWorkflowLabel(
         link.issueNumber,
-        "workflow:merged",
+        WORKFLOW_LABEL_BY_STAGE.merged,
         ctx.signal,
       );
     }
