@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:08b457c9097ef6e91ff09f9ce9fdc61c11af3456e3f3abb104f5a507b36f0e47",
+  "sequence": 8,
+  "lastEventHash": "sha256:4ab011ad9342ab4a04f25661c13abe7953fe580bddc1ba25831f2440850b6adc",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -38,16 +38,24 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Current preflight resolves command.cwd and validates package.json there.",
+            "Current packageScriptName assumes argv[1] is the npm-compatible command and therefore skips script validation when a package-selection option precedes the command.",
+            "The command runner executes the original argv unchanged, so npm package-selection options can make execution target a package different from the manifest preflighted at cwd.",
+            "README.md documents cwd as the package owner for monorepo checks.",
+            "Issue metadata records source PR #110 and prior remediation commit d174f8e9d8ff88c1a40b8a75c99489c76ef52e92, which rejected package-location options and required workingDirectory."
+          ],
           "inputArtifactHash": "issue-111-review-finding-56ebb4f62bcf530064157181b2e4b3692b30db9cb430175d80234f27692ff118",
           "logicalNodeId": "investigate",
           "startedAt": "2026-08-26T19:16:12.213Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/ce7f65c2-9592-4836-91b1-5bcf721a39f5",
           "branch": "forge/issue-111-ce7f65c2",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T19:17:19.486Z",
+          "outputArtifactHash": "investigation-111-package-selection-cwd"
         }
       ]
     }
@@ -61,7 +69,8 @@
     "phase:resolve:1:start": "bf99ab7c-aaae-4a38-9781-6ae851ff44ec",
     "phase:resolve:1:complete": "b7ba84bb-b2bf-4176-9d9f-06b852556eef",
     "phase:investigate:1:queue": "28b87b05-91a3-4d71-a4e5-2153650c9648",
-    "phase:investigate:1:start": "df9dda05-7c01-4142-ab98-4550180d450e"
+    "phase:investigate:1:start": "df9dda05-7c01-4142-ab98-4550180d450e",
+    "phase:investigate:1:complete": "409d4932-c113-4146-8793-09731d583aa6"
   },
   "eventIds": {
     "eee3d593-c568-4a9a-9e1f-9d5fce12eca3": true,
@@ -70,7 +79,8 @@
     "bf99ab7c-aaae-4a38-9781-6ae851ff44ec": true,
     "b7ba84bb-b2bf-4176-9d9f-06b852556eef": true,
     "28b87b05-91a3-4d71-a4e5-2153650c9648": true,
-    "df9dda05-7c01-4142-ab98-4550180d450e": true
+    "df9dda05-7c01-4142-ab98-4550180d450e": true,
+    "409d4932-c113-4146-8793-09731d583aa6": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
