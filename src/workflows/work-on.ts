@@ -578,30 +578,32 @@ export class ForgeWorkOnController {
     if (!stage) return;
     const label = WORKFLOW_LABEL_BY_STAGE[stage];
     assertWorkflowLabel(label, stage);
-    try {
-      const activeProjector =
-        projector ??
-        new GitHubIssueProjector(
-          new FetchGitHubTransport({
-            token: await resolveGitHubToken(
-              this.#pi,
-              link.prepared.repositoryRoot,
-              ctx.signal,
-            ),
-          }),
-          link.repository,
-        );
-      await activeProjector.setWorkflowLabel(
-        link.issueNumber,
-        label,
-        ctx.signal,
-      );
-    } catch (error) {
-      ctx.ui.notify(
-        `ForgeDock issue #${link.issueNumber} durable state advanced, but workflow label projection will retry: ${errorMessage(error)}`,
-        "warning",
-      );
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const activeProjector =
+          projector ??
+          new GitHubIssueProjector(
+            new FetchGitHubTransport({
+              token: await resolveGitHubToken(
+                this.#pi,
+                link.prepared.repositoryRoot,
+              ),
+            }),
+            link.repository,
+          );
+        await activeProjector.setWorkflowLabel(link.issueNumber, label);
+        return;
+      } catch (error) {
+        lastError = error;
+        if (attempt < 3)
+          await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
+      }
     }
+    ctx.ui.notify(
+      `ForgeDock issue #${link.issueNumber} durable state advanced, but workflow label projection will retry: ${errorMessage(lastError)}`,
+      "warning",
+    );
   }
 
   async #reconcileWorkflowProjection(
@@ -611,6 +613,13 @@ export class ForgeWorkOnController {
   ): Promise<void> {
     const snapshot = await store.readRun(link.forgeRunId, ctx.signal);
     if (!snapshot.state) return;
+    if (
+      snapshot.state.status === "completed" &&
+      snapshot.state.outcome === "merged"
+    ) {
+      await this.#projectWorkflowStage(link, "merged", ctx);
+      return;
+    }
     const nodes = Object.values(snapshot.state.nodes);
     const latest = nodes.at(-1);
     if (!latest) {
@@ -2149,11 +2158,27 @@ export class ForgeWorkOnController {
         this.#emitLifecycle(link, { reason, nodeId: node.nodeId, pullNumber: pull.number });
         return;
       }
-      const merged = await github.mergePullRequest({ pullNumber: pull.number, expectedHeadSha: pull.headSha, method: "squash", ...(ctx.signal ? { signal: ctx.signal } : {}) });
+      let merged: Awaited<
+        ReturnType<GitHubWorkflowAdapter["mergePullRequest"]>
+      >;
+      try {
+        merged = await github.mergePullRequest({ pullNumber: pull.number, expectedHeadSha: pull.headSha, method: "squash", ...(ctx.signal ? { signal: ctx.signal } : {}) });
+      } catch (error) {
+        await projector
+          .setWorkflowLabel(
+            link.issueNumber,
+            WORKFLOW_LABEL_BY_STAGE.review,
+          )
+          .catch(() => undefined);
+        throw error;
+      }
       headSha = merged.sha;
       outcome = "merged";
       evidence = [`merge:${merged.sha}`];
       await journal.append({ runId: link.forgeRunId, type: "effect.recorded", payload: { effectType: "merge", effectId: `merge:${pull.number}`, digest: digest(merged.sha) }, idempotencyKey: `effect:merge:${pull.number}`, sessionId, message: `Record merge effect for ${pull.number}`, ...(ctx.signal ? { signal: ctx.signal } : {}) });
+      await this.#projectWorkflowStage(link, "merged", ctx, projector).catch(
+        () => undefined,
+      );
       const aggregate = await this.#aggregateFromState(
         link,
         authority.state as import("../core/state.ts").RunState,
@@ -2304,6 +2329,10 @@ export class ForgeWorkOnController {
       }
       const event = terminalSnapshot.events.at(-1);
       if (event) await projector.projectEvent({ issueNumber: link.issueNumber, event, markdown: `## ForgeDock Pi complete\n\nRun: ${link.forgeRunId}`,  ...(ctx.signal ? { signal: ctx.signal } : {}) });
+      if (link.terminalOutcome === "merged")
+        await this.#projectWorkflowStage(link, "merged", ctx, projector).catch(
+          () => undefined,
+        );
       link.status = "completed";
       this.#persistLink(link);
       this.#emitLifecycle(link, { headSha, nodeId: node.nodeId, outcome: link.terminalOutcome, pullNumber: link.terminalOutcome === "merged" ? pull?.number : undefined });

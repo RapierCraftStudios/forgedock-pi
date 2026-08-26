@@ -48,7 +48,7 @@ test("tracked policy enables only non-protected integration auto-merge", () => {
   assert.equal(isGitHubCiRequired(policy, "main"), true);
   assert.equal(isGitHubCiRequired(policy, "staging"), false);
   assert.equal(policy.verification.commands.test?.cwd, ".");
-  assert.equal(policy.subagents.reviewerTimeoutMs, 600_000);
+  assert.equal(policy.subagents.reviewerTimeoutMs, 900_000);
 });
 
 test("verification command cwd is portable, relative, and normalized", () => {

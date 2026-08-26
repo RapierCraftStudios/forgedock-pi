@@ -53,6 +53,6 @@
     "maxConcurrent": 2,
     "maxDepth": 2,
     "workOnTimeoutMs": 14400000,
-    "reviewerTimeoutMs": 600000
+    "reviewerTimeoutMs": 900000
   }
 }
