@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 16,
-  "lastEventHash": "sha256:e416e2d46ed7e64eaf4e826f7ff05db3316621030137f0de8203515b80f7fb63",
+  "sequence": 17,
+  "lastEventHash": "sha256:ae20b8c811713f13ef8027fde5dcd247e7c1294173a4dd7c68c3c5dffa73127b",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -105,15 +105,21 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Updated verification preflight to return a typed effective command map and `local`/`ci-only` mode; malformed root test metadata now disables local commands without nested discovery.",
+            "Persisted verification mode on active run links and reapplied it across startup, recovery, reconciliation, integration, refresh, and finalization; propagated it through RPC/direct child bindings.",
+            "Added strict child binding mode consistency checks, focused object/array root regressions, nested fail-closed coverage, immutable policy coverage, RPC propagation coverage, and aligned README/DESIGN guidance.",
+            "Implementation commit is intentionally deferred until the required named verification check passes."
+          ],
           "logicalNodeId": "implement",
           "startedAt": "2026-08-26T23:24:42.980Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/88f4f526-ab31-42d2-9748-d70dd2faabd1",
           "branch": "forge/issue-114-88f4f526",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T23:27:09.720Z"
         }
       ]
     }
@@ -136,7 +142,8 @@
     "phase:prepare-worktree:1:start": "b75c8526-864a-4994-adf0-a6004bc98e99",
     "phase:prepare-worktree:1:complete": "a7195574-2a10-43d0-a1ef-476f16df1bf6",
     "phase:implement:1:queue": "b4cd4d71-d224-46eb-9647-51b8040073aa",
-    "phase:implement:1:start": "57fe3c52-d787-44f5-b9c4-236ef24bbe31"
+    "phase:implement:1:start": "57fe3c52-d787-44f5-b9c4-236ef24bbe31",
+    "phase:implement:1:complete": "e2789023-aaac-4363-a510-25330ab25182"
   },
   "eventIds": {
     "8164e76b-1828-4998-af32-c413ea50fb97": true,
@@ -154,7 +161,8 @@
     "b75c8526-864a-4994-adf0-a6004bc98e99": true,
     "a7195574-2a10-43d0-a1ef-476f16df1bf6": true,
     "b4cd4d71-d224-46eb-9647-51b8040073aa": true,
-    "57fe3c52-d787-44f5-b9c4-236ef24bbe31": true
+    "57fe3c52-d787-44f5-b9c4-236ef24bbe31": true,
+    "e2789023-aaac-4363-a510-25330ab25182": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
