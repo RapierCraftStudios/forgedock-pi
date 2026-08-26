@@ -20,7 +20,10 @@ import {
   type ForgeWorkOnResult,
 } from "../agents/contracts.ts";
 import { materializeForgeAgents } from "../agents/materialize.ts";
-import { checkPreMergeAuditTrail } from "../core/artifact-protocol.ts";
+import {
+  checkPreMergeAuditTrail,
+  workflowLabelForCheckpoint,
+} from "../core/artifact-protocol.ts";
 import {
   canAutoMerge,
   isProtectedBranch,
@@ -302,6 +305,17 @@ export class ForgeWorkOnController {
       sessionId,
       ctx.signal,
     );
+    const awaitingMergeWorkflowLabel = workflowLabelForCheckpoint({
+      phase: "merge",
+      action: "start",
+    });
+    if (awaitingMergeWorkflowLabel) {
+      await projector.setWorkflowLabel(
+        link.issueNumber,
+        awaitingMergeWorkflowLabel,
+        ctx.signal,
+      );
+    }
     await this.#git.push(
       link.prepared.worktreePath,
       link.prepared.branch,
@@ -442,6 +456,17 @@ export class ForgeWorkOnController {
       undefined,
       [merged.sha],
     );
+    const mergedWorkflowLabel = workflowLabelForCheckpoint({
+      phase: "merge",
+      action: "complete",
+    });
+    if (mergedWorkflowLabel) {
+      await projector.setWorkflowLabel(
+        link.issueNumber,
+        mergedWorkflowLabel,
+        ctx.signal,
+      );
+    }
     await postReviewCompletionArtifacts({
       github,
       projector,
@@ -571,11 +596,17 @@ export class ForgeWorkOnController {
         markdown: `## ForgeDock Pi complete\n\nPR #${pull.number} merged into \`${link.prepared.baseBranch}\`.\nNested review completed at \`${result.review.headSha}\`.\nRun: \`${link.forgeRunId}\`.`,
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
-      await projector.setWorkflowLabel(
-        link.issueNumber,
-        "workflow:merged",
-        ctx.signal,
-      );
+      const terminalWorkflowLabel = workflowLabelForCheckpoint({
+        phase: "merge",
+        action: "complete",
+      });
+      if (terminalWorkflowLabel) {
+        await projector.setWorkflowLabel(
+          link.issueNumber,
+          terminalWorkflowLabel,
+          ctx.signal,
+        );
+      }
     }
 
     link.status = "completed";

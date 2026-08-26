@@ -23,6 +23,7 @@ import { FetchGitHubTransport } from "../adapters/github-api.ts";
 import { GitHubIssueProjector } from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
+import { workflowLabelForCheckpoint } from "../core/artifact-protocol.ts";
 import {
   createRunEvent,
   RUN_PHASES,
@@ -1097,38 +1098,6 @@ async function postDerivedPhaseArtifacts(
       ...(signal ? { signal } : {}),
     });
   }
-}
-
-function workflowLabelForCheckpoint(params: {
-  phase: RunPhase;
-  action:
-    | "queue"
-    | "start"
-    | "complete"
-    | "fail"
-    | "block"
-    | "needs-human"
-    | "abandon";
-  report?: string;
-}): string | undefined {
-  if (params.action === "start") {
-    if (params.phase === "investigate") return "workflow:investigating";
-    if (
-      params.phase === "plan" ||
-      params.phase === "prepare-worktree" ||
-      params.phase === "implement" ||
-      params.phase === "verify"
-    ) {
-      return "workflow:building";
-    }
-    if (params.phase === "review") return "workflow:in-review";
-  }
-  if (params.action === "complete" && params.phase === "investigate") {
-    return params.report?.includes("**Verdict**: INVALID")
-      ? "workflow:invalid"
-      : "workflow:ready-to-build";
-  }
-  return undefined;
 }
 
 function validatePhaseReport(phase: RunPhase, report: string): void {
