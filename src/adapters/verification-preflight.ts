@@ -37,26 +37,35 @@ export async function preflightRequiredVerificationCommands(
   for (const [name, command] of Object.entries(commands)) {
     if (!command.required) continue;
     const basePath = `${configPath} verification.commands.${name}`;
-    const cwd = await resolveVerificationCommandDirectory(
-      canonicalRoot,
-      command.cwd,
-      `${basePath}.cwd`,
-    );
+    let cwd: string;
+    try {
+      cwd = await resolveVerificationCommandDirectory(
+        canonicalRoot,
+        command.cwd,
+        `${basePath}.cwd`,
+      );
+    } catch (error) {
+      failPreflight(
+        configPath,
+        name,
+        "cwd",
+        errorDetail(error),
+      );
+    }
     const program = command.argv[0];
     if (!program)
-      throw new VerificationPreflightError(
-        `${basePath}.argv`,
-        "must name an executable",
-      );
+      failPreflight(configPath, name, "argv", "must name an executable");
     if (!(await executableAvailable(program, cwd, options.path ?? process.env.PATH))) {
-      throw new VerificationPreflightError(
-        `${basePath}.argv`,
-        `executable '${program}' is unavailable; install it or update the tracked command`,
+      failPreflight(
+        configPath,
+        name,
+        "argv",
+        `executable '${program}' is unavailable`,
       );
     }
     const script = packageScriptName(command.argv);
     if (script)
-      await assertPackageScript(canonicalRoot, cwd, script, basePath);
+      await assertPackageScript(canonicalRoot, cwd, script, configPath, name);
   }
 }
 
@@ -120,7 +129,7 @@ function packageScriptName(argv: readonly string[]): string | undefined {
   const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
   if (!["npm", "pnpm", "yarn", "bun"].includes(manager)) return undefined;
   const command = argv[1];
-  if (command === "test") return "test";
+  if (command === "test" || command === "t") return "test";
   if (command === "run" || command === "run-script") {
     const script = argv.slice(2).find((argument) => !argument.startsWith("-"));
     return script || undefined;
@@ -128,33 +137,63 @@ function packageScriptName(argv: readonly string[]): string | undefined {
   return undefined;
 }
 
+function failPreflight(
+  configPath: string,
+  name: string,
+  field: "argv" | "cwd",
+  message: string,
+): never {
+  const basePath = `${configPath} verification.commands.${name}`;
+  throw new VerificationPreflightError(
+    `${basePath}.${field}`,
+    `${message}. Update ${basePath}.${field} in the tracked policy, or run /forge:init and leave verification.commands empty for explicit GitHub-CI-only verification`,
+  );
+}
+
+function errorDetail(error: unknown): string {
+  if (error instanceof VerificationPreflightError) {
+    const prefix = `${error.path}: `;
+    return error.message.startsWith(prefix)
+      ? error.message.slice(prefix.length)
+      : error.message;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
 async function assertPackageScript(
   repositoryRoot: string,
   cwd: string,
   script: string,
-  basePath: string,
+  configPath: string,
+  name: string,
 ): Promise<void> {
   const manifestPath = join(cwd, "package.json");
   let canonicalManifest: string;
   try {
     canonicalManifest = await realpath(manifestPath);
   } catch {
-    throw new VerificationPreflightError(
-      `${basePath}.cwd`,
+    failPreflight(
+      configPath,
+      name,
+      "cwd",
       `selected package directory has no package.json for script '${script}'`,
     );
   }
   if (!pathWithin(repositoryRoot, canonicalManifest))
-    throw new VerificationPreflightError(
-      `${basePath}.cwd`,
+    failPreflight(
+      configPath,
+      name,
+      "cwd",
       "package.json resolves outside the repository",
     );
   let manifest: unknown;
   try {
     manifest = JSON.parse(await readFile(canonicalManifest, "utf8"));
   } catch {
-    throw new VerificationPreflightError(
-      `${basePath}.cwd`,
+    failPreflight(
+      configPath,
+      name,
+      "cwd",
       "selected package.json is not valid JSON",
     );
   }
@@ -167,9 +206,11 @@ async function assertPackageScript(
       ? (scripts as Record<string, unknown>)[script]
       : undefined;
   if (typeof value !== "string" || !value.trim()) {
-    throw new VerificationPreflightError(
-      `${basePath}.argv`,
-      `package.json in '${relative(repositoryRoot, cwd) || "."}' has no '${script}' script; set cwd to the package that defines it or use CI-only verification`,
+    failPreflight(
+      configPath,
+      name,
+      "argv",
+      `package.json in '${relative(repositoryRoot, cwd) || "."}' has no '${script}' script`,
     );
   }
 }
