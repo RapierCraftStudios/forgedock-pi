@@ -48,6 +48,12 @@ export async function preflightRequiredVerificationCommands(
         `${basePath}.argv`,
         "must name an executable",
       );
+    const packageSelectionOption = npmPackageSelectionOption(command.argv);
+    if (packageSelectionOption)
+      throw new VerificationPreflightError(
+        `${basePath}.argv`,
+        `npm package-selection option '${packageSelectionOption}' is unsupported; set cwd to the package that defines the script instead`,
+      );
     if (!(await executableAvailable(program, cwd, options.path ?? process.env.PATH))) {
       throw new VerificationPreflightError(
         `${basePath}.argv`,
@@ -114,6 +120,38 @@ async function executableAvailable(
     }
   }
   return false;
+}
+
+function npmPackageSelectionOption(argv: readonly string[]): string | undefined {
+  const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
+  if (manager !== "npm") return undefined;
+
+  for (let index = 1; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument === undefined || argument === "--") return undefined;
+    const option = argument.split("=", 1)[0] ?? argument;
+    if (
+      option === "--prefix" ||
+      option === "-C" ||
+      option.startsWith("-C") ||
+      option === "--workspace" ||
+      option === "-w" ||
+      option.startsWith("-w") ||
+      option === "--workspaces" ||
+      option === "--include-workspace-root" ||
+      option === "--global" ||
+      option === "-g"
+    )
+      return argument;
+    if (option === "--location") {
+      const value = argument.includes("=")
+        ? argument.slice(argument.indexOf("=") + 1)
+        : argv[index + 1];
+      if (value?.toLowerCase() === "global")
+        return argument.includes("=") ? argument : `${argument} ${value}`;
+    }
+  }
+  return undefined;
 }
 
 function packageScriptName(argv: readonly string[]): string | undefined {
