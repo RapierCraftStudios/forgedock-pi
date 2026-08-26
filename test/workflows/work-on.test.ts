@@ -17,6 +17,7 @@ import {
   reviewInstanceMarker,
   reviewSummaryInstanceMarker,
   reviewSupersessionMarker,
+  restoreReviewWorkflowLabel,
   shouldBufferLaunchCompletion,
   similarFindingTitle,
   workflowLabelForNode,
@@ -112,6 +113,38 @@ test("provider completion is buffered until its launch receipt is durably bound"
   assert.equal(shouldBufferLaunchCompletion(true, true), true);
   assert.equal(shouldBufferLaunchCompletion(false, false), true);
   assert.equal(shouldBufferLaunchCompletion(false, true), false);
+});
+
+test("merge rollback label restoration omits an aborted operation signal", async () => {
+  const operation = new AbortController();
+  operation.abort(new Error("merge operation aborted"));
+  let received:
+    | {
+        issueNumber: number;
+        workflowLabel: string;
+        signal: AbortSignal | undefined;
+      }
+    | undefined;
+  const projector = {
+    async setWorkflowLabel(
+      issueNumber: number,
+      workflowLabel: string,
+      signal?: AbortSignal,
+    ): Promise<void> {
+      received = { issueNumber, workflowLabel, signal };
+      if (operation.signal.aborted && signal)
+        throw operation.signal.reason;
+    },
+  };
+
+  await restoreReviewWorkflowLabel(projector, 120);
+
+  assert.equal(operation.signal.aborted, true);
+  assert.deepEqual(received, {
+    issueNumber: 120,
+    workflowLabel: "workflow:in-review",
+    signal: undefined,
+  });
 });
 
 test("workflow transitions cover the complete canonical label lifecycle", () => {

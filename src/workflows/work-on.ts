@@ -87,6 +87,22 @@ import {
 
 const RUN_LINK_ENTRY = "forgedock-run-link/v1";
 
+/**
+ * Restore the review label after a merge attempt fails. This compensation is
+ * deliberately not bound to the merge operation's abort signal: the merge
+ * may have aborted after the awaiting-merge projection succeeded, while the
+ * corrective label request still needs to run.
+ */
+export async function restoreReviewWorkflowLabel(
+  projector: Pick<GitHubIssueProjector, "setWorkflowLabel">,
+  issueNumber: number,
+): Promise<void> {
+  await projector.setWorkflowLabel(
+    issueNumber,
+    WORKFLOW_LABEL_BY_STAGE.review,
+  );
+}
+
 export type WorkflowStage = keyof typeof WORKFLOW_LABEL_BY_STAGE;
 export type WorkflowTransition = "started" | "resumed" | "completed";
 
@@ -2164,12 +2180,10 @@ export class ForgeWorkOnController {
       try {
         merged = await github.mergePullRequest({ pullNumber: pull.number, expectedHeadSha: pull.headSha, method: "squash", ...(ctx.signal ? { signal: ctx.signal } : {}) });
       } catch (error) {
-        await projector
-          .setWorkflowLabel(
-            link.issueNumber,
-            WORKFLOW_LABEL_BY_STAGE.review,
-          )
-          .catch(() => undefined);
+        await restoreReviewWorkflowLabel(
+          projector,
+          link.issueNumber,
+        ).catch(() => undefined);
         throw error;
       }
       headSha = merged.sha;
