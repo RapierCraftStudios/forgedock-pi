@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 10,
-  "lastEventHash": "sha256:843c44ab6b01887fac5f84132fcde3af0413b30b8619061f1c51e34c21079ca7",
+  "sequence": 11,
+  "lastEventHash": "sha256:df301406e57a14776167e5c58e30555526fbbe6fed6bc36cbca9246c9671a5b1",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -59,15 +59,20 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Builder contract is limited to `src/adapters/verification-preflight.ts` and `test/adapters/verification-preflight.test.ts`.",
+            "Implementation will map npm's direct `test`, `t`, and `tst` aliases to the package `test` script; existing `run` and `run-script` handling remains unchanged.",
+            "Regression coverage will exercise root failure and package success for the alias path, preserving fail-closed validation."
+          ],
           "logicalNodeId": "plan-1",
           "startedAt": "2026-08-26T19:18:31.003Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/eaa81a29-de7e-4fab-899a-7b7ac90bf652",
           "branch": "forge/issue-113-eaa81a29",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T19:19:25.250Z"
         }
       ]
     }
@@ -84,7 +89,8 @@
     "phase:investigate:1:start": "c59d6adb-9d41-4586-bfb4-df07632562e1",
     "phase:investigate:1:complete": "81e6ea5a-53ef-48a2-8d17-ec548a3fdd31",
     "phase:plan:1:queue": "6387d089-ff8e-4d67-a633-2f5c67f93089",
-    "phase:plan:1:start": "4015e422-ad10-484a-b1ae-195765f252b5"
+    "phase:plan:1:start": "4015e422-ad10-484a-b1ae-195765f252b5",
+    "phase:plan:1:complete": "d0bb34ca-7412-4863-8e78-1ad5de1f5095"
   },
   "eventIds": {
     "0902b4d5-bc43-4cbf-8a30-9d7fd570986a": true,
@@ -96,7 +102,8 @@
     "c59d6adb-9d41-4586-bfb4-df07632562e1": true,
     "81e6ea5a-53ef-48a2-8d17-ec548a3fdd31": true,
     "6387d089-ff8e-4d67-a633-2f5c67f93089": true,
-    "4015e422-ad10-484a-b1ae-195765f252b5": true
+    "4015e422-ad10-484a-b1ae-195765f252b5": true,
+    "d0bb34ca-7412-4863-8e78-1ad5de1f5095": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
