@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 10,
-  "lastEventHash": "sha256:82a7848822442d0b6d270644274565518213232e5a159f6efeeafd260a0bd3ad",
+  "sequence": 11,
+  "lastEventHash": "sha256:dbe4b8ba117f25dfe2a50f48fb5150dd9dd4ce716334d227c0d0f2b0f3fa3941",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -63,16 +63,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Builder contract is restricted to two production validators and one focused adapter test file.",
+            "The plan uses one shared exported guard so preflight and child binding validation cannot drift.",
+            "The accepted command invariant is that package selection comes only from the bound repository-relative cwd."
+          ],
           "inputArtifactHash": "sha256:investigate-112-location-flags",
           "logicalNodeId": "plan-1",
           "startedAt": "2026-08-26T22:15:14.507Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/6761d4c2-a194-4fed-9b24-f775d9bf8d79",
           "branch": "forge/issue-112-6761d4c2",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T22:16:15.491Z",
+          "outputArtifactHash": "sha256:plan-112-location-flags-v1"
         }
       ]
     }
@@ -89,7 +95,8 @@
     "phase:investigate:1:start": "9d99910e-bd50-42d1-b756-ee0f5b2ecf14",
     "phase:investigate:1:complete": "5c297ae7-077f-4567-a900-6382a62f3054",
     "phase:plan:1:queue": "051c01ce-bceb-40e7-bb6a-9a4693679d7c",
-    "phase:plan:1:start": "108c2b35-bbb9-4f20-abd7-df12d1f692f2"
+    "phase:plan:1:start": "108c2b35-bbb9-4f20-abd7-df12d1f692f2",
+    "phase:plan:1:complete": "eb9468bb-aedf-4882-be65-bc717d49bd27"
   },
   "eventIds": {
     "87554173-ee5e-4060-9d29-9bc6f7cef91c": true,
@@ -101,7 +108,8 @@
     "9d99910e-bd50-42d1-b756-ee0f5b2ecf14": true,
     "5c297ae7-077f-4567-a900-6382a62f3054": true,
     "051c01ce-bceb-40e7-bb6a-9a4693679d7c": true,
-    "108c2b35-bbb9-4f20-abd7-df12d1f692f2": true
+    "108c2b35-bbb9-4f20-abd7-df12d1f692f2": true,
+    "eb9468bb-aedf-4882-be65-bc717d49bd27": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
