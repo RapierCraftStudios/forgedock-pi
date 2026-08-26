@@ -2036,7 +2036,11 @@ export class ForgeWorkOnController {
         ctx.signal,
       );
       const auditFailures = [...audit.missingIssueMarkers, ...audit.missingPullRequestMarkers, ...audit.missingReviewerDomains.map((domain) => `reviewer:${domain}`)];
-      const missingDecision = checkReviewDecisionAuditTrail({ pullRequestComments: await github.getComments(pull.number, ctx.signal) });
+      const missingDecision = await waitForReviewDecisionAudit(
+        github,
+        pull.number,
+        ctx.signal,
+      );
       if (auditFailures.length || missingDecision.length) {
         const reason = `Audit trail incomplete: ${[...auditFailures, ...missingDecision].join(", ")}`;
         await journal.append({ runId: link.forgeRunId, type: "node.failed", payload: { ...common, headSha: pull.headSha, reason, evidence: [reason] }, idempotencyKey: `node:${node.nodeId}:audit-failed`, sessionId, message: `Fail decision audit ${node.nodeId}`, ...(ctx.signal ? { signal: ctx.signal } : {}) });
@@ -3791,12 +3795,11 @@ export class ForgeWorkOnController {
       gate,
       ctx.signal,
     );
-    const missingDecisionArtifacts = checkReviewDecisionAuditTrail({
-      pullRequestComments: await github.getComments(
-        currentPull.number,
-        ctx.signal,
-      ),
-    });
+    const missingDecisionArtifacts = await waitForReviewDecisionAudit(
+      github,
+      currentPull.number,
+      ctx.signal,
+    );
     if (missingDecisionArtifacts.length > 0) {
       throw new Error(
         `Review decision projection failed: ${missingDecisionArtifacts.join(", ")}.`,
@@ -4524,6 +4527,24 @@ async function waitForPreMergeAudit(
     });
   }
   return audit;
+}
+
+async function waitForReviewDecisionAudit(
+  github: GitHubWorkflowAdapter,
+  pullNumber: number,
+  signal?: AbortSignal,
+): Promise<ReturnType<typeof checkReviewDecisionAuditTrail>> {
+  let missing = checkReviewDecisionAuditTrail({
+    pullRequestComments: await github.getComments(pullNumber, signal),
+  });
+  for (let attempt = 1; attempt < 5 && missing.length > 0; attempt += 1) {
+    if (signal?.aborted) throw signal.reason;
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 1_000));
+    missing = checkReviewDecisionAuditTrail({
+      pullRequestComments: await github.getComments(pullNumber, signal),
+    });
+  }
+  return missing;
 }
 
 async function resolveMergeability(
