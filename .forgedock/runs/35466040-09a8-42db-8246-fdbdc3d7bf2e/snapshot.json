@@ -7,23 +7,28 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 4,
-  "lastEventHash": "sha256:bd08fd4a1f279e755b040901f30d5500f1b341be172cda3e77ce6794f8915de8",
+  "sequence": 5,
+  "lastEventHash": "sha256:363ad4d6b009e0fa155bca527191d11aee9530e855d00f6e9c83bc5b97412b52",
   "phases": {
     "resolve": {
       "phase": "resolve",
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume resolve attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`.forge/config.json` identifies `RapierCraftStudios/forgedock-pi`, integration branch `staging`, required `check` verification, and correctness/security review roster.",
+            "`forge_diff` reports no local changes before implementation.",
+            "`src/adapters/github-projection.ts` owns replacement of workflow labels while preserving unrelated labels; `src/agents/child-runtime.ts` maps direct checkpoint transitions; `src/workflows/work-on.ts` maps parent node transitions."
+          ],
           "logicalNodeId": "resolve",
           "startedAt": "2026-08-26T23:45:33.847Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/35466040-09a8-42db-8246-fdbdc3d7bf2e",
           "branch": "forge/issue-92-35466040",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T23:47:35.058Z"
         }
       ]
     }
@@ -34,13 +39,15 @@
     "run:create": "2f9de7d7-ccbc-4ec8-b273-57d93d8d88fd",
     "lease:acquire:1": "ce1c045e-8304-418d-b8fa-2c095aed3b45",
     "phase:resolve:1:queue": "2d5ce689-1ce3-4e56-babe-a9bec14c0757",
-    "phase:resolve:1:start": "bb079e6a-c61c-4707-b2de-aa804c6a24bc"
+    "phase:resolve:1:start": "bb079e6a-c61c-4707-b2de-aa804c6a24bc",
+    "phase:resolve:1:complete": "bb61ce2c-b318-4b08-be0e-7c13d572f687"
   },
   "eventIds": {
     "2f9de7d7-ccbc-4ec8-b273-57d93d8d88fd": true,
     "ce1c045e-8304-418d-b8fa-2c095aed3b45": true,
     "2d5ce689-1ce3-4e56-babe-a9bec14c0757": true,
-    "bb079e6a-c61c-4707-b2de-aa804c6a24bc": true
+    "bb079e6a-c61c-4707-b2de-aa804c6a24bc": true,
+    "bb61ce2c-b318-4b08-be0e-7c13d572f687": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
