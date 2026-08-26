@@ -46,12 +46,18 @@ export async function preflightRequiredVerificationCommands(
     if (!program)
       throw new VerificationPreflightError(
         `${basePath}.argv`,
-        "must name an executable",
+        `must name an executable; fix ${basePath}.argv or run /forge:init to configure CI-only verification`,
       );
-    if (!(await executableAvailable(program, cwd, options.path ?? process.env.PATH))) {
+    if (
+      !(await executableAvailable(
+        program,
+        cwd,
+        options.path ?? process.env.PATH,
+      ))
+    ) {
       throw new VerificationPreflightError(
         `${basePath}.argv`,
-        `executable '${program}' is unavailable; install it or update the tracked command`,
+        `executable '${program}' is unavailable; install it, fix ${basePath}.argv, or run /forge:init to configure CI-only verification`,
       );
     }
     const script = packageScriptName(command.argv);
@@ -69,12 +75,15 @@ export async function resolveVerificationCommandDirectory(
   const canonicalRoot = await realpath(repositoryRoot);
   const lexical = resolve(canonicalRoot, normalized);
   if (!pathWithin(canonicalRoot, lexical))
-    throw new VerificationPreflightError(path, "escapes the repository");
+    throw new VerificationPreflightError(
+      path,
+      `escapes the repository; set ${path} to a repository-relative package directory or run /forge:init to configure CI-only verification`,
+    );
   const firstSegment = relative(canonicalRoot, lexical).split(/[\\/]/, 1)[0];
   if (firstSegment === ".git" || firstSegment === ".pi")
     throw new VerificationPreflightError(
       path,
-      "must not target Git or Forge runtime control directories",
+      `must not target Git or Forge runtime control directories; set ${path} to a package directory or run /forge:init to configure CI-only verification`,
     );
   let canonical: string;
   try {
@@ -82,13 +91,19 @@ export async function resolveVerificationCommandDirectory(
   } catch {
     throw new VerificationPreflightError(
       path,
-      `directory '${normalized}' does not exist`,
+      `directory '${normalized}' does not exist; set ${path} to an existing package directory or run /forge:init to configure CI-only verification`,
     );
   }
   if (!pathWithin(canonicalRoot, canonical))
-    throw new VerificationPreflightError(path, "resolves outside the repository");
+    throw new VerificationPreflightError(
+      path,
+      `resolves outside the repository; set ${path} to a repository-relative package directory or run /forge:init to configure CI-only verification`,
+    );
   if (!(await stat(canonical)).isDirectory())
-    throw new VerificationPreflightError(path, "must resolve to a directory");
+    throw new VerificationPreflightError(
+      path,
+      `must resolve to a directory; set ${path} to an existing package directory or run /forge:init to configure CI-only verification`,
+    );
   return canonical;
 }
 
@@ -141,13 +156,13 @@ async function assertPackageScript(
   } catch {
     throw new VerificationPreflightError(
       `${basePath}.cwd`,
-      `selected package directory has no package.json for script '${script}'`,
+      `selected package directory has no package.json for script '${script}'; set ${basePath}.cwd to the package that defines it, set verification.commands to {} for CI-only verification, or run /forge:init`,
     );
   }
   if (!pathWithin(repositoryRoot, canonicalManifest))
     throw new VerificationPreflightError(
       `${basePath}.cwd`,
-      "package.json resolves outside the repository",
+      `package.json resolves outside the repository; set ${basePath}.cwd to an in-repository package directory or run /forge:init to configure CI-only verification`,
     );
   let manifest: unknown;
   try {
@@ -155,7 +170,7 @@ async function assertPackageScript(
   } catch {
     throw new VerificationPreflightError(
       `${basePath}.cwd`,
-      "selected package.json is not valid JSON",
+      `selected package.json is not valid JSON; fix the package manifest, set ${basePath}.cwd to another package, or run /forge:init to configure CI-only verification`,
     );
   }
   const scripts =
@@ -169,7 +184,7 @@ async function assertPackageScript(
   if (typeof value !== "string" || !value.trim()) {
     throw new VerificationPreflightError(
       `${basePath}.argv`,
-      `package.json in '${relative(repositoryRoot, cwd) || "."}' has no '${script}' script; set cwd to the package that defines it or use CI-only verification`,
+      `package.json in '${relative(repositoryRoot, cwd) || "."}' has no '${script}' script; set ${basePath}.cwd to the package that defines it, set verification.commands to {} for CI-only verification, or run /forge:init`,
     );
   }
 }

@@ -11,6 +11,7 @@ import {
   confirmOrchestrationDispatch,
   confirmWorkOnDispatch,
   issueResolverPrompt,
+  prepareInitVerificationConfiguration,
   registerForgeCommands,
 } from "../../src/ui/commands.ts";
 
@@ -19,6 +20,24 @@ const input = {
   sourceExpression: "https://github.com/owner/repo/issues",
   resolutionSummary: "Three eligible open issues; active-owned lanes excluded.",
 };
+
+test("init preserves tracked local checks and reports CI-only when none are configured", () => {
+  const command = {
+    argv: ["npm", "test"],
+    cwd: "web",
+    required: true,
+    timeoutMs: 600_000,
+  } as const;
+  const local = prepareInitVerificationConfiguration({ test: command });
+  assert.deepEqual(local.commands.test, command);
+  assert.notEqual(local.commands.test, command);
+  assert.notEqual(local.commands.test?.argv, command.argv);
+  assert.match(local.summary, /Preserved tracked local checks: test/);
+
+  const ciOnly = prepareInitVerificationConfiguration({});
+  assert.deepEqual(ciOnly.commands, {});
+  assert.match(ciOnly.summary, /CI-only verification/);
+});
 
 test("model-callable orchestration fails closed without interactive confirmation", async () => {
   const ui = {

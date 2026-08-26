@@ -9,7 +9,12 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-import { parseForgePolicy, type ForgePolicy } from "../core/policy.ts";
+import { preflightRequiredVerificationCommands } from "../adapters/verification-preflight.ts";
+import {
+  parseForgePolicy,
+  type ForgePolicy,
+  type VerificationCommandPolicy,
+} from "../core/policy.ts";
 import type { ForgeOrchestrationController } from "../workflows/orchestrate.ts";
 import type { ForgeWorkOnController } from "../workflows/work-on.ts";
 import {
@@ -218,8 +223,10 @@ export function registerForgeCommands(
         configPath,
       });
       await reconcileWorkflowLabels(pi, root, config.repository.name);
+      const verificationConfiguration =
+        prepareInitVerificationConfiguration(config.verification.commands);
       ctx.ui.notify(
-        `ForgeDock setup complete.\nPolicy: ${configPath}\nIntegration: ${config.branches.integration[0]}\nCI-required PR targets: ${config.verification.github.requiredBranches.join(", ")}\nAuto-merge: ${config.branches.autoMergeIntegration ? "enabled" : "disabled"}\nParallel lanes: ${config.orchestration.maxConcurrent}\nReview and commit the tracked policy.`,
+        `ForgeDock setup complete.\nPolicy: ${configPath}\nIntegration: ${config.branches.integration[0]}\nCI-required PR targets: ${config.verification.github.requiredBranches.join(", ")}\nAuto-merge: ${config.branches.autoMergeIntegration ? "enabled" : "disabled"}\nParallel lanes: ${config.orchestration.maxConcurrent}\nLocal verification: ${verificationConfiguration.summary}\nReview and commit the tracked policy.`,
         "info",
       );
       await orchestrator.resume(ctx);
@@ -333,6 +340,35 @@ export function issueResolverPrompt(
   ].join("\n\n");
 }
 
+export interface InitVerificationConfiguration {
+  commands: Record<string, VerificationCommandPolicy>;
+  summary: string;
+}
+
+/**
+ * Keep the tracked local verification contract when /forge:init updates other
+ * repository settings. A command-less template is deliberately CI-only; init
+ * must not guess a package or synthesize an npm script from repository files.
+ */
+export function prepareInitVerificationConfiguration(
+  commands: Readonly<Record<string, VerificationCommandPolicy>>,
+): InitVerificationConfiguration {
+  const copied = Object.fromEntries(
+    Object.entries(commands).map(([name, command]) => [
+      name,
+      { ...command, argv: [...command.argv] },
+    ]),
+  );
+  const names = Object.keys(copied);
+  return {
+    commands: copied,
+    summary:
+      names.length > 0
+        ? `Preserved tracked local checks: ${names.join(", ")}.`
+        : "CI-only verification is configured (no local commands are tracked).",
+  };
+}
+
 async function configureForgePolicy(input: {
   pi: ExtensionAPI;
   ctx: ExtensionCommandContext;
@@ -418,6 +454,14 @@ async function configureForgePolicy(input: {
   const maxConcurrent = Number(concurrencyChoice.match(/^\d+/)?.[0]);
   if (!Number.isSafeInteger(maxConcurrent) || maxConcurrent < 1)
     throw new Error("Invalid orchestration concurrency selection.");
+  const verificationConfiguration = prepareInitVerificationConfiguration(
+    config.verification.commands,
+  );
+  await preflightRequiredVerificationCommands(
+    input.root,
+    verificationConfiguration.commands,
+    { configPath: input.configPath },
+  );
 
   config = {
     ...config,
@@ -442,7 +486,7 @@ async function configureForgePolicy(input: {
         waitTimeoutMs: config.verification.github.waitTimeoutMs,
         pollIntervalMs: config.verification.github.pollIntervalMs,
       },
-      commands: {},
+      commands: verificationConfiguration.commands,
     },
     orchestration: {
       ...config.orchestration,

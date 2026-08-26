@@ -72,7 +72,22 @@ test("required monorepo verification preflight selects the package cwd", async (
       (error: unknown) =>
         error instanceof VerificationPreflightError &&
         error.path === "/repo/.forge/config.json verification.commands.test.argv" &&
-        /no 'test' script/.test(error.message),
+        /no 'test' script/.test(error.message) &&
+        /\.cwd/.test(error.message) &&
+        /\/forge:init/.test(error.message),
+    );
+
+    await assert.rejects(
+      preflightRequiredVerificationCommands(
+        testFixture.root,
+        { test: command("missing") },
+        { path: testFixture.path, configPath: "/repo/.forge/config.json" },
+      ),
+      (error: unknown) =>
+        error instanceof VerificationPreflightError &&
+        error.path === "/repo/.forge/config.json verification.commands.test.cwd" &&
+        /does not exist/.test(error.message) &&
+        /\/forge:init/.test(error.message),
     );
 
     await preflightRequiredVerificationCommands(
@@ -94,7 +109,11 @@ test("preflight checks executable availability without running the command", asy
         { test: command("web", { argv: ["missing-tool", "test"] }) },
         { path: testFixture.path },
       ),
-      /executable 'missing-tool' is unavailable/,
+      (error: unknown) =>
+        error instanceof VerificationPreflightError &&
+        /executable 'missing-tool' is unavailable/.test(error.message) &&
+        /fix .*verification\.commands\.test\.argv/.test(error.message) &&
+        /\/forge:init/.test(error.message),
     );
     await preflightRequiredVerificationCommands(
       testFixture.root,
