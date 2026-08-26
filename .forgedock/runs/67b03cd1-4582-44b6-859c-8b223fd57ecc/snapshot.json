@@ -10,8 +10,8 @@
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:d76739308ae1bcc18410802528558ae952eec80da5a6aca143215c40a74991fe",
+  "sequence": 6,
+  "lastEventHash": "sha256:e3200685124576ee07771ead254daef3f7faa5f4487021976c13f10b4d4dd1ab",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -38,6 +38,15 @@
         "No supplied label, comment, or context marks the issue terminal, duplicate, or owned by a different active run; it is eligible for this bound workflow."
       ],
       "finishedAt": "2026-08-26T02:09:03.351Z"
+    },
+    "investigate-1": {
+      "nodeId": "investigate-1",
+      "node": "investigate",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/67b03cd1-4582-44b6-859c-8b223fd57ecc/.pi/forge/67b03cd1-4582-44b6-859c-8b223fd57ecc-investigate-1.json"
     }
   },
   "effects": {},
@@ -46,13 +55,15 @@
     "node:resolve-1:queued": "d88952f4-799b-49b4-a288-af4111881aed",
     "node:resolve-1:started": "9a1f7670-82ef-4b01-b875-46017494ebd5",
     "node:resolve-1:attempt:1:launch-receipt:90d6eae0-35ad-41af-8faf-48746d16c8c5:fb976e4b-c9f4-4514-8d6b-4b28fbd038db": "d1b547e1-005e-4aa6-8417-50482bd0e5f9",
-    "node:resolve-1:completed": "e03a7709-6ec6-4657-8da2-8ef8a38dcf63"
+    "node:resolve-1:completed": "e03a7709-6ec6-4657-8da2-8ef8a38dcf63",
+    "node:investigate-1:queued": "dafe73be-ec14-439b-a713-753101bbc722"
   },
   "eventIds": {
     "4c885062-171c-4391-a8e6-3f9f65c74aa9": true,
     "d88952f4-799b-49b4-a288-af4111881aed": true,
     "9a1f7670-82ef-4b01-b875-46017494ebd5": true,
     "d1b547e1-005e-4aa6-8417-50482bd0e5f9": true,
-    "e03a7709-6ec6-4657-8da2-8ef8a38dcf63": true
+    "e03a7709-6ec6-4657-8da2-8ef8a38dcf63": true,
+    "dafe73be-ec14-439b-a713-753101bbc722": true
   }
 }
