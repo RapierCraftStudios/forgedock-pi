@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 10,
-  "lastEventHash": "sha256:cf1f3d3d12520ca57b7bbbf1950591684b081868e9733fd9fc7f74b65a32f0f4",
+  "sequence": 11,
+  "lastEventHash": "sha256:173f34a1fb634827f97d09675bc37dd5a6af157089fe56c24225b4478e048f1f",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -61,7 +61,7 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
           "evidence": [],
@@ -70,7 +70,9 @@
           "startedAt": "2026-08-26T23:07:39.016Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/fcf854d3-cad5-4ed5-8649-2eba554b522d",
           "branch": "forge/issue-94-fcf854d3",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T23:08:25.261Z",
+          "outputArtifactHash": "sha256:plan-94-preflight-hardening"
         }
       ]
     }
@@ -87,7 +89,8 @@
     "phase:investigate:1:start": "6d9270f5-e9db-4c67-9e8b-80a33530a213",
     "phase:investigate:1:complete": "bb459af0-b4f8-4b38-9de6-81f61458f735",
     "phase:plan:1:queue": "b8eb7e82-8a45-46ab-94ee-2c9289699f35",
-    "phase:plan:1:start": "95897fdb-826d-49a1-9543-120dae06e93d"
+    "phase:plan:1:start": "95897fdb-826d-49a1-9543-120dae06e93d",
+    "phase:plan:1:complete": "bfad7b6c-58aa-4f54-ac8e-44a31f190a8d"
   },
   "eventIds": {
     "c855f386-448f-4d45-90ad-71051c747a27": true,
@@ -99,7 +102,8 @@
     "6d9270f5-e9db-4c67-9e8b-80a33530a213": true,
     "bb459af0-b4f8-4b38-9de6-81f61458f735": true,
     "b8eb7e82-8a45-46ab-94ee-2c9289699f35": true,
-    "95897fdb-826d-49a1-9543-120dae06e93d": true
+    "95897fdb-826d-49a1-9543-120dae06e93d": true,
+    "bfad7b6c-58aa-4f54-ac8e-44a31f190a8d": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
