@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 18,
-  "lastEventHash": "sha256:40660829de97a7c86980566a2302ad47f05b09516d42410babc3de117166fc5b",
+  "sequence": 19,
+  "lastEventHash": "sha256:65ea7e96ad3d6c3866893baf317d188d809a4e9bc54ca67f57d4445cd51bb248",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -113,11 +113,16 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "resume verify attempt 1",
           "evidence": [],
-          "inputArtifactHash": "sha256:implementation-113-pre-commit"
+          "inputArtifactHash": "sha256:implementation-113-pre-commit",
+          "logicalNodeId": "work-on.verify",
+          "startedAt": "2026-08-26T18:07:14.359Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/9c864f56-0e45-4324-acb5-3759374d3bc9",
+          "branch": "forge/issue-113-9c864f56",
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
         }
       ]
     }
@@ -142,7 +147,8 @@
     "phase:implement:1:queue": "9a44c987-ead8-47d3-9d3d-3a4c94f3fedd",
     "phase:implement:1:start": "04c91085-3491-4f98-bda7-8b45733169a2",
     "phase:implement:1:complete": "c20b980c-105e-4eed-9ff9-78c70fefeabd",
-    "phase:verify:1:queue": "a8da9bfc-9194-4a32-b914-52ec0a75b93f"
+    "phase:verify:1:queue": "a8da9bfc-9194-4a32-b914-52ec0a75b93f",
+    "phase:verify:1:start": "795e0e9d-db3c-456c-a73a-08923ad372a0"
   },
   "eventIds": {
     "e9bf163f-055b-4f9d-ba29-c1c27ebcf03f": true,
@@ -162,7 +168,8 @@
     "9a44c987-ead8-47d3-9d3d-3a4c94f3fedd": true,
     "04c91085-3491-4f98-bda7-8b45733169a2": true,
     "c20b980c-105e-4eed-9ff9-78c70fefeabd": true,
-    "a8da9bfc-9194-4a32-b914-52ec0a75b93f": true
+    "a8da9bfc-9194-4a32-b914-52ec0a75b93f": true,
+    "795e0e9d-db3c-456c-a73a-08923ad372a0": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
