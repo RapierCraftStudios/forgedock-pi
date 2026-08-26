@@ -74,6 +74,41 @@ test("PR lookup qualifies and exactly matches the bound head branch", async () =
   assert.equal(pull?.headSha, "right-sha");
 });
 
+test("PR creation refuses to reuse a head retargeted to another base", async () => {
+  const transport = new MockTransport((request) => {
+    if (request.method === "GET" && request.path.includes("/pulls?"))
+      return response(200, [
+        {
+          number: 8,
+          html_url: "https://example.test/pr/8",
+          state: "open",
+          merged: false,
+          head: { sha: "reviewed-head", ref: "forge/issue-8" },
+          base: { sha: "other-base", ref: "main" },
+          mergeable: true,
+        },
+      ]);
+    throw new Error(`Unexpected request ${request.method} ${request.path}`);
+  });
+  const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
+  await assert.rejects(
+    adapter.createPullRequest({
+      title: "Bound PR",
+      body: "body",
+      head: "forge/issue-8",
+      base: "staging",
+    }),
+    (error: unknown) =>
+      error instanceof GitHubApiError &&
+      error.status === 409 &&
+      JSON.stringify(error.response).includes("expected staging"),
+  );
+  assert.equal(
+    transport.requests.some((request) => request.method === "POST"),
+    false,
+  );
+});
+
 test("GitHub CI gate follows required checks on the exact reviewed SHA", async () => {
   const transport = new MockTransport((request) => {
     const shared = common(request);

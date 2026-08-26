@@ -233,7 +233,13 @@ export class GitHubWorkflowAdapter {
     signal?: AbortSignal;
   }): Promise<GitHubPullRequestData> {
     const existing = await this.findPullRequest(input.head, input.signal);
-    if (existing && existing.state === "open") return existing;
+    if (existing && existing.state === "open") {
+      if (existing.baseRef !== input.base)
+        throw new GitHubApiError(409, `${this.#apiRoot}/pulls/${existing.number}`, {
+          message: `Existing pull request targets ${existing.baseRef}; expected ${input.base}.`,
+        });
+      return existing;
+    }
     const path = `${this.#apiRoot}/pulls`;
     const response = await this.#transport.request<PullApiResponse>({
       method: "POST",

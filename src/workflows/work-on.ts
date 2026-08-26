@@ -3491,6 +3491,11 @@ export class ForgeWorkOnController {
       ...(pullIdentityChanged
         ? ["pull request head/base identity changed during CI polling"]
         : []),
+      ...(mergePull.baseRef !== link.prepared.baseBranch
+        ? [
+            `pull request target ${mergePull.baseRef} does not match bound integration branch ${link.prepared.baseBranch}`,
+          ]
+        : []),
     ];
     const findings = result.review.findings as readonly ReviewFinding[];
     const gate = evaluateReviewGate({
