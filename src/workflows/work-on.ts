@@ -2176,23 +2176,28 @@ export class ForgeWorkOnController {
       outcome = "merged";
       evidence = [`merge:${merged.sha}`];
       await journal.append({ runId: link.forgeRunId, type: "effect.recorded", payload: { effectType: "merge", effectId: `merge:${pull.number}`, digest: digest(merged.sha) }, idempotencyKey: `effect:merge:${pull.number}`, sessionId, message: `Record merge effect for ${pull.number}`, ...(ctx.signal ? { signal: ctx.signal } : {}) });
-      await this.#projectWorkflowStage(link, "merged", ctx, projector).catch(
-        () => undefined,
-      );
-      const aggregate = await this.#aggregateFromState(
-        link,
-        authority.state as import("../core/state.ts").RunState,
-        decision.attempt,
-      );
-      await postReviewCompletionArtifacts({
-        github,
-        projector,
-        link,
-        result: aggregate,
-        pullNumber: pull.number,
-        mergedSha: merged.sha,
-        decision: mergeDecision,
-        signal: ctx.signal,
+      await projectMergedBeforePostMergeWork({
+        projectMerged: () =>
+          this.#projectWorkflowStage(link, "merged", ctx, projector).catch(
+            () => undefined,
+          ),
+        postMergeWork: async () => {
+          const aggregate = await this.#aggregateFromState(
+            link,
+            authority.state as import("../core/state.ts").RunState,
+            decision.attempt,
+          );
+          await postReviewCompletionArtifacts({
+            github,
+            projector,
+            link,
+            result: aggregate,
+            pullNumber: pull.number,
+            mergedSha: merged.sha,
+            decision: mergeDecision,
+            signal: ctx.signal,
+          });
+        },
       });
     } else if (node.node === "close") {
       await github.closeIssue(link.issueNumber, ctx.signal);
@@ -3333,6 +3338,12 @@ export class ForgeWorkOnController {
       );
     }
 
+    // Merge evidence is already durable; project the terminal label before
+    // cleanup or terminal artifacts can fail and strand awaiting-merge.
+    await this.#projectWorkflowStage(link, "merged", ctx, projector).catch(
+      () => undefined,
+    );
+
     if (action === "terminal-cleanup") {
       await appendPhase(
         journal,
@@ -3409,9 +3420,6 @@ export class ForgeWorkOnController {
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         })
         .catch(() => undefined);
-      await this.#projectWorkflowStage(link, "merged", ctx, projector).catch(
-        () => undefined,
-      );
     }
 
     this.#directBinding = undefined;
@@ -3905,18 +3913,23 @@ export class ForgeWorkOnController {
       undefined,
       [merged.sha],
     );
-    await this.#projectWorkflowStage(link, "merged", ctx, projector);
-    if (!currentPull.merged)
-      await postReviewCompletionArtifacts({
-        github,
-        projector,
-        link,
-        result,
-        pullNumber: pull.number,
-        mergedSha: merged.sha,
-        decision: gate,
-        signal: ctx.signal,
-      });
+    await projectMergedBeforePostMergeWork({
+      projectMerged: () =>
+        this.#projectWorkflowStage(link, "merged", ctx, projector),
+      postMergeWork: async () => {
+        if (!currentPull.merged)
+          await postReviewCompletionArtifacts({
+            github,
+            projector,
+            link,
+            result,
+            pullNumber: pull.number,
+            mergedSha: merged.sha,
+            decision: gate,
+            signal: ctx.signal,
+          });
+      },
+    });
 
     await appendPhase(
       journal,
@@ -4176,6 +4189,18 @@ async function appendEffect(
     message: `Record ForgeDock effect ${effectId}`,
     ...(signal ? { signal } : {}),
   });
+}
+
+/**
+ * The merge journal is durable before this boundary. Keep the merged issue
+ * projection ahead of independent post-merge effects that may fail.
+ */
+export async function projectMergedBeforePostMergeWork(input: {
+  projectMerged: () => Promise<void>;
+  postMergeWork: () => Promise<void>;
+}): Promise<void> {
+  await input.projectMerged();
+  await input.postMergeWork();
 }
 
 async function postReviewCompletionArtifacts(input: {

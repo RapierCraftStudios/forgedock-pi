@@ -12,6 +12,7 @@ import {
   lineWithinTolerance,
   parentNodeFromId,
   parseAsyncCompletion,
+  projectMergedBeforePostMergeWork,
   reconcileLaunchState,
   reviewFindingMarker,
   reviewInstanceMarker,
@@ -112,6 +113,23 @@ test("provider completion is buffered until its launch receipt is durably bound"
   assert.equal(shouldBufferLaunchCompletion(true, true), true);
   assert.equal(shouldBufferLaunchCompletion(false, false), true);
   assert.equal(shouldBufferLaunchCompletion(false, true), false);
+});
+
+test("merged projection precedes failing post-merge work", async () => {
+  const steps: string[] = [];
+  await assert.rejects(
+    projectMergedBeforePostMergeWork({
+      projectMerged: async () => {
+        steps.push("merged-label");
+      },
+      postMergeWork: async () => {
+        steps.push("post-merge");
+        throw new Error("terminal artifact failed");
+      },
+    }),
+    /terminal artifact failed/,
+  );
+  assert.deepEqual(steps, ["merged-label", "post-merge"]);
 });
 
 test("workflow transitions cover the complete canonical label lifecycle", () => {
