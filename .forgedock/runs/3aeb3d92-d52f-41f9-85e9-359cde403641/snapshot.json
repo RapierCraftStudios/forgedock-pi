@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:762cdb55829d77cdbd7f0a8ffb6fff3b43daccb7d8eb9f97ef3316683c2cba47",
+  "sequence": 8,
+  "lastEventHash": "sha256:7a7c1c31285b5669af3fbb2b6c969ebf1183a1a12dbf0a059a20f29022ade050",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -37,15 +37,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "src/adapters/verification-preflight.ts validates repository-relative cwd, executable availability, package.json, and npm-family scripts without executing them",
+            "src/workflows/work-on.ts calls preflightRequiredVerificationCommands before materializing agents or launching a writer",
+            "src/core/policy.ts normalizes and validates command cwd",
+            "src/ui/commands.ts currently replaces configured local commands with an empty map during /forge:init",
+            "README.md documents cwd and CI-only verification"
+          ],
           "logicalNodeId": "work-on/investigate",
           "startedAt": "2026-08-26T20:07:09.667Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/3aeb3d92-d52f-41f9-85e9-359cde403641",
           "branch": "forge/issue-94-3aeb3d92",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T20:11:19.071Z"
         }
       ]
     }
@@ -59,7 +66,8 @@
     "phase:resolve:1:start": "b518cf14-ebbf-4cf7-a7e7-92f157cc72be",
     "phase:resolve:1:complete": "bf9d0bb0-dcff-4157-a360-75a1be3720a6",
     "phase:investigate:1:queue": "b24e46d7-b785-43a5-9ac3-fe64e6648f73",
-    "phase:investigate:1:start": "6080c007-3c7a-4b0b-af68-9111deb2e384"
+    "phase:investigate:1:start": "6080c007-3c7a-4b0b-af68-9111deb2e384",
+    "phase:investigate:1:complete": "2b356015-d476-4d56-9f2b-1444ca51f39f"
   },
   "eventIds": {
     "fe96d16b-f181-41a1-82ae-a1bb61ad4205": true,
@@ -68,7 +76,8 @@
     "b518cf14-ebbf-4cf7-a7e7-92f157cc72be": true,
     "bf9d0bb0-dcff-4157-a360-75a1be3720a6": true,
     "b24e46d7-b785-43a5-9ac3-fe64e6648f73": true,
-    "6080c007-3c7a-4b0b-af68-9111deb2e384": true
+    "6080c007-3c7a-4b0b-af68-9111deb2e384": true,
+    "2b356015-d476-4d56-9f2b-1444ca51f39f": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
