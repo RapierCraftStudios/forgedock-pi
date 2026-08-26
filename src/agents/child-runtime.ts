@@ -75,6 +75,8 @@ const BINDING_NAMESPACE = "forgedock.pi/1";
 export const DIRECT_WORK_ON_FINALIZED_EVENT =
   "forgedock:direct-work-on-finalized";
 const MAX_OUTPUT_BYTES = 50 * 1024;
+const MAX_DIFF_CHUNK_BYTES = 32 * 1024;
+const MAX_REVIEW_DIFF_BYTES = 4 * 1024 * 1024;
 
 interface BoundVerificationCommand {
   argv: readonly string[];
@@ -159,6 +161,7 @@ const RefreshBaseParameters = Type.Object({});
 
 const DiffParameters = Type.Object({
   mode: StringEnum(["patch", "name-only", "stat"] as const),
+  cursor: Type.Optional(Type.Integer({ minimum: 0 })),
 });
 
 const CommitParameters = Type.Object({
@@ -234,7 +237,7 @@ export function registerForgeRuntime(
   let githubToken: string | undefined;
   let refreshPushLeaseSha: string | undefined;
   let reviewDiffCoverage:
-    | { headSha: string; sha256: string; bytes: number }
+    | { headSha: string; sha256: string; bytes: number; coveredBytes: number }
     | undefined;
 
   pi.on("session_start", async (_event, ctx) => {
@@ -450,7 +453,7 @@ export function registerForgeRuntime(
     name: "forge_diff",
     label: "Forge Diff",
     description:
-      "Read the current assigned worktree diff against the frozen base SHA",
+      "Read the assigned diff in bounded chunks; follow nextCursor until coverage.complete is true",
     parameters: DiffParameters,
     async execute(_toolCallId, params, signal) {
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
@@ -459,12 +462,14 @@ export function registerForgeRuntime(
           ? ["--name-only"]
           : params.mode === "stat"
             ? ["--stat"]
-            : ["--no-ext-diff", "--unified=80"];
+            : ["--no-ext-diff", "--unified=20"];
       const reviewerHead = binding.node?.startsWith("review-")
         ? binding.reviewHeadSha
         : undefined;
       if (binding.node?.startsWith("review-") && !reviewerHead)
         throw new Error("Reviewer diff requires an exact frozen head SHA.");
+      if (params.cursor !== undefined && params.mode !== "patch")
+        throw new Error("Diff cursors are only valid in patch mode.");
       if (reviewerHead && params.mode !== "patch")
         throw new Error("Reviewer diff coverage requires the complete patch mode.");
       if (reviewerHead) {
@@ -499,6 +504,7 @@ export function registerForgeRuntime(
           cwd: root,
           timeoutMs: 60_000,
           env: safeEnvironment(binding.runId),
+          outputLimitBytes: MAX_REVIEW_DIFF_BYTES + 1,
           ...(signal ? { signal } : {}),
         },
       );
@@ -506,30 +512,81 @@ export function registerForgeRuntime(
         throw new Error(
           `git diff failed (${String(result.exitCode)}): ${result.stderr}`,
         );
-      assertCompleteReviewDiff(result, MAX_OUTPUT_BYTES);
-      const headSha = reviewerHead ?? await gitHead(root, binding.runId, signal);
-      const patchSha256 = createHash("sha256").update(result.stdout).digest("hex");
-      if (reviewerHead)
+      assertCompleteReviewDiff(result, MAX_REVIEW_DIFF_BYTES);
+      const headSha =
+        reviewerHead ?? (await gitHead(root, binding.runId, signal));
+      const patchSha256 = createHash("sha256")
+        .update(result.stdout)
+        .digest("hex");
+      const totalBytes = Buffer.byteLength(result.stdout);
+      const cursor = params.cursor ?? 0;
+      let output = result.stdout || "No diff.";
+      let nextCursor: number | undefined;
+      let complete = true;
+      if (
+        params.mode === "patch" &&
+        (reviewerHead !== undefined ||
+          totalBytes > MAX_OUTPUT_BYTES ||
+          cursor > 0)
+      ) {
+        const chunk = diffChunk(result.stdout, cursor, MAX_DIFF_CHUNK_BYTES);
+        output = chunk.text || (totalBytes === 0 ? "No diff." : "");
+        nextCursor = chunk.end < totalBytes ? chunk.end : undefined;
+        complete = nextCursor === undefined;
+        if (reviewerHead) {
+          if (cursor === 0) {
+            reviewDiffCoverage = {
+              headSha: reviewerHead,
+              sha256: patchSha256,
+              bytes: totalBytes,
+              coveredBytes: chunk.end,
+            };
+          } else {
+            if (
+              !reviewDiffCoverage ||
+              reviewDiffCoverage.headSha !== reviewerHead ||
+              reviewDiffCoverage.sha256 !== patchSha256 ||
+              reviewDiffCoverage.bytes !== totalBytes ||
+              reviewDiffCoverage.coveredBytes !== cursor
+            ) {
+              throw new Error(
+                "Reviewer diff chunks must be read in order from cursor 0 for one frozen patch.",
+              );
+            }
+            reviewDiffCoverage.coveredBytes = chunk.end;
+          }
+        }
+        if (nextCursor !== undefined) {
+          output += `\n\n[Forge diff chunk ${cursor}-${chunk.end} of ${totalBytes} bytes. Call forge_diff again with mode=patch and cursor=${nextCursor}.]`;
+        }
+      } else if (cursor !== 0) {
+        throw new Error("Diff cursor exceeds the available patch.");
+      } else if (reviewerHead) {
         reviewDiffCoverage = {
           headSha: reviewerHead,
           sha256: patchSha256,
-          bytes: Buffer.byteLength(result.stdout),
+          bytes: totalBytes,
+          coveredBytes: totalBytes,
         };
+      }
       return {
-        content: [
-          {
-            type: "text",
-            text: result.stdout || "No diff.",
-          },
-        ],
+        content: [{ type: "text", text: output }],
         details: {
           mode: params.mode,
           baseSha: binding.baseSha,
           headSha,
           exitCode: result.exitCode,
+          cursor,
+          ...(nextCursor === undefined ? {} : { nextCursor }),
           coverage: {
-            complete: true,
-            bytes: Buffer.byteLength(result.stdout),
+            complete,
+            bytes: totalBytes,
+            coveredBytes:
+              reviewerHead && reviewDiffCoverage
+                ? reviewDiffCoverage.coveredBytes
+                : complete
+                  ? totalBytes
+                  : nextCursor,
             sha256: patchSha256,
           },
         },
@@ -903,17 +960,22 @@ export function registerForgeRuntime(
       const transport = new FetchGitHubTransport({ token });
       const github = new GitHubWorkflowAdapter(transport, binding.repository);
       const issue = await github.getIssue(binding.issueNumber, signal);
-      const pull = await github.createPullRequest({
+      const initialPull = await github.createPullRequest({
         title: issue.title,
         body: `## Summary\n\nImplements #${binding.issueNumber} through ForgeDock Pi run \`${binding.runId}\`.\n\n## Testing\n\nRequired checks passed before review.\n\nCloses #${binding.issueNumber}\n\n**Reviewed head**: \`${headSha}\``,
         head: binding.branch,
         base: binding.baseBranch,
         ...(signal ? { signal } : {}),
       });
-      if (pull.headSha !== headSha)
-        throw new Error(
-          `Created PR head ${pull.headSha} does not match frozen review head ${headSha}.`,
-        );
+      const pull =
+        initialPull.headSha === headSha
+          ? initialPull
+          : await github.waitForPullRequestHead({
+              pullNumber: initialPull.number,
+              headSha,
+              headRef: binding.branch,
+              ...(signal ? { signal } : {}),
+            });
 
       const store = new GitHubStateBranchStore(
         transport,
@@ -2360,6 +2422,32 @@ export function assertCompleteProcessOutput(
     throw new ForgeOutputLimitError(operation);
 }
 
+export function diffChunk(
+  value: string,
+  cursor: number,
+  maxBytes: number,
+): { text: string; end: number } {
+  const buffer = Buffer.from(value, "utf8");
+  if (
+    !Number.isSafeInteger(cursor) ||
+    cursor < 0 ||
+    cursor > buffer.length ||
+    !Number.isSafeInteger(maxBytes) ||
+    maxBytes < 1
+  )
+    throw new Error("Invalid diff chunk cursor or size.");
+  if (cursor < buffer.length && (buffer[cursor]! & 0xc0) === 0x80)
+    throw new Error("Diff cursor must start at a UTF-8 boundary.");
+  let end = Math.min(buffer.length, cursor + maxBytes);
+  while (end > cursor && end < buffer.length && (buffer[end]! & 0xc0) === 0x80)
+    end -= 1;
+  if (end === cursor && end < buffer.length) {
+    end += 1;
+    while (end < buffer.length && (buffer[end]! & 0xc0) === 0x80) end += 1;
+  }
+  return { text: buffer.subarray(cursor, end).toString("utf8"), end };
+}
+
 export function assertCompleteReviewDiff(
   result: Pick<ProcessResult, "stdout" | "stdoutTruncated" | "stderrTruncated">,
   maxBytes = MAX_OUTPUT_BYTES,
@@ -2370,7 +2458,14 @@ export function assertCompleteReviewDiff(
 }
 
 export function assertReviewerDiffCoverage(
-  coverage: { headSha: string; sha256: string; bytes: number } | undefined,
+  coverage:
+    | {
+        headSha: string;
+        sha256: string;
+        bytes: number;
+        coveredBytes: number;
+      }
+    | undefined,
   expectedHeadSha: string | undefined,
 ): void {
   if (
@@ -2379,7 +2474,8 @@ export function assertReviewerDiffCoverage(
     coverage.headSha !== expectedHeadSha ||
     !/^[a-f0-9]{64}$/.test(coverage.sha256) ||
     !Number.isSafeInteger(coverage.bytes) ||
-    coverage.bytes < 0
+    coverage.bytes < 0 ||
+    coverage.coveredBytes !== coverage.bytes
   )
     throw new Error(
       "Reviewer finalization requires complete forge_diff coverage for the exact frozen head SHA.",
@@ -2411,6 +2507,7 @@ async function runProcess(
     timeoutMs: number;
     signal?: AbortSignal;
     env: NodeJS.ProcessEnv;
+    outputLimitBytes?: number;
   },
 ): Promise<ProcessResult> {
   return new Promise((resolvePromise, reject) => {
@@ -2428,13 +2525,14 @@ async function runProcess(
     let timedOut = false;
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
+    const outputLimitBytes = options.outputLimitBytes ?? MAX_OUTPUT_BYTES * 2;
     child.stdout.on("data", (chunk: string) => {
-      const next = appendBounded(stdout, chunk, MAX_OUTPUT_BYTES * 2);
+      const next = appendBounded(stdout, chunk, outputLimitBytes);
       stdout = next.value;
       stdoutTruncated ||= next.truncated;
     });
     child.stderr.on("data", (chunk: string) => {
-      const next = appendBounded(stderr, chunk, MAX_OUTPUT_BYTES * 2);
+      const next = appendBounded(stderr, chunk, outputLimitBytes);
       stderr = next.value;
       stderrTruncated ||= next.truncated;
     });

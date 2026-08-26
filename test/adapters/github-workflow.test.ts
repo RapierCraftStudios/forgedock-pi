@@ -73,6 +73,37 @@ test("PR lookup qualifies and exactly matches the bound head branch", async () =
   assert.equal(pull?.headSha, "right-sha");
 });
 
+test("PR head polling waits for the pushed commit to become visible", async () => {
+  let reads = 0;
+  const transport = new MockTransport((request) => {
+    assert.equal(request.method, "GET");
+    assert.match(request.path, /\/pulls\/6\?cache_bust=\d+$/);
+    reads += 1;
+    return response(200, {
+      number: 6,
+      html_url: "https://example.test/pr/6",
+      state: "open",
+      merged: false,
+      head: {
+        sha: reads < 3 ? "stale-sha" : "fresh-sha",
+        ref: "forge/issue-2",
+      },
+      base: { sha: "base-sha", ref: "staging" },
+      mergeable: true,
+    });
+  });
+  const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
+  const pull = await adapter.waitForPullRequestHead({
+    pullNumber: 6,
+    headSha: "fresh-sha",
+    headRef: "forge/issue-2",
+    timeoutMs: 100,
+    pollIntervalMs: 1,
+  });
+  assert.equal(pull.headSha, "fresh-sha");
+  assert.equal(reads, 3);
+});
+
 test("branch deletion reconciles a missing auto-deleted ref", async () => {
   const transport = new MockTransport((request) => {
     if (request.method === "DELETE")
