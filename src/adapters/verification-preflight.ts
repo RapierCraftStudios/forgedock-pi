@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { access, readFile, realpath, stat } from "node:fs/promises";
+import { access, lstat, readFile, realpath, stat } from "node:fs/promises";
 import {
   basename,
   delimiter,
@@ -135,10 +135,26 @@ async function assertPackageScript(
   basePath: string,
 ): Promise<void> {
   const manifestPath = join(cwd, "package.json");
+  let manifestEntry: Awaited<ReturnType<typeof lstat>>;
+  try {
+    manifestEntry = await lstat(manifestPath);
+  } catch {
+    throw new VerificationPreflightError(
+      `${basePath}.cwd`,
+      `selected package directory has no package.json for script '${script}'`,
+    );
+  }
+
   let canonicalManifest: string;
   try {
     canonicalManifest = await realpath(manifestPath);
-  } catch {
+  } catch (error) {
+    if (manifestEntry.isSymbolicLink() && isMissingFile(error)) {
+      throw new VerificationPreflightError(
+        `${basePath}.cwd`,
+        "selected package.json is a dangling symlink",
+      );
+    }
     throw new VerificationPreflightError(
       `${basePath}.cwd`,
       `selected package directory has no package.json for script '${script}'`,
@@ -177,4 +193,13 @@ async function assertPackageScript(
 function pathWithin(root: string, target: string): boolean {
   const child = relative(resolve(root), resolve(target));
   return child === "" || (!child.startsWith("..") && !isAbsolute(child));
+}
+
+function isMissingFile(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "ENOENT",
+  );
 }
