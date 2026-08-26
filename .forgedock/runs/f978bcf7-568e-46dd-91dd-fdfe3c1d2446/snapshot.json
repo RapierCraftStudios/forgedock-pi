@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:003d3b7dc5ef88168a4c1abe67dae34d14da71eb8ab28f41d7d7a087bf708f21",
+  "sequence": 8,
+  "lastEventHash": "sha256:f551601e593f897d85b1926f56cd9f371c19b3c43fefd55047981ecba80a82a0",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -39,15 +39,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/workflows/work-on.ts` has two merge paths: dispatcher parent-node merge and direct finalization merge.",
+            "Both paths currently perform merge bookkeeping before their first merged-label projection; the direct path completes the merge phase before calling `#projectWorkflowStage`, while the dispatcher path records the merge effect first.",
+            "Post-merge artifact, close, cleanup, terminal projection, and completion operations can throw after the merge API succeeds; the completion handlers persist failure without guaranteeing a new projection attempt.",
+            "`#reconcileWorkflowProjection` can recover a merged label from durable terminal/merge state, but that is restart/reconciliation dependent and does not protect the in-process failure window.",
+            "`test/workflows/work-on.test.ts` currently covers label mapping but not ordering across a successful merge and failing follow-up work."
+          ],
           "logicalNodeId": "investigate-1",
           "startedAt": "2026-08-26T23:07:14.755Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/f978bcf7-568e-46dd-91dd-fdfe3c1d2446",
           "branch": "forge/issue-119-f978bcf7",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T23:09:43.380Z",
+          "outputArtifactHash": "sha256:investigate-119-merged-projection"
         }
       ]
     }
@@ -61,7 +69,8 @@
     "phase:resolve:1:start": "3ae766ec-d001-4057-9547-ceea4dfe5257",
     "phase:resolve:1:complete": "114cc9ca-02e5-4a40-bdfc-4ca5c82d341f",
     "phase:investigate:1:queue": "bf092321-d6dd-47f7-84c0-8986b7d7616b",
-    "phase:investigate:1:start": "276bd4d5-8876-47d8-83d4-bab0698b9e19"
+    "phase:investigate:1:start": "276bd4d5-8876-47d8-83d4-bab0698b9e19",
+    "phase:investigate:1:complete": "128b1722-da19-4065-9832-9ece63c66f2d"
   },
   "eventIds": {
     "8859b45e-b39f-4669-97a0-573c32198e59": true,
@@ -70,7 +79,8 @@
     "3ae766ec-d001-4057-9547-ceea4dfe5257": true,
     "114cc9ca-02e5-4a40-bdfc-4ca5c82d341f": true,
     "bf092321-d6dd-47f7-84c0-8986b7d7616b": true,
-    "276bd4d5-8876-47d8-83d4-bab0698b9e19": true
+    "276bd4d5-8876-47d8-83d4-bab0698b9e19": true,
+    "128b1722-da19-4065-9832-9ece63c66f2d": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
