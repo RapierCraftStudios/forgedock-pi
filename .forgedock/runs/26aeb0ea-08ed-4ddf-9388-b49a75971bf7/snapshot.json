@@ -6,8 +6,8 @@
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
   "status": "cancelled",
-  "sequence": 11,
-  "lastEventHash": "sha256:32ce710c870cbf2085260aea871b78fc7d0e1943e817ca28ffac57748103161d",
+  "sequence": 12,
+  "lastEventHash": "sha256:c12bcea871aa162412f85a75ea25de697560015550f76edfb82798721e5f11e1",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -69,7 +69,8 @@
     "node:investigate-1:started": "92597ad9-c7bf-4940-b229-841f1cfdedd2",
     "node:investigate-1:receipt-bound": "6c466358-0348-4dd0-9d18-5df50cfeb082",
     "node:investigate-1:failed": "606abee5-76f4-4b8c-a22d-8a80983a0140",
-    "run:cancelled": "86515f56-17e9-4794-9bf1-a6a521ddecab"
+    "run:cancelled": "86515f56-17e9-4794-9bf1-a6a521ddecab",
+    "lease:release": "8cccf081-0294-4891-a557-64de7e06e89b"
   },
   "eventIds": {
     "d6beb5a1-8ff7-435d-bb9d-bf2f2733d517": true,
@@ -82,18 +83,8 @@
     "92597ad9-c7bf-4940-b229-841f1cfdedd2": true,
     "6c466358-0348-4dd0-9d18-5df50cfeb082": true,
     "606abee5-76f4-4b8c-a22d-8a80983a0140": true,
-    "86515f56-17e9-4794-9bf1-a6a521ddecab": true
-  },
-  "lease": {
-    "schema": "forgedock.repository-lease/v1",
-    "repository": "RapierCraftStudios/forgedock-pi",
-    "ownerRunId": "26aeb0ea-08ed-4ddf-9388-b49a75971bf7",
-    "ownerSessionId": "01a03c50-c95c-7ec1-a277-96e34179a805",
-    "epoch": 1,
-    "acquiredAt": "2026-08-26T04:35:01.642Z",
-    "lastHeartbeatAt": "2026-08-26T04:35:01.642Z",
-    "expiresAt": "2026-08-26T05:35:01.642Z",
-    "takeoverRequired": false
+    "86515f56-17e9-4794-9bf1-a6a521ddecab": true,
+    "8cccf081-0294-4891-a557-64de7e06e89b": true
   },
   "cancellationReason": "Cancelled because standalone work-on used the wrong bounded-subagent architecture."
 }
