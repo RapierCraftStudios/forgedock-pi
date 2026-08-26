@@ -54,6 +54,7 @@ export async function preflightRequiredVerificationCommands(
         `executable '${program}' is unavailable; install it or update the tracked command`,
       );
     }
+    assertNpmPackageSelectionUsesCwd(command.argv, cwd, basePath);
     const script = packageScriptName(command.argv);
     if (script)
       await assertPackageScript(canonicalRoot, cwd, script, basePath);
@@ -114,6 +115,40 @@ async function executableAvailable(
     }
   }
   return false;
+}
+
+const NPM_PACKAGE_SELECTION_OPTIONS = new Set([
+  "--prefix",
+  "-C",
+  "--workspace",
+  "-w",
+  "--workspaces",
+  "--include-workspace-root",
+  "--global",
+  "-g",
+  "--location",
+  "--global-style",
+]);
+
+function assertNpmPackageSelectionUsesCwd(
+  argv: readonly string[],
+  cwd: string,
+  basePath: string,
+): void {
+  const manager = basename(argv[0] ?? "").replace(/\\.(?:cmd|exe)$/i, "");
+  if (manager !== "npm") return;
+  for (const argument of argv.slice(1)) {
+    if (argument === "--") break;
+    const option = argument.split("=")[0] ?? argument;
+    const shortPrefix =
+      (argument.startsWith("-C") || argument.startsWith("-w")) &&
+      argument.length > 2;
+    if (!NPM_PACKAGE_SELECTION_OPTIONS.has(option) && !shortPrefix) continue;
+    throw new VerificationPreflightError(
+      `${basePath}.argv`,
+      `npm package-selection option '${option}' cannot override verification cwd '${cwd}'`,
+    );
+  }
 }
 
 function packageScriptName(argv: readonly string[]): string | undefined {

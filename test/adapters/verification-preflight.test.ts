@@ -121,6 +121,68 @@ test("direct npm test aliases validate the package test script", async () => {
   }
 });
 
+test("npm package-selection options cannot override verification cwd", async () => {
+  const testFixture = await fixture();
+  try {
+    await writeFile(
+      join(testFixture.outside, "package.json"),
+      JSON.stringify({ scripts: { test: "echo outside" } }),
+    );
+    const selectors = [
+      ["--prefix", testFixture.outside],
+      [`--prefix=${testFixture.outside}`],
+      ["-C", testFixture.outside],
+      [`-C${testFixture.outside}`],
+      ["--workspace", "web"],
+      ["--workspace=web"],
+      ["-w", "web"],
+      ["--workspaces"],
+      ["--include-workspace-root"],
+      ["--global"],
+      ["-g"],
+      ["--location=global"],
+      ["--global-style"],
+    ];
+    for (const selector of selectors) {
+      for (const argv of [
+        ["npm", "test", ...selector],
+        ["npm", ...selector, "test"],
+      ]) {
+        await assert.rejects(
+          preflightRequiredVerificationCommands(
+            testFixture.root,
+            {
+              test: command(".", { argv }),
+            },
+            {
+              path: testFixture.path,
+              configPath: "/repo/.forge/config.json",
+            },
+          ),
+          (error: unknown) =>
+            error instanceof VerificationPreflightError &&
+            error.path ===
+              "/repo/.forge/config.json verification.commands.test.argv" &&
+            /npm package-selection option/.test(error.message),
+          `npm ${selector.join(" ")} must not override verification cwd`,
+        );
+      }
+    }
+
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      {
+        test: command("web", {
+          argv: ["npm", "test", "--", "--prefix", testFixture.outside],
+        }),
+      },
+      { path: testFixture.path },
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
 test("preflight checks executable availability without running the command", async () => {
   const testFixture = await fixture();
   try {
