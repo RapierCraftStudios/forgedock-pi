@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 14,
-  "lastEventHash": "sha256:f1c8e099a006886acdc6692a2cac5a01950a0f70e5707067a33425a2c3494899",
+  "sequence": 15,
+  "lastEventHash": "sha256:ca30d000cb30782d628d1268acb4fa9085f0482146b803623e3b1024fe679422",
   "lanes": [
     {
       "issueNumber": 92,
@@ -65,10 +65,11 @@
     {
       "issueNumber": 115,
       "ordinal": 6,
-      "status": "running",
+      "status": "blocked",
       "refreshes": 0,
       "forgeRunId": "a85015fc-c09f-4760-8c6c-c62b55064ff7",
-      "subagentRunId": "8a57ac99-1b75-4fb3-9c28-fd1b20b58d06"
+      "subagentRunId": "8a57ac99-1b75-4fb3-9c28-fd1b20b58d06",
+      "reason": "Authoritative GitHub state-branch access returned HTTP 401 while recording the required review-complete checkpoint; an operator must restore authorization before the run can be marked ready or merged."
     },
     {
       "issueNumber": 119,
@@ -102,7 +103,8 @@
     "lane:113:ready:0": "cf05dd99-112d-44dc-88cc-dda29265d55a",
     "lane:120:failed": "c9052b24-c0dd-4498-a33d-05f3152b8c35",
     "lane:114:ready:0": "c87f1be8-0b3b-4039-8094-3154dc9f47a3",
-    "lane:94:blocked": "bd916f89-5dac-45ef-babf-b9a77386e5ac"
+    "lane:94:blocked": "bd916f89-5dac-45ef-babf-b9a77386e5ac",
+    "lane:115:blocked": "bb444516-d5df-44a4-ad9e-a826ec1c7c13"
   },
   "createdAt": "2026-08-26T20:01:21.510Z"
 }
