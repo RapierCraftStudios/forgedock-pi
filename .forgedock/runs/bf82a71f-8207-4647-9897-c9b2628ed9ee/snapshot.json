@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:4e66db7ce31a6d0583b0ab5171ce3737036a5efff5e6c3941fec865bdef5929f",
+  "sequence": 8,
+  "lastEventHash": "sha256:54d7e9f46ae2fe19ec99e5627b52a8e24946a8df641a08235fe57d75f6bc0304",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -38,16 +38,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Policy lacks command cwd and rejects empty local verification maps.",
+            "Writer launch currently has no metadata-only required-command preflight.",
+            "Child forge_verify always runs from the worktree root.",
+            "Init template unconditionally selects root npm test.",
+            "Existing gate behavior remains fail-closed for absent required results."
+          ],
           "inputArtifactHash": "resolve-1",
           "logicalNodeId": "investigate-1",
           "startedAt": "2026-08-26T13:28:45.164Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/bf82a71f-8207-4647-9897-c9b2628ed9ee",
           "branch": "forge/issue-94-bf82a71f",
-          "baseSha": "26139ba278b95578a300c597ec35495a7d502eb6"
+          "baseSha": "26139ba278b95578a300c597ec35495a7d502eb6",
+          "finishedAt": "2026-08-26T13:30:46.974Z"
         }
       ]
     }
@@ -61,7 +68,8 @@
     "phase:resolve:1:start": "204961c8-428d-476d-8d28-7b4dd36f6089",
     "phase:resolve:1:complete": "39a2efba-fdca-4b35-afb2-85ab1b9f559e",
     "phase:investigate:1:queue": "0fb21a0c-1433-4d0c-aaf4-4635ad42c74c",
-    "phase:investigate:1:start": "d04c91b4-5643-4eb3-b0fb-0ccb87557cc1"
+    "phase:investigate:1:start": "d04c91b4-5643-4eb3-b0fb-0ccb87557cc1",
+    "phase:investigate:1:complete": "a2b73bfa-7716-4918-97d1-2c1820785663"
   },
   "eventIds": {
     "6bf70f63-8815-4672-8e98-4f0e70b9004e": true,
@@ -70,7 +78,8 @@
     "204961c8-428d-476d-8d28-7b4dd36f6089": true,
     "39a2efba-fdca-4b35-afb2-85ab1b9f559e": true,
     "0fb21a0c-1433-4d0c-aaf4-4635ad42c74c": true,
-    "d04c91b4-5643-4eb3-b0fb-0ccb87557cc1": true
+    "d04c91b4-5643-4eb3-b0fb-0ccb87557cc1": true,
+    "a2b73bfa-7716-4918-97d1-2c1820785663": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
