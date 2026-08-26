@@ -54,6 +54,12 @@ export async function preflightRequiredVerificationCommands(
         `executable '${program}' is unavailable; install it or update the tracked command`,
       );
     }
+    const packageSelectionOption = npmPackageSelectionOption(command.argv);
+    if (packageSelectionOption)
+      throw new VerificationPreflightError(
+        `${basePath}.argv`,
+        `npm package-selection option '${packageSelectionOption}' is unsupported; set cwd to the selected package and remove the option`,
+      );
     const script = packageScriptName(command.argv);
     if (script)
       await assertPackageScript(canonicalRoot, cwd, script, basePath);
@@ -114,6 +120,30 @@ async function executableAvailable(
     }
   }
   return false;
+}
+
+const NPM_PACKAGE_SELECTION_OPTIONS = new Set([
+  "--prefix",
+  "--workspace",
+  "-w",
+  "--workspaces",
+  "--ws",
+  "--include-workspace-root",
+  "--global",
+  "-g",
+]);
+
+function npmPackageSelectionOption(argv: readonly string[]): string | undefined {
+  const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
+  if (manager !== "npm") return undefined;
+  for (const argument of argv.slice(1)) {
+    if (argument === "--") break;
+    const equalsIndex = argument.indexOf("=");
+    const option =
+      equalsIndex === -1 ? argument : argument.slice(0, equalsIndex);
+    if (NPM_PACKAGE_SELECTION_OPTIONS.has(option)) return argument;
+  }
+  return undefined;
 }
 
 function packageScriptName(argv: readonly string[]): string | undefined {
