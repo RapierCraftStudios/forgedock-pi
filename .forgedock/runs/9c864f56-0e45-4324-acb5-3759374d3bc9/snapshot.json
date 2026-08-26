@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 12,
-  "lastEventHash": "sha256:9849bc529360496d293c56f90537977b1d14c0e81cecec8f77b8b84ccbe9ad88",
+  "sequence": 13,
+  "lastEventHash": "sha256:f13a443b1cdb70af609424367676e8151028833d8a0ca2e00f73a293eec702ef",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -73,11 +73,16 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "resume prepare-worktree attempt 1",
           "evidence": [],
-          "inputArtifactHash": "sha256:plan-113-preflight"
+          "inputArtifactHash": "sha256:plan-113-preflight",
+          "logicalNodeId": "work-on.prepare-worktree",
+          "startedAt": "2026-08-26T18:02:14.176Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/9c864f56-0e45-4324-acb5-3759374d3bc9",
+          "branch": "forge/issue-113-9c864f56",
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
         }
       ]
     }
@@ -96,7 +101,8 @@
     "phase:plan:1:queue": "fbb81aa7-f1da-421b-b7e3-d920c8e67e52",
     "phase:plan:1:start": "9cdc408e-5ff8-490e-88d3-0c3793c374fe",
     "phase:plan:1:complete": "e1165312-49f1-4bb4-a516-7c524ad5950a",
-    "phase:prepare-worktree:1:queue": "01721c49-a98d-484c-9cda-59625434cbf8"
+    "phase:prepare-worktree:1:queue": "01721c49-a98d-484c-9cda-59625434cbf8",
+    "phase:prepare-worktree:1:start": "f3fda0f4-08b3-40ed-ad6a-15f37ebd45ef"
   },
   "eventIds": {
     "e9bf163f-055b-4f9d-ba29-c1c27ebcf03f": true,
@@ -110,7 +116,8 @@
     "fbb81aa7-f1da-421b-b7e3-d920c8e67e52": true,
     "9cdc408e-5ff8-490e-88d3-0c3793c374fe": true,
     "e1165312-49f1-4bb4-a516-7c524ad5950a": true,
-    "01721c49-a98d-484c-9cda-59625434cbf8": true
+    "01721c49-a98d-484c-9cda-59625434cbf8": true,
+    "f3fda0f4-08b3-40ed-ad6a-15f37ebd45ef": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
