@@ -5,10 +5,10 @@
   "issueNumber": 92,
   "integrationBranch": "staging",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "blocked",
   "authorityMode": "run-scoped",
-  "sequence": 22,
-  "lastEventHash": "sha256:196bdc088bc4bd8831588015c1fb9a9577c1d365a158bacde17cdf0b20cad80d",
+  "sequence": 23,
+  "lastEventHash": "sha256:c711ba21926a4d6a1c91f1506bffc5630d67001ba28b9a53e5c385fafa6dfdca",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -154,7 +154,7 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "blocked",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 1",
           "evidence": [],
@@ -163,7 +163,9 @@
           "startedAt": "2026-08-26T19:30:51.110Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/fc4c825b-6b02-463b-bd23-efd3109643a0",
           "branch": "forge/issue-92-fc4c825b",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "reason": "Nested review infrastructure is unavailable after five trusted forge_run_review_panel attempts; pi-subagents RPC ping timed out each time. The frozen implementation head remains unreviewed.",
+          "finishedAt": "2026-08-26T19:35:56.294Z"
         }
       ]
     }
@@ -192,7 +194,8 @@
     "phase:verify:1:start": "98409a34-4d77-4043-9cad-a9846c89b980",
     "phase:verify:1:complete": "220ce0ff-4881-416c-8457-35e9acb7cb5a",
     "phase:review:1:queue": "7a25dd82-b110-42e4-8515-978f9e9a09d2",
-    "phase:review:1:start": "d4fb1dd0-5479-4db9-9dc0-33c2a422e0ea"
+    "phase:review:1:start": "d4fb1dd0-5479-4db9-9dc0-33c2a422e0ea",
+    "phase:review:1:block": "b4511501-8c43-4a55-90f5-f5ab8cb41980"
   },
   "eventIds": {
     "4c861e72-4cff-47cc-b247-e917fe5fb5a8": true,
@@ -216,7 +219,8 @@
     "98409a34-4d77-4043-9cad-a9846c89b980": true,
     "220ce0ff-4881-416c-8457-35e9acb7cb5a": true,
     "7a25dd82-b110-42e4-8515-978f9e9a09d2": true,
-    "d4fb1dd0-5479-4db9-9dc0-33c2a422e0ea": true
+    "d4fb1dd0-5479-4db9-9dc0-33c2a422e0ea": true,
+    "b4511501-8c43-4a55-90f5-f5ab8cb41980": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
