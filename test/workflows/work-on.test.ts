@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 
 import {
   canonicalReviewerName,
   directRunRecoveryAction,
+  directTerminalEvidence,
   finalReviewDecisionMarker,
   findingPriority,
   isTransientProviderFailure,
@@ -70,6 +72,38 @@ test("direct restart selects terminal cleanup and authority release windows", ()
     directRunRecoveryAction(state("blocked", ["merge", "close"]), true),
     "none",
   );
+});
+
+test("direct terminal evidence binds PR, merge phase, and merge effect", () => {
+  const mergeSha = "a".repeat(40);
+  const mergeDigest = `sha256:${createHash("sha256").update(mergeSha).digest("hex")}`;
+  const state = {
+    status: "active",
+    phases: {
+      merge: { attempts: [{ status: "completed", evidence: [mergeSha] }] },
+    },
+    effects: {
+      pr: {
+        effectType: "pull-request",
+        effectId: "pr:105",
+        digest: "sha256:pr",
+        eventId: "event-pr",
+      },
+      merge: {
+        effectType: "merge",
+        effectId: "pr:105:merge",
+        digest: mergeDigest,
+        eventId: "event-merge",
+      },
+    },
+  } as unknown as import("../../src/core/state.ts").RunState;
+
+  assert.deepEqual(directTerminalEvidence(state), {
+    pullNumber: 105,
+    mergeSha,
+  });
+  state.effects.merge!.digest = "sha256:wrong";
+  assert.equal(directTerminalEvidence(state), undefined);
 });
 
 test("provider completion is buffered until its launch receipt is durably bound", () => {

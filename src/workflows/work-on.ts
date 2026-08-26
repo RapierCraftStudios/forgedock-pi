@@ -193,6 +193,34 @@ export function directRunRecoveryAction(
   return mergeCompleted && closeCompleted ? "terminal-cleanup" : "resume-work";
 }
 
+export interface DirectTerminalEvidence {
+  pullNumber: number;
+  mergeSha: string;
+}
+
+export function directTerminalEvidence(
+  state: import("../core/state.ts").RunState,
+): DirectTerminalEvidence | undefined {
+  const pullEffect = Object.values(state.effects).find(
+    (effect) => effect.effectType === "pull-request",
+  );
+  const pullNumber =
+    state.pullNumber ??
+    Number(pullEffect?.effectId.match(/^pr:(\d+)$/)?.[1] ?? 0);
+  const mergeSha = state.phases.merge?.attempts
+    .at(-1)
+    ?.evidence.find((entry) => /^[0-9a-f]{40}$/i.test(entry));
+  if (!Number.isSafeInteger(pullNumber) || pullNumber < 1 || !mergeSha)
+    return undefined;
+  const mergeEffect = Object.values(state.effects).find(
+    (effect) =>
+      effect.effectType === "merge" &&
+      effect.effectId === `pr:${pullNumber}:merge`,
+  );
+  if (!mergeEffect || mergeEffect.digest !== digest(mergeSha)) return undefined;
+  return { pullNumber, mergeSha };
+}
+
 export function directRunResumeTask(
   link: ActiveRunLink,
   state: import("../core/state.ts").RunState,
@@ -3229,19 +3257,12 @@ export class ForgeWorkOnController {
       return;
     }
 
-    const pullEffect = Object.values(state.effects).find(
-      (effect) => effect.effectType === "pull-request",
-    );
-    const pullNumber =
-      state.pullNumber ??
-      Number(pullEffect?.effectId.match(/^pr:(\d+)$/)?.[1] ?? 0);
-    const mergeSha = state.phases.merge?.attempts
-      .at(-1)
-      ?.evidence.find((entry) => /^[0-9a-f]{40}$/i.test(entry));
-    if (!Number.isSafeInteger(pullNumber) || pullNumber < 1 || !mergeSha)
+    const evidence = directTerminalEvidence(state);
+    if (!evidence)
       throw new Error(
-        "Direct terminal recovery requires durable PR and merge SHA evidence.",
+        "Direct terminal recovery requires matching durable PR and merge effect evidence.",
       );
+    const { pullNumber, mergeSha } = evidence;
 
     link.status = "finalizing";
     this.#persistLink(link);
@@ -3260,6 +3281,16 @@ export class ForgeWorkOnController {
     );
     const journal = new RunJournal(store);
     const sessionId = ctx.sessionManager.getSessionId();
+    const pull = await github.getPullRequest(pullNumber, ctx.signal);
+    if (
+      !pull.merged ||
+      pull.baseRef !== link.prepared.baseBranch ||
+      pull.headRef !== link.prepared.branch
+    ) {
+      throw new Error(
+        `Direct terminal recovery requires PR #${pullNumber} merged from ${link.prepared.branch} into ${link.prepared.baseBranch}.`,
+      );
+    }
 
     if (action === "terminal-cleanup") {
       await appendPhase(
