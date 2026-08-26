@@ -3186,6 +3186,49 @@ export class ForgeWorkOnController {
     action: "terminal-cleanup" | "release-authority",
     ctx: ExtensionContext,
   ): Promise<void> {
+    if (action === "release-authority") {
+      link.status = "finalizing";
+      this.#persistLink(link);
+      const token = await resolveGitHubToken(
+        this.#pi,
+        link.prepared.repositoryRoot,
+        ctx.signal,
+      );
+      const transport = new FetchGitHubTransport({ token });
+      const store = new GitHubStateBranchStore(
+        transport,
+        link.repository,
+        link.stateBranch,
+      );
+      const journal = new RunJournal(store);
+      const terminal = await journal.append({
+        runId: link.forgeRunId,
+        type: "lease.released",
+        payload: {
+          ownerRunId: link.leaseOwnerRunId,
+          epoch: link.leaseEpoch,
+        },
+        idempotencyKey: "lease:release",
+        sessionId: ctx.sessionManager.getSessionId(),
+        message: `Release completed ForgeDock authority ${link.forgeRunId}`,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      this.#directBinding = undefined;
+      delete process.env.PI_SUBAGENT_EXTENSION_BINDINGS;
+      link.status = "completed";
+      this.#persistLink(link);
+      this.#emitLifecycle(link, {
+        baseSha: link.prepared.baseSha,
+        ...(state.pullNumber ? { pullNumber: state.pullNumber } : {}),
+      });
+      ctx.ui.setStatus("forgedock", undefined);
+      ctx.ui.notify(
+        `ForgeDock run ${link.forgeRunId} released recovered authority at journal length ${terminal.events.length}.`,
+        "info",
+      );
+      return;
+    }
+
     const pullEffect = Object.values(state.effects).find(
       (effect) => effect.effectType === "pull-request",
     );
