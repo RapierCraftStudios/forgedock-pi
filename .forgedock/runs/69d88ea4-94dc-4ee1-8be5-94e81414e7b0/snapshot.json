@@ -6,23 +6,28 @@
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
   "status": "active",
-  "sequence": 4,
-  "lastEventHash": "sha256:baf84cad74aa3d046769272c1e03d414ba2476b0e0f7a9d2a3df67f97df89ad6",
+  "sequence": 5,
+  "lastEventHash": "sha256:bad79cd431fa4d7c72776a790dd2c0ec30fd2e72b3b74e42b63ec9dd2d8da08f",
   "phases": {
     "resolve": {
       "phase": "resolve",
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume resolve attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Resolved issue #95 exactly: open, unassigned, non-duplicate, and not actively owned because the prior run is cancelled and its lease is released.",
+            "The issue title is test: add deterministic work-on E2E receipt fixture and its acceptance contract is limited to two test paths.",
+            "Valid .forge/config.json configures dogfood as existing non-protected integration branch and main as protected."
+          ],
           "logicalNodeId": "resolve-1",
           "startedAt": "2026-08-26T05:06:56.577Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/69d88ea4-94dc-4ee1-8be5-94e81414e7b0",
           "branch": "forge/issue-95-69d88ea4",
-          "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491"
+          "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+          "finishedAt": "2026-08-26T05:07:24.120Z"
         }
       ]
     }
@@ -33,13 +38,15 @@
     "run:create": "b1395e28-212e-45b6-a67c-66af8f796d7d",
     "lease:acquire:1": "68c8b2b5-36d4-496f-848a-987d1a75274b",
     "phase:resolve:1:queue": "9569464f-6f35-4e42-9dc6-42866b9c690b",
-    "phase:resolve:1:start": "059c6427-1160-431a-801b-aee6d7a2ef93"
+    "phase:resolve:1:start": "059c6427-1160-431a-801b-aee6d7a2ef93",
+    "phase:resolve:1:complete": "ef3274bd-5f75-4a23-b0f4-96e312617fc6"
   },
   "eventIds": {
     "b1395e28-212e-45b6-a67c-66af8f796d7d": true,
     "68c8b2b5-36d4-496f-848a-987d1a75274b": true,
     "9569464f-6f35-4e42-9dc6-42866b9c690b": true,
-    "059c6427-1160-431a-801b-aee6d7a2ef93": true
+    "059c6427-1160-431a-801b-aee6d7a2ef93": true,
+    "ef3274bd-5f75-4a23-b0f4-96e312617fc6": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
