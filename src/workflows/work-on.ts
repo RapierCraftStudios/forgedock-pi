@@ -423,24 +423,38 @@ export class ForgeWorkOnController {
       phase: "merge",
       action: "start",
     });
+    const reviewWorkflowLabel = workflowLabelForCheckpoint({
+      phase: "review",
+      action: "start",
+    });
     const mergedWorkflowLabel = workflowLabelForCheckpoint({
       phase: "merge",
       action: "complete",
     });
-    if (!awaitingMergeLabel || !mergedWorkflowLabel)
+    if (!awaitingMergeLabel || !reviewWorkflowLabel || !mergedWorkflowLabel)
       throw new Error("Missing canonical workflow label for merge transition.");
-    await projector.setWorkflowLabel(
-      link.issueNumber,
-      awaitingMergeLabel,
-      ctx.signal,
-    );
 
-    const merged = await github.mergePullRequest({
-      pullNumber: pull.number,
-      expectedHeadSha: result.review.headSha,
-      method: "squash",
-      ...(ctx.signal ? { signal: ctx.signal } : {}),
-    });
+    let merged: Awaited<
+      ReturnType<GitHubWorkflowAdapter["mergePullRequest"]>
+    >;
+    try {
+      await projector.setWorkflowLabel(
+        link.issueNumber,
+        awaitingMergeLabel,
+        ctx.signal,
+      );
+      merged = await github.mergePullRequest({
+        pullNumber: pull.number,
+        expectedHeadSha: result.review.headSha,
+        method: "squash",
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+    } catch (error) {
+      await projector
+        .setWorkflowLabel(link.issueNumber, reviewWorkflowLabel, ctx.signal)
+        .catch(() => undefined);
+      throw error;
+    }
     await appendEffect(
       journal,
       link.forgeRunId,
