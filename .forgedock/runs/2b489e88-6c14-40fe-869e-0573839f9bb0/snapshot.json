@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 21,
-  "lastEventHash": "sha256:0a453fae3f0fd1e35724449f1c6e5a9e5deebcbe2bdd096a8900e77ad5088284",
+  "sequence": 22,
+  "lastEventHash": "sha256:12d71dce5b87a9cb31299a073437d0e19afb21511f5df2741cb38c3062d089eb",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -167,11 +167,16 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 1",
           "evidence": [],
-          "inputArtifactHash": "sha256:verification-issue-112-check-passed"
+          "inputArtifactHash": "sha256:verification-issue-112-check-passed",
+          "logicalNodeId": "work-on-review",
+          "startedAt": "2026-08-26T18:32:44.671Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/2b489e88-6c14-40fe-869e-0573839f9bb0",
+          "branch": "forge/issue-112-2b489e88",
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
         }
       ]
     }
@@ -199,7 +204,8 @@
     "phase:verify:1:queue": "7c8b842b-2a9b-4b59-9bff-3359b297f31b",
     "phase:verify:1:start": "5ca100aa-19f2-4d43-8622-370d14c7ee64",
     "phase:verify:1:complete": "e5805840-ef5c-4381-b04d-12f7ade27fff",
-    "phase:review:1:queue": "bbaff078-ef81-4421-a8f6-4f475481283b"
+    "phase:review:1:queue": "bbaff078-ef81-4421-a8f6-4f475481283b",
+    "phase:review:1:start": "299ca78b-5490-4cd4-b77d-47e3dfdbffbf"
   },
   "eventIds": {
     "f349b52b-b125-43dd-b940-b6b8f8bfd776": true,
@@ -222,7 +228,8 @@
     "7c8b842b-2a9b-4b59-9bff-3359b297f31b": true,
     "5ca100aa-19f2-4d43-8622-370d14c7ee64": true,
     "e5805840-ef5c-4381-b04d-12f7ade27fff": true,
-    "bbaff078-ef81-4421-a8f6-4f475481283b": true
+    "bbaff078-ef81-4421-a8f6-4f475481283b": true,
+    "299ca78b-5490-4cd4-b77d-47e3dfdbffbf": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
