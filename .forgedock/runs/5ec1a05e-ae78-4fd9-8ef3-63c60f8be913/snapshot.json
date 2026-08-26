@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 16,
-  "lastEventHash": "sha256:c5ab5cd8a273fe15e7e65131ec8bbc498c0bf1c31be5e0f5b5d4154e8319cfa3",
+  "sequence": 17,
+  "lastEventHash": "sha256:faf202aeb9ae1f2235eda34e9ba67c29045d94b6af9605c39b0ef9b5d01a8842",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -111,16 +111,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/verification-preflight.ts` now uses `lstat` before `realpath`, maps only `ENOENT` to missing-manifest handling, and rejects symbolic-link manifests.",
+            "`test/adapters/verification-preflight.test.ts` now covers an in-repository nested manifest link, a dangling root manifest link, and a genuinely missing root manifest.",
+            "The bounded diff contains only the two contract-approved files; the implementation commit is intentionally deferred until required verification passes."
+          ],
           "inputArtifactHash": "sha256:issue115-plan-lstat-manifest-guard",
           "logicalNodeId": "implement",
           "startedAt": "2026-08-26T18:07:08.809Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/5ec1a05e-ae78-4fd9-8ef3-63c60f8be913",
           "branch": "forge/issue-115-5ec1a05e",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T18:08:39.933Z",
+          "outputArtifactHash": "sha256:issue115-implementation-lstat-regression"
         }
       ]
     }
@@ -143,7 +149,8 @@
     "phase:prepare-worktree:1:start": "3a512f99-0a8f-422b-a171-90d8276b8079",
     "phase:prepare-worktree:1:complete": "53d420b1-6492-463d-a5d7-ff6dbc205812",
     "phase:implement:1:queue": "7542405e-4330-4026-a21f-9532a6b8339e",
-    "phase:implement:1:start": "8a1c674e-f7f4-4c89-a3de-ce3d06baf0ae"
+    "phase:implement:1:start": "8a1c674e-f7f4-4c89-a3de-ce3d06baf0ae",
+    "phase:implement:1:complete": "cfb945ca-d73a-4a9d-809f-63141c08f544"
   },
   "eventIds": {
     "cb910872-25c5-4ad7-afad-cf0c4cb6639a": true,
@@ -161,7 +168,8 @@
     "3a512f99-0a8f-422b-a171-90d8276b8079": true,
     "53d420b1-6492-463d-a5d7-ff6dbc205812": true,
     "7542405e-4330-4026-a21f-9532a6b8339e": true,
-    "8a1c674e-f7f4-4c89-a3de-ce3d06baf0ae": true
+    "8a1c674e-f7f4-4c89-a3de-ce3d06baf0ae": true,
+    "cfb945ca-d73a-4a9d-809f-63141c08f544": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
