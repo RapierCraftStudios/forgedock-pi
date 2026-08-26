@@ -5,13 +5,13 @@
   "issueNumber": 30,
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "leaseBinding": {
     "ownerRunId": "dd680e3c-d22e-4841-9e2e-5042551e056a",
     "epoch": 1
   },
-  "sequence": 57,
-  "lastEventHash": "sha256:066f484f2b5d49873c8365d112c0574599b43df99f32d4dc269c85bef12cdce5",
+  "sequence": 58,
+  "lastEventHash": "sha256:bba0009aaa335176c0bc6ce4156007dc87847ed7bcc0e7474f449f5f0c84e3f7",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -407,9 +407,11 @@
       "node": "cleanup",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "failed",
       "baseSha": "320ad98f894e872dcb4ddc50cc90237722ab736c",
-      "startedAt": "2026-08-25T10:33:44.707Z"
+      "startedAt": "2026-08-25T10:33:44.707Z",
+      "reason": "Cancelled by the operator through /forge:cancel.",
+      "finishedAt": "2026-08-26T01:32:48.725Z"
     }
   },
   "effects": {
@@ -489,7 +491,8 @@
     "node:close-1:complete": "1e1885d0-b21e-4b5b-b792-a366063d4b15",
     "node:cleanup-1:queued": "1283244a-5622-4e59-aac9-43110f1acb27",
     "node:cleanup-1:started": "d9ef44a0-0fbb-48f2-87bf-dfd4bae09bba",
-    "effect:cleanup:4f3e8e17-3743-4a53-a0c7-db71ce9535b9": "2b64251f-00ec-4de6-adde-930828439815"
+    "effect:cleanup:4f3e8e17-3743-4a53-a0c7-db71ce9535b9": "2b64251f-00ec-4de6-adde-930828439815",
+    "run:cancelled": "455c1cd8-840b-49ed-bbe1-7534a04c750c"
   },
   "eventIds": {
     "f09b50df-0043-4493-aea7-a52e7e099b6f": true,
@@ -548,6 +551,8 @@
     "1e1885d0-b21e-4b5b-b792-a366063d4b15": true,
     "1283244a-5622-4e59-aac9-43110f1acb27": true,
     "d9ef44a0-0fbb-48f2-87bf-dfd4bae09bba": true,
-    "2b64251f-00ec-4de6-adde-930828439815": true
-  }
+    "2b64251f-00ec-4de6-adde-930828439815": true,
+    "455c1cd8-840b-49ed-bbe1-7534a04c750c": true
+  },
+  "cancellationReason": "Cancelled by the operator through /forge:cancel."
 }
