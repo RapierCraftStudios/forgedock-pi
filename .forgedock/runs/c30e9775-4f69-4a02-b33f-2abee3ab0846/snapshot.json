@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "completed",
   "authorityMode": "run-scoped",
-  "sequence": 38,
-  "lastEventHash": "sha256:69bec39aa09501d66b47f4f266e373279f4f78d8fdf3218a4d6325f2497979ff",
+  "sequence": 39,
+  "lastEventHash": "sha256:1e4163dc576f9aa4073d0204f488162bdeab72885fdbc6ee9c627d3f6e136c7e",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -292,7 +292,8 @@
     "phase:cleanup:1:start": "86ed41f8-3c34-4165-af76-73c431d71a85",
     "phase:cleanup:1:complete": "7876ccc6-6bba-4fa9-a618-f3f8240ac5a7",
     "effect:worktree:c30e9775-4f69-4a02-b33f-2abee3ab0846": "30feca94-7997-4a00-a29d-3684ec9656af",
-    "run:completed": "e9fa66bc-22b3-4f2f-8d75-8b53a73a1292"
+    "run:completed": "e9fa66bc-22b3-4f2f-8d75-8b53a73a1292",
+    "lease:release": "4be695b6-98e5-4c2b-9fe4-c99b2c5a2a05"
   },
   "eventIds": {
     "c9339e85-e4dc-47ef-8416-edc58e3220c6": true,
@@ -332,18 +333,8 @@
     "86ed41f8-3c34-4165-af76-73c431d71a85": true,
     "7876ccc6-6bba-4fa9-a618-f3f8240ac5a7": true,
     "30feca94-7997-4a00-a29d-3684ec9656af": true,
-    "e9fa66bc-22b3-4f2f-8d75-8b53a73a1292": true
-  },
-  "lease": {
-    "schema": "forgedock.repository-lease/v1",
-    "repository": "RapierCraftStudios/forgedock-pi",
-    "ownerRunId": "c30e9775-4f69-4a02-b33f-2abee3ab0846",
-    "ownerSessionId": "01a03da0-76c1-750f-9ea4-3c2aa2811646",
-    "epoch": 1,
-    "acquiredAt": "2026-08-26T10:35:15.687Z",
-    "lastHeartbeatAt": "2026-08-26T10:35:15.687Z",
-    "expiresAt": "2027-08-26T10:35:15.687Z",
-    "takeoverRequired": false
+    "e9fa66bc-22b3-4f2f-8d75-8b53a73a1292": true,
+    "4be695b6-98e5-4c2b-9fe4-c99b2c5a2a05": true
   },
   "pullNumber": 105,
   "outcome": "merged"
