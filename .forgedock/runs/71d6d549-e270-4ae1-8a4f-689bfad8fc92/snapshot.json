@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:6da9a690420111f402865a035449c0d8869b3de0b4613fffcb2043765794f2b4",
+  "sequence": 8,
+  "lastEventHash": "sha256:6b17752c8dae8065f3361d6aaf5472e5baf33c8f061f0471aab6f2aa6dc069eb",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -38,15 +38,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/core/policy.ts` accepts only argv, required, and timeoutMs for verification commands; it has no package working-directory field.",
+            "`src/ui/commands.ts` copies `templates/config.json` unchanged except repository name, so `/forge:init` always selects root `npm test` and never inspects package scripts.",
+            "`src/workflows/work-on.ts` prepares the writer worktree and materializes agents before spawning the writer; no local verification preflight exists.",
+            "`src/agents/child-runtime.ts` currently executes every bound verification command with the worktree root as cwd.",
+            "Existing tests cover policy parsing, worktree lifecycle, and subagent binding, but no monorepo command preflight fixture exists.",
+            "The bound trusted policy has an empty local verification command map, so no local check is approved for this run; GitHub CI remains parent-owned."
+          ],
           "logicalNodeId": "investigate-1",
           "startedAt": "2026-08-26T10:37:23.769Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/71d6d549-e270-4ae1-8a4f-689bfad8fc92",
           "branch": "forge/issue-94-71d6d549",
-          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4"
+          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4",
+          "finishedAt": "2026-08-26T10:43:33.457Z"
         }
       ]
     }
@@ -60,7 +68,8 @@
     "phase:resolve:1:start": "90df3154-7332-42f0-b848-652b98a4aaf9",
     "phase:resolve:1:complete": "5661656e-0c6f-4fdf-b178-0fabeb77559b",
     "phase:investigate:1:queue": "5c0203b4-8416-43d8-911e-54fc029ee1a6",
-    "phase:investigate:1:start": "706d75dc-d7eb-49e9-9025-3945c8ff8b6a"
+    "phase:investigate:1:start": "706d75dc-d7eb-49e9-9025-3945c8ff8b6a",
+    "phase:investigate:1:complete": "ae327b57-a1ff-450a-acc0-00f2c5d662eb"
   },
   "eventIds": {
     "74b94345-a812-40a3-af2c-143b38e194b4": true,
@@ -69,7 +78,8 @@
     "90df3154-7332-42f0-b848-652b98a4aaf9": true,
     "5661656e-0c6f-4fdf-b178-0fabeb77559b": true,
     "5c0203b4-8416-43d8-911e-54fc029ee1a6": true,
-    "706d75dc-d7eb-49e9-9025-3945c8ff8b6a": true
+    "706d75dc-d7eb-49e9-9025-3945c8ff8b6a": true,
+    "ae327b57-a1ff-450a-acc0-00f2c5d662eb": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
