@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 16,
-  "lastEventHash": "sha256:79230de13fa547827873bb405a433fd9eb4827c2941a3ac0ab3d8d1406e603b7",
+  "sequence": 17,
+  "lastEventHash": "sha256:754705a716aa48b4daa2304cb4de2217b4c206028fb8dd34c7e62bd982f921e6",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -113,16 +113,25 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Commit `490f38bbb974255eabe2fa3645d98df24c6e88b5` adds the shared canonical workflow checkpoint mapping.",
+            "Child checkpoint handling now reuses the shared helper and its schema excludes parent-owned merge, close, and cleanup phases.",
+            "Parent merge projection now sets awaiting-merge only after gate approval and merged only after the merge effect plus merge completion checkpoint.",
+            "Focused tests cover child/parent mapping, invalid-versus-ready investigation outcomes, and repeated workflow-label replacement with unrelated-label preservation.",
+            "Primary LSP diagnostics are clean for all five changed files."
+          ],
           "inputArtifactHash": "sha256:prepare-92-clean",
           "logicalNodeId": "work-on/92/implement",
           "startedAt": "2026-08-26T13:27:45.081Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/4131d7d7-e83d-4690-8d08-b4bfd08a9168",
           "branch": "forge/issue-92-4131d7d7",
-          "baseSha": "26139ba278b95578a300c597ec35495a7d502eb6"
+          "baseSha": "26139ba278b95578a300c597ec35495a7d502eb6",
+          "finishedAt": "2026-08-26T13:31:07.936Z",
+          "outputArtifactHash": "sha256:implement-490f38bbb974255eabe2fa3645d98df24c6e88b5",
+          "commitSha": "490f38bbb974255eabe2fa3645d98df24c6e88b5"
         }
       ]
     }
@@ -145,7 +154,8 @@
     "phase:prepare-worktree:1:start": "8dc603b9-0567-4c3b-90ab-25cda3238c2e",
     "phase:prepare-worktree:1:complete": "01fe4529-b7b1-41f3-b21c-72654e961f24",
     "phase:implement:1:queue": "60ad41ac-21cf-4b6a-8a8f-fe00c5bf3552",
-    "phase:implement:1:start": "4b2bbe2e-a006-4bbd-b64b-8ed21357d179"
+    "phase:implement:1:start": "4b2bbe2e-a006-4bbd-b64b-8ed21357d179",
+    "phase:implement:1:complete": "63853e49-21b3-4d6e-b1c3-016230623556"
   },
   "eventIds": {
     "d4bc0456-c63a-47b8-83b8-0bcee88aab3b": true,
@@ -163,7 +173,8 @@
     "8dc603b9-0567-4c3b-90ab-25cda3238c2e": true,
     "01fe4529-b7b1-41f3-b21c-72654e961f24": true,
     "60ad41ac-21cf-4b6a-8a8f-fe00c5bf3552": true,
-    "4b2bbe2e-a006-4bbd-b64b-8ed21357d179": true
+    "4b2bbe2e-a006-4bbd-b64b-8ed21357d179": true,
+    "63853e49-21b3-4d6e-b1c3-016230623556": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
