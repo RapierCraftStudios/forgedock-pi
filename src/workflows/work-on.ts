@@ -1895,7 +1895,7 @@ export class ForgeWorkOnController {
       await projector.postArtifact({
         issueNumber: link.issueNumber,
         runId: link.forgeRunId,
-        eventId: `node-${node.nodeId}`,
+        eventId: `node-${node.nodeId}-${ci.headSha}`,
         artifactKey: "acceptance-gate",
         markdown: `<!-- FORGE:ACCEPTANCE_GATE -->\n## GitHub CI — ${gateTitle}\n\n**Reviewed head**: \`${ci.headSha}\`\n**Target branch**: \`${pull.baseRef}\`\n\n${renderVerificationEvidence(verificationResults)}\n\n${ciPassed ? ACCEPTANCE_GATE_SUCCESS_MARKER : "<!-- FORGE:ACCEPTANCE_GATE:BLOCKED -->"}`,
         ...(ctx.signal ? { signal: ctx.signal } : {}),
@@ -2028,7 +2028,13 @@ export class ForgeWorkOnController {
         gate,
         ctx.signal,
       );
-      const audit = checkPreMergeAuditTrail({ issueComments: await github.getComments(link.issueNumber, ctx.signal), pullRequestComments: await github.getComments(pull.number, ctx.signal), requiredReviewerDomains: policy.review.required.map(reviewerDomain) });
+      const audit = await waitForPreMergeAudit(
+        github,
+        link.issueNumber,
+        pull.number,
+        policy.review.required.map(reviewerDomain),
+        ctx.signal,
+      );
       const auditFailures = [...audit.missingIssueMarkers, ...audit.missingPullRequestMarkers, ...audit.missingReviewerDomains.map((domain) => `reviewer:${domain}`)];
       const missingDecision = checkReviewDecisionAuditTrail({ pullRequestComments: await github.getComments(pull.number, ctx.signal) });
       if (auditFailures.length || missingDecision.length) {
@@ -3732,14 +3738,13 @@ export class ForgeWorkOnController {
       markdown: `<!-- FORGE:ACCEPTANCE_GATE -->\n## GitHub CI — ${githubTitle}\n\n**Reviewed head**: \`${result.review.headSha}\`\n**Target branch**: \`${currentPull.baseRef}\`\n\n${renderVerificationEvidence(githubChecks)}\n\n${acceptancePassed ? ACCEPTANCE_GATE_SUCCESS_MARKER : "<!-- FORGE:ACCEPTANCE_GATE:BLOCKED -->"}`,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
-    const refreshedAudit = checkPreMergeAuditTrail({
-      issueComments: await github.getComments(link.issueNumber, ctx.signal),
-      pullRequestComments: await github.getComments(
-        currentPull.number,
-        ctx.signal,
-      ),
-      requiredReviewerDomains: policy.review.required.map(reviewerDomain),
-    });
+    const refreshedAudit = await waitForPreMergeAudit(
+      github,
+      link.issueNumber,
+      currentPull.number,
+      policy.review.required.map(reviewerDomain),
+      ctx.signal,
+    );
     auditFailures = [
       ...refreshedAudit.missingIssueMarkers.map(
         (marker) => `missing issue artifact ${marker}`,
@@ -4490,6 +4495,36 @@ function reviewerDomain(reviewer: string): string {
   return reviewer.replace(/^forge-review-/, "").replace(/\s*\(.+\)$/, "");
 }
 
+
+async function waitForPreMergeAudit(
+  github: GitHubWorkflowAdapter,
+  issueNumber: number,
+  pullNumber: number,
+  requiredReviewerDomains: readonly string[],
+  signal?: AbortSignal,
+): Promise<ReturnType<typeof checkPreMergeAuditTrail>> {
+  let audit = checkPreMergeAuditTrail({
+    issueComments: await github.getComments(issueNumber, signal),
+    pullRequestComments: await github.getComments(pullNumber, signal),
+    requiredReviewerDomains,
+  });
+  for (let attempt = 1; attempt < 5; attempt += 1) {
+    if (
+      audit.missingIssueMarkers.length === 0 &&
+      audit.missingPullRequestMarkers.length === 0 &&
+      audit.missingReviewerDomains.length === 0
+    )
+      return audit;
+    if (signal?.aborted) throw signal.reason;
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 1_000));
+    audit = checkPreMergeAuditTrail({
+      issueComments: await github.getComments(issueNumber, signal),
+      pullRequestComments: await github.getComments(pullNumber, signal),
+      requiredReviewerDomains,
+    });
+  }
+  return audit;
+}
 
 async function resolveMergeability(
   github: GitHubWorkflowAdapter,

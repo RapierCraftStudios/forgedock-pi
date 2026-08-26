@@ -992,7 +992,7 @@ export function registerForgeRuntime(
       await projector.postArtifact({
         issueNumber: binding.issueNumber,
         runId: binding.runId,
-        eventId: event.eventId,
+        eventId: `${event.eventId}-${headSha}`,
         artifactKey: "review-started",
         markdown: `PR #${pull.number} created targeting \`${binding.baseBranch}\`. The isolated review route is active for the required domains at commit \`${headSha}\`.\n\nReview will verify the builder contract, acceptance evidence, changed behavior, and absence of security/regression findings before merge.\n\n<!-- FORGE:REVIEW_STARTED -->`,
         ...(signal ? { signal } : {}),

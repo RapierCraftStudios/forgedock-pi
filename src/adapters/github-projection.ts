@@ -234,7 +234,7 @@ export class GitHubIssueProjector {
     issueNumber: number,
     signal?: AbortSignal,
   ): Promise<IssueComment[]> {
-    const path = `${this.#apiRoot}/issues/${issueNumber}/comments?per_page=100`;
+    const path = `${this.#apiRoot}/issues/${issueNumber}/comments?per_page=100&cache_bust=${Date.now()}`;
     const response = await this.#transport.request<IssueComment[]>({
       method: "GET",
       path,
