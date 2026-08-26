@@ -5,13 +5,13 @@
   "issueNumber": 86,
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "leaseBinding": {
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:e45ee0e8fe8f7b97195dbd05479c2e6f68ec9071523dc0a8dde00869dcafff69",
+  "sequence": 6,
+  "lastEventHash": "sha256:9af3f0e950cfbb389271dac76bb2a095c6c5c426ea745fba63e9f139235ed17c",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -47,13 +47,16 @@
     "node:resolve-1:queued": "d306b1b4-bcbd-4361-b239-1fcc7a1154a7",
     "node:resolve-1:started": "0c7ea41d-bb72-4f87-9f0b-bb2174cb19a5",
     "node:resolve-1:attempt:1:launch-receipt:3e9af19c-7fef-4001-b3ae-33ef2d7d2684:af7c621b-d51a-4960-bc2c-dffa28369d56": "a8264d63-b77c-420e-af76-719839ea3f78",
-    "node:resolve-1:completed": "cd5fbbc4-f9f4-4d07-ba36-60c24b5af8a9"
+    "node:resolve-1:completed": "cd5fbbc4-f9f4-4d07-ba36-60c24b5af8a9",
+    "run:cancelled": "d3398055-3f86-439f-82e6-acb9fb8b70b9"
   },
   "eventIds": {
     "0cbd3323-3142-4e44-84a9-370d600170c1": true,
     "d306b1b4-bcbd-4361-b239-1fcc7a1154a7": true,
     "0c7ea41d-bb72-4f87-9f0b-bb2174cb19a5": true,
     "a8264d63-b77c-420e-af76-719839ea3f78": true,
-    "cd5fbbc4-f9f4-4d07-ba36-60c24b5af8a9": true
-  }
+    "cd5fbbc4-f9f4-4d07-ba36-60c24b5af8a9": true,
+    "d3398055-3f86-439f-82e6-acb9fb8b70b9": true
+  },
+  "cancellationReason": "Cancelled by the operator through /forge:cancel."
 }
