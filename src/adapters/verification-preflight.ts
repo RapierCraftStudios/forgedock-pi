@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { access, readFile, realpath, stat } from "node:fs/promises";
+import { access, lstat, readFile, realpath, stat } from "node:fs/promises";
 import {
   basename,
   delimiter,
@@ -135,6 +135,20 @@ async function assertPackageScript(
   basePath: string,
 ): Promise<void> {
   const manifestPath = join(cwd, "package.json");
+  let manifestEntry;
+  try {
+    manifestEntry = await lstat(manifestPath);
+  } catch {
+    throw new VerificationPreflightError(
+      `${basePath}.cwd`,
+      `selected package directory has no package.json for script '${script}'`,
+    );
+  }
+  if (manifestEntry.isSymbolicLink())
+    throw new VerificationPreflightError(
+      `${basePath}.cwd`,
+      "selected package.json must not be a symbolic link",
+    );
   let canonicalManifest: string;
   try {
     canonicalManifest = await realpath(manifestPath);

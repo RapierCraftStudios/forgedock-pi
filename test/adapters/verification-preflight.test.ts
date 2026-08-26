@@ -111,6 +111,54 @@ test("preflight checks executable availability without running the command", asy
   }
 });
 
+test("package manifest symlink cannot select a nested package", async () => {
+  const testFixture = await fixture();
+  try {
+    await rm(join(testFixture.root, "package.json"));
+    await symlink(
+      join("web", "package.json"),
+      join(testFixture.root, "package.json"),
+    );
+    await assert.rejects(
+      preflightRequiredVerificationCommands(
+        testFixture.root,
+        { test: command(".") },
+        { path: testFixture.path },
+      ),
+      (error: unknown) =>
+        error instanceof VerificationPreflightError &&
+        error.path === ".forge/config.json verification.commands.test.cwd" &&
+        /symbolic link/.test(error.message),
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
+test("dangling package manifest symlink is rejected distinctly from absence", async () => {
+  const testFixture = await fixture();
+  try {
+    await rm(join(testFixture.root, "package.json"));
+    await symlink(
+      "missing-package.json",
+      join(testFixture.root, "package.json"),
+    );
+    await assert.rejects(
+      preflightRequiredVerificationCommands(
+        testFixture.root,
+        { test: command(".") },
+        { path: testFixture.path },
+      ),
+      (error: unknown) =>
+        error instanceof VerificationPreflightError &&
+        error.path === ".forge/config.json verification.commands.test.cwd" &&
+        /symbolic link/.test(error.message),
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
 test("verification cwd rejects missing, control, and symlink-escape directories", async () => {
   const testFixture = await fixture();
   try {
