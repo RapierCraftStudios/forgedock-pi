@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { assertCurrentAuthority } from "../../src/adapters/run-journal.ts";
+import {
+  assertCurrentAuthority,
+  isRevokedOrchestrationCancellationAuthorized,
+} from "../../src/adapters/run-journal.ts";
 import { FORGEDOCK_LEASE_SCHEMA } from "../../src/core/version.ts";
 import type { RepositoryLease } from "../../src/core/lease.ts";
 import type { RunState } from "../../src/core/state.ts";
@@ -38,5 +41,36 @@ test("only explicit human takeover cancellation may use an expired matching leas
         true,
       ),
     /binding is stale/,
+  );
+});
+
+test("only humans may terminalize a revoked orchestration-bound child", () => {
+  const input = {
+    state: boundState,
+    type: "run.cancelled" as const,
+    actorKind: "human" as const,
+    allowRevokedOrchestrationCancellation: true,
+  };
+  assert.equal(isRevokedOrchestrationCancellationAuthorized(input), true);
+  assert.equal(
+    isRevokedOrchestrationCancellationAuthorized({
+      ...input,
+      actorKind: "extension",
+    }),
+    false,
+  );
+  assert.equal(
+    isRevokedOrchestrationCancellationAuthorized({
+      ...input,
+      type: "node.failed",
+    }),
+    false,
+  );
+  assert.equal(
+    isRevokedOrchestrationCancellationAuthorized({
+      ...input,
+      state: { ...boundState, leaseBinding: undefined },
+    }),
+    false,
   );
 });

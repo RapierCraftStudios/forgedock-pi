@@ -132,17 +132,27 @@ export class RunJournal {
     sessionId: string;
     actorKind?: "extension" | "human";
     allowExpiredLease?: boolean;
+    allowRevokedOrchestrationCancellation?: boolean;
     message: string;
     signal?: AbortSignal;
   }): Promise<JournalSnapshot> {
     for (let attempt = 1; attempt <= MAX_CAS_ATTEMPTS; attempt += 1) {
       const current = await this.#store.readRun(input.runId, input.signal);
       if (!current.state) throw new Error(`Run ${input.runId} does not exist.`);
-      assertCurrentAuthority(
-        current.state,
-        current.lease,
-        input.allowExpiredLease === true && input.actorKind === "human",
-      );
+      if (
+        !isRevokedOrchestrationCancellationAuthorized({
+          state: current.state,
+          type: input.type,
+          actorKind: input.actorKind,
+          allowRevokedOrchestrationCancellation:
+            input.allowRevokedOrchestrationCancellation,
+        })
+      )
+        assertCurrentAuthority(
+          current.state,
+          current.lease,
+          input.allowExpiredLease === true && input.actorKind === "human",
+        );
       const epoch = current.state.lease?.epoch ?? current.state.leaseBinding?.epoch;
       if (epoch === undefined)
         throw new Error(`Run ${input.runId} has no active lease authority.`);
@@ -236,6 +246,20 @@ function validateOrchestrationLease(
     );
   }
   return lease;
+}
+
+export function isRevokedOrchestrationCancellationAuthorized(input: {
+  state: RunState;
+  type: RunEventType;
+  actorKind: "extension" | "human" | undefined;
+  allowRevokedOrchestrationCancellation: boolean | undefined;
+}): boolean {
+  return Boolean(
+    input.allowRevokedOrchestrationCancellation === true &&
+      input.actorKind === "human" &&
+      input.type === "run.cancelled" &&
+      input.state.leaseBinding,
+  );
 }
 
 export function assertCurrentAuthority(

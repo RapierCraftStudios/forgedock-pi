@@ -287,6 +287,15 @@ export class ForgeOrchestrationController {
         throw new Error(`Orchestration ${orchestrationId} does not exist.`);
       const state = current.state;
       if (state.status !== "running") {
+        await this.#cancelDurableChildRuns(
+          store,
+          state,
+          ctx,
+          reason,
+          false,
+          true,
+        );
+        await this.#workOn.stopOrchestration(orchestrationId, ctx, reason);
         if (link) {
           this.#syncLink(link, state);
           this.#persistLink(link);
@@ -342,6 +351,7 @@ export class ForgeOrchestrationController {
     ctx: ExtensionContext,
     reason: string,
     allowExpiredLease = false,
+    allowRevokedOrchestrationCancellation = false,
   ): Promise<void> {
     const childRunIds = new Set<string>();
     const childStates: RunState[] = [];
@@ -377,6 +387,7 @@ export class ForgeOrchestrationController {
           sessionId: ctx.sessionManager.getSessionId(),
           actorKind: "human",
           allowExpiredLease,
+          allowRevokedOrchestrationCancellation,
           message: `Cancel child ForgeDock run ${runId}`,
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
@@ -727,6 +738,12 @@ export class ForgeOrchestrationController {
         if (this.#cancelling.has(link.orchestrationId)) break;
         current = await this.#read(link, ctx.signal);
         if (current.state.lanes.every(isTerminalLane)) {
+          await this.#cancelDurableChildRuns(
+            current.store,
+            current.state,
+            ctx,
+            "Orchestration lanes reached terminal state; revoke any child run that did not terminalize independently.",
+          );
           const completed = await current.journal.complete({
             orchestrationId: link.orchestrationId,
             ...(ctx.signal ? { signal: ctx.signal } : {}),
@@ -821,6 +838,7 @@ export class ForgeOrchestrationController {
   ): Promise<{
     state: OrchestrationState;
     journal: OrchestrationJournal;
+    store: GitHubStateBranchStore;
   }> {
     const token = await resolveGitHubToken(
       this.#pi,
@@ -840,7 +858,11 @@ export class ForgeOrchestrationController {
       throw new Error(
         `Orchestration ${link.orchestrationId} is missing authoritative state.`,
       );
-    return { state: current.state, journal: new OrchestrationJournal(store) };
+    return {
+      state: current.state,
+      journal: new OrchestrationJournal(store),
+      store,
+    };
   }
 
   #syncLink(
