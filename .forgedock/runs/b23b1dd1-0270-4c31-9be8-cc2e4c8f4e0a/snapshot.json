@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 16,
-  "lastEventHash": "sha256:b3eb42783bab6fd69a362bcd294acd400549fff85127f9ba98b976cad5e1fec3",
+  "sequence": 17,
+  "lastEventHash": "sha256:b5b8dac3549311f36680e06af8fa909b8e790dbe2f2dae58203a0fbc9b6ae915",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -112,15 +112,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Added lstat-based final manifest inspection in src/adapters/verification-preflight.ts.",
+            "Missing package.json entries retain the existing missing-manifest diagnostic; dangling symlinks now fail closed with a dedicated ambiguous-selection diagnostic.",
+            "Added test coverage with a dangling root package.json link and an available nested web package script; root preflight rejects before nested selection.",
+            "forge_diff shows only the two contract-approved files; implementation commit is intentionally deferred until required verification passes."
+          ],
           "logicalNodeId": "work-on-implement",
           "startedAt": "2026-08-26T23:10:08.677Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/b23b1dd1-0270-4c31-9be8-cc2e4c8f4e0a",
           "branch": "forge/issue-115-b23b1dd1",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T23:12:02.063Z",
+          "outputArtifactHash": "sha256:issue-115-implement-output-dangling-symlink-regression"
         }
       ]
     }
@@ -143,7 +150,8 @@
     "phase:prepare-worktree:1:start": "d9143f7f-9082-4aeb-828b-9468ceac7fa0",
     "phase:prepare-worktree:1:complete": "535d753a-c217-47b9-a8a5-8e28724bc13f",
     "phase:implement:1:queue": "53cc26e6-70a0-4d85-b486-9c8ddd80f27d",
-    "phase:implement:1:start": "a2acba91-a7be-4212-8299-e80cc0b9fd03"
+    "phase:implement:1:start": "a2acba91-a7be-4212-8299-e80cc0b9fd03",
+    "phase:implement:1:complete": "ddbcd7bc-ebef-48ee-8cb6-9e1967ed0406"
   },
   "eventIds": {
     "268d1542-2116-474c-957d-cf47a3b629a2": true,
@@ -161,7 +169,8 @@
     "d9143f7f-9082-4aeb-828b-9468ceac7fa0": true,
     "535d753a-c217-47b9-a8a5-8e28724bc13f": true,
     "53cc26e6-70a0-4d85-b486-9c8ddd80f27d": true,
-    "a2acba91-a7be-4212-8299-e80cc0b9fd03": true
+    "a2acba91-a7be-4212-8299-e80cc0b9fd03": true,
+    "ddbcd7bc-ebef-48ee-8cb6-9e1967ed0406": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
