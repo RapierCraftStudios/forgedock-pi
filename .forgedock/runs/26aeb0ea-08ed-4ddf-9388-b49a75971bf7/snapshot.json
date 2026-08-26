@@ -6,29 +6,35 @@
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
   "status": "active",
-  "sequence": 3,
-  "lastEventHash": "sha256:98a19de35ac620cbea608419bf3e8479ba94b682bc35480e489a88e0fba53d29",
+  "sequence": 4,
+  "lastEventHash": "sha256:fe148622aa8ac86637832a625d9568f513f00a8a55bab4cb0084583a0e4d3785",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "queued",
+      "status": "running",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
-      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/26aeb0ea-08ed-4ddf-9388-b49a75971bf7/.pi/forge/26aeb0ea-08ed-4ddf-9388-b49a75971bf7-resolve-1.json"
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/26aeb0ea-08ed-4ddf-9388-b49a75971bf7/.pi/forge/26aeb0ea-08ed-4ddf-9388-b49a75971bf7-resolve-1.json",
+      "subagentRunId": "launch:resolve-1:abab507e-57f0-42cb-aeb3-28d14d6caec1",
+      "launchNonce": "abab507e-57f0-42cb-aeb3-28d14d6caec1",
+      "launchIntent": true,
+      "startedAt": "2026-08-26T04:35:21.635Z"
     }
   },
   "effects": {},
   "idempotencyKeys": {
     "run:create": "d6beb5a1-8ff7-435d-bb9d-bf2f2733d517",
     "lease:acquire:1": "e1e4345f-cc96-47be-bb4a-670f0af7f243",
-    "node:resolve-1:queued": "f830cb08-0889-4721-8028-1fe710990208"
+    "node:resolve-1:queued": "f830cb08-0889-4721-8028-1fe710990208",
+    "node:resolve-1:started": "3b480eee-a1c8-4daa-a34d-51583967a309"
   },
   "eventIds": {
     "d6beb5a1-8ff7-435d-bb9d-bf2f2733d517": true,
     "e1e4345f-cc96-47be-bb4a-670f0af7f243": true,
-    "f830cb08-0889-4721-8028-1fe710990208": true
+    "f830cb08-0889-4721-8028-1fe710990208": true,
+    "3b480eee-a1c8-4daa-a34d-51583967a309": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
