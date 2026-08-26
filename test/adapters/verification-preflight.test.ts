@@ -125,6 +125,21 @@ test("uses CI-only mode when nested npm test packages are ambiguous", async () =
   }
 });
 
+test("uses CI-only mode when root package metadata is malformed", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forge-invalid-root-"));
+  try {
+    await mkdir(join(root, "web"), { recursive: true });
+    await writeFile(join(root, "package.json"), "{ invalid json\n");
+    await packageJson(root, "web", {
+      name: "web-package",
+      scripts: { test: "node --version" },
+    });
+    assert.equal(await discoverNpmTestPackage(root), undefined);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("preflight checks npm scripts without executing them", async () => {
   const root = await mkdtemp(join(tmpdir(), "forge-no-exec-"));
   const marker = join(root, "executed");
@@ -148,6 +163,38 @@ test("preflight checks npm scripts without executing them", async () => {
     assert.equal(await pathExists(marker), false);
     assert.equal((await readFile(executable, "utf8")).includes("touch"), true);
   } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("preflight recognizes npm test aliases and global options", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forge-npm-alias-"));
+  const fakeNpm = await fakeNpmEnvironment();
+  try {
+    await packageJson(root, ".", { name: "missing-script-package" });
+    for (const argv of [
+      ["npm", "t"],
+      ["npm", "--silent", "test"],
+      ["npm", "--loglevel", "silent", "run", "test"],
+    ]) {
+      await assert.rejects(
+        preflightVerificationCommands(
+          root,
+          {
+            test: {
+              argv,
+              required: true,
+              timeoutMs: TIMEOUT_MS,
+              workingDirectory: ".",
+            },
+          },
+          { configPath: ".forge/config.json", env: fakeNpm.env },
+        ),
+        /npm script 'test' is not defined/,
+      );
+    }
+  } finally {
+    await rm(fakeNpm.directory, { recursive: true, force: true });
     await rm(root, { recursive: true, force: true });
   }
 });

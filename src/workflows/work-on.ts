@@ -106,11 +106,6 @@ export class ForgeWorkOnController {
       ctx.signal,
     );
     const { policy, trackedPath } = await loadForgePolicy(repositoryRoot);
-    await preflightVerificationCommands(
-      repositoryRoot,
-      policy.verification.commands,
-      { configPath: trackedPath },
-    );
     const integrationBranch = chooseIntegrationBranch(policy);
     if (isProtectedBranch(policy, integrationBranch))
       throw new Error(`Integration branch ${integrationBranch} is protected.`);
@@ -147,6 +142,11 @@ export class ForgeWorkOnController {
     });
 
     try {
+      await preflightVerificationCommands(
+        prepared.worktreePath,
+        policy.verification.commands,
+        { configPath: trackedPath },
+      );
       await materializeForgeAgents(prepared.worktreePath);
       const journal = new RunJournal(store);
       const initialized = await journal.initialize({

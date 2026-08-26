@@ -113,7 +113,9 @@ export async function discoverNpmTestPackage(
   repositoryRoot: string,
 ): Promise<string | undefined> {
   const root = await realpath(repositoryRoot);
-  if (await hasNpmTestScript(root, root)) return ".";
+  const rootPackage = await inspectNpmPackage(root, root);
+  if (rootPackage === "test") return ".";
+  if (rootPackage === "invalid") return undefined;
 
   const candidates: string[] = [];
   let inspectedDirectories = 0;
@@ -141,7 +143,12 @@ export async function discoverNpmTestPackage(
       if (!entry.isDirectory() || IGNORED_DISCOVERY_DIRECTORIES.has(entry.name))
         continue;
       const child = join(directory, entry.name);
-      if (await hasNpmTestScript(root, child)) {
+      const packageInspection = await inspectNpmPackage(root, child);
+      if (packageInspection === "invalid") {
+        incomplete = true;
+        return;
+      }
+      if (packageInspection === "test") {
         candidates.push(toRepositoryPath(root, child));
         if (candidates.length > 1) return;
       }
@@ -286,9 +293,35 @@ function npmScriptName(
 ): string | undefined {
   const executable = program.replaceAll("\\", "/").split("/").at(-1) ?? "";
   if (!/^npm(?:\.cmd)?$/i.test(executable)) return undefined;
-  if (args[0] === "test") return "test";
-  if (args[0] === "run" || args[0] === "run-script") {
-    const script = args[1];
+
+  const optionsWithValues = new Set([
+    "--cache",
+    "--location",
+    "--loglevel",
+    "--prefix",
+    "--registry",
+    "--script-shell",
+    "--userconfig",
+    "--workspace",
+    "-w",
+  ]);
+  let commandIndex = 0;
+  while (commandIndex < args.length && args[commandIndex]?.startsWith("-")) {
+    const option = args[commandIndex];
+    if (option === "--") return undefined;
+    commandIndex += 1;
+    if (
+      option !== undefined &&
+      optionsWithValues.has(option) &&
+      commandIndex < args.length
+    )
+      commandIndex += 1;
+  }
+
+  const npmCommand = args[commandIndex];
+  if (npmCommand === "test" || npmCommand === "t") return "test";
+  if (npmCommand === "run" || npmCommand === "run-script") {
+    const script = args[commandIndex + 1];
     if (!script || script.startsWith("-")) {
       throw new CommandPreflightFailure(
         argvPath,
@@ -354,26 +387,43 @@ async function assertNpmScript(
   }
 }
 
-async function hasNpmTestScript(root: string, directory: string): Promise<boolean> {
+type NpmPackageInspection = "test" | "none" | "invalid";
+
+function isMissingFile(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "ENOENT",
+  );
+}
+
+async function inspectNpmPackage(
+  root: string,
+  directory: string,
+): Promise<NpmPackageInspection> {
   const manifestPath = join(directory, "package.json");
   let canonicalManifest: string;
   try {
     canonicalManifest = await realpath(manifestPath);
-    if (!isPathWithin(root, canonicalManifest)) return false;
-  } catch {
-    return false;
+    if (!isPathWithin(root, canonicalManifest)) return "invalid";
+  } catch (error) {
+    return isMissingFile(error) ? "none" : "invalid";
   }
   try {
     const parsed: unknown = JSON.parse(await readFile(canonicalManifest, "utf8"));
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-      return false;
+      return "invalid";
     const scripts = (parsed as Record<string, unknown>).scripts;
+    if (scripts === undefined) return "none";
     if (!scripts || typeof scripts !== "object" || Array.isArray(scripts))
-      return false;
+      return "invalid";
     const testScript = (scripts as Record<string, unknown>).test;
-    return typeof testScript === "string" && testScript.trim().length > 0;
+    return typeof testScript === "string" && testScript.trim().length > 0
+      ? "test"
+      : "none";
   } catch {
-    return false;
+    return "invalid";
   }
 }
 

@@ -30,7 +30,7 @@ ForgeDock Pi is designed so that:
 - protected branches are not auto-merged;
 - required checks, reviewers, audit artifacts, SHAs, and leases fail closed.
 
-These controls are not an operating-system sandbox. Repository tests execute code and may access resources available to the current user unless a separate container or sandbox is configured. A policy with no local commands is an explicit CI-only mode; it does not imply that local verification has passed.
+These controls are not an operating-system sandbox. Repository tests execute code and may access resources available to the current user unless a separate container or sandbox is configured. A policy with no local commands is an explicit CI-only mode; it does not imply that local verification has passed and it cannot auto-merge without human CI verification.
 
 ## Production guidance
 

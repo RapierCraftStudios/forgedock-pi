@@ -88,7 +88,7 @@ From a trusted GitHub repository:
 /forge:init
 ```
 
-This creates `.forge/config.json` and reconciles canonical workflow labels. Init selects `npm test` only when the repository root or one uniquely discoverable package declares `scripts.test`; otherwise it writes an explicit empty local command map for GitHub-CI-only verification. Each selected local command records its repository-relative `workingDirectory`. Review and commit that policy before running work.
+This creates `.forge/config.json` and reconciles canonical workflow labels. Init selects `npm test` only when the repository root or one uniquely discoverable package declares `scripts.test`; otherwise it writes an explicit empty local command map for GitHub-CI-only verification. CI-only policies cannot auto-merge and require a human to verify the parent-owned CI result. Each selected local command records its repository-relative `workingDirectory`. Review and commit that policy before running work.
 
 For an initial production pilot, set:
 

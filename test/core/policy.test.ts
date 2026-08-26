@@ -39,6 +39,7 @@ test("verification commands default to the repository root and allow CI-only mod
     verification: { commands: {} },
   });
   assert.deepEqual(ciOnly.verification.commands, {});
+  assert.equal(canAutoMerge(ciOnly, "staging"), false);
 });
 
 test("verification working directories reject path escapes", () => {
@@ -65,6 +66,14 @@ test("verification working directories reject path escapes", () => {
       PolicyValidationError,
     );
   }
+});
+
+test("CI-only policies require human verification before merge", () => {
+  const policy = parseForgePolicy({
+    ...rawPolicy,
+    verification: { commands: {} },
+  });
+  assert.equal(canAutoMerge(policy, "staging"), false);
 });
 
 test("tracked policy enables only non-protected integration auto-merge", () => {

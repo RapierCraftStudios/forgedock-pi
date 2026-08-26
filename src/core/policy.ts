@@ -291,7 +291,11 @@ export function isIntegrationBranch(
 }
 
 export function canAutoMerge(policy: ForgePolicy, branch: string): boolean {
+  const hasRequiredVerification = Object.values(
+    policy.verification.commands,
+  ).some((command) => command.required);
   return (
+    hasRequiredVerification &&
     policy.branches.autoMergeIntegration &&
     isIntegrationBranch(policy, branch) &&
     !isProtectedBranch(policy, branch)
