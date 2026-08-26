@@ -9,12 +9,7 @@ import {
   type OrchestrationEventType,
   type OrchestrationState,
 } from "../core/orchestration.ts";
-import {
-  acquireLease,
-  heartbeatLease,
-  isLeaseExpired,
-  type RepositoryLease,
-} from "../core/lease.ts";
+import type { RepositoryLease } from "../core/lease.ts";
 
 const MAX_CAS_ATTEMPTS = 12;
 
@@ -22,7 +17,7 @@ export interface OrchestrationJournalSnapshot {
   tip: string;
   events: readonly OrchestrationEvent[];
   state: OrchestrationState;
-  lease: RepositoryLease;
+  lease?: RepositoryLease;
 }
 
 export class OrchestrationJournal {
@@ -54,15 +49,6 @@ export class OrchestrationJournal {
           `Orchestration ${input.orchestrationId} already exists.`,
         );
       const now = input.now ?? new Date();
-      const lease = acquireLease(current.lease, {
-        repository: input.repository,
-        owner: {
-          runId: input.orchestrationId,
-          sessionId: input.sessionId,
-        },
-        now,
-        ttlSeconds: input.leaseSeconds,
-      });
       const event = createOrchestrationEvent({
         orchestrationId: input.orchestrationId,
         repository: input.repository,
@@ -74,7 +60,7 @@ export class OrchestrationJournal {
           issueNumbers: [...input.issueNumbers],
           integrationBranch: input.integrationBranch,
           maxConcurrent: input.maxConcurrent,
-          leaseEpoch: lease.epoch,
+          leaseEpoch: 1,
         },
         occurredAt: now.toISOString(),
       });
@@ -84,11 +70,11 @@ export class OrchestrationJournal {
           expectedTip: current.tip,
           events: [event],
           state,
-          leaseUpdate: lease,
+          leaseUpdate: null,
           message: `Initialize ForgeDock orchestration ${input.orchestrationId}`,
           ...(input.signal ? { signal: input.signal } : {}),
         });
-        return { tip, events: [event], state, lease };
+        return { tip, events: [event], state };
       } catch (error) {
         if (
           !(error instanceof StateBranchConflictError) ||
@@ -187,52 +173,30 @@ export class OrchestrationJournal {
       message: string;
       signal?: AbortSignal;
     },
-    release: boolean,
-    heartbeat?: { sessionId: string; leaseSeconds: number; now: Date },
-    allowExpired = false,
+    _release: boolean,
+    _heartbeat?: { sessionId: string; leaseSeconds: number; now: Date },
+    _allowExpired = false,
   ): Promise<OrchestrationJournalSnapshot> {
     for (let attempt = 1; attempt <= MAX_CAS_ATTEMPTS; attempt += 1) {
       const current = await this.#store.readOrchestration(
         input.orchestrationId,
         input.signal,
       );
-      if (!current.state || !current.lease)
+      if (!current.state)
         throw new Error(
           `Orchestration ${input.orchestrationId} is not initialized.`,
         );
-      if (
-        current.lease.ownerRunId !== input.orchestrationId ||
-        current.lease.epoch !== current.state.leaseEpoch ||
-        (!allowExpired &&
-          isLeaseExpired(current.lease, heartbeat?.now ?? new Date()))
-      ) {
-        throw new Error(
-          `Orchestration ${input.orchestrationId} no longer owns its repository lease.`,
-        );
-      }
       const prior = current.state.idempotencyKeys[input.idempotencyKey];
       if (prior)
         return {
           tip: current.tip,
           events: current.events,
           state: current.state,
-          lease: current.lease,
+          ...(current.lease ? { lease: current.lease } : {}),
         };
-      const lease = heartbeat
-        ? heartbeatLease(current.lease, {
-            repository: current.state.repository,
-            owner: {
-              runId: input.orchestrationId,
-              sessionId: heartbeat.sessionId,
-            },
-            epoch: current.lease.epoch,
-            now: heartbeat.now,
-            ttlSeconds: heartbeat.leaseSeconds,
-          })
-        : current.lease;
       const payload =
         input.type === "lease.heartbeat"
-          ? { ...input.payload, epoch: lease.epoch }
+          ? { ...input.payload, epoch: current.state.leaseEpoch }
           : input.payload;
       const event = createOrchestrationEvent({
         orchestrationId: input.orchestrationId,
@@ -250,11 +214,11 @@ export class OrchestrationJournal {
           expectedTip: current.tip,
           events,
           state,
-          leaseUpdate: release ? null : heartbeat ? lease : undefined,
+          leaseUpdate: null,
           message: input.message,
           ...(input.signal ? { signal: input.signal } : {}),
         });
-        return { tip, events, state, lease };
+        return { tip, events, state };
       } catch (error) {
         if (
           !(error instanceof StateBranchConflictError) ||

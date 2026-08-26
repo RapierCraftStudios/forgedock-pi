@@ -3,6 +3,7 @@ import {
   builderPathAllowed,
   type BuilderPathContract,
 } from "../core/builder-contract.ts";
+import { findingBlocksMerge } from "../core/review.ts";
 import type {
   ForgeReviewFindingResult,
   ForgeWorkOnResult,
@@ -15,9 +16,24 @@ export interface AuthoritativeReviewFinding {
   finding: ForgeReviewFindingResult;
 }
 
+export type FindingDisposition =
+  | "actionable-blocking"
+  | "validated-nonblocking"
+  | "authority-ambiguous"
+  | "unvalidated";
+
+export interface DispositionedFinding {
+  finding: AuthoritativeReviewFinding;
+  disposition: FindingDisposition;
+  reason: string;
+}
+
 export interface RemediationClassification {
   fixable: AuthoritativeReviewFinding[];
   escalated: AuthoritativeReviewFinding[];
+  followUp: AuthoritativeReviewFinding[];
+  unvalidated: AuthoritativeReviewFinding[];
+  dispositions: DispositionedFinding[];
 }
 
 export function classifyRemediationFindings(
@@ -26,21 +42,44 @@ export function classifyRemediationFindings(
 ): RemediationClassification {
   const fixable: AuthoritativeReviewFinding[] = [];
   const escalated: AuthoritativeReviewFinding[] = [];
+  const followUp: AuthoritativeReviewFinding[] = [];
+  const unvalidated: AuthoritativeReviewFinding[] = [];
+  const dispositions: DispositionedFinding[] = [];
   for (const finding of findings) {
-    const text = `${finding.finding.category} ${finding.finding.summary} ${finding.finding.evidence.join(" ")}`;
-    const requiresAuthority =
-      finding.finding.confidence === "possible" ||
-      (builderContract !== undefined &&
-        !builderPathAllowed(builderContract, finding.finding.file)) ||
-      ["auth", "billing", "production-safety"].includes(
-        finding.finding.category,
-      ) ||
-      /\b(product|policy|ux|scope|protected branch|release authority|out[- ]of[- ]contract)\b/i.test(
+    const value = finding.finding;
+    const text = `${value.category} ${value.summary} ${value.evidence.join(" ")}`;
+    const inContract =
+      builderContract === undefined || builderPathAllowed(builderContract, value.file);
+    const hasEvidence = value.evidence.some((entry) => entry.trim().length > 0);
+    const authorityDecision =
+      !inContract ||
+      /\b(product|policy|ux|scope|protected branch|release authority|out[- ]of[- ]contract|destructive|data loss|migration approval|credential authority)\b/i.test(
         text,
       );
-    (requiresAuthority ? escalated : fixable).push(finding);
+    let disposition: FindingDisposition;
+    let reason: string;
+    if (value.confidence === "possible" || !hasEvidence || value.line < 1) {
+      disposition = "unvalidated";
+      reason = "Finding lacks confirmed evidence or a valid source location.";
+      unvalidated.push(finding);
+    } else if (findingBlocksMerge(value)) {
+      if (authorityDecision) {
+        disposition = "authority-ambiguous";
+        reason = "Blocking fix requires an out-of-contract or authority decision.";
+        escalated.push(finding);
+      } else {
+        disposition = "actionable-blocking";
+        reason = "Blocking finding is validated, deterministic, and in contract.";
+        fixable.push(finding);
+      }
+    } else {
+      disposition = "validated-nonblocking";
+      reason = "Finding is validated but does not block the current merge.";
+      followUp.push(finding);
+    }
+    dispositions.push({ finding, disposition, reason });
   }
-  return { fixable, escalated };
+  return { fixable, escalated, followUp, unvalidated, dispositions };
 }
 
 export function isRemediationCandidate(

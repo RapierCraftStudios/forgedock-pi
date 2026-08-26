@@ -99,7 +99,7 @@ test("open review-finding issues are authoritative and deduplicated per PR", asy
   assert.equal(findings[0]?.finding.id, "SEC-001");
 });
 
-test("remediation classification escalates policy authority and accepts contract-safe fixes", () => {
+test("remediation classification fixes in-contract blockers and escalates true authority decisions", () => {
   const fixable = parseAuthoritativeReviewFindingIssue({
     number: 100,
     body: findingBody(7, "SEC-001", "security"),
@@ -112,10 +112,23 @@ test("remediation classification escalates policy authority and accepts contract
   const classification = classifyRemediationFindings([fixable, escalated]);
   assert.deepEqual(classification.fixable.map((item) => item.finding.id), [
     "SEC-001",
-  ]);
-  assert.deepEqual(classification.escalated.map((item) => item.finding.id), [
     "POLICY-001",
   ]);
+  assert.deepEqual(classification.escalated, []);
+  const authorityFinding = parseAuthoritativeReviewFindingIssue({
+    number: 102,
+    body: findingBody(7, "AUTHORITY-001", "security").replace(
+      "Unsafe trust-boundary validation permits stale input",
+      "Product policy and release authority decision required",
+    ),
+  });
+  assert.ok(authorityFinding);
+  assert.deepEqual(
+    classifyRemediationFindings([authorityFinding]).escalated.map(
+      (item) => item.finding.id,
+    ),
+    ["AUTHORITY-001"],
+  );
   assert.equal(
     isRemediationCandidate(blockedResult, classification.fixable),
     true,
@@ -186,7 +199,7 @@ function findingBody(
     "**Reviewed head**: `head-sha`",
     "**Reviewer**: `forge-review-security`",
     `**Finding ID**: \`${findingId}\``,
-    "**Confidence**: LIKELY",
+    "**Confidence**: CONFIRMED",
     "**Severity**: HIGH",
     `**Category**: ${category}`,
     "**File**: `src/example.ts`",

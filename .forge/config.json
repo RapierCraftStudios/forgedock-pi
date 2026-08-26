@@ -34,7 +34,7 @@
       "forge-review-correctness",
       "forge-review-security"
     ],
-    "maxRounds": 1
+    "maxRounds": 3
   },
   "orchestration": {
     "maxConcurrent": 16,

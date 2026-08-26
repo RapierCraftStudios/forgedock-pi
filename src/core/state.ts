@@ -86,6 +86,7 @@ export interface RunState {
   integrationBranch: string;
   protectedBranch: string;
   status: RunStatus;
+  authorityMode?: "run-scoped" | "legacy-lease";
   sequence: number;
   lastEventHash: string;
   lease?: RepositoryLease;
@@ -819,6 +820,10 @@ function createInitialState(event: RunEvent): RunState {
     integrationBranch,
     protectedBranch,
     status: "active",
+    authorityMode:
+      payload.authorityMode === "run-scoped"
+        ? "run-scoped"
+        : "legacy-lease",
     ...(orchestrationRunId && leaseEpoch
       ? { leaseBinding: { ownerRunId: orchestrationRunId, epoch: leaseEpoch } }
       : {}),

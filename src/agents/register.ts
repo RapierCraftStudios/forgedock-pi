@@ -37,6 +37,7 @@ export const FORGE_WORK_ON_TOOLS = [
   "find",
   "ls",
   "subagent",
+  "forge_run_review_panel",
   "forge_checkpoint",
   "forge_verify",
   "forge_diff",
@@ -79,7 +80,7 @@ Pi native agent-level retry is required for this work-on session and every neste
 
 You are authorized and required to remediate reviewer findings that stay inside the accepted builder contract and do not require a product, scope, UX, protected-branch, or security-authority decision. Apply those fixes as the sole writer, create a review-fixes commit, rerun applicable verification, refresh the PR head, and launch a fresh full reviewer panel up to the configured round cap.
 
-At review, use the subagent tool with one workflowScript and runs.all to launch exactly the registered forge-review-correctness and forge-review-security agents in fresh context. Give each reviewer the exact run ID, frozen head SHA, base SHA, changed files, worktree, and output schema. Wait for both reviewers. Reviewers cannot recurse. Never replace nested review with self-review.
+At review, call forge_run_review_panel exactly once with the frozen head SHA and review round. The trusted tool launches exactly the registered forge-review-correctness and forge-review-security agents in fresh contexts, joins both results, validates their bindings, and returns the typed panel. Reviewers cannot recurse. Never launch reviewers manually or replace nested review with self-review.
 
 Do not use raw shell, gh, git push, merge, issue/PR writes, or paths outside the assigned worktree. Use forge_diff, named forge_verify checks, forge_commit, forge_prepare_review, forge_checkpoint, and forge_finalize_work_on. An empty local verification allowlist is valid and means GitHub CI is parent-owned. Return only the required structured work-on result. The parent extension alone decides merge, close, labels, and cleanup.`;
 

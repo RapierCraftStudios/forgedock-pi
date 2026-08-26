@@ -164,6 +164,66 @@ test("state append uses a non-force compare-and-set ref update", async () => {
   );
 });
 
+test("run-scoped state commits remove the global repository lock", async () => {
+  const events: RunEvent[] = [];
+  const created = next(
+    undefined,
+    "run.created",
+    {
+      issueNumber: 42,
+      integrationBranch: "staging",
+      protectedBranch: "main",
+      authorityMode: "run-scoped",
+    },
+    "run-scoped-create",
+  );
+  events.push(created);
+  let state = applyRunEvent(undefined, created);
+  const authority = acquireLease(undefined, {
+    repository,
+    owner: { runId, sessionId },
+    now: new Date(timestamp),
+    ttlSeconds: 300,
+  });
+  const acquired = next(state, "lease.acquired", { lease: authority }, "run-scoped-authority", 1);
+  events.push(acquired);
+  state = applyRunEvent(state, acquired);
+
+  let treeBody: unknown;
+  let blobCounter = 0;
+  const transport = new MockTransport((request) => {
+    if (request.method === "GET" && request.path.endsWith("/git/commits/tip-1"))
+      return response(200, { sha: "tip-1", tree: { sha: "base-tree" } });
+    if (request.method === "POST" && request.path.endsWith("/git/blobs"))
+      return response(201, { sha: `blob-${++blobCounter}` });
+    if (request.method === "POST" && request.path.endsWith("/git/trees")) {
+      treeBody = request.body;
+      return response(201, { sha: "tree-run-scoped" });
+    }
+    if (request.method === "POST" && request.path.endsWith("/git/commits"))
+      return response(201, { sha: "commit-run-scoped" });
+    if (request.method === "PATCH" && request.path.includes("/git/refs/heads/"))
+      return response(200, { object: { sha: "commit-run-scoped" } });
+    throw new Error(`Unexpected request ${request.method} ${request.path}`);
+  });
+  const store = new GitHubStateBranchStore(transport, repository);
+  await store.commitRunState({
+    expectedTip: "tip-1",
+    events,
+    state,
+    runScopedAuthority: true,
+    message: "Initialize concurrent run authority",
+  });
+  const entries = (treeBody as { tree: Array<{ path: string; sha: string | null }> }).tree;
+  assert.equal(
+    entries.some(
+      (entry) =>
+        entry.path === ".forgedock/locks/repository.json" && entry.sha === null,
+    ),
+    true,
+  );
+});
+
 test("non-fast-forward state update becomes a CAS conflict", async () => {
   const { events, state, lease } = journal();
   let blobCounter = 0;

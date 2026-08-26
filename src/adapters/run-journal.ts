@@ -57,7 +57,7 @@ export class RunJournal {
       const now = input.now ?? new Date();
       const lease = input.orchestration
         ? validateOrchestrationLease(existing.lease, input.orchestration, now)
-        : acquireLease(existing.lease, {
+        : acquireLease(undefined, {
             repository: input.repository,
             owner: { runId: input.runId, sessionId: input.sessionId },
             now,
@@ -75,6 +75,7 @@ export class RunJournal {
           issueNumber: input.issueNumber,
           integrationBranch: input.integrationBranch,
           protectedBranch: input.protectedBranch,
+          authorityMode: input.orchestration ? "legacy-lease" : "run-scoped",
           ...(input.orchestration
             ? {
                 orchestrationRunId: input.orchestration.ownerRunId,
@@ -112,7 +113,7 @@ export class RunJournal {
           state,
           ...(input.orchestration
             ? { preserveRepositoryLease: true }
-            : { lease }),
+            : { runScopedAuthority: true }),
           message: `Initialize ForgeDock run ${input.runId}`,
           ...(input.signal ? { signal: input.signal } : {}),
         });
@@ -206,11 +207,13 @@ export class RunJournal {
           expectedTip: current.tip,
           events,
           state,
-          ...(state.lease
-            ? { lease: state.lease }
-            : state.leaseBinding
-              ? { preserveRepositoryLease: true }
-              : {}),
+          ...(state.authorityMode === "run-scoped"
+            ? { runScopedAuthority: true }
+            : state.lease
+              ? { lease: state.lease }
+              : state.leaseBinding
+                ? { preserveRepositoryLease: true }
+                : {}),
           message: input.message,
           ...(input.signal ? { signal: input.signal } : {}),
         });
@@ -273,6 +276,11 @@ function assertCurrentAuthority(
   state: RunState,
   repositoryLease: RepositoryLease | undefined,
 ): void {
+  if (state.authorityMode === "run-scoped") {
+    if (!state.lease || state.lease.ownerRunId !== state.runId)
+      throw new Error(`Run ${state.runId} has invalid run-scoped authority.`);
+    return;
+  }
   if (state.lease) {
     if (
       !repositoryLease ||

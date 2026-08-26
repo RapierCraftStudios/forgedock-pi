@@ -3,6 +3,7 @@ import test from "node:test";
 
 import type { GitHubWorkflowAdapter } from "../../src/adapters/github-workflow.ts";
 import type { ForgeWorkOnResult } from "../../src/agents/contracts.ts";
+import { reviewFindingFingerprint } from "../../src/workflows/review-findings.ts";
 import {
   publishReviewFindingIssues,
   type ActiveRunLink,
@@ -105,6 +106,29 @@ const result: ForgeWorkOnResult = {
   },
   residualRisks: [],
 };
+
+test("finding fingerprints remain stable across review heads and nearby lines", () => {
+  const finding = result.review.findings[0];
+  assert.ok(finding);
+  const first = reviewFindingFingerprint({
+    repository: "owner/repo",
+    sourceIssueNumber: 42,
+    sourcePullNumber: 7,
+    finding,
+  });
+  const second = reviewFindingFingerprint({
+    repository: "OWNER/REPO",
+    sourceIssueNumber: 42,
+    sourcePullNumber: 7,
+    finding: {
+      ...finding,
+      headSha: "new-head",
+      line: 52,
+      summary: " Unsafe trust-boundary   validation permits stale input ",
+    },
+  });
+  assert.equal(first, second);
+});
 
 test("every structured finding creates one deduplicated standalone issue", async () => {
   const fake = new FindingGitHubFake();
