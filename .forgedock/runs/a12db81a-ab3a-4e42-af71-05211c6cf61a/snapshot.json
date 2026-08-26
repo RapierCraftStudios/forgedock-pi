@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:7da2f879c13b8caae5e23ef9858aed3beb3239a483c011420633344f0efb73ad",
+  "sequence": 8,
+  "lastEventHash": "sha256:e45f746d96a5e0ca336195cee3e4795ef2859e35b6e84212e897f153df0e5264",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -37,15 +37,21 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/github-projection.ts` replaces `workflow:*` labels while preserving unrelated labels",
+            "`src/agents/child-runtime.ts` projects labels only for selected checkpoint starts and investigation completion",
+            "`src/workflows/work-on.ts` has separate node and legacy phase projection paths; legacy merge start has no stage projection",
+            "Existing tests cover projector replacement and pure node-stage mapping but not the full direct lifecycle"
+          ],
           "logicalNodeId": "investigate-1",
           "startedAt": "2026-08-26T21:27:46.188Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/a12db81a-ab3a-4e42-af71-05211c6cf61a",
           "branch": "forge/issue-92-a12db81a",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T21:32:29.290Z"
         }
       ]
     }
@@ -59,7 +65,8 @@
     "phase:resolve:1:start": "6ff48362-6c8e-4d4c-9dd8-54225382bd5e",
     "phase:resolve:1:complete": "0e93d0bb-ad7c-41e7-bfce-0f2c6f86b5d6",
     "phase:investigate:1:queue": "c6f46c38-454d-41db-805e-25fb0e06eedf",
-    "phase:investigate:1:start": "820772a1-4b0c-42f9-b1e8-c95ff7f87226"
+    "phase:investigate:1:start": "820772a1-4b0c-42f9-b1e8-c95ff7f87226",
+    "phase:investigate:1:complete": "8bf8a4c1-fb39-45c7-a693-08a1f58f9628"
   },
   "eventIds": {
     "ee012148-d142-4743-8bee-bda88fd1c8ec": true,
@@ -68,7 +75,8 @@
     "6ff48362-6c8e-4d4c-9dd8-54225382bd5e": true,
     "0e93d0bb-ad7c-41e7-bfce-0f2c6f86b5d6": true,
     "c6f46c38-454d-41db-805e-25fb0e06eedf": true,
-    "820772a1-4b0c-42f9-b1e8-c95ff7f87226": true
+    "820772a1-4b0c-42f9-b1e8-c95ff7f87226": true,
+    "8bf8a4c1-fb39-45c7-a693-08a1f58f9628": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
