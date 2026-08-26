@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 10,
-  "lastEventHash": "sha256:5ad1b1131f6d77ed1ac17829d35b9cb38ab67515106fa415e71dad0c18f52f50",
+  "sequence": 11,
+  "lastEventHash": "sha256:b514617b68dbf95c0e204c0cd7a021da380f17e64443adb72788327e1b4d131f",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -63,15 +63,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Builder contract is limited to src/workflows/work-on.ts and test/workflows/work-on.test.ts.",
+            "Implementation will add durable merge-effect stage selection and use it in reconciliation.",
+            "Regression coverage will model a running merge node with a recorded merge effect and the no-effect awaiting-merge control case.",
+            "No policy, API, UX, schema, or protected-branch changes are in scope."
+          ],
           "logicalNodeId": "work-on/119/plan",
           "startedAt": "2026-08-26T20:16:32.957Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/7a25e70c-87d2-49cd-88dc-255d85e847de",
           "branch": "forge/issue-119-7a25e70c",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T20:17:27.142Z",
+          "outputArtifactHash": "sha256:plan-issue119-two-file-contract"
         }
       ]
     }
@@ -88,7 +95,8 @@
     "phase:investigate:1:start": "75d625ad-8f6d-4107-a522-dd4d0466244e",
     "phase:investigate:1:complete": "f9c34867-2f3d-420e-8dd4-4413426bfb87",
     "phase:plan:1:queue": "19a7bec9-4c11-442b-b372-ca42a7f3c677",
-    "phase:plan:1:start": "60a3ba8f-62f5-493a-81d3-982f32f8ecdf"
+    "phase:plan:1:start": "60a3ba8f-62f5-493a-81d3-982f32f8ecdf",
+    "phase:plan:1:complete": "1bda0ed9-35cf-4e25-8fa4-0e4ca7493d33"
   },
   "eventIds": {
     "5412fff8-4fa6-49a7-85f9-b1f471d6a6f0": true,
@@ -100,7 +108,8 @@
     "75d625ad-8f6d-4107-a522-dd4d0466244e": true,
     "f9c34867-2f3d-420e-8dd4-4413426bfb87": true,
     "19a7bec9-4c11-442b-b372-ca42a7f3c677": true,
-    "60a3ba8f-62f5-493a-81d3-982f32f8ecdf": true
+    "60a3ba8f-62f5-493a-81d3-982f32f8ecdf": true,
+    "1bda0ed9-35cf-4e25-8fa4-0e4ca7493d33": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
