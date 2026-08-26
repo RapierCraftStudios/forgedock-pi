@@ -85,6 +85,46 @@ test("required monorepo verification preflight selects the package cwd", async (
   }
 });
 
+test("malformed root test metadata cannot select a nested package", async () => {
+  const testFixture = await fixture();
+  try {
+    const malformedRootManifests: readonly unknown[] = [
+      { scripts: { test: null } },
+      { scripts: { test: { command: "vitest run" } } },
+      { scripts: { test: ["vitest", "run"] } },
+      { scripts: { test: 42 } },
+      { scripts: { test: " \t" } },
+      { scripts: [] },
+      { scripts: null },
+    ];
+    for (const manifest of malformedRootManifests) {
+      await writeFile(join(testFixture.root, "package.json"), JSON.stringify(manifest));
+      await assert.rejects(
+        preflightRequiredVerificationCommands(
+          testFixture.root,
+          { test: command(".") },
+          {
+            path: testFixture.path,
+            configPath: "/repo/.forge/config.json",
+          },
+        ),
+        (error: unknown) =>
+          error instanceof VerificationPreflightError &&
+          error.path === "/repo/.forge/config.json verification.commands.test.argv" &&
+          /no 'test' script/.test(error.message),
+      );
+    }
+
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      { test: command("web") },
+      { path: testFixture.path },
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
 test("preflight checks executable availability without running the command", async () => {
   const testFixture = await fixture();
   try {
