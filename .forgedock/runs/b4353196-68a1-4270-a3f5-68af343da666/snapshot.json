@@ -10,8 +10,8 @@
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 9,
-  "lastEventHash": "sha256:d237595b38807c1674d04677c4c35ef27b6493d15393e9b6c8fffcb726d89de7",
+  "sequence": 10,
+  "lastEventHash": "sha256:8fb779edad2625a01c3c1892a814bebf9b54283626d6b0e5e4f2a0c626149d0d",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -65,6 +65,13 @@
         "The supplied run-start comment binds issue #82 to run b4353196-68a1-4270-a3f5-68af343da666 on integration base dogfood."
       ],
       "finishedAt": "2026-08-26T02:02:36.538Z"
+    },
+    "close-1": {
+      "nodeId": "close-1",
+      "node": "close",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued"
     }
   },
   "effects": {},
@@ -77,7 +84,8 @@
     "node:investigate-1:queued": "164fc3bc-3bd8-4bbf-8b2f-7432b61b87b4",
     "node:investigate-1:started": "bcbc0bbf-1bfa-44a1-97a1-e9ce5a2411f2",
     "node:investigate-1:attempt:1:launch-receipt:7158438d-3de7-48dd-8a15-9641f3f6a45b:a52ccc6f-eaf9-4057-ac7a-e74fc4e60086": "718257d3-95e0-42bb-9c1a-07f240187cc0",
-    "node:investigate-1:completed": "96a79c59-d7d4-4571-bf65-4b5ab4cc96da"
+    "node:investigate-1:completed": "96a79c59-d7d4-4571-bf65-4b5ab4cc96da",
+    "node:close-1:queued": "bef4f4e7-8df4-426a-834b-816af523a40e"
   },
   "eventIds": {
     "d48e1c79-60d9-431d-a91a-e3303b965a7d": true,
@@ -88,6 +96,7 @@
     "164fc3bc-3bd8-4bbf-8b2f-7432b61b87b4": true,
     "bcbc0bbf-1bfa-44a1-97a1-e9ce5a2411f2": true,
     "718257d3-95e0-42bb-9c1a-07f240187cc0": true,
-    "96a79c59-d7d4-4571-bf65-4b5ab4cc96da": true
+    "96a79c59-d7d4-4571-bf65-4b5ab4cc96da": true,
+    "bef4f4e7-8df4-426a-834b-816af523a40e": true
   }
 }
