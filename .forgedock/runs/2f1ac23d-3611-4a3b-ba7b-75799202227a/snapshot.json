@@ -10,8 +10,8 @@
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 16,
-  "lastEventHash": "sha256:716ddd82cede4539453b491583b7ff429c9462a8a52e4cd38a0079d2cac59abd",
+  "sequence": 17,
+  "lastEventHash": "sha256:185fc937725c3f59372dfd3927cd483462f8c5732bdefb5c31cc90fa0b859cd5",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -90,9 +90,17 @@
       "node": "cleanup",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
-      "startedAt": "2026-08-26T02:07:48.531Z"
+      "startedAt": "2026-08-26T02:07:48.531Z",
+      "headSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "verificationResults": [],
+      "outcome": "closed",
+      "evidence": [
+        "owned worktree removed",
+        "remote feature branch deletion is idempotent"
+      ],
+      "finishedAt": "2026-08-26T02:08:35.884Z"
     }
   },
   "effects": {
@@ -125,7 +133,8 @@
     "node:close-1:complete": "ef05db38-06a8-4017-a72e-3522efab442a",
     "node:cleanup-1:queued": "2a7bc967-62f7-4ad9-b651-cc09894931ce",
     "node:cleanup-1:started": "a8f0f749-f5f3-4dfe-bc6a-9526df4f954a",
-    "effect:cleanup:2f1ac23d-3611-4a3b-ba7b-75799202227a": "1001ebd4-c9df-493a-81b6-cb6891f9da2b"
+    "effect:cleanup:2f1ac23d-3611-4a3b-ba7b-75799202227a": "1001ebd4-c9df-493a-81b6-cb6891f9da2b",
+    "node:cleanup-1:complete": "f39b3463-e759-4d19-a4ac-a708b2e9af58"
   },
   "eventIds": {
     "c1b8f49b-b030-458f-bae6-8d5f1d4ab497": true,
@@ -143,6 +152,7 @@
     "ef05db38-06a8-4017-a72e-3522efab442a": true,
     "2a7bc967-62f7-4ad9-b651-cc09894931ce": true,
     "a8f0f749-f5f3-4dfe-bc6a-9526df4f954a": true,
-    "1001ebd4-c9df-493a-81b6-cb6891f9da2b": true
+    "1001ebd4-c9df-493a-81b6-cb6891f9da2b": true,
+    "f39b3463-e759-4d19-a4ac-a708b2e9af58": true
   }
 }
