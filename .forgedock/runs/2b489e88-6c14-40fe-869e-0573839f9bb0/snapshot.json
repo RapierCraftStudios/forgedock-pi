@@ -5,10 +5,10 @@
   "issueNumber": 112,
   "integrationBranch": "staging",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "blocked",
   "authorityMode": "run-scoped",
-  "sequence": 22,
-  "lastEventHash": "sha256:12d71dce5b87a9cb31299a073437d0e19afb21511f5df2741cb38c3062d089eb",
+  "sequence": 23,
+  "lastEventHash": "sha256:bb1d817dbaef4bbbcd31f5635644420d435c67012f01ebbf1caaa32e0d609b22",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -167,7 +167,7 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "blocked",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 1",
           "evidence": [],
@@ -176,7 +176,9 @@
           "startedAt": "2026-08-26T18:32:44.671Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/2b489e88-6c14-40fe-869e-0573839f9bb0",
           "branch": "forge/issue-112-2b489e88",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "reason": "Required fresh review panel could not complete: trusted panel RPC ping timed out on retries, and the mandated fresh reviewer workflow timed out before either structured result returned. The run is blocked pending a new review attempt under the same frozen-head identity.",
+          "finishedAt": "2026-08-26T18:51:03.454Z"
         }
       ]
     }
@@ -205,7 +207,8 @@
     "phase:verify:1:start": "5ca100aa-19f2-4d43-8622-370d14c7ee64",
     "phase:verify:1:complete": "e5805840-ef5c-4381-b04d-12f7ade27fff",
     "phase:review:1:queue": "bbaff078-ef81-4421-a8f6-4f475481283b",
-    "phase:review:1:start": "299ca78b-5490-4cd4-b77d-47e3dfdbffbf"
+    "phase:review:1:start": "299ca78b-5490-4cd4-b77d-47e3dfdbffbf",
+    "phase:review:1:block": "d99dfcc8-10cb-4b9d-b430-8b82152f9ead"
   },
   "eventIds": {
     "f349b52b-b125-43dd-b940-b6b8f8bfd776": true,
@@ -229,7 +232,8 @@
     "5ca100aa-19f2-4d43-8622-370d14c7ee64": true,
     "e5805840-ef5c-4381-b04d-12f7ade27fff": true,
     "bbaff078-ef81-4421-a8f6-4f475481283b": true,
-    "299ca78b-5490-4cd4-b77d-47e3dfdbffbf": true
+    "299ca78b-5490-4cd4-b77d-47e3dfdbffbf": true,
+    "d99dfcc8-10cb-4b9d-b430-8b82152f9ead": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
