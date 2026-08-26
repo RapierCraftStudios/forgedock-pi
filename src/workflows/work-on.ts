@@ -613,10 +613,7 @@ export class ForgeWorkOnController {
   ): Promise<void> {
     const snapshot = await store.readRun(link.forgeRunId, ctx.signal);
     if (!snapshot.state) return;
-    if (
-      snapshot.state.status === "completed" &&
-      snapshot.state.outcome === "merged"
-    ) {
+    if (hasDurableMergeCompletion(snapshot.state)) {
       await this.#projectWorkflowStage(link, "merged", ctx);
       return;
     }
@@ -2175,25 +2172,27 @@ export class ForgeWorkOnController {
       headSha = merged.sha;
       outcome = "merged";
       evidence = [`merge:${merged.sha}`];
-      await journal.append({ runId: link.forgeRunId, type: "effect.recorded", payload: { effectType: "merge", effectId: `merge:${pull.number}`, digest: digest(merged.sha) }, idempotencyKey: `effect:merge:${pull.number}`, sessionId, message: `Record merge effect for ${pull.number}`, ...(ctx.signal ? { signal: ctx.signal } : {}) });
-      await this.#projectWorkflowStage(link, "merged", ctx, projector).catch(
-        () => undefined,
+      await runPostMergeWorkAfterProjection(
+        () => this.#projectWorkflowStage(link, "merged", ctx, projector),
+        async () => {
+          await journal.append({ runId: link.forgeRunId, type: "effect.recorded", payload: { effectType: "merge", effectId: `merge:${pull.number}`, digest: digest(merged.sha) }, idempotencyKey: `effect:merge:${pull.number}`, sessionId, message: `Record merge effect for ${pull.number}`, ...(ctx.signal ? { signal: ctx.signal } : {}) });
+          const aggregate = await this.#aggregateFromState(
+            link,
+            authority.state as import("../core/state.ts").RunState,
+            decision.attempt,
+          );
+          await postReviewCompletionArtifacts({
+            github,
+            projector,
+            link,
+            result: aggregate,
+            pullNumber: pull.number,
+            mergedSha: merged.sha,
+            decision: mergeDecision,
+            signal: ctx.signal,
+          });
+        },
       );
-      const aggregate = await this.#aggregateFromState(
-        link,
-        authority.state as import("../core/state.ts").RunState,
-        decision.attempt,
-      );
-      await postReviewCompletionArtifacts({
-        github,
-        projector,
-        link,
-        result: aggregate,
-        pullNumber: pull.number,
-        mergedSha: merged.sha,
-        decision: mergeDecision,
-        signal: ctx.signal,
-      });
     } else if (node.node === "close") {
       await github.closeIssue(link.issueNumber, ctx.signal);
       const closed = await github.getIssue(link.issueNumber, ctx.signal);
@@ -3885,38 +3884,42 @@ export class ForgeWorkOnController {
           method: "squash",
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
-    await appendEffect(
-      journal,
-      link.forgeRunId,
-      "merge",
-      `pr:${pull.number}:merge`,
-      digest(merged.sha),
-      sessionId,
-      ctx.signal,
+    await runPostMergeWorkAfterProjection(
+      () => this.#projectWorkflowStage(link, "merged", ctx, projector),
+      async () => {
+        await appendEffect(
+          journal,
+          link.forgeRunId,
+          "merge",
+          `pr:${pull.number}:merge`,
+          digest(merged.sha),
+          sessionId,
+          ctx.signal,
+        );
+        await appendPhase(
+          journal,
+          link.forgeRunId,
+          "merge",
+          "complete",
+          1,
+          sessionId,
+          ctx.signal,
+          undefined,
+          [merged.sha],
+        );
+        if (!currentPull.merged)
+          await postReviewCompletionArtifacts({
+            github,
+            projector,
+            link,
+            result,
+            pullNumber: pull.number,
+            mergedSha: merged.sha,
+            decision: gate,
+            signal: ctx.signal,
+          });
+      },
     );
-    await appendPhase(
-      journal,
-      link.forgeRunId,
-      "merge",
-      "complete",
-      1,
-      sessionId,
-      ctx.signal,
-      undefined,
-      [merged.sha],
-    );
-    await this.#projectWorkflowStage(link, "merged", ctx, projector);
-    if (!currentPull.merged)
-      await postReviewCompletionArtifacts({
-        github,
-        projector,
-        link,
-        result,
-        pullNumber: pull.number,
-        mergedSha: merged.sha,
-        decision: gate,
-        signal: ctx.signal,
-      });
 
     await appendPhase(
       journal,
@@ -4687,6 +4690,34 @@ export function shouldBufferLaunchCompletion(
   linkKnown: boolean,
 ): boolean {
   return receiptBindingInFlight || !linkKnown;
+}
+
+/** Keep merged-label projection ahead of every post-merge side effect. */
+export async function runPostMergeWorkAfterProjection<T>(
+  projectMerged: () => Promise<void>,
+  postMergeWork: () => Promise<T>,
+): Promise<T> {
+  await projectMerged();
+  return postMergeWork();
+}
+
+/** Durable merge evidence remains authoritative while later terminal work runs. */
+export function hasDurableMergeCompletion(
+  state: import("../core/state.ts").RunState,
+): boolean {
+  if (state.status === "completed" && state.outcome === "merged") return true;
+  if (
+    state.phases.merge?.attempts.some(
+      (attempt) => attempt.status === "completed",
+    )
+  )
+    return true;
+  return Object.values(state.nodes).some(
+    (node) =>
+      node.node === "merge" &&
+      node.status === "completed" &&
+      node.outcome === "merged",
+  );
 }
 
 export function workflowStageForNodeTransition(

@@ -7,6 +7,7 @@ import {
   directRunRecoveryAction,
   directTerminalEvidence,
   finalReviewDecisionMarker,
+  hasDurableMergeCompletion,
   findingPriority,
   isTransientProviderFailure,
   lineWithinTolerance,
@@ -17,6 +18,7 @@ import {
   reviewInstanceMarker,
   reviewSummaryInstanceMarker,
   reviewSupersessionMarker,
+  runPostMergeWorkAfterProjection,
   shouldBufferLaunchCompletion,
   similarFindingTitle,
   workflowLabelForNode,
@@ -106,6 +108,88 @@ test("direct terminal evidence binds PR, merge phase, and merge effect", () => {
   });
   state.effects.merge!.digest = "sha256:wrong";
   assert.equal(directTerminalEvidence(state), undefined);
+});
+
+test("merged projection is awaited before post-merge work", async () => {
+  const events: string[] = [];
+  await assert.rejects(
+    runPostMergeWorkAfterProjection(
+      async () => {
+        events.push("workflow:merged");
+      },
+      async () => {
+        events.push("post-merge");
+        throw new Error("post-merge projection failure");
+      },
+    ),
+    /post-merge projection failure/,
+  );
+  assert.deepEqual(events, ["workflow:merged", "post-merge"]);
+
+  events.length = 0;
+  await assert.rejects(
+    runPostMergeWorkAfterProjection(
+      async () => {
+        events.push("workflow:merged");
+        throw new Error("merged projection failure");
+      },
+      async () => {
+        events.push("post-merge");
+      },
+    ),
+    /merged projection failure/,
+  );
+  assert.deepEqual(events, ["workflow:merged"]);
+});
+
+test("durable merge evidence keeps projection merged during terminal recovery", () => {
+  const state = (overrides: Record<string, unknown> = {}) =>
+    ({
+      status: "active",
+      phases: {},
+      nodes: {},
+      ...overrides,
+    }) as unknown as import("../../src/core/state.ts").RunState;
+
+  assert.equal(hasDurableMergeCompletion(state()), false);
+  assert.equal(
+    hasDurableMergeCompletion(
+      state({
+        phases: {
+          merge: { attempts: [{ status: "completed" }] },
+        },
+      }),
+    ),
+    true,
+  );
+  assert.equal(
+    hasDurableMergeCompletion(
+      state({
+        nodes: {
+          "merge-1": {
+            node: "merge",
+            status: "completed",
+            outcome: "merged",
+          },
+        },
+      }),
+    ),
+    true,
+  );
+  assert.equal(
+    hasDurableMergeCompletion(
+      state({
+        nodes: {
+          "merge-1": {
+            node: "merge",
+            status: "running",
+            outcome: "merged",
+          },
+        },
+      }),
+    ),
+    false,
+  );
 });
 
 test("provider completion is buffered until its launch receipt is durably bound", () => {
