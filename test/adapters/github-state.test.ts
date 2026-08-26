@@ -139,6 +139,7 @@ test("state append uses a non-force compare-and-set ref update", async () => {
     throw new Error(`Unexpected request ${request.method} ${request.path}`);
   });
   const store = new GitHubStateBranchStore(transport, repository);
+  let retryChecks = 0;
   assert.equal(
     await store.commitRunState({
       expectedTip: "tip-1",
@@ -146,6 +147,9 @@ test("state append uses a non-force compare-and-set ref update", async () => {
       state,
       lease,
       message: "Fail issue #2 launch",
+      beforeRefUpdate: async () => {
+        retryChecks += 1;
+      },
     }),
     "commit-2",
   );
@@ -153,6 +157,9 @@ test("state append uses a non-force compare-and-set ref update", async () => {
     (request) => request.method === "PATCH",
   );
   assert.deepEqual(patch?.body, { sha: "commit-2", force: false });
+  assert.equal(retryChecks, 1);
+  await patch?.beforeRetry?.();
+  assert.equal(retryChecks, 2);
   const commit = transport.requests.find(
     (request) =>
       request.method === "POST" && request.path.endsWith("/git/commits"),

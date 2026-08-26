@@ -252,6 +252,25 @@ export class OrchestrationJournal {
           state,
           leaseUpdate: release ? null : heartbeat ? lease : undefined,
           message: input.message,
+          beforeRefUpdate: async () => {
+            const latest = await this.#store.readOrchestration(
+              input.orchestrationId,
+              input.signal,
+            );
+            if (!latest.state || !latest.lease)
+              throw new Error(
+                `Orchestration ${input.orchestrationId} is not initialized.`,
+              );
+            if (latest.state.idempotencyKeys[input.idempotencyKey]) return;
+            if (
+              latest.lease.ownerRunId !== input.orchestrationId ||
+              latest.lease.epoch !== latest.state.leaseEpoch ||
+              (!allowExpired && isLeaseExpired(latest.lease, new Date()))
+            )
+              throw new Error(
+                `Orchestration ${input.orchestrationId} no longer owns its repository lease.`,
+              );
+          },
           ...(input.signal ? { signal: input.signal } : {}),
         });
         return { tip, events, state, lease };

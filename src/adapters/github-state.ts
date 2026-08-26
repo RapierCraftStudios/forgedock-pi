@@ -76,6 +76,7 @@ export interface CommitRunStateInput {
   preserveRepositoryLease?: boolean;
   message: string;
   signal?: AbortSignal;
+  beforeRefUpdate?: () => Promise<void>;
 }
 
 export interface ReadOrchestrationStateResult {
@@ -93,6 +94,7 @@ export interface CommitOrchestrationStateInput {
   leaseUpdate?: RepositoryLease | null;
   message: string;
   signal?: AbortSignal;
+  beforeRefUpdate?: () => Promise<void>;
 }
 
 export class StateBranchConflictError extends Error {
@@ -414,11 +416,15 @@ export class GitHubStateBranchStore {
       input.signal,
     );
     const refPath = `${this.#apiRoot}/git/refs/heads/${encodePath(this.#branch)}`;
+    await input.beforeRefUpdate?.();
     const response = await this.#transport.request<GitRefResponse>({
       method: "PATCH",
       path: refPath,
       body: { sha: newCommit, force: false },
       ...(input.signal ? { signal: input.signal } : {}),
+      ...(input.beforeRefUpdate
+        ? { beforeRetry: input.beforeRefUpdate }
+        : {}),
     });
     if (response.status === 409 || response.status === 422)
       throw new StateBranchConflictError(input.expectedTip);
@@ -504,11 +510,15 @@ export class GitHubStateBranchStore {
       input.signal,
     );
     const refPath = `${this.#apiRoot}/git/refs/heads/${encodePath(this.#branch)}`;
+    await input.beforeRefUpdate?.();
     const response = await this.#transport.request<GitRefResponse>({
       method: "PATCH",
       path: refPath,
       body: { sha: newCommit, force: false },
       ...(input.signal ? { signal: input.signal } : {}),
+      ...(input.beforeRefUpdate
+        ? { beforeRetry: input.beforeRefUpdate }
+        : {}),
     });
     if (response.status === 409 || response.status === 422)
       throw new StateBranchConflictError(input.expectedTip);

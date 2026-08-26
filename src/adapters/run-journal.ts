@@ -191,6 +191,27 @@ export class RunJournal {
               ? { preserveRepositoryLease: true }
               : {}),
           message: input.message,
+          beforeRefUpdate: async () => {
+            const latest = await this.#store.readRun(input.runId, input.signal);
+            if (!latest.state)
+              throw new Error(`Run ${input.runId} does not exist.`);
+            if (latest.state.idempotencyKeys[input.idempotencyKey]) return;
+            if (
+              !isRevokedOrchestrationCancellationAuthorized({
+                state: latest.state,
+                type: input.type,
+                actorKind: input.actorKind,
+                allowRevokedOrchestrationCancellation:
+                  input.allowRevokedOrchestrationCancellation,
+              })
+            )
+              assertCurrentAuthority(
+                latest.state,
+                latest.lease,
+                input.allowExpiredLease === true &&
+                  input.actorKind === "human",
+              );
+          },
           ...(input.signal ? { signal: input.signal } : {}),
         });
         return { tip, events, state, ...(state.lease ? { lease: state.lease } : {}) };
