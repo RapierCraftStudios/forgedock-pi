@@ -10,8 +10,8 @@
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 5,
-  "lastEventHash": "sha256:100a59df8d6d96a156a497a8c7720d8f340974e5990b9db990b7355fa512d5d2",
+  "sequence": 6,
+  "lastEventHash": "sha256:7c6c51da6cfe726feace45bb937adddb2673e99d54214d47733aed81d45d709f",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -40,6 +40,15 @@
         "The issue body's request for invalid/no-code classification is downstream investigation content and does not prevent resolve eligibility."
       ],
       "finishedAt": "2026-08-26T02:00:28.904Z"
+    },
+    "investigate-1": {
+      "nodeId": "investigate-1",
+      "node": "investigate",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued",
+      "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/8a06f8af-710e-499a-8ff0-3ef73dedf48b/.pi/forge/8a06f8af-710e-499a-8ff0-3ef73dedf48b-investigate-1.json"
     }
   },
   "effects": {},
@@ -48,13 +57,15 @@
     "node:resolve-1:queued": "a4d304f4-a917-4df4-9b85-6a47128f6d6f",
     "node:resolve-1:started": "91fa927b-7779-4b36-b618-c3837e7904a6",
     "node:resolve-1:attempt:1:launch-receipt:7547da39-217e-4f9d-8f76-a98ef3eda27c:3406ae85-a4a7-4122-9b13-8ad279d4f169": "ca2b9584-6538-421d-90ff-063f12be257b",
-    "node:resolve-1:completed": "691df5a7-9ddd-4ddc-b8f3-8a11ff59df92"
+    "node:resolve-1:completed": "691df5a7-9ddd-4ddc-b8f3-8a11ff59df92",
+    "node:investigate-1:queued": "e9b3ba2b-d97c-4bc8-9b82-df94118ed62f"
   },
   "eventIds": {
     "8b9c2c93-ab24-4751-ab72-b8158f83ed64": true,
     "a4d304f4-a917-4df4-9b85-6a47128f6d6f": true,
     "91fa927b-7779-4b36-b618-c3837e7904a6": true,
     "ca2b9584-6538-421d-90ff-063f12be257b": true,
-    "691df5a7-9ddd-4ddc-b8f3-8a11ff59df92": true
+    "691df5a7-9ddd-4ddc-b8f3-8a11ff59df92": true,
+    "e9b3ba2b-d97c-4bc8-9b82-df94118ed62f": true
   }
 }
