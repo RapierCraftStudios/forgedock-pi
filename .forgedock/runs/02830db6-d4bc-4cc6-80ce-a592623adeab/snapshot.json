@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 16,
-  "lastEventHash": "sha256:b1c12daa781427db64baefe361e61dc130ccc0284fc7e5e837101fa34bfceaa4",
+  "sequence": 17,
+  "lastEventHash": "sha256:19ebaed3513d79f205a1f4f1b0faf897bf3c7db836899398ed29edb5292c3d10",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -105,15 +105,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/verification-preflight.ts` now gives all static failure classes exact policy-path remediation and a `/forge:init` CI-only fallback.",
+            "`src/ui/commands.ts` preserves existing tracked verification command/cwd bindings instead of replacing them with an empty map and reports local-verification mode.",
+            "Regression tests cover monorepo script selection, executable/path diagnostics, and init command preservation.",
+            "No implementation commit exists yet; the required `check` command and commit are scheduled in verify."
+          ],
           "logicalNodeId": "work-on.implement",
           "startedAt": "2026-08-26T21:40:14.456Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/02830db6-d4bc-4cc6-80ce-a592623adeab",
           "branch": "forge/issue-94-02830db6",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T21:41:02.925Z",
+          "outputArtifactHash": "sha256:issue94-implementation"
         }
       ]
     }
@@ -136,7 +143,8 @@
     "phase:prepare-worktree:1:start": "c958d74a-788e-4e9c-b0ef-b6ae024b43a7",
     "phase:prepare-worktree:1:complete": "528eebee-70b4-4693-abfb-87fcdfcb5a46",
     "phase:implement:1:queue": "141b989a-133c-4453-802e-286b98b0285b",
-    "phase:implement:1:start": "b52df085-86e2-49d0-9c5a-8d95a2b3e84d"
+    "phase:implement:1:start": "b52df085-86e2-49d0-9c5a-8d95a2b3e84d",
+    "phase:implement:1:complete": "88d13a0a-a000-44cd-afc9-9be0efa622d6"
   },
   "eventIds": {
     "09b30e70-abad-4329-bd94-a424edad7e9b": true,
@@ -154,7 +162,8 @@
     "c958d74a-788e-4e9c-b0ef-b6ae024b43a7": true,
     "528eebee-70b4-4693-abfb-87fcdfcb5a46": true,
     "141b989a-133c-4453-802e-286b98b0285b": true,
-    "b52df085-86e2-49d0-9c5a-8d95a2b3e84d": true
+    "b52df085-86e2-49d0-9c5a-8d95a2b3e84d": true,
+    "88d13a0a-a000-44cd-afc9-9be0efa622d6": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
