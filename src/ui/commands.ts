@@ -9,6 +9,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
+import { selectInitVerificationCommands } from "../adapters/verification-preflight.ts";
 import { parseForgePolicy, type ForgePolicy } from "../core/policy.ts";
 import type { ForgeOrchestrationController } from "../workflows/orchestrate.ts";
 import type { ForgeWorkOnController } from "../workflows/work-on.ts";
@@ -218,8 +219,13 @@ export function registerForgeCommands(
         configPath,
       });
       await reconcileWorkflowLabels(pi, root, config.repository.name);
+      const localVerification = Object.keys(
+        config.verification.commands,
+      ).length
+        ? `Local verification: ${Object.keys(config.verification.commands).join(", ")} (statically validated).`
+        : "Local verification: GitHub CI only (no local commands configured).";
       ctx.ui.notify(
-        `ForgeDock setup complete.\nPolicy: ${configPath}\nIntegration: ${config.branches.integration[0]}\nCI-required PR targets: ${config.verification.github.requiredBranches.join(", ")}\nAuto-merge: ${config.branches.autoMergeIntegration ? "enabled" : "disabled"}\nParallel lanes: ${config.orchestration.maxConcurrent}\nReview and commit the tracked policy.`,
+        `ForgeDock setup complete.\nPolicy: ${configPath}\nIntegration: ${config.branches.integration[0]}\nCI-required PR targets: ${config.verification.github.requiredBranches.join(", ")}\nAuto-merge: ${config.branches.autoMergeIntegration ? "enabled" : "disabled"}\nParallel lanes: ${config.orchestration.maxConcurrent}\n${localVerification}\nReview and commit the tracked policy.`,
         "info",
       );
       await orchestrator.resume(ctx);
@@ -352,6 +358,28 @@ async function configureForgePolicy(input: {
     ...source,
     repository: { provider: "github", name: input.repository },
   };
+  const verificationSelection = await selectInitVerificationCommands(
+    input.root,
+    config.verification.commands,
+    { configPath: input.configPath },
+  );
+  if (
+    verificationSelection.mode === "ci-only" &&
+    Object.keys(config.verification.commands).length > 0
+  ) {
+    const choice = await requiredSelection(
+      input.ctx,
+      "No configured required local verification command is runnable from this repository. How should /forge:init proceed?",
+      [
+        "Use GitHub CI only (recommended)",
+        "Cancel and fix the tracked verification policy",
+      ],
+    );
+    if (!choice.startsWith("Use GitHub CI only"))
+      throw new Error(
+        `${verificationSelection.reason ?? "The configured local verification policy is not runnable."} Update ${input.configPath} or rerun /forge:init after fixing the package cwd/script.`,
+      );
+  }
 
   const defaultBranch = await resolveDefaultBranch(
     input.pi,
@@ -442,7 +470,7 @@ async function configureForgePolicy(input: {
         waitTimeoutMs: config.verification.github.waitTimeoutMs,
         pollIntervalMs: config.verification.github.pollIntervalMs,
       },
-      commands: {},
+      commands: verificationSelection.commands,
     },
     orchestration: {
       ...config.orchestration,
