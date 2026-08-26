@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 16,
-  "lastEventHash": "sha256:c2585418e036541ac8481718d23fc5c0b7d8825daaa0c55bad3a3f10670a0350",
+  "sequence": 17,
+  "lastEventHash": "sha256:03823d98d4b6a768b1fdecd77332ad493139271650ce20933b37d0cd3cb5a144",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -111,16 +111,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "The working tree contains only the accepted source and focused test changes.",
+            "The implementation adds one shared package-manager location-option guard, wires it into required preflight, child binding validation, and runtime verification, and preserves `--` script arguments.",
+            "The implementation commit is intentionally deferred until the required `check` passes, per the bound verification contract."
+          ],
           "inputArtifactHash": "sha256:plan-112-location-flags-v1",
           "logicalNodeId": "implement-1",
           "startedAt": "2026-08-26T22:21:45.895Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/6761d4c2-a194-4fed-9b24-f775d9bf8d79",
           "branch": "forge/issue-112-6761d4c2",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T22:22:52.617Z",
+          "outputArtifactHash": "sha256:implement-112-location-flags-working-tree"
         }
       ]
     }
@@ -143,7 +149,8 @@
     "phase:prepare-worktree:1:start": "0a113ea3-35f8-4ff8-894a-de0f28b1a241",
     "phase:prepare-worktree:1:complete": "d3c4c05a-6368-4f75-8c6e-c567d457ee1e",
     "phase:implement:1:queue": "097edc9c-07bb-4ccf-a5d4-2a9c9122f72e",
-    "phase:implement:1:start": "a35c5e34-12fd-4366-bc88-ee8b2254d311"
+    "phase:implement:1:start": "a35c5e34-12fd-4366-bc88-ee8b2254d311",
+    "phase:implement:1:complete": "b7283a99-f676-4d9a-894a-4d1f2caf3ebb"
   },
   "eventIds": {
     "87554173-ee5e-4060-9d29-9bc6f7cef91c": true,
@@ -161,7 +168,8 @@
     "0a113ea3-35f8-4ff8-894a-de0f28b1a241": true,
     "d3c4c05a-6368-4f75-8c6e-c567d457ee1e": true,
     "097edc9c-07bb-4ccf-a5d4-2a9c9122f72e": true,
-    "a35c5e34-12fd-4366-bc88-ee8b2254d311": true
+    "a35c5e34-12fd-4366-bc88-ee8b2254d311": true,
+    "b7283a99-f676-4d9a-894a-4d1f2caf3ebb": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
