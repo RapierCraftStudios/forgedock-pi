@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 16,
-  "lastEventHash": "sha256:2cd1c6a9360245d7afed2997066e45c24bbd7ad823e8a3ac1555de6242678bfb",
+  "sequence": 17,
+  "lastEventHash": "sha256:b79f1131e8264225194dc5edc8fea6ab520e781648e2a12dce17e977ff9adf43",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -110,15 +110,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Added static package-manager selection detection that stops at `--` and handles npm selector aliases/equal forms plus equivalent selectors for already-supported package managers.",
+            "Required package selection options now fail with `VerificationPreflightError` at the command argv policy path and direct authors to `cwd`.",
+            "Added focused regression coverage for npm selectors before/after `test` and a selector-looking script argument after `--`.",
+            "No implementation commit exists yet; it is intentionally deferred until the required verify check passes."
+          ],
           "logicalNodeId": "work-on/implement",
           "startedAt": "2026-08-26T21:39:24.210Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/4dd3e7ea-abe4-4f29-870d-34a51336bf28",
           "branch": "forge/issue-111-4dd3e7ea",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T21:42:35.597Z",
+          "outputArtifactHash": "sha256:implement-111-selection-guard"
         }
       ]
     }
@@ -141,7 +148,8 @@
     "phase:prepare-worktree:1:start": "cae756e2-4b42-451b-8f6a-fcaef7366354",
     "phase:prepare-worktree:1:complete": "b82ac4b0-9843-4810-b27e-0f6a73722c9a",
     "phase:implement:1:queue": "ac2b5086-eb4b-4f18-a282-6d934adfca27",
-    "phase:implement:1:start": "2a2dcbb7-bdd6-46b7-bb6d-faaa13480ba5"
+    "phase:implement:1:start": "2a2dcbb7-bdd6-46b7-bb6d-faaa13480ba5",
+    "phase:implement:1:complete": "defbe3e1-0676-4140-91be-64e2626a17fa"
   },
   "eventIds": {
     "5c1d2029-2cc4-4315-8e15-d249f26221a2": true,
@@ -159,7 +167,8 @@
     "cae756e2-4b42-451b-8f6a-fcaef7366354": true,
     "b82ac4b0-9843-4810-b27e-0f6a73722c9a": true,
     "ac2b5086-eb4b-4f18-a282-6d934adfca27": true,
-    "2a2dcbb7-bdd6-46b7-bb6d-faaa13480ba5": true
+    "2a2dcbb7-bdd6-46b7-bb6d-faaa13480ba5": true,
+    "defbe3e1-0676-4140-91be-64e2626a17fa": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
