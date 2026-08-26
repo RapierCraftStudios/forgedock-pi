@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 21,
-  "lastEventHash": "sha256:f9ab3d7cbd2faf09758515607006d56e5186835a9526093691c016f33d601faf",
+  "sequence": 22,
+  "lastEventHash": "sha256:665ab51ff4906500f64f44bd46b378a1d72f54e3cb914b727d6a37e1f05d46a1",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -160,10 +160,15 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 1",
-          "evidence": []
+          "evidence": [],
+          "logicalNodeId": "work-on-review-1",
+          "startedAt": "2026-08-26T22:27:40.213Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/6d8b31d0-afaf-4381-8899-a059f16feb55",
+          "branch": "forge/issue-119-6d8b31d0",
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
         }
       ]
     }
@@ -191,7 +196,8 @@
     "phase:verify:1:queue": "e1861d94-972e-4251-9a83-2e8af155d2b6",
     "phase:verify:1:start": "9bffb936-8964-40ac-a5dc-e9990ec4a6be",
     "phase:verify:1:complete": "0c80c60c-0d11-446a-a4b7-03ab2ec3ff9b",
-    "phase:review:1:queue": "6f8894c4-b463-44cf-be43-1c2845273660"
+    "phase:review:1:queue": "6f8894c4-b463-44cf-be43-1c2845273660",
+    "phase:review:1:start": "7b91a603-be80-4068-816d-324db2df3dab"
   },
   "eventIds": {
     "49b14db0-bfa1-4247-a547-92c9a9dea274": true,
@@ -214,7 +220,8 @@
     "e1861d94-972e-4251-9a83-2e8af155d2b6": true,
     "9bffb936-8964-40ac-a5dc-e9990ec4a6be": true,
     "0c80c60c-0d11-446a-a4b7-03ab2ec3ff9b": true,
-    "6f8894c4-b463-44cf-be43-1c2845273660": true
+    "6f8894c4-b463-44cf-be43-1c2845273660": true,
+    "7b91a603-be80-4068-816d-324db2df3dab": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
