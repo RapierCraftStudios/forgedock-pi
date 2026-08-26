@@ -5,20 +5,20 @@
   "issueNumber": 77,
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "leaseBinding": {
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 4,
-  "lastEventHash": "sha256:e47ab847be79a17362cbf3a08282e65f82ad0edf12e17b8879c897897fff49cb",
+  "sequence": 5,
+  "lastEventHash": "sha256:0dfb1e8c09e43c72f19f37a905e89bc906588e2061f09740f962ce9357327f63",
   "phases": {},
   "nodes": {
     "resolve-1": {
       "nodeId": "resolve-1",
       "node": "resolve",
       "attempt": 1,
-      "status": "running",
+      "status": "failed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/6fe69052-7503-463b-8f91-19e6ea84de5e/.pi/forge/6fe69052-7503-463b-8f91-19e6ea84de5e-resolve-1.json",
       "subagentRunId": "99c40661-e430-4da8-bdd8-61f8401ccfcf",
@@ -27,7 +27,9 @@
       "startedAt": "2026-08-26T01:53:24.341Z",
       "previousSubagentRunId": "launch:resolve-1:dfe57197-ce81-42c8-84a6-5c76db3d505b",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "reason": "Cancelled by the operator through /forge:cancel.",
+      "finishedAt": "2026-08-26T02:50:06.156Z"
     }
   },
   "effects": {},
@@ -35,12 +37,15 @@
     "run:create": "9e6609fa-9dae-437d-8d32-f9513f258a58",
     "node:resolve-1:queued": "54ad51a4-d705-42b4-893d-b7cc795543b3",
     "node:resolve-1:started": "edd35174-2e12-4c91-99c5-d87f2c3ddf60",
-    "node:resolve-1:attempt:1:launch-receipt:dfe57197-ce81-42c8-84a6-5c76db3d505b:99c40661-e430-4da8-bdd8-61f8401ccfcf": "7143171c-0820-4712-a613-aa656f6a3c50"
+    "node:resolve-1:attempt:1:launch-receipt:dfe57197-ce81-42c8-84a6-5c76db3d505b:99c40661-e430-4da8-bdd8-61f8401ccfcf": "7143171c-0820-4712-a613-aa656f6a3c50",
+    "run:cancelled": "87061e7e-dd98-449c-8629-4ac11b5d13b0"
   },
   "eventIds": {
     "9e6609fa-9dae-437d-8d32-f9513f258a58": true,
     "54ad51a4-d705-42b4-893d-b7cc795543b3": true,
     "edd35174-2e12-4c91-99c5-d87f2c3ddf60": true,
-    "7143171c-0820-4712-a613-aa656f6a3c50": true
-  }
+    "7143171c-0820-4712-a613-aa656f6a3c50": true,
+    "87061e7e-dd98-449c-8629-4ac11b5d13b0": true
+  },
+  "cancellationReason": "Cancelled by the operator through /forge:cancel."
 }
