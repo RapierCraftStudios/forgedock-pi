@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 26,
-  "lastEventHash": "sha256:3858d8d35c06bcf63cd20d7a2af82989a09d0ca3776ebee23b76b0fd62d30340",
+  "sequence": 27,
+  "lastEventHash": "sha256:7241ffa16e7863059d656b372e3712cccb65f85f6cbda638e73e028aba630a2c",
   "lanes": [
     {
       "issueNumber": 92,
@@ -71,11 +71,10 @@
     {
       "issueNumber": 119,
       "ordinal": 7,
-      "status": "blocked",
+      "status": "running",
       "refreshes": 0,
       "forgeRunId": "bfa9e372-4b48-4bbb-8704-9c5e544f4dd3",
-      "subagentRunId": "12339c20-3787-40c7-9b2f-e39f8c4f3b69",
-      "reason": "Required synchronous review panel timed out before security evidence returned; merge readiness cannot be established fail-closed."
+      "subagentRunId": "c932f25c-2f2a-492f-be2e-3796fdb2f3c9"
     },
     {
       "issueNumber": 120,
@@ -112,7 +111,8 @@
     "lane:114:blocked": "9beb33fa-09e5-4f42-9245-de752e43396f",
     "lane:115:blocked": "5a5dd20f-9ac7-4306-9bfb-8a5db52e9d85",
     "lane:115:recovered:5ec1a05e-ae78-4fd9-8ef3-63c60f8be913": "14f742d5-3e1f-4396-84f1-4ba10f219429",
-    "lane:119:blocked": "94abbea6-6ad4-480f-badc-3145fedab14a"
+    "lane:119:blocked": "94abbea6-6ad4-480f-badc-3145fedab14a",
+    "lane:119:recovered:bfa9e372-4b48-4bbb-8704-9c5e544f4dd3": "00b24623-0ab0-4875-aeec-eb9a82f34275"
   },
   "createdAt": "2026-08-26T17:53:19.264Z"
 }
