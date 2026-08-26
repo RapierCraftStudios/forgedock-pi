@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 19,
-  "lastEventHash": "sha256:e0fcf25a3f995b0a978ebacd648f867c433f15e225570632cebfb559d75c8af7",
+  "sequence": 20,
+  "lastEventHash": "sha256:d31211e4febc80f91f18d7fada266bc07127695846dbbec704c3edd9016f2b7a",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -135,16 +135,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume verify attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Named bound verification `check` passed via `forge_verify`: TypeScript compilation succeeded and all 150 tests passed.",
+            "Implementation commit `3b2d0c5ad69cf12120429fe5d68bd8b73d79926c` exists on the assigned branch.",
+            "The required local implementation readiness gate passed; authoritative GitHub CI remains parent-owned after PR creation."
+          ],
           "inputArtifactHash": "sha256:issue115-implementation-lstat-regression",
           "logicalNodeId": "verify",
           "startedAt": "2026-08-26T18:09:34.649Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/5ec1a05e-ae78-4fd9-8ef3-63c60f8be913",
           "branch": "forge/issue-115-5ec1a05e",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T18:12:09.335Z",
+          "outputArtifactHash": "sha256:issue115-verify-check-passed",
+          "commitSha": "3b2d0c5ad69cf12120429fe5d68bd8b73d79926c"
         }
       ]
     }
@@ -170,7 +177,8 @@
     "phase:implement:1:start": "8a1c674e-f7f4-4c89-a3de-ce3d06baf0ae",
     "phase:implement:1:complete": "cfb945ca-d73a-4a9d-809f-63141c08f544",
     "phase:verify:1:queue": "00565ff8-ac58-4240-9778-fe2c48cf538c",
-    "phase:verify:1:start": "c9ce1b75-fc41-4b34-a375-e77b84a3e4b0"
+    "phase:verify:1:start": "c9ce1b75-fc41-4b34-a375-e77b84a3e4b0",
+    "phase:verify:1:complete": "d5936455-99f2-4d94-b9fd-35ba6bf7717a"
   },
   "eventIds": {
     "cb910872-25c5-4ad7-afad-cf0c4cb6639a": true,
@@ -191,7 +199,8 @@
     "8a1c674e-f7f4-4c89-a3de-ce3d06baf0ae": true,
     "cfb945ca-d73a-4a9d-809f-63141c08f544": true,
     "00565ff8-ac58-4240-9778-fe2c48cf538c": true,
-    "c9ce1b75-fc41-4b34-a375-e77b84a3e4b0": true
+    "c9ce1b75-fc41-4b34-a375-e77b84a3e4b0": true,
+    "d5936455-99f2-4d94-b9fd-35ba6bf7717a": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
