@@ -10,8 +10,8 @@
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 9,
-  "lastEventHash": "sha256:db734d4bce54ffbe973eb4386764faf7a3798af1cf3ae081a1a06f9e9e009865",
+  "sequence": 10,
+  "lastEventHash": "sha256:4aa045b69bbd3d9c965bab746c6783605dd7051b1c27d2557856f91808de5645",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -64,6 +64,13 @@
         "No repository changes were made; the investigation used read-only inspection only."
       ],
       "finishedAt": "2026-08-26T01:50:37.438Z"
+    },
+    "close-1": {
+      "nodeId": "close-1",
+      "node": "close",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued"
     }
   },
   "effects": {},
@@ -76,7 +83,8 @@
     "node:investigate-1:queued": "318c2ea4-8d79-4197-82ab-d61e6f5a845c",
     "node:investigate-1:started": "01ab10d6-c7d8-4e87-8bce-d69ca7980b86",
     "node:investigate-1:attempt:1:launch-receipt:0dfb2285-23e9-46e2-8b76-4c0f406da479:b7a5204f-1ddf-46d7-be47-d4e37293435f": "6f6e7641-65cc-4a0c-a76b-2ca181f112c4",
-    "node:investigate-1:completed": "24aaf7c4-a346-458a-be3b-4750c9047676"
+    "node:investigate-1:completed": "24aaf7c4-a346-458a-be3b-4750c9047676",
+    "node:close-1:queued": "5f59346e-843b-4a7a-83bd-372f809b9732"
   },
   "eventIds": {
     "204f33f3-da9d-4c81-975e-3ad4a53e38d4": true,
@@ -87,6 +95,7 @@
     "318c2ea4-8d79-4197-82ab-d61e6f5a845c": true,
     "01ab10d6-c7d8-4e87-8bce-d69ca7980b86": true,
     "6f6e7641-65cc-4a0c-a76b-2ca181f112c4": true,
-    "24aaf7c4-a346-458a-be3b-4750c9047676": true
+    "24aaf7c4-a346-458a-be3b-4750c9047676": true,
+    "5f59346e-843b-4a7a-83bd-372f809b9732": true
   }
 }
