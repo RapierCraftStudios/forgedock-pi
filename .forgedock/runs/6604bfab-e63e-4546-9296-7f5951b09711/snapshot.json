@@ -5,10 +5,10 @@
   "issueNumber": 94,
   "integrationBranch": "staging",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "blocked",
   "authorityMode": "run-scoped",
-  "sequence": 22,
-  "lastEventHash": "sha256:efe8430fa34a03b3b56c1dde59e2e8efb1e17cef73cb0be1cbaa737f9320d0aa",
+  "sequence": 23,
+  "lastEventHash": "sha256:c777a57bb04808fa1b14476775afa8792c2efdac0853bed53c2854d332d22744",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -148,7 +148,7 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "blocked",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 1",
           "evidence": [],
@@ -156,7 +156,9 @@
           "startedAt": "2026-08-26T18:17:14.570Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/6604bfab-e63e-4546-9296-7f5951b09711",
           "branch": "forge/issue-94-6604bfab",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "reason": "Trusted forge_run_review_panel timed out at pi-subagents RPC ping on all three native retry attempts at unchanged reviewed head `60b7b5701e595bf29704ba8c7d8a7ce2b8b91585`; manual reviewer launches are prohibited.",
+          "finishedAt": "2026-08-26T18:26:55.044Z"
         }
       ]
     }
@@ -185,7 +187,8 @@
     "phase:verify:1:start": "3b818856-e2e8-416a-9a6a-3fd83b95ef29",
     "phase:verify:1:complete": "1e12abb7-a524-4487-9836-e1022b62fa4a",
     "phase:review:1:queue": "9db7428e-e56a-4aff-8030-8130acf821e6",
-    "phase:review:1:start": "510cb643-3bd1-432e-b8b5-747f8b0273d5"
+    "phase:review:1:start": "510cb643-3bd1-432e-b8b5-747f8b0273d5",
+    "phase:review:1:block": "30e59731-1489-4646-aa36-13058733819f"
   },
   "eventIds": {
     "b5497a1a-24a4-4d24-8216-e9a75bbf6738": true,
@@ -209,7 +212,8 @@
     "3b818856-e2e8-416a-9a6a-3fd83b95ef29": true,
     "1e12abb7-a524-4487-9836-e1022b62fa4a": true,
     "9db7428e-e56a-4aff-8030-8130acf821e6": true,
-    "510cb643-3bd1-432e-b8b5-747f8b0273d5": true
+    "510cb643-3bd1-432e-b8b5-747f8b0273d5": true,
+    "30e59731-1489-4646-aa36-13058733819f": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
