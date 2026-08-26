@@ -5,10 +5,10 @@
   "issueNumber": 92,
   "integrationBranch": "staging",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "blocked",
   "authorityMode": "run-scoped",
-  "sequence": 22,
-  "lastEventHash": "sha256:4b3db7f63641d222a400f19d1507ec6e8aea87c0876c8550579bba0dacbaffd4",
+  "sequence": 23,
+  "lastEventHash": "sha256:ec71a28b81a7d02059b5e41c97a7b909e0c223f26d7397dc80be239f7b835d3f",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -156,7 +156,7 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "blocked",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 1",
           "evidence": [],
@@ -165,7 +165,9 @@
           "startedAt": "2026-08-26T10:49:08.128Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/58de845f-ff95-41f2-ad99-28f754518c40",
           "branch": "forge/issue-92-58de845f",
-          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4"
+          "baseSha": "1e2a635ff05080dda36c17efe409e86af4fe17c4",
+          "reason": "Review is blocked: the round-3 reviewer panel could not produce valid bound results because complete trusted diff coverage exceeded the review output limit, and PR head refresh did not observe the review-fix head.",
+          "finishedAt": "2026-08-26T11:18:06.180Z"
         }
       ]
     }
@@ -194,7 +196,8 @@
     "phase:verify:1:start": "dd1175ea-2caf-4d29-b942-8ae70e90f4e3",
     "phase:verify:1:complete": "8c546953-6e0f-4d77-88c7-3da784a0dafc",
     "phase:review:1:queue": "84cc40d8-3991-4152-baf7-3f57a19cd29a",
-    "phase:review:1:start": "86850011-788f-4531-b067-148309b27da7"
+    "phase:review:1:start": "86850011-788f-4531-b067-148309b27da7",
+    "phase:review:1:block": "e4047d34-bdb6-4af5-95c8-242066332699"
   },
   "eventIds": {
     "74b757d4-9b6a-4e8c-94a7-4cdfa78371cc": true,
@@ -218,7 +221,8 @@
     "dd1175ea-2caf-4d29-b942-8ae70e90f4e3": true,
     "8c546953-6e0f-4d77-88c7-3da784a0dafc": true,
     "84cc40d8-3991-4152-baf7-3f57a19cd29a": true,
-    "86850011-788f-4531-b067-148309b27da7": true
+    "86850011-788f-4531-b067-148309b27da7": true,
+    "e4047d34-bdb6-4af5-95c8-242066332699": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
