@@ -281,4 +281,8 @@ test("run replay trusts the journal and detects a stale snapshot", async () => {
   const states = await store.listRunStates();
   assert.deepEqual(states.map((state) => state.runId), [runId]);
   assert.equal(states[0]?.sequence, 2);
+  assert.deepEqual(
+    await store.listOrchestrationRunStates("orchestration-1", 1),
+    [],
+  );
 });

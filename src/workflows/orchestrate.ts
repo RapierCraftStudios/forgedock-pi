@@ -359,7 +359,11 @@ export class ForgeOrchestrationController {
     for (const lane of state.lanes) {
       if (lane.subagentRunId) providerRunIds.add(lane.subagentRunId);
     }
-    for (const durableState of await store.listRunStates(ctx.signal)) {
+    for (const durableState of await store.listOrchestrationRunStates(
+      state.orchestrationId,
+      state.leaseEpoch,
+      ctx.signal,
+    )) {
       if (!isOwnedActiveChildRun(durableState, state)) continue;
       childRunIds.add(durableState.runId);
       childStates.push(durableState);

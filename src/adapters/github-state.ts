@@ -207,6 +207,45 @@ export class GitHubStateBranchStore {
     return states;
   }
 
+  async listOrchestrationRunStates(
+    orchestrationId: string,
+    leaseEpoch: number,
+    signal?: AbortSignal,
+  ): Promise<RunState[]> {
+    assertRunId(orchestrationId);
+    if (!Number.isSafeInteger(leaseEpoch) || leaseEpoch < 1)
+      throw new TypeError("Lease epoch must be a positive safe integer.");
+    const tip = await this.getTip(signal);
+    if (!tip)
+      throw new GitHubApiError(
+        404,
+        `${this.#apiRoot}/git/ref/heads/${this.#branch}`,
+        { message: "State branch missing" },
+      );
+    const entries = await this.#readTree(tip, signal);
+    const states: RunState[] = [];
+    for (const runId of runIdsFromTree(entries)) {
+      const eventText = await this.#readPath(
+        entries,
+        runEventsPath(runId),
+        signal,
+      );
+      const events = parseEventJournal(eventText ?? "");
+      const created = events[0];
+      const payload = created?.payload as
+        | { orchestrationRunId?: unknown; leaseEpoch?: unknown }
+        | undefined;
+      if (
+        created?.type !== "run.created" ||
+        payload?.orchestrationRunId !== orchestrationId ||
+        payload.leaseEpoch !== leaseEpoch
+      )
+        continue;
+      states.push(replayRunEvents(events));
+    }
+    return states;
+  }
+
   async readRun(
     runId: string,
     signal?: AbortSignal,
