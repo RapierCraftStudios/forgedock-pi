@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "cancelled",
   "authorityMode": "run-scoped",
-  "sequence": 24,
-  "lastEventHash": "sha256:13cb758b12f730bd5b73991c841acf01bcb9599acfb9f22dc3bc61d4994afc83",
+  "sequence": 25,
+  "lastEventHash": "sha256:3134d6427cba797a2dfd21adea59c1b857ffa1fbec8b7b841c10c890222ab856",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -204,7 +204,8 @@
     "phase:review:1:queue": "ef8b22dc-8d85-45f1-a536-ae6fb4700ab4",
     "phase:review:1:start": "059915a0-c549-4f3c-8be5-1c5c5a0c0a6e",
     "phase:review:1:block": "819759e7-7964-4eb6-96de-eb2d5f6d6270",
-    "run:cancelled": "015e12bc-7263-4cb2-883f-2de424070b19"
+    "run:cancelled": "015e12bc-7263-4cb2-883f-2de424070b19",
+    "lease:release": "defa2493-49cc-43bd-b621-3ba72e41933c"
   },
   "eventIds": {
     "dea8530b-0f60-4fbf-8188-84e3df4b2153": true,
@@ -230,18 +231,8 @@
     "ef8b22dc-8d85-45f1-a536-ae6fb4700ab4": true,
     "059915a0-c549-4f3c-8be5-1c5c5a0c0a6e": true,
     "819759e7-7964-4eb6-96de-eb2d5f6d6270": true,
-    "015e12bc-7263-4cb2-883f-2de424070b19": true
-  },
-  "lease": {
-    "schema": "forgedock.repository-lease/v1",
-    "repository": "RapierCraftStudios/forgedock-pi",
-    "ownerRunId": "3b8e41dc-a26a-43eb-9e15-d8ce3eae0414",
-    "ownerSessionId": "01a03df0-e373-711b-a3e5-9ab8c2b86c61",
-    "epoch": 1,
-    "acquiredAt": "2026-08-26T12:01:57.905Z",
-    "lastHeartbeatAt": "2026-08-26T12:01:57.905Z",
-    "expiresAt": "2027-08-26T12:01:57.905Z",
-    "takeoverRequired": false
+    "015e12bc-7263-4cb2-883f-2de424070b19": true,
+    "defa2493-49cc-43bd-b621-3ba72e41933c": true
   },
   "cancellationReason": "Authorized final reset after gate reconciliation fix"
 }
