@@ -632,6 +632,21 @@ export class ForgeOrchestrationController {
 
         current = await this.#read(link, ctx.signal);
         if (current.state.lanes.every(isTerminalLane)) {
+          const reason = childCleanupReason(current.state);
+          if (reason) {
+            await this.#cancelDurableChildRuns(
+              current.store,
+              current.state,
+              ctx,
+              reason,
+            );
+            await this.#workOn.stopOrchestration(
+              link.orchestrationId,
+              ctx,
+              reason,
+            );
+            current = await this.#read(link, ctx.signal);
+          }
           const completed = await current.journal.complete({
             orchestrationId: link.orchestrationId,
             ...(ctx.signal ? { signal: ctx.signal } : {}),
@@ -697,6 +712,7 @@ export class ForgeOrchestrationController {
   ): Promise<{
     state: OrchestrationState;
     journal: OrchestrationJournal;
+    store: GitHubStateBranchStore;
   }> {
     const token = await resolveGitHubToken(
       this.#pi,
@@ -716,7 +732,11 @@ export class ForgeOrchestrationController {
       throw new Error(
         `Orchestration ${link.orchestrationId} is missing authoritative state.`,
       );
-    return { state: current.state, journal: new OrchestrationJournal(store) };
+    return {
+      state: current.state,
+      journal: new OrchestrationJournal(store),
+      store,
+    };
   }
 
   #syncLink(
@@ -800,6 +820,19 @@ function renderCompletion(state: OrchestrationState): string {
     .map(([status, count]) => `${status}=${count}`)
     .join(" · ");
   return `ForgeDock orchestration ${state.orchestrationId} finished: ${state.status}.\n${summary}`;
+}
+
+export function childCleanupReason(
+  state: Pick<OrchestrationState, "lanes">,
+): string | undefined {
+  if (!state.lanes.every(isTerminalLane)) return undefined;
+  const unsuccessful = state.lanes.filter(
+    (lane) => lane.status !== "merged" && lane.status !== "closed",
+  );
+  if (unsuccessful.length === 0) return undefined;
+  return `Orchestration is terminal with ${unsuccessful
+    .map((lane) => `#${lane.issueNumber}:${lane.status}`)
+    .join(", ")}; cancelling nonterminal child runs before lease release.`;
 }
 
 export function lifecycleMatchesForgeRun(

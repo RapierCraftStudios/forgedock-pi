@@ -42,7 +42,7 @@ Issue
 ### Implemented
 
 - `/forge:init`
-- `/forge:work-on <issue>`
+- `/forge:work-on <issue intent>`
 - `/forge:status`
 - Durable GitHub state journal and repository lease
 - Canonical issue phase reports
@@ -101,10 +101,29 @@ For an initial production pilot, set:
 }
 ```
 
+For monorepo-local checks, bind each tracked command to the package that owns its script:
+
+```json
+{
+  "verification": {
+    "commands": {
+      "web-test": {
+        "argv": ["npm", "test"],
+        "cwd": "web",
+        "required": true,
+        "timeoutMs": 600000
+      }
+    }
+  }
+}
+```
+
+`cwd` is optional and defaults to the repository root. It must be a safe repository-relative directory. ForgeDock statically preflights required executables and package scripts against the frozen integration worktree before launching a writer; absolute paths, traversal, missing scripts, and symlink escapes fail closed with the exact policy path to fix. Use `commands: {}` for CI-only verification.
+
 Then run:
 
 ```text
-/forge:work-on 123
+/forge:work-on "the oldest eligible workflow bug"
 /forge:status
 ```
 
@@ -114,7 +133,7 @@ Then run:
 |---|---|
 | `/forge:about` | Show extension, schema, and `pi-subagents` availability |
 | `/forge:init` | Create tracked policy and canonical labels |
-| `/forge:work-on <issue>` | Launch one issue through work-on and nested review |
+| `/forge:work-on <issue intent>` | Resolve exactly one issue from a number, URL, or natural-language selector, then launch work-on |
 | `/forge:status` | Show ForgeDock runs linked to the Pi session |
 
 ## GitHub audit trail

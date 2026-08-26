@@ -17,6 +17,7 @@ import {
   shouldBufferLaunchCompletion,
   similarFindingTitle,
   workflowLabelForNode,
+  workflowStageForNodeTransition,
 } from "../../src/workflows/work-on.ts";
 
 test("short reviewer aliases normalize to configured agent names", () => {
@@ -39,12 +40,51 @@ test("provider completion is buffered until its launch receipt is durably bound"
   assert.equal(shouldBufferLaunchCompletion(false, true), false);
 });
 
-test("bounded parent nodes project every terminal workflow label", () => {
-  assert.equal(workflowLabelForNode("decision", "awaiting-merge"), "workflow:awaiting-merge");
-  assert.equal(workflowLabelForNode("decision", "remediation-required"), "workflow:in-review");
+test("workflow transitions cover the complete canonical label lifecycle", () => {
+  assert.equal(
+    workflowStageForNodeTransition("resolve", "started"),
+    "investigation",
+  );
+  assert.equal(
+    workflowStageForNodeTransition("investigate", "completed", "confirmed"),
+    "readyToBuild",
+  );
+  for (const node of [
+    "plan",
+    "prepare-worktree",
+    "implement",
+    "verify",
+  ] as const)
+    assert.equal(workflowStageForNodeTransition(node, "started"), "build");
+  for (const node of [
+    "prepare-pr",
+    "review-correctness",
+    "review-security",
+    "review-join",
+    "ci",
+  ] as const)
+    assert.equal(workflowStageForNodeTransition(node, "started"), "review");
+  assert.equal(
+    workflowLabelForNode("decision", "awaiting-merge"),
+    "workflow:awaiting-merge",
+  );
+  assert.equal(
+    workflowLabelForNode("decision", "remediation-required"),
+    "workflow:building",
+  );
   assert.equal(workflowLabelForNode("merge", "merged"), "workflow:merged");
-  assert.equal(workflowLabelForNode("close", "closed", "invalid"), "workflow:invalid");
-  assert.equal(workflowLabelForNode("cleanup", "closed", "decomposed"), "workflow:decomposed");
+  assert.equal(
+    workflowLabelForNode("investigate", "invalid"),
+    "workflow:invalid",
+  );
+  assert.equal(
+    workflowLabelForNode("close", "closed", "invalid"),
+    "workflow:invalid",
+  );
+  assert.equal(
+    workflowLabelForNode("cleanup", "closed", "decomposed"),
+    "workflow:decomposed",
+  );
 });
 
 test("normal matching provider receipts are inspected instead of escalated", () => {

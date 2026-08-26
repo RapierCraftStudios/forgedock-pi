@@ -262,6 +262,7 @@ export class SubagentsRpcClient {
           `Run ID: ${input.runId}`,
           `Assigned worktree: ${input.worktreeRoot}`,
           `Branch: ${input.branch}`,
+          `Integration base: ${input.baseBranch}`,
           `Frozen base SHA: ${input.baseSha}`,
           ...(input.builderContract
             ? [

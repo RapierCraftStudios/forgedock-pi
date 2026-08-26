@@ -8,7 +8,12 @@ import {
   type RunEventPayload,
   type RunEventType,
 } from "../core/events.ts";
-import { acquireLease, isLeaseExpired, type RepositoryLease } from "../core/lease.ts";
+import {
+  acquireLease,
+  heartbeatLease,
+  isLeaseExpired,
+  type RepositoryLease,
+} from "../core/lease.ts";
 import { applyRunEvent, type RunState } from "../core/state.ts";
 
 const MAX_CAS_ATTEMPTS = 12;
@@ -122,6 +127,37 @@ export class RunJournal {
       }
     }
     throw new Error(`Unable to initialize run ${input.runId}.`);
+  }
+
+  async heartbeat(input: {
+    runId: string;
+    sessionId: string;
+    leaseSeconds: number;
+    now?: Date;
+    signal?: AbortSignal;
+  }): Promise<JournalSnapshot> {
+    const current = await this.#store.readRun(input.runId, input.signal);
+    if (!current.state || !current.lease)
+      throw new Error(`Standalone run ${input.runId} has no renewable lease.`);
+    if (current.state.leaseBinding)
+      throw new Error("Orchestration-bound child runs cannot heartbeat the repository lease.");
+    const now = input.now ?? new Date();
+    const lease = heartbeatLease(current.lease, {
+      repository: current.state.repository,
+      owner: { runId: input.runId, sessionId: input.sessionId },
+      epoch: current.lease.epoch,
+      now,
+      ttlSeconds: input.leaseSeconds,
+    });
+    return this.append({
+      runId: input.runId,
+      type: "lease.heartbeat",
+      payload: { lease },
+      idempotencyKey: `lease:heartbeat:${now.toISOString()}`,
+      sessionId: input.sessionId,
+      message: `Heartbeat ForgeDock run ${input.runId}`,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
   }
 
   async append(input: {

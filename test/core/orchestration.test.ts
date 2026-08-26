@@ -7,7 +7,10 @@ import {
   type OrchestrationEventType,
   type OrchestrationState,
 } from "../../src/core/orchestration.ts";
-import { lifecycleMatchesForgeRun } from "../../src/workflows/orchestrate.ts";
+import {
+  childCleanupReason,
+  lifecycleMatchesForgeRun,
+} from "../../src/workflows/orchestrate.ts";
 
 const orchestrationId = "orchestration-1";
 const repository = "owner/repo";
@@ -86,7 +89,8 @@ test("a falsely failed lane can rebind to its still-active child", () => {
       "lane.failed",
       {
         issueNumber: 2,
-        reason: "Completed work-on subagent did not return a schema-valid Forge result artifact.",
+        reason:
+          "Completed work-on subagent did not return a schema-valid Forge result artifact.",
       },
       "false-failure",
     ),
@@ -106,4 +110,46 @@ test("a falsely failed lane can rebind to its still-active child", () => {
   );
   assert.equal(state.lanes[0]?.status, "running");
   assert.equal(state.lanes[0]?.reason, undefined);
+});
+
+test("terminal failed lanes require child cleanup before lease release", () => {
+  let state = initialized();
+  assert.equal(childCleanupReason(state), undefined);
+  state = applyOrchestrationEvent(
+    state,
+    next(
+      state,
+      "lane.failed",
+      { issueNumber: 2, reason: "artifact identity mismatch" },
+      "fail-before-start",
+    ),
+  );
+  assert.match(childCleanupReason(state) ?? "", /#2:failed/);
+});
+
+test("successfully closed lanes do not request cancellation cleanup", () => {
+  let state = initialized();
+  state = applyOrchestrationEvent(
+    state,
+    next(
+      state,
+      "lane.started",
+      {
+        issueNumber: 2,
+        forgeRunId: "forge-run-2",
+        subagentRunId: "workflow-2",
+      },
+      "start-for-close",
+    ),
+  );
+  state = applyOrchestrationEvent(
+    state,
+    next(
+      state,
+      "lane.closed",
+      { issueNumber: 2, reason: "invalid issue" },
+      "closed",
+    ),
+  );
+  assert.equal(childCleanupReason(state), undefined);
 });

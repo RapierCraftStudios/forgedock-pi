@@ -98,10 +98,13 @@ test("issue projection is marker-idempotent and only adds missing labels", async
   assert.deepEqual(first.labelsAdded, ["workflow:investigating"]);
   assert.equal(transport.labels.has("workflow:investigating"), true);
 
+  transport.labels.add("priority:P1");
+  await projector.setWorkflowLabel(42, "workflow:merged");
   await projector.setWorkflowLabel(42, "workflow:merged");
   assert.equal(transport.labels.has("workflow:investigating"), false);
   assert.equal(transport.labels.has("workflow:merged"), true);
   assert.equal(transport.labels.has("bug"), true);
+  assert.equal(transport.labels.has("priority:P1"), true);
 });
 
 test("logical issue artifacts are idempotent by revision and supersede older revisions", async () => {

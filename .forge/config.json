@@ -11,7 +11,7 @@
   },
   "branches": {
     "integration": [
-      "dogfood"
+      "staging"
     ],
     "protected": [
       "main"
@@ -22,7 +22,7 @@
     "github": {
       "required": true,
       "requiredBranches": [
-        "dogfood"
+        "staging"
       ],
       "waitTimeoutMs": 1800000,
       "pollIntervalMs": 10000

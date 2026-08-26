@@ -47,6 +47,26 @@ test("tracked policy enables only non-protected integration auto-merge", () => {
   assert.equal(isProtectedBranch(policy, "main"), true);
   assert.equal(isGitHubCiRequired(policy, "main"), true);
   assert.equal(isGitHubCiRequired(policy, "staging"), false);
+  assert.equal(policy.verification.commands.test?.cwd, ".");
+});
+
+test("verification command cwd is portable, relative, and normalized", () => {
+  const withCwd = (cwd: string) => ({
+    ...structuredClone(rawPolicy),
+    verification: {
+      ...structuredClone(rawPolicy.verification),
+      commands: {
+        test: { ...rawPolicy.verification.commands.test, cwd },
+      },
+    },
+  });
+  assert.equal(
+    parseForgePolicy(withCwd("./web")).verification.commands.test?.cwd,
+    "web",
+  );
+
+  for (const cwd of ["/tmp", "C:/tmp", "\\\\server\\share", "../web", "web/../api", "web\\api", "bad\0path"])
+    assert.throws(() => parseForgePolicy(withCwd(cwd)), PolicyValidationError);
 });
 
 test("local overrides can only tighten tracked policy", () => {

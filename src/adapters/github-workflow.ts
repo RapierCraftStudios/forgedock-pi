@@ -437,6 +437,18 @@ export class GitHubWorkflowAdapter {
     return comment.id;
   }
 
+  async deleteBranch(branch: string, signal?: AbortSignal): Promise<void> {
+    if (!branch.trim()) throw new TypeError("branch must be non-empty");
+    const path = `${this.#apiRoot}/git/refs/heads/${encodeURIComponent(branch)}`;
+    const response = await this.#transport.request<unknown>({
+      method: "DELETE",
+      path,
+      ...(signal ? { signal } : {}),
+    });
+    if (response.status === 404) return;
+    requireGitHubSuccess(response, path, [204]);
+  }
+
   async closeIssue(issueNumber: number, signal?: AbortSignal): Promise<void> {
     assertNumber(issueNumber, "issue");
     const path = `${this.#apiRoot}/issues/${issueNumber}`;
