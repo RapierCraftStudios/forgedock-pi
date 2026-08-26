@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 16,
-  "lastEventHash": "sha256:51cb4749847e88166fbf453010f457663aef55399fc8be9c066cf96e2c7cefc5",
+  "sequence": 17,
+  "lastEventHash": "sha256:dfa9b6bbe84342ec52186f83951f0de69bf59e0f9777eb6752a702a0f3f28c95",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -110,16 +110,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Added bounded read-only package-manifest discovery and deterministic init selection.",
+            "Wired `/forge:init` to preserve valid commands, configure an unambiguous package test, or write explicit CI-only local verification.",
+            "Strengthened verification cwd control-directory checks and npm-family script token detection.",
+            "Added monorepo, ambiguity, invalid-policy, control-path, and parser regression tests; updated operator/design documentation.",
+            "Implementation commit is intentionally pending the required verify-phase `check` command."
+          ],
           "inputArtifactHash": "plan-1",
           "logicalNodeId": "implement-1",
           "startedAt": "2026-08-26T22:19:28.564Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/73eb948f-3d83-46a2-87d9-86aec0ce35d1",
           "branch": "forge/issue-94-73eb948f",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T22:26:52.614Z"
         }
       ]
     }
@@ -142,7 +149,8 @@
     "phase:prepare-worktree:1:start": "f1cdb89d-faa3-4066-8791-55b972c9efa5",
     "phase:prepare-worktree:1:complete": "e4944a95-bc71-4984-9341-35ee58de3b54",
     "phase:implement:1:queue": "33b91ade-8442-47ea-a7fb-cbbcb7dd807f",
-    "phase:implement:1:start": "031d2a10-c92e-4580-b41e-844ffd49e8d4"
+    "phase:implement:1:start": "031d2a10-c92e-4580-b41e-844ffd49e8d4",
+    "phase:implement:1:complete": "fc452fba-967b-41f1-8544-9b5ac7ab6e4f"
   },
   "eventIds": {
     "2e7b5622-0693-4b51-b96b-9d9a27598b35": true,
@@ -160,7 +168,8 @@
     "f1cdb89d-faa3-4066-8791-55b972c9efa5": true,
     "e4944a95-bc71-4984-9341-35ee58de3b54": true,
     "33b91ade-8442-47ea-a7fb-cbbcb7dd807f": true,
-    "031d2a10-c92e-4580-b41e-844ffd49e8d4": true
+    "031d2a10-c92e-4580-b41e-844ffd49e8d4": true,
+    "fc452fba-967b-41f1-8544-9b5ac7ab6e4f": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
