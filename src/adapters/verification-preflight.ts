@@ -37,6 +37,10 @@ export async function preflightRequiredVerificationCommands(
   for (const [name, command] of Object.entries(commands)) {
     if (!command.required) continue;
     const basePath = `${configPath} verification.commands.${name}`;
+    assertNoPackageManagerLocationOptions(
+      command.argv,
+      `${basePath}.argv`,
+    );
     const cwd = await resolveVerificationCommandDirectory(
       canonicalRoot,
       command.cwd,
@@ -116,9 +120,59 @@ async function executableAvailable(
   return false;
 }
 
+const PACKAGE_MANAGER_LOCATION_OPTIONS: Readonly<
+  Record<string, readonly string[]>
+> = {
+  npm: ["--prefix", "-C", "--workspace", "-w", "--workspaces"],
+  pnpm: ["--dir", "-C", "--filter", "-F", "--workspace-root"],
+  yarn: ["--cwd"],
+  bun: ["--cwd", "--filter"],
+};
+
+export function findPackageManagerLocationOption(
+  argv: readonly string[],
+): string | undefined {
+  const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
+  const options = Object.prototype.hasOwnProperty.call(
+    PACKAGE_MANAGER_LOCATION_OPTIONS,
+    manager,
+  )
+    ? PACKAGE_MANAGER_LOCATION_OPTIONS[manager]
+    : undefined;
+  if (!options) return undefined;
+  for (const argument of argv.slice(1)) {
+    if (argument === "--") break;
+    for (const option of options) {
+      if (
+        argument === option ||
+        argument.startsWith(`${option}=`) ||
+        ((option === "-C" || option === "-w" || option === "-F") &&
+          argument.startsWith(option) &&
+          argument.length > option.length)
+      ) {
+        return argument;
+      }
+    }
+  }
+  return undefined;
+}
+
+export function assertNoPackageManagerLocationOptions(
+  argv: readonly string[],
+  path: string,
+): void {
+  const option = findPackageManagerLocationOption(argv);
+  if (option)
+    throw new VerificationPreflightError(
+      path,
+      `package-manager location option '${option}' is not allowed; configure the bound cwd instead`,
+    );
+}
+
 function packageScriptName(argv: readonly string[]): string | undefined {
   const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
-  if (!["npm", "pnpm", "yarn", "bun"].includes(manager)) return undefined;
+  if (!Object.prototype.hasOwnProperty.call(PACKAGE_MANAGER_LOCATION_OPTIONS, manager))
+    return undefined;
   const command = argv[1];
   if (command === "test") return "test";
   if (command === "run" || command === "run-script") {

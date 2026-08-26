@@ -12,6 +12,8 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  assertNoPackageManagerLocationOptions,
+  findPackageManagerLocationOption,
   preflightRequiredVerificationCommands,
   resolveVerificationCommandDirectory,
   VerificationPreflightError,
@@ -79,6 +81,56 @@ test("required monorepo verification preflight selects the package cwd", async (
       testFixture.root,
       { test: command("web") },
       { path: testFixture.path },
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
+test("package-manager location options cannot bypass the bound cwd", async () => {
+  const testFixture = await fixture();
+  try {
+    for (const argv of [
+      ["npm", "--prefix", "web", "test"],
+      ["npm", "--prefix=web", "test"],
+      ["npm", "-C", "web", "test"],
+      ["npm", "-Cweb", "test"],
+      ["npm", "--workspace", "web", "test"],
+      ["npm", "-wweb", "test"],
+    ]) {
+      await assert.rejects(
+        preflightRequiredVerificationCommands(
+          testFixture.root,
+          { test: command(".", { argv }) },
+          { path: testFixture.path },
+        ),
+        (error: unknown) =>
+          error instanceof VerificationPreflightError &&
+          error.path === ".forge/config.json verification.commands.test.argv" &&
+          /location option/.test(error.message),
+      );
+    }
+
+    assert.equal(
+      findPackageManagerLocationOption([
+        "npm",
+        "run",
+        "test",
+        "--",
+        "--prefix",
+        "web",
+      ]),
+      undefined,
+    );
+    assert.doesNotThrow(() =>
+      assertNoPackageManagerLocationOptions(
+        ["npm", "run", "test", "--", "--prefix", "web"],
+        "verification.argv",
+      ),
+    );
+    assert.equal(
+      findPackageManagerLocationOption(["node", "--prefix", "web"]),
+      undefined,
     );
   } finally {
     await testFixture.cleanup();
