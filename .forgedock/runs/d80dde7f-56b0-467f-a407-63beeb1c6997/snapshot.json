@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 18,
-  "lastEventHash": "sha256:3aa94b36777f52033628a10d0d6bb69b61f45acd565efdb8092b8995ebf6a41d",
+  "sequence": 19,
+  "lastEventHash": "sha256:d12a8ad7164a7ac21702ea5240c9a21732e2c079e511a4ff02418c2d8beb1828",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -133,11 +133,16 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "resume verify attempt 1",
           "evidence": [],
-          "inputArtifactHash": "sha256:implement-114-regression-tests"
+          "inputArtifactHash": "sha256:implement-114-regression-tests",
+          "logicalNodeId": "work-on-verify",
+          "startedAt": "2026-08-26T19:28:43.609Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/d80dde7f-56b0-467f-a407-63beeb1c6997",
+          "branch": "forge/issue-114-d80dde7f",
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
         }
       ]
     }
@@ -162,7 +167,8 @@
     "phase:implement:1:queue": "9e0a7bfd-affa-4b53-8267-c4b002c9fc73",
     "phase:implement:1:start": "77f55bc9-b4c4-4720-b414-2d0befbfe6c3",
     "phase:implement:1:complete": "34c44b59-bb3c-4a13-8eed-1ef48e9cb5ec",
-    "phase:verify:1:queue": "c5ca0f5e-3eb9-47ed-a441-5fed04bd725a"
+    "phase:verify:1:queue": "c5ca0f5e-3eb9-47ed-a441-5fed04bd725a",
+    "phase:verify:1:start": "17a4c6d3-350f-49c2-9b1b-0b0ab512371a"
   },
   "eventIds": {
     "533c2019-3105-4632-818c-999aaa247610": true,
@@ -182,7 +188,8 @@
     "9e0a7bfd-affa-4b53-8267-c4b002c9fc73": true,
     "77f55bc9-b4c4-4720-b414-2d0befbfe6c3": true,
     "34c44b59-bb3c-4a13-8eed-1ef48e9cb5ec": true,
-    "c5ca0f5e-3eb9-47ed-a441-5fed04bd725a": true
+    "c5ca0f5e-3eb9-47ed-a441-5fed04bd725a": true,
+    "17a4c6d3-350f-49c2-9b1b-0b0ab512371a": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
