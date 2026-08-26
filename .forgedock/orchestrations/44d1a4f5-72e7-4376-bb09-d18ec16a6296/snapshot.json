@@ -3,11 +3,11 @@
   "orchestrationId": "44d1a4f5-72e7-4376-bb09-d18ec16a6296",
   "repository": "RapierCraftStudios/forgedock-pi",
   "integrationBranch": "dogfood",
-  "status": "running",
+  "status": "failed",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 15,
-  "lastEventHash": "sha256:c99583166f42106cfc5220c8e7aa7d5a7515eae02c407165ce608fab14994682",
+  "sequence": 16,
+  "lastEventHash": "sha256:27606d8f5013ae77a61bd66eae5aa43ed7e22be5fee3e3aed24c9ea863fd78b1",
   "lanes": [
     {
       "issueNumber": 92,
@@ -34,7 +34,9 @@
     "lease:heartbeat:2026-08-26T03:09:51.047Z": "fafe52c0-ae99-430d-ab47-d23f70c9ca3f",
     "lease:heartbeat:2026-08-26T03:10:51.160Z": "438f6ee8-771b-4bdb-946b-92aaaedff527",
     "lease:heartbeat:2026-08-26T03:11:51.241Z": "1dbdbe88-80a0-453e-95e4-09cd0ad5c153",
-    "lane:92:failed": "584c0dd6-c233-4afb-b1ca-f082c0e146e6"
+    "lane:92:failed": "584c0dd6-c233-4afb-b1ca-f082c0e146e6",
+    "orchestration:complete": "bb7f76b1-0a69-4d9c-a4f0-8d494943beb5"
   },
-  "createdAt": "2026-08-26T02:59:49.719Z"
+  "createdAt": "2026-08-26T02:59:49.719Z",
+  "completedAt": "2026-08-26T03:12:33.457Z"
 }
