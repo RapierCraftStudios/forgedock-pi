@@ -23,17 +23,7 @@ export default function forgedockPiExtension(pi: ExtensionAPI): void {
     await orchestrator.resume(ctx);
   });
 
-  pi.on("session_shutdown", async (event, ctx) => {
-    if (event.reason !== "reload") {
-      await orchestrator.shutdown(
-        ctx,
-        `Owning Pi session ended (${event.reason}); release the repository lease.`,
-      );
-      await controller.shutdownStandalone(
-        ctx,
-        `Owning Pi session ended (${event.reason}); cancel direct work-on and release its lease.`,
-      );
-    }
+  pi.on("session_shutdown", () => {
     orchestrator.dispose();
     controller.dispose();
     for (const registration of agentRegistrations) registration.dispose();

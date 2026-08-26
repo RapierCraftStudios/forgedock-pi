@@ -8,6 +8,15 @@ test("agent runtime no longer imports workflow-layer authority", async () => {
   assert.match(childRuntime, /from "\.\.\/adapters\/run-journal\.ts"/);
 });
 
+test("session shutdown detaches active runs instead of cancelling durable work", async () => {
+  const entrypoint = await readFile("src/index.ts", "utf8");
+  assert.match(entrypoint, /pi\.on\("session_shutdown"/);
+  assert.doesNotMatch(entrypoint, /shutdownStandalone/);
+  assert.doesNotMatch(entrypoint, /orchestrator\.shutdown/);
+  assert.match(entrypoint, /controller\.dispose\(\)/);
+  assert.match(entrypoint, /orchestrator\.dispose\(\)/);
+});
+
 test("authority-sensitive seams are source-discoverable modules", async () => {
   for (const path of [
     "src/agents/child-containment.ts",
