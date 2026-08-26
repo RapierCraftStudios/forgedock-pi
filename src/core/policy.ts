@@ -2,6 +2,7 @@ export const FORGEDOCK_CONFIG_SCHEMA = "forgedock.config/v1" as const;
 
 export interface VerificationCommandPolicy {
   argv: readonly string[];
+  workingDirectory: string;
   required: boolean;
   timeoutMs: number;
 }
@@ -77,6 +78,33 @@ function boolean(value: unknown, path: string): boolean {
   return value;
 }
 
+export function isSafeWorkingDirectory(value: string): boolean {
+  if (
+    !value ||
+    value !== value.trim() ||
+    value.includes("\0") ||
+    value.startsWith("/") ||
+    value.startsWith("\\") ||
+    /^[A-Za-z]:/.test(value)
+  ) {
+    return false;
+  }
+  return value
+    .split(/[\\/]/)
+    .every((segment) => segment.length > 0 && segment !== "..");
+}
+
+function workingDirectory(value: unknown, path: string): string {
+  const directory = string(value, path);
+  if (!isSafeWorkingDirectory(directory)) {
+    throw new PolicyValidationError(
+      path,
+      "must be a repository-relative path without parent traversal",
+    );
+  }
+  return directory;
+}
+
 function integer(
   value: unknown,
   path: string,
@@ -123,6 +151,13 @@ function parseVerificationCommands(
     );
     commands[name] = {
       argv,
+      workingDirectory:
+        command.workingDirectory === undefined
+          ? "."
+          : workingDirectory(
+              command.workingDirectory,
+              `verification.commands.${name}.workingDirectory`,
+            ),
       required: boolean(
         command.required,
         `verification.commands.${name}.required`,
@@ -134,12 +169,6 @@ function parseVerificationCommands(
         3_600_000,
       ),
     };
-  }
-  if (Object.keys(commands).length === 0) {
-    throw new PolicyValidationError(
-      "verification.commands",
-      "must define at least one approved command",
-    );
   }
   return commands;
 }

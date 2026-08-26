@@ -31,12 +31,59 @@ const rawPolicy = {
   subagents: { maxConcurrent: 4, maxDepth: 2 },
 };
 
+test("tracked policy validates and defaults verification working directories", () => {
+  const policy = parseForgePolicy(rawPolicy);
+  assert.equal(policy.verification.commands.test?.workingDirectory, ".");
+  const packagePolicy = parseForgePolicy({
+    ...rawPolicy,
+    verification: {
+      commands: {
+        test: {
+          argv: ["npm", "test"],
+          workingDirectory: "web",
+          required: true,
+          timeoutMs: 600_000,
+        },
+      },
+    },
+  });
+  assert.equal(
+    packagePolicy.verification.commands.test?.workingDirectory,
+    "web",
+  );
+  assert.throws(
+    () =>
+      parseForgePolicy({
+        ...rawPolicy,
+        verification: {
+          commands: {
+            test: {
+              argv: ["npm", "test"],
+              workingDirectory: "../web",
+              required: true,
+              timeoutMs: 600_000,
+            },
+          },
+        },
+      }),
+    PolicyValidationError,
+  );
+});
+
 test("tracked policy enables only non-protected integration auto-merge", () => {
   const policy = parseForgePolicy(rawPolicy);
   assert.equal(canAutoMerge(policy, "staging"), true);
   assert.equal(canAutoMerge(policy, "milestone/auth"), true);
   assert.equal(canAutoMerge(policy, "main"), false);
   assert.equal(isProtectedBranch(policy, "main"), true);
+});
+
+test("an empty verification command map explicitly delegates to CI", () => {
+  const policy = parseForgePolicy({
+    ...rawPolicy,
+    verification: { commands: {} },
+  });
+  assert.deepEqual(policy.verification.commands, {});
 });
 
 test("local overrides can only tighten tracked policy", () => {

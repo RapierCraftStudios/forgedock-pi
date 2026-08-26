@@ -23,7 +23,7 @@ ForgeDock Pi is designed so that:
 
 - subagents edit only an assigned worktree;
 - reviewers are read-only and cannot recursively delegate;
-- models cannot select arbitrary verification commands;
+- models cannot select arbitrary verification commands; required local commands are preflighted without executing repository scripts;
 - GitHub writes and merges pass deterministic policy checks;
 - protected branches are not auto-merged;
 - required checks, reviewers, audit artifacts, SHAs, and leases fail closed.
@@ -39,4 +39,4 @@ Until production hardening is complete:
 3. Use a dedicated GitHub identity with least-privilege repository access.
 4. Run untrusted repositories inside a container or VM.
 5. Review `.forge/config.json` from the trusted base revision.
-6. Do not expose provider, cloud, SSH, package-registry, or production credentials to child environments.
+6. Do not expose provider, cloud, SSH, package-registry, or production credentials to child environments. Configure monorepo checks with a repository-relative `workingDirectory`; an empty local command map explicitly delegates verification to GitHub CI.

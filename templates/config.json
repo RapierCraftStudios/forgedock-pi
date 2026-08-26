@@ -18,6 +18,7 @@
     "commands": {
       "test": {
         "argv": ["npm", "test"],
+        "workingDirectory": ".",
         "required": true,
         "timeoutMs": 600000
       }

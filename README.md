@@ -87,7 +87,7 @@ From a trusted GitHub repository:
 /forge:init
 ```
 
-This creates `.forge/config.json` and reconciles canonical workflow labels. Review and commit that policy before running work.
+This creates `.forge/config.json` and reconciles canonical workflow labels. `/forge:init` selects `npm test` only when a package manifest actually defines `scripts.test`; for a monorepo it records the unique package-relative working directory. If no unique runnable package is found, it leaves local verification empty as an explicit GitHub-CI-only policy. Review and commit that policy before running work.
 
 For an initial production pilot, set:
 
@@ -157,7 +157,7 @@ npm install
 npm run check
 ```
 
-The check suite runs strict TypeScript validation and unit/integration tests.
+The check suite runs strict TypeScript validation and unit/integration tests. Before any work-on writer starts, required local commands are checked without executing repository scripts: the executable, package-relative working directory, package manifest, and npm script must be present. A failing preflight identifies the exact `.forge/config.json` command path and suggests `/forge:init` or a config correction.
 
 To run the disposable GitHub E2E harness:
 

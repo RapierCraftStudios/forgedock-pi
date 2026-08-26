@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
-import { mkdir, realpath, writeFile } from "node:fs/promises";
+import { mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import {
   basename,
@@ -30,6 +30,7 @@ import {
   type RunEventType,
   type RunPhase,
 } from "../core/events.ts";
+import { isSafeWorkingDirectory } from "../core/policy.ts";
 import { applyRunEvent } from "../core/state.ts";
 import {
   FORGE_WORK_ON_OUTPUT_SCHEMA,
@@ -53,6 +54,7 @@ const MAX_OUTPUT_BYTES = 50 * 1024;
 
 interface BoundVerificationCommand {
   argv: readonly string[];
+  workingDirectory: string;
   required: boolean;
   timeoutMs: number;
 }
@@ -424,14 +426,34 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           `Verification command '${params.name}' has an empty argv.`,
         );
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const workingDirectory = command.workingDirectory ?? ".";
+      if (!isSafeWorkingDirectory(workingDirectory))
+        throw new Error(
+          `Verification command '${params.name}' has an unsafe working directory.`,
+        );
+      const requestedCwd = resolve(root, workingDirectory);
+      if (!isPathWithin(root, requestedCwd))
+        throw new Error(
+          `Verification command '${params.name}' resolves outside the assigned worktree.`,
+        );
+      let cwd: string;
+      try {
+        cwd = await realpath(requestedCwd);
+        if (!isPathWithin(root, cwd) || !(await stat(cwd)).isDirectory())
+          throw new Error("not an assigned worktree directory");
+      } catch (error) {
+        throw new Error(
+          `Verification command '${params.name}' working directory is unavailable: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
       onUpdate?.({
         content: [
           { type: "text", text: `Running approved check ${params.name}...` },
         ],
-        details: { name: params.name, status: "running" },
+        details: { name: params.name, status: "running", cwd },
       });
       const result = await runProcess(program, args, {
-        cwd: root,
+        cwd,
         timeoutMs: command.timeoutMs,
         env: safeEnvironment(binding.runId),
         ...(signal ? { signal } : {}),
@@ -455,6 +477,8 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         details: {
           name: params.name,
           required: command.required,
+          workingDirectory,
+          cwd,
           status,
           exitCode: result.exitCode,
           signal: result.signal,
@@ -802,7 +826,10 @@ function readBinding(): ForgeChildBinding {
   const verificationCommands: Record<string, BoundVerificationCommand> = {};
   for (const [name, commandValue] of Object.entries(commands)) {
     validateBoundCommand(name, commandValue);
-    verificationCommands[name] = commandValue;
+    verificationCommands[name] = {
+      ...commandValue,
+      workingDirectory: commandValue.workingDirectory ?? ".",
+    };
   }
   return {
     runId: value.runId as string,
@@ -836,6 +863,14 @@ function validateBoundCommand(
       `Verification binding ${name}.argv must be a non-empty string array.`,
     );
   }
+  if (
+    command.workingDirectory !== undefined &&
+    (typeof command.workingDirectory !== "string" ||
+      !isSafeWorkingDirectory(command.workingDirectory))
+  )
+    throw new Error(
+      `Verification binding ${name}.workingDirectory must be a safe repository-relative path.`,
+    );
   if (typeof command.required !== "boolean")
     throw new Error(`Verification binding ${name}.required must be boolean.`);
   if (

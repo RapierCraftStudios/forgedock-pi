@@ -1,0 +1,7 @@
+{
+  "name": "forgedock-monorepo-web-fixture",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  }
+}
