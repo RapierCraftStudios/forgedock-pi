@@ -37,8 +37,6 @@ export function workflowLabelForCheckpoint(params: {
   if (params.phase === "investigate" && params.action === "complete") {
     if (params.report?.includes("**Verdict**: INVALID"))
       return WORKFLOW_LABEL_BY_STAGE.invalid;
-    if (params.report?.includes("**Verdict**: DECOMPOSED"))
-      return WORKFLOW_LABEL_BY_STAGE.decomposed;
     return WORKFLOW_LABEL_BY_STAGE.readyToBuild;
   }
   if (
@@ -55,12 +53,6 @@ export function workflowLabelForCheckpoint(params: {
     (params.action === "start" || params.action === "complete")
   ) {
     return WORKFLOW_LABEL_BY_STAGE.review;
-  }
-  if (params.phase === "merge" && params.action === "start") {
-    return WORKFLOW_LABEL_BY_STAGE.awaitingMerge;
-  }
-  if (params.phase === "merge" && params.action === "complete") {
-    return WORKFLOW_LABEL_BY_STAGE.merged;
   }
   return undefined;
 }

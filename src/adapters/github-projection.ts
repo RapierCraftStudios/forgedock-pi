@@ -172,17 +172,29 @@ export class GitHubIssueProjector {
       ...(signal ? { signal } : {}),
     });
     const issue = requireGitHubSuccess(issueResponse, issuePath, [200]);
-    const labels = [
-      ...issue.labels
-        .map((label) => label.name)
-        .filter((label) => !label.startsWith("workflow:")),
-      workflowLabel,
-    ];
     const labelsPath = `${this.#apiRoot}/issues/${issueNumber}/labels`;
+    const existingWorkflowLabels = issue.labels
+      .map((label) => label.name)
+      .filter(
+        (label) =>
+          label.startsWith("workflow:") && label !== workflowLabel,
+      );
+
+    for (const label of existingWorkflowLabels) {
+      const labelPath = `${labelsPath}/${encodeURIComponent(label)}`;
+      const response = await this.#transport.request<IssueLabel[]>({
+        method: "DELETE",
+        path: labelPath,
+        ...(signal ? { signal } : {}),
+      });
+      if (response.status !== 404)
+        requireGitHubSuccess(response, labelPath, [200]);
+    }
+
     const response = await this.#transport.request<IssueLabel[]>({
-      method: "PUT",
+      method: "POST",
       path: labelsPath,
-      body: { labels },
+      body: { labels: [workflowLabel] },
       ...(signal ? { signal } : {}),
     });
     requireGitHubSuccess(response, labelsPath, [200]);

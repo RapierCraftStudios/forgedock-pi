@@ -22,7 +22,7 @@ import {
 import { materializeForgeAgents } from "../agents/materialize.ts";
 import {
   checkPreMergeAuditTrail,
-  workflowLabelForCheckpoint,
+  WORKFLOW_LABEL_BY_STAGE,
 } from "../core/artifact-protocol.ts";
 import {
   canAutoMerge,
@@ -305,16 +305,6 @@ export class ForgeWorkOnController {
       sessionId,
       ctx.signal,
     );
-    const awaitingMergeLabel = workflowLabelForCheckpoint({
-      phase: "merge",
-      action: "start",
-    });
-    if (awaitingMergeLabel)
-      await projector.setWorkflowLabel(
-        link.issueNumber,
-        awaitingMergeLabel,
-        ctx.signal,
-      );
     await this.#git.push(
       link.prepared.worktreePath,
       link.prepared.branch,
@@ -429,6 +419,12 @@ export class ForgeWorkOnController {
       return;
     }
 
+    await setWorkflowLabelWithRetry(
+      projector,
+      link.issueNumber,
+      WORKFLOW_LABEL_BY_STAGE.awaitingMerge,
+      ctx.signal,
+    );
     const merged = await github.mergePullRequest({
       pullNumber: pull.number,
       expectedHeadSha: result.review.headSha,
@@ -455,16 +451,19 @@ export class ForgeWorkOnController {
       undefined,
       [merged.sha],
     );
-    const mergedLabel = workflowLabelForCheckpoint({
-      phase: "merge",
-      action: "complete",
-    });
-    if (mergedLabel)
-      await projector.setWorkflowLabel(
+    try {
+      await setWorkflowLabelWithRetry(
+        projector,
         link.issueNumber,
-        mergedLabel,
+        WORKFLOW_LABEL_BY_STAGE.merged,
         ctx.signal,
       );
+    } catch (error) {
+      ctx.ui.notify(
+        `ForgeDock issue #${link.issueNumber} merged, but workflow label projection will retry during terminal reconciliation: ${errorMessage(error)}`,
+        "warning",
+      );
+    }
     await postReviewCompletionArtifacts({
       github,
       projector,
@@ -594,11 +593,19 @@ export class ForgeWorkOnController {
         markdown: `## ForgeDock Pi complete\n\nPR #${pull.number} merged into \`${link.prepared.baseBranch}\`.\nNested review completed at \`${result.review.headSha}\`.\nRun: \`${link.forgeRunId}\`.`,
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
-      await projector.setWorkflowLabel(
-        link.issueNumber,
-        "workflow:merged",
-        ctx.signal,
-      );
+      try {
+        await setWorkflowLabelWithRetry(
+          projector,
+          link.issueNumber,
+          WORKFLOW_LABEL_BY_STAGE.merged,
+          ctx.signal,
+        );
+      } catch (error) {
+        ctx.ui.notify(
+          `ForgeDock issue #${link.issueNumber} completed, but workflow:merged projection failed: ${errorMessage(error)}`,
+          "warning",
+        );
+      }
     }
 
     link.status = "completed";
@@ -875,6 +882,30 @@ async function resolveMergeability(
     pull = await github.getPullRequest(pullNumber, signal);
   }
   return pull;
+}
+
+async function setWorkflowLabelWithRetry(
+  projector: GitHubIssueProjector,
+  issueNumber: number,
+  workflowLabel: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await projector.setWorkflowLabel(issueNumber, workflowLabel, signal);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3)
+        await new Promise((resolvePromise) =>
+          setTimeout(resolvePromise, attempt * 250),
+        );
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(String(lastError));
 }
 
 function chooseIntegrationBranch(policy: ForgePolicy): string {

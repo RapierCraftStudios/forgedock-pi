@@ -114,14 +114,10 @@ test("checkpoint labels cover the complete workflow lifecycle", () => {
   );
   assert.equal(
     workflowLabelForCheckpoint({ phase: "merge", action: "start" }),
-    WORKFLOW_LABEL_BY_STAGE.awaitingMerge,
+    undefined,
   );
   assert.equal(
     workflowLabelForCheckpoint({ phase: "merge", action: "complete" }),
-    WORKFLOW_LABEL_BY_STAGE.merged,
-  );
-  assert.equal(
-    workflowLabelForCheckpoint({ phase: "merge", action: "queue" }),
     undefined,
   );
 });

@@ -41,6 +41,13 @@ class ProjectionTransport implements GitHubTransport {
     ) {
       data = { labels: [...this.labels].map((name) => ({ name })) };
     } else if (
+      request.method === "DELETE" &&
+      request.path.includes("/labels/")
+    ) {
+      const encodedLabel = request.path.slice(request.path.lastIndexOf("/") + 1);
+      this.labels.delete(decodeURIComponent(encodedLabel));
+      data = [...this.labels].map((name) => ({ name }));
+    } else if (
       (request.method === "POST" || request.method === "PUT") &&
       request.path.endsWith("/labels")
     ) {
