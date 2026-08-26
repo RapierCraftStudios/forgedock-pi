@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 18,
-  "lastEventHash": "sha256:2d2b024504e2efcfd5ddc52fe04a826e7478d2306aa1b4026eae8073bf13ffe0",
+  "sequence": 19,
+  "lastEventHash": "sha256:97f9d6c510734478f49ce88b9aeb08bb563befbdf0508e5145249a00e17468c5",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -141,11 +141,16 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "resume verify attempt 1",
           "evidence": [],
-          "inputArtifactHash": "sha256:implementation-issue-112-npm-location-guard"
+          "inputArtifactHash": "sha256:implementation-issue-112-npm-location-guard",
+          "logicalNodeId": "work-on-verify",
+          "startedAt": "2026-08-26T18:29:41.209Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/2b489e88-6c14-40fe-869e-0573839f9bb0",
+          "branch": "forge/issue-112-2b489e88",
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
         }
       ]
     }
@@ -170,7 +175,8 @@
     "phase:implement:1:queue": "7dceccf3-7ea4-4504-8ee5-f38f11df093d",
     "phase:implement:1:start": "0f88f77b-bd29-45c1-956d-2cd0de2a0361",
     "phase:implement:1:complete": "a6bf9f7b-0015-4110-b237-ac389cf0ae09",
-    "phase:verify:1:queue": "7c8b842b-2a9b-4b59-9bff-3359b297f31b"
+    "phase:verify:1:queue": "7c8b842b-2a9b-4b59-9bff-3359b297f31b",
+    "phase:verify:1:start": "5ca100aa-19f2-4d43-8622-370d14c7ee64"
   },
   "eventIds": {
     "f349b52b-b125-43dd-b940-b6b8f8bfd776": true,
@@ -190,7 +196,8 @@
     "7dceccf3-7ea4-4504-8ee5-f38f11df093d": true,
     "0f88f77b-bd29-45c1-956d-2cd0de2a0361": true,
     "a6bf9f7b-0015-4110-b237-ac389cf0ae09": true,
-    "7c8b842b-2a9b-4b59-9bff-3359b297f31b": true
+    "7c8b842b-2a9b-4b59-9bff-3359b297f31b": true,
+    "5ca100aa-19f2-4d43-8622-370d14c7ee64": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
