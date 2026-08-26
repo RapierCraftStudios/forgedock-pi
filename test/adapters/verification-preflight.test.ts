@@ -85,6 +85,42 @@ test("required monorepo verification preflight selects the package cwd", async (
   }
 });
 
+test("direct npm test aliases validate the package test script", async () => {
+  const testFixture = await fixture();
+  try {
+    for (const alias of ["test", "t", "tst"]) {
+      await assert.rejects(
+        preflightRequiredVerificationCommands(
+          testFixture.root,
+          {
+            test: command(".", {
+              argv: ["npm", alias],
+            }),
+          },
+          { path: testFixture.path, configPath: "/repo/.forge/config.json" },
+        ),
+        (error: unknown) =>
+          error instanceof VerificationPreflightError &&
+          error.path === "/repo/.forge/config.json verification.commands.test.argv" &&
+          /no 'test' script/.test(error.message),
+        `npm ${alias} must validate the selected package script`,
+      );
+
+      await preflightRequiredVerificationCommands(
+        testFixture.root,
+        {
+          test: command("web", {
+            argv: ["npm", alias],
+          }),
+        },
+        { path: testFixture.path },
+      );
+    }
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
 test("preflight checks executable availability without running the command", async () => {
   const testFixture = await fixture();
   try {
