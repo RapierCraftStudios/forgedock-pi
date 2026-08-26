@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:ec9c18a68933cee955a3d5f2a004dcbc8b65cc890146230508345233e97a9af0",
+  "sequence": 8,
+  "lastEventHash": "sha256:324a21210249a6576c0020947808c31b3f09dd62f517ec3ffb7f211441c66ba0",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -38,15 +38,21 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/verification-preflight.ts` resolves the configured cwd exactly and does not search nested packages, but currently throws for non-string root `scripts.test` values.",
+            "Existing regression coverage proves a missing root test script is rejected while an explicitly configured nested package is accepted; it does not cover root `scripts.test` object/array metadata.",
+            "`src/workflows/work-on.ts` passes the original policy verification commands into child bindings and reloads policy on recovery, so a CI-only decision would otherwise be lost after startup.",
+            "`src/adapters/subagents.ts` already treats an empty verification command map as valid CI-only mode; this is the propagation seam to reuse."
+          ],
           "logicalNodeId": "investigate",
           "startedAt": "2026-08-26T23:05:38.341Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/88f4f526-ab31-42d2-9748-d70dd2faabd1",
           "branch": "forge/issue-114-88f4f526",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T23:11:32.551Z"
         }
       ]
     }
@@ -60,7 +66,8 @@
     "phase:resolve:1:start": "aa63af53-2599-4ab3-b421-74579899ec74",
     "phase:resolve:1:complete": "ac3bbf79-c376-47e9-9f6a-ab7f4d9c6e17",
     "phase:investigate:1:queue": "8182fe91-0a8d-4fe4-8e21-09d1978b8fe7",
-    "phase:investigate:1:start": "507edd57-9833-4e4b-b6cc-27ca39cca16c"
+    "phase:investigate:1:start": "507edd57-9833-4e4b-b6cc-27ca39cca16c",
+    "phase:investigate:1:complete": "d52ff165-94a9-4e0e-bd52-f8cb6bbb7bf4"
   },
   "eventIds": {
     "8164e76b-1828-4998-af32-c413ea50fb97": true,
@@ -69,7 +76,8 @@
     "aa63af53-2599-4ab3-b421-74579899ec74": true,
     "ac3bbf79-c376-47e9-9f6a-ab7f4d9c6e17": true,
     "8182fe91-0a8d-4fe4-8e21-09d1978b8fe7": true,
-    "507edd57-9833-4e4b-b6cc-27ca39cca16c": true
+    "507edd57-9833-4e4b-b6cc-27ca39cca16c": true,
+    "d52ff165-94a9-4e0e-bd52-f8cb6bbb7bf4": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
