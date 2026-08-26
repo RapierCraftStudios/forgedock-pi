@@ -12,6 +12,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  assertNoPackageLocationOptions,
   preflightRequiredVerificationCommands,
   resolveVerificationCommandDirectory,
   VerificationPreflightError,
@@ -105,6 +106,57 @@ test("preflight checks executable availability without running the command", asy
         }),
       },
       { path: "" },
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
+test("package-manager location options cannot override the bound package cwd", async () => {
+  const testFixture = await fixture();
+  try {
+    const locationCommands = [
+      ["npm", "--prefix", "..", "run", "test"],
+      ["npm", "--prefix=..", "run", "test"],
+      ["npm", "--global", "run", "test"],
+      ["npm", "-g", "run", "test"],
+      ["npm", "--location=global", "run", "test"],
+      ["npm", "--workspace", "..", "run", "test"],
+      ["npm", "-w", "..", "run", "test"],
+      ["npm", "--workspaces", "run", "test"],
+      ["npm", "--include-workspace-root", "run", "test"],
+    ];
+    for (const argv of locationCommands) {
+      await assert.rejects(
+        preflightRequiredVerificationCommands(
+          testFixture.root,
+          { test: command("web", { argv }) },
+        ),
+        (error: unknown) =>
+          error instanceof VerificationPreflightError &&
+          error.path === ".forge/config.json verification.commands.test.argv" &&
+          /package-manager location option/.test(error.message),
+        `expected ${argv.join(" ")} to be rejected`,
+      );
+    }
+
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      {
+        test: command("web", {
+          argv: ["npm", "run", "test", "--", "--prefix", ".."],
+        }),
+      },
+    );
+    assert.doesNotThrow(() =>
+      assertNoPackageLocationOptions([
+        "npm",
+        "run",
+        "test",
+        "--",
+        "--prefix",
+        "..",
+      ]),
     );
   } finally {
     await testFixture.cleanup();

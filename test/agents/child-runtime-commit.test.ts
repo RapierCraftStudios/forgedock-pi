@@ -31,6 +31,7 @@ import {
   parseBoundReviewerResult,
   parseGitStatusPaths,
   reviewerStatusIsTerminal,
+  validateBoundCommand,
   writeTrustedResultFile,
 } from "../../src/agents/child-runtime.ts";
 import { FORGE_WORK_ON_TOOLS } from "../../src/agents/register.ts";
@@ -86,6 +87,38 @@ test("read-only nodes deny shell and file mutation tools", () => {
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_checkpoint"), true);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_run_review_panel"), true);
   assert.equal(allowedNodeTools(undefined).has("forge_run_review_panel"), true);
+});
+
+test("child verification bindings reject package-manager location options", () => {
+  const locationCommands = [
+    ["npm", "--prefix", "..", "run", "check"],
+    ["npm", "--prefix=..", "run", "check"],
+    ["npm", "--workspace", "other", "run", "check"],
+    ["npm", "--global", "run", "check"],
+    ["npm", "-g", "run", "check"],
+  ];
+  for (const argv of locationCommands) {
+    assert.throws(
+      () =>
+        validateBoundCommand("check", {
+          argv,
+          cwd: ".",
+          required: true,
+          timeoutMs: 60_000,
+        }),
+      /package-manager location option/,
+      `expected ${argv.join(" ")} to be rejected`,
+    );
+  }
+
+  assert.doesNotThrow(() =>
+    validateBoundCommand("check", {
+      argv: ["npm", "run", "check", "--", "--prefix", ".."],
+      cwd: ".",
+      required: true,
+      timeoutMs: 60_000,
+    }),
+  );
 });
 
 test("runtime path classification follows the checkout case contract", () => {
