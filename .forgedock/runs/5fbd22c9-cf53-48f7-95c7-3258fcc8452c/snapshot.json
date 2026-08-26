@@ -6,8 +6,8 @@
   "integrationBranch": "dogfood",
   "protectedBranch": "main",
   "status": "active",
-  "sequence": 35,
-  "lastEventHash": "sha256:767594a2e0b8a3c7cd6bbc4775c97a3ec0cb0a1d4ac46b1f53d7c784d8f72a70",
+  "sequence": 36,
+  "lastEventHash": "sha256:bba664f24779b35a1f92d5fc100144a10a2870b92f98064f4fc3588a1c7bcfcf",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -169,15 +169,22 @@
         },
         {
           "attempt": 2,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 2",
-          "evidence": [],
+          "evidence": [
+            "`forge_prepare_review` returned PR #96 with frozen review head `399ed953c00e612086c6228c3b33c0fac6af07a7` targeting `dogfood`.",
+            "The fresh `forge-review-correctness` child completed with a schema-valid pass and no findings; it reviewed both changed files.",
+            "The fresh `forge-review-security` child completed with a schema-valid pass and no findings; it reviewed both changed files.",
+            "Both reviewer bindings matched Forge run `5fbd22c9-cf53-48f7-95c7-3258fcc8452c`, attempt 2, and the frozen head.",
+            "No reviewer attempted file mutation; the committed head remains unchanged."
+          ],
           "logicalNodeId": "review-2",
           "startedAt": "2026-08-26T05:39:38.454Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/5fbd22c9-cf53-48f7-95c7-3258fcc8452c",
           "branch": "forge/issue-95-5fbd22c9",
-          "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491"
+          "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+          "finishedAt": "2026-08-26T05:42:08.161Z"
         }
       ]
     }
@@ -219,7 +226,8 @@
     "phase:review:2:queue": "0f215b9a-caa3-447a-a1cd-6ea4f6e9f264",
     "phase:review:2:start": "fddff983-aaf9-44b5-a1d6-a3dfc2952acf",
     "lease:heartbeat:2026-08-26T05:40:42.487Z": "44a8316c-ee95-4604-9fba-7a4095d8c85d",
-    "lease:heartbeat:2026-08-26T05:41:43.570Z": "e83a868c-7403-4a2b-83d0-b99b11e38179"
+    "lease:heartbeat:2026-08-26T05:41:43.570Z": "e83a868c-7403-4a2b-83d0-b99b11e38179",
+    "phase:review:2:complete": "aae827ba-9c52-4d94-84f6-76169e46ee2e"
   },
   "eventIds": {
     "194412ac-e384-4835-94fd-cee5a8867930": true,
@@ -256,7 +264,8 @@
     "0f215b9a-caa3-447a-a1cd-6ea4f6e9f264": true,
     "fddff983-aaf9-44b5-a1d6-a3dfc2952acf": true,
     "44a8316c-ee95-4604-9fba-7a4095d8c85d": true,
-    "e83a868c-7403-4a2b-83d0-b99b11e38179": true
+    "e83a868c-7403-4a2b-83d0-b99b11e38179": true,
+    "aae827ba-9c52-4d94-84f6-76169e46ee2e": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
