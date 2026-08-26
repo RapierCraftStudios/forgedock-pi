@@ -31,6 +31,7 @@ import {
   parseBoundReviewerResult,
   parseGitStatusPaths,
   reviewerStatusIsTerminal,
+  workflowLabelForCheckpoint,
   writeTrustedResultFile,
 } from "../../src/agents/child-runtime.ts";
 import { FORGE_WORK_ON_TOOLS } from "../../src/agents/register.ts";
@@ -94,6 +95,81 @@ test("runtime path classification follows the checkout case contract", () => {
   assert.equal(isForgeRuntimePath(".FORGE/CACHE/result", true), true);
   assert.equal(isForgeRuntimePath(".Forge/WorkTrees/run", true), true);
   assert.equal(isForgeRuntimePath("src/.pi-value.ts", true), false);
+});
+
+test("checkpoint boundaries project the canonical workflow label lifecycle", () => {
+  const buildPhases = [
+    "plan",
+    "prepare-worktree",
+    "implement",
+    "verify",
+  ] as const;
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "resolve", action: "start" }),
+    "workflow:investigating",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "resolve", action: "complete" }),
+    "workflow:investigating",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "investigate", action: "start" }),
+    "workflow:investigating",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({
+      phase: "investigate",
+      action: "complete",
+      report: "**Verdict**: CONFIRMED",
+    }),
+    "workflow:ready-to-build",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({
+      phase: "investigate",
+      action: "complete",
+      report: "**Verdict**: INVALID",
+    }),
+    "workflow:invalid",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({
+      phase: "investigate",
+      action: "complete",
+      report: "**Verdict**: DECOMPOSED",
+    }),
+    "workflow:decomposed",
+  );
+  for (const phase of buildPhases) {
+    assert.equal(
+      workflowLabelForCheckpoint({ phase, action: "start" }),
+      "workflow:building",
+    );
+    assert.equal(
+      workflowLabelForCheckpoint({ phase, action: "complete" }),
+      "workflow:building",
+    );
+  }
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "review", action: "start" }),
+    "workflow:in-review",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "review", action: "complete" }),
+    "workflow:in-review",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "merge", action: "start" }),
+    "workflow:awaiting-merge",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "merge", action: "complete" }),
+    "workflow:merged",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "review", action: "queue" }),
+    undefined,
+  );
 });
 
 test("security evidence overflow stays typed across repeated output chunks", () => {
