@@ -86,6 +86,42 @@ import {
 } from "./remediation.ts";
 
 const RUN_LINK_ENTRY = "forgedock-run-link/v1";
+const MERGE_ROLLBACK_TIMEOUT_MS = 30_000;
+
+export interface MergeRollbackResult {
+  succeeded: boolean;
+  error?: unknown;
+}
+
+/**
+ * Run merge compensation with a lifecycle independent from the failed merge.
+ *
+ * A merge request can be rejected after GitHub has accepted the mutation, and
+ * the caller's signal may be aborted by the time compensation starts. The
+ * compensating label update therefore needs its own bounded signal. The
+ * caller still decides how to surface a failed best-effort rollback.
+ */
+export async function attemptMergeWorkflowRollback(
+  rollback: (signal: AbortSignal) => Promise<void>,
+  timeoutMs = MERGE_ROLLBACK_TIMEOUT_MS,
+): Promise<MergeRollbackResult> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0)
+    throw new RangeError("Merge rollback timeout must be positive.");
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort(new Error("Merge workflow-label rollback timed out."));
+  }, timeoutMs);
+  timer.unref?.();
+  try {
+    await rollback(controller.signal);
+    return { succeeded: true };
+  } catch (error) {
+    return { succeeded: false, error };
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export type WorkflowStage = keyof typeof WORKFLOW_LABEL_BY_STAGE;
 export type WorkflowTransition = "started" | "resumed" | "completed";
@@ -2164,12 +2200,19 @@ export class ForgeWorkOnController {
       try {
         merged = await github.mergePullRequest({ pullNumber: pull.number, expectedHeadSha: pull.headSha, method: "squash", ...(ctx.signal ? { signal: ctx.signal } : {}) });
       } catch (error) {
-        await projector
-          .setWorkflowLabel(
+        const rollback = await attemptMergeWorkflowRollback((signal) =>
+          projector.setWorkflowLabel(
             link.issueNumber,
             WORKFLOW_LABEL_BY_STAGE.review,
-          )
-          .catch(() => undefined);
+            signal,
+          ),
+        );
+        if (!rollback.succeeded) {
+          ctx.ui.notify(
+            `ForgeDock merge failed and workflow label rollback failed: ${errorMessage(rollback.error)}`,
+            "warning",
+          );
+        }
         throw error;
       }
       headSha = merged.sha;

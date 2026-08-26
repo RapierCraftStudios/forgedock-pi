@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 
 import {
+  attemptMergeWorkflowRollback,
   canonicalReviewerName,
   directRunRecoveryAction,
   directTerminalEvidence,
@@ -271,6 +272,32 @@ test("detached workflow continuation failure remains distinguishable for durable
         "unsupported-continuation: detached workflow child settled, but JavaScript workflow continuation was not persisted.",
     },
   );
+});
+
+test("merge rollback uses an independent signal after merge cancellation", async () => {
+  const mergeController = new AbortController();
+  mergeController.abort(new Error("merge request cancelled"));
+  let rollbackSignal: AbortSignal | undefined;
+
+  const result = await attemptMergeWorkflowRollback(async (signal) => {
+    rollbackSignal = signal;
+    assert.notEqual(signal, mergeController.signal);
+    assert.equal(signal.aborted, false);
+  }, 10);
+
+  assert.deepEqual(result, { succeeded: true });
+  assert.ok(rollbackSignal);
+  assert.equal(rollbackSignal.aborted, false);
+});
+
+test("merge rollback returns compensation failures without replacing them", async () => {
+  const rollbackError = new Error("label update unavailable");
+  const result = await attemptMergeWorkflowRollback(async () => {
+    throw rollbackError;
+  }, 10);
+
+  assert.equal(result.succeeded, false);
+  assert.equal(result.error, rollbackError);
 });
 
 test("provider retry classification includes WebSocket failures but excludes quota", () => {
