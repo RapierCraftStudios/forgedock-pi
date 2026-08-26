@@ -3,11 +3,11 @@
   "orchestrationId": "f02c5c23-1ac2-43e0-8691-e9835698bda5",
   "repository": "RapierCraftStudios/forgedock-pi",
   "integrationBranch": "staging",
-  "status": "running",
+  "status": "cancelled",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 29,
-  "lastEventHash": "sha256:48d9a4a81c1ad697bb9d0026611b666e13649062ee2f141ed54f37d2dd73dd54",
+  "sequence": 30,
+  "lastEventHash": "sha256:38ff3f8b3a025a8124cf92b0beaeecaac4d2b87d6f7a3b44c96c2d1cf2a9004f",
   "lanes": [
     {
       "issueNumber": 92,
@@ -114,7 +114,10 @@
     "lane:119:blocked": "94abbea6-6ad4-480f-badc-3145fedab14a",
     "lane:119:recovered:bfa9e372-4b48-4bbb-8704-9c5e544f4dd3": "00b24623-0ab0-4875-aeec-eb9a82f34275",
     "lane:120:blocked": "40da0085-9810-4ee3-a6c1-44f356f0c079",
-    "lane:120:recovered:195fe0bb-35f6-493a-ba12-932d5d3d7cd5": "bf619b51-b2a5-435d-866d-0370b53f28fb"
+    "lane:120:recovered:195fe0bb-35f6-493a-ba12-932d5d3d7cd5": "bf619b51-b2a5-435d-866d-0370b53f28fb",
+    "orchestration:cancel": "eefd153f-043b-446e-bb7c-fc7aee4d9c35"
   },
-  "createdAt": "2026-08-26T17:53:19.264Z"
+  "createdAt": "2026-08-26T17:53:19.264Z",
+  "reason": "Cancelled by the operator through /forge:cancel.",
+  "completedAt": "2026-08-26T19:05:18.856Z"
 }
