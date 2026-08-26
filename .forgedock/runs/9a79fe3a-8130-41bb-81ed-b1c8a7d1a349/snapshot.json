@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:2eafe80cd3b5f7a08a3351586cd506f1f69572e52d0a0e901819e3db0cafd431",
+  "sequence": 8,
+  "lastEventHash": "sha256:7def1772d6ed40dc733b9c0d5211e60de448dd79c2b05e41468f8436aadae415",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -39,15 +39,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`preflightRequiredVerificationCommands` resolves and validates exactly the configured `cwd`; it does not search descendants for a package.",
+            "`assertPackageScript` already rejects non-object `scripts`, non-string/blank script values, and missing root scripts before any nested package can satisfy the command.",
+            "The existing monorepo regression covers a missing root `scripts.test` with a valid nested `web/package.json`, but does not enumerate malformed `scripts.test` values.",
+            "The focused remediation is a regression matrix for malformed root metadata while retaining the nested valid package, with no production behavior or policy expansion."
+          ],
           "logicalNodeId": "work-on/investigate",
           "startedAt": "2026-08-26T21:35:24.292Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/9a79fe3a-8130-41bb-81ed-b1c8a7d1a349",
           "branch": "forge/issue-114-9a79fe3a",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T21:37:07.062Z",
+          "outputArtifactHash": "investigate-114-verify-preflight"
         }
       ]
     }
@@ -61,7 +68,8 @@
     "phase:resolve:1:start": "5d4fff6c-8ba7-4397-a14b-313e28ed8fc1",
     "phase:resolve:1:complete": "87e4cbdb-fe7f-431d-b932-b101640d7418",
     "phase:investigate:1:queue": "3aa864cd-088d-41fd-87e0-d7ba10bdf47c",
-    "phase:investigate:1:start": "884ebbd4-e216-4f04-8b80-86c2790f0234"
+    "phase:investigate:1:start": "884ebbd4-e216-4f04-8b80-86c2790f0234",
+    "phase:investigate:1:complete": "e4f11f56-29db-4af2-b24a-34be3e8e1a1c"
   },
   "eventIds": {
     "29c332fc-f98a-44d2-aea6-4c213b8f72a8": true,
@@ -70,7 +78,8 @@
     "5d4fff6c-8ba7-4397-a14b-313e28ed8fc1": true,
     "87e4cbdb-fe7f-431d-b932-b101640d7418": true,
     "3aa864cd-088d-41fd-87e0-d7ba10bdf47c": true,
-    "884ebbd4-e216-4f04-8b80-86c2790f0234": true
+    "884ebbd4-e216-4f04-8b80-86c2790f0234": true,
+    "e4f11f56-29db-4af2-b24a-34be3e8e1a1c": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
