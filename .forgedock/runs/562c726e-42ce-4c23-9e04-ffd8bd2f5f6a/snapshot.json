@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 24,
-  "lastEventHash": "sha256:0bd9bc747036a3fcc223928a95b43efda558a04718995a1f4314786e250908b7",
+  "sequence": 25,
+  "lastEventHash": "sha256:5750f996b4da5d2bcc8a2c415cb488bcbb21727e44987f5903e5bf57d3c36eae",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -191,10 +191,12 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "reconcile and retry parent-owned merge",
-          "evidence": []
+          "evidence": [],
+          "logicalNodeId": "parent-merge-1",
+          "startedAt": "2026-08-26T12:32:04.821Z"
         }
       ]
     }
@@ -225,7 +227,8 @@
     "phase:review:1:queue": "a897b343-ff42-4dce-ae31-8ed1de9246fd",
     "phase:review:1:start": "32add1dd-47ec-4d82-a9fe-0292eeca0171",
     "phase:review:1:complete": "d6d7db72-e17f-466a-8e91-141da78dae92",
-    "phase:merge:1:queue": "de1f30e4-a6d8-4da2-9e54-1134385df06a"
+    "phase:merge:1:queue": "de1f30e4-a6d8-4da2-9e54-1134385df06a",
+    "phase:merge:1:start": "16e54d0d-4df3-45c6-8715-ac94517ff270"
   },
   "eventIds": {
     "2d6b4799-e254-4339-9dcb-219a49010664": true,
@@ -251,7 +254,8 @@
     "a897b343-ff42-4dce-ae31-8ed1de9246fd": true,
     "32add1dd-47ec-4d82-a9fe-0292eeca0171": true,
     "d6d7db72-e17f-466a-8e91-141da78dae92": true,
-    "de1f30e4-a6d8-4da2-9e54-1134385df06a": true
+    "de1f30e4-a6d8-4da2-9e54-1134385df06a": true,
+    "16e54d0d-4df3-45c6-8715-ac94517ff270": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
