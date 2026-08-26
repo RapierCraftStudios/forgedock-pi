@@ -57,3 +57,31 @@ test("local overrides can only tighten tracked policy", () => {
     PolicyValidationError,
   );
 });
+
+test("verification cwd defaults safely and supports explicit CI-only mode", () => {
+  const legacy = parseForgePolicy(rawPolicy);
+  assert.equal(legacy.verification.commands.test?.cwd, ".");
+
+  const ciOnly = parseForgePolicy({
+    ...rawPolicy,
+    verification: { commands: {} },
+  });
+  assert.deepEqual(ciOnly.verification.commands, {});
+
+  for (const cwd of ["../web", "/tmp", "C:\\\\repo", "web\\\\tests"]) {
+    assert.throws(
+      () =>
+        parseForgePolicy({
+          ...rawPolicy,
+          verification: {
+            commands: {
+              test: { ...rawPolicy.verification.commands.test, cwd },
+            },
+          },
+        }),
+      (error: unknown) =>
+        error instanceof PolicyValidationError &&
+        error.path === "verification.commands.test.cwd",
+    );
+  }
+});

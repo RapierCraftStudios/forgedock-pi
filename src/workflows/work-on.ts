@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 import type {
   ExtensionAPI,
@@ -9,6 +10,7 @@ import type {
 
 import { FetchGitHubTransport } from "../adapters/github-api.ts";
 import { loadForgePolicy } from "../adapters/config.ts";
+import { preflightRequiredVerificationCommands } from "../adapters/verification-preflight.ts";
 import { GitWorktreeManager, type PreparedWorktree } from "../adapters/git.ts";
 import { GitHubIssueProjector } from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
@@ -141,6 +143,11 @@ export class ForgeWorkOnController {
     });
 
     try {
+      await preflightRequiredVerificationCommands(
+        prepared.worktreePath,
+        policy.verification.commands,
+        { configPath: join(repositoryRoot, ".forge", "config.json") },
+      );
       await materializeForgeAgents(prepared.worktreePath);
       const journal = new RunJournal(store);
       const initialized = await journal.initialize({

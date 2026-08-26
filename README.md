@@ -108,6 +108,27 @@ Then run:
 /forge:status
 ```
 
+### Verification policy
+
+Each approved local verification command may set a repository-relative `cwd` so a monorepo can run a package script without a root wrapper:
+
+```json
+{
+  "verification": {
+    "commands": {
+      "test": {
+        "argv": ["npm", "test"],
+        "cwd": "web",
+        "required": true,
+        "timeoutMs": 600000
+      }
+    }
+  }
+}
+```
+
+`/forge:init` selects the root package or one unambiguous nested package only when it defines `scripts.test`. If no package can be selected, it leaves local commands empty for explicit GitHub-CI-only verification. Before a writer starts, ForgeDock checks required command executables, canonical directories, package manifests, and recognized npm scripts using metadata only; it does not run repository code during this preflight.
+
 ## Commands
 
 | Command | Purpose |

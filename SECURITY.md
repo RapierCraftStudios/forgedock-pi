@@ -24,6 +24,8 @@ ForgeDock Pi is designed so that:
 - subagents edit only an assigned worktree;
 - reviewers are read-only and cannot recursively delegate;
 - models cannot select arbitrary verification commands;
+- approved verification commands run from validated repository-contained working directories;
+- required verification policy is preflighted from filesystem metadata without running repository code;
 - GitHub writes and merges pass deterministic policy checks;
 - protected branches are not auto-merged;
 - required checks, reviewers, audit artifacts, SHAs, and leases fail closed.

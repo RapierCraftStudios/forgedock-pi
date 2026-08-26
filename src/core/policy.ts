@@ -1,7 +1,10 @@
+import { isAbsolute, normalize } from "node:path";
+
 export const FORGEDOCK_CONFIG_SCHEMA = "forgedock.config/v1" as const;
 
 export interface VerificationCommandPolicy {
   argv: readonly string[];
+  cwd: string;
   required: boolean;
   timeoutMs: number;
 }
@@ -104,9 +107,36 @@ function stringArray(value: unknown, path: string): string[] {
   ];
 }
 
+function normalizeVerificationCommandCwd(
+  value: unknown,
+  path: string,
+): string {
+  const raw = value === undefined ? "." : string(value, path);
+  if (
+    raw.includes("\0") ||
+    raw.includes("\\") ||
+    isAbsolute(raw) ||
+    /^[A-Za-z]:[\\/]/.test(raw)
+  ) {
+    throw new PolicyValidationError(
+      path,
+      "must be a repository-relative path",
+    );
+  }
+  const normalized = normalize(raw);
+  if (normalized === ".." || normalized.startsWith(`..${"/"}`)) {
+    throw new PolicyValidationError(
+      path,
+      "must resolve within the repository",
+    );
+  }
+  return normalized || ".";
+}
+
 function parseVerificationCommands(
   value: unknown,
 ): Record<string, VerificationCommandPolicy> {
+  if (value === undefined) return {};
   const source = record(value, "verification.commands");
   const commands: Record<string, VerificationCommandPolicy> = {};
   for (const [name, raw] of Object.entries(source)) {
@@ -117,29 +147,19 @@ function parseVerificationCommands(
       );
     }
     const command = record(raw, `verification.commands.${name}`);
-    const argv = stringArray(
-      command.argv,
-      `verification.commands.${name}.argv`,
-    );
+    const commandPath = `verification.commands.${name}`;
+    const argv = stringArray(command.argv, `${commandPath}.argv`);
     commands[name] = {
       argv,
-      required: boolean(
-        command.required,
-        `verification.commands.${name}.required`,
-      ),
+      cwd: normalizeVerificationCommandCwd(command.cwd, `${commandPath}.cwd`),
+      required: boolean(command.required, `${commandPath}.required`),
       timeoutMs: integer(
         command.timeoutMs,
-        `verification.commands.${name}.timeoutMs`,
+        `${commandPath}.timeoutMs`,
         1_000,
         3_600_000,
       ),
     };
-  }
-  if (Object.keys(commands).length === 0) {
-    throw new PolicyValidationError(
-      "verification.commands",
-      "must define at least one approved command",
-    );
   }
   return commands;
 }

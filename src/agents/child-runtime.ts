@@ -23,6 +23,7 @@ import { FetchGitHubTransport } from "../adapters/github-api.ts";
 import { GitHubIssueProjector } from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
+import { resolveVerificationCommandDirectory } from "../adapters/verification-preflight.ts";
 import {
   createRunEvent,
   RUN_PHASES,
@@ -53,6 +54,7 @@ const MAX_OUTPUT_BYTES = 50 * 1024;
 
 interface BoundVerificationCommand {
   argv: readonly string[];
+  cwd: string;
   required: boolean;
   timeoutMs: number;
 }
@@ -424,6 +426,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           `Verification command '${params.name}' has an empty argv.`,
         );
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const cwd = await resolveVerificationCommandDirectory(root, command.cwd);
       onUpdate?.({
         content: [
           { type: "text", text: `Running approved check ${params.name}...` },
@@ -431,7 +434,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         details: { name: params.name, status: "running" },
       });
       const result = await runProcess(program, args, {
-        cwd: root,
+        cwd,
         timeoutMs: command.timeoutMs,
         env: safeEnvironment(binding.runId),
         ...(signal ? { signal } : {}),
@@ -454,6 +457,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         ],
         details: {
           name: params.name,
+          cwd,
           required: command.required,
           status,
           exitCode: result.exitCode,
@@ -836,6 +840,8 @@ function validateBoundCommand(
       `Verification binding ${name}.argv must be a non-empty string array.`,
     );
   }
+  if (typeof command.cwd !== "string" || !command.cwd.trim())
+    throw new Error(`Verification binding ${name}.cwd must be a non-empty path.`);
   if (typeof command.required !== "boolean")
     throw new Error(`Verification binding ${name}.required must be boolean.`);
   if (

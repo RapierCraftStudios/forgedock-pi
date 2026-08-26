@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
+import { findPackageWithScript } from "../adapters/verification-preflight.ts";
 import type { ForgeWorkOnController } from "../workflows/work-on.ts";
 import {
   FORGEDOCK_EVENT_SCHEMA,
@@ -62,10 +63,30 @@ export function registerForgeCommands(
       const templatePath = fileURLToPath(
         new URL("../../templates/config.json", import.meta.url),
       );
+      const testCwd = await findPackageWithScript(root, "test");
       await mkdir(dirname(configPath), { recursive: true });
       await copyFile(templatePath, configPath);
       const config = parseTemplateConfig(await readFile(configPath, "utf8"));
       config.repository.name = repoResult.stdout.trim();
+      const verification =
+        config.verification &&
+        typeof config.verification === "object" &&
+        !Array.isArray(config.verification)
+          ? (config.verification as Record<string, unknown>)
+          : {};
+      config.verification = {
+        ...verification,
+        commands: testCwd
+          ? {
+              test: {
+                argv: ["npm", "test"],
+                cwd: testCwd,
+                required: true,
+                timeoutMs: 600_000,
+              },
+            }
+          : {},
+      };
       await writeFile(
         configPath,
         `${JSON.stringify(config, null, 2)}\n`,

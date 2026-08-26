@@ -15,13 +15,7 @@
     "autoMergeIntegration": true
   },
   "verification": {
-    "commands": {
-      "test": {
-        "argv": ["npm", "test"],
-        "required": true,
-        "timeoutMs": 600000
-      }
-    }
+    "commands": {}
   },
   "review": {
     "required": ["forge-review-correctness", "forge-review-security"],

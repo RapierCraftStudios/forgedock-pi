@@ -268,14 +268,16 @@ The production/default branch is never auto-merged.
 {
   "verification": {
     "commands": {
-      "test": { "argv": ["npm", "test"], "required": true, "timeoutMs": 600000 },
-      "typecheck": { "argv": ["npm", "run", "typecheck"], "required": true, "timeoutMs": 300000 }
+      "test": { "argv": ["npm", "test"], "cwd": "web", "required": true, "timeoutMs": 600000 },
+      "typecheck": { "argv": ["npm", "run", "typecheck"], "cwd": ".", "required": true, "timeoutMs": 300000 }
     }
   }
 }
 ```
 
-The run snapshots policy from the trusted base commit. A PR/worktree modification to policy cannot change the active run. Models request checks by name and cannot supply shell source. The runner uses argv spawning, scrubs secrets, preserves the child exit code separately from truncated output, records hashes/artifacts, and fails closed for required checks.
+`cwd` is a repository-relative path and defaults to `.` for legacy command entries. An empty `verification.commands` map explicitly delegates local verification to GitHub CI; it does not weaken any configured required check. `/forge:init` chooses `npm test` only when the root package or one unique nested package defines that script. Before any writer is launched, ForgeDock checks every required local command's executable, canonical working directory, package manifest, and recognized npm script using filesystem metadata only. A failure names the exact config path and points to `/forge:init` or a config correction.
+
+The run snapshots policy from the trusted base commit. A PR/worktree modification to policy cannot change the active run. Models request checks by name and cannot supply shell source. The runner uses argv spawning from the bound cwd, scrubs secrets, preserves the child exit code separately from truncated output, records hashes/artifacts, and fails closed for required checks.
 
 Executing repository code is still a security boundary. Production writer/verification runs require a containment mode. The first implementation must at minimum provide child environment scrubbing, worktree-root enforcement, no GitHub credentials, and a child-side guard against GitHub writes/push/merge. A stronger container/sandbox backend remains an explicit production-hardening option.
 
