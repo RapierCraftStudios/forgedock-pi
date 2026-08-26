@@ -1,3 +1,5 @@
+import type { RunPhase } from "./events.ts";
+
 export const WORKFLOW_LABEL_BY_STAGE = {
   investigation: "workflow:investigating",
   readyToBuild: "workflow:ready-to-build",
@@ -8,6 +10,52 @@ export const WORKFLOW_LABEL_BY_STAGE = {
   invalid: "workflow:invalid",
   decomposed: "workflow:decomposed",
 } as const;
+
+export type WorkflowPhaseTransition = "start" | "complete";
+
+/**
+ * Resolve a typed phase boundary to the one canonical issue workflow label.
+ *
+ * This function is deliberately side-effect free so direct checkpoints and
+ * parent-owned node transitions can share the same lifecycle vocabulary while
+ * the projector remains the sole owner of label replacement.
+ */
+export function workflowLabelForPhaseTransition(
+  phase: RunPhase,
+  transition: WorkflowPhaseTransition,
+  report?: string,
+): string | undefined {
+  let stage: keyof typeof WORKFLOW_LABEL_BY_STAGE | undefined;
+  if (phase === "investigate" && transition === "complete") {
+    const verdict = report?.match(
+      /^\s*\*\*Verdict\*\*:\s*(INVALID|DECOMPOSED)\b/im,
+    )?.[1]?.toLowerCase();
+    stage =
+      verdict === "invalid"
+        ? "invalid"
+        : verdict === "decomposed"
+          ? "decomposed"
+          : "readyToBuild";
+  } else if (phase === "resolve" || phase === "investigate") {
+    stage = "investigation";
+  } else if (
+    phase === "plan" ||
+    phase === "prepare-worktree" ||
+    phase === "implement" ||
+    phase === "verify"
+  ) {
+    stage = "build";
+  } else if (phase === "review") {
+    stage = "review";
+  } else if (phase === "merge") {
+    stage = transition === "complete" ? "merged" : "awaitingMerge";
+  } else if (phase === "close" || phase === "cleanup") {
+    // A normal close/cleanup only follows a durable merge. Invalid and
+    // decomposed investigations are projected before this terminal path.
+    stage = "merged";
+  }
+  return stage ? WORKFLOW_LABEL_BY_STAGE[stage] : undefined;
+}
 
 export const ACCEPTANCE_GATE_SUCCESS_MARKER =
   "<!-- FORGE:ACCEPTANCE_GATE:COMPLETE -->" as const;

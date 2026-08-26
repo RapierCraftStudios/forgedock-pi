@@ -1802,9 +1802,20 @@ export class ForgeWorkOnController {
     const transport = new FetchGitHubTransport({ token });
     const github = new GitHubWorkflowAdapter(transport, link.repository);
     const projector = new GitHubIssueProjector(transport, link.repository);
+    const priorInvestigationOutcome = Object.values(initial.state.nodes)
+      .filter(
+        (candidate) =>
+          candidate.node === "investigate" && candidate.status === "completed",
+      )
+      .sort((left, right) => right.attempt - left.attempt)[0]?.outcome;
     await this.#projectWorkflowStage(
       link,
-      workflowStageForNodeTransition(node.node, "started"),
+      workflowStageForNodeTransition(
+        node.node,
+        "started",
+        undefined,
+        priorInvestigationOutcome,
+      ),
       ctx,
       projector,
     );
@@ -3602,6 +3613,7 @@ export class ForgeWorkOnController {
       sessionId,
       ctx.signal,
     );
+    await this.#projectWorkflowStage(link, "awaitingMerge", ctx, projector);
     if (!existingPull || existingPull.headSha !== actualHead)
       await this.#git.push(
         link.prepared.worktreePath,
@@ -3936,6 +3948,7 @@ export class ForgeWorkOnController {
       sessionId,
       ctx.signal,
     );
+    await this.#projectWorkflowStage(link, "merged", ctx, projector);
     await github.closeIssue(link.issueNumber, ctx.signal);
     await appendEffect(
       journal,
@@ -3957,6 +3970,7 @@ export class ForgeWorkOnController {
       undefined,
       ["issue close read-back passed"],
     );
+    await this.#projectWorkflowStage(link, "merged", ctx, projector);
 
     await appendPhase(
       journal,
@@ -3976,6 +3990,7 @@ export class ForgeWorkOnController {
       sessionId,
       ctx.signal,
     );
+    await this.#projectWorkflowStage(link, "merged", ctx, projector);
     await github.deleteBranch(link.prepared.branch, ctx.signal);
     await this.#git.cleanup(link.prepared, ctx.signal);
     await appendEffect(
@@ -3998,6 +4013,7 @@ export class ForgeWorkOnController {
       undefined,
       ["owned worktree removed", "remote feature branch deleted"],
     );
+    await this.#projectWorkflowStage(link, "merged", ctx, projector);
 
     try {
       await postTerminalIssueArtifacts({
@@ -4704,6 +4720,7 @@ export function workflowStageForNodeTransition(
       node === "investigate" ? outcome : investigationOutcome;
     if (terminalInvestigation === "invalid") return "invalid";
     if (terminalInvestigation === "decomposed") return "decomposed";
+    if (node === "close" || node === "cleanup") return "merged";
   }
   if (node === "decision" && outcome === "awaiting-merge")
     return "awaitingMerge";

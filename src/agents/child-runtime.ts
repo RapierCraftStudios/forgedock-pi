@@ -38,6 +38,9 @@ import {
   validateBuilderPathContract,
 } from "../core/builder-contract.ts";
 import {
+  workflowLabelForPhaseTransition,
+} from "../core/artifact-protocol.ts";
+import {
   normalizeVerificationCommandCwd,
   type ForgePolicy,
 } from "../core/policy.ts";
@@ -1926,7 +1929,7 @@ async function postDerivedPhaseArtifacts(
   }
 }
 
-function workflowLabelForCheckpoint(params: {
+export function workflowLabelForCheckpoint(params: {
   phase: RunPhase;
   action:
     | "queue"
@@ -1938,24 +1941,13 @@ function workflowLabelForCheckpoint(params: {
     | "abandon";
   report?: string;
 }): string | undefined {
-  if (params.action === "start") {
-    if (params.phase === "investigate") return "workflow:investigating";
-    if (
-      params.phase === "plan" ||
-      params.phase === "prepare-worktree" ||
-      params.phase === "implement" ||
-      params.phase === "verify"
-    ) {
-      return "workflow:building";
-    }
-    if (params.phase === "review") return "workflow:in-review";
-  }
-  if (params.action === "complete" && params.phase === "investigate") {
-    return params.report?.includes("**Verdict**: INVALID")
-      ? "workflow:invalid"
-      : "workflow:ready-to-build";
-  }
-  return undefined;
+  if (params.action !== "start" && params.action !== "complete")
+    return undefined;
+  return workflowLabelForPhaseTransition(
+    params.phase,
+    params.action,
+    params.report,
+  );
 }
 
 function validatePhaseReport(phase: RunPhase, report: string): void {

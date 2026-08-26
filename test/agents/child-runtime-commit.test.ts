@@ -29,6 +29,7 @@ import {
   forgeCommitArguments,
   isForgeRuntimePath,
   parseBoundReviewerResult,
+  workflowLabelForCheckpoint,
   parseGitStatusPaths,
   reviewerStatusIsTerminal,
   writeTrustedResultFile,
@@ -72,6 +73,81 @@ test("every bounded non-review node can persist its trusted result", () => {
   assert.equal(
     allowedNodeTools("review-architecture").has("forge_finalize_node"),
     false,
+  );
+});
+
+test("checkpoint workflow labels cover every lifecycle boundary", () => {
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "resolve", action: "start" }),
+    "workflow:investigating",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "resolve", action: "complete" }),
+    "workflow:investigating",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "investigate", action: "start" }),
+    "workflow:investigating",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "investigate", action: "complete", report: "**Verdict**: CONFIRMED" }),
+    "workflow:ready-to-build",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "investigate", action: "complete", report: "**Verdict**: INVALID" }),
+    "workflow:invalid",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "investigate", action: "complete", report: "**Verdict**: DECOMPOSED" }),
+    "workflow:decomposed",
+  );
+
+  for (const phase of [
+    "plan",
+    "prepare-worktree",
+    "implement",
+    "verify",
+  ] as const) {
+    assert.equal(
+      workflowLabelForCheckpoint({ phase, action: "start" }),
+      "workflow:building",
+    );
+    assert.equal(
+      workflowLabelForCheckpoint({ phase, action: "complete" }),
+      "workflow:building",
+    );
+  }
+  for (const phase of ["review"] as const) {
+    assert.equal(
+      workflowLabelForCheckpoint({ phase, action: "start" }),
+      "workflow:in-review",
+    );
+    assert.equal(
+      workflowLabelForCheckpoint({ phase, action: "complete" }),
+      "workflow:in-review",
+    );
+  }
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "merge", action: "start" }),
+    "workflow:awaiting-merge",
+  );
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "merge", action: "complete" }),
+    "workflow:merged",
+  );
+  for (const phase of ["close", "cleanup"] as const) {
+    assert.equal(
+      workflowLabelForCheckpoint({ phase, action: "start" }),
+      "workflow:merged",
+    );
+    assert.equal(
+      workflowLabelForCheckpoint({ phase, action: "complete" }),
+      "workflow:merged",
+    );
+  }
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "verify", action: "block" }),
+    undefined,
   );
 });
 
