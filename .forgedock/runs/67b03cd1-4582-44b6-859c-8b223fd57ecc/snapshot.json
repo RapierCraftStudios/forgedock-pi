@@ -10,8 +10,8 @@
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 7,
-  "lastEventHash": "sha256:69c57f083426f5ecb6c81f077535f57d57888f698f4715612652df8deee1af2b",
+  "sequence": 8,
+  "lastEventHash": "sha256:ca7961b2adefbe9424d28825caf9aec0addb25ae5227decf18b8598ce1f3bf18",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -47,10 +47,13 @@
       "status": "running",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/67b03cd1-4582-44b6-859c-8b223fd57ecc/.pi/forge/67b03cd1-4582-44b6-859c-8b223fd57ecc-investigate-1.json",
-      "subagentRunId": "launch:investigate-1:405eedff-bb84-4ebe-be83-593a4b2ba705",
+      "subagentRunId": "c99acdb1-c71c-46a9-9ee8-d2a9e67d9a38",
       "launchNonce": "405eedff-bb84-4ebe-be83-593a4b2ba705",
       "launchIntent": true,
-      "startedAt": "2026-08-26T02:09:50.520Z"
+      "startedAt": "2026-08-26T02:09:50.520Z",
+      "previousSubagentRunId": "launch:investigate-1:405eedff-bb84-4ebe-be83-593a4b2ba705",
+      "transportRetries": 0,
+      "launchReceipt": true
     }
   },
   "effects": {},
@@ -61,7 +64,8 @@
     "node:resolve-1:attempt:1:launch-receipt:90d6eae0-35ad-41af-8faf-48746d16c8c5:fb976e4b-c9f4-4514-8d6b-4b28fbd038db": "d1b547e1-005e-4aa6-8417-50482bd0e5f9",
     "node:resolve-1:completed": "e03a7709-6ec6-4657-8da2-8ef8a38dcf63",
     "node:investigate-1:queued": "dafe73be-ec14-439b-a713-753101bbc722",
-    "node:investigate-1:started": "4e7c7a21-277d-43c2-90e0-60764d36c94d"
+    "node:investigate-1:started": "4e7c7a21-277d-43c2-90e0-60764d36c94d",
+    "node:investigate-1:attempt:1:launch-receipt:405eedff-bb84-4ebe-be83-593a4b2ba705:c99acdb1-c71c-46a9-9ee8-d2a9e67d9a38": "ea1a2005-dc89-4850-a110-2ee98e1dff14"
   },
   "eventIds": {
     "4c885062-171c-4391-a8e6-3f9f65c74aa9": true,
@@ -70,6 +74,7 @@
     "d1b547e1-005e-4aa6-8417-50482bd0e5f9": true,
     "e03a7709-6ec6-4657-8da2-8ef8a38dcf63": true,
     "dafe73be-ec14-439b-a713-753101bbc722": true,
-    "4e7c7a21-277d-43c2-90e0-60764d36c94d": true
+    "4e7c7a21-277d-43c2-90e0-60764d36c94d": true,
+    "ea1a2005-dc89-4850-a110-2ee98e1dff14": true
   }
 }
