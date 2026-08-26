@@ -1,0 +1,7 @@
+{
+  "name": "monorepo-no-root-test-web",
+  "private": true,
+  "scripts": {
+    "test": "node --version"
+  }
+}

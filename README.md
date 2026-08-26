@@ -34,6 +34,7 @@ Issue
 - **Nested review hierarchy:** one work-on writer launches fresh, read-only reviewer subagents.
 - **Fail-closed merge policy:** stale SHAs, failed checks, incomplete reviewers, missing audit artifacts, conflicts, protected branches, and invalid leases block merge.
 - **Isolated Git worktrees:** one issue, one branch, one writer.
+- **Repository-aware verification:** required local commands are metadata-preflighted before a writer starts; package-scoped commands cannot escape the worktree.
 - **Exact workflow labels:** `investigating → ready-to-build → building → in-review → merged`.
 - **Idempotent side effects:** event IDs, idempotency keys, read-back verification, and optimistic non-force state updates.
 
@@ -87,7 +88,7 @@ From a trusted GitHub repository:
 /forge:init
 ```
 
-This creates `.forge/config.json` and reconciles canonical workflow labels. Review and commit that policy before running work.
+This creates `.forge/config.json` and reconciles canonical workflow labels. Init selects `npm test` only when the repository root or one uniquely discoverable package declares `scripts.test`; otherwise it writes an explicit empty local command map for GitHub-CI-only verification. Each selected local command records its repository-relative `workingDirectory`. Review and commit that policy before running work.
 
 For an initial production pilot, set:
 

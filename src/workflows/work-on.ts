@@ -14,6 +14,7 @@ import { GitHubIssueProjector } from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
 import { SubagentsRpcClient } from "../adapters/subagents.ts";
+import { preflightVerificationCommands } from "../adapters/verification-preflight.ts";
 import {
   findForgeWorkOnResult,
   type ForgeReviewerResult,
@@ -104,7 +105,12 @@ export class ForgeWorkOnController {
       ctx.cwd,
       ctx.signal,
     );
-    const { policy } = await loadForgePolicy(repositoryRoot);
+    const { policy, trackedPath } = await loadForgePolicy(repositoryRoot);
+    await preflightVerificationCommands(
+      repositoryRoot,
+      policy.verification.commands,
+      { configPath: trackedPath },
+    );
     const integrationBranch = chooseIntegrationBranch(policy);
     if (isProtectedBranch(policy, integrationBranch))
       throw new Error(`Integration branch ${integrationBranch} is protected.`);

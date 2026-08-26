@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
-import { mkdir, realpath, writeFile } from "node:fs/promises";
+import { mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import {
   basename,
@@ -55,6 +55,7 @@ interface BoundVerificationCommand {
   argv: readonly string[];
   required: boolean;
   timeoutMs: number;
+  workingDirectory: string;
 }
 
 interface ForgeChildBinding {
@@ -424,14 +425,23 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           `Verification command '${params.name}' has an empty argv.`,
         );
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const workingDirectory = await resolveBoundWorkingDirectory(
+        root,
+        command.workingDirectory,
+        params.name,
+      );
       onUpdate?.({
         content: [
           { type: "text", text: `Running approved check ${params.name}...` },
         ],
-        details: { name: params.name, status: "running" },
+        details: {
+          name: params.name,
+          status: "running",
+          workingDirectory: command.workingDirectory,
+        },
       });
       const result = await runProcess(program, args, {
-        cwd: root,
+        cwd: workingDirectory,
         timeoutMs: command.timeoutMs,
         env: safeEnvironment(binding.runId),
         ...(signal ? { signal } : {}),
@@ -455,6 +465,7 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         details: {
           name: params.name,
           required: command.required,
+          workingDirectory: command.workingDirectory,
           status,
           exitCode: result.exitCode,
           signal: result.signal,
@@ -801,8 +812,7 @@ function readBinding(): ForgeChildBinding {
     throw new Error("Forge binding verificationCommands must be an object.");
   const verificationCommands: Record<string, BoundVerificationCommand> = {};
   for (const [name, commandValue] of Object.entries(commands)) {
-    validateBoundCommand(name, commandValue);
-    verificationCommands[name] = commandValue;
+    verificationCommands[name] = validateBoundCommand(name, commandValue);
   }
   return {
     runId: value.runId as string,
@@ -823,7 +833,7 @@ function readBinding(): ForgeChildBinding {
 function validateBoundCommand(
   name: string,
   value: unknown,
-): asserts value is BoundVerificationCommand {
+): BoundVerificationCommand {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error(`Verification binding ${name} must be an object.`);
   const command = value as Record<string, unknown>;
@@ -846,6 +856,31 @@ function validateBoundCommand(
       `Verification binding ${name}.timeoutMs must be at least 1000.`,
     );
   }
+  const workingDirectory =
+    command.workingDirectory === undefined
+      ? "."
+      : command.workingDirectory;
+  if (
+    typeof workingDirectory !== "string" ||
+    !workingDirectory.trim() ||
+    workingDirectory !== workingDirectory.trim() ||
+    workingDirectory.includes("\0") ||
+    workingDirectory.startsWith("/") ||
+    workingDirectory.startsWith("\\") ||
+    isAbsolute(workingDirectory) ||
+    /^[A-Za-z]:/.test(workingDirectory) ||
+    workingDirectory.split(/[\\/]/).some((segment) => segment === "..")
+  ) {
+    throw new Error(
+      `Verification binding ${name}.workingDirectory must be repository-relative without absolute or '..' segments.`,
+    );
+  }
+  return {
+    argv: command.argv,
+    required: command.required,
+    timeoutMs: command.timeoutMs,
+    workingDirectory,
+  };
 }
 
 function checkpointEventType(
@@ -1177,6 +1212,41 @@ function toolPath(input: unknown): string | undefined {
     return undefined;
   const value = (input as Record<string, unknown>).path;
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+async function resolveBoundWorkingDirectory(
+  root: string,
+  workingDirectory: string,
+  name: string,
+): Promise<string> {
+  const target = resolve(root, workingDirectory);
+  let canonical: string;
+  try {
+    canonical = await realpath(target);
+  } catch {
+    throw new Error(
+      `Verification command '${name}' working directory '${workingDirectory}' does not exist.`,
+    );
+  }
+  if (!isPathWithin(root, canonical)) {
+    throw new Error(
+      `Verification command '${name}' working directory resolves outside the assigned worktree.`,
+    );
+  }
+  try {
+    if (!(await stat(canonical)).isDirectory()) {
+      throw new Error(
+        `Verification command '${name}' working directory is not a directory.`,
+      );
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("working directory"))
+      throw error;
+    throw new Error(
+      `Verification command '${name}' working directory cannot be inspected.`,
+    );
+  }
+  return canonical;
 }
 
 async function canonicalizePotentialPath(

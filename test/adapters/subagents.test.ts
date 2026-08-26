@@ -95,7 +95,12 @@ const policy = parseForgePolicy({
   },
   verification: {
     commands: {
-      test: { argv: ["npm", "test"], required: true, timeoutMs: 600_000 },
+      test: {
+        argv: ["npm", "test"],
+        required: true,
+        timeoutMs: 600_000,
+        workingDirectory: "web",
+      },
     },
   },
   review: { required: ["correctness", "security"], maxRounds: 3 },
@@ -132,6 +137,7 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
   assert.match(spawn.params.workflowScript, /forge-review-correctness/);
   assert.match(spawn.params.workflowScript, /forge-review-security/);
   assert.match(spawn.params.workflowScript, /forgedock\.pi\/1/);
+  assert.match(spawn.params.workflowScript, /workingDirectory.*web/);
   assert.doesNotMatch(spawn.params.workflowScript, /gh auth token/);
 });
 

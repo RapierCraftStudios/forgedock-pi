@@ -1,0 +1,5 @@
+{
+  "name": "monorepo-no-root-test",
+  "private": true,
+  "dependencies": {}
+}

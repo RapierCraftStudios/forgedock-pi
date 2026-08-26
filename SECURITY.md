@@ -24,11 +24,13 @@ ForgeDock Pi is designed so that:
 - subagents edit only an assigned worktree;
 - reviewers are read-only and cannot recursively delegate;
 - models cannot select arbitrary verification commands;
+- required local verification commands are checked for executable, package, and path feasibility without executing repository code before a writer starts;
+- bound verification working directories remain canonically contained by the assigned worktree;
 - GitHub writes and merges pass deterministic policy checks;
 - protected branches are not auto-merged;
 - required checks, reviewers, audit artifacts, SHAs, and leases fail closed.
 
-These controls are not an operating-system sandbox. Repository tests execute code and may access resources available to the current user unless a separate container or sandbox is configured.
+These controls are not an operating-system sandbox. Repository tests execute code and may access resources available to the current user unless a separate container or sandbox is configured. A policy with no local commands is an explicit CI-only mode; it does not imply that local verification has passed.
 
 ## Production guidance
 

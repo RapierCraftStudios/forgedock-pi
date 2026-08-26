@@ -31,6 +31,42 @@ const rawPolicy = {
   subagents: { maxConcurrent: 4, maxDepth: 2 },
 };
 
+test("verification commands default to the repository root and allow CI-only mode", () => {
+  const policy = parseForgePolicy(rawPolicy);
+  assert.equal(policy.verification.commands.test?.workingDirectory, ".");
+  const ciOnly = parseForgePolicy({
+    ...rawPolicy,
+    verification: { commands: {} },
+  });
+  assert.deepEqual(ciOnly.verification.commands, {});
+});
+
+test("verification working directories reject path escapes", () => {
+  for (const workingDirectory of [
+    "../web",
+    "packages/../web",
+    "/tmp",
+    "\\\\server\\share",
+    "C:\\repo",
+  ]) {
+    assert.throws(
+      () =>
+        parseForgePolicy({
+          ...rawPolicy,
+          verification: {
+            commands: {
+              test: {
+                ...rawPolicy.verification.commands.test,
+                workingDirectory,
+              },
+            },
+          },
+        }),
+      PolicyValidationError,
+    );
+  }
+});
+
 test("tracked policy enables only non-protected integration auto-merge", () => {
   const policy = parseForgePolicy(rawPolicy);
   assert.equal(canAutoMerge(policy, "staging"), true);

@@ -4,6 +4,10 @@ import { fileURLToPath } from "node:url";
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
+import {
+  DEFAULT_NPM_TEST_COMMAND,
+  discoverNpmTestPackage,
+} from "../adapters/verification-preflight.ts";
 import type { ForgeWorkOnController } from "../workflows/work-on.ts";
 import {
   FORGEDOCK_EVENT_SCHEMA,
@@ -59,6 +63,7 @@ export function registerForgeCommands(
       );
       if (repoResult.code !== 0 || !repoResult.stdout.trim())
         throw new Error("Unable to resolve the GitHub repository through gh.");
+      const testWorkingDirectory = await discoverNpmTestPackage(root);
       const templatePath = fileURLToPath(
         new URL("../../templates/config.json", import.meta.url),
       );
@@ -66,6 +71,7 @@ export function registerForgeCommands(
       await copyFile(templatePath, configPath);
       const config = parseTemplateConfig(await readFile(configPath, "utf8"));
       config.repository.name = repoResult.stdout.trim();
+      setTemplateVerification(config, testWorkingDirectory);
       await writeFile(
         configPath,
         `${JSON.stringify(config, null, 2)}\n`,
@@ -178,6 +184,7 @@ export function registerForgeCommands(
 
 interface TemplateConfig {
   repository: { name: string };
+  verification?: unknown;
   [key: string]: unknown;
 }
 
@@ -211,6 +218,34 @@ function parseTemplateConfig(text: string): TemplateConfig {
       ...(repository as Record<string, unknown>),
       name: (repository as Record<string, unknown>).name as string,
     },
+  };
+}
+
+function setTemplateVerification(
+  config: TemplateConfig,
+  workingDirectory: string | undefined,
+): void {
+  const verification = config.verification;
+  if (
+    !verification ||
+    typeof verification !== "object" ||
+    Array.isArray(verification)
+  ) {
+    throw new Error(
+      "Bundled Forge config template is missing verification settings.",
+    );
+  }
+  config.verification = {
+    ...(verification as Record<string, unknown>),
+    commands:
+      workingDirectory === undefined
+        ? {}
+        : {
+            test: {
+              ...DEFAULT_NPM_TEST_COMMAND,
+              workingDirectory,
+            },
+          },
   };
 }
 

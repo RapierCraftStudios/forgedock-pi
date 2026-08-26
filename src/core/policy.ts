@@ -4,6 +4,7 @@ export interface VerificationCommandPolicy {
   argv: readonly string[];
   required: boolean;
   timeoutMs: number;
+  workingDirectory: string;
 }
 
 export interface ForgePolicy {
@@ -104,6 +105,23 @@ function stringArray(value: unknown, path: string): string[] {
   ];
 }
 
+function repositoryRelativePath(value: unknown, path: string): string {
+  const result = string(value, path);
+  if (
+    result.includes("\0") ||
+    result.startsWith("/") ||
+    result.startsWith("\\") ||
+    /^[A-Za-z]:/.test(result) ||
+    result.split(/[\\/]/).some((segment) => segment === "..")
+  ) {
+    throw new PolicyValidationError(
+      path,
+      "must be a repository-relative path without absolute or '..' segments",
+    );
+  }
+  return result;
+}
+
 function parseVerificationCommands(
   value: unknown,
 ): Record<string, VerificationCommandPolicy> {
@@ -133,13 +151,14 @@ function parseVerificationCommands(
         1_000,
         3_600_000,
       ),
+      workingDirectory:
+        command.workingDirectory === undefined
+          ? "."
+          : repositoryRelativePath(
+              command.workingDirectory,
+              `verification.commands.${name}.workingDirectory`,
+            ),
     };
-  }
-  if (Object.keys(commands).length === 0) {
-    throw new PolicyValidationError(
-      "verification.commands",
-      "must define at least one approved command",
-    );
   }
   return commands;
 }

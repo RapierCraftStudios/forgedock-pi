@@ -268,14 +268,14 @@ The production/default branch is never auto-merged.
 {
   "verification": {
     "commands": {
-      "test": { "argv": ["npm", "test"], "required": true, "timeoutMs": 600000 },
-      "typecheck": { "argv": ["npm", "run", "typecheck"], "required": true, "timeoutMs": 300000 }
+      "test": { "argv": ["npm", "test"], "workingDirectory": ".", "required": true, "timeoutMs": 600000 },
+      "typecheck": { "argv": ["npm", "run", "typecheck"], "workingDirectory": ".", "required": true, "timeoutMs": 300000 }
     }
   }
 }
 ```
 
-The run snapshots policy from the trusted base commit. A PR/worktree modification to policy cannot change the active run. Models request checks by name and cannot supply shell source. The runner uses argv spawning, scrubs secrets, preserves the child exit code separately from truncated output, records hashes/artifacts, and fails closed for required checks.
+The run snapshots policy from the trusted base commit. A PR/worktree modification to policy cannot change the active run. Models request checks by name and cannot supply shell source. Before a writer is launched, required commands are preflighted with filesystem metadata, PATH lookup, and package JSON parsing only; no executable or npm script is run during preflight. The runner uses argv spawning from the bound repository-relative working directory, scrubs secrets, preserves the child exit code separately from truncated output, records hashes/artifacts, and fails closed for required checks. An empty local command map explicitly delegates verification to parent-owned GitHub CI.
 
 Executing repository code is still a security boundary. Production writer/verification runs require a containment mode. The first implementation must at minimum provide child environment scrubbing, worktree-root enforcement, no GitHub credentials, and a child-side guard against GitHub writes/push/merge. A stronger container/sandbox backend remains an explicit production-hardening option.
 
