@@ -224,7 +224,7 @@ export class SubagentsRpcClient {
           `Run ID: ${input.runId}`,
           `Frozen review head SHA: ${reviewHeadSha}`,
           `Assigned worktree: ${input.worktreeRoot}`,
-          `Return reviewer=${JSON.stringify(domain)} in forgedock.reviewer-result/v1. Call forge_diff first and inspect only domain-specific risks introduced by the frozen patch.`,
+          `Return reviewer=${JSON.stringify(domain)} in forgedock.reviewer-result/v1. Call forge_diff first and inspect only domain-specific risks introduced by the frozen patch. Before returning, call forge_finalize_reviewer with the complete result, then call structured_output with the identical value. Never write .pi files directly.`,
           input.issueContext,
         ].join("\n\n"),
         cwd: input.worktreeRoot,

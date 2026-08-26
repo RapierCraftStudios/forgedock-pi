@@ -17,7 +17,9 @@ import {
   boundedToolDenial,
   forgeCommitArguments,
   isForgeRuntimePath,
+  parseBoundReviewerResult,
   parseGitStatusPaths,
+  reviewerStatusIsTerminal,
 } from "../../src/agents/child-runtime.ts";
 import { FORGE_WORK_ON_TOOLS } from "../../src/agents/register.ts";
 
@@ -107,6 +109,54 @@ test("security evidence overflow stays typed across repeated output chunks", () 
       { headSha: "abcdef1234567890", sha256: "a".repeat(64), bytes: 42 },
       "abcdef1234567890",
     ),
+  );
+});
+
+test("review polling recognizes textual terminal states from pi-subagents RPC", () => {
+  assert.equal(
+    reviewerStatusIsTerminal({ text: "Run: child\nState: complete\nResult: /tmp/result.json" }),
+    true,
+  );
+  assert.equal(reviewerStatusIsTerminal({ state: "failed" }), true);
+  assert.equal(reviewerStatusIsTerminal({ text: "State: running" }), false);
+});
+
+test("review result files are schema and identity bound", () => {
+  const value = {
+    schema: "forgedock.reviewer-result/v1",
+    runId: "forge-run",
+    reviewer: "architecture",
+    headSha: "abcdef1234567890",
+    verdict: "pass",
+    findings: [],
+    filesReviewed: ["src/index.ts"],
+    limitations: [],
+  };
+  assert.deepEqual(
+    parseBoundReviewerResult(JSON.stringify(value), {
+      runId: "forge-run",
+      reviewer: "architecture",
+      headSha: "abcdef1234567890",
+    }),
+    value,
+  );
+  assert.throws(
+    () =>
+      parseBoundReviewerResult(JSON.stringify(value), {
+        runId: "other-run",
+        reviewer: "architecture",
+        headSha: "abcdef1234567890",
+      }),
+    /identity does not match/,
+  );
+  assert.throws(
+    () =>
+      parseBoundReviewerResult("not-json", {
+        runId: "forge-run",
+        reviewer: "architecture",
+        headSha: "abcdef1234567890",
+      }),
+    /valid JSON/,
   );
 });
 

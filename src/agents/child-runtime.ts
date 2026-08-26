@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { mkdir, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
@@ -19,7 +19,10 @@ import { parseChangedGitPaths } from "../adapters/git.ts";
 import { GitHubIssueProjector } from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
-import { SubagentsRpcClient } from "../adapters/subagents.ts";
+import {
+  SubagentsRpcClient,
+  type SubagentSpawnReceipt,
+} from "../adapters/subagents.ts";
 import { resolveVerificationCommandDirectory } from "../adapters/verification-preflight.ts";
 import {
   assertBuilderContractPaths,
@@ -956,7 +959,7 @@ export function registerForgeRuntime(
     name: "forge_run_review_panel",
     label: "Forge Run Review Panel",
     description:
-      "Launch and join the exact fresh correctness/security reviewer pair with trusted bindings",
+      "Launch and join a fresh risk-derived reviewer panel with trusted bindings",
     parameters: ReviewPanelParameters,
     async execute(_toolCallId, params, signal) {
       if (binding.node)
@@ -993,7 +996,7 @@ export function registerForgeRuntime(
           maxConcurrent: 2,
           maxDepth: 2,
           workOnTimeoutMs: 14_400_000,
-          reviewerTimeoutMs: 3_600_000,
+          reviewerTimeoutMs: 600_000,
         },
       };
       const common = {
@@ -1046,12 +1049,23 @@ export function registerForgeRuntime(
         ),
       );
       const receipts = [correctness, security, ...specialists];
+      const reviewers = [
+        "correctness",
+        "security",
+        ...(params.profiles ?? []).map((profile) => profile.id),
+      ];
       const reviewerResults = await Promise.all(
-        receipts.map((receipt) =>
+        receipts.map((receipt, index) =>
           waitForReviewerResult(
             rpc,
-            receipt.runId,
+            receipt,
             policy.subagents.reviewerTimeoutMs,
+            {
+              runId: binding.runId,
+              headSha: params.headSha,
+              reviewer: reviewers[index]!,
+            },
+            signal,
           ),
         ),
       );
@@ -1970,22 +1984,99 @@ async function checkoutIgnoresCase(
   return value === "true";
 }
 
+interface ExpectedReviewerResult {
+  runId: string;
+  headSha: string;
+  reviewer: string;
+}
+
+export function parseBoundReviewerResult(
+  text: string,
+  expected: ExpectedReviewerResult,
+): ForgeReviewerResult {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new Error("Reviewer result file does not contain valid JSON.");
+  }
+  if (!isForgeReviewerResult(value))
+    throw new Error("Reviewer result file failed schema validation.");
+  assertReviewerResultIdentity(value, expected);
+  return value;
+}
+
+export function reviewerStatusIsTerminal(payload: unknown): boolean {
+  const serialized = JSON.stringify(payload ?? {});
+  return /(?:State:\s*|"(?:state|status)"\s*:\s*")(?:complete|completed|failed|stopped|cancelled|canceled|rejected|paused|timed[-_ ]?out)\b/i.test(
+    serialized,
+  );
+}
+
 async function waitForReviewerResult(
   rpc: SubagentsRpcClient,
-  runId: string,
+  receipt: SubagentSpawnReceipt,
   timeoutMs: number,
+  expected: ExpectedReviewerResult,
+  signal?: AbortSignal,
 ): Promise<ForgeReviewerResult> {
   const deadline = Date.now() + timeoutMs;
+  let fileError: Error | undefined;
   while (Date.now() < deadline) {
-    const payload = await rpc.status(runId).catch(() => undefined);
+    if (signal?.aborted)
+      throw signal.reason ?? new Error("Reviewer panel was aborted.");
+    try {
+      const text = await readFile(receipt.resultPath, "utf8");
+      if (text.trim()) return parseBoundReviewerResult(text, expected);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT")
+        fileError = error instanceof Error ? error : new Error(String(error));
+    }
+
+    const payload = await rpc.status(receipt.runId).catch(() => undefined);
     const result = findForgeReviewerResult(payload);
-    if (result) return result;
-    const serialized = JSON.stringify(payload ?? {});
-    if (/"(?:state|status)":"(?:failed|stopped|cancelled)"/i.test(serialized))
-      throw new Error(`Reviewer ${runId} terminated without a valid result.`);
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    if (result) {
+      assertReviewerResultIdentity(result, expected);
+      return result;
+    }
+    if (reviewerStatusIsTerminal(payload)) {
+      throw new Error(
+        `Reviewer ${receipt.runId} terminated without a valid bound result${fileError ? `: ${fileError.message}` : "."}`,
+      );
+    }
+    await reviewerPollDelay(signal);
   }
-  throw new Error(`Reviewer ${runId} exceeded its configured timeout.`);
+  throw new Error(
+    `Reviewer ${receipt.runId} exceeded its configured timeout${fileError ? `: ${fileError.message}` : "."}`,
+  );
+}
+
+function assertReviewerResultIdentity(
+  result: ForgeReviewerResult,
+  expected: ExpectedReviewerResult,
+): void {
+  if (
+    result.runId !== expected.runId ||
+    result.headSha !== expected.headSha ||
+    (result.reviewer !== expected.reviewer &&
+      result.reviewer !== `forge-review-${expected.reviewer}`)
+  ) {
+    throw new Error("Reviewer result identity does not match its panel binding.");
+  }
+}
+
+async function reviewerPollDelay(signal?: AbortSignal): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new Error("Reviewer panel was aborted."));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, 1_000);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 export async function pushWithGitHubToken(
