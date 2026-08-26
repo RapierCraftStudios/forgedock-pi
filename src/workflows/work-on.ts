@@ -7,7 +7,10 @@ import type {
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 
-import { FetchGitHubTransport } from "../adapters/github-api.ts";
+import {
+  AuthorityGuardedGitHubTransport,
+  FetchGitHubTransport,
+} from "../adapters/github-api.ts";
 import { resolveGitHubToken } from "../adapters/github-auth.ts";
 import { loadForgePolicy } from "../adapters/config.ts";
 import { GitWorktreeManager, type PreparedWorktree } from "../adapters/git.ts";
@@ -52,13 +55,18 @@ import {
   isProtectedBranch,
   type ForgePolicy,
 } from "../core/policy.ts";
-import type { RepositoryLease } from "../core/lease.ts";
+import {
+  heartbeatLease,
+  isLeaseExpired,
+  type RepositoryLease,
+} from "../core/lease.ts";
 import {
   evaluateReviewGate,
   type FinalReviewDecision,
   type ReviewFinding,
   type VerificationResult,
 } from "../core/review.ts";
+import type { RunState } from "../core/state.ts";
 import { RunJournal } from "./journal.ts";
 import { publishReviewFindingIssues } from "./review-findings.ts";
 export {
@@ -109,6 +117,9 @@ export interface ActiveRunLink {
   orchestrationId?: string;
   leaseOwnerRunId: string;
   leaseEpoch: number;
+  leaseSeconds?: number;
+  heartbeatSeconds?: number;
+  lastHeartbeatAt?: string;
   reviewBaseSha: string;
   refreshes: number;
   providerRetries: number;
@@ -149,6 +160,7 @@ export interface StartIssueResult {
 export interface StartIssueOptions {
   orchestrationId?: string;
   leaseEpoch?: number;
+  confirmExpiredTakeover?: (ownerRunId: string) => Promise<boolean>;
 }
 
 export interface ParsedAsyncCompletion {
@@ -171,7 +183,11 @@ export class ForgeWorkOnController {
   readonly #receiptBindings = new Set<string>();
   readonly #earlyCompletions = new Map<string, ParsedAsyncCompletion>();
   readonly #reconcilingNodes = new Map<string, Promise<void>>();
+  readonly #heartbeating = new Set<string>();
+  readonly #heartbeatRetryAt = new Map<string, number>();
   #completionUnsubscribe: (() => void) | undefined;
+  #heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+  #attachmentGeneration = 0;
 
   constructor(pi: ExtensionAPI) {
     this.#pi = pi;
@@ -183,10 +199,17 @@ export class ForgeWorkOnController {
 
   async attach(ctx: ExtensionContext): Promise<void> {
     this.#restoreLinks(ctx);
+    const generation = ++this.#attachmentGeneration;
+    if (this.#heartbeatTimer) clearInterval(this.#heartbeatTimer);
+    this.#heartbeatTimer = setInterval(() => {
+      void this.#heartbeatDirectRuns(ctx, generation);
+    }, 5_000);
+    this.#heartbeatTimer.unref();
     for (const repositoryRoot of new Set(
       [...this.#links.values()].map((link) => link.prepared.repositoryRoot),
     ))
       await this.#git.ensureRuntimeIgnored(repositoryRoot);
+    await this.#heartbeatDirectRuns(ctx, generation);
     await this.#rpc.ping();
     this.#completionUnsubscribe?.();
     this.#completionUnsubscribe = this.#rpc.onAsyncComplete((payload) => {
@@ -405,7 +428,118 @@ export class ForgeWorkOnController {
     }
   }
 
+  async #heartbeatDirectRuns(
+    ctx: ExtensionContext,
+    generation: number,
+  ): Promise<void> {
+    if (generation !== this.#attachmentGeneration) return;
+    const now = new Date();
+    const links = new Map(
+      [...this.#links.values()].map((link) => [link.forgeRunId, link]),
+    );
+    for (const link of links.values()) {
+      if (generation !== this.#attachmentGeneration) return;
+      if (
+        link.orchestrationId ||
+        !["running", "ready", "refreshing", "finalizing"].includes(
+          link.status,
+        ) ||
+        this.#heartbeating.has(link.forgeRunId) ||
+        (this.#heartbeatRetryAt.get(link.forgeRunId) ?? 0) > now.getTime()
+      )
+        continue;
+      const heartbeatSeconds = link.heartbeatSeconds ?? 60;
+      if (
+        !directRunHeartbeatDue(
+          link.lastHeartbeatAt,
+          heartbeatSeconds,
+          now,
+        )
+      )
+        continue;
+
+      this.#heartbeating.add(link.forgeRunId);
+      try {
+        const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
+        const token = await resolveGitHubToken(
+          this.#pi,
+          link.prepared.repositoryRoot,
+          ctx.signal,
+        );
+        const store = new GitHubStateBranchStore(
+          new FetchGitHubTransport({ token }),
+          link.repository,
+          link.stateBranch,
+        );
+        const current = await store.readRun(link.forgeRunId, ctx.signal);
+        if (!current.state || current.state.status !== "active") continue;
+        if (!current.state.lease || current.state.leaseBinding)
+          throw new Error(
+            `Direct Forge run ${link.forgeRunId} has no renewable lease.`,
+          );
+        const durableHeartbeatAt = Date.parse(
+          current.state.lease.lastHeartbeatAt,
+        );
+        if (
+          Number.isFinite(durableHeartbeatAt) &&
+          now.getTime() - durableHeartbeatAt <
+            policy.state.heartbeatSeconds * 1_000
+        ) {
+          link.lastHeartbeatAt = current.state.lease.lastHeartbeatAt;
+          link.leaseSeconds = policy.state.leaseSeconds;
+          link.heartbeatSeconds = policy.state.heartbeatSeconds;
+          this.#persistLink(link);
+          continue;
+        }
+        const lease = heartbeatLease(current.state.lease, {
+          repository: link.repository,
+          owner: {
+            runId: link.forgeRunId,
+            sessionId: ctx.sessionManager.getSessionId(),
+          },
+          epoch: link.leaseEpoch,
+          now,
+          ttlSeconds: policy.state.leaseSeconds,
+        });
+        const result = await new RunJournal(store).append({
+          runId: link.forgeRunId,
+          type: "lease.heartbeat",
+          payload: { lease },
+          idempotencyKey: `lease:heartbeat:${lease.lastHeartbeatAt}`,
+          sessionId: ctx.sessionManager.getSessionId(),
+          message: `Heartbeat ForgeDock run ${link.forgeRunId}`,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+        if (generation !== this.#attachmentGeneration) return;
+        link.lastHeartbeatAt =
+          result.state.lease?.lastHeartbeatAt ?? lease.lastHeartbeatAt;
+        link.leaseSeconds = policy.state.leaseSeconds;
+        link.heartbeatSeconds = policy.state.heartbeatSeconds;
+        this.#heartbeatRetryAt.delete(link.forgeRunId);
+        this.#persistLink(link);
+      } catch (error) {
+        if (generation === this.#attachmentGeneration) {
+          this.#heartbeatRetryAt.set(
+            link.forgeRunId,
+            now.getTime() + heartbeatSeconds * 1_000,
+          );
+          ctx.ui.notify(
+            `ForgeDock run ${link.forgeRunId} heartbeat failed: ${errorMessage(error)}`,
+            "warning",
+          );
+        }
+      } finally {
+        this.#heartbeating.delete(link.forgeRunId);
+      }
+    }
+  }
+
   dispose(): void {
+    this.#attachmentGeneration += 1;
+    if (this.#heartbeatTimer) clearInterval(this.#heartbeatTimer);
+    this.#heartbeatTimer = undefined;
+    this.#heartbeating.clear();
+    this.#heartbeatRetryAt.clear();
     this.#completionUnsubscribe?.();
     this.#completionUnsubscribe = undefined;
     this.#lifecycleListeners.clear();
@@ -646,14 +780,29 @@ export class ForgeWorkOnController {
     );
     await store.ensureBranch(new Date(), ctx.signal);
     const preflight = await store.readRun(runId, ctx.signal);
-    if (
-      preflight.lease &&
-      (!options.orchestrationId ||
-        preflight.lease.ownerRunId !== options.orchestrationId ||
-        preflight.lease.epoch !== options.leaseEpoch)
-    ) {
-      throw new Error(
-        `Repository is already leased by run ${preflight.lease.ownerRunId}; takeover must be explicit.`,
+    const orchestrationOwnsLease = Boolean(
+      options.orchestrationId &&
+        preflight.lease &&
+        preflight.lease.ownerRunId === options.orchestrationId &&
+        preflight.lease.epoch === options.leaseEpoch,
+    );
+    if (preflight.lease && !orchestrationOwnsLease) {
+      if (!isLeaseExpired(preflight.lease, new Date()))
+        throw new Error(
+          `Repository is already leased by run ${preflight.lease.ownerRunId}; takeover must be explicit.`,
+        );
+      if (
+        !options.confirmExpiredTakeover ||
+        !(await options.confirmExpiredTakeover(preflight.lease.ownerRunId))
+      )
+        throw new Error(
+          `Repository lease ${preflight.lease.ownerRunId} expired and requires confirmed takeover.`,
+        );
+      await this.cancelExpiredDirectRun(
+        store,
+        preflight.lease.ownerRunId,
+        ctx,
+        `Expired direct run takeover confirmed by operator session ${ctx.sessionManager.getSessionId()}.`,
       );
     }
     if (options.orchestrationId && !preflight.lease)
@@ -697,8 +846,20 @@ export class ForgeWorkOnController {
           : {}),
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
-      const projector = new GitHubIssueProjector(
+      const authorityBinding = {
+        forgeRunId: runId,
+        leaseOwnerRunId: options.orchestrationId ?? runId,
+        leaseEpoch: initialized.lease?.epoch ?? options.leaseEpoch ?? 1,
+        ...(options.orchestrationId
+          ? { orchestrationId: options.orchestrationId }
+          : {}),
+      };
+      const projectionTransport = new AuthorityGuardedGitHubTransport(
         transport,
+        () => requireActiveRunAuthority(store, authorityBinding, ctx.signal),
+      );
+      const projector = new GitHubIssueProjector(
+        projectionTransport,
         policy.repository.name,
       );
       const createdEvent = initialized.events[0];
@@ -768,6 +929,11 @@ export class ForgeWorkOnController {
         leaseOwnerRunId: options.orchestrationId ?? runId,
         leaseEpoch:
           initialized.lease?.epoch ?? options.leaseEpoch ?? 1,
+        leaseSeconds: policy.state.leaseSeconds,
+        heartbeatSeconds: policy.state.heartbeatSeconds,
+        ...(initialized.lease
+          ? { lastHeartbeatAt: initialized.lease.lastHeartbeatAt }
+          : {}),
         reviewBaseSha: prepared.baseSha,
         refreshes: 0,
         providerRetries: 0,
@@ -1080,10 +1246,18 @@ export class ForgeWorkOnController {
     }
     const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
     const token = await resolveGitHubToken(this.#pi, link.prepared.repositoryRoot, ctx.signal);
-    const transport = new FetchGitHubTransport({ token });
+    const baseTransport = new FetchGitHubTransport({ token });
+    const store = new GitHubStateBranchStore(
+      baseTransport,
+      link.repository,
+      link.stateBranch,
+    );
+    const transport = new AuthorityGuardedGitHubTransport(
+      baseTransport,
+      () => requireActiveRunAuthority(store, link, ctx.signal),
+    );
     const github = new GitHubWorkflowAdapter(transport, link.repository);
     const projector = new GitHubIssueProjector(transport, link.repository);
-    const store = new GitHubStateBranchStore(transport, link.repository, link.stateBranch);
     const reviewerNode =
       nodeResult.node === "review-correctness" ||
       nodeResult.node === "review-security";
@@ -1489,7 +1663,11 @@ export class ForgeWorkOnController {
     if (!prior) await journal.append({ runId: link.forgeRunId, type: "node.queued", payload: common, idempotencyKey: `node:${node.nodeId}:queued`, sessionId, message: `Queue parent node ${node.nodeId}`, ...(ctx.signal ? { signal: ctx.signal } : {}) });
     if (!prior || prior.status === "queued") await journal.append({ runId: link.forgeRunId, type: "node.started", payload: { ...common, baseSha: link.prepared.baseSha }, idempotencyKey: `node:${node.nodeId}:started`, sessionId, message: `Start parent node ${node.nodeId}`, ...(ctx.signal ? { signal: ctx.signal } : {}) });
     const token = await resolveGitHubToken(this.#pi, link.prepared.repositoryRoot, ctx.signal);
-    const transport = new FetchGitHubTransport({ token });
+    const baseTransport = new FetchGitHubTransport({ token });
+    const transport = new AuthorityGuardedGitHubTransport(
+      baseTransport,
+      () => requireActiveRunAuthority(store, link, ctx.signal),
+    );
     const github = new GitHubWorkflowAdapter(transport, link.repository);
     const projector = new GitHubIssueProjector(transport, link.repository);
     const current = await store.readRun(link.forgeRunId, ctx.signal);
@@ -1683,7 +1861,15 @@ export class ForgeWorkOnController {
       finalReviewDecision = gate;
       const priorFindingIssueMap = { ...link.findingIssueMap };
       await requireActiveRunAuthority(store, link, ctx.signal);
-      link.findingIssueMap = await publishReviewFindingIssues({ github, pullNumber: pull.number, link, result: aggregate, signal: ctx.signal });
+      link.findingIssueMap = await publishReviewFindingIssues({
+        github,
+        pullNumber: pull.number,
+        link,
+        result: aggregate,
+        assertAuthority: () =>
+          requireActiveRunAuthority(store, link, ctx.signal),
+        signal: ctx.signal,
+      });
       if (aggregate.review.rounds > 1) {
         await requireActiveRunAuthority(store, link, ctx.signal);
         await closeAddressedReviewFindingIssues({
@@ -1695,6 +1881,8 @@ export class ForgeWorkOnController {
           ),
           remediationCommitSha: aggregate.review.headSha,
           runId: link.forgeRunId,
+          assertAuthority: () =>
+            requireActiveRunAuthority(store, link, ctx.signal),
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
         const completeMarker = remediationCompleteMarker(
@@ -1843,6 +2031,7 @@ export class ForgeWorkOnController {
         checks: currentCi.checks,
         policyExempt: !currentCiRequired,
       });
+      const currentPull = await github.getPullRequest(pull.number, ctx.signal);
       const actualHead = await this.#git.head(link.prepared.worktreePath, ctx.signal);
       const actualFiles = await this.#git.changedFiles(link.prepared.worktreePath, link.prepared.baseSha, ctx.signal);
       if (!link.builderContract)
@@ -1853,16 +2042,46 @@ export class ForgeWorkOnController {
         authority.lease,
         link,
       );
-      if (!mergeAuthorityValid || !currentCiPassed || currentCi.headSha !== pull.headSha || !decision || !mergeDecision || (mergeDecision.decision !== "approved" && mergeDecision.decision !== "approved-with-follow-ups") || decision.outcome !== "awaiting-merge" || mergeDecision.headSha !== pull.headSha || mergeDecision.baseSha !== pull.baseSha || decision.headSha !== pull.headSha || decision.baseSha !== pull.baseSha || pull.baseRef !== link.prepared.baseBranch || !policy.branches.integration.includes(pull.baseRef) || !canAutoMerge(policy, pull.baseRef) || actualHead !== pull.headSha || actualFiles.length === 0) {
+      if (
+        !mergeAuthorityValid ||
+        !currentCiPassed ||
+        currentCi.headSha !== currentPull.headSha ||
+        currentPull.headSha !== pull.headSha ||
+        currentPull.baseSha !== pull.baseSha ||
+        currentPull.baseRef !== pull.baseRef ||
+        currentPull.state !== "open" ||
+        currentPull.merged ||
+        !decision ||
+        !mergeDecision ||
+        (mergeDecision.decision !== "approved" &&
+          mergeDecision.decision !== "approved-with-follow-ups") ||
+        decision.outcome !== "awaiting-merge" ||
+        mergeDecision.headSha !== currentPull.headSha ||
+        mergeDecision.baseSha !== currentPull.baseSha ||
+        decision.headSha !== currentPull.headSha ||
+        decision.baseSha !== currentPull.baseSha ||
+        currentPull.baseRef !== link.prepared.baseBranch ||
+        !policy.branches.integration.includes(currentPull.baseRef) ||
+        !canAutoMerge(policy, currentPull.baseRef) ||
+        actualHead !== currentPull.headSha ||
+        actualFiles.length === 0
+      ) {
         const reason = "Merge authority, current CI, reviewed SHA/base, integration branch, clean tree, or actual diff validation failed.";
-        await journal.append({ runId: link.forgeRunId, type: "node.needs-human", payload: { ...common, headSha: pull.headSha, reason, evidence: [reason] }, idempotencyKey: `node:${node.nodeId}:authority`, sessionId, message: `Gate merge node ${node.nodeId}`, ...(ctx.signal ? { signal: ctx.signal } : {}) });
+        await journal.append({ runId: link.forgeRunId, type: "node.needs-human", payload: { ...common, headSha: currentPull.headSha, reason, evidence: [reason] }, idempotencyKey: `node:${node.nodeId}:authority`, sessionId, message: `Gate merge node ${node.nodeId}`, ...(ctx.signal ? { signal: ctx.signal } : {}) });
         link.status = "needs-human";
         this.#persistLink(link);
         this.#emitLifecycle(link, { reason, nodeId: node.nodeId, pullNumber: pull.number });
         return;
       }
       await requireActiveRunAuthority(store, link, ctx.signal);
-      const merged = await github.mergePullRequest({ pullNumber: pull.number, expectedHeadSha: pull.headSha, method: "squash", ...(ctx.signal ? { signal: ctx.signal } : {}) });
+      const merged = await github.mergePullRequest({
+        pullNumber: currentPull.number,
+        expectedHeadSha: currentPull.headSha,
+        expectedBaseSha: currentPull.baseSha,
+        expectedBaseRef: currentPull.baseRef,
+        method: "squash",
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
       headSha = merged.sha;
       outcome = "merged";
       evidence = [`merge:${merged.sha}`];
@@ -2571,6 +2790,102 @@ export class ForgeWorkOnController {
     await Promise.allSettled(inFlight);
   }
 
+  async cancelExpiredDirectRun(
+    store: GitHubStateBranchStore,
+    runId: string,
+    ctx: ExtensionContext,
+    reason: string,
+  ): Promise<void> {
+    const current = await store.readRun(runId, ctx.signal);
+    if (
+      !current.state ||
+      !current.state.lease ||
+      current.state.leaseBinding ||
+      !current.lease ||
+      current.lease.ownerRunId !== runId ||
+      current.lease.epoch !== current.state.lease.epoch ||
+      !isLeaseExpired(current.lease, new Date())
+    )
+      throw new Error(
+        `Expired lease owner ${runId} is not a cancellable direct Forge run.`,
+      );
+    const providerRunIds = await this.findProviderRunsForDurableStates([
+      current.state,
+    ]);
+    const journal = new RunJournal(store);
+    let state = current.state;
+    if (state.status !== "completed" && state.status !== "cancelled") {
+      state = (
+        await journal.append({
+          runId,
+          type: "run.cancelled",
+          payload: { reason },
+          idempotencyKey: "run:cancelled",
+          sessionId: ctx.sessionManager.getSessionId(),
+          actorKind: "human",
+          allowExpiredLease: true,
+          message: `Cancel expired direct ForgeDock run ${runId}`,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        })
+      ).state;
+    }
+    if (state.lease) {
+      await journal.append({
+        runId,
+        type: "lease.released",
+        payload: { ownerRunId: runId, epoch: state.lease.epoch },
+        idempotencyKey: "lease:release",
+        sessionId: ctx.sessionManager.getSessionId(),
+        actorKind: "human",
+        allowExpiredLease: true,
+        message: `Release expired direct ForgeDock lease ${runId}`,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+    }
+    const readBack = await store.readRun(runId, ctx.signal);
+    if (readBack.lease || readBack.state?.lease)
+      throw new Error(`Expired direct Forge run ${runId} retained its lease.`);
+    await this.stopProviderRuns(providerRunIds).catch(() => undefined);
+    const link = [...this.#links.values()].find(
+      (candidate) => candidate.forgeRunId === runId,
+    );
+    if (link) {
+      link.status = "failed";
+      link.activeNodes = {};
+      link.currentNodeId = undefined;
+      this.#persistLink(link);
+    }
+  }
+
+  async findProviderRunsForDurableStates(
+    states: readonly RunState[],
+  ): Promise<string[]> {
+    const providerRunIds = new Set<string>();
+    for (const state of states) {
+      for (const node of Object.values(state.nodes)) {
+        if (node.subagentRunId && isProviderSubagentRunId(node.subagentRunId)) {
+          providerRunIds.add(node.subagentRunId);
+          continue;
+        }
+        if (!node.resultPath || !node.launchNonce) continue;
+        try {
+          const recovered = await this.#rpc.findRunByLaunch({
+            forgeRunId: state.runId,
+            nodeId: node.nodeId,
+            resultPath: node.resultPath,
+            launchNonce: node.launchNonce,
+            allowMismatchedNonce: (node.transportRetries ?? 0) > 0,
+          });
+          if (recovered) providerRunIds.add(recovered);
+        } catch {
+          // Ambiguous or unavailable provider descriptors cannot weaken durable
+          // cancellation; runtime stop remains a best-effort cleanup projection.
+        }
+      }
+    }
+    return [...providerRunIds].sort();
+  }
+
   async stopProviderRuns(runIds: readonly string[]): Promise<void> {
     for (const runId of new Set(runIds)) {
       if (!isProviderSubagentRunId(runId)) continue;
@@ -2844,14 +3159,18 @@ export class ForgeWorkOnController {
       link.prepared.repositoryRoot,
       ctx.signal,
     );
-    const transport = new FetchGitHubTransport({ token });
-    const github = new GitHubWorkflowAdapter(transport, link.repository);
-    const projector = new GitHubIssueProjector(transport, link.repository);
+    const baseTransport = new FetchGitHubTransport({ token });
     const store = new GitHubStateBranchStore(
-      transport,
+      baseTransport,
       link.repository,
       link.stateBranch,
     );
+    const transport = new AuthorityGuardedGitHubTransport(
+      baseTransport,
+      () => requireActiveRunAuthority(store, link, ctx.signal),
+    );
+    const github = new GitHubWorkflowAdapter(transport, link.repository);
+    const projector = new GitHubIssueProjector(transport, link.repository);
     await requireActiveRunAuthority(store, link, ctx.signal);
     const existingPull = await github.findPullRequest(
       link.prepared.branch,
@@ -2869,6 +3188,8 @@ export class ForgeWorkOnController {
           pullNumber: existingPull.number,
           link,
           result,
+          assertAuthority: () =>
+            requireActiveRunAuthority(store, link, ctx.signal),
           signal: ctx.signal,
         })
       : {};
@@ -2885,6 +3206,8 @@ export class ForgeWorkOnController {
         activeFindingIds,
         remediationCommitSha: result.review.headSha,
         runId: link.forgeRunId,
+        assertAuthority: () =>
+          requireActiveRunAuthority(store, link, ctx.signal),
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
       await postRemediationArtifact({
@@ -3073,6 +3396,15 @@ export class ForgeWorkOnController {
           configuredWorkflowCount: 0,
           timedOut: false,
         };
+    const mergePull = await resolveMergeability(
+      github,
+      pull.number,
+      ctx.signal,
+    );
+    const pullIdentityChanged =
+      mergePull.headSha !== currentPull.headSha ||
+      mergePull.baseSha !== currentPull.baseSha ||
+      mergePull.baseRef !== currentPull.baseRef;
     const localChecks: VerificationResult[] = Object.entries(
       policy.verification.commands,
     ).map(([name, command]) => {
@@ -3156,32 +3488,35 @@ export class ForgeWorkOnController {
       ...refreshedAudit.missingReviewerDomains.map(
         (domain) => `missing reviewer artifact ${domain}`,
       ),
+      ...(pullIdentityChanged
+        ? ["pull request head/base identity changed during CI polling"]
+        : []),
     ];
     const findings = result.review.findings as readonly ReviewFinding[];
     const gate = evaluateReviewGate({
       identity: {
         repository: link.repository,
         runId: link.forgeRunId,
-        pullRequest: currentPull.number,
+        pullRequest: mergePull.number,
         headSha: result.review.headSha,
         baseSha: result.baseSha,
         rosterVersion: "forgedock.review-roster/v1",
       },
-      currentHeadSha: currentPull.headSha,
-      currentBaseSha: currentPull.baseSha,
+      currentHeadSha: mergePull.headSha,
+      currentBaseSha: mergePull.baseSha,
       requiredReviewers: policy.review.required,
       completedReviewers: result.review.completedReviewers,
       findings,
       checks,
-      mergeability: currentPull.mergeability,
+      mergeability: mergePull.mergeability,
       leaseValid: runLeaseAuthorityMatches(
         currentRun.state,
         currentRun.lease,
         link,
       ),
-      baseBranch: currentPull.baseRef,
+      baseBranch: mergePull.baseRef,
       protectedBranches: policy.branches.protected,
-      autoMergeAuthorized: canAutoMerge(policy, currentPull.baseRef),
+      autoMergeAuthorized: canAutoMerge(policy, mergePull.baseRef),
       malformedResults: auditFailures,
     });
     await requireActiveRunAuthority(store, link, ctx.signal);
@@ -3238,8 +3573,10 @@ export class ForgeWorkOnController {
 
     await requireActiveRunAuthority(store, link, ctx.signal);
     const merged = await github.mergePullRequest({
-      pullNumber: pull.number,
-      expectedHeadSha: result.review.headSha,
+      pullNumber: mergePull.number,
+      expectedHeadSha: mergePull.headSha,
+      expectedBaseSha: mergePull.baseSha,
+      expectedBaseRef: mergePull.baseRef,
       method: "squash",
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
@@ -4126,6 +4463,18 @@ function normalizeActiveRunLink(value: unknown): ActiveRunLink | undefined {
             }
           : {},
   };
+}
+
+export function directRunHeartbeatDue(
+  lastHeartbeatAt: string | undefined,
+  heartbeatSeconds: number,
+  now: Date,
+): boolean {
+  const timestamp = Date.parse(lastHeartbeatAt ?? "");
+  return (
+    !Number.isFinite(timestamp) ||
+    now.getTime() - timestamp >= heartbeatSeconds * 1_000
+  );
 }
 
 function runLeaseAuthorityMatches(

@@ -1,7 +1,40 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { githubRetryDelayMs } from "../../src/adapters/github-api.ts";
+import {
+  AuthorityGuardedGitHubTransport,
+  githubRetryDelayMs,
+  type GitHubRequest,
+  type GitHubResponse,
+  type GitHubTransport,
+} from "../../src/adapters/github-api.ts";
+
+test("GitHub mutation transport revalidates authority for every write", async () => {
+  const requests: GitHubRequest[] = [];
+  const inner: GitHubTransport = {
+    async request<T>(request: GitHubRequest): Promise<GitHubResponse<T>> {
+      requests.push(request);
+      return { status: 200, data: {} as T, headers: {} };
+    },
+  };
+  let checks = 0;
+  const transport = new AuthorityGuardedGitHubTransport(inner, async () => {
+    checks += 1;
+    if (checks === 2) throw new Error("authority revoked");
+  });
+
+  await transport.request({ method: "GET", path: "/read" });
+  await transport.request({ method: "POST", path: "/first-write" });
+  await assert.rejects(
+    transport.request({ method: "PATCH", path: "/stale-write" }),
+    /authority revoked/,
+  );
+  assert.equal(checks, 2);
+  assert.deepEqual(
+    requests.map((request) => request.path),
+    ["/read", "/first-write"],
+  );
+});
 
 test("GitHub transient retry honors rate-limit and server failures", () => {
   const now = 1_000_000;

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   canonicalReviewerName,
+  directRunHeartbeatDue,
   expectedHeadForNode,
   finalReviewDecisionMarker,
   findingPriority,
@@ -22,6 +23,19 @@ import {
   similarFindingTitle,
   workflowLabelForNode,
 } from "../../src/workflows/work-on.ts";
+
+test("direct runs heartbeat at the configured cadence", () => {
+  const now = new Date("2026-08-26T00:02:00.000Z");
+  assert.equal(
+    directRunHeartbeatDue("2026-08-26T00:01:01.000Z", 60, now),
+    false,
+  );
+  assert.equal(
+    directRunHeartbeatDue("2026-08-26T00:01:00.000Z", 60, now),
+    true,
+  );
+  assert.equal(directRunHeartbeatDue(undefined, 60, now), true);
+});
 
 test("short reviewer aliases normalize to configured agent names", () => {
   assert.equal(canonicalReviewerName("security"), "forge-review-security");

@@ -342,22 +342,28 @@ export class GitHubWorkflowAdapter {
   async mergePullRequest(input: {
     pullNumber: number;
     expectedHeadSha: string;
+    expectedBaseSha: string;
+    expectedBaseRef: string;
     method?: "merge" | "squash" | "rebase";
     signal?: AbortSignal;
   }): Promise<MergeResult> {
     assertNumber(input.pullNumber, "pull request");
     const current = await this.getPullRequest(input.pullNumber, input.signal);
-    if (current.merged)
-      return { merged: true, sha: current.headSha, message: "Already merged" };
-    if (current.headSha !== input.expectedHeadSha) {
+    if (
+      current.headSha !== input.expectedHeadSha ||
+      current.baseSha !== input.expectedBaseSha ||
+      current.baseRef !== input.expectedBaseRef
+    ) {
       throw new GitHubApiError(
         409,
         `${this.#apiRoot}/pulls/${input.pullNumber}/merge`,
         {
-          message: `Stale reviewed SHA ${input.expectedHeadSha}; current head is ${current.headSha}`,
+          message: `Stale reviewed pull identity ${input.expectedHeadSha}/${input.expectedBaseRef}@${input.expectedBaseSha}; current identity is ${current.headSha}/${current.baseRef}@${current.baseSha}`,
         },
       );
     }
+    if (current.merged)
+      return { merged: true, sha: current.headSha, message: "Already merged" };
     const path = `${this.#apiRoot}/pulls/${input.pullNumber}/merge`;
     const response = await this.#transport.request<MergeApiResponse>({
       method: "PUT",

@@ -56,7 +56,7 @@ export async function confirmExpiredLeaseTakeover(
   if (!ctx.hasUI) return false;
   return ctx.ui.confirm(
     "Take over expired ForgeDock lease?",
-    `Expired orchestration ${ownerRunId} still owns the repository lease. Confirm cancellation and takeover.`,
+    `Expired run or orchestration ${ownerRunId} still owns the repository lease. Confirm cancellation and takeover.`,
   );
 }
 
@@ -201,7 +201,10 @@ export function registerForgeCommands(
       } catch {
         throw new Error("Usage: /forge:work-on <issue-number>");
       }
-      const result = await controller.startIssue(issueNumber, ctx);
+      const result = await controller.startIssue(issueNumber, ctx, {
+        confirmExpiredTakeover: (ownerRunId) =>
+          confirmExpiredLeaseTakeover(ctx, ownerRunId),
+      });
       ctx.ui.notify(
         `Launched ForgeDock run ${result.runId} for issue #${result.issueNumber}.\nSubagent: ${result.subagentRunId}\nWorktree: ${result.worktreePath}`,
         "info",

@@ -4,6 +4,9 @@
 
 - Added `/forge:audit [focus]` for read-only workflow diagnosis and privacy-gated upstream issue filing from external repositories.
 - Added deterministic sanitization, editable public-report previews, fixed upstream routing, and explicit operator confirmation.
+- Added direct-run lease heartbeats plus confirmed stale direct-run cancellation/release for crash recovery.
+- Added state-wide orchestration child discovery so internal launch sentinels cannot orphan durable children during cancellation or takeover.
+- Added per-mutation GitHub authority guards and exact PR head/base-branch/base-SHA revalidation immediately before merge.
 
 ## 0.1.0 — Experimental
 

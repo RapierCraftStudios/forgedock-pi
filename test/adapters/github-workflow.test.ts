@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type {
-  GitHubRequest,
-  GitHubResponse,
-  GitHubTransport,
+import {
+  GitHubApiError,
+  type GitHubRequest,
+  type GitHubResponse,
+  type GitHubTransport,
 } from "../../src/adapters/github-api.ts";
 import { GitHubWorkflowAdapter } from "../../src/adapters/github-workflow.ts";
 
@@ -141,6 +142,79 @@ test("GitHub CI gate fails closed on a configured check failure", async () => {
   ]);
 });
 
+test("merge rejects a retargeted or advanced pull base", async (t) => {
+  for (const current of [
+    { headSha: "reviewed-head", baseSha: "advanced-base", baseRef: "staging" },
+    { headSha: "reviewed-head", baseSha: "reviewed-base", baseRef: "main" },
+  ]) {
+    await t.test(`${current.baseRef}@${current.baseSha}`, async () => {
+      const transport = new MockTransport((request) => {
+        if (request.method === "GET" && request.path.endsWith("/pulls/7"))
+          return response(200, {
+            number: 7,
+            html_url: "https://example.test/pr/7",
+            state: "open",
+            merged: false,
+            head: { sha: current.headSha, ref: "forge/issue-7" },
+            base: { sha: current.baseSha, ref: current.baseRef },
+            mergeable: true,
+          });
+        throw new Error(`Unexpected request ${request.method} ${request.path}`);
+      });
+      const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
+      await assert.rejects(
+        adapter.mergePullRequest({
+          pullNumber: 7,
+          expectedHeadSha: "reviewed-head",
+          expectedBaseSha: "reviewed-base",
+          expectedBaseRef: "staging",
+        }),
+        (error: unknown) =>
+          error instanceof GitHubApiError &&
+          error.status === 409 &&
+          JSON.stringify(error.response).includes("Stale reviewed pull identity"),
+      );
+      assert.equal(
+        transport.requests.some((request) => request.method === "PUT"),
+        false,
+      );
+    });
+  }
+});
+
+test("merge sends the reviewed identity only after exact pull revalidation", async () => {
+  const transport = new MockTransport((request) => {
+    if (request.method === "GET" && request.path.endsWith("/pulls/7"))
+      return response(200, {
+        number: 7,
+        html_url: "https://example.test/pr/7",
+        state: "open",
+        merged: false,
+        head: { sha: "reviewed-head", ref: "forge/issue-7" },
+        base: { sha: "reviewed-base", ref: "staging" },
+        mergeable: true,
+      });
+    if (request.method === "PUT" && request.path.endsWith("/pulls/7/merge"))
+      return response(200, {
+        merged: true,
+        sha: "merge-sha",
+        message: "merged",
+      });
+    throw new Error(`Unexpected request ${request.method} ${request.path}`);
+  });
+  const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
+  const result = await adapter.mergePullRequest({
+    pullNumber: 7,
+    expectedHeadSha: "reviewed-head",
+    expectedBaseSha: "reviewed-base",
+    expectedBaseRef: "staging",
+  });
+  assert.equal(result.sha, "merge-sha");
+  assert.deepEqual(
+    transport.requests.find((request) => request.method === "PUT")?.body,
+    { sha: "reviewed-head", merge_method: "squash" },
+  );
+});
 test("GitHub CI gate reports a missing required context as unknown", async () => {
   const transport = new MockTransport((request) => {
     const shared = common(request);

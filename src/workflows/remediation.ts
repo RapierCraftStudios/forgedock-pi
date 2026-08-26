@@ -192,6 +192,7 @@ export async function closeAddressedReviewFindingIssues(input: {
   activeFindingIds: ReadonlySet<string>;
   remediationCommitSha: string;
   runId: string;
+  assertAuthority?: () => Promise<void>;
   signal?: AbortSignal;
 }): Promise<void> {
   for (const [findingId, issueNumber] of Object.entries(
@@ -204,15 +205,19 @@ export async function closeAddressedReviewFindingIssues(input: {
       input.remediationCommitSha,
     );
     const comments = await input.github.getComments(issueNumber, input.signal);
-    if (!comments.some((comment) => comment.includes(marker)))
+    if (!comments.some((comment) => comment.includes(marker))) {
+      await input.assertAuthority?.();
       await input.github.commentOnIssue(
         issueNumber,
         `${marker}\nFixed by remediation of PR #${input.pullNumber} at commit \`${input.remediationCommitSha}\`.`,
         input.signal,
       );
+    }
     const issue = await input.github.getIssue(issueNumber, input.signal);
-    if (issue.state === "open")
+    if (issue.state === "open") {
+      await input.assertAuthority?.();
       await input.github.closeIssue(issueNumber, input.signal);
+    }
   }
 }
 

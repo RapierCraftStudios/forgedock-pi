@@ -25,8 +25,9 @@ ForgeDock Pi is designed so that:
 - reviewers are read-only and cannot recursively delegate;
 - models cannot select arbitrary verification commands;
 - GitHub writes and merges pass deterministic policy checks;
+- every GitHub mutation revalidates the current run/lease authority;
 - protected branches are not auto-merged;
-- required checks, reviewers, audit artifacts, SHAs, and leases fail closed.
+- required checks, reviewers, audit artifacts, exact PR head/base identity, and leases fail closed.
 
 These controls are not an operating-system sandbox. Repository tests execute code and may access resources available to the current user unless a separate container or sandbox is configured. Forge-owned runtime and Git local-exclude writes use directory handles and no-follow opens where the host supports them, and fail closed when those primitives are unavailable. This protects against pre-existing and replacement symlink redirection, but it does not provide a complete lock against a concurrent local filesystem actor that can rename or replace unrelated paths; use a container or VM when that actor is in the threat model.
 

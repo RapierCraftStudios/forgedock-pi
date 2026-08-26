@@ -49,6 +49,34 @@ test("audit sanitization removes common secrets, paths, and known repository ide
   assert.match(sanitized, /Bearer \[REDACTED_TOKEN\]/);
 });
 
+test("audit sanitization removes structured credentials, PII, controls, and repository URL variants", () => {
+  const escape = String.fromCharCode(27);
+  const sanitized = sanitizeAuditText(
+    [
+      '{"password":"hunter2","token":"opaque-value","client_secret":"client-value"}',
+      "AWS_ACCESS_KEY_ID=AKIAABCDEFGHIJKLMNOP",
+      "AWS_SECRET_ACCESS_KEY=aws-secret-value",
+      "Authorization: Basic dXNlcjpwYXNzd29yZA==",
+      "http://alice:swordfish@example.com/path",
+      "alice@example.com",
+      "http://github.com/HiddenOrg/HiddenRepo",
+      "https://api.github.com/repos/PrivateOrg/PrivateRepo/issues/1",
+      "./OtherOwner/OtherRepo",
+      `${escape}[8msecret=hidden-by-terminal${escape}[0m`,
+      "-----BEGIN PRIVATE KEY-----\nprivate-material\n-----END PRIVATE KEY-----",
+    ].join("\n"),
+  );
+  assert.doesNotMatch(
+    sanitized,
+    /hunter2|opaque-value|client-value|AKIA|aws-secret|dXNlcj|alice|swordfish|HiddenOrg|PrivateOrg|OtherOwner|hidden-by-terminal|private-material/i,
+  );
+  assert.equal(sanitized.includes(escape), false);
+  assert.match(sanitized, /\[REDACTED\]/);
+  assert.match(sanitized, /\[REDACTED_EMAIL\]/);
+  assert.match(sanitized, /\[REDACTED_PRIVATE_KEY\]/);
+  assert.match(sanitized, /\[SOURCE_REPOSITORY\]/);
+});
+
 test("audit sanitization fails closed for unlinked repositories and arbitrary absolute paths", () => {
   const upstream = `https://github.com/${FORGEDOCK_ISSUE_REPOSITORY}/issues/12`;
   const sanitized = sanitizeAuditText(
@@ -171,7 +199,12 @@ test("audit filing uses only the fixed upstream repository after edit and confir
   const ui = {
     editor: async (_title: string, draft: string) => {
       editorDraft = draft;
-      return draft.replace("builder retries", "builder repeats");
+      return draft
+        .replace("builder retries", "builder repeats")
+        .replace(
+          "<!-- forgedock-audit/v1 -->",
+          `${String.fromCharCode(27)}[8m{\"client_secret\":\"edited-secret\"} PrivateOrg/PrivateRepo alice@example.com${String.fromCharCode(27)}[0m\n\n<!-- forgedock-audit/v1 -->`,
+        );
     },
     confirm: async () => true,
   } as unknown as ExtensionContext["ui"];
@@ -200,6 +233,11 @@ test("audit filing uses only the fixed upstream repository after edit and confir
     `https://github.com/${FORGEDOCK_ISSUE_REPOSITORY}/issues/123`,
   );
   assert.doesNotMatch(editorDraft, /private-owner|private-repo|ghp_|alice/);
+  assert.doesNotMatch(
+    args.join("\n"),
+    /edited-secret|PrivateOrg|PrivateRepo|alice@example/i,
+  );
+  assert.equal(args.join("\n").includes(String.fromCharCode(27)), false);
 });
 
 test("audit filing stops before GitHub mutation when aborted", async () => {
@@ -257,6 +295,20 @@ test("audit filing fails closed without UI or operator confirmation", async () =
     reviewAndFileForgeAuditIssue(
       pi,
       { cwd: "/tmp/project", hasUI: true, ui: deniedUi },
+      input,
+      diagnostics,
+    ),
+    /not confirmed/,
+  );
+
+  const malformedUi = {
+    editor: async (_title: string, draft: string) => draft,
+    confirm: async () => "false" as unknown as boolean,
+  } as unknown as ExtensionContext["ui"];
+  await assert.rejects(
+    reviewAndFileForgeAuditIssue(
+      pi,
+      { cwd: "/tmp/project", hasUI: true, ui: malformedUi },
       input,
       diagnostics,
     ),

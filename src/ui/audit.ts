@@ -1,4 +1,5 @@
 import { arch, platform } from "node:os";
+import { basename } from "node:path";
 
 import type {
   ExtensionAPI,
@@ -15,6 +16,8 @@ const FORGEDOCK_ISSUE_MARKER = "<!-- forgedock-audit/v1 -->";
 const MAX_ISSUE_INPUT_TITLE_LENGTH = 160;
 const MAX_NORMALIZED_ISSUE_TITLE_LENGTH =
   MAX_ISSUE_INPUT_TITLE_LENGTH + "bug: ".length;
+const UNSAFE_TERMINAL_CONTROLS =
+  /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g;
 
 export interface ForgeAuditDiagnostics {
   runStatuses: readonly string[];
@@ -39,12 +42,17 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function currentRepositoryHints(cwd: string): string[] {
+  const repositoryName = basename(cwd.trim());
+  return repositoryName.length >= 3 ? [repositoryName] : [];
+}
+
 /** Remove common credentials, paths, and source-repository identities. */
 export function sanitizeAuditText(
   value: string,
   privateValues: readonly string[] = [],
 ): string {
-  let sanitized = value;
+  let sanitized = value.replace(UNSAFE_TERMINAL_CONTROLS, "");
   for (const privateValue of privateValues) {
     const trimmed = privateValue.trim();
     if (!trimmed) continue;
@@ -56,22 +64,47 @@ export function sanitizeAuditText(
 
   return sanitized
     .replace(
-      /https:\/\/github\.com\/(?!RapierCraftStudios\/forgedock-pi(?:[/?#]|$))[^/\s]+\/[^/?#\s]+(?:\.git)?/gi,
+      /https?:\/\/api\.github\.com\/repos\/(?!RapierCraftStudios\/forgedock-pi(?:[/?#]|$))[^/\s]+\/[^/?#\s]+/gi,
+      "[SOURCE_REPOSITORY]",
+    )
+    .replace(
+      /(?:https?|git|ssh):\/\/(?:[^\s/@]+@)?github\.com[/:](?!RapierCraftStudios\/forgedock-pi(?:\.git)?(?:[/?#]|$))[^/\s]+\/[^/?#\s]+(?:\.git)?/gi,
       "[SOURCE_REPOSITORY]",
     )
     .replace(
       /git@github\.com:(?!RapierCraftStudios\/forgedock-pi(?:\.git)?(?:\s|$))[^/\s]+\/[^\s]+/gi,
       "[SOURCE_REPOSITORY]",
     )
+    .replace(
+      /-----BEGIN [^-\r\n]*PRIVATE KEY-----[\s\S]*?-----END [^-\r\n]*PRIVATE KEY-----/gi,
+      "[REDACTED_PRIVATE_KEY]",
+    )
     .replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, "[REDACTED_TOKEN]")
     .replace(/\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g, "[REDACTED_TOKEN]")
     .replace(/\bsk-[A-Za-z0-9_-]{20,}\b/g, "[REDACTED_TOKEN]")
+    .replace(/\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g, "[REDACTED_ACCESS_KEY]")
+    .replace(
+      /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g,
+      "[REDACTED_TOKEN]",
+    )
+    .replace(
+      /\b(Authorization)\s*:\s*(?:Basic|Bearer)\s+[A-Za-z0-9._~+/=-]{4,}/gi,
+      "$1: [REDACTED]",
+    )
     .replace(/\b(Bearer)\s+[A-Za-z0-9._~+/=-]{12,}/gi, "$1 [REDACTED_TOKEN]")
     .replace(
-      /\b(api[_-]?key|access[_-]?token|password|secret)\s*([:=])\s*[^\s,;]+/gi,
-      "$1$2[REDACTED]",
+      /(["']?)(api[_-]?key|access[_-]?key(?:[_-]?id)?|secret[_-]?access[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|passwd|private[_-]?key|secret|token)\1\s*([:=])\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
+      (_match, quote: string, key: string, separator: string) =>
+        `${quote}${key}${quote}${separator}${quote}[REDACTED]${quote}`,
     )
-    .replace(/https:\/\/[^\s/@:]+:[^\s/@]+@/gi, "https://[REDACTED]@")
+    .replace(
+      /\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]+:[^\s/@]+@/gi,
+      "$1[REDACTED]@",
+    )
+    .replace(
+      /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,
+      "[REDACTED_EMAIL]",
+    )
     .replace(/\/home\/[^/\s]+/g, "$HOME")
     .replace(/\/Users\/[^/\s]+/g, "$HOME")
     .replace(
@@ -79,6 +112,10 @@ export function sanitizeAuditText(
       "[ABSOLUTE_PATH]",
     )
     .replace(/[A-Za-z]:\\[^\r\n\s]+/g, "[ABSOLUTE_PATH]")
+    .replace(
+      /\.\/(?!RapierCraftStudios\/forgedock-pi\b)[A-Za-z0-9_-]+\/[A-Za-z0-9_.-]+\b/gi,
+      "./[SOURCE_REPOSITORY_OR_PATH]",
+    )
     .replace(
       /(?<![A-Za-z0-9._$:/-])\b(?!RapierCraftStudios\/forgedock-pi\b)[A-Za-z0-9_-]+\/[A-Za-z0-9_.-]+\b/gi,
       "[SOURCE_REPOSITORY_OR_PATH]",
@@ -191,10 +228,16 @@ export async function reviewAndFileForgeAuditIssue(
       "forge_file_audit_issue requires interactive review and operator confirmation.",
     );
 
-  const privateValues = diagnostics.privateRepositoryNames ?? [];
+  const privateValues = [
+    ...(diagnostics.privateRepositoryNames ?? []),
+    ...currentRepositoryHints(ctx.cwd),
+  ];
   const initialIssue = {
     title: normalizeAuditTitle(sanitizeAuditText(input.title, privateValues)),
-    body: createForgeAuditBody(input, diagnostics),
+    body: createForgeAuditBody(input, {
+      ...diagnostics,
+      privateRepositoryNames: privateValues,
+    }),
   };
   const edited = await ctx.ui.editor(
     `Review issue for ${FORGEDOCK_ISSUE_REPOSITORY}`,
@@ -204,7 +247,11 @@ export async function reviewAndFileForgeAuditIssue(
     throw new Error(
       "ForgeDock issue filing was cancelled during draft review.",
     );
-  const reviewed = parseForgeAuditDraft(edited);
+  const parsed = parseForgeAuditDraft(edited);
+  const reviewed = {
+    title: normalizeAuditTitle(sanitizeAuditText(parsed.title, privateValues)),
+    body: sanitizeAuditText(parsed.body, privateValues),
+  };
   const confirmed = await ctx.ui.confirm(
     "Create public ForgeDock issue?",
     [
@@ -215,7 +262,7 @@ export async function reviewAndFileForgeAuditIssue(
       reviewed.body,
     ].join("\n"),
   );
-  if (!confirmed)
+  if (confirmed !== true)
     throw new Error(
       "ForgeDock issue creation was not confirmed by the operator.",
     );

@@ -196,7 +196,7 @@ The repository lease contains:
 }
 ```
 
-Expiry never transfers ownership automatically. A different machine may inspect and resume only after a user confirms takeover. Takeover appends an audit event, increments `epoch`, and marks the old active attempt `abandoned` before a fresh idempotent attempt begins.
+Expiry never transfers ownership automatically. Active direct runs and orchestrations heartbeat before their lease TTL; an expired lease cannot be revived. A different session may cancel and release an expired owner only after a user confirms takeover. Orchestration cancellation discovers children from every authoritative run journal, not only published lane receipts, so an internal launch sentinel cannot hide an active child. Durable cancellation revokes child authority before provider cleanup and parent lease release.
 
 ### GitHub projections
 
@@ -232,7 +232,7 @@ Machine handoff never blindly resumes an old local child. The old attempt is rec
 5. **Implement** — one writer child edits only the assigned worktree and returns a structured handoff. The parent verifies the actual diff rather than trusting the handoff.
 6. **Verify** — run operator-approved named checks as argv arrays in a scrubbed environment with timeout and preserved exit status. Unknown or malformed results fail closed.
 7. **Review** — freeze repository, PR/diff, run ID, head SHA, base SHA, and roster; launch fresh read-only reviewers in parallel; validate all findings and panel completion.
-8. **Merge** — immediately recheck head SHA, base policy, required checks, reviewer roster, blocking matrix, and lease. Auto-merge only to a configured integration branch.
+8. **Merge** — after CI polling, refetch and pin the exact PR head SHA, base branch, and base SHA; immediately recheck policy, reviewers, checks, diff, and lease; then enforce the same identity inside the merge adapter. Auto-merge only to a configured integration branch.
 9. **Close** — verify merge first, then update issue state and projections exactly once.
 10. **Cleanup** — remove only owned clean worktrees/temporary branches. Residue is reported, not concealed.
 

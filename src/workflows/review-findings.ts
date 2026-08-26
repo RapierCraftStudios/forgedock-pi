@@ -14,8 +14,10 @@ export async function publishReviewFindingIssues(input: {
   pullNumber: number;
   link: ReviewFindingRunIdentity;
   result: ForgeWorkOnResult;
+  assertAuthority?: () => Promise<void>;
   signal?: AbortSignal;
 }): Promise<Record<string, number>> {
+  await input.assertAuthority?.();
   const existing = await input.github.listIssuesByLabel(
     "review-finding",
     "all",
@@ -60,6 +62,7 @@ export async function publishReviewFindingIssues(input: {
       marker,
       regressionIssue: regression ? exact?.number : undefined,
     });
+    await input.assertAuthority?.();
     const created = await input.github.createIssue({
       title,
       body,
@@ -75,6 +78,7 @@ export async function publishReviewFindingIssues(input: {
       (finding) =>
         `- #${issueMap[finding.id]} — ${finding.id}: ${finding.summary}`,
     );
+    await input.assertAuthority?.();
     await input.github.postPullArtifact({
       pullNumber: input.pullNumber,
       marker: `<!-- FORGE:REVIEW_FINDING_ISSUES head=${input.result.review.headSha} -->`,

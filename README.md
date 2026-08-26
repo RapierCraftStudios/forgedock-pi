@@ -32,7 +32,7 @@ Issue
 - **Typed execution authority:** hash-chained events and snapshots on a dedicated GitHub state branch.
 - **Machine-visible memory:** canonical `FORGE:*` comments on issues and PRs.
 - **Nested review hierarchy:** one work-on writer launches fresh, read-only reviewer subagents.
-- **Fail-closed merge policy:** stale SHAs, failed checks, incomplete reviewers, missing audit artifacts, conflicts, protected branches, and invalid leases block merge.
+- **Fail-closed merge policy:** stale head/base identity, failed checks, incomplete reviewers, missing audit artifacts, conflicts, protected branches, and invalid leases block merge.
 - **Isolated Git worktrees:** one issue, one branch, one writer.
 - **Exact workflow labels:** `investigating → ready-to-build → building → in-review → merged`.
 - **Idempotent side effects:** event IDs, idempotency keys, read-back verification, and optimistic non-force state updates.
@@ -135,7 +135,7 @@ Then run:
 
 Run `/forge:audit` when ForgeDock itself behaves incorrectly in another project. The command performs a read-only analysis, searches for likely upstream duplicates, and prepares a structured report for `RapierCraftStudios/forgedock-pi`. Before submission, an editor shows the exact public title and body and a separate confirmation gate is required. Submission uses the authenticated GitHub CLI identity.
 
-Only sanitized metadata is included by default: ForgeDock, Node.js, and platform versions plus workflow statuses and redacted evidence. Source-repository identity, absolute paths, source code, issue or PR contents, customer data, full logs, and credentials must not be included. Report suspected vulnerabilities through the repository's private GitHub Security Advisory flow instead of `/forge:audit`.
+Only sanitized metadata is included by default: ForgeDock, Node.js, and platform versions plus workflow statuses and redacted evidence. The draft is sanitized both before editing and again before confirmation; structured credentials, source-repository URL variants, email addresses, absolute paths, and terminal control sequences are removed. Source code, issue or PR contents, customer data, full logs, and security-vulnerability details must not be included. Report suspected vulnerabilities through the repository's private GitHub Security Advisory flow instead of `/forge:audit`.
 
 An optional focus narrows the investigation:
 

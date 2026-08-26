@@ -193,6 +193,44 @@ test("non-fast-forward state update becomes a CAS conflict", async () => {
   );
 });
 
+test("state branch enumerates every authoritative durable run journal", async () => {
+  const transport = new MockTransport((request) => {
+    if (request.path.includes("/git/ref/heads/"))
+      return response(200, { object: { sha: "tip-1" } });
+    if (request.path.endsWith("/git/commits/tip-1"))
+      return response(200, { sha: "tip-1", tree: { sha: "tree-1" } });
+    if (request.path.includes("/git/trees/tree-1"))
+      return response(200, {
+        sha: "tree-1",
+        tree: [
+          {
+            path: ".forgedock/runs/run-z/events.ndjson",
+            type: "blob",
+            sha: "events-z",
+          },
+          {
+            path: ".forgedock/runs/run-a/events.ndjson",
+            type: "blob",
+            sha: "events-a",
+          },
+          {
+            path: ".forgedock/runs/run-a/snapshot.json",
+            type: "blob",
+            sha: "snapshot-a",
+          },
+          {
+            path: ".forgedock/orchestrations/orchestration-1/events.ndjson",
+            type: "blob",
+            sha: "orchestration-events",
+          },
+        ],
+      });
+    throw new Error(`Unexpected request ${request.method} ${request.path}`);
+  });
+  const store = new GitHubStateBranchStore(transport, repository);
+  assert.deepEqual(await store.listRunIds(), ["run-a", "run-z"]);
+});
+
 test("run replay trusts the journal and detects a stale snapshot", async () => {
   const { events, state, lease } = journal();
   const blobs: Record<string, string> = {
@@ -240,4 +278,7 @@ test("run replay trusts the journal and detects a stale snapshot", async () => {
   assert.equal(result.state?.sequence, 2);
   assert.equal(result.snapshotMatchesJournal, false);
   assert.equal(result.lease?.epoch, 1);
+  const states = await store.listRunStates();
+  assert.deepEqual(states.map((state) => state.runId), [runId]);
+  assert.equal(states[0]?.sequence, 2);
 });

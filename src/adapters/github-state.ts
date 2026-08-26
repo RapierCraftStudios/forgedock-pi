@@ -173,6 +173,40 @@ export class GitHubStateBranchStore {
     throw new GitHubApiError(response.status, path, response.data);
   }
 
+  async listRunIds(signal?: AbortSignal): Promise<string[]> {
+    const tip = await this.getTip(signal);
+    if (!tip)
+      throw new GitHubApiError(
+        404,
+        `${this.#apiRoot}/git/ref/heads/${this.#branch}`,
+        { message: "State branch missing" },
+      );
+    const entries = await this.#readTree(tip, signal);
+    return runIdsFromTree(entries);
+  }
+
+  async listRunStates(signal?: AbortSignal): Promise<RunState[]> {
+    const tip = await this.getTip(signal);
+    if (!tip)
+      throw new GitHubApiError(
+        404,
+        `${this.#apiRoot}/git/ref/heads/${this.#branch}`,
+        { message: "State branch missing" },
+      );
+    const entries = await this.#readTree(tip, signal);
+    const states: RunState[] = [];
+    for (const runId of runIdsFromTree(entries)) {
+      const eventText = await this.#readPath(
+        entries,
+        runEventsPath(runId),
+        signal,
+      );
+      const events = parseEventJournal(eventText ?? "");
+      if (events.length > 0) states.push(replayRunEvents(events));
+    }
+    return states;
+  }
+
   async readRun(
     runId: string,
     signal?: AbortSignal,
@@ -626,6 +660,18 @@ function encodePath(value: string): string {
 function assertRunId(runId: string): void {
   if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(runId))
     throw new TypeError("Run ID contains unsafe path characters.");
+}
+
+function runIdsFromTree(entries: readonly GitTreeEntry[]): string[] {
+  const runIds = new Set<string>();
+  for (const entry of entries) {
+    if (entry.type !== "blob") continue;
+    const match = /^\.forgedock\/runs\/([A-Za-z0-9][A-Za-z0-9_-]{0,127})\/events\.ndjson$/.exec(
+      entry.path,
+    );
+    if (match?.[1]) runIds.add(match[1]);
+  }
+  return [...runIds].sort();
 }
 
 function runEventsPath(runId: string): string {

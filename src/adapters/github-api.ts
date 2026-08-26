@@ -36,6 +36,21 @@ export class GitHubApiError extends Error {
   }
 }
 
+export class AuthorityGuardedGitHubTransport implements GitHubTransport {
+  readonly #inner: GitHubTransport;
+  readonly #assertAuthority: () => Promise<void>;
+
+  constructor(inner: GitHubTransport, assertAuthority: () => Promise<void>) {
+    this.#inner = inner;
+    this.#assertAuthority = assertAuthority;
+  }
+
+  async request<T>(request: GitHubRequest): Promise<GitHubResponse<T>> {
+    if (request.method !== "GET") await this.#assertAuthority();
+    return this.#inner.request<T>(request);
+  }
+}
+
 export class FetchGitHubTransport implements GitHubTransport {
   readonly #token: string;
   readonly #baseUrl: string;

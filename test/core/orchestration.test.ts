@@ -9,9 +9,13 @@ import {
 } from "../../src/core/orchestration.ts";
 import {
   cancelChildrenBeforeParent,
+  isOwnedActiveChildRun,
   isPublishableLaneReceipt,
   lifecycleMatchesForgeRun,
+  shouldBindQueuedLifecycle,
 } from "../../src/workflows/orchestrate.ts";
+
+import type { RunState } from "../../src/core/state.ts";
 
 const orchestrationId = "orchestration-1";
 const repository = "owner/repo";
@@ -84,6 +88,50 @@ test("lanes publish only real provider receipts", () => {
   assert.equal(isPublishableLaneReceipt("child-resolve-1"), true);
   assert.equal(isPublishableLaneReceipt("pending:forge-run-1"), false);
   assert.equal(isPublishableLaneReceipt("launch:resolve-1:nonce"), false);
+});
+
+test("durable cancellation discovers sentinel children outside lane receipts", () => {
+  const orchestration = initialized();
+  const orphan = {
+    runId: "forge-run-orphan",
+    status: "active",
+    leaseBinding: { ownerRunId: orchestrationId, epoch: 1 },
+  } as RunState;
+  assert.equal(isOwnedActiveChildRun(orphan, orchestration), true);
+  assert.equal(
+    isOwnedActiveChildRun(
+      {
+        ...orphan,
+        leaseBinding: { ownerRunId: "other-orchestration", epoch: 1 },
+      },
+      orchestration,
+    ),
+    false,
+  );
+  assert.equal(
+    isOwnedActiveChildRun({ ...orphan, status: "cancelled" }, orchestration),
+    false,
+  );
+});
+
+test("an early lifecycle event durably binds its queued lane first", () => {
+  assert.equal(
+    shouldBindQueuedLifecycle(
+      { status: "queued" },
+      { forgeRunId: "forge-run-1", subagentRunId: "provider-run-1" },
+    ),
+    true,
+  );
+  assert.equal(
+    shouldBindQueuedLifecycle(
+      { status: "queued" },
+      {
+        forgeRunId: "forge-run-1",
+        subagentRunId: "launch:resolve-1:nonce",
+      },
+    ),
+    false,
+  );
 });
 
 test("lane lifecycle follows the stable Forge run instead of rotating child receipts", () => {

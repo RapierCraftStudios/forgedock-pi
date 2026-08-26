@@ -13,7 +13,10 @@ import {
   type SubagentCapabilityCeilingHandle,
 } from "pi-subagents/capability-ceiling";
 
-import { FetchGitHubTransport } from "../adapters/github-api.ts";
+import {
+  AuthorityGuardedGitHubTransport,
+  FetchGitHubTransport,
+} from "../adapters/github-api.ts";
 import { resolveGitHubToken } from "../adapters/github-auth.ts";
 import { parseChangedGitPaths } from "../adapters/git.ts";
 import { GitHubIssueProjector } from "../adapters/github-projection.ts";
@@ -860,7 +863,13 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         );
 
       const token = await requireActiveAuthority(signal);
-      const transport = new FetchGitHubTransport({ token });
+      const baseTransport = new FetchGitHubTransport({ token });
+      const transport = new AuthorityGuardedGitHubTransport(
+        baseTransport,
+        async () => {
+          await requireActiveAuthority(signal);
+        },
+      );
       const github = new GitHubWorkflowAdapter(transport, binding.repository);
       const issue = await github.getIssue(binding.issueNumber, signal);
       await requireActiveAuthority(signal);
@@ -1103,9 +1112,9 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         githubToken ??
         (await resolveGitHubToken(pi, binding.worktreeRoot, signal));
       githubToken = token;
-      const transport = new FetchGitHubTransport({ token });
+      const baseTransport = new FetchGitHubTransport({ token });
       const store = new GitHubStateBranchStore(
-        transport,
+        baseTransport,
         binding.repository,
         binding.stateBranch,
       );
@@ -1147,25 +1156,47 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
       const idempotent = priorEventId !== undefined;
 
       if (params.action !== "queue") {
+        const projectionTransport = new AuthorityGuardedGitHubTransport(
+          baseTransport,
+          async () => {
+            await requireActiveAuthority(signal);
+          },
+        );
         const projector = new GitHubIssueProjector(
-          transport,
+          projectionTransport,
           binding.repository,
         );
         if (params.action !== "start") {
-          await projectPhaseReport(projector, event, params, binding, signal);
+          await requireActiveAuthority(signal);
+          await projectPhaseReport(
+            projector,
+            event,
+            params,
+            binding,
+            async () => {
+            await requireActiveAuthority(signal);
+          },
+            signal,
+          );
         }
         const workflowLabel = workflowLabelForCheckpoint(params);
-        if (workflowLabel)
+        if (workflowLabel) {
+          await requireActiveAuthority(signal);
           await projector.setWorkflowLabel(
             binding.issueNumber,
             workflowLabel,
             signal,
           );
+        }
+        await requireActiveAuthority(signal);
         await postDerivedPhaseArtifacts(
           projector,
           event,
           params,
           binding,
+          async () => {
+            await requireActiveAuthority(signal);
+          },
           signal,
         );
       }
@@ -1464,6 +1495,7 @@ async function projectPhaseReport(
     reason?: string;
   },
   binding: ForgeChildBinding,
+  assertAuthority: () => Promise<void>,
   signal?: AbortSignal,
 ): Promise<void> {
   if (
@@ -1480,6 +1512,7 @@ async function projectPhaseReport(
   ) {
     const blocks = splitPlanReport(params.report);
     for (const block of blocks) {
+      await assertAuthority();
       await projector.postArtifact({
         issueNumber: binding.issueNumber,
         runId: binding.runId,
@@ -1491,6 +1524,7 @@ async function projectPhaseReport(
     }
     return;
   }
+  await assertAuthority();
   await projector.projectEvent({
     issueNumber: binding.issueNumber,
     event,
@@ -1570,10 +1604,12 @@ async function postDerivedPhaseArtifacts(
     report?: string;
   },
   binding: ForgeChildBinding,
+  assertAuthority: () => Promise<void>,
   signal?: AbortSignal,
 ): Promise<void> {
   if (params.action !== "complete") return;
   if (params.phase === "investigate") {
+    await assertAuthority();
     await projector.postArtifact({
       issueNumber: binding.issueNumber,
       runId: binding.runId,
@@ -1582,6 +1618,7 @@ async function postDerivedPhaseArtifacts(
       markdown: `<!-- FORGE:CHECKPOINT -->\n\`\`\`json\n${JSON.stringify({ phase: "INVESTIGATION", status: "COMPLETE", next_phase: "BUILD", timestamp: event.occurredAt })}\n\`\`\``,
       ...(signal ? { signal } : {}),
     });
+    await assertAuthority();
     await projector.postArtifact({
       issueNumber: binding.issueNumber,
       runId: binding.runId,
@@ -1592,6 +1629,7 @@ async function postDerivedPhaseArtifacts(
     });
   }
   if (params.phase === "verify") {
+    await assertAuthority();
     await projector.appendToLatestComment({
       issueNumber: binding.issueNumber,
       marker: "<!-- FORGE:BUILDER -->",
@@ -1599,6 +1637,7 @@ async function postDerivedPhaseArtifacts(
       skipIfContains: "<!-- FORGE:BUILDER:COMPLETE -->",
       ...(signal ? { signal } : {}),
     });
+    await assertAuthority();
     await projector.postArtifact({
       issueNumber: binding.issueNumber,
       runId: binding.runId,

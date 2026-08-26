@@ -19,6 +19,7 @@ import {
 } from "../core/orchestration.ts";
 import { isLeaseExpired } from "../core/lease.ts";
 import { isProtectedBranch, type ForgePolicy } from "../core/policy.ts";
+import type { RunState } from "../core/state.ts";
 import { OrchestrationJournal } from "./orchestration-journal.ts";
 import {
   isProviderSubagentRunId,
@@ -87,12 +88,11 @@ export class ForgeOrchestrationController {
       if (!event.orchestrationId) return;
       void this.#enqueueLifecycle(event, ctx);
     });
-    if (!this.#heartbeatTimer) {
-      this.#heartbeatTimer = setInterval(() => {
-        void this.#heartbeat(ctx, generation);
-      }, 5_000);
-      this.#heartbeatTimer.unref();
-    }
+    if (this.#heartbeatTimer) clearInterval(this.#heartbeatTimer);
+    this.#heartbeatTimer = setInterval(() => {
+      void this.#heartbeat(ctx, generation);
+    }, 5_000);
+    this.#heartbeatTimer.unref();
   }
 
   async resume(ctx: ExtensionContext): Promise<void> {
@@ -172,24 +172,33 @@ export class ForgeOrchestrationController {
           `Repository lease ${expiredId} expired and requires confirmed takeover.`,
         );
       const expired = await store.readOrchestration(expiredId, ctx.signal);
-      if (!expired.state || expired.state.status !== "running")
-        throw new Error(
-          `Expired repository lease ${expiredId} has no cancellable orchestration state.`,
-        );
       const takeoverReason = `Lease expired after its owning Pi session stopped heartbeating; takeover confirmed by operator session ${ctx.sessionManager.getSessionId()}.`;
-      await this.#cancelDurableChildRuns(
-        store,
-        expired.state,
-        ctx,
-        takeoverReason,
-        true,
-      );
-      await this.#workOn.stopOrchestration(expiredId, ctx, takeoverReason);
-      await new OrchestrationJournal(store).cancel({
-        orchestrationId: expiredId,
-        reason: takeoverReason,
-        ...(ctx.signal ? { signal: ctx.signal } : {}),
-      });
+      if (expired.state?.status === "running") {
+        await this.#cancelDurableChildRuns(
+          store,
+          expired.state,
+          ctx,
+          takeoverReason,
+          true,
+        );
+        await this.#workOn.stopOrchestration(expiredId, ctx, takeoverReason);
+        await new OrchestrationJournal(store).cancel({
+          orchestrationId: expiredId,
+          reason: takeoverReason,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+      } else if (!expired.state) {
+        await this.#workOn.cancelExpiredDirectRun(
+          store,
+          expiredId,
+          ctx,
+          takeoverReason,
+        );
+      } else {
+        throw new Error(
+          `Expired repository lease ${expiredId} has no cancellable active owner state.`,
+        );
+      }
     }
     const journal = new OrchestrationJournal(store);
     const initialized = await journal.initialize({
@@ -334,24 +343,24 @@ export class ForgeOrchestrationController {
     reason: string,
     allowExpiredLease = false,
   ): Promise<void> {
-    const childRunIds: string[] = [];
-    const providerRunIds: string[] = [];
+    const childRunIds = new Set<string>();
+    const childStates: RunState[] = [];
+    const providerRunIds = new Set<string>();
     for (const lane of state.lanes) {
-      if (!lane.forgeRunId) continue;
-      const current = await store.readRun(lane.forgeRunId, ctx.signal);
-      if (
-        !current.state ||
-        current.state.status === "completed" ||
-        current.state.status === "cancelled"
-      )
-        continue;
-      childRunIds.push(lane.forgeRunId);
-      if (lane.subagentRunId) providerRunIds.push(lane.subagentRunId);
-      for (const node of Object.values(current.state.nodes)) {
-        if (node.status === "running" && node.subagentRunId)
-          providerRunIds.push(node.subagentRunId);
+      if (lane.subagentRunId) providerRunIds.add(lane.subagentRunId);
+    }
+    for (const durableState of await store.listRunStates(ctx.signal)) {
+      if (!isOwnedActiveChildRun(durableState, state)) continue;
+      childRunIds.add(durableState.runId);
+      childStates.push(durableState);
+      for (const node of Object.values(durableState.nodes)) {
+        if (node.subagentRunId) providerRunIds.add(node.subagentRunId);
       }
     }
+    for (const runId of await this.#workOn.findProviderRunsForDurableStates(
+      childStates,
+    ))
+      providerRunIds.add(runId);
     const journal = new RunJournal(store);
     for (const runId of childRunIds) {
       const current = await store.readRun(runId, ctx.signal);
@@ -380,7 +389,9 @@ export class ForgeOrchestrationController {
     }
     // Durable cancellation revokes child authority. Provider cleanup is a
     // best-effort runtime projection and must not retain the repository lease.
-    await this.#workOn.stopProviderRuns(providerRunIds).catch(() => undefined);
+    await this.#workOn
+      .stopProviderRuns([...providerRunIds])
+      .catch(() => undefined);
   }
 
   async #recoverFalseFailures(
@@ -459,11 +470,30 @@ export class ForgeOrchestrationController {
     if (!orchestrationId || this.#cancelling.has(orchestrationId)) return;
     const link = this.#links.get(orchestrationId);
     if (!link || link.status !== "running") return;
-    const current = await this.#read(link, ctx.signal);
-    const lane = current.state.lanes.find(
+    let current = await this.#read(link, ctx.signal);
+    let lane = current.state.lanes.find(
       (candidate) => candidate.issueNumber === event.issueNumber,
     );
     if (!lane || isTerminalLane(lane)) return;
+    if (shouldBindQueuedLifecycle(lane, event)) {
+      await current.journal.append({
+        orchestrationId,
+        type: "lane.started",
+        payload: {
+          issueNumber: event.issueNumber,
+          forgeRunId: event.forgeRunId,
+          subagentRunId: event.subagentRunId,
+        },
+        idempotencyKey: `lane:${event.issueNumber}:started`,
+        message: `Bind issue ${event.issueNumber} before lifecycle reconciliation`,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      current = await this.#read(link, ctx.signal);
+      lane = current.state.lanes.find(
+        (candidate) => candidate.issueNumber === event.issueNumber,
+      );
+      if (!lane || isTerminalLane(lane)) return;
+    }
     if (!lifecycleMatchesForgeRun(lane, event)) return;
     // A work-on run uses a new child receipt for each bounded node. The stable
     // Forge run ID, not the latest child receipt, owns lane lifecycle events.
@@ -840,6 +870,22 @@ export class ForgeOrchestrationController {
   }
 }
 
+export function isOwnedActiveChildRun(
+  run: RunState | undefined,
+  orchestration: Pick<
+    OrchestrationState,
+    "orchestrationId" | "leaseEpoch"
+  >,
+): run is RunState {
+  return Boolean(
+    run &&
+      run.leaseBinding?.ownerRunId === orchestration.orchestrationId &&
+      run.leaseBinding.epoch === orchestration.leaseEpoch &&
+      run.status !== "completed" &&
+      run.status !== "cancelled",
+  );
+}
+
 function chooseIntegrationBranch(policy: ForgePolicy): string {
   const exact = policy.branches.integration.find(
     (candidate) => !candidate.includes("*"),
@@ -906,6 +952,18 @@ export async function cancelChildrenBeforeParent<T>(input: {
 
 export function isPublishableLaneReceipt(runId: string): boolean {
   return isProviderSubagentRunId(runId);
+}
+
+export function shouldBindQueuedLifecycle(
+  lane: { status: string; forgeRunId?: string },
+  event: { forgeRunId: string; subagentRunId: string },
+): boolean {
+  return (
+    lane.status === "queued" &&
+    !lane.forgeRunId &&
+    Boolean(event.forgeRunId) &&
+    isPublishableLaneReceipt(event.subagentRunId)
+  );
 }
 
 export function lifecycleMatchesForgeRun(
