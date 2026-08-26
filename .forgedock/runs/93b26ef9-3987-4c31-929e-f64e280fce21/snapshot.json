@@ -10,8 +10,8 @@
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:56e02ee0245be78abe64c51a5c5c27f34bbfba0ceba45520c0015a6d1366f5a2",
+  "sequence": 9,
+  "lastEventHash": "sha256:db734d4bce54ffbe973eb4386764faf7a3798af1cf3ae081a1a06f9e9e009865",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -45,7 +45,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/93b26ef9-3987-4c31-929e-f64e280fce21/.pi/forge/93b26ef9-3987-4c31-929e-f64e280fce21-investigate-1.json",
       "subagentRunId": "b7a5204f-1ddf-46d7-be47-d4e37293435f",
@@ -54,7 +54,16 @@
       "startedAt": "2026-08-26T01:48:15.223Z",
       "previousSubagentRunId": "launch:investigate-1:0dfb2285-23e9-46e2-8b76-4c0f406da479",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "verificationResults": [],
+      "outcome": "invalid",
+      "evidence": [
+        "Issue #73 explicitly states that it is a disposable concurrency probe, intentionally not an actionable product change, and safe to close once observed.",
+        "The supplied run-start comment proves lane 03 was observed under run 93b26ef9-3987-4c31-929e-f64e280fce21.",
+        "No repository changes were made; the investigation used read-only inspection only."
+      ],
+      "finishedAt": "2026-08-26T01:50:37.438Z"
     }
   },
   "effects": {},
@@ -66,7 +75,8 @@
     "node:resolve-1:completed": "15bc6a1b-8057-479e-9df3-2aac508c63ab",
     "node:investigate-1:queued": "318c2ea4-8d79-4197-82ab-d61e6f5a845c",
     "node:investigate-1:started": "01ab10d6-c7d8-4e87-8bce-d69ca7980b86",
-    "node:investigate-1:attempt:1:launch-receipt:0dfb2285-23e9-46e2-8b76-4c0f406da479:b7a5204f-1ddf-46d7-be47-d4e37293435f": "6f6e7641-65cc-4a0c-a76b-2ca181f112c4"
+    "node:investigate-1:attempt:1:launch-receipt:0dfb2285-23e9-46e2-8b76-4c0f406da479:b7a5204f-1ddf-46d7-be47-d4e37293435f": "6f6e7641-65cc-4a0c-a76b-2ca181f112c4",
+    "node:investigate-1:completed": "24aaf7c4-a346-458a-be3b-4750c9047676"
   },
   "eventIds": {
     "204f33f3-da9d-4c81-975e-3ad4a53e38d4": true,
@@ -76,6 +86,7 @@
     "15bc6a1b-8057-479e-9df3-2aac508c63ab": true,
     "318c2ea4-8d79-4197-82ab-d61e6f5a845c": true,
     "01ab10d6-c7d8-4e87-8bce-d69ca7980b86": true,
-    "6f6e7641-65cc-4a0c-a76b-2ca181f112c4": true
+    "6f6e7641-65cc-4a0c-a76b-2ca181f112c4": true,
+    "24aaf7c4-a346-458a-be3b-4750c9047676": true
   }
 }
