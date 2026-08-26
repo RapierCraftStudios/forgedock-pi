@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 10,
-  "lastEventHash": "sha256:07305502bc4c1041120dad654cf434fccfac832ea81b412460b6cb2b03a4c800",
+  "sequence": 11,
+  "lastEventHash": "sha256:029fe520253f91beb22a9b637fa1b916e2ca43b92975b8808e6f69fd3139bf27",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -65,16 +65,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/verification-preflight.ts` and `test/adapters/verification-preflight.test.ts` are the only approved implementation paths.",
+            "The fix is a local alias normalization with no public API or policy-schema change.",
+            "The existing fixture supports testing failure at root and success in `web`.",
+            "The required acceptance behavior is directly testable through `preflightRequiredVerificationCommands`."
+          ],
           "inputArtifactHash": "sha256:7b2ef0f6e0f7892f8a3dbfbaf5d647bf9c905c3f24f5d2c7a5c3d8f1a2b4e6c8",
           "logicalNodeId": "plan-1",
           "startedAt": "2026-08-26T23:06:26.114Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/0a5f25bc-f48f-4607-a43d-2f9f490df1dc",
           "branch": "forge/issue-113-0a5f25bc",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T23:07:20.252Z",
+          "outputArtifactHash": "sha256:2c4f6a8e0b1d3f5a7c9e1b2d4f6a8c0e2b4d6f8a0c1e3b5d7f9a1c3e5b7d9f0a"
         }
       ]
     }
@@ -91,7 +98,8 @@
     "phase:investigate:1:start": "db484ae3-2f06-4051-a1fd-ea63a40254d5",
     "phase:investigate:1:complete": "932781be-b97d-49bd-a71c-656877b52eb2",
     "phase:plan:1:queue": "201372c9-7fa2-4952-bf79-0027749eb9b7",
-    "phase:plan:1:start": "ed3ba797-0210-495b-b1e2-92f49abd4f73"
+    "phase:plan:1:start": "ed3ba797-0210-495b-b1e2-92f49abd4f73",
+    "phase:plan:1:complete": "45698d96-5dbd-4218-8279-69e8c7233923"
   },
   "eventIds": {
     "e63377ed-a50b-4ad0-881a-36b1f97825a3": true,
@@ -103,7 +111,8 @@
     "db484ae3-2f06-4051-a1fd-ea63a40254d5": true,
     "932781be-b97d-49bd-a71c-656877b52eb2": true,
     "201372c9-7fa2-4952-bf79-0027749eb9b7": true,
-    "ed3ba797-0210-495b-b1e2-92f49abd4f73": true
+    "ed3ba797-0210-495b-b1e2-92f49abd4f73": true,
+    "45698d96-5dbd-4218-8279-69e8c7233923": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
