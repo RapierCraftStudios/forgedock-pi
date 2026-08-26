@@ -14,6 +14,7 @@ import {
 } from "pi-subagents/capability-ceiling";
 
 import { FetchGitHubTransport } from "../adapters/github-api.ts";
+import { resolveGitHubToken } from "../adapters/github-auth.ts";
 import { parseChangedGitPaths } from "../adapters/git.ts";
 import { GitHubIssueProjector } from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
@@ -1755,24 +1756,6 @@ async function checkoutIgnoresCase(
   if (value !== "true" && value !== "false")
     throw new Error(`Invalid core.ignorecase value: ${value || "empty"}.`);
   return value === "true";
-}
-
-async function resolveGitHubToken(
-  pi: ExtensionAPI,
-  cwd: string,
-  signal?: AbortSignal,
-): Promise<string> {
-  const result = await pi.exec("gh", ["auth", "token"], {
-    cwd,
-    timeout: 10_000,
-    ...(signal ? { signal } : {}),
-  });
-  const token = result.stdout.trim();
-  if (result.code !== 0 || !token)
-    throw new Error(
-      "Unable to resolve GitHub authentication for Forge checkpoint writes.",
-    );
-  return token;
 }
 
 function safeEnvironment(runId: string): NodeJS.ProcessEnv {

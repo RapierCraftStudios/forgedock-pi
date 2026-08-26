@@ -8,6 +8,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 
 import { FetchGitHubTransport } from "../adapters/github-api.ts";
+import { resolveGitHubToken } from "../adapters/github-auth.ts";
 import { loadForgePolicy } from "../adapters/config.ts";
 import { GitWorktreeManager, type PreparedWorktree } from "../adapters/git.ts";
 import { GitHubIssueProjector } from "../adapters/github-projection.ts";
@@ -3646,22 +3647,6 @@ function buildPullBody(link: ActiveRunLink, result: ForgeWorkOnResult): string {
     `Frozen head: \`${result.review.headSha}\``,
     `Findings: ${result.review.findings.length}`,
   ].join("\n");
-}
-
-async function resolveGitHubToken(
-  pi: ExtensionAPI,
-  cwd: string,
-  signal?: AbortSignal,
-): Promise<string> {
-  const result = await pi.exec("gh", ["auth", "token"], {
-    cwd,
-    timeout: 10_000,
-    ...(signal ? { signal } : {}),
-  });
-  const token = result.stdout.trim();
-  if (result.code !== 0 || !token)
-    throw new Error("GitHub CLI authentication is required.");
-  return token;
 }
 
 function assertResultIdentity(
