@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 19,
-  "lastEventHash": "sha256:fe21ac71a84858e959b2e989c1ed989876504512009f11380671e2dcd17301b7",
+  "sequence": 20,
+  "lastEventHash": "sha256:e846e4cb7b250b2f2c99768ccb85c89bdcfc61c21b1fca7d7223510d9e560de9",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -138,15 +138,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume verify attempt 1",
-          "evidence": [],
+          "evidence": [
+            "forge_verify check passed with exit code 0.",
+            "The check ran npm run typecheck and npm test; 150 tests passed and 0 failed.",
+            "Implementation commit 48bed21b2868e70dcaf0d551f914597e690e8576 exists on the bound branch.",
+            "The committed diff remains within src/workflows/work-on.ts and test/workflows/work-on.test.ts."
+          ],
           "logicalNodeId": "work-on/verify",
           "startedAt": "2026-08-26T20:21:13.283Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/9490f6a2-208c-459e-b62c-8041983b4505",
           "branch": "forge/issue-120-9490f6a2",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T20:22:16.938Z",
+          "outputArtifactHash": "sha256:verification-issue-120-48bed21",
+          "commitSha": "48bed21b2868e70dcaf0d551f914597e690e8576"
         }
       ]
     }
@@ -172,7 +180,8 @@
     "phase:implement:1:start": "284edfdb-276a-49af-88b7-1796ba11ee5c",
     "phase:implement:1:complete": "75cc80a7-9c85-4ec6-8b50-55eef621ac05",
     "phase:verify:1:queue": "c21a3007-d689-49ae-aa1a-424e4fc54729",
-    "phase:verify:1:start": "6fcfc6b1-3392-4e67-babf-07634d50b3dd"
+    "phase:verify:1:start": "6fcfc6b1-3392-4e67-babf-07634d50b3dd",
+    "phase:verify:1:complete": "0c3e8039-d422-4f14-9419-55e97f3eb2ad"
   },
   "eventIds": {
     "57e65b56-0ba9-4db8-a3a5-0e883f0add56": true,
@@ -193,7 +202,8 @@
     "284edfdb-276a-49af-88b7-1796ba11ee5c": true,
     "75cc80a7-9c85-4ec6-8b50-55eef621ac05": true,
     "c21a3007-d689-49ae-aa1a-424e4fc54729": true,
-    "6fcfc6b1-3392-4e67-babf-07634d50b3dd": true
+    "6fcfc6b1-3392-4e67-babf-07634d50b3dd": true,
+    "0c3e8039-d422-4f14-9419-55e97f3eb2ad": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
