@@ -5,10 +5,10 @@
   "issueNumber": 114,
   "integrationBranch": "staging",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "blocked",
   "authorityMode": "run-scoped",
-  "sequence": 22,
-  "lastEventHash": "sha256:388bca1be76493b8633b4ede361e97f3d6b85ad4ca51626375cfb3d3d8d8b780",
+  "sequence": 23,
+  "lastEventHash": "sha256:8927177d936de636632f5ea50f0e43b3ddfe21ecdab6d9918237847b54cde10a",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -160,7 +160,7 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "blocked",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 1",
           "evidence": [],
@@ -169,7 +169,9 @@
           "startedAt": "2026-08-26T18:10:02.721Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/b2442731-9897-4ff7-8b26-82a2c9b1571a",
           "branch": "forge/issue-114-b2442731",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "reason": "Required security reviewer did not return a schema-valid result after transient retry; trusted review panel is incomplete.",
+          "finishedAt": "2026-08-26T18:26:24.962Z"
         }
       ]
     }
@@ -198,7 +200,8 @@
     "phase:verify:1:start": "9f73b2d5-8a1f-4768-8914-8991987897cd",
     "phase:verify:1:complete": "8eb9f481-d495-4fea-93d9-088a3455937e",
     "phase:review:1:queue": "374b9ab7-1d5d-4cd4-901b-1f8d49b0e845",
-    "phase:review:1:start": "2aae7e03-122a-4cc8-8a3a-9a200357bcb4"
+    "phase:review:1:start": "2aae7e03-122a-4cc8-8a3a-9a200357bcb4",
+    "phase:review:1:block": "7f7b52b3-7a53-4cc4-a54d-0f8572f7de3f"
   },
   "eventIds": {
     "b824a9b4-9e40-40ac-9431-3794ecbad2f1": true,
@@ -222,7 +225,8 @@
     "9f73b2d5-8a1f-4768-8914-8991987897cd": true,
     "8eb9f481-d495-4fea-93d9-088a3455937e": true,
     "374b9ab7-1d5d-4cd4-901b-1f8d49b0e845": true,
-    "2aae7e03-122a-4cc8-8a3a-9a200357bcb4": true
+    "2aae7e03-122a-4cc8-8a3a-9a200357bcb4": true,
+    "7f7b52b3-7a53-4cc4-a54d-0f8572f7de3f": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
