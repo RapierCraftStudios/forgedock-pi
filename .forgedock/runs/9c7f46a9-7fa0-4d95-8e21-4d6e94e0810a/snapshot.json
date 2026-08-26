@@ -10,8 +10,8 @@
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 8,
-  "lastEventHash": "sha256:bf3d9399a9ea9d811bb78254a67b1acf3973bf01267c486f61cd414ff3c0da84",
+  "sequence": 9,
+  "lastEventHash": "sha256:6c11a2fd9ba8c9c352472287f6cdfcf9794126ad56bd867a54156b73431ecbf1",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -46,7 +46,7 @@
       "node": "investigate",
       "attempt": 1,
       "round": 1,
-      "status": "running",
+      "status": "completed",
       "baseSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
       "resultPath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/9c7f46a9-7fa0-4d95-8e21-4d6e94e0810a/.pi/forge/9c7f46a9-7fa0-4d95-8e21-4d6e94e0810a-investigate-1.json",
       "subagentRunId": "73d1d681-5912-4308-9810-a62b9aaee87e",
@@ -55,7 +55,18 @@
       "startedAt": "2026-08-26T01:47:36.529Z",
       "previousSubagentRunId": "launch:investigate-1:788bd458-b328-48af-bcbb-7e35ebb1e57f",
       "transportRetries": 0,
-      "launchReceipt": true
+      "launchReceipt": true,
+      "headSha": "1b018483cd94b8324ae7e34eaa07293861f4f491",
+      "verificationResults": [],
+      "outcome": "invalid",
+      "evidence": [
+        "Issue #72 explicitly describes itself as a disposable concurrency probe and states that it is intentionally not an actionable product change.",
+        "A repository-wide literal search found no occurrence of the issue title, so there is no lane-specific implementation to repair or complete.",
+        "src/core/dispatcher.ts:163-174 routes completed invalid investigations directly to close and cleanup rather than implementation.",
+        "test/core/dispatcher.test.ts:111-122 covers invalid/decomposed investigations routing to close without implementation.",
+        "src/workflows/orchestrate.ts:386-393 records a closed lane with the reason that invalid/decomposed investigations close without code."
+      ],
+      "finishedAt": "2026-08-26T01:49:50.541Z"
     }
   },
   "effects": {},
@@ -67,7 +78,8 @@
     "node:resolve-1:completed": "8da245ae-13fc-4d11-98b7-d67fed04092e",
     "node:investigate-1:queued": "ce02d33a-2635-4c20-b64d-c2a4f3f6942e",
     "node:investigate-1:started": "3bf13a08-f8f2-48e6-9ae9-aba9a0ac7024",
-    "node:investigate-1:attempt:1:launch-receipt:788bd458-b328-48af-bcbb-7e35ebb1e57f:73d1d681-5912-4308-9810-a62b9aaee87e": "33098981-7546-4068-9bc0-012b2353852b"
+    "node:investigate-1:attempt:1:launch-receipt:788bd458-b328-48af-bcbb-7e35ebb1e57f:73d1d681-5912-4308-9810-a62b9aaee87e": "33098981-7546-4068-9bc0-012b2353852b",
+    "node:investigate-1:completed": "80898ac3-77c6-4f97-ac57-446aa1a4fd38"
   },
   "eventIds": {
     "366b353d-0477-4064-9a24-f5fad1bec3dd": true,
@@ -77,6 +89,7 @@
     "8da245ae-13fc-4d11-98b7-d67fed04092e": true,
     "ce02d33a-2635-4c20-b64d-c2a4f3f6942e": true,
     "3bf13a08-f8f2-48e6-9ae9-aba9a0ac7024": true,
-    "33098981-7546-4068-9bc0-012b2353852b": true
+    "33098981-7546-4068-9bc0-012b2353852b": true,
+    "80898ac3-77c6-4f97-ac57-446aa1a4fd38": true
   }
 }
