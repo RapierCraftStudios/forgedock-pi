@@ -32,7 +32,7 @@ Issue
 - **Typed execution authority:** hash-chained events and snapshots on a dedicated GitHub state branch.
 - **Machine-visible memory:** canonical `FORGE:*` comments on issues and PRs.
 - **Nested review hierarchy:** one work-on writer launches fresh, read-only reviewer subagents.
-- **Fail-closed merge policy:** stale SHAs, failed checks, incomplete reviewers, missing audit artifacts, conflicts, protected branches, and invalid leases block merge.
+- **Fail-closed merge policy:** stale SHAs, failed checks, incomplete reviewers, missing audit artifacts, conflicts, protected branches, and invalid run/integration authority block merge.
 - **Isolated Git worktrees:** one issue, one branch, one writer.
 - **Exact workflow labels:** `investigating → ready-to-build → building → in-review → merged`.
 - **Idempotent side effects:** event IDs, idempotency keys, read-back verification, and optimistic non-force state updates.
@@ -44,7 +44,7 @@ Issue
 - `/forge:init`
 - `/forge:work-on <issue intent>`
 - `/forge:status`
-- Durable GitHub state journal and repository lease
+- Durable GitHub state journal, run-scoped authority, and CAS-backed integration gating
 - Canonical issue phase reports
 - PR-before-review ordering
 - Nested correctness and security reviewers
@@ -56,7 +56,7 @@ Issue
 
 - Multi-issue `/forge:orchestrate`
 - Full legacy Forge history recall and relevance ranking
-- Live cross-machine takeover validation
+- Live cross-machine run reconciliation validation
 - Container/OS sandboxing for repository test execution
 - Staging-to-production deployment review
 

@@ -62,6 +62,8 @@ test("read-only nodes deny shell and file mutation tools", () => {
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("bash"), false);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("subagent"), true);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_checkpoint"), true);
+  assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_run_review_panel"), true);
+  assert.equal(allowedNodeTools(undefined).has("forge_run_review_panel"), true);
 });
 
 test("runtime path classification follows the checkout case contract", () => {

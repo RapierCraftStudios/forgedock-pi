@@ -5,9 +5,7 @@
     "name": "owner/repository"
   },
   "state": {
-    "branch": "forgedock/state/v1",
-    "leaseSeconds": 300,
-    "heartbeatSeconds": 60
+    "branch": "forgedock/state/v1"
   },
   "branches": {
     "integration": ["staging", "milestone/*"],

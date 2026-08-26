@@ -264,18 +264,19 @@ export function parseForgePolicy(value: unknown): ForgePolicy {
       ? undefined
       : record(root.orchestration, "orchestration");
   const subagents = record(root.subagents, "subagents");
-  const leaseSeconds = integer(
-    state.leaseSeconds,
-    "state.leaseSeconds",
-    30,
-    86_400,
-  );
-  const heartbeatSeconds = integer(
-    state.heartbeatSeconds,
-    "state.heartbeatSeconds",
-    5,
-    leaseSeconds - 1,
-  );
+  const leaseSeconds =
+    state.leaseSeconds === undefined
+      ? 31_536_000
+      : integer(state.leaseSeconds, "state.leaseSeconds", 30, 31_536_000);
+  const heartbeatSeconds =
+    state.heartbeatSeconds === undefined
+      ? 60
+      : integer(
+          state.heartbeatSeconds,
+          "state.heartbeatSeconds",
+          5,
+          leaseSeconds - 1,
+        );
 
   return {
     schema: FORGEDOCK_CONFIG_SCHEMA,

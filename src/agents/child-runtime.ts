@@ -158,6 +158,24 @@ const PrepareReviewParameters = Type.Object({});
 const ReviewPanelParameters = Type.Object({
   headSha: Type.String({ minLength: 7 }),
   round: Type.Integer({ minimum: 1, maximum: 10 }),
+  profiles: Type.Optional(
+    Type.Array(
+      Type.Object({
+        id: Type.String({ minLength: 2, maxLength: 64, pattern: "^[a-z][a-z0-9-]+$" }),
+        focus: Type.String({ minLength: 1, maxLength: 2_000 }),
+        rationale: Type.String({ minLength: 1, maxLength: 2_000 }),
+        required: Type.Boolean(),
+        files: Type.Array(Type.String({ minLength: 1 }), { maxItems: 200 }),
+        changedLineRanges: Type.Array(Type.String({ minLength: 1 }), {
+          maxItems: 500,
+        }),
+        requiredEvidence: Type.Array(Type.String({ minLength: 1 }), {
+          maxItems: 50,
+        }),
+      }),
+      { maxItems: 8 },
+    ),
+  ),
 });
 
 const FinalizeReviewerParameters = Type.Object({
@@ -1011,10 +1029,32 @@ export function registerForgeRuntime(
           },
         }),
       ]);
-      const reviewerResults = await Promise.all([
-        waitForReviewerResult(rpc, correctness.runId, policy.subagents.reviewerTimeoutMs),
-        waitForReviewerResult(rpc, security.runId, policy.subagents.reviewerTimeoutMs),
-      ]);
+      const specialists = await Promise.all(
+        (params.profiles ?? []).map((profile) =>
+          rpc.spawnDomainReviewNode(
+            {
+              ...common,
+              issueContext: `Reviewer profile: ${JSON.stringify(profile)}\nReview only this profile scope against the frozen patch.`,
+              node: {
+                nodeId: `review-${profile.id}-${params.round}`,
+                node: `review-${profile.id}`,
+                attempt: params.round,
+              },
+            },
+            profile.id,
+          ),
+        ),
+      );
+      const receipts = [correctness, security, ...specialists];
+      const reviewerResults = await Promise.all(
+        receipts.map((receipt) =>
+          waitForReviewerResult(
+            rpc,
+            receipt.runId,
+            policy.subagents.reviewerTimeoutMs,
+          ),
+        ),
+      );
       return {
         content: [
           {
@@ -1025,7 +1065,7 @@ export function registerForgeRuntime(
         details: {
           headSha: params.headSha,
           round: params.round,
-          reviewerRunIds: [correctness.runId, security.runId],
+          reviewerRunIds: receipts.map((receipt) => receipt.runId),
           reviewerResults,
         },
       };
@@ -1046,9 +1086,7 @@ export function registerForgeRuntime(
       if (!isForgeReviewerResult(params.value))
         throw new Error("Final reviewer result failed schema validation.");
       assertReviewerDiffCoverage(reviewDiffCoverage, binding.reviewHeadSha);
-      const expectedReviewer = binding.node === "review-security"
-        ? "security"
-        : "correctness";
+      const expectedReviewer = binding.node.replace(/^review-/, "");
       if (
         params.value.runId !== binding.runId ||
         (params.value.reviewer !== expectedReviewer &&

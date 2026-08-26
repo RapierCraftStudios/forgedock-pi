@@ -12,6 +12,7 @@ import {
 import {
   FORGE_READ_ONLY_NODE_AGENT,
   FORGE_REVIEW_CORRECTNESS_AGENT,
+  FORGE_REVIEW_DOMAIN_AGENT,
   FORGE_REVIEW_SECURITY_AGENT,
   FORGE_REFRESH_REVIEW_AGENT,
   FORGE_WORK_ON_AGENT,
@@ -170,6 +171,81 @@ export class SubagentsRpcClient {
       throw new SubagentRpcError(
         "missing-run-id",
         "Dedicated reviewer spawn reply did not include a run ID.",
+      );
+    return { runId, resultPath, raw: data };
+  }
+
+  async spawnDomainReviewNode(
+    input: Omit<WorkOnLaunchInput, "node"> & {
+      node: {
+        nodeId: string;
+        node: string;
+        attempt: number;
+        headSha?: string;
+      };
+    },
+    domain: string,
+  ): Promise<SubagentSpawnReceipt> {
+    if (!/^[a-z][a-z0-9-]{1,63}$/.test(domain))
+      throw new TypeError("Reviewer domain must be lowercase kebab-case.");
+    if (!this.#asyncCompleteEvent) await this.ping();
+    const resultPath = join(
+      input.worktreeRoot,
+      ".pi",
+      "forge",
+      `${input.runId}-${input.node.nodeId}.json`,
+    );
+    const reviewHeadSha = input.reviewHeadSha ?? input.baseSha;
+    const binding = {
+      runId: input.runId,
+      resultPath,
+      repository: input.repository,
+      issueNumber: input.issueNumber,
+      leaseEpoch: input.leaseEpoch,
+      leaseOwnerRunId: input.leaseOwnerRunId ?? input.runId,
+      stateBranch: input.policy.state.branch,
+      worktreeRoot: input.worktreeRoot,
+      branch: input.branch,
+      baseBranch: input.baseBranch,
+      baseSha: input.baseSha,
+      maxReviewRounds: input.policy.review.maxRounds,
+      verificationCommands: input.policy.verification.commands,
+      nodeId: input.node.nodeId,
+      node: `review-${domain}`,
+      nodeAttempt: input.node.attempt,
+      reviewHeadSha,
+    };
+    const data = await this.#request(
+      "spawn",
+      {
+        agent: FORGE_REVIEW_DOMAIN_AGENT,
+        task: [
+          `Review ForgeDock issue #${input.issueNumber} as the ${domain} specialist.`,
+          `Run ID: ${input.runId}`,
+          `Frozen review head SHA: ${reviewHeadSha}`,
+          `Assigned worktree: ${input.worktreeRoot}`,
+          `Return reviewer=${JSON.stringify(domain)} in forgedock.reviewer-result/v1. Call forge_diff first and inspect only domain-specific risks introduced by the frozen patch.`,
+          input.issueContext,
+        ].join("\n\n"),
+        cwd: input.worktreeRoot,
+        context: "fresh",
+        extensionBindings: { [BINDING_NAMESPACE]: binding },
+        outputSchema: FORGE_REVIEWER_OUTPUT_SCHEMA,
+        output: resultPath,
+        outputMode: "file-only",
+        timeoutMs: input.policy.subagents.reviewerTimeoutMs,
+        acceptance: {
+          level: "none",
+          reason: "Parent validates specialist reviewer identity, SHA, and projection.",
+        },
+      },
+      15_000,
+    );
+    const runId = findRunId(data);
+    if (!runId)
+      throw new SubagentRpcError(
+        "missing-run-id",
+        "Domain reviewer spawn reply did not include a run ID.",
       );
     return { runId, resultPath, raw: data };
   }

@@ -6,6 +6,7 @@ export const CAPSULE_SCHEMAS = {
   intent: "forgedock.intent-capsule/v1",
   investigation: "forgedock.investigation-capsule/v1",
   contract: "forgedock.contract-capsule/v1",
+  roster: "forgedock.reviewer-roster-capsule/v1",
   review: "forgedock.review-capsule/v1",
   remediation: "forgedock.remediation-capsule/v1",
 } as const;
@@ -76,6 +77,23 @@ export interface ContractCapsule extends CapsuleEnvelope {
   authorityHazards: readonly string[];
 }
 
+export interface ReviewerRosterCapsule extends CapsuleEnvelope {
+  schema: typeof CAPSULE_SCHEMAS.roster;
+  pullNumber: number;
+  headSha: string;
+  contractDigest: string;
+  repositoryRiskProfileHash: string;
+  profiles: readonly {
+    id: string;
+    focus: string;
+    rationale: string;
+    required: boolean;
+    files: readonly string[];
+    changedLineRanges: readonly string[];
+    requiredEvidence: readonly string[];
+  }[];
+}
+
 export interface ReviewCapsule extends CapsuleEnvelope {
   schema: typeof CAPSULE_SCHEMAS.review;
   pullNumber: number;
@@ -109,6 +127,7 @@ export type ForgeCapsule =
   | IntentResolutionCapsule
   | InvestigationCapsule
   | ContractCapsule
+  | ReviewerRosterCapsule
   | ReviewCapsule
   | RemediationCapsule;
 

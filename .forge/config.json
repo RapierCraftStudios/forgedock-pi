@@ -5,9 +5,7 @@
     "name": "RapierCraftStudios/forgedock-pi"
   },
   "state": {
-    "branch": "forgedock/state/v1",
-    "leaseSeconds": 3600,
-    "heartbeatSeconds": 60
+    "branch": "forgedock/state/v1"
   },
   "branches": {
     "integration": [

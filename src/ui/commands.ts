@@ -424,8 +424,6 @@ async function configureForgePolicy(input: {
     repository: { provider: "github", name: input.repository },
     state: {
       ...config.state,
-      leaseSeconds: Math.min(config.state.leaseSeconds, 300),
-      heartbeatSeconds: Math.min(config.state.heartbeatSeconds, 60),
     },
     branches: {
       integration: uniqueStrings([integrationBranch, "milestone/*"]),
@@ -452,10 +450,17 @@ async function configureForgePolicy(input: {
     },
   };
   parseForgePolicy(config);
+  const serializedPolicy = structuredClone(config) as unknown as Record<
+    string,
+    unknown
+  >;
+  const serializedState = serializedPolicy.state as Record<string, unknown>;
+  delete serializedState.leaseSeconds;
+  delete serializedState.heartbeatSeconds;
   await mkdir(dirname(input.configPath), { recursive: true });
   await writeFile(
     input.configPath,
-    `${JSON.stringify(config, null, 2)}\n`,
+    `${JSON.stringify(serializedPolicy, null, 2)}\n`,
     "utf8",
   );
   return config;

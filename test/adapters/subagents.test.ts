@@ -11,6 +11,7 @@ import { materializeForgeAgents } from "../../src/agents/materialize.ts";
 import {
   FORGE_READ_ONLY_NODE_AGENT,
   FORGE_READ_ONLY_NODE_TOOLS,
+  FORGE_REVIEW_DOMAIN_AGENT,
   FORGE_REVIEW_TOOLS,
   FORGE_REFRESH_REVIEW_AGENT,
   FORGE_REFRESH_REVIEW_TOOLS,
@@ -318,7 +319,7 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
   const root = await mkdtemp(join(tmpdir(), "forgedock-agents-"));
   try {
     const paths = await materializeForgeAgents(root);
-    assert.equal(paths.length, 5);
+    assert.equal(paths.length, 6);
     const readOnlyNode = await readFile(
       join(root, ".pi", "agents", `${FORGE_READ_ONLY_NODE_AGENT}.md`),
       "utf8",
@@ -329,6 +330,10 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
     );
     const reviewer = await readFile(
       join(root, ".pi", "agents", "forge-review-security.md"),
+      "utf8",
+    );
+    const domainReviewer = await readFile(
+      join(root, ".pi", "agents", `${FORGE_REVIEW_DOMAIN_AGENT}.md`),
       "utf8",
     );
     const refresh = await readFile(
@@ -355,6 +360,9 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
     assert.match(reviewer, /^completionGuard: true$/m);
     assert.match(reviewer, /^extensions:/m);
     assert.match(reviewer, /^async: false$/m);
+    assert.doesNotMatch(domainReviewer, /tools: .*subagent/);
+    assert.match(domainReviewer, /domain-specialist/);
+    assert.match(domainReviewer, /^completionGuard: true$/m);
     assert.match(refresh, /tools: .*subagent/);
     assert.match(refresh, /forge_refresh_base/);
     assert.match(refresh, /^completionGuard: true$/m);
@@ -470,7 +478,7 @@ test("runtime Forge hierarchy keeps full work-on and reviewer boundaries", () =>
 
   const { pi } = fakePi();
   const registrations = registerForgeAgents(pi);
-  assert.equal(registrations.length, 5);
+  assert.equal(registrations.length, 6);
   const registry = (
     globalThis as Record<PropertyKey, unknown>
   )[Symbol.for("pi-subagents.runtime-agents.v1")] as {
