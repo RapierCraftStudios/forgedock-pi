@@ -111,6 +111,30 @@ test("preflight checks executable availability without running the command", asy
   }
 });
 
+test("preflight rejects a dangling root manifest symlink before nested package selection", async () => {
+  const testFixture = await fixture();
+  try {
+    await rm(join(testFixture.root, "package.json"));
+    await symlink(
+      join(testFixture.root, "web", "missing-package.json"),
+      join(testFixture.root, "package.json"),
+    );
+    await assert.rejects(
+      preflightRequiredVerificationCommands(
+        testFixture.root,
+        { test: command(".") },
+        { path: testFixture.path },
+      ),
+      (error: unknown) =>
+        error instanceof VerificationPreflightError &&
+        error.path === ".forge/config.json verification.commands.test.cwd" &&
+        /must not be a symbolic link/.test(error.message),
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
 test("verification cwd rejects missing, control, and symlink-escape directories", async () => {
   const testFixture = await fixture();
   try {
