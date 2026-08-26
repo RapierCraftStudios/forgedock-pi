@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:44aa08868b00cd58b290de8f4ad2473bb08f4998e7c5bdfacae2ae89421d5a76",
+  "sequence": 8,
+  "lastEventHash": "sha256:f1b9c7ffe27d026267bdd71b1445f87375491b9dc6bb0709e891d75f0a034b50",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -39,15 +39,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/verification-preflight.ts:57-59` validates package scripts at the configured command cwd and does not search sibling or nested packages.",
+            "`src/adapters/verification-preflight.ts:161-172` rejects non-object script maps, arrays, non-string values, and blank strings with a fail-closed error that points to the tracked command.",
+            "`test/adapters/verification-preflight.test.ts:63-86` covers a missing root script and a valid nested package, but does not cover a malformed root `scripts.test` value alongside that nested package.",
+            "`README.md:104-121` documents explicit package cwd binding and CI-only verification.",
+            "Issue #114 cites PR #110 and remediation commit `d174f8e9d8ff88c1a40b8a75c99489c76ef52e92`; the frozen tree already contains the cited validation behavior."
+          ],
           "logicalNodeId": "work-on/investigate",
           "startedAt": "2026-08-26T20:06:49.821Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/6dddc835-8066-43bf-9045-9fca7380e798",
           "branch": "forge/issue-114-6dddc835",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T20:09:08.852Z",
+          "outputArtifactHash": "sha256:investigation-issue-114-6dddc835"
         }
       ]
     }
@@ -61,7 +69,8 @@
     "phase:resolve:1:start": "a29a4379-1960-4de2-a1ca-6c537f20deb1",
     "phase:resolve:1:complete": "8de60f8f-8092-494a-b687-d039c8afe4fe",
     "phase:investigate:1:queue": "7da235b0-3aa7-4166-bf72-069081f0f196",
-    "phase:investigate:1:start": "1677b71c-1ecf-4867-9194-cfacbc55c3b7"
+    "phase:investigate:1:start": "1677b71c-1ecf-4867-9194-cfacbc55c3b7",
+    "phase:investigate:1:complete": "24621715-f344-4449-b6c2-ddd072bc2110"
   },
   "eventIds": {
     "bc0cdcf4-03ca-470f-afec-afc2da863301": true,
@@ -70,7 +79,8 @@
     "a29a4379-1960-4de2-a1ca-6c537f20deb1": true,
     "8de60f8f-8092-494a-b687-d039c8afe4fe": true,
     "7da235b0-3aa7-4166-bf72-069081f0f196": true,
-    "1677b71c-1ecf-4867-9194-cfacbc55c3b7": true
+    "1677b71c-1ecf-4867-9194-cfacbc55c3b7": true,
+    "24621715-f344-4449-b6c2-ddd072bc2110": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
