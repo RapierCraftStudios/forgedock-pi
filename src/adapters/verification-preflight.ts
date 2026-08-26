@@ -48,6 +48,7 @@ export async function preflightRequiredVerificationCommands(
         `${basePath}.argv`,
         "must name an executable",
       );
+    assertNoPackageLocationOptions(command.argv, `${basePath}.argv`);
     if (!(await executableAvailable(program, cwd, options.path ?? process.env.PATH))) {
       throw new VerificationPreflightError(
         `${basePath}.argv`,
@@ -114,6 +115,52 @@ async function executableAvailable(
     }
   }
   return false;
+}
+
+const PACKAGE_MANAGER_LOCATION_OPTIONS: Readonly<
+  Record<string, readonly string[]>
+> = {
+  npm: [
+    "--prefix",
+    "--global",
+    "--location",
+    "--workspace",
+    "--workspaces",
+    "--include-workspace-root",
+    "--workspace-root",
+    "--ws",
+    "-g",
+    "-w",
+  ],
+  pnpm: ["--dir", "--global", "--workspace-root", "--filter", "-C", "-g", "-w"],
+  yarn: ["--cwd", "--workspace", "--filter", "--top-level"],
+  bun: ["--cwd", "--filter", "--global", "--workspace", "--workspaces", "-g", "-w"],
+};
+
+/** Reject package-manager options that can select a package other than the bound cwd. */
+export function assertNoPackageLocationOptions(
+  argv: readonly string[],
+  path = "verification command argv",
+): void {
+  const manager = basename((argv[0] ?? "").replaceAll("\\", "/"))
+    .replace(/\.(?:cmd|exe)$/i, "")
+    .toLowerCase();
+  const options = PACKAGE_MANAGER_LOCATION_OPTIONS[manager];
+  if (!options) return;
+  const terminator = argv.slice(1).indexOf("--");
+  const beforeTerminator =
+    terminator < 0 ? argv.slice(1) : argv.slice(1, terminator);
+  const locationOption = beforeTerminator.find((argument) =>
+    options.some(
+      (candidate) =>
+        argument === candidate || argument.startsWith(`${candidate}=`),
+    ),
+  );
+  if (locationOption)
+    throw new VerificationPreflightError(
+      path,
+      `package-manager location option '${locationOption}' is not allowed; use the bound cwd`,
+    );
 }
 
 function packageScriptName(argv: readonly string[]): string | undefined {

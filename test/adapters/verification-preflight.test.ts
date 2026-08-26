@@ -12,6 +12,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  assertNoPackageLocationOptions,
   preflightRequiredVerificationCommands,
   resolveVerificationCommandDirectory,
   VerificationPreflightError,
@@ -79,6 +80,45 @@ test("required monorepo verification preflight selects the package cwd", async (
       testFixture.root,
       { test: command("web") },
       { path: testFixture.path },
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
+test("package-manager location options cannot override the bound cwd", async () => {
+  const testFixture = await fixture();
+  try {
+    const locationCommands = [
+      ["npm", "--prefix", "web", "test"],
+      ["npm", "test", "--prefix=web"],
+      ["npm", "--global", "test"],
+      ["npm", "test", "-g"],
+      ["npm", "--location=global", "test"],
+      ["npm", "--workspace", "web", "test"],
+      ["npm", "--workspaces", "test"],
+      ["npm", "--include-workspace-root", "test"],
+    ];
+    for (const argv of locationCommands) {
+      await assert.rejects(
+        preflightRequiredVerificationCommands(
+          testFixture.root,
+          { test: command("web", { argv }) },
+        ),
+        (error: unknown) =>
+          error instanceof VerificationPreflightError &&
+          error.path === ".forge/config.json verification.commands.test.argv" &&
+          /package-manager location option/.test(error.message),
+      );
+    }
+
+    await preflightRequiredVerificationCommands(testFixture.root, {
+      test: command("web", {
+        argv: ["npm", "test", "--", "--prefix=/outside", "--workspace", "other"],
+      }),
+    });
+    assert.doesNotThrow(() =>
+      assertNoPackageLocationOptions(["custom-tool", "--prefix", "/outside"]),
     );
   } finally {
     await testFixture.cleanup();

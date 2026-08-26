@@ -31,7 +31,10 @@ import {
   SubagentsRpcClient,
   type SubagentSpawnReceipt,
 } from "../adapters/subagents.ts";
-import { resolveVerificationCommandDirectory } from "../adapters/verification-preflight.ts";
+import {
+  assertNoPackageLocationOptions,
+  resolveVerificationCommandDirectory,
+} from "../adapters/verification-preflight.ts";
 import {
   assertBuilderContractPaths,
   type BuilderPathContract,
@@ -809,6 +812,10 @@ export function registerForgeRuntime(
         throw new Error(
           `Verification command '${params.name}' has an empty argv.`,
         );
+      assertNoPackageLocationOptions(
+        command.argv,
+        `verification.commands.${params.name}.argv`,
+      );
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
       const commandCwd = await resolveVerificationCommandDirectory(
         root,
@@ -1659,6 +1666,10 @@ function validateBoundCommand(
       `Verification binding ${name}.argv must be a non-empty string array.`,
     );
   }
+  assertNoPackageLocationOptions(
+    command.argv as readonly string[],
+    `verification binding ${name}.argv`,
+  );
   command.cwd = normalizeVerificationCommandCwd(
     command.cwd,
     `verification binding ${name}.cwd`,
