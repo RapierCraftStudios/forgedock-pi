@@ -653,6 +653,20 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
           `Bound lease epoch ${binding.leaseEpoch} no longer owns run ${binding.runId}.`,
         );
       }
+      const investigationOutcome = latestInvestigationOutcome(current.events);
+      if (
+        (params.phase === "plan" ||
+          params.phase === "prepare-worktree" ||
+          params.phase === "implement" ||
+          params.phase === "verify" ||
+          params.phase === "review") &&
+        (investigationOutcome === "invalid" ||
+          investigationOutcome === "decomposed")
+      ) {
+        throw new Error(
+          `Cannot advance ${params.phase} after investigation outcome ${investigationOutcome}.`,
+        );
+      }
       const idempotencyKey = `phase:${params.phase}:${params.attempt}:${params.action}`;
       const priorEventId = current.state.idempotencyKeys[idempotencyKey];
       let event: RunEvent;
@@ -698,7 +712,9 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
         sequence = nextState.sequence;
       }
 
-      if (params.action !== "queue") {
+      const isCurrentReplay =
+        !idempotent || current.events.at(-1)?.eventId === event.eventId;
+      if (params.action !== "queue" && isCurrentReplay) {
         const projector = new GitHubIssueProjector(
           transport,
           binding.repository,
@@ -895,6 +911,10 @@ function checkpointPayload(
   binding: ForgeChildBinding,
 ): Record<string, unknown> {
   const common = { phase: params.phase, attempt: params.attempt };
+  const workflowOutcome =
+    params.phase === "investigate" && params.action === "complete"
+      ? investigationOutcomeForReport(params.report)
+      : undefined;
   if (params.action === "queue") {
     return {
       ...common,
@@ -920,6 +940,7 @@ function checkpointPayload(
     return {
       ...common,
       evidence: params.evidence ?? [],
+      ...(workflowOutcome ? { workflowOutcome } : {}),
       ...(params.report ? { report: params.report } : {}),
       ...(params.outputArtifactHash
         ? { outputArtifactHash: params.outputArtifactHash }
@@ -933,6 +954,36 @@ function checkpointPayload(
       params.reason ??
       `${params.phase} attempt ${params.attempt} ${params.action}`,
   };
+}
+
+type InvestigationWorkflowOutcome = "confirmed" | "invalid" | "decomposed";
+
+function investigationOutcomeForReport(
+  report?: string,
+): InvestigationWorkflowOutcome | undefined {
+  if (report?.includes("**Verdict**: INVALID")) return "invalid";
+  if (report?.includes("**Verdict**: DECOMPOSE")) return "decomposed";
+  if (report?.includes("**Verdict**: CONFIRMED")) return "confirmed";
+  return undefined;
+}
+
+function latestInvestigationOutcome(
+  events: readonly RunEvent[],
+): InvestigationWorkflowOutcome | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.type !== "phase.completed") continue;
+    const payload = event.payload as Record<string, unknown>;
+    if (payload.phase !== "investigate") continue;
+    const outcome = payload.workflowOutcome;
+    if (
+      outcome === "confirmed" ||
+      outcome === "invalid" ||
+      outcome === "decomposed"
+    )
+      return outcome;
+  }
+  return undefined;
 }
 
 async function projectPhaseReport(

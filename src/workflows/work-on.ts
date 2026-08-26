@@ -451,19 +451,6 @@ export class ForgeWorkOnController {
       undefined,
       [merged.sha],
     );
-    try {
-      await setWorkflowLabelWithRetry(
-        projector,
-        link.issueNumber,
-        WORKFLOW_LABEL_BY_STAGE.merged,
-        ctx.signal,
-      );
-    } catch (error) {
-      ctx.ui.notify(
-        `ForgeDock issue #${link.issueNumber} merged, but workflow label projection will retry during terminal reconciliation: ${errorMessage(error)}`,
-        "warning",
-      );
-    }
     await postReviewCompletionArtifacts({
       github,
       projector,
@@ -564,6 +551,42 @@ export class ForgeWorkOnController {
       signal: ctx.signal,
     });
 
+    try {
+      await setWorkflowLabelWithRetry(
+        projector,
+        link.issueNumber,
+        WORKFLOW_LABEL_BY_STAGE.merged,
+        ctx.signal,
+      );
+    } catch (error) {
+      const reason = `Merged run cannot complete until workflow:merged is projected: ${errorMessage(error)}`;
+      await journal.append({
+        runId: link.forgeRunId,
+        type: "run.cancelled",
+        payload: { reason },
+        idempotencyKey: "run:cancelled:merged-label",
+        sessionId,
+        message: `Cancel ForgeDock run ${link.forgeRunId} after merged-label failure`,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      await journal.append({
+        runId: link.forgeRunId,
+        type: "lease.released",
+        payload: {
+          ownerRunId: link.forgeRunId,
+          epoch: currentRun.lease?.epoch ?? 1,
+        },
+        idempotencyKey: "lease:release:merged-label-failure",
+        sessionId,
+        message: `Release ForgeDock lease ${link.forgeRunId} after merged-label failure`,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      link.status = "failed";
+      this.#persistLink(link);
+      ctx.ui.notify(`ForgeDock issue #${link.issueNumber} stopped: ${reason}`, "error");
+      return;
+    }
+
     await journal.append({
       runId: link.forgeRunId,
       type: "run.completed",
@@ -593,19 +616,6 @@ export class ForgeWorkOnController {
         markdown: `## ForgeDock Pi complete\n\nPR #${pull.number} merged into \`${link.prepared.baseBranch}\`.\nNested review completed at \`${result.review.headSha}\`.\nRun: \`${link.forgeRunId}\`.`,
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
-      try {
-        await setWorkflowLabelWithRetry(
-          projector,
-          link.issueNumber,
-          WORKFLOW_LABEL_BY_STAGE.merged,
-          ctx.signal,
-        );
-      } catch (error) {
-        ctx.ui.notify(
-          `ForgeDock issue #${link.issueNumber} completed, but workflow:merged projection failed: ${errorMessage(error)}`,
-          "warning",
-        );
-      }
     }
 
     link.status = "completed";

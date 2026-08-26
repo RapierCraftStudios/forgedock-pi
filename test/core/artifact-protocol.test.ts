@@ -97,6 +97,14 @@ test("checkpoint labels cover the complete workflow lifecycle", () => {
     WORKFLOW_LABEL_BY_STAGE.invalid,
   );
   assert.equal(
+    workflowLabelForCheckpoint({
+      phase: "investigate",
+      action: "complete",
+      report: "**Verdict**: DECOMPOSED",
+    }),
+    WORKFLOW_LABEL_BY_STAGE.decomposed,
+  );
+  assert.equal(
     workflowLabelForCheckpoint({ phase: "plan", action: "start" }),
     WORKFLOW_LABEL_BY_STAGE.build,
   );

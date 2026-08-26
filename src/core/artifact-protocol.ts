@@ -37,6 +37,11 @@ export function workflowLabelForCheckpoint(params: {
   if (params.phase === "investigate" && params.action === "complete") {
     if (params.report?.includes("**Verdict**: INVALID"))
       return WORKFLOW_LABEL_BY_STAGE.invalid;
+    if (
+      params.report?.includes("**Verdict**: DECOMPOSE") ||
+      params.report?.includes("**Verdict**: DECOMPOSED")
+    )
+      return WORKFLOW_LABEL_BY_STAGE.decomposed;
     return WORKFLOW_LABEL_BY_STAGE.readyToBuild;
   }
   if (
