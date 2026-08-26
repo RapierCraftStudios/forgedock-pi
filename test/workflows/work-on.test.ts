@@ -80,7 +80,9 @@ test("direct terminal evidence binds PR, merge phase, and merge effect", () => {
   const state = {
     status: "active",
     phases: {
-      merge: { attempts: [{ status: "completed", evidence: [mergeSha] }] },
+      merge: {
+        attempts: [{ status: "completed", evidence: [`merge:${mergeSha}`] }],
+      },
     },
     effects: {
       pr: {
@@ -91,7 +93,7 @@ test("direct terminal evidence binds PR, merge phase, and merge effect", () => {
       },
       merge: {
         effectType: "merge",
-        effectId: "pr:105:merge",
+        effectId: "merge:105",
         digest: mergeDigest,
         eventId: "event-merge",
       },

@@ -207,15 +207,17 @@ export function directTerminalEvidence(
   const pullNumber =
     state.pullNumber ??
     Number(pullEffect?.effectId.match(/^pr:(\d+)$/)?.[1] ?? 0);
-  const mergeSha = state.phases.merge?.attempts
+  const mergeEvidence = state.phases.merge?.attempts
     .at(-1)
-    ?.evidence.find((entry) => /^[0-9a-f]{40}$/i.test(entry));
+    ?.evidence.find((entry) => /^(?:merge:)?[0-9a-f]{40}$/i.test(entry));
+  const mergeSha = mergeEvidence?.replace(/^merge:/i, "");
   if (!Number.isSafeInteger(pullNumber) || pullNumber < 1 || !mergeSha)
     return undefined;
   const mergeEffect = Object.values(state.effects).find(
     (effect) =>
       effect.effectType === "merge" &&
-      effect.effectId === `pr:${pullNumber}:merge`,
+      (effect.effectId === `merge:${pullNumber}` ||
+        effect.effectId === `pr:${pullNumber}:merge`),
   );
   if (!mergeEffect || mergeEffect.digest !== digest(mergeSha)) return undefined;
   return { pullNumber, mergeSha };
