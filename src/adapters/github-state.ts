@@ -428,7 +428,11 @@ export class GitHubStateBranchStore {
           sha: await this.#createBlob(file.content, input.signal),
         })),
       );
-    if (!input.lease && !input.preserveRepositoryLease)
+    if (
+      !input.runScopedAuthority &&
+      !input.lease &&
+      !input.preserveRepositoryLease
+    )
       treeEntries.push({ path: leasePath(), sha: null });
     const treeSha = await this.#createTree(
       commit.tree.sha,
