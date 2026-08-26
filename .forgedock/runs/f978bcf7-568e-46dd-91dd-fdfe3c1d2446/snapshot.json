@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 10,
-  "lastEventHash": "sha256:7197f1c443b0155d107d691d91979bd1ed21ac441ece6b63d2354cd8fdcd44c1",
+  "sequence": 11,
+  "lastEventHash": "sha256:dff8f4654bf3fd5ccfafd40177eaf01e2e9c02f95c957524f80ec9903f4d2bdd",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -64,15 +64,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Builder scope is limited to `src/workflows/work-on.ts` and `test/workflows/work-on.test.ts`.",
+            "The existing bounded/idempotent `#projectWorkflowStage` retry behavior remains authoritative.",
+            "Both dispatcher and direct merge paths will use one sequencing helper so projection is awaited immediately after merge API success.",
+            "The regression test will exercise callback order and a failing follow-up operation without touching GitHub or production artifacts."
+          ],
           "logicalNodeId": "plan-1",
           "startedAt": "2026-08-26T23:10:53.734Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/f978bcf7-568e-46dd-91dd-fdfe3c1d2446",
           "branch": "forge/issue-119-f978bcf7",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T23:11:55.970Z",
+          "outputArtifactHash": "sha256:plan-119-early-projection"
         }
       ]
     }
@@ -89,7 +96,8 @@
     "phase:investigate:1:start": "276bd4d5-8876-47d8-83d4-bab0698b9e19",
     "phase:investigate:1:complete": "128b1722-da19-4065-9832-9ece63c66f2d",
     "phase:plan:1:queue": "889ccddd-16b6-4157-9e75-b0ea04960707",
-    "phase:plan:1:start": "e7d29120-bff0-4a87-b880-9cf1d5d815ab"
+    "phase:plan:1:start": "e7d29120-bff0-4a87-b880-9cf1d5d815ab",
+    "phase:plan:1:complete": "f05000b3-36d4-4ce6-8d17-31731ffe5a9d"
   },
   "eventIds": {
     "8859b45e-b39f-4669-97a0-573c32198e59": true,
@@ -101,7 +109,8 @@
     "276bd4d5-8876-47d8-83d4-bab0698b9e19": true,
     "128b1722-da19-4065-9832-9ece63c66f2d": true,
     "889ccddd-16b6-4157-9e75-b0ea04960707": true,
-    "e7d29120-bff0-4a87-b880-9cf1d5d815ab": true
+    "e7d29120-bff0-4a87-b880-9cf1d5d815ab": true,
+    "f05000b3-36d4-4ce6-8d17-31731ffe5a9d": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
