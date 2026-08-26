@@ -6,6 +6,7 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 
 import { FetchGitHubTransport } from "../adapters/github-api.ts";
+import { resolveGitHubToken } from "../adapters/github-auth.ts";
 import { loadForgePolicy } from "../adapters/config.ts";
 import { RunJournal } from "../adapters/run-journal.ts";
 import { GitWorktreeManager } from "../adapters/git.ts";
@@ -754,23 +755,6 @@ function chooseIntegrationBranch(policy: ForgePolicy): string {
       "Forge policy needs at least one exact integration branch for work-on.",
     );
   return exact;
-}
-
-async function resolveGitHubToken(
-  pi: ExtensionAPI,
-  cwd: string,
-  signal?: AbortSignal,
-): Promise<string> {
-  const result = await pi.exec("gh", ["auth", "token"], {
-    cwd,
-    timeout: 30_000,
-    ...(signal ? { signal } : {}),
-  });
-  if (result.code !== 0 || !result.stdout.trim())
-    throw new Error(
-      `Unable to resolve GitHub token through gh: ${result.stderr || result.stdout}`,
-    );
-  return result.stdout.trim();
 }
 
 function validateIssueNumbers(issueNumbers: readonly number[]): void {
