@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 19,
-  "lastEventHash": "sha256:ea843a43ece6ecdf59f7872070a712eba90bdf8ba76824ca91c338e9f1ca215a",
+  "sequence": 20,
+  "lastEventHash": "sha256:28e9ad7db37f07a74975df254fba62e666fb0edfeca02abf43b7838aab2734f3",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -125,15 +125,21 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume verify attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Bound `check` verification passed: TypeScript typecheck and all 150 tests passed",
+            "Implementation commit `60b7b5701e595bf29704ba8c7d8a7ce2b8b91585` exists before this completion",
+            "Required local verification remained fail-closed; no check was skipped or downgraded"
+          ],
           "logicalNodeId": "work-on-verify-1",
           "startedAt": "2026-08-26T18:15:26.370Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/6604bfab-e63e-4546-9296-7f5951b09711",
           "branch": "forge/issue-94-6604bfab",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-26T18:16:39.532Z",
+          "commitSha": "60b7b5701e595bf29704ba8c7d8a7ce2b8b91585"
         }
       ]
     }
@@ -159,7 +165,8 @@
     "phase:implement:1:start": "66ac1e25-a276-4503-bfc3-ed43c5d250b4",
     "phase:implement:1:complete": "3cb3c104-84c5-4065-b9d2-4b52dbfe7bd5",
     "phase:verify:1:queue": "df023907-9a47-46e5-88a0-43b5308d20ce",
-    "phase:verify:1:start": "3b818856-e2e8-416a-9a6a-3fd83b95ef29"
+    "phase:verify:1:start": "3b818856-e2e8-416a-9a6a-3fd83b95ef29",
+    "phase:verify:1:complete": "1e12abb7-a524-4487-9836-e1022b62fa4a"
   },
   "eventIds": {
     "b5497a1a-24a4-4d24-8216-e9a75bbf6738": true,
@@ -180,7 +187,8 @@
     "66ac1e25-a276-4503-bfc3-ed43c5d250b4": true,
     "3cb3c104-84c5-4065-b9d2-4b52dbfe7bd5": true,
     "df023907-9a47-46e5-88a0-43b5308d20ce": true,
-    "3b818856-e2e8-416a-9a6a-3fd83b95ef29": true
+    "3b818856-e2e8-416a-9a6a-3fd83b95ef29": true,
+    "1e12abb7-a524-4487-9836-e1022b62fa4a": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
