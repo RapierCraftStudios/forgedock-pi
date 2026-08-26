@@ -1,0 +1,34 @@
+{
+  "schema": "forgedock.run-state/v1",
+  "runId": "eaa81a29-de7e-4fab-899a-7b7ac90bf652",
+  "repository": "RapierCraftStudios/forgedock-pi",
+  "issueNumber": 113,
+  "integrationBranch": "staging",
+  "protectedBranch": "main",
+  "status": "active",
+  "authorityMode": "run-scoped",
+  "sequence": 2,
+  "lastEventHash": "sha256:ae6d5b3c4581d40e304133ba2bb9a8a33eac6297f650e43eee376deeb170ca94",
+  "phases": {},
+  "nodes": {},
+  "effects": {},
+  "idempotencyKeys": {
+    "run:create": "0902b4d5-bc43-4cbf-8a30-9d7fd570986a",
+    "lease:acquire:1": "436d90ab-571c-4268-8df5-d3a3cd4ea03d"
+  },
+  "eventIds": {
+    "0902b4d5-bc43-4cbf-8a30-9d7fd570986a": true,
+    "436d90ab-571c-4268-8df5-d3a3cd4ea03d": true
+  },
+  "lease": {
+    "schema": "forgedock.repository-lease/v1",
+    "repository": "RapierCraftStudios/forgedock-pi",
+    "ownerRunId": "eaa81a29-de7e-4fab-899a-7b7ac90bf652",
+    "ownerSessionId": "01a03f32-dfe4-7f8b-8475-ef65884934ee",
+    "epoch": 1,
+    "acquiredAt": "2026-08-26T19:13:42.262Z",
+    "lastHeartbeatAt": "2026-08-26T19:13:42.262Z",
+    "expiresAt": "2027-08-26T19:13:42.262Z",
+    "takeoverRequired": false
+  }
+}
