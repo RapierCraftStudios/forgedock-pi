@@ -31,7 +31,10 @@ import {
   SubagentsRpcClient,
   type SubagentSpawnReceipt,
 } from "../adapters/subagents.ts";
-import { resolveVerificationCommandDirectory } from "../adapters/verification-preflight.ts";
+import {
+  assertNoPackageManagerLocationOptions,
+  resolveVerificationCommandDirectory,
+} from "../adapters/verification-preflight.ts";
 import {
   assertBuilderContractPaths,
   type BuilderPathContract,
@@ -1643,7 +1646,7 @@ export function allowedNodeTools(node: string | undefined): ReadonlySet<string> 
   return new Set(common);
 }
 
-function validateBoundCommand(
+export function validateBoundCommand(
   name: string,
   value: unknown,
 ): asserts value is BoundVerificationCommand {
@@ -1659,6 +1662,10 @@ function validateBoundCommand(
       `Verification binding ${name}.argv must be a non-empty string array.`,
     );
   }
+  assertNoPackageManagerLocationOptions(
+    command.argv,
+    `verification binding ${name}.argv`,
+  );
   command.cwd = normalizeVerificationCommandCwd(
     command.cwd,
     `verification binding ${name}.cwd`,

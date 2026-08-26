@@ -21,6 +21,7 @@ import {
   appendBounded,
   assertCommittedTree,
   assertCompleteProcessOutput,
+  validateBoundCommand,
   assertCompleteReviewDiff,
   assertReviewerDiffCoverage,
   assertUniqueReviewerProfileIds,
@@ -40,6 +41,34 @@ const execFileAsync = promisify(execFile);
 async function git(cwd: string, ...args: string[]) {
   return execFileAsync("git", args, { cwd, encoding: "utf8" });
 }
+
+test("bound verification commands reject package-manager location selectors", () => {
+  const command = {
+    argv: ["npm", "--prefix", "other", "test"],
+    cwd: ".",
+    required: true,
+    timeoutMs: 60_000,
+  };
+  assert.throws(
+    () => validateBoundCommand("check", command),
+    /verification binding check\.argv: package-manager location option/,
+  );
+
+  assert.throws(
+    () =>
+      validateBoundCommand("check", {
+        ...command,
+        argv: ["npm", "run", "test", "--workspace=other"],
+      }),
+    /location option/,
+  );
+  assert.doesNotThrow(() =>
+    validateBoundCommand("check", {
+      ...command,
+      argv: ["npm", "run", "test", "--", "--prefix", "other"],
+    }),
+  );
+});
 
 test("every bounded non-review node can persist its trusted result", () => {
   for (const node of [

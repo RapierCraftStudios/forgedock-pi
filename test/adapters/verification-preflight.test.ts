@@ -12,6 +12,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  assertNoPackageManagerLocationOptions,
   preflightRequiredVerificationCommands,
   resolveVerificationCommandDirectory,
   VerificationPreflightError,
@@ -79,6 +80,60 @@ test("required monorepo verification preflight selects the package cwd", async (
       testFixture.root,
       { test: command("web") },
       { path: testFixture.path },
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
+test("package-manager location options cannot bypass the bound cwd", async () => {
+  const testFixture = await fixture();
+  try {
+    for (const argv of [
+      ["npm", "--prefix", "web", "test"],
+      ["npm", "--prefix=web", "test"],
+      ["npm", "-C", "web", "test"],
+      ["npm", "test", "--workspace=web"],
+      ["npm", "--workspaces", "test"],
+      ["npm", "--global", "test"],
+      ["npm", "--location=global", "test"],
+    ]) {
+      await assert.rejects(
+        preflightRequiredVerificationCommands(
+          testFixture.root,
+          { test: command("web", { argv }) },
+          { path: testFixture.path },
+        ),
+        (error: unknown) =>
+          error instanceof VerificationPreflightError &&
+          error.path === ".forge/config.json verification.commands.test.argv" &&
+          /location option/.test(error.message),
+        `expected ${argv.join(" ")} to be rejected`,
+      );
+    }
+
+    for (const argv of [
+      ["pnpm", "--dir=web", "test"],
+      ["yarn", "--cwd", "web", "test"],
+      ["bun", "--cwd=web", "test"],
+      ["npm.cmd", "-Cweb", "test"],
+    ]) {
+      assert.throws(
+        () => assertNoPackageManagerLocationOptions(argv),
+        /location option/,
+        `expected ${argv.join(" ")} to be rejected`,
+      );
+    }
+
+    assert.doesNotThrow(() =>
+      assertNoPackageManagerLocationOptions([
+        "npm",
+        "run",
+        "test",
+        "--",
+        "--prefix",
+        "web",
+      ]),
     );
   } finally {
     await testFixture.cleanup();

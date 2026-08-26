@@ -24,6 +24,65 @@ export class VerificationPreflightError extends Error {
   }
 }
 
+const PACKAGE_MANAGER_LOCATION_OPTIONS: Readonly<
+  Record<string, readonly string[]>
+> = {
+  npm: [
+    "--prefix",
+    "-C",
+    "--workspace",
+    "-w",
+    "--workspaces",
+    "-ws",
+    "--include-workspace-root",
+    "--global",
+    "-g",
+    "--location",
+  ],
+  pnpm: [
+    "--dir",
+    "-C",
+    "--prefix",
+    "--filter",
+    "-F",
+    "--workspace-root",
+    "-w",
+    "--global",
+    "-g",
+    "--recursive",
+    "-r",
+  ],
+  yarn: [
+    "--cwd",
+    "--global",
+    "-g",
+    "--workspace",
+    "--workspaces",
+    "-A",
+  ],
+  bun: ["--cwd", "-C", "--filter", "-F", "--global", "-g"],
+};
+
+/** Reject package-manager options that can select a package independently of the bound cwd. */
+export function assertNoPackageManagerLocationOptions(
+  argv: readonly string[],
+  path = "verification command argv",
+): void {
+  const manager = packageManagerName(argv[0]);
+  if (!manager) return;
+  const options = PACKAGE_MANAGER_LOCATION_OPTIONS[manager];
+  if (!options) return;
+  for (const argument of argv.slice(1)) {
+    if (argument === "--") break;
+    const option = packageManagerLocationOption(manager, argument, options);
+    if (option)
+      throw new VerificationPreflightError(
+        path,
+        `package-manager location option '${option}' is not allowed; use the bound cwd`,
+      );
+  }
+}
+
 export async function preflightRequiredVerificationCommands(
   repositoryRoot: string,
   commands: Readonly<Record<string, VerificationCommandPolicy>>,
@@ -37,6 +96,7 @@ export async function preflightRequiredVerificationCommands(
   for (const [name, command] of Object.entries(commands)) {
     if (!command.required) continue;
     const basePath = `${configPath} verification.commands.${name}`;
+    assertNoPackageManagerLocationOptions(command.argv, `${basePath}.argv`);
     const cwd = await resolveVerificationCommandDirectory(
       canonicalRoot,
       command.cwd,
@@ -116,9 +176,29 @@ async function executableAvailable(
   return false;
 }
 
+function packageManagerName(program: string | undefined): string | undefined {
+  const manager = basename(program ?? "").replace(/\.(?:cmd|exe)$/i, "");
+  return PACKAGE_MANAGER_LOCATION_OPTIONS[manager] ? manager : undefined;
+}
+
+function packageManagerLocationOption(
+  manager: string,
+  argument: string,
+  options: readonly string[],
+): string | undefined {
+  const equals = argument.indexOf("=");
+  const option = equals < 0 ? argument : argument.slice(0, equals);
+  if (options.includes(option)) return option;
+
+  // npm and pnpm accept -C with an attached directory as well as a separate value.
+  if ((manager === "npm" || manager === "pnpm") && argument.startsWith("-C"))
+    return "-C";
+  return undefined;
+}
+
 function packageScriptName(argv: readonly string[]): string | undefined {
   const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
-  if (!["npm", "pnpm", "yarn", "bun"].includes(manager)) return undefined;
+  if (!PACKAGE_MANAGER_LOCATION_OPTIONS[manager]) return undefined;
   const command = argv[1];
   if (command === "test") return "test";
   if (command === "run" || command === "run-script") {
