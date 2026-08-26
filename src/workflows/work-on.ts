@@ -86,6 +86,9 @@ import {
 } from "./remediation.ts";
 
 const RUN_LINK_ENTRY = "forgedock-run-link/v1";
+const MERGE_ROLLBACK_MAX_ATTEMPTS = 3;
+const MERGE_ROLLBACK_RETRY_DELAY_MS = 100;
+const MERGE_ROLLBACK_TIMEOUT_MS = 30_000;
 
 export type WorkflowStage = keyof typeof WORKFLOW_LABEL_BY_STAGE;
 export type WorkflowTransition = "started" | "resumed" | "completed";
@@ -244,6 +247,65 @@ export function directRunResumeTask(
     `Known review head: ${link.reviewHeadSha ?? "not yet prepared"}`,
     "Do not create another run, worktree, branch, commit, or PR merely because the session restarted. Reconcile the existing durable phase, trusted result files, current git head, and bound PR before retrying any side effect. Idempotently continue the complete work-on pipeline from the first unfinished phase. If review was interrupted, launch a fresh risk-derived panel for the current frozen head. Continue through merge, issue closure, labels, and cleanup, using only Forge tools.",
   ].join("\n\n");
+}
+
+/**
+ * Restore the review projection after a merge attempt fails.
+ *
+ * This is a compensating write, so it deliberately owns a separate signal
+ * instead of inheriting the merge operation's cancellation. The bounded
+ * retries cover an uncertain GET/PUT projection without retrying the merge
+ * itself.
+ */
+export async function rollbackAwaitingMergeLabel(
+  projector: Pick<GitHubIssueProjector, "setWorkflowLabel">,
+  issueNumber: number,
+  primarySignal?: AbortSignal,
+): Promise<void> {
+  const controller = new AbortController();
+  if (controller.signal === primarySignal)
+    throw new Error("Merge rollback must use an independent signal.");
+  const timeout = setTimeout(
+    () =>
+      controller.abort(
+        new Error("Awaiting-merge label rollback timed out."),
+      ),
+    MERGE_ROLLBACK_TIMEOUT_MS,
+  );
+  timeout.unref();
+  let lastError: unknown;
+  try {
+    for (
+      let attempt = 1;
+      attempt <= MERGE_ROLLBACK_MAX_ATTEMPTS;
+      attempt += 1
+    ) {
+      try {
+        await projector.setWorkflowLabel(
+          issueNumber,
+          WORKFLOW_LABEL_BY_STAGE.review,
+          controller.signal,
+        );
+        return;
+      } catch (error) {
+        lastError = error;
+        if (attempt < MERGE_ROLLBACK_MAX_ATTEMPTS && !controller.signal.aborted)
+          await new Promise<void>((resolve) => {
+            const retryTimer = setTimeout(
+              resolve,
+              MERGE_ROLLBACK_RETRY_DELAY_MS * attempt,
+            );
+            retryTimer.unref();
+          });
+      }
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+  throw new Error(
+    `Failed to restore ${WORKFLOW_LABEL_BY_STAGE.review} after ${MERGE_ROLLBACK_MAX_ATTEMPTS} attempts.`,
+    { cause: lastError },
+  );
 }
 
 export class ForgeWorkOnController {
@@ -2164,12 +2226,18 @@ export class ForgeWorkOnController {
       try {
         merged = await github.mergePullRequest({ pullNumber: pull.number, expectedHeadSha: pull.headSha, method: "squash", ...(ctx.signal ? { signal: ctx.signal } : {}) });
       } catch (error) {
-        await projector
-          .setWorkflowLabel(
+        try {
+          await rollbackAwaitingMergeLabel(
+            projector,
             link.issueNumber,
-            WORKFLOW_LABEL_BY_STAGE.review,
-          )
-          .catch(() => undefined);
+            ctx.signal,
+          );
+        } catch (rollbackError) {
+          throw new AggregateError(
+            [error, rollbackError],
+            `Merge failed and restoring ${WORKFLOW_LABEL_BY_STAGE.review} also failed.`,
+          );
+        }
         throw error;
       }
       headSha = merged.sha;

@@ -14,6 +14,7 @@ import {
   parseAsyncCompletion,
   reconcileLaunchState,
   reviewFindingMarker,
+  rollbackAwaitingMergeLabel,
   reviewInstanceMarker,
   reviewSummaryInstanceMarker,
   reviewSupersessionMarker,
@@ -159,6 +160,67 @@ test("workflow transitions cover the complete canonical label lifecycle", () => 
     workflowLabelForNode("cleanup", "closed", "decomposed"),
     "workflow:decomposed",
   );
+});
+
+test("merge rollback uses an independent signal and retries after cancellation", async () => {
+  const primary = new AbortController();
+  primary.abort(new Error("merge request cancelled"));
+  const signals: AbortSignal[] = [];
+  const labels: string[] = [];
+  let attempts = 0;
+  const projector = {
+    async setWorkflowLabel(
+      issueNumber: number,
+      label: string,
+      signal?: AbortSignal,
+    ): Promise<void> {
+      assert.equal(issueNumber, 42);
+      labels.push(label);
+      assert.ok(signal);
+      signals.push(signal);
+      assert.notEqual(signal, primary.signal);
+      assert.equal(signal.aborted, false);
+      attempts += 1;
+      if (attempts < 3) throw new Error("transient projection failure");
+    },
+  };
+
+  await rollbackAwaitingMergeLabel(projector, 42, primary.signal);
+
+  assert.equal(attempts, 3);
+  assert.deepEqual(labels, [
+    "workflow:in-review",
+    "workflow:in-review",
+    "workflow:in-review",
+  ]);
+  assert.equal(signals.every((signal) => !signal.aborted), true);
+});
+
+test("merge rollback surfaces exhausted projection failures", async () => {
+  const rollbackError = new Error("labels API unavailable");
+  let attempts = 0;
+  const projector = {
+    async setWorkflowLabel(
+      _issueNumber: number,
+      _label: string,
+      signal?: AbortSignal,
+    ): Promise<void> {
+      assert.ok(signal);
+      attempts += 1;
+      throw rollbackError;
+    },
+  };
+
+  await assert.rejects(
+    rollbackAwaitingMergeLabel(projector, 42),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /Failed to restore workflow:in-review/);
+      assert.equal((error as Error & { cause?: unknown }).cause, rollbackError);
+      return true;
+    },
+  );
+  assert.equal(attempts, 3);
 });
 
 test("normal matching provider receipts are inspected instead of escalated", () => {
