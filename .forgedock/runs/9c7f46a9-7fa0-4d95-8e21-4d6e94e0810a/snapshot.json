@@ -10,8 +10,8 @@
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 15,
-  "lastEventHash": "sha256:60865d4ea7aae3366309aae48d9ca0aa547fa1560c1cc5618fdbf4d1e8f5e673",
+  "sequence": 16,
+  "lastEventHash": "sha256:851a254ef47f717363aee24c10915da03fc99a1f2630a21e7d779423ccbed2c9",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -100,6 +100,12 @@
       "effectId": "issue-close:72",
       "digest": "sha256:8722616204217eddb39e7df969e0698aed8e599ba62ed2de1ce49b03ade0fede",
       "eventId": "ecd99fdd-5988-40b3-b269-7e3bcb12f70d"
+    },
+    "cleanup:9c7f46a9-7fa0-4d95-8e21-4d6e94e0810a": {
+      "effectType": "cleanup",
+      "effectId": "cleanup:9c7f46a9-7fa0-4d95-8e21-4d6e94e0810a",
+      "digest": "sha256:df0c2e5b8695e71ecfe0ba1728b2892e2cdd5b2f5b442cb0fbeb399ccfb3b23b",
+      "eventId": "b3b18918-c0bb-43b8-9511-d971eaf53cfc"
     }
   },
   "idempotencyKeys": {
@@ -117,7 +123,8 @@
     "effect:issue-close:72": "ecd99fdd-5988-40b3-b269-7e3bcb12f70d",
     "node:close-1:complete": "d78cdce7-16bd-4c57-8d93-a354fc48a85e",
     "node:cleanup-1:queued": "6d93da53-e694-4a7a-b3e4-507ae4a76bc9",
-    "node:cleanup-1:started": "73f9deab-d858-4dfb-bdab-6385f6abdc18"
+    "node:cleanup-1:started": "73f9deab-d858-4dfb-bdab-6385f6abdc18",
+    "effect:cleanup:9c7f46a9-7fa0-4d95-8e21-4d6e94e0810a": "b3b18918-c0bb-43b8-9511-d971eaf53cfc"
   },
   "eventIds": {
     "366b353d-0477-4064-9a24-f5fad1bec3dd": true,
@@ -134,6 +141,7 @@
     "ecd99fdd-5988-40b3-b269-7e3bcb12f70d": true,
     "d78cdce7-16bd-4c57-8d93-a354fc48a85e": true,
     "6d93da53-e694-4a7a-b3e4-507ae4a76bc9": true,
-    "73f9deab-d858-4dfb-bdab-6385f6abdc18": true
+    "73f9deab-d858-4dfb-bdab-6385f6abdc18": true,
+    "b3b18918-c0bb-43b8-9511-d971eaf53cfc": true
   }
 }
