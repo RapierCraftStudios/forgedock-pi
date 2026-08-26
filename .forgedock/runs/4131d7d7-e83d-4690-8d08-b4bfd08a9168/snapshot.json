@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:2ce93a698df980f6bae68b379e76bc926385833096a3a2d14d19051a10264ddf",
+  "sequence": 8,
+  "lastEventHash": "sha256:59875ef10776113f14ba081b786454c2fbbe5a08c020a1cdbc027d0927f2e625",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -39,16 +39,24 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/core/artifact-protocol.ts` defines canonical workflow labels but no shared checkpoint-to-label mapping.",
+            "`src/agents/child-runtime.ts` contains a local partial mapping for child starts and investigation completion only; it uses hard-coded labels.",
+            "`src/workflows/work-on.ts` starts the parent merge phase but does not project awaiting-merge after the merge gate or merged immediately after the merge checkpoint; terminal cleanup still hard-codes merged.",
+            "`GitHubIssueProjector.setWorkflowLabel` already removes every workflow:* label while preserving unrelated labels, so the defect is mapping/timing rather than label replacement.",
+            "Existing tests cover exact stage constants and one isolated replacement, but not full lifecycle mapping or parent merge timing."
+          ],
           "inputArtifactHash": "sha256:resolve-92-eligible",
           "logicalNodeId": "work-on/92/investigate",
           "startedAt": "2026-08-26T13:22:47.053Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/4131d7d7-e83d-4690-8d08-b4bfd08a9168",
           "branch": "forge/issue-92-4131d7d7",
-          "baseSha": "26139ba278b95578a300c597ec35495a7d502eb6"
+          "baseSha": "26139ba278b95578a300c597ec35495a7d502eb6",
+          "finishedAt": "2026-08-26T13:25:15.775Z",
+          "outputArtifactHash": "sha256:investigate-92-workflow-label-projection"
         }
       ]
     }
@@ -62,7 +70,8 @@
     "phase:resolve:1:start": "6690b7e0-60a3-4c62-b064-38cb89b2a4f5",
     "phase:resolve:1:complete": "0d79cab3-f8d7-440a-bda5-74a94e694e9f",
     "phase:investigate:1:queue": "d753a99e-927b-4006-93e7-8604d84a3b4c",
-    "phase:investigate:1:start": "5adef8f7-2b56-4711-a5de-3c273efb9325"
+    "phase:investigate:1:start": "5adef8f7-2b56-4711-a5de-3c273efb9325",
+    "phase:investigate:1:complete": "2b3d25ef-438c-4bbc-b0e2-de7cf12d4933"
   },
   "eventIds": {
     "d4bc0456-c63a-47b8-83b8-0bcee88aab3b": true,
@@ -71,7 +80,8 @@
     "6690b7e0-60a3-4c62-b064-38cb89b2a4f5": true,
     "0d79cab3-f8d7-440a-bda5-74a94e694e9f": true,
     "d753a99e-927b-4006-93e7-8604d84a3b4c": true,
-    "5adef8f7-2b56-4711-a5de-3c273efb9325": true
+    "5adef8f7-2b56-4711-a5de-3c273efb9325": true,
+    "2b3d25ef-438c-4bbc-b0e2-de7cf12d4933": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
