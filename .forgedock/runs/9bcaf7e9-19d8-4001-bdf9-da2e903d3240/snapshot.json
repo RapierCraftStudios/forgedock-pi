@@ -10,8 +10,8 @@
     "ownerRunId": "2011d399-419f-41ee-a5b3-9e2825af3c71",
     "epoch": 1
   },
-  "sequence": 9,
-  "lastEventHash": "sha256:d3804a5cb59833900e8022c6a4d58dabdceadee07d01c75aaeb76f51f410b216",
+  "sequence": 10,
+  "lastEventHash": "sha256:9ab5fff3471a24099630f328a3e23cbb8718d70156e283fbc19deb1219ce5884",
   "phases": {},
   "nodes": {
     "resolve-1": {
@@ -66,6 +66,13 @@
         "The supplied recent history binds HEAD to frozen base SHA 1b018483cd94b8324ae7e34eaa07293861f4f491; this read-only investigation made no changes."
       ],
       "finishedAt": "2026-08-26T01:55:28.395Z"
+    },
+    "close-1": {
+      "nodeId": "close-1",
+      "node": "close",
+      "attempt": 1,
+      "round": 1,
+      "status": "queued"
     }
   },
   "effects": {},
@@ -78,7 +85,8 @@
     "node:investigate-1:queued": "45508e01-850d-45a3-add3-c8b81ce17317",
     "node:investigate-1:started": "1f1bec6d-a4b9-4bcc-bf98-5b1d0cc6f9d5",
     "node:investigate-1:attempt:1:launch-receipt:270ed409-1c59-4ca0-8950-a157beb91e8d:1bcba0ed-0445-4eb3-9390-ce3dc35694cc": "5b2ee0f0-a6b2-4cf5-9c73-56a8f64af64a",
-    "node:investigate-1:completed": "1d950b29-9759-4959-9a18-7682c0e6ccd7"
+    "node:investigate-1:completed": "1d950b29-9759-4959-9a18-7682c0e6ccd7",
+    "node:close-1:queued": "5ac98983-6ee6-41bf-b8fc-ccbc77320c6e"
   },
   "eventIds": {
     "9cda0aad-8c41-4767-a9d5-95c16a88ebf2": true,
@@ -89,6 +97,7 @@
     "45508e01-850d-45a3-add3-c8b81ce17317": true,
     "1f1bec6d-a4b9-4bcc-bf98-5b1d0cc6f9d5": true,
     "5b2ee0f0-a6b2-4cf5-9c73-56a8f64af64a": true,
-    "1d950b29-9759-4959-9a18-7682c0e6ccd7": true
+    "1d950b29-9759-4959-9a18-7682c0e6ccd7": true,
+    "5ac98983-6ee6-41bf-b8fc-ccbc77320c6e": true
   }
 }
