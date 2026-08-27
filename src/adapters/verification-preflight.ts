@@ -158,13 +158,11 @@ async function assertPackageScript(
       "selected package.json is not valid JSON",
     );
   }
-  const scripts =
-    manifest && typeof manifest === "object" && !Array.isArray(manifest)
-      ? (manifest as { scripts?: unknown }).scripts
-      : undefined;
+  const manifestRecord = objectRecord(manifest);
+  const scriptsRecord = objectRecord(manifestRecord?.scripts);
   const value =
-    scripts && typeof scripts === "object" && !Array.isArray(scripts)
-      ? (scripts as Record<string, unknown>)[script]
+    scriptsRecord && Object.hasOwn(scriptsRecord, script)
+      ? scriptsRecord[script]
       : undefined;
   if (typeof value !== "string" || !value.trim()) {
     throw new VerificationPreflightError(
@@ -172,6 +170,12 @@ async function assertPackageScript(
       `package.json in '${relative(repositoryRoot, cwd) || "."}' has no '${script}' script; set cwd to the package that defines it or use CI-only verification`,
     );
   }
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
 
 function pathWithin(root: string, target: string): boolean {
