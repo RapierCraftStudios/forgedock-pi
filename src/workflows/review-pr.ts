@@ -578,12 +578,7 @@ export class ReviewPrCoordinator {
         const check: VerificationResult = {
           name: `reviewer:${result.reviewer}`,
           required: true,
-          status:
-            result.verdict === "blocked"
-              ? "failed"
-              : result.limitations.length > 0
-                ? "unknown"
-                : "passed",
+          status: result.verdict === "blocked" ? "failed" : "passed",
         };
         snapshot = await this.#journal.append({
           reviewId: input.reviewId,

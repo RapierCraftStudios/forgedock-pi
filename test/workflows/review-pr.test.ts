@@ -419,6 +419,31 @@ test("clean standalone review posts route, reviewer, and summary and completes r
   assert.match(h.github.artifacts[3]?.marker ?? "", /FORGE:REVIEW_SUMMARY/);
 });
 
+test("passing reviewer scope limitations remain audit context, not unknown checks", async () => {
+  const passing = reviewerResult();
+  const h = harness({
+    results: [
+      {
+        ...passing,
+        limitations: ["Read-only review did not execute test commands."],
+      },
+    ],
+  });
+
+  const result = await h.coordinator.review(request());
+  assert.equal(result.decision.decision, "approved");
+  assert.deepEqual(
+    result.state.checks.find((check) =>
+      check.name.startsWith("reviewer:"),
+    ),
+    {
+      name: `reviewer:${passing.reviewer}`,
+      required: true,
+      status: "passed",
+    },
+  );
+});
+
 test("exact route drift fails closed before verdict or completion", async () => {
   const h = harness({ drift: { baseRef: "staging" } });
 
