@@ -81,6 +81,8 @@ export interface ReviewPrRequest {
   protectedBranches: readonly string[];
   autoMergeAuthorized: boolean;
   autoMergeRequested: boolean;
+  /** Resume may reconcile a terminal GitHub merge against an old route snapshot. */
+  resume?: boolean;
   authorityValid?: () => boolean | Promise<boolean>;
   reviewerContext?: string;
   signal?: AbortSignal;
@@ -163,7 +165,12 @@ export class ReviewPrCoordinator {
       ));
     if (route.pullNumber !== input.pullNumber)
       throw new Error("Review route pull request does not match the request.");
-    await this.#github.revalidatePullRequestRoute(route, input.signal);
+    const resumedPull = input.resume
+      ? await this.#github.getPullRequest(input.pullNumber, input.signal)
+      : undefined;
+    const alreadyMergedOnResume = resumedPull?.merged === true;
+    if (!alreadyMergedOnResume)
+      await this.#github.revalidatePullRequestRoute(route, input.signal);
 
     let snapshot = await this.#journal.initialize({
       reviewId: input.reviewId,
@@ -183,6 +190,29 @@ export class ReviewPrCoordinator {
     });
     if (snapshot.state.status === "cancelled")
       throw new Error(`Review ${input.reviewId} is cancelled.`);
+    if (snapshot.state.status === "completed")
+      return completedResult(snapshot.state, route);
+
+    if (alreadyMergedOnResume) {
+      if (!snapshot.state.mergeAuthorization?.authorized)
+        throw new Error(
+          "Already-merged review resume lacks durable merge authorization.",
+        );
+      const merge = await this.#mergeAuthorized(input, route);
+      snapshot = await this.#journal.append({
+        reviewId: input.reviewId,
+        type: "review.completed",
+        payload: {
+          round: requirePanelRound(snapshot.state),
+          outcome: "merged",
+          reason: `Reconciled already-merged PR as ${merge.sha}`,
+        },
+        idempotencyKey: "review:completed",
+        message: `Reconcile already-merged review ${input.reviewId}`,
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+      return completedResult(snapshot.state, route, merge);
+    }
 
     await this.#github.postPullArtifact({
       pullNumber: route.pullNumber,
@@ -195,9 +225,6 @@ export class ReviewPrCoordinator {
       ),
       ...(input.signal ? { signal: input.signal } : {}),
     });
-
-    if (snapshot.state.status === "completed")
-      return completedResult(snapshot.state, route);
 
     if (snapshot.state.mergeAuthorization?.authorized) {
       const merge = await this.#mergeAuthorized(input, route);
@@ -891,6 +918,7 @@ export class ForgeReviewController {
       protectedBranches: environment.policy.branches.protected,
       autoMergeAuthorized: canAutoMerge(environment.policy, state.baseRef),
       autoMergeRequested: state.mergeAuthorization?.authorized === true,
+      resume: true,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
     this.#linked.set(reviewId, {

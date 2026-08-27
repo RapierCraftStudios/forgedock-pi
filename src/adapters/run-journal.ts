@@ -181,7 +181,7 @@ export class RunJournal {
         await stateCasBackoff(attempt, input.signal);
         continue;
       }
-      assertCurrentAuthority(current.state, current.lease);
+      assertCurrentAuthority(current.state, current.lease, new Date());
       const epoch = current.state.lease?.epoch ?? current.state.leaseBinding?.epoch;
       if (epoch === undefined)
         throw new Error(`Run ${input.runId} has no active lease authority.`);
@@ -262,17 +262,24 @@ function validateOrchestrationLease(
 function assertCurrentAuthority(
   state: RunState,
   repositoryLease: RepositoryLease | undefined,
+  now: Date,
 ): void {
   if (state.authorityMode === "run-scoped") {
-    if (!state.lease || state.lease.ownerRunId !== state.runId)
-      throw new Error(`Run ${state.runId} has invalid run-scoped authority.`);
+    if (
+      !state.lease ||
+      state.lease.ownerRunId !== state.runId ||
+      isLeaseExpired(state.lease, now)
+    )
+      throw new Error(`Run ${state.runId} has invalid or expired run-scoped authority.`);
     return;
   }
   if (state.lease) {
     if (
       !repositoryLease ||
       repositoryLease.ownerRunId !== state.runId ||
-      repositoryLease.epoch !== state.lease.epoch
+      repositoryLease.epoch !== state.lease.epoch ||
+      isLeaseExpired(state.lease, now) ||
+      isLeaseExpired(repositoryLease, now)
     )
       throw new Error(`Run ${state.runId} no longer owns the repository lease.`);
     return;
@@ -281,7 +288,8 @@ function assertCurrentAuthority(
     if (
       !repositoryLease ||
       repositoryLease.ownerRunId !== state.leaseBinding.ownerRunId ||
-      repositoryLease.epoch !== state.leaseBinding.epoch
+      repositoryLease.epoch !== state.leaseBinding.epoch ||
+      isLeaseExpired(repositoryLease, now)
     ) {
       throw new Error(
         `Run ${state.runId} orchestration lease binding is stale.`,

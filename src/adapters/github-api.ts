@@ -352,7 +352,7 @@ export class GitHubApiError extends Error {
     this.name = "GitHubApiError";
     this.status = status;
     this.path = path;
-    this.response = response;
+    this.response = redactGitHubResponse(response);
   }
 }
 
@@ -367,10 +367,37 @@ export function safeGitHubErrorDetail(response: unknown): string | undefined {
   }
   if (typeof message !== "string" || !message.trim()) return undefined;
   const normalized = message.replace(/\s+/g, " ").trim();
-  return normalized
+  return redactGitHubTokens(normalized).slice(0, 300);
+}
+
+/** Remove credential-shaped GitHub tokens before error text is exposed. */
+export function redactGitHubTokens(value: string): string {
+  return value
     .replace(/Bearer\s+[A-Za-z0-9._~+/-]+/gi, "Bearer [redacted]")
-    .replace(/gh[oprsu]_[A-Za-z0-9_]+/g, "[redacted-token]")
-    .slice(0, 300);
+    .replace(/github_pat_[A-Za-z0-9_]+/g, "[redacted-token]")
+    .replace(/gh[oprsu]_[A-Za-z0-9_]+/g, "[redacted-token]");
+}
+
+type RedactedGitHubValue =
+  | null
+  | boolean
+  | number
+  | string
+  | RedactedGitHubValue[]
+  | { [key: string]: RedactedGitHubValue };
+
+function redactGitHubResponse(value: unknown): RedactedGitHubValue {
+  if (typeof value === "string") return redactGitHubTokens(value);
+  if (typeof value === "boolean" || typeof value === "number") return value;
+  if (value === null || value === undefined) return null;
+  if (Array.isArray(value)) return value.map(redactGitHubResponse);
+  if (typeof value === "object") {
+    const redacted: { [key: string]: RedactedGitHubValue } = {};
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>))
+      redacted[key] = redactGitHubResponse(entry);
+    return redacted;
+  }
+  return redactGitHubTokens(String(value));
 }
 
 export class FetchGitHubTransport implements GitHubTransport {

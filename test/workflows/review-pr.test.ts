@@ -126,6 +126,8 @@ class GitHubFake {
     labels: readonly string[];
   }> = [];
   readonly mergeInputs: unknown[] = [];
+  merged = false;
+  failMerge = false;
   revalidateCalls = 0;
 
   constructor(
@@ -157,6 +159,20 @@ class GitHubFake {
       htmlUrl: "https://example.test/pulls/7",
       state: "open" as const,
       merged: false,
+      headSha: this.currentRoute.headSha,
+      baseSha: this.currentRoute.baseSha,
+      headRef: this.currentRoute.headRef,
+      baseRef: this.currentRoute.baseRef,
+      mergeability: "mergeable" as const,
+    };
+  }
+
+  async getPullRequest() {
+    return {
+      number: this.currentRoute.pullNumber,
+      htmlUrl: "https://example.test/pulls/7",
+      state: "open" as const,
+      merged: this.merged,
       headSha: this.currentRoute.headSha,
       baseSha: this.currentRoute.baseSha,
       headRef: this.currentRoute.headRef,
@@ -205,6 +221,7 @@ class GitHubFake {
 
   async mergePullRequest(input: unknown) {
     this.mergeInputs.push(input);
+    if (this.failMerge) throw new Error("simulated merge transport failure");
     return { merged: true, sha: "merge-sha", message: "Merged" };
   }
 }
@@ -451,6 +468,30 @@ test("automatic merge requires both an explicit request and authorization", asyn
     (authorized.journal.events.at(-1)?.payload as { outcome: string }).outcome,
     "merged",
   );
+});
+
+test("resume reconciles an already-merged PR before stale route rejection", async () => {
+  const h = harness();
+  h.github.failMerge = true;
+  await assert.rejects(
+    h.coordinator.review(request({ autoMergeRequested: true })),
+    /simulated merge transport failure/,
+  );
+  assert.equal(h.journal.state?.mergeAuthorization?.authorized, true);
+
+  h.github.failMerge = false;
+  h.github.merged = true;
+  h.github.currentRoute = { ...h.github.currentRoute, baseSha: "new-base-sha" };
+  const result = await h.coordinator.review(
+    request({ autoMergeRequested: true, resume: true }),
+  );
+  assert.equal(result.state.status, "completed");
+  assert.equal(result.state.completion?.outcome, "merged");
+  assert.equal(
+    h.journal.events.filter((event) => event.type === "review.completed").length,
+    1,
+  );
+  assert.equal(h.github.revalidateCalls, 3);
 });
 
 test("standard route review honors an explicit auto-merge request", async () => {

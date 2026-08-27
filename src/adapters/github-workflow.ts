@@ -261,7 +261,8 @@ export class GitHubWorkflowAdapter {
         path: pagePath,
         ...(signal ? { signal } : {}),
       });
-      if (response.status === 404) return [];
+      if (response.status === 404 && isBlockedByEndpointUnsupported(response))
+        return [];
       const dependencies = requireGitHubSuccess(response, pagePath, [200]);
       if (!Array.isArray(dependencies))
         throw new GitHubApiError(422, pagePath, {
@@ -339,9 +340,13 @@ export class GitHubWorkflowAdapter {
     });
     const issue = requireGitHubSuccess(response, path, [201]);
     const readBack = await this.getIssue(issue.number, input.signal);
-    if (!readBack.body.includes("<!-- FORGE:REVIEW_FINDING"))
+    if (
+      readBack.title !== input.title ||
+      readBack.body !== input.body ||
+      !sameLabels(readBack.labels, input.labels)
+    )
       throw new GitHubApiError(422, path, {
-        message: "Review-finding issue read-back marker missing",
+        message: "Review-finding issue read-back did not match the requested payload.",
       });
     return readBack;
   }
@@ -359,7 +364,14 @@ export class GitHubWorkflowAdapter {
       body: { body },
       ...(signal ? { signal } : {}),
     });
-    return requireGitHubSuccess(response, path, [201]).id;
+    const comment = requireGitHubSuccess(response, path, [201]);
+    const readBack = await this.#getCommentRecord(comment.id, signal);
+    if (readBack.id !== comment.id || readBack.body !== body)
+      throw new GitHubApiError(422, path, {
+        message: "Issue comment read-back did not match the requested payload.",
+        commentId: comment.id,
+      });
+    return comment.id;
   }
 
   /**
@@ -791,6 +803,11 @@ export class GitHubWorkflowAdapter {
       input.signal,
     );
     const path = `${this.#apiRoot}/pulls/${input.pullNumber}/merge`;
+    // A replay may observe a PR merged after the original route snapshot. Its
+    // base SHA is expected to have moved, so reconcile this terminal side
+    // effect before rejecting the stale pre-merge route.
+    if (current.merged)
+      return { merged: true, sha: current.headSha, message: "Already merged" };
     if (input.expectedRoute) {
       assertPullRequestRouteSnapshot(
         input.expectedRoute,
@@ -811,8 +828,6 @@ export class GitHubWorkflowAdapter {
       input.expectedRoute?.headSha ?? input.expectedHeadSha;
     if (!expectedHeadSha)
       throw new TypeError("merge requires an expected head SHA.");
-    if (current.merged)
-      return { merged: true, sha: current.headSha, message: "Already merged" };
     if (current.headSha !== expectedHeadSha) {
       throw new GitHubApiError(409, path, {
         message: `Stale reviewed SHA ${expectedHeadSha}; current head is ${current.headSha}`,
@@ -1058,6 +1073,30 @@ export class GitHubWorkflowAdapter {
       left.name.localeCompare(right.name),
     );
   }
+}
+
+function isBlockedByEndpointUnsupported(
+  response: { status: number; data: unknown; headers: Readonly<Record<string, string>> },
+): boolean {
+  if (response.status !== 404) return false;
+  const headers = response.headers;
+  if (
+    headers["x-github-endpoint-unsupported"]?.toLowerCase() === "true" ||
+    headers["x-forgedock-endpoint-unsupported"]?.toLowerCase() === "true"
+  )
+    return true;
+  if (!response.data || typeof response.data !== "object" || Array.isArray(response.data))
+    return false;
+  const body = response.data as Record<string, unknown>;
+  return (
+    body.endpoint_unsupported === true ||
+    (typeof body.message === "string" &&
+      /^(?:GitHub )?endpoint (?:(?:not )?supported|unsupported)$/i.test(body.message.trim()))
+  );
+}
+
+function sameLabels(actual: readonly string[], expected: readonly string[]): boolean {
+  return actual.length === expected.length && actual.every((label, index) => label === expected[index]);
 }
 
 function parseBlockedByIssue(value: unknown, path: string): number {

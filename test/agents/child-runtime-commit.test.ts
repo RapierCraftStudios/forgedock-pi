@@ -28,12 +28,14 @@ import {
   boundedToolDenial,
   diffChunk,
   forgeCommitArguments,
+  forgePushArguments,
   isForgeRuntimePath,
   parseBoundReviewerResult,
   parseGitStatusPaths,
   reviewerStatusIsTerminal,
   writeTrustedResultFile,
 } from "../../src/agents/child-runtime.ts";
+import { redactGitHubTokens } from "../../src/adapters/github-api.ts";
 import { FORGE_WORK_ON_TOOLS } from "../../src/agents/register.ts";
 
 const execFileAsync = promisify(execFile);
@@ -315,6 +317,31 @@ test("commit path staging excludes ignored Forge runtime content", async () => {
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("Git pushes use an empty hooks path and redact GitHub credentials", () => {
+  const args = forgePushArguments("/tmp/empty-hooks", [
+    "-C",
+    "/tmp/repo",
+    "push",
+    "origin",
+    "main",
+  ]);
+  assert.deepEqual(args, [
+    "-c",
+    "core.hooksPath=/tmp/empty-hooks",
+    "-C",
+    "/tmp/repo",
+    "push",
+    "--no-verify",
+    "origin",
+    "main",
+  ]);
+  const token = "github_pat_11AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  assert.equal(
+    redactGitHubTokens(`git failed: ${token}`),
+    "git failed: [redacted-token]",
+  );
 });
 
 test("controlled hooksPath prevents repository hooks and committed-tree checks fail closed", async () => {

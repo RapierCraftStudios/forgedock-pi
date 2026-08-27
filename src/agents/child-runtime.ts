@@ -21,7 +21,10 @@ import {
   type SubagentCapabilityCeilingHandle,
 } from "pi-subagents/capability-ceiling";
 
-import { FetchGitHubTransport } from "../adapters/github-api.ts";
+import {
+  FetchGitHubTransport,
+  redactGitHubTokens,
+} from "../adapters/github-api.ts";
 import { createGitHubTokenProvider } from "../adapters/github-auth.ts";
 import { parseChangedGitPaths } from "../adapters/git.ts";
 import {
@@ -2604,6 +2607,7 @@ export async function pushWithGitHubToken(
   if (!token.trim())
     throw new Error("Git push requires a non-empty GitHub token.");
   const askPassDir = mkdtempSync(join(tmpdir(), "forgedock-askpass-"));
+  const hooksPath = mkdtempSync(join(tmpdir(), "forgedock-empty-hooks-"));
   const askPassPath = join(askPassDir, "askpass.mjs");
   try {
     await writeFile(
@@ -2611,7 +2615,7 @@ export async function pushWithGitHubToken(
       `#!${process.execPath}\nconst prompt = process.argv.slice(2).join(" ");\nconst value = /username/i.test(prompt) ? "x-access-token" : (process.env.FORGEDOCK_GIT_TOKEN || "");\nprocess.stdout.write(value + "\\n");\n`,
       { encoding: "utf8", mode: 0o700 },
     );
-    return await runProcess("git", [...args], {
+    return await runProcess("git", forgePushArguments(hooksPath, args), {
       cwd,
       timeoutMs: 120_000,
       env: {
@@ -2621,11 +2625,29 @@ export async function pushWithGitHubToken(
         GIT_TERMINAL_PROMPT: "0",
         FORGEDOCK_GIT_TOKEN: token,
       },
+      redactValues: [token],
       ...(signal ? { signal } : {}),
     });
   } finally {
     rmSync(askPassDir, { recursive: true, force: true });
+    rmSync(hooksPath, { recursive: true, force: true });
   }
+}
+
+/** Build a push invocation that cannot run repository or global Git hooks. */
+export function forgePushArguments(
+  hooksPath: string,
+  args: readonly string[],
+): string[] {
+  const pushIndex = args.indexOf("push");
+  if (pushIndex < 0) throw new TypeError("Git push arguments must include push.");
+  return [
+    "-c",
+    `core.hooksPath=${hooksPath}`,
+    ...args.slice(0, pushIndex + 1),
+    "--no-verify",
+    ...args.slice(pushIndex + 1),
+  ];
 }
 
 function safeEnvironment(runId: string): NodeJS.ProcessEnv {
@@ -2754,6 +2776,7 @@ async function runProcess(
     signal?: AbortSignal;
     env: NodeJS.ProcessEnv;
     outputLimitBytes?: number;
+    redactValues?: readonly string[];
   },
 ): Promise<ProcessResult> {
   return new Promise((resolvePromise, reject) => {
@@ -2796,14 +2819,25 @@ async function runProcess(
       resolvePromise({
         exitCode,
         signal,
-        stdout,
-        stderr,
+        stdout: redactProcessOutput(stdout, options.redactValues),
+        stderr: redactProcessOutput(stderr, options.redactValues),
         stdoutTruncated,
         stderrTruncated,
         timedOut,
       });
     });
   });
+}
+
+function redactProcessOutput(
+  value: string,
+  redactValues: readonly string[] | undefined,
+): string {
+  let redacted = redactGitHubTokens(value);
+  for (const secret of redactValues ?? []) {
+    if (secret) redacted = redacted.split(secret).join("[redacted-secret]");
+  }
+  return redacted;
 }
 
 export function appendBounded(

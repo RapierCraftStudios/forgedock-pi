@@ -202,6 +202,27 @@ test("merge rejects a PR retargeted from the reviewed base", async () => {
   assert.equal(transport.requests.length, 2);
 });
 
+test("already-merged PR replay bypasses stale base route validation", async () => {
+  const transport = new MockTransport((request) => {
+    if (request.method === "GET" && request.path.includes("/git/ref/heads/"))
+      return response(200, { object: { sha: "new-base-sha" } });
+    return response(200, { ...pullData(), merged: true, base: { sha: "old-base-sha", ref: "staging" } });
+  });
+  const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
+  const result = await adapter.mergePullRequest({
+    pullNumber: 6,
+    expectedRoute: {
+      pullNumber: 6,
+      headRef: "forge/issue-2",
+      headSha: "head-sha",
+      baseRef: "staging",
+      baseSha: "old-base-sha",
+    },
+  });
+  assert.deepEqual(result, { merged: true, sha: "head-sha", message: "Already merged" });
+  assert.equal(transport.requests.some((request) => request.method === "PUT"), false);
+});
+
 test("merge binds both the reviewed head and base", async () => {
   const transport = new MockTransport((request) => {
     if (request.method === "GET" && request.path.includes("/git/ref/heads/"))
@@ -369,6 +390,20 @@ test("blocked_by dependency reads are typed, paginated, and deduplicated", async
   assert.match(transport.requests[1]?.path ?? "", /blocked_by\?.*page=2$/);
 });
 
+test("blocked_by 404 responses fail closed unless endpoint support is explicit", async () => {
+  const unsupported = new MockTransport(() =>
+    response(404, { endpoint_unsupported: true }),
+  );
+  const adapter = new GitHubWorkflowAdapter(unsupported, "owner/repo");
+  assert.deepEqual(await adapter.listIssueBlockedBy(9), []);
+
+  const missing = new MockTransport(() => response(404, { message: "Not Found" }));
+  await assert.rejects(
+    new GitHubWorkflowAdapter(missing, "owner/repo").listIssueBlockedBy(9),
+    (error) => error instanceof GitHubApiError && error.status === 404,
+  );
+});
+
 test("blocked_by dependency reads reject untyped dependency records", async () => {
   const transport = new MockTransport(() =>
     response(200, [{ number: 7, pull_request: {} }]),
@@ -377,6 +412,45 @@ test("blocked_by dependency reads reject untyped dependency records", async () =
   await assert.rejects(
     adapter.listIssueBlockedBy(9),
     (error) => error instanceof GitHubApiError && error.status === 422,
+  );
+});
+
+test("review-finding issue and comment mutations require exact read-back", async () => {
+  let issueBody = "requested body";
+  const transport = new MockTransport((request) => {
+    if (request.method === "POST" && request.path.endsWith("/issues"))
+      return response(201, { number: 12 });
+    if (request.method === "GET" && request.path.endsWith("/issues/12"))
+      return response(200, {
+        number: 12,
+        title: "requested title",
+        body: issueBody,
+        state: "open",
+        labels: [{ name: "review-finding" }],
+      });
+    if (request.method === "POST" && request.path.endsWith("/issues/12/comments"))
+      return response(201, { id: 88, body: "requested comment" });
+    if (request.method === "GET" && request.path.endsWith("/issues/comments/88"))
+      return response(200, { id: 88, body: "requested comment" });
+    throw new Error(`Unexpected request ${request.method} ${request.path}`);
+  });
+  const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
+  const issue = await adapter.createIssue({
+    title: "requested title",
+    body: issueBody,
+    labels: ["review-finding"],
+  });
+  assert.equal(issue.number, 12);
+  assert.equal(await adapter.commentOnIssue(12, "requested comment"), 88);
+
+  issueBody = "tampered body";
+  await assert.rejects(
+    adapter.createIssue({
+      title: "requested title",
+      body: "requested body",
+      labels: ["review-finding"],
+    }),
+    /read-back did not match/,
   );
 });
 

@@ -60,7 +60,7 @@ import {
   isProtectedBranch,
   type ForgePolicy,
 } from "../core/policy.ts";
-import type { RepositoryLease } from "../core/lease.ts";
+import { isLeaseExpired, type RepositoryLease } from "../core/lease.ts";
 import type {
   FinalReviewDecision,
   VerificationResult,
@@ -4381,8 +4381,14 @@ export class ForgeWorkOnController {
       protectedBranches: policy.branches.protected,
       autoMergeAuthorized: canAutoMerge(policy, currentPull.baseRef),
       autoMergeRequested: false,
-      authorityValid: () =>
-        runLeaseAuthorityMatches(currentRun.state, currentRun.lease, link),
+      authorityValid: async () => {
+        const authority = await store.readRun(link.forgeRunId, ctx.signal);
+        return runLeaseAuthorityMatches(
+          authority.state,
+          authority.lease,
+          link,
+        );
+      },
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
     const gate = sharedReview.decision;
@@ -5445,10 +5451,13 @@ function runLeaseAuthorityMatches(
   >,
 ): boolean {
   if (!state) return false;
+  const now = new Date();
   if (state.authorityMode === "run-scoped")
     return (
       state.runId === link.forgeRunId &&
-      state.lease?.ownerRunId === link.forgeRunId
+      state.lease?.ownerRunId === link.forgeRunId &&
+      state.lease !== undefined &&
+      !isLeaseExpired(state.lease, now)
     );
   if (!repositoryLease) return false;
   const authority = state.leaseBinding ?? state.lease;
@@ -5458,6 +5467,8 @@ function runLeaseAuthorityMatches(
       authority.epoch === link.leaseEpoch &&
       repositoryLease.ownerRunId === authority.ownerRunId &&
       repositoryLease.epoch === authority.epoch &&
+      (state.lease === undefined || !isLeaseExpired(state.lease, now)) &&
+      !isLeaseExpired(repositoryLease, now) &&
       (link.orchestrationId
         ? Boolean(state.leaseBinding)
         : !state.leaseBinding),

@@ -225,6 +225,14 @@ test("GitHub API errors expose bounded safe diagnostics", () => {
     message: "Bad credentials Bearer ghp_secret-token",
   });
   assert.doesNotMatch(redacted.message, /ghp_secret-token/);
+
+  const pat = "github_pat_11AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const patError = new GitHubApiError(401, "/user", {
+    message: `Bad credentials ${pat}`,
+    nested: { token: pat },
+  });
+  assert.doesNotMatch(patError.message, /github_pat_/);
+  assert.doesNotMatch(JSON.stringify(patError.response), /github_pat_/);
 });
 
 test("GitHub retry does not retry permission failures", () => {
