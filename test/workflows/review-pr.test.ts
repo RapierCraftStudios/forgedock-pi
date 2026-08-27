@@ -47,13 +47,18 @@ class InMemoryReviewJournal {
   state: ReviewState | undefined;
   readonly events: ReviewEvent[] = [];
 
-  async initialize(input: InitializeReviewInput): Promise<ReviewJournalSnapshot> {
+  async initialize(
+    input: InitializeReviewInput,
+  ): Promise<ReviewJournalSnapshot> {
     if (this.state) return this.snapshot();
     const pullNumber = input.pullNumber ?? input.pullRequest;
-    if (pullNumber === undefined) throw new Error("test pull number is required");
+    if (pullNumber === undefined)
+      throw new Error("test pull number is required");
     const payload: ReviewCreatedPayload = {
       pullNumber,
-      ...(input.issueNumber === undefined ? {} : { issueNumber: input.issueNumber }),
+      ...(input.issueNumber === undefined
+        ? {}
+        : { issueNumber: input.issueNumber }),
       mode: input.mode,
       headRef: input.headRef,
       headSha: input.headSha,
@@ -126,6 +131,8 @@ class GitHubFake {
     labels: readonly string[];
   }> = [];
   readonly mergeInputs: unknown[] = [];
+  merged = false;
+  failMerge = false;
   revalidateCalls = 0;
 
   constructor(
@@ -140,9 +147,7 @@ class GitHubFake {
     return { ...this.currentRoute };
   }
 
-  async revalidatePullRequestRoute(
-    expected: GitHubPullRequestRouteSnapshot,
-  ) {
+  async revalidatePullRequestRoute(expected: GitHubPullRequestRouteSnapshot) {
     this.revalidateCalls += 1;
     if (this.revalidateCalls === 2 && this.driftAfterFirstValidation) {
       this.currentRoute = {
@@ -165,13 +170,25 @@ class GitHubFake {
     };
   }
 
+  async getPullRequest() {
+    return {
+      number: this.currentRoute.pullNumber,
+      htmlUrl: "https://example.test/pulls/7",
+      state: "open" as const,
+      merged: this.merged,
+      headSha: this.currentRoute.headSha,
+      baseSha: this.currentRoute.baseSha,
+      headRef: this.currentRoute.headRef,
+      baseRef: this.currentRoute.baseRef,
+      mergeability: "mergeable" as const,
+    };
+  }
+
   async waitForPullRequestChecks(input: { headSha: string }) {
     assert.equal(input.headSha, route.headSha);
     return {
       headSha: input.headSha,
-      checks: [
-        { name: "ci", required: true, status: "passed" as const },
-      ],
+      checks: [{ name: "ci", required: true, status: "passed" as const }],
       requiredContexts: ["ci"],
       configuredWorkflowCount: 1,
       timedOut: false,
@@ -205,6 +222,7 @@ class GitHubFake {
 
   async mergePullRequest(input: unknown) {
     this.mergeInputs.push(input);
+    if (this.failMerge) throw new Error("simulated merge transport failure");
     return { merged: true, sha: "merge-sha", message: "Merged" };
   }
 }
@@ -253,7 +271,9 @@ class PanelFake implements ReviewPanelRunner {
     this.results = results;
   }
 
-  async run(input: ReviewPanelRunInput): Promise<readonly ForgeReviewerResult[]> {
+  async run(
+    input: ReviewPanelRunInput,
+  ): Promise<readonly ForgeReviewerResult[]> {
     this.inputs.push(input);
     return this.results;
   }
@@ -291,9 +311,7 @@ function finding(reviewer: string = roster.reviewers[0]) {
   };
 }
 
-function request(
-  overrides: Partial<ReviewPrRequest> = {},
-): ReviewPrRequest {
+function request(overrides: Partial<ReviewPrRequest> = {}): ReviewPrRequest {
   return {
     reviewId: "review-1",
     repository: "owner/repo",
@@ -313,10 +331,12 @@ function request(
   };
 }
 
-function harness(options: {
-  results?: readonly ForgeReviewerResult[];
-  drift?: Partial<GitHubPullRequestRouteSnapshot>;
-} = {}) {
+function harness(
+  options: {
+    results?: readonly ForgeReviewerResult[];
+    drift?: Partial<GitHubPullRequestRouteSnapshot>;
+  } = {},
+) {
   const github = new GitHubFake(route, options.drift);
   const journal = new InMemoryReviewJournal();
   const git = new GitFake();
@@ -384,13 +404,18 @@ test("clean standalone review posts route, reviewer, and summary and completes r
   assert.equal(
     h.journal.events.find((event) => event.type === "review.findings-recorded")
       ?.payload &&
-      (h.journal.events.find((event) => event.type === "review.findings-recorded")
-        ?.payload as { findings: readonly unknown[] }).findings.length,
+      (
+        h.journal.events.find(
+          (event) => event.type === "review.findings-recorded",
+        )?.payload as { findings: readonly unknown[] }
+      ).findings.length,
     1,
   );
   assert.equal(
-    (h.journal.events.find((event) => event.type === "review.gate-recorded")
-      ?.payload as { passed: boolean }).passed,
+    (
+      h.journal.events.find((event) => event.type === "review.gate-recorded")
+        ?.payload as { passed: boolean }
+    ).passed,
     true,
   );
   assert.equal(h.github.mergeInputs.length, 0);
@@ -400,6 +425,42 @@ test("clean standalone review posts route, reviewer, and summary and completes r
   assert.match(h.github.artifacts[1]?.body ?? "", /forge-review-security/);
   assert.match(h.github.artifacts[2]?.marker ?? "", /REVIEW_FINDING_ISSUES/);
   assert.match(h.github.artifacts[3]?.marker ?? "", /FORGE:REVIEW_SUMMARY/);
+});
+
+test("passing reviewer scope limitations remain audit context, not unknown checks", async () => {
+  const passing = reviewerResult();
+  const h = harness({
+    results: [
+      {
+        ...passing,
+        limitations: ["Read-only review did not execute test commands."],
+      },
+    ],
+  });
+
+  const result = await h.coordinator.review(request());
+  assert.equal(result.decision.decision, "approved");
+  assert.deepEqual(
+    result.state.checks.find((check) => check.name.startsWith("reviewer:")),
+    {
+      name: `reviewer:${passing.reviewer}`,
+      required: true,
+      status: "passed",
+    },
+  );
+});
+
+test("fresh synthetic work-on review IDs begin their internal panel at round one", async () => {
+  const panelResult = reviewerResult();
+  const h = harness({
+    results: [{ ...panelResult, runId: "workon-forge-run-r2" }],
+  });
+  const result = await h.coordinator.review(
+    request({ reviewId: "workon-forge-run-r2", round: 1 }),
+  );
+  assert.equal(result.state.reviewId, "workon-forge-run-r2");
+  assert.equal(result.state.panel?.round, 1);
+  assert.equal(result.decision.decision, "approved");
 });
 
 test("exact route drift fails closed before verdict or completion", async () => {
@@ -434,8 +495,10 @@ test("automatic merge requires both an explicit request and authorization", asyn
   );
   assert.equal(unauthorized.github.mergeInputs.length, 0);
   assert.equal(unauthorized.journal.events.at(-1)?.type, "review.completed");
-  assert.equal(unauthorized.journal.events.at(-1)?.payload &&
-    (unauthorized.journal.events.at(-1)?.payload as { outcome: string }).outcome,
+  assert.equal(
+    unauthorized.journal.events.at(-1)?.payload &&
+      (unauthorized.journal.events.at(-1)?.payload as { outcome: string })
+        .outcome,
     "reviewed",
   );
 
@@ -453,11 +516,50 @@ test("automatic merge requires both an explicit request and authorization", asyn
   );
 });
 
+test("resume reconciles an already-merged PR before stale route rejection", async () => {
+  const h = harness();
+  h.github.failMerge = true;
+  await assert.rejects(
+    h.coordinator.review(request({ autoMergeRequested: true })),
+    /simulated merge transport failure/,
+  );
+  assert.equal(h.journal.state?.mergeAuthorization?.authorized, true);
+
+  h.github.failMerge = false;
+  h.github.merged = true;
+  h.github.currentRoute = { ...h.github.currentRoute, baseSha: "new-base-sha" };
+  const result = await h.coordinator.review(
+    request({ autoMergeRequested: true, resume: true }),
+  );
+  assert.equal(result.state.status, "completed");
+  assert.equal(result.state.completion?.outcome, "merged");
+  assert.equal(
+    h.journal.events.filter((event) => event.type === "review.completed")
+      .length,
+    1,
+  );
+  assert.equal(h.github.revalidateCalls, 3);
+});
+
+test("standard route review honors an explicit auto-merge request", async () => {
+  const h = harness();
+
+  const result = await h.coordinator.review(
+    request({ mode: "standard", autoMergeRequested: true }),
+  );
+
+  assert.equal(result.state.mode, "standard");
+  assert.equal(result.merged, true);
+  assert.equal(h.github.mergeInputs.length, 1);
+});
+
 test("staging review rejects merge requests and never calls merge", async () => {
   const h = harness();
 
   await assert.rejects(
-    h.coordinator.review(request({ mode: "staging", autoMergeRequested: true })),
+    h.coordinator.review(
+      request({ mode: "staging", autoMergeRequested: true }),
+    ),
     /staging review cannot merge/i,
   );
   assert.equal(h.github.mergeInputs.length, 0);
@@ -540,7 +642,10 @@ test("a protected main staging route can pass because staging never merges", asy
 
 test("retrying a completed staging review does not duplicate gate markers", async () => {
   const h = harness();
-  const stagingRequest = request({ mode: "staging", autoMergeRequested: false });
+  const stagingRequest = request({
+    mode: "staging",
+    autoMergeRequested: false,
+  });
 
   await h.coordinator.review(stagingRequest);
   const eventCount = h.journal.events.length;
@@ -559,15 +664,15 @@ test("retrying a completed staging review does not duplicate gate markers", asyn
 test("incomplete reviewer panel fails closed without recording findings", async () => {
   const h = harness({ results: [] });
 
-  await assert.rejects(
-    h.coordinator.review(request()),
-    /incomplete roster/i,
-  );
+  await assert.rejects(h.coordinator.review(request()), /incomplete roster/i);
   assert.equal(
     h.journal.events.some((event) => event.type === "review.findings-recorded"),
     false,
   );
-  assert.equal(h.journal.events.some((event) => event.type === "review.completed"), false);
+  assert.equal(
+    h.journal.events.some((event) => event.type === "review.completed"),
+    false,
+  );
   assert.equal(h.git.cleaned.length, 1);
 });
 
@@ -579,7 +684,9 @@ test("malformed reviewer identity fails closed without publishing reviewer outpu
     /not in the frozen roster/i,
   );
   assert.equal(
-    h.github.artifacts.some((artifact) => artifact.marker.includes("FORGE:REVIEW_AGENT")),
+    h.github.artifacts.some((artifact) =>
+      artifact.marker.includes("FORGE:REVIEW_AGENT"),
+    ),
     false,
   );
   assert.equal(
@@ -600,7 +707,9 @@ test("only a standalone-owned worktree is cleaned by the coordinator", async () 
 
   const workOn = harness();
   await workOn.coordinator.review(
-    request({ execution: { kind: "work-on", worktreePath: "/existing/worktree" } }),
+    request({
+      execution: { kind: "work-on", worktreePath: "/existing/worktree" },
+    }),
   );
   assert.equal(workOn.git.prepared.length, 0);
   assert.equal(workOn.git.cleaned.length, 0);

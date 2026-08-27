@@ -129,17 +129,40 @@ export interface NodeEventPayload {
   reason?: string;
 }
 
+export const EFFECT_TYPES = [
+  "github-comment",
+  "github-label",
+  "push",
+  "pull-request",
+  "merge",
+  "issue-close",
+  "cleanup",
+] as const;
+
+export type EffectType = (typeof EFFECT_TYPES)[number];
+
 export interface EffectRecordedPayload {
-  effectType:
-    | "github-comment"
-    | "github-label"
-    | "push"
-    | "pull-request"
-    | "merge"
-    | "issue-close"
-    | "cleanup";
+  effectType: EffectType;
   effectId: string;
   digest: string;
+}
+
+export function isEffectType(value: unknown): value is EffectType {
+  return (
+    typeof value === "string" &&
+    (EFFECT_TYPES as readonly string[]).includes(value)
+  );
+}
+
+/** Construct the payload persisted after an external effect is verified. */
+export function createEffectRecordedPayload(
+  effectType: EffectType,
+  effectId: string,
+  digest: string,
+): EffectRecordedPayload {
+  if (!effectId.trim() || !digest.trim())
+    throw new TypeError("Effect ID and digest must be non-empty strings.");
+  return { effectType, effectId, digest };
 }
 
 export interface RunCompletedPayload {

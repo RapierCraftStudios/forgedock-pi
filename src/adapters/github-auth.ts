@@ -17,6 +17,7 @@ interface CachedInstallationToken {
 }
 
 let cachedInstallationToken: CachedInstallationToken | undefined;
+const installationTokenExchanges = new Map<string, Promise<string>>();
 
 export interface GitHubTokenResolverOptions {
   env?: NodeJS.ProcessEnv;
@@ -25,11 +26,39 @@ export interface GitHubTokenResolverOptions {
   readPem?: (path: string) => Promise<string>;
 }
 
+export interface GitHubTokenProvider {
+  get(signal?: AbortSignal): Promise<string>;
+  refresh(signal?: AbortSignal): Promise<string>;
+}
+
+export function createGitHubTokenProvider(
+  pi: ExtensionAPI,
+  cwd: string,
+  options: GitHubTokenResolverOptions = {},
+): GitHubTokenProvider {
+  return Object.freeze({
+    get: (signal?: AbortSignal) =>
+      resolveGitHubTokenInternal(pi, cwd, signal, options, false),
+    refresh: (signal?: AbortSignal) =>
+      resolveGitHubTokenInternal(pi, cwd, signal, options, true),
+  });
+}
+
 export async function resolveGitHubToken(
   pi: ExtensionAPI,
   cwd: string,
   signal?: AbortSignal,
   options: GitHubTokenResolverOptions = {},
+): Promise<string> {
+  return resolveGitHubTokenInternal(pi, cwd, signal, options, false);
+}
+
+async function resolveGitHubTokenInternal(
+  pi: ExtensionAPI,
+  cwd: string,
+  signal: AbortSignal | undefined,
+  options: GitHubTokenResolverOptions,
+  forceRefresh: boolean,
 ): Promise<string> {
   const env = options.env ?? process.env;
   const configuredToken = env.FORGEDOCK_BOT_TOKEN?.trim();
@@ -46,12 +75,12 @@ export async function resolveGitHubToken(
       pemPath,
       appId: env.FORGEDOCK_GITHUB_APP_ID?.trim() || DEFAULT_APP_ID,
       installationId:
-        env.FORGEDOCK_GITHUB_INSTALLATION_ID?.trim() ||
-        DEFAULT_INSTALLATION_ID,
+        env.FORGEDOCK_GITHUB_INSTALLATION_ID?.trim() || DEFAULT_INSTALLATION_ID,
       signal,
       fetchImpl: options.fetchImpl ?? fetch,
       now: options.now ?? Date.now,
       readPem: options.readPem ?? ((path) => readFile(path, "utf8")),
+      forceRefresh,
     });
   }
 
@@ -97,15 +126,41 @@ async function resolveInstallationToken(input: {
   fetchImpl: typeof fetch;
   now: () => number;
   readPem: (path: string) => Promise<string>;
+  forceRefresh?: boolean;
 }): Promise<string> {
   const key = `${input.pemPath}\0${input.appId}\0${input.installationId}`;
   const now = input.now();
   if (
+    !input.forceRefresh &&
     cachedInstallationToken?.key === key &&
     cachedInstallationToken.expiresAt - REFRESH_SKEW_MS > now
   )
     return cachedInstallationToken.token;
 
+  const inFlight = installationTokenExchanges.get(key);
+  if (inFlight) return inFlight;
+  const exchange = mintInstallationToken(input, key, now);
+  installationTokenExchanges.set(key, exchange);
+  try {
+    return await exchange;
+  } finally {
+    if (installationTokenExchanges.get(key) === exchange)
+      installationTokenExchanges.delete(key);
+  }
+}
+
+async function mintInstallationToken(
+  input: {
+    pemPath: string;
+    appId: string;
+    installationId: string;
+    signal?: AbortSignal;
+    fetchImpl: typeof fetch;
+    readPem: (path: string) => Promise<string>;
+  },
+  key: string,
+  now: number,
+): Promise<string> {
   const pem = await input.readPem(input.pemPath).catch((error) => {
     throw new Error(
       `Unable to read FORGEDOCK_APP_PEM: ${error instanceof Error ? error.message : String(error)}`,
@@ -132,7 +187,9 @@ async function resolveInstallationToken(input: {
   };
   if (!response.ok || typeof body.token !== "string" || !body.token.trim()) {
     const message =
-      typeof body.message === "string" ? body.message : `HTTP ${response.status}`;
+      typeof body.message === "string"
+        ? body.message
+        : `HTTP ${response.status}`;
     throw new Error(`ForgeDock GitHub App token exchange failed: ${message}`);
   }
   const expiresAt =

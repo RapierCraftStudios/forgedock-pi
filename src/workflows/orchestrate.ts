@@ -5,26 +5,50 @@ import type {
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 
-import { FetchGitHubTransport } from "../adapters/github-api.ts";
-import { resolveGitHubToken } from "../adapters/github-auth.ts";
+import {
+  FetchGitHubTransport,
+  githubRateLimitReservations,
+  GITHUB_CONTROL_PLANE_MIN_RESERVE,
+  GITHUB_LANE_ESTIMATED_REQUEST_COST,
+  type GitHubCoreRateLimit,
+  readGitHubCoreRateLimit,
+} from "../adapters/github-api.ts";
+import { createGitHubTokenProvider } from "../adapters/github-auth.ts";
 import { loadForgePolicy } from "../adapters/config.ts";
 import { RunJournal } from "../adapters/run-journal.ts";
 import { GitWorktreeManager } from "../adapters/git.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
+import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
 import {
+  blockedOrchestrationLanes,
   isTerminalLane,
   nextIntegrationLane,
   readyOrchestrationLanes,
+  type OrchestrationDependencyEdge,
   type OrchestrationState,
 } from "../core/orchestration.ts";
 import { isProtectedBranch, type ForgePolicy } from "../core/policy.ts";
 import { OrchestrationJournal } from "./orchestration-journal.ts";
-import type {
-  ForgeWorkOnController,
-  WorkOnLifecycleEvent,
+import {
+  isTransientProviderFailure,
+  type ForgeWorkOnController,
+  type WorkOnLifecycleEvent,
 } from "./work-on.ts";
 
 const ORCHESTRATION_LINK_ENTRY = "forgedock-orchestration-link/v1";
+
+function laneReservationKey(
+  orchestrationId: string,
+  issueNumber: number,
+): string {
+  return `${orchestrationId}:${issueNumber}`;
+}
+
+function isTerminalLifecycleStatus(
+  status: WorkOnLifecycleEvent["status"],
+): boolean {
+  return ["completed", "blocked", "needs-human", "failed"].includes(status);
+}
 
 export interface ActiveOrchestrationLink {
   orchestrationId: string;
@@ -64,6 +88,10 @@ export class ForgeOrchestrationController {
   readonly #pumping = new Set<string>();
   readonly #pumpPending = new Set<string>();
   readonly #lifecycleQueues = new Map<string, Promise<void>>();
+  readonly #rateBudgets = new Map<
+    string,
+    { checkedAt: number; budget: GitHubCoreRateLimit }
+  >();
   #lifecycleUnsubscribe: (() => void) | undefined;
 
   constructor(pi: ExtensionAPI, workOn: ForgeWorkOnController) {
@@ -143,9 +171,18 @@ export class ForgeOrchestrationController {
       integrationBranch,
       ctx.signal,
     );
-    const token = await resolveGitHubToken(this.#pi, repositoryRoot, ctx.signal);
+    const tokenProvider = createGitHubTokenProvider(this.#pi, repositoryRoot);
+    const transport = new FetchGitHubTransport({
+        tokenProvider,
+        repository: policy.repository.name,
+      });
+    const dependencies = await discoverIssueDependencies(
+      new GitHubWorkflowAdapter(transport, policy.repository.name),
+      issueNumbers,
+      ctx.signal,
+    );
     const store = new GitHubStateBranchStore(
-      new FetchGitHubTransport({ token }),
+      transport,
       policy.repository.name,
       policy.state.branch,
     );
@@ -158,6 +195,7 @@ export class ForgeOrchestrationController {
       issueNumbers,
       integrationBranch,
       maxConcurrent: policy.orchestration.maxConcurrent,
+      dependencies,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
     const link: ActiveOrchestrationLink = {
@@ -211,20 +249,16 @@ export class ForgeOrchestrationController {
       ctx.signal,
     );
     const { policy } = await loadForgePolicy(repositoryRoot);
-    const token = await resolveGitHubToken(
-      this.#pi,
-      repositoryRoot,
-      ctx.signal,
-    );
+    const tokenProvider = createGitHubTokenProvider(this.#pi, repositoryRoot);
     const store = new GitHubStateBranchStore(
-      new FetchGitHubTransport({ token }),
+      new FetchGitHubTransport({
+        tokenProvider,
+        repository: policy.repository.name,
+      }),
       policy.repository.name,
       policy.state.branch,
     );
-    const current = await store.readOrchestration(
-      orchestrationId,
-      ctx.signal,
-    );
+    const current = await store.readOrchestration(orchestrationId, ctx.signal);
     if (!current.state)
       throw new Error(`Orchestration ${orchestrationId} does not exist.`);
     if (current.state.status !== "running") return current.state;
@@ -240,6 +274,10 @@ export class ForgeOrchestrationController {
       this.#syncLink(link, cancelled);
       this.#persistLink(link);
     }
+    githubRateLimitReservations.releaseOrchestration(
+      policy.repository.name,
+      orchestrationId,
+    );
     return cancelled;
   }
 
@@ -372,7 +410,8 @@ export class ForgeOrchestrationController {
   ): Promise<void> {
     const orchestrationId = event.orchestrationId;
     if (!orchestrationId) return;
-    const prior = this.#lifecycleQueues.get(orchestrationId) ?? Promise.resolve();
+    const prior =
+      this.#lifecycleQueues.get(orchestrationId) ?? Promise.resolve();
     const next = prior
       .catch(() => undefined)
       .then(() => this.#handleLifecycle(event, ctx))
@@ -400,7 +439,14 @@ export class ForgeOrchestrationController {
     const lane = current.state.lanes.find(
       (candidate) => candidate.issueNumber === event.issueNumber,
     );
-    if (!lane || isTerminalLane(lane)) return;
+    if (!lane || isTerminalLane(lane)) {
+      if (isTerminalLifecycleStatus(event.status))
+        githubRateLimitReservations.release(
+          link.repository,
+          laneReservationKey(orchestrationId, event.issueNumber),
+        );
+      return;
+    }
     if (!lifecycleMatchesForgeRun(lane, event)) return;
     // A work-on run uses a new child receipt for each bounded node. The stable
     // Forge run ID, not the latest child receipt, owns lane lifecycle events.
@@ -437,7 +483,11 @@ export class ForgeOrchestrationController {
         await journal.append({
           orchestrationId,
           type: "lane.closed",
-          payload: { issueNumber: event.issueNumber, reason: "Closed without code after invalid/decomposed investigation." },
+          payload: {
+            issueNumber: event.issueNumber,
+            reason:
+              "Closed without code after invalid/decomposed investigation.",
+          },
           idempotencyKey: `lane:${event.issueNumber}:closed`,
           message: `Close issue ${event.issueNumber} without code`,
           ...(ctx.signal ? { signal: ctx.signal } : {}),
@@ -478,6 +528,11 @@ export class ForgeOrchestrationController {
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
     } else return;
+    if (isTerminalLifecycleStatus(event.status))
+      githubRateLimitReservations.release(
+        link.repository,
+        laneReservationKey(orchestrationId, event.issueNumber),
+      );
     const latest = await this.#read(link, ctx.signal);
     await this.#recoverFalseFailures(link, latest.state, ctx);
     await this.#pump(link, ctx);
@@ -497,7 +552,55 @@ export class ForgeOrchestrationController {
       while (progress && link.status === "running") {
         progress = false;
         let current = await this.#read(link, ctx.signal);
-        for (const lane of readyOrchestrationLanes(current.state)) {
+        const dependencyBlocks = blockedOrchestrationLanes(current.state);
+        if (dependencyBlocks.length > 0) {
+          // Persist one event per dependent lane. Re-reading after each event
+          // makes transitive blocks durable and keeps evidence deterministic
+          // under concurrent lifecycle notifications.
+          for (const blocked of dependencyBlocks) {
+            const state = await current.journal.append({
+              orchestrationId: link.orchestrationId,
+              type: "lane.blocked",
+              payload: {
+                issueNumber: blocked.lane.issueNumber,
+                reason: blocked.reason,
+              },
+              idempotencyKey: `lane:${blocked.lane.issueNumber}:dependency-blocked`,
+              message: `Block issue ${blocked.lane.issueNumber} on failed dependency #${blocked.blockedBy.issueNumber}`,
+              ...(ctx.signal ? { signal: ctx.signal } : {}),
+            });
+            current = { ...current, state };
+          }
+          progress = true;
+          continue;
+        }
+        githubRateLimitReservations.synchronize(
+          link.repository,
+          link.orchestrationId,
+          activeReservationIssueNumbers(current.state),
+        );
+        const readyQueue = readyOrchestrationLanes(
+          current.state,
+          current.state.maxConcurrent,
+        );
+        const effectiveConcurrency =
+          readyQueue.length === 0
+            ? current.state.maxConcurrent
+            : await this.#effectiveConcurrency(
+                link,
+                current.state.maxConcurrent,
+                activeReservationIssueNumbers(current.state).length,
+                ctx.signal,
+              );
+        for (const lane of readyOrchestrationLanes(
+          current.state,
+          effectiveConcurrency,
+        )) {
+          const reservation = githubRateLimitReservations.tryReserve(
+            link.repository,
+            laneReservationKey(link.orchestrationId, lane.issueNumber),
+          );
+          if (!reservation) break;
           const existing = this.#workOn
             .listRuns()
             .find(
@@ -513,44 +616,44 @@ export class ForgeOrchestrationController {
             : undefined;
           if (!result) {
             try {
-              result = await this.#workOn.startIssue(
-                lane.issueNumber,
-                ctx,
-                {
-                  orchestrationId: link.orchestrationId,
-                },
-              );
+              result = await this.#workOn.startIssue(lane.issueNumber, ctx, {
+                orchestrationId: link.orchestrationId,
+              });
             } catch (error) {
-              const recovered = this.#workOn.listRuns().find(
-                (run) =>
-                  run.orchestrationId === link.orchestrationId &&
-                  run.issueNumber === lane.issueNumber &&
-                  Object.keys(run.activeNodes).length > 0,
-              );
+              const recovered = this.#workOn
+                .listRuns()
+                .find(
+                  (run) =>
+                    run.orchestrationId === link.orchestrationId &&
+                    run.issueNumber === lane.issueNumber &&
+                    Object.keys(run.activeNodes).length > 0,
+                );
               if (recovered) {
                 result = {
                   runId: recovered.forgeRunId,
                   subagentRunId: recovered.subagentRunId,
                 };
               } else if (isRetryableSetupError(error)) {
+                reservation.release();
                 ctx.ui.notify(
                   `ForgeDock orchestration ${link.orchestrationId} is paused before issue #${lane.issueNumber}: ${normalizeReason(errorMessage(error), "Repository setup is incomplete.")} Run /forge:init, then it will resume the queued lanes.`,
                   "warning",
                 );
                 return;
               } else {
+                reservation.release();
                 await current.journal.append({
-                orchestrationId: link.orchestrationId,
-                type: "lane.failed",
-                payload: {
-                  issueNumber: lane.issueNumber,
-                  reason: normalizeReason(
-                    errorMessage(error),
-                    "Lane launch failed.",
-                  ),
-                },
-                idempotencyKey: `lane:${lane.issueNumber}:launch-failed`,
-                message: `Fail issue ${lane.issueNumber} launch`,
+                  orchestrationId: link.orchestrationId,
+                  type: "lane.failed",
+                  payload: {
+                    issueNumber: lane.issueNumber,
+                    reason: normalizeReason(
+                      errorMessage(error),
+                      "Lane launch failed.",
+                    ),
+                  },
+                  idempotencyKey: `lane:${lane.issueNumber}:launch-failed`,
+                  message: `Fail issue ${lane.issueNumber} launch`,
                   ...(ctx.signal ? { signal: ctx.signal } : {}),
                 });
                 progress = true;
@@ -573,6 +676,7 @@ export class ForgeOrchestrationController {
               ...(ctx.signal ? { signal: ctx.signal } : {}),
             });
           } catch (error) {
+            reservation.release();
             ctx.ui.notify(
               `ForgeDock issue #${lane.issueNumber} launched as run ${result.runId}, but its lane receipt is waiting for CAS reconciliation: ${errorMessage(error)}`,
               "warning",
@@ -594,9 +698,23 @@ export class ForgeOrchestrationController {
             message: `Integrate issue ${integration.issueNumber}`,
             ...(ctx.signal ? { signal: ctx.signal } : {}),
           });
-          try {
-            await this.#workOn.integrateIssue(integration.forgeRunId, ctx);
-          } catch (error) {
+          let integrationError: unknown;
+          for (let attempt = 1; attempt <= 3; attempt += 1) {
+            try {
+              await this.#workOn.integrateIssue(integration.forgeRunId, ctx);
+              integrationError = undefined;
+              break;
+            } catch (error) {
+              integrationError = error;
+              if (
+                attempt === 3 ||
+                !isTransientProviderFailure(errorMessage(error))
+              )
+                break;
+              await orchestrationDelay(2_000 * 2 ** (attempt - 1), ctx.signal);
+            }
+          }
+          if (integrationError) {
             const latest = await this.#read(link, ctx.signal);
             await latest.journal.append({
               orchestrationId: link.orchestrationId,
@@ -604,7 +722,7 @@ export class ForgeOrchestrationController {
               payload: {
                 issueNumber: integration.issueNumber,
                 reason: normalizeReason(
-                  errorMessage(error),
+                  errorMessage(integrationError),
                   "Lane integration failed.",
                 ),
               },
@@ -657,6 +775,52 @@ export class ForgeOrchestrationController {
     }
   }
 
+  async #effectiveConcurrency(
+    link: ActiveOrchestrationLink,
+    configuredMax: number,
+    activeReservations: number,
+    signal?: AbortSignal,
+  ): Promise<number> {
+    while (true) {
+      const now = Date.now();
+      let cached = this.#rateBudgets.get(link.repository);
+      if (!cached || now - cached.checkedAt > 15_000) {
+        const tokenProvider = createGitHubTokenProvider(
+          this.#pi,
+          link.repositoryRoot,
+        );
+        const budget = await readGitHubCoreRateLimit(
+          new FetchGitHubTransport({
+            tokenProvider,
+            repository: link.repository,
+          }),
+          signal,
+          link.repository,
+        );
+        cached = { checkedAt: now, budget };
+        this.#rateBudgets.set(link.repository, cached);
+      } else {
+        githubRateLimitReservations.update(link.repository, cached.budget);
+      }
+      const available = githubRateLimitReservations.availableSlots(
+        link.repository,
+        GITHUB_CONTROL_PLANE_MIN_RESERVE,
+        GITHUB_LANE_ESTIMATED_REQUEST_COST,
+      );
+      const concurrency = Math.min(
+        configuredMax,
+        activeReservations + available,
+      );
+      if (concurrency > activeReservations || activeReservations > 0)
+        return concurrency;
+      await githubRateLimitReservations.waitForCapacity(
+        link.repository,
+        signal,
+      );
+      this.#rateBudgets.delete(link.repository);
+    }
+  }
+
   async #read(
     link: ActiveOrchestrationLink,
     signal?: AbortSignal,
@@ -665,20 +829,19 @@ export class ForgeOrchestrationController {
     journal: OrchestrationJournal;
     store: GitHubStateBranchStore;
   }> {
-    const token = await resolveGitHubToken(
+    const tokenProvider = createGitHubTokenProvider(
       this.#pi,
       link.repositoryRoot,
-      signal,
     );
     const store = new GitHubStateBranchStore(
-      new FetchGitHubTransport({ token }),
+      new FetchGitHubTransport({
+        tokenProvider,
+        repository: link.repository,
+      }),
       link.repository,
       link.stateBranch,
     );
-    const current = await store.readOrchestration(
-      link.orchestrationId,
-      signal,
-    );
+    const current = await store.readOrchestration(link.orchestrationId, signal);
     if (!current.state)
       throw new Error(
         `Orchestration ${link.orchestrationId} is missing authoritative state.`,
@@ -690,11 +853,13 @@ export class ForgeOrchestrationController {
     };
   }
 
-  #syncLink(
-    link: ActiveOrchestrationLink,
-    state: OrchestrationState,
-  ): void {
+  #syncLink(link: ActiveOrchestrationLink, state: OrchestrationState): void {
     link.status = state.status;
+    if (state.status !== "running")
+      githubRateLimitReservations.releaseOrchestration(
+        link.repository,
+        link.orchestrationId,
+      );
   }
 
   #restoreLinks(ctx: ExtensionContext): void {
@@ -714,6 +879,82 @@ export class ForgeOrchestrationController {
     this.#pi.appendEntry(ORCHESTRATION_LINK_ENTRY, link);
     this.#links.set(link.orchestrationId, link);
   }
+}
+
+export class ExternalIssueDependencyError extends Error {
+  readonly code = "external-dependency" as const;
+  readonly issueNumber: number;
+  readonly blockerIssueNumber: number;
+
+  constructor(issueNumber: number, blockerIssueNumber: number) {
+    super(
+      `Cannot dispatch orchestration: issue #${issueNumber} is blocked by unselected external issue #${blockerIssueNumber}. Select #${blockerIssueNumber} or resolve the GitHub dependency before dispatching.`,
+    );
+    this.name = "ExternalIssueDependencyError";
+    this.issueNumber = issueNumber;
+    this.blockerIssueNumber = blockerIssueNumber;
+  }
+}
+
+export async function discoverIssueDependencies(
+  github: Pick<GitHubWorkflowAdapter, "listIssueBlockedBy">,
+  issueNumbers: readonly number[],
+  signal?: AbortSignal,
+): Promise<OrchestrationDependencyEdge[]> {
+  const confirmed = new Set(issueNumbers);
+  const dependencies: OrchestrationDependencyEdge[] = [];
+  for (const issueNumber of issueNumbers) {
+    const blockers = await github.listIssueBlockedBy(issueNumber, signal);
+    for (const blocker of blockers) {
+      if (!confirmed.has(blocker))
+        throw new ExternalIssueDependencyError(issueNumber, blocker);
+      dependencies.push({
+        fromIssue: blocker,
+        toIssue: issueNumber,
+        kind: "explicit",
+        reason: `GitHub issue dependency: #${issueNumber} is blocked by #${blocker}.`,
+      });
+    }
+  }
+  return dependencies;
+}
+
+export function rateLimitedOrchestrationConcurrency(
+  configuredMax: number,
+  budget: GitHubCoreRateLimit,
+): number {
+  if (!Number.isSafeInteger(configuredMax) || configuredMax < 1)
+    throw new TypeError(
+      "Configured orchestration concurrency must be positive.",
+    );
+  const reserve = Math.max(
+    GITHUB_CONTROL_PLANE_MIN_RESERVE,
+    Math.ceil(budget.limit * 0.2),
+  );
+  const available = Math.max(0, budget.remaining - reserve);
+  return Math.min(
+    configuredMax,
+    Math.floor(available / GITHUB_LANE_ESTIMATED_REQUEST_COST),
+  );
+}
+
+async function orchestrationDelay(
+  milliseconds: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (signal?.aborted) throw signal.reason;
+  await new Promise<void>((resolve, reject) => {
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new Error("Integration retry aborted."));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, milliseconds);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    timer.unref();
+  });
 }
 
 function chooseIntegrationBranch(policy: ForgePolicy): string {
@@ -736,6 +977,18 @@ function validateIssueNumbers(issueNumbers: readonly number[]): void {
   }
   if (new Set(issueNumbers).size !== issueNumbers.length)
     throw new Error("Orchestration issue numbers must be unique.");
+}
+
+function activeReservationIssueNumbers(
+  state: Pick<OrchestrationState, "lanes">,
+): number[] {
+  return state.lanes
+    .filter((lane) =>
+      ["running", "ready", "refreshing", "integrating"].includes(
+        lane.status,
+      ),
+    )
+    .map((lane) => lane.issueNumber);
 }
 
 function cloneLink(link: ActiveOrchestrationLink): ActiveOrchestrationLink {
@@ -781,7 +1034,9 @@ export function childCleanupReason(
   if (unsuccessful.length === 0) return undefined;
   return `Orchestration is terminal with ${unsuccessful
     .map((lane) => `#${lane.issueNumber}:${lane.status}`)
-    .join(", ")}; stopping nonterminal child runs before orchestration completion.`;
+    .join(
+      ", ",
+    )}; stopping nonterminal child runs before orchestration completion.`;
 }
 
 export function lifecycleMatchesForgeRun(
@@ -796,10 +1051,7 @@ function required(value: string | undefined, field: string): string {
   return value;
 }
 
-function requiredNumber(
-  value: number | undefined,
-  field: string,
-): number {
+function requiredNumber(value: number | undefined, field: string): number {
   if (!Number.isSafeInteger(value) || (value ?? 0) < 1)
     throw new Error(`Work-on lifecycle event is missing ${field}.`);
   return value as number;
@@ -811,10 +1063,7 @@ function isRetryableSetupError(error: unknown): boolean {
   );
 }
 
-function normalizeReason(
-  value: string | undefined,
-  fallback: string,
-): string {
+function normalizeReason(value: string | undefined, fallback: string): string {
   const normalized = value?.trim();
   return normalized || fallback;
 }

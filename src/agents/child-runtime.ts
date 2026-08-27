@@ -21,10 +21,16 @@ import {
   type SubagentCapabilityCeilingHandle,
 } from "pi-subagents/capability-ceiling";
 
-import { FetchGitHubTransport } from "../adapters/github-api.ts";
-import { resolveGitHubToken } from "../adapters/github-auth.ts";
+import {
+  FetchGitHubTransport,
+  redactGitHubTokens,
+} from "../adapters/github-api.ts";
+import { createGitHubTokenProvider } from "../adapters/github-auth.ts";
 import { parseChangedGitPaths } from "../adapters/git.ts";
-import { GitHubIssueProjector } from "../adapters/github-projection.ts";
+import {
+  GitHubIssueProjector,
+  type GitHubProjectionReceipt,
+} from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
 import {
@@ -37,10 +43,10 @@ import {
   type BuilderPathContract,
   validateBuilderPathContract,
 } from "../core/builder-contract.ts";
+import { workflowLabelForPhaseBoundary } from "../core/artifact-protocol.ts";
 import {
-  workflowLabelForPhaseBoundary,
-} from "../core/artifact-protocol.ts";
-import {
+  HUMAN_AUTHORITY_REASONS,
+  isHumanAuthorityReason,
   normalizeVerificationCommandCwd,
   type ForgePolicy,
 } from "../core/policy.ts";
@@ -51,7 +57,13 @@ import {
   type RunPhase,
 } from "../core/events.ts";
 import { RunJournal } from "../adapters/run-journal.ts";
-import { phaseArtifactValidationError } from "../core/comment-contract.ts";
+import {
+  FORGE_PHASE_ARTIFACT_SCHEMA,
+  isPhaseArtifact,
+  phaseArtifactValidationError,
+  renderPhaseArtifact,
+  type PhaseArtifact,
+} from "../core/comment-contract.ts";
 import {
   canonicalizePotentialPath,
   isPathWithin,
@@ -135,7 +147,9 @@ export class ForgeOutputLimitError extends Error {
   readonly code = "forgedock-output-truncated";
 
   constructor(operation: string) {
-    super(`${operation} exceeded the trusted output limit; refusing to consume incomplete security evidence.`);
+    super(
+      `${operation} exceeded the trusted output limit; refusing to consume incomplete security evidence.`,
+    );
     this.name = "ForgeOutputLimitError";
   }
 }
@@ -159,7 +173,9 @@ const CheckpointParameters = Type.Object({
   commitSha: Type.Optional(Type.String({ minLength: 7 })),
   evidence: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
   report: Type.Optional(Type.String({ minLength: 1, maxLength: 100_000 })),
+  artifact: Type.Optional(Type.Unsafe(FORGE_PHASE_ARTIFACT_SCHEMA)),
   reason: Type.Optional(Type.String({ minLength: 1 })),
+  authorityReason: Type.Optional(StringEnum(HUMAN_AUTHORITY_REASONS)),
 });
 
 const VerifyParameters = Type.Object({
@@ -188,7 +204,11 @@ const ReviewPanelParameters = Type.Object({
   profiles: Type.Optional(
     Type.Array(
       Type.Object({
-        id: Type.String({ minLength: 2, maxLength: 64, pattern: "^[a-z][a-z0-9-]+$" }),
+        id: Type.String({
+          minLength: 2,
+          maxLength: 64,
+          pattern: "^[a-z][a-z0-9-]+$",
+        }),
         focus: Type.String({ minLength: 1, maxLength: 2_000 }),
         rationale: Type.String({ minLength: 1, maxLength: 2_000 }),
         required: Type.Boolean(),
@@ -224,14 +244,8 @@ export interface ForgeRuntimeOptions {
 }
 
 export const FORGE_REVIEWER_CAPABILITY_CEILING = {
-  allowedAgents: [
-    FORGE_REVIEW_CORRECTNESS_AGENT,
-    FORGE_REVIEW_SECURITY_AGENT,
-  ],
-  allowedTools: [
-    "forge_diff",
-    "forge_finalize_reviewer",
-  ],
+  allowedAgents: [FORGE_REVIEW_CORRECTNESS_AGENT, FORGE_REVIEW_SECURITY_AGENT],
+  allowedTools: ["forge_diff", "forge_finalize_reviewer"],
   denyExtensions: false,
 } as const;
 
@@ -302,7 +316,8 @@ export function registerForgeRuntime(
       )
         return {
           block: true,
-          reason: "No active direct ForgeDock work-on run is bound to this session.",
+          reason:
+            "No active direct ForgeDock work-on run is bound to this session.",
         };
       return;
     }
@@ -310,7 +325,11 @@ export function registerForgeRuntime(
     if (denial) return { block: true, reason: denial };
     if (event.toolName.startsWith("forge_") || event.toolName === "subagent") {
       const allowed = allowedNodeTools(binding.node);
-      if (!allowed.has(event.toolName)) return { block: true, reason: `${event.toolName} is not allowed for bounded node ${binding.node ?? "legacy"}.` };
+      if (!allowed.has(event.toolName))
+        return {
+          block: true,
+          reason: `${event.toolName} is not allowed for bounded node ${binding.node ?? "legacy"}.`,
+        };
     }
     if (
       !["read", "write", "edit", "grep", "find", "ls"].includes(event.toolName)
@@ -365,7 +384,8 @@ export function registerForgeRuntime(
       assertCompleteProcessOutput(status, "Refresh worktree path listing");
       const refreshStatus = nonRuntimeStatus(
         status.stdout,
-        caseInsensitivePaths ?? (await checkoutIgnoresCase(root, binding.runId)),
+        caseInsensitivePaths ??
+          (await checkoutIgnoresCase(root, binding.runId)),
       );
       if (status.exitCode !== 0 || refreshStatus)
         throw new Error(
@@ -441,16 +461,12 @@ export function registerForgeRuntime(
           `Controlled rebase failed and was aborted: ${rebased.stderr || rebased.stdout}`,
         );
       }
-      const head = await runProcess(
-        "git",
-        ["-C", root, "rev-parse", "HEAD"],
-        {
-          cwd: root,
-          timeoutMs: 30_000,
-          env,
-          ...(signal ? { signal } : {}),
-        },
-      );
+      const head = await runProcess("git", ["-C", root, "rev-parse", "HEAD"], {
+        cwd: root,
+        timeoutMs: 30_000,
+        env,
+        ...(signal ? { signal } : {}),
+      });
       if (head.exitCode !== 0 || !head.stdout.trim())
         throw new Error(`Unable to resolve refreshed HEAD: ${head.stderr}`);
       return {
@@ -491,7 +507,9 @@ export function registerForgeRuntime(
       if (params.cursor !== undefined && params.mode !== "patch")
         throw new Error("Diff cursors are only valid in patch mode.");
       if (reviewerHead && params.mode !== "patch")
-        throw new Error("Reviewer diff coverage requires the complete patch mode.");
+        throw new Error(
+          "Reviewer diff coverage requires the complete patch mode.",
+        );
       if (reviewerHead) {
         const actualHead = await runProcess(
           "git",
@@ -504,7 +522,10 @@ export function registerForgeRuntime(
           },
         );
         assertCompleteProcessOutput(actualHead, "review HEAD resolution");
-        if (actualHead.exitCode !== 0 || actualHead.stdout.trim() !== reviewerHead)
+        if (
+          actualHead.exitCode !== 0 ||
+          actualHead.stdout.trim() !== reviewerHead
+        )
           throw new Error(
             `Reviewer diff is bound to ${reviewerHead}, found ${actualHead.stdout.trim() || "unknown"}.`,
           );
@@ -578,6 +599,8 @@ export function registerForgeRuntime(
         }
         if (nextCursor !== undefined) {
           output += `\n\n[Forge diff chunk ${cursor}-${chunk.end} of ${totalBytes} bytes. Call forge_diff again with mode=patch and cursor=${nextCursor}.]`;
+        } else {
+          output += `\n\n[Forge diff coverage complete: ${totalBytes}/${totalBytes} bytes; sha256=${patchSha256}.]`;
         }
       } else if (cursor !== 0) {
         throw new Error("Diff cursor exceeds the available patch.");
@@ -624,7 +647,8 @@ export function registerForgeRuntime(
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
       const env = safeEnvironment(binding.runId);
       const ignoreCase =
-        caseInsensitivePaths ?? (await checkoutIgnoresCase(root, binding.runId));
+        caseInsensitivePaths ??
+        (await checkoutIgnoresCase(root, binding.runId));
       const status = await runProcess(
         "git",
         ["-C", root, "status", "--porcelain=v1", "--untracked-files=all", "-z"],
@@ -647,7 +671,9 @@ export function registerForgeRuntime(
           `Refusing to commit Forge runtime paths: ${runtimePaths.join(", ")}.`,
         );
       if (changedPaths.length === 0)
-        throw new Error("Cannot create a Forge commit with no worktree changes.");
+        throw new Error(
+          "Cannot create a Forge commit with no worktree changes.",
+        );
       if (binding.node === "implement" && !binding.builderContract)
         throw new Error(
           "Implementation commit refused without an accepted builder contract.",
@@ -665,7 +691,8 @@ export function registerForgeRuntime(
         },
       );
       assertCompleteProcessOutput(added, "Git staging");
-      if (added.exitCode !== 0) throw new Error(`git add failed: ${added.stderr}`);
+      if (added.exitCode !== 0)
+        throw new Error(`git add failed: ${added.stderr}`);
       const staged = await runProcess(
         "git",
         [
@@ -698,15 +725,24 @@ export function registerForgeRuntime(
       if (binding.builderContract)
         assertBuilderContractPaths(binding.builderContract, stagedPaths);
       const preCommitHead = await gitHead(root, binding.runId, signal);
-      const stagedTreeResult = await runProcess("git", ["-C", root, "write-tree"], {
-        cwd: root,
-        timeoutMs: 30_000,
-        env,
-        ...(signal ? { signal } : {}),
-      });
-      assertCompleteProcessOutput(stagedTreeResult, "Git staged tree resolution");
+      const stagedTreeResult = await runProcess(
+        "git",
+        ["-C", root, "write-tree"],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      assertCompleteProcessOutput(
+        stagedTreeResult,
+        "Git staged tree resolution",
+      );
       if (stagedTreeResult.exitCode !== 0 || !stagedTreeResult.stdout.trim())
-        throw new Error(`Unable to resolve staged tree: ${stagedTreeResult.stderr}`);
+        throw new Error(
+          `Unable to resolve staged tree: ${stagedTreeResult.stderr}`,
+        );
       const stagedTree = stagedTreeResult.stdout.trim();
       const message =
         params.kind === "implementation"
@@ -730,7 +766,9 @@ export function registerForgeRuntime(
       }
       assertCompleteProcessOutput(committed, "Git commit");
       if (committed.exitCode !== 0)
-        throw new Error(`git commit failed: ${committed.stderr || committed.stdout}`);
+        throw new Error(
+          `git commit failed: ${committed.stderr || committed.stdout}`,
+        );
       const headSha = await gitHead(root, binding.runId, signal);
       const tree = await runProcess(
         "git",
@@ -749,8 +787,15 @@ export function registerForgeRuntime(
       );
       assertCompleteProcessOutput(tree, "Committed tree resolution");
       assertCompleteProcessOutput(parent, "Commit parent resolution");
-      assertCompleteProcessOutput(committedPathsResult, "Committed path listing");
-      if (tree.exitCode !== 0 || parent.exitCode !== 0 || committedPathsResult.exitCode !== 0)
+      assertCompleteProcessOutput(
+        committedPathsResult,
+        "Committed path listing",
+      );
+      if (
+        tree.exitCode !== 0 ||
+        parent.exitCode !== 0 ||
+        committedPathsResult.exitCode !== 0
+      )
         throw new Error("Unable to revalidate the Forge-owned commit.");
       const committedPaths = committedPathsResult.stdout
         .split("\0")
@@ -799,7 +844,9 @@ export function registerForgeRuntime(
         );
       }
       return {
-        content: [{ type: "text", text: `Created ${params.kind} commit ${headSha}.` }],
+        content: [
+          { type: "text", text: `Created ${params.kind} commit ${headSha}.` },
+        ],
         details: {
           kind: params.kind,
           headSha,
@@ -882,7 +929,7 @@ export function registerForgeRuntime(
     description:
       "Push the bound clean branch, create or reuse its PR, post FORGE:REVIEW_STARTED, and return the frozen review identity",
     parameters: PrepareReviewParameters,
-    async execute(_toolCallId, _params, signal) {
+    async execute(_toolCallId, _params, signal, _onUpdate, ctx) {
       assertWorkOnAuthority(binding);
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
       const status = await runProcess(
@@ -901,7 +948,8 @@ export function registerForgeRuntime(
       if (
         nonRuntimeStatus(
           status.stdout,
-          caseInsensitivePaths ?? (await checkoutIgnoresCase(root, binding.runId)),
+          caseInsensitivePaths ??
+            (await checkoutIgnoresCase(root, binding.runId)),
         )
       ) {
         throw new Error(
@@ -939,7 +987,9 @@ export function registerForgeRuntime(
           },
         );
         if (committedPaths.exitCode !== 0)
-          throw new Error(`git committed diff failed: ${committedPaths.stderr}`);
+          throw new Error(
+            `git committed diff failed: ${committedPaths.stderr}`,
+          );
         assertBuilderContractPaths(
           binding.builderContract,
           parseChangedGitPaths(committedPaths.stdout),
@@ -962,11 +1012,8 @@ export function registerForgeRuntime(
         "origin",
         binding.branch,
       ];
-      const token = await resolveGitHubToken(
-        pi,
-        binding.worktreeRoot,
-        signal,
-      );
+      const tokenProvider = createGitHubTokenProvider(pi, binding.worktreeRoot);
+      const token = await tokenProvider.get(signal);
       const push = await pushWithGitHubToken(
         root,
         pushArgs,
@@ -979,7 +1026,7 @@ export function registerForgeRuntime(
           `Bound branch push failed: ${push.stderr || push.stdout}`,
         );
 
-      const transport = new FetchGitHubTransport({ token });
+      const transport = new FetchGitHubTransport({ tokenProvider });
       const github = new GitHubWorkflowAdapter(transport, binding.repository);
       const issue = await github.getIssue(binding.issueNumber, signal);
       const initialPull = await github.createPullRequest({
@@ -1011,7 +1058,8 @@ export function registerForgeRuntime(
           "Cannot post review-started artifact without a run event.",
         );
       const projector = new GitHubIssueProjector(transport, binding.repository);
-      await projector.postArtifact({
+      const journal = new RunJournal(store);
+      const artifactReceipt = await projector.postArtifactWithReceipt({
         issueNumber: binding.issueNumber,
         runId: binding.runId,
         eventId: `${event.eventId}-${headSha}`,
@@ -1019,9 +1067,17 @@ export function registerForgeRuntime(
         markdown: `PR #${pull.number} created targeting \`${binding.baseBranch}\`. The isolated review route is active for the required domains at commit \`${headSha}\`.\n\nReview will verify the builder contract, acceptance evidence, changed behavior, and absence of security/regression findings before merge.\n\n<!-- FORGE:REVIEW_STARTED -->`,
         ...(signal ? { signal } : {}),
       });
-      await projector.setWorkflowLabel(
+      const labelReceipt = await projector.setWorkflowLabelWithReceipt(
         binding.issueNumber,
         "workflow:in-review",
+        signal,
+        event.eventId,
+      );
+      await appendProjectionReceipts(
+        journal,
+        binding.runId,
+        [artifactReceipt, labelReceipt],
+        ctx.sessionManager.getSessionId(),
         signal,
       );
       await github.postPullArtifact({
@@ -1057,13 +1113,19 @@ export function registerForgeRuntime(
     async execute(_toolCallId, params, signal) {
       assertWorkOnAuthority(binding);
       if (binding.node)
-        throw new Error("Review panels can only be launched by the work-on coordinator.");
+        throw new Error(
+          "Review panels can only be launched by the work-on coordinator.",
+        );
       const rpc = new SubagentsRpcClient(pi);
       await rpc.ping();
       const policy: ForgePolicy = {
         schema: "forgedock.config/v1",
         repository: { provider: "github", name: binding.repository },
-        state: { branch: binding.stateBranch, leaseSeconds: 300, heartbeatSeconds: 60 },
+        state: {
+          branch: binding.stateBranch,
+          leaseSeconds: 300,
+          heartbeatSeconds: 60,
+        },
         branches: {
           integration: [binding.baseBranch],
           protected: ["main"],
@@ -1085,7 +1147,7 @@ export function registerForgeRuntime(
           ],
           maxRounds: binding.maxReviewRounds,
         },
-        orchestration: { maxConcurrent: 2, maxIssues: 20 },
+        orchestration: { maxConcurrent: 2, maxIssues: 100 },
         subagents: {
           maxConcurrent: 2,
           maxDepth: 2,
@@ -1230,7 +1292,8 @@ export function registerForgeRuntime(
               return {
                 optionalFailure: {
                   reviewer: launch.reviewer,
-                  reason: error instanceof Error ? error.message : String(error),
+                  reason:
+                    error instanceof Error ? error.message : String(error),
                 },
               };
             }
@@ -1322,7 +1385,9 @@ export function registerForgeRuntime(
         throw new Error("forge_finalize_node requires a bounded node binding.");
       if (!isForgeNodeResult(params.value)) {
         const artifact =
-          params.value && typeof params.value === "object" && !Array.isArray(params.value)
+          params.value &&
+          typeof params.value === "object" &&
+          !Array.isArray(params.value)
             ? (params.value as { artifact?: unknown }).artifact
             : undefined;
         throw new Error(
@@ -1337,7 +1402,9 @@ export function registerForgeRuntime(
         params.value.branch !== binding.branch ||
         params.value.baseSha !== binding.baseSha
       )
-        throw new Error("Final node result identity does not match its binding.");
+        throw new Error(
+          "Final node result identity does not match its binding.",
+        );
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
       const resultPath = await writeTrustedResultFile(
         root,
@@ -1375,8 +1442,7 @@ export function registerForgeRuntime(
       }
       if (
         binding.refresh &&
-        params.value.review.rounds !==
-          (binding.previousReviewRounds ?? 0) + 1
+        params.value.review.rounds !== (binding.previousReviewRounds ?? 0) + 1
       ) {
         throw new Error(
           "Refreshed work-on result must increment the prior review round exactly once.",
@@ -1416,16 +1482,33 @@ export function registerForgeRuntime(
     parameters: CheckpointParameters,
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       assertWorkOnAuthority(binding);
+      if (
+        params.action === "complete" &&
+        params.phase === "investigate" &&
+        (!isPhaseArtifact(params.artifact) ||
+          params.artifact.phase !== "investigate")
+      )
+        throw new Error(
+          `Investigation completion requires its typed investigate artifact: ${phaseArtifactValidationError(params.artifact)}.`,
+        );
+      if (params.action === "needs-human") {
+        if (!isHumanAuthorityReason(params.authorityReason))
+          throw new Error(
+            "needs-human requires one of the typed high-level authority reasons.",
+          );
+        if (!params.reason?.trim())
+          throw new Error("needs-human requires a non-empty authority detail.");
+      }
+      const phaseArtifact = isPhaseArtifact(params.artifact)
+        ? params.artifact
+        : undefined;
+      const { artifact: _untrustedArtifact, ...checkpointParams } = params;
       if (binding.refresh)
         throw new Error(
           "Refresh-review runs cannot mutate the original phase journal.",
         );
-      const token = await resolveGitHubToken(
-        pi,
-        binding.worktreeRoot,
-        signal,
-      );
-      const transport = new FetchGitHubTransport({ token });
+      const tokenProvider = createGitHubTokenProvider(pi, binding.worktreeRoot);
+      const transport = new FetchGitHubTransport({ tokenProvider });
       const store = new GitHubStateBranchStore(
         transport,
         binding.repository,
@@ -1477,21 +1560,45 @@ export function registerForgeRuntime(
           transport,
           binding.repository,
         );
+        const projectionReceipts: GitHubProjectionReceipt[] = [];
         if (params.action !== "start") {
-          await projectPhaseReport(projector, event, params, binding, signal);
+          projectionReceipts.push(
+            ...(await projectPhaseReport(
+              projector,
+              event,
+              {
+                ...checkpointParams,
+                ...(phaseArtifact ? { artifact: phaseArtifact } : {}),
+              },
+              binding,
+              signal,
+            )),
+          );
         }
         const workflowLabel = workflowLabelForCheckpoint(params);
         if (workflowLabel)
-          await projector.setWorkflowLabel(
-            binding.issueNumber,
-            workflowLabel,
-            signal,
+          projectionReceipts.push(
+            await projector.setWorkflowLabelWithReceipt(
+              binding.issueNumber,
+              workflowLabel,
+              signal,
+              event.eventId,
+            ),
           );
-        await postDerivedPhaseArtifacts(
-          projector,
-          event,
-          params,
-          binding,
+        projectionReceipts.push(
+          ...(await postDerivedPhaseArtifacts(
+            projector,
+            event,
+            params,
+            binding,
+            signal,
+          )),
+        );
+        await appendProjectionReceipts(
+          journal,
+          binding.runId,
+          projectionReceipts,
+          ctx.sessionManager.getSessionId(),
           signal,
         );
       }
@@ -1576,9 +1683,12 @@ function readBinding(): ForgeChildBinding {
       throw new Error("Standalone reviewer bindings require reviewId.");
     if (
       value.issueNumber !== undefined &&
-      (!Number.isSafeInteger(value.issueNumber) || (value.issueNumber as number) < 1)
+      (!Number.isSafeInteger(value.issueNumber) ||
+        (value.issueNumber as number) < 1)
     )
-      throw new Error("Forge binding issueNumber must be positive when supplied.");
+      throw new Error(
+        "Forge binding issueNumber must be positive when supplied.",
+      );
   } else {
     if (
       !Number.isSafeInteger(value.issueNumber) ||
@@ -1612,7 +1722,8 @@ function readBinding(): ForgeChildBinding {
     );
   }
   const builderContract = value.builderContract;
-  if (builderContract !== undefined) validateBuilderPathContract(builderContract);
+  if (builderContract !== undefined)
+    validateBuilderPathContract(builderContract);
   const commands = value.verificationCommands;
   if (!commands || typeof commands !== "object" || Array.isArray(commands))
     throw new Error("Forge binding verificationCommands must be an object.");
@@ -1694,7 +1805,9 @@ function readBinding(): ForgeChildBinding {
   };
 }
 
-export function allowedNodeTools(node: string | undefined): ReadonlySet<string> {
+export function allowedNodeTools(
+  node: string | undefined,
+): ReadonlySet<string> {
   if (!node)
     return new Set([
       "subagent",
@@ -1791,6 +1904,7 @@ function checkpointPayload(
     evidence?: string[];
     report?: string;
     reason?: string;
+    authorityReason?: string;
   },
   binding: ForgeChildBinding,
 ): Record<string, unknown> {
@@ -1827,12 +1941,62 @@ function checkpointPayload(
       ...(params.commitSha ? { commitSha: params.commitSha } : {}),
     };
   }
+  if (params.action === "needs-human") {
+    if (!isHumanAuthorityReason(params.authorityReason))
+      throw new Error(
+        "needs-human requires one of the typed high-level authority reasons.",
+      );
+    if (!params.reason?.trim())
+      throw new Error("needs-human requires a non-empty authority detail.");
+    return {
+      ...common,
+      reason: params.reason.trim(),
+      authorityReason: params.authorityReason,
+    };
+  }
   return {
     ...common,
     reason:
       params.reason ??
       `${params.phase} attempt ${params.attempt} ${params.action}`,
   };
+}
+
+async function appendProjectionReceipts(
+  journal: RunJournal,
+  runId: string,
+  receipts: readonly GitHubProjectionReceipt[],
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  for (const receipt of receipts) {
+    await journal.append({
+      runId,
+      type: "effect.recorded",
+      payload: {
+        effectType: receipt.effectType,
+        effectId: receipt.effectId,
+        digest: receipt.digest,
+      },
+      idempotencyKey: `effect:${receipt.effectId}`,
+      sessionId,
+      message: `Record verified ${receipt.effectType} projection ${receipt.effectId}`,
+      ...(signal ? { signal } : {}),
+    });
+  }
+}
+
+export function phaseProjectionLabels(
+  action:
+    | "queue"
+    | "start"
+    | "complete"
+    | "fail"
+    | "block"
+    | "needs-human"
+    | "abandon",
+): string[] {
+  return action === "needs-human" ? ["needs-human"] : [];
 }
 
 async function projectPhaseReport(
@@ -1851,45 +2015,64 @@ async function projectPhaseReport(
       | "abandon";
     evidence?: string[];
     report?: string;
+    artifact?: PhaseArtifact;
     reason?: string;
   },
   binding: WorkOnForgeChildBinding,
   signal?: AbortSignal,
-): Promise<void> {
+): Promise<GitHubProjectionReceipt[]> {
   if (
     params.action === "complete" &&
     (params.phase === "resolve" ||
       params.phase === "prepare-worktree" ||
       params.phase === "review")
   )
-    return;
+    return [];
+  if (
+    params.phase === "investigate" &&
+    params.action === "complete" &&
+    params.artifact?.phase === "investigate"
+  ) {
+    return [
+      await projector.postArtifactWithReceipt({
+        issueNumber: binding.issueNumber,
+        runId: binding.runId,
+        eventId: event.eventId,
+        artifactKey: "investigation",
+        markdown: renderPhaseArtifact(params.artifact),
+        ...(signal ? { signal } : {}),
+      }),
+    ];
+  }
   if (
     params.phase === "plan" &&
     params.action === "complete" &&
     params.report
   ) {
     const blocks = splitPlanReport(params.report);
+    const receipts: GitHubProjectionReceipt[] = [];
     for (const block of blocks) {
-      await projector.postArtifact({
-        issueNumber: binding.issueNumber,
-        runId: binding.runId,
-        eventId: event.eventId,
-        artifactKey: block.key,
-        markdown: block.body,
-        ...(signal ? { signal } : {}),
-      });
+      receipts.push(
+        await projector.postArtifactWithReceipt({
+          issueNumber: binding.issueNumber,
+          runId: binding.runId,
+          eventId: event.eventId,
+          artifactKey: block.key,
+          markdown: block.body,
+          ...(signal ? { signal } : {}),
+        }),
+      );
     }
-    return;
+    return receipts;
   }
-  await projector.projectEvent({
+  const projection = await projector.projectEventWithReceipt({
     issueNumber: binding.issueNumber,
     event,
     markdown: checkpointMarkdown(params, binding.runId),
-    addLabels: ["fail", "block", "needs-human"].includes(params.action)
-      ? ["needs-human"]
-      : [],
+    addLabels: phaseProjectionLabels(params.action),
     ...(signal ? { signal } : {}),
   });
+  return [...projection.receipts];
 }
 
 function splitPlanReport(report: string): Array<{ key: string; body: string }> {
@@ -1961,43 +2144,44 @@ async function postDerivedPhaseArtifacts(
   },
   binding: WorkOnForgeChildBinding,
   signal?: AbortSignal,
-): Promise<void> {
-  if (params.action !== "complete") return;
+): Promise<GitHubProjectionReceipt[]> {
+  if (params.action !== "complete") return [];
+  const receipts: GitHubProjectionReceipt[] = [];
   if (params.phase === "investigate") {
-    await projector.postArtifact({
-      issueNumber: binding.issueNumber,
-      runId: binding.runId,
-      eventId: event.eventId,
-      artifactKey: "investigation-checkpoint",
-      markdown: `<!-- FORGE:CHECKPOINT -->\n\`\`\`json\n${JSON.stringify({ phase: "INVESTIGATION", status: "COMPLETE", next_phase: "BUILD", timestamp: event.occurredAt })}\n\`\`\``,
-      ...(signal ? { signal } : {}),
-    });
-    await projector.postArtifact({
-      issueNumber: binding.issueNumber,
-      runId: binding.runId,
-      eventId: event.eventId,
-      artifactKey: "fast-path",
-      markdown: `<!-- FORGE:FAST_PATH -->\n## Legacy Routing Classification\n\n**Complexity**: NOT RECORDED\n**Task type**: NOT RECORDED\n**Rationale**: This in-flight legacy checkpoint supplied raw Markdown rather than a typed routing artifact. No classification is inferred.\n**Phases skipped**: NOT RECORDED`,
-      ...(signal ? { signal } : {}),
-    });
+    receipts.push(
+      await projector.postArtifactWithReceipt({
+        issueNumber: binding.issueNumber,
+        runId: binding.runId,
+        eventId: event.eventId,
+        artifactKey: "investigation-checkpoint",
+        markdown: `<!-- FORGE:CHECKPOINT -->\n\`\`\`json\n${JSON.stringify({ phase: "INVESTIGATION", status: "COMPLETE", next_phase: "BUILD", timestamp: event.occurredAt })}\n\`\`\``,
+        ...(signal ? { signal } : {}),
+      }),
+    );
   }
   if (params.phase === "verify") {
-    await projector.appendToLatestComment({
-      issueNumber: binding.issueNumber,
-      marker: "<!-- FORGE:BUILDER -->",
-      append: "<!-- FORGE:BUILDER:COMPLETE -->",
-      skipIfContains: "<!-- FORGE:BUILDER:COMPLETE -->",
-      ...(signal ? { signal } : {}),
-    });
-    await projector.postArtifact({
-      issueNumber: binding.issueNumber,
-      runId: binding.runId,
-      eventId: event.eventId,
-      artifactKey: "build-checkpoint",
-      markdown: `<!-- FORGE:CHECKPOINT -->\n${JSON.stringify({ phase: "BUILD", status: "COMPLETE", next_phase: "REVIEW", timestamp: event.occurredAt, commit: params.commitSha ?? null, local_verification: "COMPLETE", github_ci: "PENDING_PARENT_GATE" })}`,
-      ...(signal ? { signal } : {}),
-    });
+    receipts.push(
+      await projector.appendToLatestCommentWithReceipt({
+        issueNumber: binding.issueNumber,
+        marker: "<!-- FORGE:BUILDER -->",
+        append: "<!-- FORGE:BUILDER:COMPLETE -->",
+        skipIfContains: "<!-- FORGE:BUILDER:COMPLETE -->",
+        eventId: event.eventId,
+        ...(signal ? { signal } : {}),
+      }),
+    );
+    receipts.push(
+      await projector.postArtifactWithReceipt({
+        issueNumber: binding.issueNumber,
+        runId: binding.runId,
+        eventId: event.eventId,
+        artifactKey: "build-checkpoint",
+        markdown: `<!-- FORGE:CHECKPOINT -->\n${JSON.stringify({ phase: "BUILD", status: "COMPLETE", next_phase: "REVIEW", timestamp: event.occurredAt, commit: params.commitSha ?? null, local_verification: "COMPLETE", github_ci: "PENDING_PARENT_GATE" })}`,
+        ...(signal ? { signal } : {}),
+      }),
+    );
   }
+  return receipts;
 }
 
 function workflowLabelForCheckpoint(params: {
@@ -2078,7 +2262,10 @@ export function boundedToolDenial(
 ): string | undefined {
   if (toolName === "bash" && READ_ONLY_NODES.has(node ?? ""))
     return `Shell execution is disabled for read-only ${node} nodes; use repository read tools and supplied context.`;
-  if (READ_ONLY_NODES.has(node ?? "") && (toolName === "write" || toolName === "edit"))
+  if (
+    READ_ONLY_NODES.has(node ?? "") &&
+    (toolName === "write" || toolName === "edit")
+  )
     return `${toolName} is not allowed for read-only ${node} nodes.`;
   return undefined;
 }
@@ -2092,7 +2279,9 @@ export function isForgeRuntimePath(
   caseInsensitive = false,
 ): boolean {
   const normalized = normalizeRepositoryPath(value);
-  const path = caseInsensitive ? normalized.toLocaleLowerCase("en-US") : normalized;
+  const path = caseInsensitive
+    ? normalized.toLocaleLowerCase("en-US")
+    : normalized;
   return (
     path === ".pi" ||
     path.startsWith(".pi/") ||
@@ -2177,7 +2366,9 @@ function nonRuntimeStatus(output: string, caseInsensitive = false): string {
     .filter((line) => {
       if (!line.trim()) return false;
       const path = line.length > 3 ? line.slice(3).trim() : line.trim();
-      return !(line.startsWith("??") && isForgeRuntimePath(path, caseInsensitive));
+      return !(
+        line.startsWith("??") && isForgeRuntimePath(path, caseInsensitive)
+      );
     })
     .join("\n")
     .trim();
@@ -2199,7 +2390,9 @@ async function checkoutIgnoresCase(
   assertCompleteProcessOutput(result, "Git case-sensitivity detection");
   if (result.exitCode === 1 && !result.stdout.trim()) return false;
   if (result.exitCode !== 0)
-    throw new Error(`Unable to read Git case-sensitivity contract: ${result.stderr}`);
+    throw new Error(
+      `Unable to read Git case-sensitivity contract: ${result.stderr}`,
+    );
   const value = result.stdout.trim();
   if (value !== "true" && value !== "false")
     throw new Error(`Invalid core.ignorecase value: ${value || "empty"}.`);
@@ -2239,10 +2432,14 @@ async function trustedResultPath(
     );
   });
   if (!protectedStat.isDirectory() || protectedStat.isSymbolicLink())
-    throw new Error("Protected Forge result directory must be a real directory.");
+    throw new Error(
+      "Protected Forge result directory must be a real directory.",
+    );
   const canonicalProtectedRoot = await realpath(protectedRoot);
   if (resolve(canonicalProtectedRoot) !== resolve(protectedRoot))
-    throw new Error("Protected Forge result directory cannot traverse symlinks.");
+    throw new Error(
+      "Protected Forge result directory cannot traverse symlinks.",
+    );
 
   const parent = dirname(resultPath);
   const parentStat = await lstat(parent);
@@ -2356,7 +2553,9 @@ export async function waitForReviewerResult(
   const deadline = Date.now() + timeoutMs;
   const root = await realpath(worktreeRoot);
   let fileError: Error | undefined;
-  const loadBoundResult = async (): Promise<ForgeReviewerResult | undefined> => {
+  const loadBoundResult = async (): Promise<
+    ForgeReviewerResult | undefined
+  > => {
     try {
       const text = await readTrustedResultFile(root, receipt.resultPath);
       if (!text?.trim()) return undefined;
@@ -2397,7 +2596,9 @@ function assertReviewerResultIdentity(
     (result.reviewer !== expected.reviewer &&
       result.reviewer !== `forge-review-${expected.reviewer}`)
   ) {
-    throw new Error("Reviewer result identity does not match its panel binding.");
+    throw new Error(
+      "Reviewer result identity does not match its panel binding.",
+    );
   }
 }
 
@@ -2422,8 +2623,10 @@ export async function pushWithGitHubToken(
   runId: string,
   signal?: AbortSignal,
 ): Promise<ProcessResult> {
-  if (!token.trim()) throw new Error("Git push requires a non-empty GitHub token.");
+  if (!token.trim())
+    throw new Error("Git push requires a non-empty GitHub token.");
   const askPassDir = mkdtempSync(join(tmpdir(), "forgedock-askpass-"));
+  const hooksPath = mkdtempSync(join(tmpdir(), "forgedock-empty-hooks-"));
   const askPassPath = join(askPassDir, "askpass.mjs");
   try {
     await writeFile(
@@ -2431,7 +2634,7 @@ export async function pushWithGitHubToken(
       `#!${process.execPath}\nconst prompt = process.argv.slice(2).join(" ");\nconst value = /username/i.test(prompt) ? "x-access-token" : (process.env.FORGEDOCK_GIT_TOKEN || "");\nprocess.stdout.write(value + "\\n");\n`,
       { encoding: "utf8", mode: 0o700 },
     );
-    return await runProcess("git", [...args], {
+    return await runProcess("git", forgePushArguments(hooksPath, args), {
       cwd,
       timeoutMs: 120_000,
       env: {
@@ -2441,11 +2644,30 @@ export async function pushWithGitHubToken(
         GIT_TERMINAL_PROMPT: "0",
         FORGEDOCK_GIT_TOKEN: token,
       },
+      redactValues: [token],
       ...(signal ? { signal } : {}),
     });
   } finally {
     rmSync(askPassDir, { recursive: true, force: true });
+    rmSync(hooksPath, { recursive: true, force: true });
   }
+}
+
+/** Build a push invocation that cannot run repository or global Git hooks. */
+export function forgePushArguments(
+  hooksPath: string,
+  args: readonly string[],
+): string[] {
+  const pushIndex = args.indexOf("push");
+  if (pushIndex < 0)
+    throw new TypeError("Git push arguments must include push.");
+  return [
+    "-c",
+    `core.hooksPath=${hooksPath}`,
+    ...args.slice(0, pushIndex + 1),
+    "--no-verify",
+    ...args.slice(pushIndex + 1),
+  ];
 }
 
 function safeEnvironment(runId: string): NodeJS.ProcessEnv {
@@ -2574,6 +2796,7 @@ async function runProcess(
     signal?: AbortSignal;
     env: NodeJS.ProcessEnv;
     outputLimitBytes?: number;
+    redactValues?: readonly string[];
   },
 ): Promise<ProcessResult> {
   return new Promise((resolvePromise, reject) => {
@@ -2616,14 +2839,25 @@ async function runProcess(
       resolvePromise({
         exitCode,
         signal,
-        stdout,
-        stderr,
+        stdout: redactProcessOutput(stdout, options.redactValues),
+        stderr: redactProcessOutput(stderr, options.redactValues),
         stdoutTruncated,
         stderrTruncated,
         timedOut,
       });
     });
   });
+}
+
+function redactProcessOutput(
+  value: string,
+  redactValues: readonly string[] | undefined,
+): string {
+  let redacted = redactGitHubTokens(value);
+  for (const secret of redactValues ?? []) {
+    if (secret) redacted = redacted.split(secret).join("[redacted-secret]");
+  }
+  return redacted;
 }
 
 export function appendBounded(

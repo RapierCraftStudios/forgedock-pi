@@ -1,12 +1,22 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-import { boundedNodeAgent, SubagentsRpcClient } from "../../src/adapters/subagents.ts";
+import {
+  boundedNodeAgent,
+  SubagentsRpcClient,
+} from "../../src/adapters/subagents.ts";
 import { materializeForgeAgents } from "../../src/agents/materialize.ts";
 import {
   FORGE_READ_ONLY_NODE_AGENT,
@@ -133,6 +143,15 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
   assert.match(spawn.params.task, /do not call forge_run_review_panel/);
   assert.match(serialized, /forgedock\.pi\/1/);
   assert.match(serialized, /Reviewer remediation is pre-authorized/);
+  assert.match(
+    spawn.params.task,
+    /Investigation complete MUST additionally pass artifact/,
+  );
+  assert.match(
+    spawn.params.task,
+    /forgedock\.phase-artifact\/v1 investigate schema/,
+  );
+  assert.doesNotMatch(spawn.params.task, /Legacy Routing Classification/);
   assert.doesNotMatch(serialized, /gh auth token/);
 });
 
@@ -198,10 +217,16 @@ test("RPC dedicated reviewer launch uses the registered reviewer and reviewer sc
     };
   };
   assert.equal(spawn.params.agent, "forge-review-security");
-  assert.equal(spawn.params.outputSchema.properties.schema.const, "forgedock.reviewer-result/v1");
+  assert.equal(
+    spawn.params.outputSchema.properties.schema.const,
+    "forgedock.reviewer-result/v1",
+  );
   assert.match(spawn.params.task, /Frozen review head SHA: fedcba9876543210/);
   assert.match(spawn.params.task, /Call forge_diff first/);
-  assert.match(spawn.params.task, /pre-existing repository defects.*out of scope/i);
+  assert.match(
+    spawn.params.task,
+    /pre-existing repository defects.*out of scope/i,
+  );
   assert.match(spawn.params.task, /forge_finalize_reviewer/);
   assert.equal(
     spawn.params.extensionBindings["forgedock.pi/1"]?.nodeId,
@@ -289,12 +314,19 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
     };
   };
   assert.equal(spawn.params.agent, FORGE_READ_ONLY_NODE_AGENT);
-  assert.equal(spawn.params.outputSchema.properties.schema.const, "forgedock.node-result/v1");
   assert.equal(
-    spawn.params.extensionBindings["forgedock.pi/1"]?.verificationCommands.test?.cwd,
+    spawn.params.outputSchema.properties.schema.const,
+    "forgedock.node-result/v1",
+  );
+  assert.equal(
+    spawn.params.extensionBindings["forgedock.pi/1"]?.verificationCommands.test
+      ?.cwd,
     ".",
   );
-  assert.match(spawn.params.task, /Execute exactly one ForgeDock node: investigate/);
+  assert.match(
+    spawn.params.task,
+    /Execute exactly one ForgeDock node: investigate/,
+  );
   assert.match(spawn.params.task, /Integration base: staging/);
   assert.match(spawn.params.task, /do not call forge_checkpoint/i);
   assert.match(spawn.params.task, /forge_finalize_node/);
@@ -429,7 +461,10 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
     );
     assert.match(readOnlyNode, /^acceptanceRole: read-only$/m);
     assert.match(readOnlyNode, /^completionGuard: false$/m);
-    assert.doesNotMatch(readOnlyNode, /tools: .*\b(?:edit|write|forge_commit)\b/);
+    assert.doesNotMatch(
+      readOnlyNode,
+      /tools: .*\b(?:edit|write|forge_commit)\b/,
+    );
     assert.match(workOn, /^completionGuard: false$/m);
     assert.match(workOn, /tools: .*\bsubagent\b/);
     assert.doesNotMatch(workOn, /tools: .*forge_run_review_panel/);
@@ -552,15 +587,26 @@ test("runtime Forge hierarchy keeps full work-on and reviewer boundaries", () =>
     (FORGE_WORK_ON_TOOLS as readonly string[]).includes("bash"),
     false,
   );
-  assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("subagent"), true);
+  assert.equal(
+    (FORGE_WORK_ON_TOOLS as readonly string[]).includes("subagent"),
+    true,
+  );
   assert.equal(
     (FORGE_WORK_ON_TOOLS as readonly string[]).includes(
       "forge_run_review_panel",
     ),
     false,
   );
-  assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_finalize_work_on"), true);
-  assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_checkpoint"), true);
+  assert.equal(
+    (FORGE_WORK_ON_TOOLS as readonly string[]).includes(
+      "forge_finalize_work_on",
+    ),
+    true,
+  );
+  assert.equal(
+    (FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_checkpoint"),
+    true,
+  );
   assert.equal(
     (FORGE_REVIEW_TOOLS as readonly string[]).includes("subagent"),
     false,
@@ -580,9 +626,9 @@ test("runtime Forge hierarchy keeps full work-on and reviewer boundaries", () =>
   const { pi } = fakePi();
   const registrations = registerForgeAgents(pi);
   assert.equal(registrations.length, 6);
-  const registry = (
-    globalThis as Record<PropertyKey, unknown>
-  )[Symbol.for("pi-subagents.runtime-agents.v1")] as {
+  const registry = (globalThis as Record<PropertyKey, unknown>)[
+    Symbol.for("pi-subagents.runtime-agents.v1")
+  ] as {
     byPi: WeakMap<
       ExtensionAPI,
       Array<{
@@ -595,7 +641,6 @@ test("runtime Forge hierarchy keeps full work-on and reviewer boundaries", () =>
     >;
   };
   const runtimeAgents = registry.byPi.get(pi)?.map(({ agent }) => agent) ?? [];
-  for (const agent of runtimeAgents)
-    assert.equal(agent.completionGuard, false);
+  for (const agent of runtimeAgents) assert.equal(agent.completionGuard, false);
   for (const registration of registrations) registration.dispose();
 });

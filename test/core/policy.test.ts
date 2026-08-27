@@ -4,10 +4,13 @@ import test from "node:test";
 import {
   applyLocalOverrides,
   canAutoMerge,
+  humanAuthorityReasonFromText,
+  isHumanAuthorityReason,
   isGitHubCiRequired,
   isProtectedBranch,
   parseForgePolicy,
   PolicyValidationError,
+  resolveConcreteBranch,
 } from "../../src/core/policy.ts";
 
 const rawPolicy = {
@@ -38,6 +41,19 @@ const rawPolicy = {
   subagents: { maxConcurrent: 4, maxDepth: 2 },
 };
 
+test("wildcard-first branch policies resolve concrete route defaults", () => {
+  assert.equal(
+    resolveConcreteBranch(["release/*", "staging"], "fallback-staging"),
+    "staging",
+  );
+  assert.equal(
+    resolveConcreteBranch(["production/*", "main"], "fallback-main"),
+    "main",
+  );
+  assert.equal(resolveConcreteBranch(["release/*"], "staging"), "staging");
+  assert.equal(resolveConcreteBranch(["production/*"], "main"), "main");
+});
+
 test("tracked policy enables only non-protected integration auto-merge", () => {
   const policy = parseForgePolicy(rawPolicy);
   assert.equal(canAutoMerge(policy, "staging"), true);
@@ -49,6 +65,7 @@ test("tracked policy enables only non-protected integration auto-merge", () => {
   assert.equal(isGitHubCiRequired(policy, "staging"), false);
   assert.equal(policy.verification.commands.test?.cwd, ".");
   assert.equal(policy.subagents.reviewerTimeoutMs, 900_000);
+  assert.ok(policy.orchestration.maxIssues >= 25);
 });
 
 test("verification command cwd is portable, relative, and normalized", () => {
@@ -68,6 +85,19 @@ test("verification command cwd is portable, relative, and normalized", () => {
 
   for (const cwd of ["/tmp", "C:/tmp", "\\\\server\\share", "../web", "web/../api", "web\\api", "bad\0path"])
     assert.throws(() => parseForgePolicy(withCwd(cwd)), PolicyValidationError);
+});
+
+test("human authority reasons are narrow and typed", () => {
+  assert.equal(isHumanAuthorityReason("product-decision"), true);
+  assert.equal(isHumanAuthorityReason("merge-conflict"), false);
+  assert.equal(
+    humanAuthorityReasonFromText("A legal approval is required."),
+    "legal-approval",
+  );
+  assert.equal(
+    humanAuthorityReasonFromText("Provider API timed out during retry."),
+    undefined,
+  );
 });
 
 test("local overrides can only tighten tracked policy", () => {

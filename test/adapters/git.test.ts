@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import {
+  access,
   mkdir,
   mkdtemp,
   readFile,
@@ -9,7 +10,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
 
@@ -160,6 +161,104 @@ test("worktree manager creates an issue branch from integration and cleans it sa
       { encoding: "utf8" },
     );
     assert.equal(localBranch.stdout.trim(), "");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("failed worktree containment validation removes its branch and worktree", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-git-prepare-cleanup-"));
+  const origin = join(root, "origin.git");
+  const seed = join(root, "seed");
+  const clone = join(root, "clone");
+  const external = join(root, "external-worktrees");
+  const branch = "forge/issue-8-escaped1";
+  try {
+    await execFileAsync("git", ["init", "--bare", origin]);
+    await execFileAsync("git", ["init", "-b", "main", seed]);
+    await git(seed, "config", "user.name", "Test");
+    await git(seed, "config", "user.email", "test@example.invalid");
+    await writeFile(join(seed, "app.txt"), "base\n");
+    await git(seed, "add", "app.txt");
+    await git(seed, "commit", "-m", "initial");
+    await git(seed, "branch", "staging");
+    await git(seed, "remote", "add", "origin", origin);
+    await git(seed, "push", "origin", "main", "staging");
+    await execFileAsync("git", ["clone", origin, clone]);
+
+    const ownedParent = join(clone, ".forge", "worktrees");
+    await mkdir(external, { recursive: true });
+    await mkdir(dirname(ownedParent), { recursive: true });
+    await symlink(external, ownedParent, "dir");
+
+    const manager = new GitWorktreeManager(executor);
+    await assert.rejects(
+      manager.prepare(clone, {
+        runId: "escaped1",
+        issueNumber: 8,
+        baseBranch: "staging",
+      }),
+      /outside the owned Forge directory/,
+    );
+    await assert.rejects(access(join(external, "escaped1")));
+    const localBranch = await execFileAsync(
+      "git",
+      ["-C", clone, "branch", "--list", branch],
+      { encoding: "utf8" },
+    );
+    assert.equal(localBranch.stdout.trim(), "");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("failed review worktree containment validation removes the detached worktree", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-git-review-cleanup-"));
+  const origin = join(root, "origin.git");
+  const seed = join(root, "seed");
+  const clone = join(root, "clone");
+  const external = join(root, "external-reviews");
+  try {
+    await execFileAsync("git", ["init", "--bare", origin]);
+    await execFileAsync("git", ["init", "-b", "main", seed]);
+    await git(seed, "config", "user.name", "Test");
+    await git(seed, "config", "user.email", "test@example.invalid");
+    await writeFile(join(seed, "app.txt"), "base\n");
+    await git(seed, "add", "app.txt");
+    await git(seed, "commit", "-m", "initial");
+    const head = (
+      await execFileAsync("git", ["rev-parse", "HEAD"], {
+        cwd: seed,
+        encoding: "utf8",
+      })
+    ).stdout.trim();
+    await git(seed, "remote", "add", "origin", origin);
+    await git(seed, "push", "origin", "main");
+    await execFileAsync("git", ["clone", origin, clone]);
+
+    const reviewsParent = join(clone, ".forge", "reviews");
+    await mkdir(external, { recursive: true });
+    await mkdir(dirname(reviewsParent), { recursive: true });
+    await symlink(external, reviewsParent, "dir");
+
+    const manager = new GitWorktreeManager(executor);
+    await assert.rejects(
+      manager.prepareReview(clone, {
+        reviewId: "escaped-review",
+        headRef: "main",
+        headSha: head,
+        baseRef: "main",
+        baseSha: head,
+      }),
+      /outside the Forge review directory/,
+    );
+    await assert.rejects(access(join(external, "escaped-review")));
+    const worktrees = await execFileAsync(
+      "git",
+      ["-C", clone, "worktree", "list", "--porcelain"],
+      { encoding: "utf8" },
+    );
+    assert.doesNotMatch(worktrees.stdout, /escaped-review/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

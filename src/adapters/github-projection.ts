@@ -1,7 +1,13 @@
-import type { RunEvent } from "../core/events.ts";
+import { createHash } from "node:crypto";
+
+import {
+  canonicalJson,
+  type RunEvent,
+} from "../core/events.ts";
 import {
   GitHubApiError,
   type GitHubTransport,
+  nextGitHubPagePath,
   repositoryApiPath,
   requireGitHubSuccess,
 } from "./github-api.ts";
@@ -17,8 +23,137 @@ interface IssueLabel {
 
 type IssueLabelValue = IssueLabel | string;
 
+const commentProjectionQueues = new Map<string, Promise<void>>();
+
+async function coordinateCommentProjection<T>(
+  effectId: string,
+  project: () => Promise<T>,
+): Promise<T> {
+  const prior = commentProjectionQueues.get(effectId) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const queued = prior.catch(() => undefined).then(() => current);
+  commentProjectionQueues.set(effectId, queued);
+  await prior.catch(() => undefined);
+  try {
+    return await project();
+  } finally {
+    release();
+    if (commentProjectionQueues.get(effectId) === queued)
+      commentProjectionQueues.delete(effectId);
+  }
+}
+
 interface IssueResponse {
   labels: IssueLabelValue[];
+}
+
+export type GitHubProjectionEffectType = "github-comment" | "github-label";
+
+export interface GitHubProjectionReceipt {
+  effectType: GitHubProjectionEffectType;
+  effectId: string;
+  digest: string;
+  /** GitHub's resource identifier, when the receipt represents a comment. */
+  resourceId?: number;
+}
+
+function receiptDigest(value: unknown): string {
+  return `sha256:${createHash("sha256").update(canonicalJson(value)).digest("hex")}`;
+}
+
+function requireIssueNumber(issueNumber: number): void {
+  if (!Number.isSafeInteger(issueNumber) || issueNumber < 1)
+    throw new TypeError("Issue number must be positive.");
+}
+
+/** Stable identity for a comment projection belonging to an event. */
+export function githubCommentEffectId(input: {
+  repository: string;
+  issueNumber: number;
+  eventId: string;
+}): string {
+  requireIssueNumber(input.issueNumber);
+  return `github-comment:${input.repository}:${input.issueNumber}:${input.eventId}`;
+}
+
+/** Stable content digest for a comment projection. Comment IDs are excluded. */
+export function githubCommentEffectDigest(input: {
+  repository: string;
+  issueNumber: number;
+  eventId: string;
+  body: string;
+}): string {
+  requireIssueNumber(input.issueNumber);
+  return receiptDigest({
+    body: input.body,
+    eventId: input.eventId,
+    issueNumber: input.issueNumber,
+    repository: input.repository,
+  });
+}
+
+export function createGitHubCommentReceipt(input: {
+  repository: string;
+  issueNumber: number;
+  eventId: string;
+  body: string;
+  commentId: number;
+}): GitHubProjectionReceipt {
+  if (!Number.isSafeInteger(input.commentId) || input.commentId < 1)
+    throw new TypeError("GitHub comment ID must be positive.");
+  return {
+    effectType: "github-comment",
+    effectId: githubCommentEffectId(input),
+    digest: githubCommentEffectDigest(input),
+    resourceId: input.commentId,
+  };
+}
+
+function normalizedLabels(labels: readonly string[]): string[] {
+  return [...new Set(labels.map((label) => label.trim()).filter(Boolean))].sort();
+}
+
+/** Stable identity for an issue-label projection operation. */
+export function githubLabelEffectId(input: {
+  repository: string;
+  issueNumber: number;
+  eventId: string;
+}): string {
+  requireIssueNumber(input.issueNumber);
+  return `github-label:${input.repository}:${input.issueNumber}:${input.eventId}`;
+}
+
+/** Stable content digest for an issue-label projection operation. */
+export function githubLabelEffectDigest(input: {
+  repository: string;
+  issueNumber: number;
+  eventId: string;
+  labels: readonly string[];
+}): string {
+  requireIssueNumber(input.issueNumber);
+  return receiptDigest({
+    eventId: input.eventId,
+    issueNumber: input.issueNumber,
+    labels: normalizedLabels(input.labels),
+    repository: input.repository,
+  });
+}
+
+/** Stable identity and digest for an event's requested issue-label projection. */
+export function createGitHubLabelReceipt(input: {
+  repository: string;
+  issueNumber: number;
+  eventId: string;
+  labels: readonly string[];
+}): GitHubProjectionReceipt {
+  return {
+    effectType: "github-label",
+    effectId: githubLabelEffectId(input),
+    digest: githubLabelEffectDigest(input),
+  };
 }
 
 export interface ProjectIssueEventInput {
@@ -33,63 +168,131 @@ export interface ProjectionResult {
   commentId: number;
   created: boolean;
   labelsAdded: readonly string[];
+  commentReceipt: GitHubProjectionReceipt;
+  labelReceipt?: GitHubProjectionReceipt;
+  receipts: readonly GitHubProjectionReceipt[];
 }
 
 function issueLabelName(label: IssueLabelValue): string {
   return typeof label === "string" ? label : label.name;
 }
 
+function requireIssueComment(value: unknown, path: string): IssueComment {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !Number.isSafeInteger((value as { id?: unknown }).id) ||
+    ((value as { id: number }).id as number) < 1 ||
+    typeof (value as { body?: unknown }).body !== "string"
+  )
+    throw new GitHubApiError(422, path, {
+      message: "GitHub returned a malformed issue comment.",
+    });
+  return value as IssueComment;
+}
+
 export class GitHubIssueProjector {
   readonly #transport: GitHubTransport;
   readonly #apiRoot: string;
+  readonly #repository: string;
 
   constructor(transport: GitHubTransport, repository: string) {
     this.#transport = transport;
+    this.#repository = repository;
     this.#apiRoot = repositoryApiPath(repository);
   }
 
-  async projectEvent(input: ProjectIssueEventInput): Promise<ProjectionResult> {
-    if (!Number.isSafeInteger(input.issueNumber) || input.issueNumber < 1)
-      throw new TypeError("Issue number must be positive.");
+  /** Project/reconcile an event and expose its verified external effect receipts. */
+  async projectEventWithReceipt(
+    input: ProjectIssueEventInput,
+  ): Promise<ProjectionResult> {
+    requireIssueNumber(input.issueNumber);
+    const effectId = githubCommentEffectId({
+      repository: this.#repository,
+      issueNumber: input.issueNumber,
+      eventId: input.event.eventId,
+    });
+    return coordinateCommentProjection(effectId, () =>
+      this.#projectEventWithReceipt(input),
+    );
+  }
+
+  async #projectEventWithReceipt(
+    input: ProjectIssueEventInput,
+  ): Promise<ProjectionResult> {
     const marker = `<!-- FORGEDOCK-EVENT:${input.event.eventId} -->`;
+    const body = `${marker}\n<!-- FORGEDOCK-RUN:${input.event.runId} -->\n${input.markdown.trim()}\n`;
+    const path = `${this.#apiRoot}/issues/${input.issueNumber}/comments`;
     const existing = await this.#findComment(
       input.issueNumber,
       marker,
       input.signal,
     );
+    if (existing) {
+      const readBack = await this.#readComment(existing.id, input.signal);
+      if (readBack.id !== existing.id || readBack.body !== body)
+        throw new GitHubApiError(422, path, {
+          message: `Projection ${marker} exists with a different payload.`,
+          commentId: existing.id,
+        });
+    }
     let commentId = existing?.id;
     let created = false;
 
     if (!commentId) {
-      const path = `${this.#apiRoot}/issues/${input.issueNumber}/comments`;
-      const body = `${marker}\n<!-- FORGEDOCK-RUN:${input.event.runId} -->\n${input.markdown.trim()}\n`;
       const response = await this.#transport.request<IssueComment>({
         method: "POST",
         path,
         body: { body },
         ...(input.signal ? { signal: input.signal } : {}),
       });
-      const comment = requireGitHubSuccess(response, path, [201]);
+      const comment = requireIssueComment(
+        requireGitHubSuccess(response, path, [201]),
+        path,
+      );
       commentId = comment.id;
       created = true;
-      const readBack = await this.#findComment(
-        input.issueNumber,
-        marker,
-        input.signal,
-      );
-      if (!readBack || readBack.id !== commentId) {
+      const readBack = await this.#readComment(comment.id, input.signal);
+      if (readBack.id !== comment.id || readBack.body !== body)
         throw new GitHubApiError(422, path, {
-          message: `Projection read-back missing ${marker}`,
+          message: `Projection read-back mismatch for ${marker}.`,
+          commentId: comment.id,
         });
-      }
     }
 
+    const requestedLabels = normalizedLabels(input.addLabels ?? []);
     const labelsAdded = await this.#addMissingLabels(
       input.issueNumber,
-      input.addLabels ?? [],
+      requestedLabels,
       input.signal,
     );
-    return { commentId, created, labelsAdded };
+    const commentReceipt = createGitHubCommentReceipt({
+      repository: this.#repository,
+      issueNumber: input.issueNumber,
+      eventId: input.event.eventId,
+      body,
+      commentId,
+    });
+    const labelReceipt =
+      requestedLabels.length > 0
+        ? createGitHubLabelReceipt({
+            repository: this.#repository,
+            issueNumber: input.issueNumber,
+            eventId: input.event.eventId,
+            labels: requestedLabels,
+          })
+        : undefined;
+    const receipts = labelReceipt
+      ? [commentReceipt, labelReceipt]
+      : [commentReceipt];
+    return {
+      commentId,
+      created,
+      labelsAdded,
+      commentReceipt,
+      ...(labelReceipt ? { labelReceipt } : {}),
+      receipts,
+    };
   }
 
   async postArtifact(input: {
@@ -102,6 +305,25 @@ export class GitHubIssueProjector {
   }): Promise<number> {
     if (!/^[a-z0-9-]+$/.test(input.artifactKey))
       throw new TypeError("Artifact keys must be lowercase kebab-case.");
+    requireIssueNumber(input.issueNumber);
+    const effectId = githubCommentEffectId({
+      repository: this.#repository,
+      issueNumber: input.issueNumber,
+      eventId: `${input.eventId}:${input.artifactKey}`,
+    });
+    return coordinateCommentProjection(effectId, () =>
+      this.#postArtifact(input),
+    );
+  }
+
+  async #postArtifact(input: {
+    issueNumber: number;
+    runId: string;
+    eventId: string;
+    artifactKey: string;
+    markdown: string;
+    signal?: AbortSignal;
+  }): Promise<number> {
     const marker = `<!-- FORGEDOCK-ARTIFACT:${input.runId}:${input.eventId}:${input.artifactKey} -->`;
     const identityMarker = `<!-- FORGEDOCK-ARTIFACT-IDENTITY run=${input.runId} key=${input.artifactKey} -->`;
     const revisionMarker = `<!-- FORGEDOCK-ARTIFACT-REVISION revision=${input.eventId} -->`;
@@ -114,10 +336,19 @@ export class GitHubIssueProjector {
         comment.body.includes(revisionMarker),
     );
     if (existing) {
-      if (!existing.body.includes(rendered))
-        throw new GitHubApiError(422, `${this.#apiRoot}/issues/${input.issueNumber}/comments`, {
-          message: `Artifact ${marker} exists with a different rendered payload.`,
-        });
+      const expected = `${marker}\n${identityMarker}\n${revisionMarker}\n<!-- FORGEDOCK-RUN:${input.runId} -->\n${rendered}\n`;
+      const withoutSupersedes = existing.body.replace(
+        /\n<!-- FORGEDOCK-SUPERSEDES comment=\d+ -->(?=\n<!-- FORGEDOCK-RUN:)/,
+        "",
+      );
+      if (withoutSupersedes !== expected)
+        throw new GitHubApiError(
+          422,
+          `${this.#apiRoot}/issues/${input.issueNumber}/comments`,
+          {
+            message: `Artifact ${marker} exists with a different rendered payload.`,
+          },
+        );
       return existing.id;
     }
     const prior = comments
@@ -138,24 +369,42 @@ export class GitHubIssueProjector {
       body: { body },
       ...(input.signal ? { signal: input.signal } : {}),
     });
-    const comment = requireGitHubSuccess(response, path, [201]);
-    const readBack = await this.#findComment(
-      input.issueNumber,
-      marker,
-      input.signal,
+    const comment = requireIssueComment(
+      requireGitHubSuccess(response, path, [201]),
+      path,
     );
-    if (
-      !readBack ||
-      readBack.id !== comment.id ||
-      !readBack.body.includes(identityMarker) ||
-      !readBack.body.includes(revisionMarker) ||
-      !readBack.body.includes(rendered)
-    ) {
+    const readBack = await this.#readComment(comment.id, input.signal);
+    if (readBack.id !== comment.id || readBack.body !== body)
       throw new GitHubApiError(422, path, {
-        message: `Artifact read-back missing ${marker}`,
+        message: `Artifact read-back mismatch for ${marker}.`,
+        commentId: comment.id,
       });
-    }
     return comment.id;
+  }
+
+  /** Post/reconcile an artifact and expose its verified comment receipt. */
+  /** Backwards-compatible alias for callers that do not persist receipts. */
+  projectEvent(input: ProjectIssueEventInput): Promise<ProjectionResult> {
+    return this.projectEventWithReceipt(input);
+  }
+
+  async postArtifactWithReceipt(input: {
+    issueNumber: number;
+    runId: string;
+    eventId: string;
+    artifactKey: string;
+    markdown: string;
+    signal?: AbortSignal;
+  }): Promise<GitHubProjectionReceipt> {
+    const commentId = await this.postArtifact(input);
+    const comment = await this.#readComment(commentId, input.signal);
+    return createGitHubCommentReceipt({
+      repository: this.#repository,
+      issueNumber: input.issueNumber,
+      eventId: `${input.eventId}:${input.artifactKey}`,
+      body: comment.body,
+      commentId: comment.id,
+    });
   }
 
   async appendToLatestComment(input: {
@@ -186,12 +435,40 @@ export class GitHubIssueProjector {
       body: { body },
       ...(input.signal ? { signal: input.signal } : {}),
     });
-    const updated = requireGitHubSuccess(response, path, [200]);
-    if (!updated.body.includes(input.append.trim()))
+    const updated = requireIssueComment(
+      requireGitHubSuccess(response, path, [200]),
+      path,
+    );
+    const readBack = await this.#readComment(updated.id, input.signal);
+    if (readBack.id !== updated.id || readBack.body !== body)
       throw new GitHubApiError(422, path, {
-        message: "Comment append read-back failed",
+        message: "Comment append read-back failed.",
+        commentId: updated.id,
       });
     return updated.id;
+  }
+
+  /** Append/reconcile a comment and expose its verified comment receipt. */
+  async appendToLatestCommentWithReceipt(input: {
+    issueNumber: number;
+    marker: string;
+    append: string;
+    skipIfContains?: string;
+    /** Stable journal event identity for this append transition. */
+    eventId?: string;
+    signal?: AbortSignal;
+  }): Promise<GitHubProjectionReceipt> {
+    const commentId = await this.appendToLatestComment(input);
+    const comment = await this.#readComment(commentId, input.signal);
+    return createGitHubCommentReceipt({
+      repository: this.#repository,
+      issueNumber: input.issueNumber,
+      eventId:
+        input.eventId ??
+        `append:${input.marker}:${input.skipIfContains ?? input.append}`,
+      body: comment.body,
+      commentId: comment.id,
+    });
   }
 
   async setWorkflowLabel(
@@ -199,11 +476,27 @@ export class GitHubIssueProjector {
     workflowLabel: string,
     signal?: AbortSignal,
   ): Promise<void> {
-    if (!Number.isSafeInteger(issueNumber) || issueNumber < 1)
-      throw new TypeError("Issue number must be positive.");
+    requireIssueNumber(issueNumber);
     if (!workflowLabel.startsWith("workflow:"))
       throw new TypeError("Workflow labels must start with workflow:.");
     await this.#replaceWorkflowLabel(issueNumber, workflowLabel, signal);
+  }
+
+  /** Set a workflow label and return the verified durable effect receipt. */
+  async setWorkflowLabelWithReceipt(
+    issueNumber: number,
+    workflowLabel: string,
+    signal?: AbortSignal,
+    eventId?: string,
+  ): Promise<GitHubProjectionReceipt> {
+    if (!workflowLabel.startsWith("workflow:"))
+      throw new TypeError("Workflow labels must start with workflow:.");
+    return this.#replaceWorkflowLabel(
+      issueNumber,
+      workflowLabel,
+      signal,
+      eventId,
+    );
   }
 
   async clearWorkflowLabel(
@@ -213,11 +506,27 @@ export class GitHubIssueProjector {
     await this.#replaceWorkflowLabel(issueNumber, undefined, signal);
   }
 
+  /** Clear workflow labels and return the verified durable effect receipt. */
+  async clearWorkflowLabelWithReceipt(
+    issueNumber: number,
+    signal?: AbortSignal,
+    eventId?: string,
+  ): Promise<GitHubProjectionReceipt> {
+    return this.#replaceWorkflowLabel(
+      issueNumber,
+      undefined,
+      signal,
+      eventId,
+    );
+  }
+
   async #replaceWorkflowLabel(
     issueNumber: number,
     workflowLabel: string | undefined,
     signal?: AbortSignal,
-  ): Promise<void> {
+    eventId?: string,
+  ): Promise<GitHubProjectionReceipt> {
+    requireIssueNumber(issueNumber);
     const issuePath = `${this.#apiRoot}/issues/${issueNumber}`;
     const issueResponse = await this.#transport.request<IssueResponse>({
       method: "GET",
@@ -225,35 +534,69 @@ export class GitHubIssueProjector {
       ...(signal ? { signal } : {}),
     });
     const issue = requireGitHubSuccess(issueResponse, issuePath, [200]);
-    const labels = issue.labels
-      .map(issueLabelName)
-      .filter(
-        (label) => !label.startsWith("workflow:") && label !== "needs-human",
-      );
-    if (workflowLabel) labels.push(workflowLabel);
+    const currentLabels = issue.labels.map(issueLabelName);
     const labelsPath = `${this.#apiRoot}/issues/${issueNumber}/labels`;
-    const response = await this.#transport.request<IssueLabelValue[]>({
-      method: "PUT",
-      path: labelsPath,
-      body: { labels },
+
+    // Mutate only Forge-owned labels. Replacing the whole label array from a
+    // stale issue read can erase an unrelated label added concurrently.
+    if (workflowLabel && !currentLabels.includes(workflowLabel)) {
+      const response = await this.#transport.request<IssueLabelValue[]>({
+        method: "POST",
+        path: labelsPath,
+        body: { labels: [workflowLabel] },
+        ...(signal ? { signal } : {}),
+      });
+      requireGitHubSuccess(response, labelsPath, [200]);
+    }
+    const staleLabels = currentLabels.filter(
+      (label) =>
+        (label.startsWith("workflow:") && label !== workflowLabel) ||
+        label === "needs-human",
+    );
+    for (const label of staleLabels) {
+      const removePath = `${labelsPath}/${encodeURIComponent(label)}`;
+      const response = await this.#transport.request<IssueLabelValue[]>({
+        method: "DELETE",
+        path: removePath,
+        ...(signal ? { signal } : {}),
+      });
+      requireGitHubSuccess(response, removePath, [200, 404]);
+    }
+
+    const verifyResponse = await this.#transport.request<IssueResponse>({
+      method: "GET",
+      path: issuePath,
       ...(signal ? { signal } : {}),
     });
-    const updated = requireGitHubSuccess(response, labelsPath, [200]);
-    const updatedLabels = updated.map(issueLabelName);
-    const workflowLabels = updatedLabels.filter((label) =>
+    const verifiedLabels = requireGitHubSuccess(
+      verifyResponse,
+      issuePath,
+      [200],
+    ).labels.map(issueLabelName);
+    const verifiedWorkflowLabels = verifiedLabels.filter((label) =>
       label.startsWith("workflow:"),
     );
-    if (workflowLabel) {
-      if (workflowLabels.length !== 1 || workflowLabels[0] !== workflowLabel)
-        throw new GitHubApiError(422, labelsPath, {
-          message: `Workflow label read-back expected only ${workflowLabel}.`,
-          labels: updatedLabels,
-        });
-    } else if (workflowLabels.length !== 0)
+    if (
+      (workflowLabel &&
+        (verifiedWorkflowLabels.length !== 1 ||
+          verifiedWorkflowLabels[0] !== workflowLabel)) ||
+      (!workflowLabel && verifiedWorkflowLabels.length !== 0)
+    )
       throw new GitHubApiError(422, labelsPath, {
-        message: "Workflow label read-back expected no workflow labels.",
-        labels: updatedLabels,
+        message: "Workflow label fresh read-back did not match the requested projection.",
+        labels: verifiedLabels,
       });
+    if (verifiedLabels.includes("needs-human"))
+      throw new GitHubApiError(422, labelsPath, {
+        message: "Workflow label fresh read-back retained needs-human.",
+        labels: verifiedLabels,
+      });
+    return createGitHubLabelReceipt({
+      repository: this.#repository,
+      issueNumber,
+      eventId: eventId ?? `workflow:${workflowLabel ?? "clear"}`,
+      labels: workflowLabel ? [workflowLabel] : [],
+    });
   }
 
   async #findComment(
@@ -262,20 +605,73 @@ export class GitHubIssueProjector {
     signal?: AbortSignal,
   ): Promise<IssueComment | undefined> {
     const comments = await this.#listComments(issueNumber, signal);
-    return comments.find((comment) => comment.body.includes(marker));
+    const matching = comments.filter((comment) => comment.body.includes(marker));
+    const first = matching[0];
+    if (
+      first &&
+      matching.some((comment) => comment.body !== first.body)
+    )
+      throw new GitHubApiError(
+        422,
+        `${this.#apiRoot}/issues/${issueNumber}/comments`,
+        { message: `Projection ${marker} has conflicting duplicate payloads.` },
+      );
+    return first;
   }
 
   async #listComments(
     issueNumber: number,
     signal?: AbortSignal,
   ): Promise<IssueComment[]> {
-    const path = `${this.#apiRoot}/issues/${issueNumber}/comments?per_page=100&cache_bust=${Date.now()}`;
-    const response = await this.#transport.request<IssueComment[]>({
+    const comments: IssueComment[] = [];
+    const seen = new Set<string>();
+    let path: string | undefined =
+      `${this.#apiRoot}/issues/${issueNumber}/comments?per_page=100`;
+    for (let page = 0; path && page < 100; page += 1) {
+      if (seen.has(path))
+        throw new GitHubApiError(422, path, {
+          message: "GitHub comment pagination repeated a page.",
+        });
+      seen.add(path);
+      const response = await this.#transport.request<IssueComment[]>({
+        method: "GET",
+        path,
+        ...(signal ? { signal } : {}),
+      });
+      const pagePath = path;
+      const pageComments = requireGitHubSuccess(response, pagePath, [200]);
+      if (!Array.isArray(pageComments))
+        throw new GitHubApiError(422, pagePath, {
+          message: "GitHub returned a malformed issue comment page.",
+        });
+      comments.push(
+        ...pageComments.map((comment) =>
+          requireIssueComment(comment, pagePath),
+        ),
+      );
+      path = nextGitHubPagePath(response.headers);
+    }
+    if (path)
+      throw new GitHubApiError(422, path, {
+        message: "GitHub comment pagination exceeded 100 pages.",
+      });
+    return comments;
+  }
+
+  async #readComment(
+    commentId: number,
+    signal?: AbortSignal,
+  ): Promise<IssueComment> {
+    const path = `${this.#apiRoot}/issues/comments/${commentId}`;
+    const response = await this.#transport.request<IssueComment>({
       method: "GET",
       path,
       ...(signal ? { signal } : {}),
     });
-    return requireGitHubSuccess(response, path, [200]);
+    return requireIssueComment(
+      requireGitHubSuccess(response, path, [200]),
+      path,
+    );
   }
 
   async #addMissingLabels(
@@ -301,13 +697,29 @@ export class GitHubIssueProjector {
     if (missing.length === 0) return [];
 
     const labelsPath = `${this.#apiRoot}/issues/${issueNumber}/labels`;
-    const response = await this.#transport.request<IssueLabel[]>({
+    const response = await this.#transport.request<IssueLabelValue[]>({
       method: "POST",
       path: labelsPath,
       body: { labels: missing },
       ...(signal ? { signal } : {}),
     });
     requireGitHubSuccess(response, labelsPath, [200]);
+
+    // Verify against a fresh issue read, rather than trusting the mutation
+    // response. A caller can safely retry after a crash because this read
+    // proves whether the requested labels were committed.
+    const verifyResponse = await this.#transport.request<IssueResponse>({
+      method: "GET",
+      path: issuePath,
+      ...(signal ? { signal } : {}),
+    });
+    const verified = requireGitHubSuccess(verifyResponse, issuePath, [200]);
+    const verifiedNames = new Set(verified.labels.map(issueLabelName));
+    if (missing.some((label) => !verifiedNames.has(label)))
+      throw new GitHubApiError(422, labelsPath, {
+        message: "Label projection read-back did not contain all requested labels.",
+        labels: [...verifiedNames],
+      });
     return missing;
   }
 }

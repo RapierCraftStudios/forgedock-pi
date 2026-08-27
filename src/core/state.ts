@@ -1,5 +1,6 @@
 import {
   hashRunEvent,
+  isEffectType,
   isRunPhase,
   RUN_PHASES,
   type EffectRecordedPayload,
@@ -580,6 +581,18 @@ function applyNodeEvent(state: RunState, event: RunEvent): void {
       "invalid-node-event",
       `Unsupported node event ${event.type}.`,
     );
+  if (event.type !== "node.queued" && prior) {
+    if (record.node !== prior.node)
+      throw new StateTransitionError(
+        "node-mismatch",
+        `Node ${record.nodeId} is ${prior.node}, not ${record.node}.`,
+      );
+    if (record.attempt !== prior.attempt)
+      throw new StateTransitionError(
+        "attempt-mismatch",
+        `Node ${record.nodeId} attempt ${record.attempt} is not current attempt ${prior.attempt}.`,
+      );
+  }
   if (event.type === "node.queued") {
     if (prior && prior.status === "running")
       throw new StateTransitionError(
@@ -753,32 +766,29 @@ function applyEffect(state: RunState, event: RunEvent): void {
   assertLeaseEpoch(state, event);
   const record = payloadRecord(event);
   const effectId = requireString(record, "effectId");
-  if (state.effects[effectId]) {
-    throw new StateTransitionError(
-      "duplicate-effect",
-      `Effect ${effectId} is already recorded.`,
-    );
-  }
+  const digest = requireString(record, "digest");
   const effectType = record.effectType;
-  const supported = [
-    "github-comment",
-    "github-label",
-    "push",
-    "pull-request",
-    "merge",
-    "issue-close",
-    "cleanup",
-  ];
-  if (typeof effectType !== "string" || !supported.includes(effectType)) {
+  if (!isEffectType(effectType)) {
     throw new StateTransitionError(
       "invalid-effect",
       `Unsupported effect type: ${String(effectType)}.`,
     );
   }
+  const prior = state.effects[effectId];
+  if (prior) {
+    if (prior.effectType !== effectType || prior.digest !== digest)
+      throw new StateTransitionError(
+        "effect-digest-conflict",
+        `Effect ${effectId} was recorded with a different type or digest.`,
+      );
+    // A second journal entry with the same verified receipt is a harmless
+    // replay (for example, after a crash between persistence attempts).
+    return;
+  }
   state.effects[effectId] = {
-    effectType: effectType as RecordedEffect["effectType"],
+    effectType,
     effectId,
-    digest: requireString(record, "digest"),
+    digest,
     eventId: event.eventId,
   };
 }
@@ -845,10 +855,12 @@ export function applyRunEvent(
   if (!current) return createInitialState(event);
   assertEnvelopeContinuation(current, event);
   if (current.status === "completed" || current.status === "cancelled") {
-    if (event.type !== "lease.released")
+    const completedEffectReceipt =
+      current.status === "completed" && event.type === "effect.recorded";
+    if (event.type !== "lease.released" && !completedEffectReceipt)
       throw new StateTransitionError(
         "terminal-run",
-        "Terminal runs reject further mutations.",
+        "Terminal runs reject further mutations except completed-run effect receipts.",
       );
   }
   const state = cloneState(current);

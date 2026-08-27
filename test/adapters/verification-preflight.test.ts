@@ -36,8 +36,10 @@ async function fixture(
     join(root, "web", "package.json"),
     JSON.stringify({ scripts: { test: "vitest run" } }),
   );
-  await writeFile(join(bin, "npm"), "#!/bin/sh\nexit 0\n");
-  await chmod(join(bin, "npm"), 0o755);
+  for (const manager of ["npm", "pnpm"]) {
+    await writeFile(join(bin, manager), "#!/bin/sh\nexit 0\n");
+    await chmod(join(bin, manager), 0o755);
+  }
   return {
     root,
     outside,
@@ -97,6 +99,7 @@ test("malformed root test metadata cannot be bypassed by package selectors", asy
       ["npm", "--prefix", "web", "test"],
       ["npm", "--workspace", "web", "test"],
       ["npm", "--workspace=web", "test"],
+      ["pnpm", "--filter-prod", "web", "test"],
       ["npm", "--registry", "https://registry.npmjs.org", "test"],
       ["npm", "--", "test"],
       ["npm", "run", "--workspace", "web", "test"],

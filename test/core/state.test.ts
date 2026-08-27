@@ -330,7 +330,57 @@ test("parent-owned node events are durable and independently joinable", () => {
   );
 });
 
-test("cleanup node permits terminal completion and post-terminal mutations are rejected", () => {
+test("non-queue node transitions cannot rewrite node identity or attempt", () => {
+  let state = initializedState();
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.queued",
+      { nodeId: "verify-1", node: "verify", attempt: 1 },
+      "verify:queue",
+    ),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.started",
+      { nodeId: "verify-1", node: "verify", attempt: 1 },
+      "verify:start",
+    ),
+  );
+  assert.throws(
+    () =>
+      applyRunEvent(
+        state,
+        nextEvent(
+          state,
+          "node.completed",
+          { nodeId: "verify-1", node: "plan", attempt: 1 },
+          "verify:wrong-node",
+        ),
+      ),
+    (error) =>
+      error instanceof StateTransitionError && error.code === "node-mismatch",
+  );
+  assert.throws(
+    () =>
+      applyRunEvent(
+        state,
+        nextEvent(
+          state,
+          "node.completed",
+          { nodeId: "verify-1", node: "verify", attempt: 2 },
+          "verify:wrong-attempt",
+        ),
+      ),
+    (error) =>
+      error instanceof StateTransitionError && error.code === "attempt-mismatch",
+  );
+});
+
+test("completed runs accept verified effect receipts but reject other mutations", () => {
   let state = initializedState();
   state = applyRunEvent(
     state,
@@ -377,6 +427,23 @@ test("cleanup node permits terminal completion and post-terminal mutations are r
       ),
     (error) =>
       error instanceof StateTransitionError && error.code === "terminal-run",
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "effect.recorded",
+      {
+        effectType: "github-comment",
+        effectId: "github-comment:owner/repo:42:terminal",
+        digest: "sha256:terminal",
+      },
+      "effect:terminal-comment",
+    ),
+  );
+  assert.equal(
+    state.effects["github-comment:owner/repo:42:terminal"]?.digest,
+    "sha256:terminal",
   );
   const epoch = state.lease?.epoch;
   assert.ok(epoch);
@@ -651,6 +718,56 @@ test("hash chain and idempotency conflicts fail closed", () => {
     (error) =>
       error instanceof StateTransitionError &&
       error.code === "duplicate-idempotency-key",
+  );
+});
+
+test("effect receipts replay idempotently and reject digest conflicts", () => {
+  let state = initializedState();
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "effect.recorded",
+      {
+        effectType: "github-comment",
+        effectId: "github-comment:owner/repo:42:event-1",
+        digest: "sha256:comment-a",
+      },
+      "effect:comment-1",
+    ),
+  );
+  const replayed = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "effect.recorded",
+      {
+        effectType: "github-comment",
+        effectId: "github-comment:owner/repo:42:event-1",
+        digest: "sha256:comment-a",
+      },
+      "effect:comment-replay",
+    ),
+  );
+  assert.equal(replayed.effects["github-comment:owner/repo:42:event-1"]?.digest, "sha256:comment-a");
+  assert.throws(
+    () =>
+      applyRunEvent(
+        replayed,
+        nextEvent(
+          replayed,
+          "effect.recorded",
+          {
+            effectType: "github-comment",
+            effectId: "github-comment:owner/repo:42:event-1",
+            digest: "sha256:comment-b",
+          },
+          "effect:comment-conflict",
+        ),
+      ),
+    (error) =>
+      error instanceof StateTransitionError &&
+      error.code === "effect-digest-conflict",
   );
 });
 

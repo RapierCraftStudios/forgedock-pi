@@ -3,9 +3,16 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 
 import {
+  ExternalIssueDependencyError,
+  discoverIssueDependencies,
+} from "../../src/workflows/orchestrate.ts";
+import type { ForgeReviewerResult } from "../../src/agents/contracts.ts";
+import {
   canonicalReviewerName,
+  cleanupDurablyCancelledWorktree,
   directRunRecoveryAction,
   directTerminalEvidence,
+  hasActiveDirectRun,
   finalReviewDecisionMarker,
   findingPriority,
   isRecoverableWorkOnBlocker,
@@ -13,15 +20,87 @@ import {
   parentNodeFromId,
   parseAsyncCompletion,
   reconcileLaunchState,
+  rebindReviewerResults,
   reviewFindingMarker,
   reviewInstanceMarker,
   reviewSummaryInstanceMarker,
   reviewSupersessionMarker,
+  restoreWorkflowLabelAfterMergeFailure,
   rollbackAwaitingMergeLabel,
   shouldBufferLaunchCompletion,
+  shouldTrustDurableWorkOnResult,
   workflowLabelForNode,
   workflowStageForNodeTransition,
+  workflowStageForRecoveredNodeTransition,
 } from "../../src/workflows/work-on.ts";
+
+test("work-on reviewer results are rebound to the shared frozen review identity", () => {
+  const result: ForgeReviewerResult = {
+    schema: "forgedock.reviewer-result/v1",
+    runId: "forge-run-1",
+    reviewer: "forge-review-security",
+    headSha: "abcdef1234567890",
+    verdict: "findings",
+    findings: [
+      {
+        id: "SEC-1",
+        reviewer: "forge-review-security",
+        runId: "forge-run-1",
+        headSha: "abcdef1234567890",
+        confidence: "possible",
+        severity: "low",
+        category: "security",
+        file: "src/example.ts",
+        line: 1,
+        summary: "Follow-up",
+        evidence: ["evidence"],
+      },
+    ],
+    filesReviewed: ["src/example.ts"],
+    limitations: [],
+  };
+
+  const [rebound] = rebindReviewerResults([result], "workon-forge-run-1-r1");
+  assert.equal(rebound?.runId, "workon-forge-run-1-r1");
+  assert.equal(rebound?.findings[0]?.runId, "workon-forge-run-1-r1");
+  assert.equal(result.runId, "forge-run-1");
+  assert.equal(result.findings[0]?.runId, "forge-run-1");
+});
+
+test("trusted durable work-on output overrides an empty failed provider envelope", () => {
+  assert.equal(
+    shouldTrustDurableWorkOnResult({ blocker: undefined }, "failed"),
+    true,
+  );
+  assert.equal(
+    shouldTrustDurableWorkOnResult(
+      { blocker: "verification still pending" },
+      "failed",
+    ),
+    false,
+  );
+  assert.equal(
+    shouldTrustDurableWorkOnResult({ blocker: undefined }, "running"),
+    false,
+  );
+});
+
+test("dependency discovery fails dispatch with explicit external blocker evidence", async () => {
+  const github = {
+    async listIssueBlockedBy(issueNumber: number): Promise<number[]> {
+      return issueNumber === 42 ? [99] : [];
+    },
+  };
+  await assert.rejects(
+    () => discoverIssueDependencies(github, [42]),
+    (error) =>
+      error instanceof ExternalIssueDependencyError &&
+      error.code === "external-dependency" &&
+      error.issueNumber === 42 &&
+      error.blockerIssueNumber === 99 &&
+      /#42.*#99/.test(error.message),
+  );
+});
 
 test("short reviewer aliases normalize to configured agent names", () => {
   assert.equal(canonicalReviewerName("security"), "forge-review-security");
@@ -32,9 +111,68 @@ test("short reviewer aliases normalize to configured agent names", () => {
 });
 
 test("restart recovery recognizes every parent-owned durable node", () => {
-  for (const node of ["review-join", "ci", "decision", "merge", "close", "cleanup"] as const)
+  for (const node of [
+    "review-join",
+    "ci",
+    "decision",
+    "merge",
+    "close",
+    "cleanup",
+  ] as const)
     assert.equal(parentNodeFromId(`${node}-2`), node);
   assert.equal(parentNodeFromId("implement-1"), undefined);
+});
+
+test("overlapping direct starts are rejected while a binding or run is live", () => {
+  const binding =
+    {} as import("../../src/agents/child-runtime.ts").ForgeChildBinding;
+  assert.equal(hasActiveDirectRun(binding, []), true);
+  assert.equal(
+    hasActiveDirectRun(undefined, [
+      { executionMode: "direct", status: "running" },
+    ]),
+    true,
+  );
+  assert.equal(
+    hasActiveDirectRun(undefined, [
+      { executionMode: "direct", status: "completed" },
+      { executionMode: "direct", status: "failed" },
+    ]),
+    false,
+  );
+  assert.equal(
+    hasActiveDirectRun(undefined, [
+      { executionMode: "orchestrated", status: "running" },
+    ]),
+    false,
+  );
+});
+
+test("owned cancellation cleanup runs only after durable cancellation and deletes remote first", async () => {
+  const calls: string[] = [];
+  const prepared = {
+    repositoryRoot: "/repo",
+    worktreePath: "/repo/.forge/worktrees/run-1",
+    branch: "forge/issue-42-run-1",
+    baseBranch: "staging",
+    baseSha: "a".repeat(40),
+  };
+  const git = {
+    async deleteRemoteBranch(): Promise<void> {
+      calls.push("delete-remote");
+    },
+    async cleanup(): Promise<void> {
+      calls.push("cleanup-worktree");
+    },
+  };
+
+  await assert.rejects(
+    () => cleanupDurablyCancelledWorktree("active", prepared, git),
+    /requires durable cancelled state/,
+  );
+  assert.deepEqual(calls, []);
+  await cleanupDurablyCancelledWorktree("cancelled", prepared, git);
+  assert.deepEqual(calls, ["delete-remote", "cleanup-worktree"]);
 });
 
 test("direct restart selects terminal cleanup and authority release windows", () => {
@@ -150,6 +288,61 @@ test("awaiting-merge rollback stays best effort when projection fails", async ()
   await assert.doesNotReject(() => rollbackAwaitingMergeLabel(projector, 42));
 });
 
+test("interrupted parent merge recovery keeps durable merged projection", async () => {
+  const state = {
+    status: "active",
+    nodes: {
+      "merge-1": {
+        nodeId: "merge-1",
+        node: "merge",
+        attempt: 1,
+        status: "running",
+      },
+    },
+    effects: {
+      "merge:145": {
+        effectType: "merge",
+        effectId: "merge:145",
+        digest: "sha256:durable-merge",
+        eventId: "event-merge",
+      },
+    },
+  } as unknown as import("../../src/core/state.ts").RunState;
+
+  // Attach reconciliation and the resumed parent-node start use this same
+  // durable selector, so neither recovery projection can downgrade the label.
+  assert.equal(
+    workflowStageForRecoveredNodeTransition(state, "merge", "started"),
+    "merged",
+  );
+  assert.equal(
+    workflowStageForRecoveredNodeTransition(state, "merge", "resumed"),
+    "merged",
+  );
+
+  const labels: string[] = [];
+  const projector = {
+    async setWorkflowLabel(_issueNumber: number, label: string): Promise<void> {
+      labels.push(label);
+    },
+  };
+  await restoreWorkflowLabelAfterMergeFailure(projector, 147, true);
+  await restoreWorkflowLabelAfterMergeFailure(projector, 147, false);
+  assert.deepEqual(labels, ["workflow:merged", "workflow:in-review"]);
+});
+
+test("durable merge failure recovery stays best effort during projection outage", async () => {
+  const projector = {
+    async setWorkflowLabel(): Promise<void> {
+      throw new Error("projection unavailable");
+    },
+  };
+
+  await assert.doesNotReject(() =>
+    restoreWorkflowLabelAfterMergeFailure(projector, 147, true),
+  );
+});
+
 test("workflow transitions cover the complete canonical label lifecycle", () => {
   assert.equal(
     workflowStageForNodeTransition("resolve", "started"),
@@ -218,7 +411,7 @@ test("normal matching provider receipts are inspected instead of escalated", () 
       activeRunId: "launch:resolve-1:nonce",
       resultArtifactPresent: false,
     }),
-    "needs-human",
+    "retry-launch",
   );
   assert.equal(
     reconcileLaunchState({
@@ -226,7 +419,7 @@ test("normal matching provider receipts are inspected instead of escalated", () 
       activeRunId: "launch:resolve-1:nonce",
       resultArtifactPresent: false,
     }),
-    "needs-human",
+    "retry-launch",
   );
 });
 
@@ -327,6 +520,15 @@ test("work-on recovery retries state branch contention but not real blockers", (
     isRecoverableWorkOnBlocker("Product decision requires operator approval."),
     false,
   );
+  assert.equal(
+    isRecoverableWorkOnBlocker("stale integration base requires a rebase"),
+    true,
+  );
+  assert.equal(
+    isRecoverableWorkOnBlocker("Review remediation rounds exhausted"),
+    true,
+  );
+  assert.equal(isRecoverableWorkOnBlocker("Invalid username or token"), false);
 });
 
 test("provider retry classification includes WebSocket failures but excludes quota", () => {

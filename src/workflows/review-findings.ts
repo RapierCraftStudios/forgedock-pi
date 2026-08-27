@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 
 import type { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
 import type { ForgeReviewFindingResult } from "../agents/contracts.ts";
+import {
+  humanAuthorityReasonFromText,
+  type HumanAuthorityReason,
+} from "../core/policy.ts";
 
 export interface ReviewFindingRunIdentity {
   forgeRunId: string;
@@ -14,6 +18,15 @@ export interface ReviewFindingProjectionResult {
     headSha: string;
     findings: readonly ForgeReviewFindingResult[];
   };
+}
+
+/** Classify only explicit high-level authority language as human-owned. */
+export function reviewFindingAuthorityReason(
+  finding: ForgeReviewFindingResult,
+): HumanAuthorityReason | undefined {
+  return humanAuthorityReasonFromText(
+    `${finding.category} ${finding.summary} ${finding.evidence.join(" ")}`,
+  );
 }
 
 export async function publishReviewFindingIssues(input: {
