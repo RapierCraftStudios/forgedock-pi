@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 39,
-  "lastEventHash": "sha256:011bfcbd73b30e2c669c2cd26c77ed85d7eb485fe41a7ef3a0a6ff9002f1c4cb",
+  "sequence": 40,
+  "lastEventHash": "sha256:8e74a1493e5cdfc9c5081c576d67faa452d3456a917a50eb9cd4545c9aa1b6a4",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -270,6 +270,12 @@
       "effectId": "github-label:RapierCraftStudios/forgedock-pi:209:74d852bd-c406-4c3f-b9d5-b5799873a724",
       "digest": "sha256:41c59356ef581a966657ed1e654e156dea80a175e46c2b740d97b4ddedc401c1",
       "eventId": "bc3ee52e-1056-45d0-8f7d-3477b7a62b3e"
+    },
+    "github-comment:RapierCraftStudios/forgedock-pi:209:ee038e9f-f3b8-4e4b-8412-dc93a65d30f9": {
+      "effectType": "github-comment",
+      "effectId": "github-comment:RapierCraftStudios/forgedock-pi:209:ee038e9f-f3b8-4e4b-8412-dc93a65d30f9",
+      "digest": "sha256:200f1a9379952fd59b9f830df79f877845e0e8fca88cceb46eae2909204f6a66",
+      "eventId": "4899dd79-e9d3-4a03-94ce-0a6ded603f47"
     }
   },
   "idempotencyKeys": {
@@ -311,7 +317,8 @@
     "phase:verify:1:queue": "27fc46d9-5a98-4843-89ed-a19fc02dae99",
     "phase:verify:1:start": "74d852bd-c406-4c3f-b9d5-b5799873a724",
     "effect:github-label:RapierCraftStudios/forgedock-pi:209:74d852bd-c406-4c3f-b9d5-b5799873a724": "bc3ee52e-1056-45d0-8f7d-3477b7a62b3e",
-    "phase:verify:1:complete": "ee038e9f-f3b8-4e4b-8412-dc93a65d30f9"
+    "phase:verify:1:complete": "ee038e9f-f3b8-4e4b-8412-dc93a65d30f9",
+    "effect:github-comment:RapierCraftStudios/forgedock-pi:209:ee038e9f-f3b8-4e4b-8412-dc93a65d30f9": "4899dd79-e9d3-4a03-94ce-0a6ded603f47"
   },
   "eventIds": {
     "8cb72a26-7f5e-4934-957a-d9f6c1bc63a0": true,
@@ -352,7 +359,8 @@
     "27fc46d9-5a98-4843-89ed-a19fc02dae99": true,
     "74d852bd-c406-4c3f-b9d5-b5799873a724": true,
     "bc3ee52e-1056-45d0-8f7d-3477b7a62b3e": true,
-    "ee038e9f-f3b8-4e4b-8412-dc93a65d30f9": true
+    "ee038e9f-f3b8-4e4b-8412-dc93a65d30f9": true,
+    "4899dd79-e9d3-4a03-94ce-0a6ded603f47": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
