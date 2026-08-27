@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 10,
-  "lastEventHash": "sha256:322c1dddbc82b4775f5d2d17f76c5f383094252611478847d37138508ba0e380",
+  "sequence": 11,
+  "lastEventHash": "sha256:32fb5e2795414452e6c34bbc7a72b504bf774d82ad39578f0f28f2f54d1bb66e",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -61,15 +61,21 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Contract is limited to `src/adapters/verification-preflight.ts` and its focused adapter test",
+            "Plan chooses fail-closed rejection of npm exec option-based shell indirection rather than an incomplete shell-language parser",
+            "No product, scope, UX, branch-policy, or security-authority decision is required"
+          ],
           "logicalNodeId": "work-on-plan",
           "startedAt": "2026-08-27T06:58:43.154Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/1e2284c4-374c-4c3b-aba9-c1a4d9bbb07f",
           "branch": "forge/issue-203-1e2284c4",
-          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22"
+          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22",
+          "finishedAt": "2026-08-27T07:01:23.628Z",
+          "outputArtifactHash": "sha256:203-plan-verified"
         }
       ]
     }
@@ -86,7 +92,8 @@
     "phase:investigate:1:start": "ed4080a9-99ce-4deb-8cbb-73b8edc23634",
     "phase:investigate:1:complete": "2afa9d6c-aa55-45d5-8921-21072340ef22",
     "phase:plan:1:queue": "e77b3713-4f67-4eb7-b828-b9655ef1bdb5",
-    "phase:plan:1:start": "ca269717-ecfd-4c8e-9dd9-ee6ffed2ddbd"
+    "phase:plan:1:start": "ca269717-ecfd-4c8e-9dd9-ee6ffed2ddbd",
+    "phase:plan:1:complete": "6b96f444-00f8-4663-aaef-718ad7afe827"
   },
   "eventIds": {
     "6d59e785-3a99-4919-877d-efb24d01b7fc": true,
@@ -98,7 +105,8 @@
     "ed4080a9-99ce-4deb-8cbb-73b8edc23634": true,
     "2afa9d6c-aa55-45d5-8921-21072340ef22": true,
     "e77b3713-4f67-4eb7-b828-b9655ef1bdb5": true,
-    "ca269717-ecfd-4c8e-9dd9-ee6ffed2ddbd": true
+    "ca269717-ecfd-4c8e-9dd9-ee6ffed2ddbd": true,
+    "6b96f444-00f8-4663-aaef-718ad7afe827": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
