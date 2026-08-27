@@ -7,23 +7,29 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 4,
-  "lastEventHash": "sha256:f58d9cb981881407755227f03f0a4a63b321185efe7f395f6ded904782297da1",
+  "sequence": 5,
+  "lastEventHash": "sha256:5fddd8e4b260b66057a9ac8741c7969833d808703e93f9ddfae46914dd8ab02d",
   "phases": {
     "resolve": {
       "phase": "resolve",
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume resolve attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`/home/dev/Projects/forgedock-pi/.forge/worktrees/e52e385d-1350-4a83-b60c-46b167c65915/.forge/config.json` validates the GitHub repository, `staging` integration branch, required `check` command, and two-reviewer policy.",
+            "Frozen base is `723b0bca407fbc66dd41e5607e012618f4c6ca22`; assigned branch is `forge/issue-112-e52e385d`.",
+            "Issue #112 is open review-finding remediation for npm package-location flags and is bounded to verification preflight/binding validation plus regression coverage."
+          ],
           "logicalNodeId": "resolve",
           "startedAt": "2026-08-27T06:45:23.890Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/e52e385d-1350-4a83-b60c-46b167c65915",
           "branch": "forge/issue-112-e52e385d",
-          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22"
+          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22",
+          "finishedAt": "2026-08-27T06:47:12.553Z",
+          "outputArtifactHash": "sha256:issue-112-resolve"
         }
       ]
     }
@@ -34,13 +40,15 @@
     "run:create": "56046d91-3819-444c-94d0-f08d4d316be3",
     "lease:acquire:1": "3bcddd3b-a49f-4b80-beb1-fb12fd15bcc1",
     "phase:resolve:1:queue": "b661d606-c827-4d45-9951-61b540444611",
-    "phase:resolve:1:start": "cc6d00b4-84f9-4224-9c62-15299ebfd849"
+    "phase:resolve:1:start": "cc6d00b4-84f9-4224-9c62-15299ebfd849",
+    "phase:resolve:1:complete": "006479c2-a99c-4ac4-a868-a4f3f8685792"
   },
   "eventIds": {
     "56046d91-3819-444c-94d0-f08d4d316be3": true,
     "3bcddd3b-a49f-4b80-beb1-fb12fd15bcc1": true,
     "b661d606-c827-4d45-9951-61b540444611": true,
-    "cc6d00b4-84f9-4224-9c62-15299ebfd849": true
+    "cc6d00b4-84f9-4224-9c62-15299ebfd849": true,
+    "006479c2-a99c-4ac4-a868-a4f3f8685792": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
