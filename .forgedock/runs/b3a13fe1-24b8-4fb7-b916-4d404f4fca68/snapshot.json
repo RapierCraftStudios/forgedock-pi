@@ -7,23 +7,31 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 4,
-  "lastEventHash": "sha256:90f6279000b3733468ca2d7a441fac15d0eceded99eef151dab04214ec8f302a",
+  "sequence": 5,
+  "lastEventHash": "sha256:45c2f952ef7ca04d921c021510fc76c8ce68fec00cddf84faf34eea979f6093c",
   "phases": {
     "resolve": {
       "phase": "resolve",
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume resolve attempt 1",
-          "evidence": [],
+          "evidence": [
+            "issue #195 is a review-finding remediation task for `verification-preflight.ts`",
+            "trusted base `staging@723b0bca407fbc66dd41e5607e012618f4c6ca22` matches the run binding",
+            "`.forge/config.json` identifies `RapierCraftStudios/forgedock-pi` and allows `staging` integration",
+            "required verification command is the named `check` command (`npm run check`)",
+            "required review roster includes `forge-review-correctness` and `forge-review-security`"
+          ],
           "logicalNodeId": "resolve-1",
           "startedAt": "2026-08-27T06:48:41.605Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/b3a13fe1-24b8-4fb7-b916-4d404f4fca68",
           "branch": "forge/issue-195-b3a13fe1",
-          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22"
+          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22",
+          "finishedAt": "2026-08-27T06:49:37.242Z",
+          "outputArtifactHash": "sha256:resolve-issue-195-eligible"
         }
       ]
     }
@@ -34,13 +42,15 @@
     "run:create": "75adf02f-41c0-4ca0-8d4e-86944589a6e4",
     "lease:acquire:1": "c96be26f-31d1-4683-8eb7-dd3f3ff22563",
     "phase:resolve:1:queue": "fa818a33-bc24-4ac1-88cb-f07d264ec104",
-    "phase:resolve:1:start": "11585596-786d-488c-8300-98540485d8c2"
+    "phase:resolve:1:start": "11585596-786d-488c-8300-98540485d8c2",
+    "phase:resolve:1:complete": "dbee9a0a-45fb-471c-9233-1278afac81a4"
   },
   "eventIds": {
     "75adf02f-41c0-4ca0-8d4e-86944589a6e4": true,
     "c96be26f-31d1-4683-8eb7-dd3f3ff22563": true,
     "fa818a33-bc24-4ac1-88cb-f07d264ec104": true,
-    "11585596-786d-488c-8300-98540485d8c2": true
+    "11585596-786d-488c-8300-98540485d8c2": true,
+    "dbee9a0a-45fb-471c-9233-1278afac81a4": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
