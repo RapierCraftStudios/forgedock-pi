@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { access, readFile, realpath, stat } from "node:fs/promises";
+import { access, lstat, readFile, realpath, stat } from "node:fs/promises";
 import {
   basename,
   delimiter,
@@ -135,13 +135,38 @@ async function assertPackageScript(
   basePath: string,
 ): Promise<void> {
   const manifestPath = join(cwd, "package.json");
+  let manifestEntry;
+  try {
+    manifestEntry = await lstat(manifestPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new VerificationPreflightError(
+        `${basePath}.cwd`,
+        `selected package directory has no package.json for script '${script}'`,
+      );
+    }
+    throw new VerificationPreflightError(
+      `${basePath}.cwd`,
+      "selected package.json cannot be inspected",
+    );
+  }
+
   let canonicalManifest: string;
   try {
     canonicalManifest = await realpath(manifestPath);
-  } catch {
+  } catch (error) {
+    if (
+      manifestEntry.isSymbolicLink() &&
+      (error as NodeJS.ErrnoException).code === "ENOENT"
+    ) {
+      throw new VerificationPreflightError(
+        `${basePath}.cwd`,
+        "selected package.json is a dangling symlink",
+      );
+    }
     throw new VerificationPreflightError(
       `${basePath}.cwd`,
-      `selected package directory has no package.json for script '${script}'`,
+      "selected package.json cannot be resolved",
     );
   }
   if (!pathWithin(repositoryRoot, canonicalManifest))

@@ -85,6 +85,32 @@ test("required monorepo verification preflight selects the package cwd", async (
   }
 });
 
+test("preflight rejects a dangling root package manifest instead of selecting a nested package", async () => {
+  const testFixture = await fixture();
+  try {
+    await rm(join(testFixture.root, "package.json"));
+    await symlink(
+      join(testFixture.root, "missing-package.json"),
+      join(testFixture.root, "package.json"),
+      "file",
+    );
+
+    await assert.rejects(
+      preflightRequiredVerificationCommands(
+        testFixture.root,
+        { test: command(".") },
+        { path: testFixture.path, configPath: "/repo/.forge/config.json" },
+      ),
+      (error: unknown) =>
+        error instanceof VerificationPreflightError &&
+        error.path === "/repo/.forge/config.json verification.commands.test.cwd" &&
+        /dangling symlink/.test(error.message),
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
 test("preflight checks executable availability without running the command", async () => {
   const testFixture = await fixture();
   try {
