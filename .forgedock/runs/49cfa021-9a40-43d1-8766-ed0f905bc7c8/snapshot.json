@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:82587feb45296706407ba0cc30c0d5670ce04c3a74b3f0507465905ce036c209",
+  "sequence": 8,
+  "lastEventHash": "sha256:b1959ce6b6c9970684964d32dd8a8ba9f3587e5b05fdb190a995eabee753d9cb",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -40,15 +40,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/verification-preflight.ts` derives the manager with basename extraction and case-sensitive membership against `npm`, `pnpm`, `yarn`, and `bun`.",
+            "The `.cmd`/`.exe` suffix is stripped case-insensitively, but the remaining manager name is not lowercased.",
+            "For `NPM.CMD --prefix web test`, the current code treats `NPM` as an unknown manager, skips package-script preflight, and can therefore accept a malformed root manifest instead of rejecting the unsupported selector.",
+            "Existing tests cover lowercase `npm` selectors and Windows suffix stripping behavior indirectly, but do not cover uppercase manager names.",
+            "The issue and review metadata identify source PR #192, source issue #111, and finding `SECURITY-SELECTOR-CASE`; no unrelated scope is implicated."
+          ],
           "logicalNodeId": "work-on-49cfa021-investigate-1",
           "startedAt": "2026-08-27T06:57:07.855Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/49cfa021-9a40-43d1-8766-ed0f905bc7c8",
           "branch": "forge/issue-197-49cfa021",
-          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22"
+          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22",
+          "finishedAt": "2026-08-27T07:00:05.204Z",
+          "outputArtifactHash": "sha256:investigation-197-selector-case"
         }
       ]
     }
@@ -62,7 +70,8 @@
     "phase:resolve:1:start": "fdcf786d-83ed-41ed-bdf1-087a9b8fb984",
     "phase:resolve:1:complete": "b7b478c8-018c-4074-a95b-3a081364f12d",
     "phase:investigate:1:queue": "5dd02118-8478-4c31-bab3-590cd2b80f22",
-    "phase:investigate:1:start": "66f85f6b-f9ff-46fb-b10e-ebfed528227e"
+    "phase:investigate:1:start": "66f85f6b-f9ff-46fb-b10e-ebfed528227e",
+    "phase:investigate:1:complete": "0079ab60-21d1-4605-8ef0-d11b0bcc3777"
   },
   "eventIds": {
     "456f7b09-869a-491b-9f9d-c0292d645a6d": true,
@@ -71,7 +80,8 @@
     "fdcf786d-83ed-41ed-bdf1-087a9b8fb984": true,
     "b7b478c8-018c-4074-a95b-3a081364f12d": true,
     "5dd02118-8478-4c31-bab3-590cd2b80f22": true,
-    "66f85f6b-f9ff-46fb-b10e-ebfed528227e": true
+    "66f85f6b-f9ff-46fb-b10e-ebfed528227e": true,
+    "0079ab60-21d1-4605-8ef0-d11b0bcc3777": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
