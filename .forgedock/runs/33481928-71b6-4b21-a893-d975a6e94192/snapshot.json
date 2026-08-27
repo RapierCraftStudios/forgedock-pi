@@ -7,18 +7,23 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 5,
-  "lastEventHash": "sha256:3da5ee90c4f72768362aed658a521d023ead01b9c9512eef3d85756dc28273cf",
+  "sequence": 6,
+  "lastEventHash": "sha256:064eaaa2e5c4b3aaaa7fe76c53c99f501b2d74cffb9836fcd8356b45c8a5e0f0",
   "phases": {
     "resolve": {
       "phase": "resolve",
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "Retry resolve from frozen base b7bfc323d992812b772c0cedce76b95a17922caa.",
-          "evidence": []
+          "evidence": [],
+          "logicalNodeId": "resolve-1",
+          "startedAt": "2026-08-27T15:01:00.365Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/33481928-71b6-4b21-a893-d975a6e94192",
+          "branch": "forge/issue-209-33481928",
+          "baseSha": "b7bfc323d992812b772c0cedce76b95a17922caa"
         }
       ]
     }
@@ -43,14 +48,16 @@
     "lease:acquire:1": "b74a22f6-314c-4320-ae50-314ba8b10d15",
     "effect:github-comment:RapierCraftStudios/forgedock-pi:209:f9b2bf5e-8593-42fa-8a2e-ba73567ea8b3": "d69cb845-bb43-460d-b4c3-c9d5af1673ed",
     "effect:github-label:RapierCraftStudios/forgedock-pi:209:f9b2bf5e-8593-42fa-8a2e-ba73567ea8b3:workflow": "472893de-11a3-4e07-bb31-bd7470439d83",
-    "phase:resolve:1:queue": "26fad87d-3b55-4c48-ac8d-920c5168dbb4"
+    "phase:resolve:1:queue": "26fad87d-3b55-4c48-ac8d-920c5168dbb4",
+    "phase:resolve:1:start": "cfa3c7a2-93ed-4b52-a54e-7e11f2e9f6df"
   },
   "eventIds": {
     "f9b2bf5e-8593-42fa-8a2e-ba73567ea8b3": true,
     "b74a22f6-314c-4320-ae50-314ba8b10d15": true,
     "d69cb845-bb43-460d-b4c3-c9d5af1673ed": true,
     "472893de-11a3-4e07-bb31-bd7470439d83": true,
-    "26fad87d-3b55-4c48-ac8d-920c5168dbb4": true
+    "26fad87d-3b55-4c48-ac8d-920c5168dbb4": true,
+    "cfa3c7a2-93ed-4b52-a54e-7e11f2e9f6df": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
