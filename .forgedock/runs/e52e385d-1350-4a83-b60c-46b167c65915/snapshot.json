@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 16,
-  "lastEventHash": "sha256:93b06e71710f92d666b0d5e339c51bcae42a857ef90dbf555d2cbe74b8281eef",
+  "sequence": 17,
+  "lastEventHash": "sha256:cffbe2c47e7dd74ab4e0361522f6006d3b2153521ad7fc10439c5ee7189b9e5b",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -108,15 +108,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/verification-preflight.ts` now centralizes package-manager detection and exports an option guard that scans every supported invocation until `--`.",
+            "`src/agents/child-runtime.ts` invokes the same guard while validating bound verification commands, before the child can execute them.",
+            "Regression tests cover unknown/alias npm subcommands, long/equal/short option forms, safe post-`--` arguments, and child binding rejection.",
+            "No implementation commit exists yet; the required `check` command and `forge_commit(kind=implementation)` are reserved for verify."
+          ],
           "logicalNodeId": "implement",
           "startedAt": "2026-08-27T07:01:11.868Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/e52e385d-1350-4a83-b60c-46b167c65915",
           "branch": "forge/issue-112-e52e385d",
-          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22"
+          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22",
+          "finishedAt": "2026-08-27T07:03:23.504Z",
+          "outputArtifactHash": "sha256:issue-112-implementation"
         }
       ]
     }
@@ -139,7 +146,8 @@
     "phase:prepare-worktree:1:start": "8d76d456-0baa-40c2-b32b-e72a76140c4b",
     "phase:prepare-worktree:1:complete": "228cb88b-5934-4c2a-a09a-1fd706394c89",
     "phase:implement:1:queue": "ac9b5f3d-4c50-4b6d-ac4b-1c1c05fff337",
-    "phase:implement:1:start": "d8a728ff-5dbe-48f3-be85-6a739b655a41"
+    "phase:implement:1:start": "d8a728ff-5dbe-48f3-be85-6a739b655a41",
+    "phase:implement:1:complete": "05e9979d-e690-4f67-974b-20f9cde5cef3"
   },
   "eventIds": {
     "56046d91-3819-444c-94d0-f08d4d316be3": true,
@@ -157,7 +165,8 @@
     "8d76d456-0baa-40c2-b32b-e72a76140c4b": true,
     "228cb88b-5934-4c2a-a09a-1fd706394c89": true,
     "ac9b5f3d-4c50-4b6d-ac4b-1c1c05fff337": true,
-    "d8a728ff-5dbe-48f3-be85-6a739b655a41": true
+    "d8a728ff-5dbe-48f3-be85-6a739b655a41": true,
+    "05e9979d-e690-4f67-974b-20f9cde5cef3": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
