@@ -3,11 +3,11 @@
   "orchestrationId": "99b72aef-a34a-41ee-b450-4f63eaa613f3",
   "repository": "RapierCraftStudios/forgedock-pi",
   "integrationBranch": "staging",
-  "status": "running",
+  "status": "cancelled",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 19,
-  "lastEventHash": "sha256:5105b39bb809191d72ee98b7d5b8f4b91be8995c297032361b422d6237846537",
+  "sequence": 20,
+  "lastEventHash": "sha256:8994d642c922f90f191e4044756c4bbcf02763b415c3ba2f6047abc8530e4c35",
   "lanes": [
     {
       "issueNumber": 92,
@@ -110,7 +110,10 @@
     "lane:111:failed": "f6575a93-df0d-492c-b925-b80857e42194",
     "lane:115:failed": "f450b1f9-e620-4df9-a1df-62fba2013784",
     "lane:119:failed": "de38be5f-9d64-42bb-a0a6-800ccea3f020",
-    "lane:120:failed": "3ed06439-81db-4744-bf74-743b5de526ba"
+    "lane:120:failed": "3ed06439-81db-4744-bf74-743b5de526ba",
+    "orchestration:cancel": "12d806c0-c1f2-4351-ab57-52296e5d7387"
   },
-  "createdAt": "2026-08-26T23:43:45.806Z"
+  "createdAt": "2026-08-26T23:43:45.806Z",
+  "reason": "Cancelled by the operator through /forge:cancel.",
+  "completedAt": "2026-08-27T00:43:53.708Z"
 }
