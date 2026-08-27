@@ -3,7 +3,9 @@ import test from "node:test";
 
 import {
   applyOrchestrationEvent,
+  blockedOrchestrationLanes,
   createOrchestrationEvent,
+  isTerminalLane,
   nextIntegrationLane,
   readyOrchestrationLanes,
   type OrchestrationEventType,
@@ -171,6 +173,113 @@ test("dependency graph gates dispatch and integration topologically", () => {
     ),
   );
   assert.equal(nextIntegrationLane(state)?.issueNumber, 2);
+});
+
+test("queued dependents receive deterministic blocker evidence", () => {
+  let state = applyOrchestrationEvent(
+    undefined,
+    next(
+      undefined,
+      "orchestration.created",
+      {
+        issueNumbers: [3, 1, 2],
+        integrationBranch: "staging",
+        maxConcurrent: 3,
+        leaseEpoch: 1,
+        dependencies: [
+          { fromIssue: 1, toIssue: 3, kind: "explicit", reason: "#3 needs #1" },
+          { fromIssue: 2, toIssue: 3, kind: "explicit", reason: "#3 needs #2" },
+        ],
+      },
+      "blocked-dependent-create",
+    ),
+  );
+  state = applyOrchestrationEvent(
+    state,
+    next(
+      state,
+      "lane.failed",
+      { issueNumber: 2, reason: "implementation failed" },
+      "blocked-dependent-fail",
+    ),
+  );
+  assert.deepEqual(
+    blockedOrchestrationLanes(state).map(({ lane, blockedBy, reason }) => ({
+      issueNumber: lane.issueNumber,
+      blockedBy: blockedBy.issueNumber,
+      reason,
+    })),
+    [
+      {
+        issueNumber: 3,
+        blockedBy: 2,
+        reason: "Issue #3 cannot start because dependency #2 is failed: implementation failed",
+      },
+    ],
+  );
+  state = applyOrchestrationEvent(
+    state,
+    next(
+      state,
+      "lane.blocked",
+      {
+        issueNumber: 3,
+        reason: "Issue #3 cannot start because dependency #2 is failed: implementation failed",
+      },
+      "blocked-dependent-block",
+    ),
+  );
+  assert.deepEqual(blockedOrchestrationLanes(state), []);
+});
+
+test("terminal dependency propagation reaches transitive queued dependents", () => {
+  let state = applyOrchestrationEvent(
+    undefined,
+    next(
+      undefined,
+      "orchestration.created",
+      {
+        issueNumbers: [4, 3, 2, 1],
+        integrationBranch: "staging",
+        maxConcurrent: 4,
+        leaseEpoch: 1,
+        dependencies: [
+          { fromIssue: 1, toIssue: 2, kind: "explicit", reason: "#2 needs #1" },
+          { fromIssue: 2, toIssue: 3, kind: "explicit", reason: "#3 needs #2" },
+          { fromIssue: 3, toIssue: 4, kind: "explicit", reason: "#4 needs #3" },
+        ],
+      },
+      "transitive-dependent-create",
+    ),
+  );
+  state = applyOrchestrationEvent(
+    state,
+    next(state, "lane.failed", { issueNumber: 1, reason: "root failed" }, "transitive-fail-1"),
+  );
+  for (const [issueNumber, blockerIssueNumber] of [
+    [2, 1],
+    [3, 2],
+    [4, 3],
+  ] as const) {
+    const blocked = blockedOrchestrationLanes(state);
+    assert.deepEqual(
+      blocked.map(({ lane, blockedBy }) => [lane.issueNumber, blockedBy.issueNumber]),
+      [[issueNumber, blockerIssueNumber]],
+    );
+    state = applyOrchestrationEvent(
+      state,
+      next(
+        state,
+        "lane.blocked",
+        {
+          issueNumber,
+          reason: blocked[0]?.reason ?? "dependency failed",
+        },
+        `transitive-block-${issueNumber}`,
+      ),
+    );
+  }
+  assert.equal(state.lanes.every(isTerminalLane), true);
 });
 
 test("genesis rejects cycles and binds the persisted graph hash", () => {

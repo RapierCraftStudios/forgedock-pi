@@ -17,6 +17,7 @@ import { GitWorktreeManager } from "../adapters/git.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
 import {
+  blockedOrchestrationLanes,
   isTerminalLane,
   nextIntegrationLane,
   readyOrchestrationLanes,
@@ -509,6 +510,28 @@ export class ForgeOrchestrationController {
       while (progress && link.status === "running") {
         progress = false;
         let current = await this.#read(link, ctx.signal);
+        const dependencyBlocks = blockedOrchestrationLanes(current.state);
+        if (dependencyBlocks.length > 0) {
+          // Persist one event per dependent lane. Re-reading after each event
+          // makes transitive blocks durable and keeps evidence deterministic
+          // under concurrent lifecycle notifications.
+          for (const blocked of dependencyBlocks) {
+            const state = await current.journal.append({
+              orchestrationId: link.orchestrationId,
+              type: "lane.blocked",
+              payload: {
+                issueNumber: blocked.lane.issueNumber,
+                reason: blocked.reason,
+              },
+              idempotencyKey: `lane:${blocked.lane.issueNumber}:dependency-blocked`,
+              message: `Block issue ${blocked.lane.issueNumber} on failed dependency #${blocked.blockedBy.issueNumber}`,
+              ...(ctx.signal ? { signal: ctx.signal } : {}),
+            });
+            current = { ...current, state };
+          }
+          progress = true;
+          continue;
+        }
         const effectiveConcurrency = await this.#effectiveConcurrency(
           link,
           current.state.maxConcurrent,
@@ -761,8 +784,23 @@ export class ForgeOrchestrationController {
   }
 }
 
-async function discoverIssueDependencies(
-  github: GitHubWorkflowAdapter,
+export class ExternalIssueDependencyError extends Error {
+  readonly code = "external-dependency" as const;
+  readonly issueNumber: number;
+  readonly blockerIssueNumber: number;
+
+  constructor(issueNumber: number, blockerIssueNumber: number) {
+    super(
+      `Cannot dispatch orchestration: issue #${issueNumber} is blocked by unselected external issue #${blockerIssueNumber}. Select #${blockerIssueNumber} or resolve the GitHub dependency before dispatching.`,
+    );
+    this.name = "ExternalIssueDependencyError";
+    this.issueNumber = issueNumber;
+    this.blockerIssueNumber = blockerIssueNumber;
+  }
+}
+
+export async function discoverIssueDependencies(
+  github: Pick<GitHubWorkflowAdapter, "listIssueBlockedBy">,
   issueNumbers: readonly number[],
   signal?: AbortSignal,
 ): Promise<OrchestrationDependencyEdge[]> {
@@ -771,7 +809,8 @@ async function discoverIssueDependencies(
   for (const issueNumber of issueNumbers) {
     const blockers = await github.listIssueBlockedBy(issueNumber, signal);
     for (const blocker of blockers) {
-      if (!confirmed.has(blocker)) continue;
+      if (!confirmed.has(blocker))
+        throw new ExternalIssueDependencyError(issueNumber, blocker);
       dependencies.push({
         fromIssue: blocker,
         toIssue: issueNumber,

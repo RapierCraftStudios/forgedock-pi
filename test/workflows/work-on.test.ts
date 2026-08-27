@@ -3,6 +3,10 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 
 import {
+  ExternalIssueDependencyError,
+  discoverIssueDependencies,
+} from "../../src/workflows/orchestrate.ts";
+import {
   canonicalReviewerName,
   directRunRecoveryAction,
   directTerminalEvidence,
@@ -22,6 +26,23 @@ import {
   workflowLabelForNode,
   workflowStageForNodeTransition,
 } from "../../src/workflows/work-on.ts";
+
+test("dependency discovery fails dispatch with explicit external blocker evidence", async () => {
+  const github = {
+    async listIssueBlockedBy(issueNumber: number): Promise<number[]> {
+      return issueNumber === 42 ? [99] : [];
+    },
+  };
+  await assert.rejects(
+    () => discoverIssueDependencies(github, [42]),
+    (error) =>
+      error instanceof ExternalIssueDependencyError &&
+      error.code === "external-dependency" &&
+      error.issueNumber === 42 &&
+      error.blockerIssueNumber === 99 &&
+      /#42.*#99/.test(error.message),
+  );
+});
 
 test("short reviewer aliases normalize to configured agent names", () => {
   assert.equal(canonicalReviewerName("security"), "forge-review-security");

@@ -41,6 +41,12 @@ export interface OrchestrationDependencyEdge {
   reason: string;
 }
 
+export interface BlockedOrchestrationLane {
+  lane: OrchestrationLane;
+  blockedBy: OrchestrationLane;
+  reason: string;
+}
+
 export interface OrchestrationLane {
   issueNumber: number;
   ordinal: number;
@@ -277,6 +283,56 @@ export function readyOrchestrationLanes(
     .map((node) => byId.get(node.id))
     .filter((lane): lane is OrchestrationLane => lane?.status === "queued")
     .map((lane) => ({ ...lane }));
+}
+
+/**
+ * Return queued lanes that can no longer run because a predecessor reached a
+ * terminal unsuccessful state. The result is ordered by lane ordinal and a
+ * lane with multiple failed predecessors uses the lowest-ordinal blocker so
+ * the emitted evidence is deterministic.
+ *
+ * This deliberately reports only direct blockers. Callers append the returned
+ * lane.blocked events and call this function again, which gives transitive
+ * dependents their own durable event rather than mutating state implicitly.
+ */
+export function blockedOrchestrationLanes(
+  state: OrchestrationState,
+): BlockedOrchestrationLane[] {
+  const byIssue = new Map(
+    state.lanes.map((lane) => [lane.issueNumber, lane]),
+  );
+  const ordinal = (issueNumber: number): number =>
+    byIssue.get(issueNumber)?.ordinal ?? Number.MAX_SAFE_INTEGER;
+  return state.lanes
+    .filter((lane) => lane.status === "queued")
+    .flatMap((lane) => {
+      const blocker = state.dependencies
+        .filter((edge) => edge.toIssue === lane.issueNumber)
+        .map((edge) => byIssue.get(edge.fromIssue))
+        .filter(
+          (candidate): candidate is OrchestrationLane =>
+            candidate !== undefined &&
+            ["blocked", "needs-human", "failed"].includes(candidate.status),
+        )
+        .sort(
+          (left, right) =>
+            ordinal(left.issueNumber) - ordinal(right.issueNumber) ||
+            left.issueNumber - right.issueNumber,
+        )[0];
+      if (!blocker) return [];
+      return [
+        {
+          lane: { ...lane },
+          blockedBy: { ...blocker },
+          reason: `Issue #${lane.issueNumber} cannot start because dependency #${blocker.issueNumber} is ${blocker.status}${blocker.reason ? `: ${blocker.reason}` : "."}`,
+        },
+      ];
+    })
+    .sort(
+      (left, right) =>
+        left.lane.ordinal - right.lane.ordinal ||
+        left.lane.issueNumber - right.lane.issueNumber,
+    );
 }
 
 export function nextIntegrationLane(
