@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 21,
-  "lastEventHash": "sha256:2138d9bfaeaece8985c08e6a0fcec1623f0b37921752cd09eaac4929acc2d7f2",
+  "sequence": 22,
+  "lastEventHash": "sha256:878e777f4a11975415bec9e3fdc0744d2e2f533f48fc8e78e7726535622f1ac5",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -153,11 +153,16 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 1",
           "evidence": [],
-          "inputArtifactHash": "sha256:7c93021b19cf0397e182cd732614dc9f65140462"
+          "inputArtifactHash": "sha256:7c93021b19cf0397e182cd732614dc9f65140462",
+          "logicalNodeId": "review-1",
+          "startedAt": "2026-08-27T00:05:26.890Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/35466040-09a8-42db-8246-fdbdc3d7bf2e",
+          "branch": "forge/issue-92-35466040",
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
         }
       ]
     }
@@ -185,7 +190,8 @@
     "phase:verify:1:queue": "d9f18ea9-dd29-4a1c-9ba8-18e7e7f5ebb4",
     "phase:verify:1:start": "9a32c8f3-94a5-47cf-9336-c938b65386bb",
     "phase:verify:1:complete": "a1d454d6-5524-441d-a619-2a467785265b",
-    "phase:review:1:queue": "2b08d8fd-9001-4138-8509-e03741a08e9d"
+    "phase:review:1:queue": "2b08d8fd-9001-4138-8509-e03741a08e9d",
+    "phase:review:1:start": "974f21aa-a657-4fbc-a3ab-8d7e4820c9b5"
   },
   "eventIds": {
     "2f9de7d7-ccbc-4ec8-b273-57d93d8d88fd": true,
@@ -208,7 +214,8 @@
     "d9f18ea9-dd29-4a1c-9ba8-18e7e7f5ebb4": true,
     "9a32c8f3-94a5-47cf-9336-c938b65386bb": true,
     "a1d454d6-5524-441d-a619-2a467785265b": true,
-    "2b08d8fd-9001-4138-8509-e03741a08e9d": true
+    "2b08d8fd-9001-4138-8509-e03741a08e9d": true,
+    "974f21aa-a657-4fbc-a3ab-8d7e4820c9b5": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
