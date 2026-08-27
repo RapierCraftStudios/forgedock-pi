@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 9,
-  "lastEventHash": "sha256:9d6c765e0d32b42fccd41abc6a4152955b0196b15f48fe3cc219fea878eceb67",
+  "sequence": 10,
+  "lastEventHash": "sha256:ae36027cac9f13f701827f2807f1073237d29ea561fed391d6621eb8f1ab6134",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -25,6 +25,18 @@
           "branch": "forge/issue-147-b436f01d",
           "baseSha": "6a8af2aaccf459b3ab45208032334e50a9ce629d",
           "finishedAt": "2026-08-27T14:30:07.185Z"
+        }
+      ]
+    },
+    "investigate": {
+      "phase": "investigate",
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "queued",
+          "leaseEpoch": 1,
+          "restartAction": "Inspect merge recovery, stage projection, durable effects, and focused tests at the frozen base.",
+          "evidence": []
         }
       ]
     }
@@ -65,7 +77,8 @@
     "phase:resolve:1:start": "d505ae90-a472-4fe2-8b25-6988e21adbc0",
     "effect:github-label:RapierCraftStudios/forgedock-pi:147:d505ae90-a472-4fe2-8b25-6988e21adbc0": "c3406a93-cf83-437f-9351-b0dfc5e5a294",
     "phase:resolve:1:complete": "a61a2495-7cfe-4c79-ad87-707c3e153b1e",
-    "effect:github-label:RapierCraftStudios/forgedock-pi:147:a61a2495-7cfe-4c79-ad87-707c3e153b1e": "170a2dca-7b55-443d-988a-cc2c7ebbdd29"
+    "effect:github-label:RapierCraftStudios/forgedock-pi:147:a61a2495-7cfe-4c79-ad87-707c3e153b1e": "170a2dca-7b55-443d-988a-cc2c7ebbdd29",
+    "phase:investigate:1:queue": "d187029e-0fe6-4cc4-a5db-37c5d8f32b43"
   },
   "eventIds": {
     "808c1371-acb6-434a-b6fb-c0e1ab7e4164": true,
@@ -76,7 +89,8 @@
     "d505ae90-a472-4fe2-8b25-6988e21adbc0": true,
     "c3406a93-cf83-437f-9351-b0dfc5e5a294": true,
     "a61a2495-7cfe-4c79-ad87-707c3e153b1e": true,
-    "170a2dca-7b55-443d-988a-cc2c7ebbdd29": true
+    "170a2dca-7b55-443d-988a-cc2c7ebbdd29": true,
+    "d187029e-0fe6-4cc4-a5db-37c5d8f32b43": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
