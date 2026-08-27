@@ -5,10 +5,10 @@
   "issueNumber": 147,
   "integrationBranch": "staging",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "authorityMode": "run-scoped",
-  "sequence": 53,
-  "lastEventHash": "sha256:25cae3fae841b5a664cf0338c7a2a5b93b020906697001b53fa288a2e79af5ad",
+  "sequence": 54,
+  "lastEventHash": "sha256:3a7af1ae0307801e9b112c3972127c419fe6dd4a8ace830772a8e0b0120f0e71",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -189,12 +189,14 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "abandoned",
           "leaseEpoch": 1,
           "restartAction": "reconcile and retry parent-owned merge",
           "evidence": [],
           "logicalNodeId": "parent-merge-1",
-          "startedAt": "2026-08-27T13:04:25.481Z"
+          "startedAt": "2026-08-27T13:04:25.481Z",
+          "reason": "Orchestration is terminal with #196:failed, #147:failed, #209:failed; stopping nonterminal child runs before orchestration completion.",
+          "finishedAt": "2026-08-27T13:05:40.447Z"
         }
       ]
     }
@@ -423,7 +425,8 @@
     "phase:merge:1:queue": "16c098ec-ec77-4b85-9f85-e2d6b72e15fd",
     "phase:merge:1:start": "dfa60ee1-0dbf-4964-806d-252a85b2f14d",
     "effect:branch:forge/issue-147-7053733d": "a7295130-39e9-4918-bea1-f05df83d08a4",
-    "effect:pr:218": "cc98d0e8-f943-4b7a-9e4b-38475a924a37"
+    "effect:pr:218": "cc98d0e8-f943-4b7a-9e4b-38475a924a37",
+    "run:cancelled": "1f0cc484-47dc-48dd-b813-51dafb083b15"
   },
   "eventIds": {
     "97c07aaf-07c1-4107-95e3-0632108817f3": true,
@@ -478,7 +481,8 @@
     "16c098ec-ec77-4b85-9f85-e2d6b72e15fd": true,
     "dfa60ee1-0dbf-4964-806d-252a85b2f14d": true,
     "a7295130-39e9-4918-bea1-f05df83d08a4": true,
-    "cc98d0e8-f943-4b7a-9e4b-38475a924a37": true
+    "cc98d0e8-f943-4b7a-9e4b-38475a924a37": true,
+    "1f0cc484-47dc-48dd-b813-51dafb083b15": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
@@ -490,5 +494,6 @@
     "lastHeartbeatAt": "2026-08-27T12:43:14.317Z",
     "expiresAt": "2027-08-27T12:43:14.317Z",
     "takeoverRequired": false
-  }
+  },
+  "cancellationReason": "Orchestration is terminal with #196:failed, #147:failed, #209:failed; stopping nonterminal child runs before orchestration completion."
 }
