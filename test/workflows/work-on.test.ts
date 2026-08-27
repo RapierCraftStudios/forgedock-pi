@@ -6,6 +6,7 @@ import {
   ExternalIssueDependencyError,
   discoverIssueDependencies,
 } from "../../src/workflows/orchestrate.ts";
+import type { ForgeReviewerResult } from "../../src/agents/contracts.ts";
 import {
   canonicalReviewerName,
   cleanupDurablyCancelledWorktree,
@@ -19,6 +20,7 @@ import {
   parentNodeFromId,
   parseAsyncCompletion,
   reconcileLaunchState,
+  rebindReviewerResults,
   reviewFindingMarker,
   reviewInstanceMarker,
   reviewSummaryInstanceMarker,
@@ -28,6 +30,39 @@ import {
   workflowLabelForNode,
   workflowStageForNodeTransition,
 } from "../../src/workflows/work-on.ts";
+
+test("work-on reviewer results are rebound to the shared frozen review identity", () => {
+  const result: ForgeReviewerResult = {
+    schema: "forgedock.reviewer-result/v1",
+    runId: "forge-run-1",
+    reviewer: "forge-review-security",
+    headSha: "abcdef1234567890",
+    verdict: "findings",
+    findings: [
+      {
+        id: "SEC-1",
+        reviewer: "forge-review-security",
+        runId: "forge-run-1",
+        headSha: "abcdef1234567890",
+        confidence: "possible",
+        severity: "low",
+        category: "security",
+        file: "src/example.ts",
+        line: 1,
+        summary: "Follow-up",
+        evidence: ["evidence"],
+      },
+    ],
+    filesReviewed: ["src/example.ts"],
+    limitations: [],
+  };
+
+  const [rebound] = rebindReviewerResults([result], "workon-forge-run-1-r1");
+  assert.equal(rebound?.runId, "workon-forge-run-1-r1");
+  assert.equal(rebound?.findings[0]?.runId, "workon-forge-run-1-r1");
+  assert.equal(result.runId, "forge-run-1");
+  assert.equal(result.findings[0]?.runId, "forge-run-1");
+});
 
 test("dependency discovery fails dispatch with explicit external blocker evidence", async () => {
   const github = {

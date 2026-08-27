@@ -2310,7 +2310,11 @@ export class ForgeWorkOnController {
       ];
       const sharedReviewId = `workon-${link.forgeRunId}-r${aggregate.review.rounds}`;
       const staticPanel: ReviewPanelRunner = {
-        run: async () => aggregate.review.reviewerResults,
+        run: async () =>
+          rebindReviewerResults(
+            aggregate.review.reviewerResults,
+            sharedReviewId,
+          ),
       };
       const sharedReview = await new ReviewPrCoordinator({
         github,
@@ -4477,7 +4481,11 @@ export class ForgeWorkOnController {
     ];
     const sharedReviewId = `workon-${link.forgeRunId}-r${result.review.rounds}`;
     const staticPanel: ReviewPanelRunner = {
-      run: async () => result.review.reviewerResults,
+      run: async () =>
+        rebindReviewerResults(
+          result.review.reviewerResults,
+          sharedReviewId,
+        ),
     };
     const sharedReview = await new ReviewPrCoordinator({
       github,
@@ -5351,6 +5359,21 @@ export function reviewInstanceMarker(
 
 export function canonicalReviewerName(reviewer: string): string {
   return `forge-review-${reviewerDomain(reviewer)}`;
+}
+
+export function rebindReviewerResults(
+  results: readonly ForgeReviewerResult[],
+  reviewId: string,
+): ForgeReviewerResult[] {
+  if (!reviewId.trim()) throw new TypeError("Review ID must be non-empty.");
+  return results.map((result) => ({
+    ...result,
+    runId: reviewId,
+    findings: result.findings.map((finding) => ({
+      ...finding,
+      runId: reviewId,
+    })),
+  }));
 }
 
 function reviewerDomain(reviewer: string): string {
