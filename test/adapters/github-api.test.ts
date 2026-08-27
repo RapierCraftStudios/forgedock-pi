@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   FetchGitHubTransport,
   GitHubApiError,
+  GitHubRateLimitReservationPool,
+  githubRateLimitReservations,
   type GitHubTransport,
   githubRequestRetryDelayMs,
   githubRetryDelayMs,
@@ -157,6 +159,59 @@ test("GitHub core rate-limit budget is parsed as scheduling authority", async ()
     remaining: 4_200,
     resetAt: 2_000_000_000_000,
   });
+});
+
+test("repository reservations aggregate across orchestration pumps", async () => {
+  const pool = new GitHubRateLimitReservationPool();
+  pool.update("owner/repo", {
+    limit: 15_000,
+    remaining: 15_000,
+    resetAt: Date.now() + 60_000,
+  });
+  const safeBudget = 15_000 - 3_000;
+  const first = Array.from({ length: 16 }, (_, issueNumber) =>
+    pool.tryReserve("owner/repo", `orchestration-a:${issueNumber + 1}`),
+  );
+  assert.ok(first.every(Boolean));
+  assert.equal(pool.reservedCost("owner/repo"), safeBudget);
+  assert.equal(pool.tryReserve("owner/repo", "orchestration-b:1"), undefined);
+  assert.equal(pool.availableSlots("owner/repo"), 0);
+  first[0]?.release();
+  assert.ok(pool.tryReserve("owner/repo", "orchestration-b:1"));
+  assert.equal(pool.reservedCost("owner/repo"), safeBudget);
+
+  const waiting = pool.waitForCapacity("owner/repo");
+  first[1]?.release();
+  await waiting;
+});
+
+test("rate-limit headers update shared reservation accounting", async () => {
+  const pool = new GitHubRateLimitReservationPool();
+  pool.updateFromHeaders("owner/repo", {
+    "X-RateLimit-Limit": "5000",
+    "X-RateLimit-Remaining": "4200",
+    "X-RateLimit-Reset": "2000000000",
+  });
+  assert.equal(pool.availableSlots("owner/repo"), 4);
+});
+
+test("GitHub transport feeds actual rate headers into repository accounting", async () => {
+  const repository = "owner/header-repo";
+  const transport = new FetchGitHubTransport({
+    token: "token",
+    repository,
+    fetchImpl: (async () =>
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: {
+          "x-ratelimit-limit": "5000",
+          "x-ratelimit-remaining": "4200",
+          "x-ratelimit-reset": "2000000000",
+        },
+      })) as typeof fetch,
+  });
+  await transport.request({ method: "GET", path: "/user" });
+  assert.equal(githubRateLimitReservations.availableSlots(repository), 4);
 });
 
 test("GitHub API errors expose bounded safe diagnostics", () => {

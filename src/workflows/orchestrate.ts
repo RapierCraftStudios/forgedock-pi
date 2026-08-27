@@ -7,6 +7,9 @@ import type {
 
 import {
   FetchGitHubTransport,
+  githubRateLimitReservations,
+  GITHUB_CONTROL_PLANE_MIN_RESERVE,
+  GITHUB_LANE_ESTIMATED_REQUEST_COST,
   type GitHubCoreRateLimit,
   readGitHubCoreRateLimit,
 } from "../adapters/github-api.ts";
@@ -29,6 +32,19 @@ import { OrchestrationJournal } from "./orchestration-journal.ts";
 import type { ForgeWorkOnController, WorkOnLifecycleEvent } from "./work-on.ts";
 
 const ORCHESTRATION_LINK_ENTRY = "forgedock-orchestration-link/v1";
+
+function laneReservationKey(
+  orchestrationId: string,
+  issueNumber: number,
+): string {
+  return `${orchestrationId}:${issueNumber}`;
+}
+
+function isTerminalLifecycleStatus(
+  status: WorkOnLifecycleEvent["status"],
+): boolean {
+  return ["completed", "blocked", "needs-human", "failed"].includes(status);
+}
 
 export interface ActiveOrchestrationLink {
   orchestrationId: string;
@@ -152,7 +168,10 @@ export class ForgeOrchestrationController {
       ctx.signal,
     );
     const tokenProvider = createGitHubTokenProvider(this.#pi, repositoryRoot);
-    const transport = new FetchGitHubTransport({ tokenProvider });
+    const transport = new FetchGitHubTransport({
+        tokenProvider,
+        repository: policy.repository.name,
+      });
     const dependencies = await discoverIssueDependencies(
       new GitHubWorkflowAdapter(transport, policy.repository.name),
       issueNumbers,
@@ -228,7 +247,10 @@ export class ForgeOrchestrationController {
     const { policy } = await loadForgePolicy(repositoryRoot);
     const tokenProvider = createGitHubTokenProvider(this.#pi, repositoryRoot);
     const store = new GitHubStateBranchStore(
-      new FetchGitHubTransport({ tokenProvider }),
+      new FetchGitHubTransport({
+        tokenProvider,
+        repository: policy.repository.name,
+      }),
       policy.repository.name,
       policy.state.branch,
     );
@@ -248,6 +270,10 @@ export class ForgeOrchestrationController {
       this.#syncLink(link, cancelled);
       this.#persistLink(link);
     }
+    githubRateLimitReservations.releaseOrchestration(
+      policy.repository.name,
+      orchestrationId,
+    );
     return cancelled;
   }
 
@@ -409,7 +435,14 @@ export class ForgeOrchestrationController {
     const lane = current.state.lanes.find(
       (candidate) => candidate.issueNumber === event.issueNumber,
     );
-    if (!lane || isTerminalLane(lane)) return;
+    if (!lane || isTerminalLane(lane)) {
+      if (isTerminalLifecycleStatus(event.status))
+        githubRateLimitReservations.release(
+          link.repository,
+          laneReservationKey(orchestrationId, event.issueNumber),
+        );
+      return;
+    }
     if (!lifecycleMatchesForgeRun(lane, event)) return;
     // A work-on run uses a new child receipt for each bounded node. The stable
     // Forge run ID, not the latest child receipt, owns lane lifecycle events.
@@ -491,6 +524,11 @@ export class ForgeOrchestrationController {
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
     } else return;
+    if (isTerminalLifecycleStatus(event.status))
+      githubRateLimitReservations.release(
+        link.repository,
+        laneReservationKey(orchestrationId, event.issueNumber),
+      );
     const latest = await this.#read(link, ctx.signal);
     await this.#recoverFalseFailures(link, latest.state, ctx);
     await this.#pump(link, ctx);
@@ -532,15 +570,33 @@ export class ForgeOrchestrationController {
           progress = true;
           continue;
         }
-        const effectiveConcurrency = await this.#effectiveConcurrency(
-          link,
-          current.state.maxConcurrent,
-          ctx.signal,
+        githubRateLimitReservations.synchronize(
+          link.repository,
+          link.orchestrationId,
+          activeReservationIssueNumbers(current.state),
         );
+        const readyQueue = readyOrchestrationLanes(
+          current.state,
+          current.state.maxConcurrent,
+        );
+        const effectiveConcurrency =
+          readyQueue.length === 0
+            ? current.state.maxConcurrent
+            : await this.#effectiveConcurrency(
+                link,
+                current.state.maxConcurrent,
+                activeReservationIssueNumbers(current.state).length,
+                ctx.signal,
+              );
         for (const lane of readyOrchestrationLanes(
           current.state,
           effectiveConcurrency,
         )) {
+          const reservation = githubRateLimitReservations.tryReserve(
+            link.repository,
+            laneReservationKey(link.orchestrationId, lane.issueNumber),
+          );
+          if (!reservation) break;
           const existing = this.#workOn
             .listRuns()
             .find(
@@ -574,12 +630,14 @@ export class ForgeOrchestrationController {
                   subagentRunId: recovered.subagentRunId,
                 };
               } else if (isRetryableSetupError(error)) {
+                reservation.release();
                 ctx.ui.notify(
                   `ForgeDock orchestration ${link.orchestrationId} is paused before issue #${lane.issueNumber}: ${normalizeReason(errorMessage(error), "Repository setup is incomplete.")} Run /forge:init, then it will resume the queued lanes.`,
                   "warning",
                 );
                 return;
               } else {
+                reservation.release();
                 await current.journal.append({
                   orchestrationId: link.orchestrationId,
                   type: "lane.failed",
@@ -614,6 +672,7 @@ export class ForgeOrchestrationController {
               ...(ctx.signal ? { signal: ctx.signal } : {}),
             });
           } catch (error) {
+            reservation.release();
             ctx.ui.notify(
               `ForgeDock issue #${lane.issueNumber} launched as run ${result.runId}, but its lane receipt is waiting for CAS reconciliation: ${errorMessage(error)}`,
               "warning",
@@ -701,6 +760,7 @@ export class ForgeOrchestrationController {
   async #effectiveConcurrency(
     link: ActiveOrchestrationLink,
     configuredMax: number,
+    activeReservations: number,
     signal?: AbortSignal,
   ): Promise<number> {
     while (true) {
@@ -712,22 +772,33 @@ export class ForgeOrchestrationController {
           link.repositoryRoot,
         );
         const budget = await readGitHubCoreRateLimit(
-          new FetchGitHubTransport({ tokenProvider }),
+          new FetchGitHubTransport({
+            tokenProvider,
+            repository: link.repository,
+          }),
           signal,
+          link.repository,
         );
         cached = { checkedAt: now, budget };
         this.#rateBudgets.set(link.repository, cached);
+      } else {
+        githubRateLimitReservations.update(link.repository, cached.budget);
       }
-      const concurrency = rateLimitedOrchestrationConcurrency(
+      const available = githubRateLimitReservations.availableSlots(
+        link.repository,
+        GITHUB_CONTROL_PLANE_MIN_RESERVE,
+        GITHUB_LANE_ESTIMATED_REQUEST_COST,
+      );
+      const concurrency = Math.min(
         configuredMax,
-        cached.budget,
+        activeReservations + available,
       );
-      if (concurrency > 0) return concurrency;
-      const waitMs = Math.min(
-        60 * 60_000,
-        Math.max(1_000, cached.budget.resetAt - now + 1_000),
+      if (concurrency > activeReservations || activeReservations > 0)
+        return concurrency;
+      await githubRateLimitReservations.waitForCapacity(
+        link.repository,
+        signal,
       );
-      await orchestrationDelay(waitMs, signal);
       this.#rateBudgets.delete(link.repository);
     }
   }
@@ -745,7 +816,10 @@ export class ForgeOrchestrationController {
       link.repositoryRoot,
     );
     const store = new GitHubStateBranchStore(
-      new FetchGitHubTransport({ tokenProvider }),
+      new FetchGitHubTransport({
+        tokenProvider,
+        repository: link.repository,
+      }),
       link.repository,
       link.stateBranch,
     );
@@ -763,6 +837,11 @@ export class ForgeOrchestrationController {
 
   #syncLink(link: ActiveOrchestrationLink, state: OrchestrationState): void {
     link.status = state.status;
+    if (state.status !== "running")
+      githubRateLimitReservations.releaseOrchestration(
+        link.repository,
+        link.orchestrationId,
+      );
   }
 
   #restoreLinks(ctx: ExtensionContext): void {
@@ -822,9 +901,6 @@ export async function discoverIssueDependencies(
   return dependencies;
 }
 
-const GITHUB_CONTROL_PLANE_MIN_RESERVE = 1_000;
-const GITHUB_LANE_ESTIMATED_REQUEST_COST = 750;
-
 export function rateLimitedOrchestrationConcurrency(
   configuredMax: number,
   budget: GitHubCoreRateLimit,
@@ -842,25 +918,6 @@ export function rateLimitedOrchestrationConcurrency(
     configuredMax,
     Math.floor(available / GITHUB_LANE_ESTIMATED_REQUEST_COST),
   );
-}
-
-async function orchestrationDelay(
-  milliseconds: number,
-  signal?: AbortSignal,
-): Promise<void> {
-  if (signal?.aborted) throw signal.reason;
-  await new Promise<void>((resolve, reject) => {
-    const onAbort = (): void => {
-      clearTimeout(timer);
-      reject(signal?.reason ?? new Error("Orchestration rate wait aborted."));
-    };
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, milliseconds);
-    signal?.addEventListener("abort", onAbort, { once: true });
-    timer.unref();
-  });
 }
 
 function chooseIntegrationBranch(policy: ForgePolicy): string {
@@ -883,6 +940,18 @@ function validateIssueNumbers(issueNumbers: readonly number[]): void {
   }
   if (new Set(issueNumbers).size !== issueNumbers.length)
     throw new Error("Orchestration issue numbers must be unique.");
+}
+
+function activeReservationIssueNumbers(
+  state: Pick<OrchestrationState, "lanes">,
+): number[] {
+  return state.lanes
+    .filter((lane) =>
+      ["running", "ready", "refreshing", "integrating"].includes(
+        lane.status,
+      ),
+    )
+    .map((lane) => lane.issueNumber);
 }
 
 function cloneLink(link: ActiveOrchestrationLink): ActiveOrchestrationLink {
