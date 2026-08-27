@@ -33,28 +33,35 @@
       "name": "reviewer:forge-review-security",
       "required": true,
       "status": "unknown"
+    },
+    {
+      "name": "material-change",
+      "required": true,
+      "status": "passed"
     }
   ],
   "findings": [],
   "status": "active",
-  "sequence": 5,
-  "lastEventHash": "sha256:c7462b6f87294fb52f3566ff1639bddfe51570bb69015eb2118fb0e69cd0bec3",
+  "sequence": 6,
+  "lastEventHash": "sha256:429794e212ccd8c87766dce38ce62dc30bb61620941700ad4cd0104a43f64516",
   "idempotencyKeys": {
     "review:create": "ca89bde2-c5b0-4456-8eaa-3e4dc10a2754",
     "panel:1:start": "2520906b-70b8-45cd-bb9e-c7ca7d5106fe",
     "check:reviewer:0:c9d99265137af9c6": "238e2380-009b-4170-9c0e-5ffe3b42bb31",
     "check:reviewer:1:67fcfdf7bc42337a": "ada90f53-15f6-42bd-bb82-316c41960f72",
-    "panel:1:findings": "63bc681d-ba94-40c4-9824-d51a4ba82b0c"
+    "panel:1:findings": "63bc681d-ba94-40c4-9824-d51a4ba82b0c",
+    "check:additional:0:f9f1e19f9e55cfa8": "250fdf91-e396-4853-b4be-de62f8f46688"
   },
   "eventIds": {
     "ca89bde2-c5b0-4456-8eaa-3e4dc10a2754": true,
     "2520906b-70b8-45cd-bb9e-c7ca7d5106fe": true,
     "238e2380-009b-4170-9c0e-5ffe3b42bb31": true,
     "ada90f53-15f6-42bd-bb82-316c41960f72": true,
-    "63bc681d-ba94-40c4-9824-d51a4ba82b0c": true
+    "63bc681d-ba94-40c4-9824-d51a4ba82b0c": true,
+    "250fdf91-e396-4853-b4be-de62f8f46688": true
   },
   "createdAt": "2026-08-27T13:34:05.438Z",
-  "updatedAt": "2026-08-27T13:34:34.656Z",
+  "updatedAt": "2026-08-27T13:34:39.543Z",
   "panel": {
     "round": 1,
     "status": "running",
