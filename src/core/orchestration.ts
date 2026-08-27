@@ -74,6 +74,8 @@ export interface OrchestrationState {
   dependencies: readonly OrchestrationDependencyEdge[];
   graphHash: string;
   idempotencyKeys: Readonly<Record<string, string>>;
+  /** Added after the initial orchestration snapshot format; replay derives it for legacy states. */
+  eventIds?: Readonly<Record<string, true>>;
   createdAt: string;
   completedAt?: string;
   reason?: string;
@@ -171,6 +173,11 @@ export function applyOrchestrationEvent(
       "hash-chain-break",
       "Orchestration event hash chain is broken.",
     );
+  if (orchestrationEventIds(current)[event.eventId])
+    throw new OrchestrationTransitionError(
+      "duplicate-event",
+      `Event ${event.eventId} was already applied.`,
+    );
   if (current.idempotencyKeys[event.idempotencyKey])
     throw new OrchestrationTransitionError(
       "duplicate-idempotency-key",
@@ -186,6 +193,7 @@ export function applyOrchestrationEvent(
     ...current,
     lanes: current.lanes.map((lane) => ({ ...lane })),
     idempotencyKeys: { ...current.idempotencyKeys },
+    eventIds: { ...orchestrationEventIds(current) },
   };
 
   if (event.type.startsWith("lane.")) applyLaneEvent(state, event);
@@ -219,6 +227,7 @@ export function applyOrchestrationEvent(
   state.lastEventHash = hashOrchestrationEvent(event);
   (state.idempotencyKeys as Record<string, string>)[event.idempotencyKey] =
     event.eventId;
+  (state.eventIds as Record<string, true>)[event.eventId] = true;
   return state;
 }
 
@@ -548,6 +557,7 @@ function createInitialState(event: OrchestrationEvent): OrchestrationState {
     dependencies,
     graphHash,
     idempotencyKeys: { [event.idempotencyKey]: event.eventId },
+    eventIds: { [event.eventId]: true },
     createdAt: event.occurredAt,
   };
   return state;
@@ -588,6 +598,9 @@ function applyLaneEvent(
       `Cannot apply ${event.type} to issue #${issueNumber} in ${current.status}.`,
     );
 
+  if (transition === "started" || transition === "integrating")
+    assertLanePredecessorsComplete(state, issueNumber);
+
   if (transition === "started" || transition === "recovered") {
     next.status = "running";
     next.forgeRunId = payloadString(event, "forgeRunId");
@@ -617,6 +630,40 @@ function applyLaneEvent(
     next.reason = payloadString(event, "reason");
   }
   (state.lanes as OrchestrationLane[])[index] = next;
+}
+
+function assertLanePredecessorsComplete(
+  state: OrchestrationState,
+  issueNumber: number,
+): void {
+  const lanesByIssue = new Map(
+    state.lanes.map((lane) => [lane.issueNumber, lane]),
+  );
+  const incomplete = state.dependencies
+    .filter((edge) => edge.toIssue === issueNumber)
+    .map((edge) => lanesByIssue.get(edge.fromIssue))
+    .filter(
+      (lane): lane is OrchestrationLane =>
+        lane !== undefined && lane.status !== "merged" && lane.status !== "closed",
+    );
+  if (incomplete.length === 0) return;
+  const predecessor = incomplete[0];
+  if (!predecessor) return;
+  throw new OrchestrationTransitionError(
+    "dependency-incomplete",
+    `Issue #${issueNumber} requires predecessor #${predecessor.issueNumber} to be merged or closed before it can start or integrate.`,
+  );
+}
+
+function orchestrationEventIds(
+  state: OrchestrationState,
+): Readonly<Record<string, true>> {
+  // Snapshots written before the event index was introduced can still be used
+  // as reducer input. Their idempotency index retains every prior event ID.
+  const eventIds: Record<string, true> = { ...(state.eventIds ?? {}) };
+  for (const eventId of Object.values(state.idempotencyKeys))
+    eventIds[eventId] = true;
+  return eventIds;
 }
 
 function payloadString(event: OrchestrationEvent, field: string): string {

@@ -330,6 +330,56 @@ test("parent-owned node events are durable and independently joinable", () => {
   );
 });
 
+test("non-queue node transitions cannot rewrite node identity or attempt", () => {
+  let state = initializedState();
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.queued",
+      { nodeId: "verify-1", node: "verify", attempt: 1 },
+      "verify:queue",
+    ),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "node.started",
+      { nodeId: "verify-1", node: "verify", attempt: 1 },
+      "verify:start",
+    ),
+  );
+  assert.throws(
+    () =>
+      applyRunEvent(
+        state,
+        nextEvent(
+          state,
+          "node.completed",
+          { nodeId: "verify-1", node: "plan", attempt: 1 },
+          "verify:wrong-node",
+        ),
+      ),
+    (error) =>
+      error instanceof StateTransitionError && error.code === "node-mismatch",
+  );
+  assert.throws(
+    () =>
+      applyRunEvent(
+        state,
+        nextEvent(
+          state,
+          "node.completed",
+          { nodeId: "verify-1", node: "verify", attempt: 2 },
+          "verify:wrong-attempt",
+        ),
+      ),
+    (error) =>
+      error instanceof StateTransitionError && error.code === "attempt-mismatch",
+  );
+});
+
 test("cleanup node permits terminal completion and post-terminal mutations are rejected", () => {
   let state = initializedState();
   state = applyRunEvent(

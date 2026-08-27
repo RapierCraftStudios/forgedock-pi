@@ -581,6 +581,18 @@ function applyNodeEvent(state: RunState, event: RunEvent): void {
       "invalid-node-event",
       `Unsupported node event ${event.type}.`,
     );
+  if (event.type !== "node.queued" && prior) {
+    if (record.node !== prior.node)
+      throw new StateTransitionError(
+        "node-mismatch",
+        `Node ${record.nodeId} is ${prior.node}, not ${record.node}.`,
+      );
+    if (record.attempt !== prior.attempt)
+      throw new StateTransitionError(
+        "attempt-mismatch",
+        `Node ${record.nodeId} attempt ${record.attempt} is not current attempt ${prior.attempt}.`,
+      );
+  }
   if (event.type === "node.queued") {
     if (prior && prior.status === "running")
       throw new StateTransitionError(

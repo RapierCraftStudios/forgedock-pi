@@ -98,6 +98,61 @@ test("GitHub budget adaptively bounds lane concurrency below the configured maxi
   );
 });
 
+test("lane transitions enforce predecessor completion rather than trusting the scheduler", () => {
+  let state = applyOrchestrationEvent(
+    undefined,
+    next(
+      undefined,
+      "orchestration.created",
+      {
+        issueNumbers: [1, 2],
+        integrationBranch: "staging",
+        maxConcurrent: 2,
+        leaseEpoch: 1,
+        dependencies: [
+          { fromIssue: 1, toIssue: 2, kind: "explicit", reason: "#2 needs #1" },
+        ],
+      },
+      "gating-create",
+    ),
+  );
+  assert.throws(
+    () =>
+      applyOrchestrationEvent(
+        state,
+        next(
+          state,
+          "lane.started",
+          { issueNumber: 2, forgeRunId: "run-2", subagentRunId: "child-2" },
+          "gating-start-2",
+        ),
+      ),
+    (error) =>
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "dependency-incomplete",
+  );
+
+  // A forged ready state must not bypass the same gate at integration time.
+  state = {
+    ...state,
+    lanes: state.lanes.map((lane) =>
+      lane.issueNumber === 2 ? { ...lane, status: "ready" as const } : lane,
+    ),
+  };
+  assert.throws(
+    () =>
+      applyOrchestrationEvent(
+        state,
+        next(state, "lane.integrating", { issueNumber: 2 }, "gating-integrate-2"),
+      ),
+    (error) =>
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "dependency-incomplete",
+  );
+});
+
 test("dependency graph gates dispatch and integration topologically", () => {
   let state = applyOrchestrationEvent(
     undefined,
@@ -280,6 +335,32 @@ test("terminal dependency propagation reaches transitive queued dependents", () 
     );
   }
   assert.equal(state.lanes.every(isTerminalLane), true);
+});
+
+test("orchestration event IDs are unique and legacy snapshots can be continued", () => {
+  let state = initialized();
+  const heartbeat = next(state, "lease.heartbeat", { epoch: 1 }, "heartbeat");
+  state = applyOrchestrationEvent(state, heartbeat);
+  const duplicate = {
+    ...next(state, "lease.heartbeat", { epoch: 1 }, "heartbeat-retry"),
+    eventId: heartbeat.eventId,
+  };
+  assert.throws(
+    () => applyOrchestrationEvent(state, duplicate),
+    (error) =>
+      error instanceof Error && "code" in error && error.code === "duplicate-event",
+  );
+
+  const legacy = { ...state, eventIds: undefined } as unknown as OrchestrationState;
+  const legacyEvent = next(
+    legacy,
+    "lease.heartbeat",
+    { epoch: 1 },
+    "legacy-heartbeat",
+  );
+  const continued = applyOrchestrationEvent(legacy, legacyEvent);
+  assert.equal(continued.eventIds?.[heartbeat.eventId], true);
+  assert.equal(continued.eventIds?.[legacyEvent.eventId], true);
 });
 
 test("genesis rejects cycles and binds the persisted graph hash", () => {
