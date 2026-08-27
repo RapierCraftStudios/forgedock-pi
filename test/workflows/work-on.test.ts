@@ -25,11 +25,13 @@ import {
   reviewInstanceMarker,
   reviewSummaryInstanceMarker,
   reviewSupersessionMarker,
+  restoreWorkflowLabelAfterMergeFailure,
   rollbackAwaitingMergeLabel,
   shouldBufferLaunchCompletion,
   shouldTrustDurableWorkOnResult,
   workflowLabelForNode,
   workflowStageForNodeTransition,
+  workflowStageForRecoveredNodeTransition,
 } from "../../src/workflows/work-on.ts";
 
 test("work-on reviewer results are rebound to the shared frozen review identity", () => {
@@ -284,6 +286,61 @@ test("awaiting-merge rollback stays best effort when projection fails", async ()
   };
 
   await assert.doesNotReject(() => rollbackAwaitingMergeLabel(projector, 42));
+});
+
+test("interrupted parent merge recovery keeps durable merged projection", async () => {
+  const state = {
+    status: "active",
+    nodes: {
+      "merge-1": {
+        nodeId: "merge-1",
+        node: "merge",
+        attempt: 1,
+        status: "running",
+      },
+    },
+    effects: {
+      "merge:145": {
+        effectType: "merge",
+        effectId: "merge:145",
+        digest: "sha256:durable-merge",
+        eventId: "event-merge",
+      },
+    },
+  } as unknown as import("../../src/core/state.ts").RunState;
+
+  // Attach reconciliation and the resumed parent-node start use this same
+  // durable selector, so neither recovery projection can downgrade the label.
+  assert.equal(
+    workflowStageForRecoveredNodeTransition(state, "merge", "started"),
+    "merged",
+  );
+  assert.equal(
+    workflowStageForRecoveredNodeTransition(state, "merge", "resumed"),
+    "merged",
+  );
+
+  const labels: string[] = [];
+  const projector = {
+    async setWorkflowLabel(_issueNumber: number, label: string): Promise<void> {
+      labels.push(label);
+    },
+  };
+  await restoreWorkflowLabelAfterMergeFailure(projector, 147, true);
+  await restoreWorkflowLabelAfterMergeFailure(projector, 147, false);
+  assert.deepEqual(labels, ["workflow:merged", "workflow:in-review"]);
+});
+
+test("durable merge failure recovery stays best effort during projection outage", async () => {
+  const projector = {
+    async setWorkflowLabel(): Promise<void> {
+      throw new Error("projection unavailable");
+    },
+  };
+
+  await assert.doesNotReject(() =>
+    restoreWorkflowLabelAfterMergeFailure(projector, 147, true),
+  );
 });
 
 test("workflow transitions cover the complete canonical label lifecycle", () => {
