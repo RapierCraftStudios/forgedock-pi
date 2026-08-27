@@ -48,19 +48,25 @@
       "name": "reviewer:forge-review-worker",
       "required": true,
       "status": "unknown"
+    },
+    {
+      "name": "reviewer:forge-review-web",
+      "required": true,
+      "status": "passed"
     }
   ],
   "findings": [],
   "status": "active",
-  "sequence": 6,
-  "lastEventHash": "sha256:32bcf872ccfec9653c512f815c134ce165d2a2bc1ebeac56b37b6e66adec2944",
+  "sequence": 7,
+  "lastEventHash": "sha256:4aceda8dc05bfc87d8dd39d3d23d660b60fd74653d61f05206ffbebb83ad4130",
   "idempotencyKeys": {
     "review:create": "c84f347e-b044-4335-84cf-e6acab99a577",
     "panel:1:start": "f9e92d66-9028-43e0-9eb7-58c6a2124f32",
     "check:reviewer:0:c9d99265137af9c6": "8037fa0f-009b-40f1-83eb-df8edfb91cf8",
     "check:reviewer:1:67fcfdf7bc42337a": "a57a6fe2-3c97-4c53-97d0-8843043cfb59",
     "check:reviewer:2:3a7d61452b14a2f3": "8db708d1-6c90-49b7-8bef-3aa056416cd6",
-    "check:reviewer:3:e15c6c64cbf9ee4b": "6f263009-647b-4640-af71-a80b1f768bea"
+    "check:reviewer:3:e15c6c64cbf9ee4b": "6f263009-647b-4640-af71-a80b1f768bea",
+    "check:reviewer:4:decf53d74268865a": "dc7b865d-7043-4e9c-91f3-5bf654fadb7b"
   },
   "eventIds": {
     "c84f347e-b044-4335-84cf-e6acab99a577": true,
@@ -68,10 +74,11 @@
     "8037fa0f-009b-40f1-83eb-df8edfb91cf8": true,
     "a57a6fe2-3c97-4c53-97d0-8843043cfb59": true,
     "8db708d1-6c90-49b7-8bef-3aa056416cd6": true,
-    "6f263009-647b-4640-af71-a80b1f768bea": true
+    "6f263009-647b-4640-af71-a80b1f768bea": true,
+    "dc7b865d-7043-4e9c-91f3-5bf654fadb7b": true
   },
   "createdAt": "2026-08-27T05:29:06.994Z",
-  "updatedAt": "2026-08-27T05:30:41.560Z",
+  "updatedAt": "2026-08-27T05:30:47.728Z",
   "panel": {
     "round": 1,
     "status": "running",
