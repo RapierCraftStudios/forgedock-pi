@@ -6,18 +6,19 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 6,
-  "lastEventHash": "sha256:f81494627b9132c70be31495f7ebc15934301b0a0375c0d6978339be1653cc0d",
+  "sequence": 7,
+  "lastEventHash": "sha256:a2b009d7e9460ea0b2df1604ab82a5cf77d883f613ed06e5e6f9d3489e864bb1",
   "lanes": [
     {
       "issueNumber": 196,
       "ordinal": 0,
-      "status": "integrating",
+      "status": "failed",
       "refreshes": 0,
       "forgeRunId": "19e8cece-ac5f-4cf1-b102-0ee9587d0a71",
       "subagentRunId": "57ec1ded-ce1b-440f-aa74-33f26b694acc",
       "headSha": "9f6fe92a9fca7143bf39994032ab040ef55113ee",
-      "baseSha": "7817370b07c7e3d172f4971771e822aab548431a"
+      "baseSha": "7817370b07c7e3d172f4971771e822aab548431a",
+      "reason": "Reviewer result does not match the frozen panel identity."
     },
     {
       "issueNumber": 147,
@@ -44,7 +45,8 @@
     "lane:147:started": "c21d7507-7ca9-47f9-9dd5-85bb18451c2d",
     "lane:209:started": "601c4cfb-48be-4f98-af63-ef0ab050454c",
     "lane:196:ready:0": "e478b130-3fb9-4fef-8628-df69e7eb159e",
-    "lane:196:integrate:0": "3eb56cd6-c5bb-4663-bc39-9a4fbb3c653d"
+    "lane:196:integrate:0": "3eb56cd6-c5bb-4663-bc39-9a4fbb3c653d",
+    "lane:196:integration-failed": "5b1d0708-26eb-496d-9fc9-bb56157adcbc"
   },
   "eventIds": {
     "f9e9cca4-083d-4d33-a141-5b91643edb94": true,
@@ -52,7 +54,8 @@
     "c21d7507-7ca9-47f9-9dd5-85bb18451c2d": true,
     "601c4cfb-48be-4f98-af63-ef0ab050454c": true,
     "e478b130-3fb9-4fef-8628-df69e7eb159e": true,
-    "3eb56cd6-c5bb-4663-bc39-9a4fbb3c653d": true
+    "3eb56cd6-c5bb-4663-bc39-9a4fbb3c653d": true,
+    "5b1d0708-26eb-496d-9fc9-bb56157adcbc": true
   },
   "createdAt": "2026-08-27T12:42:35.679Z"
 }
