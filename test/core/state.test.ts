@@ -380,7 +380,7 @@ test("non-queue node transitions cannot rewrite node identity or attempt", () =>
   );
 });
 
-test("cleanup node permits terminal completion and post-terminal mutations are rejected", () => {
+test("completed runs accept verified effect receipts but reject other mutations", () => {
   let state = initializedState();
   state = applyRunEvent(
     state,
@@ -427,6 +427,23 @@ test("cleanup node permits terminal completion and post-terminal mutations are r
       ),
     (error) =>
       error instanceof StateTransitionError && error.code === "terminal-run",
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "effect.recorded",
+      {
+        effectType: "github-comment",
+        effectId: "github-comment:owner/repo:42:terminal",
+        digest: "sha256:terminal",
+      },
+      "effect:terminal-comment",
+    ),
+  );
+  assert.equal(
+    state.effects["github-comment:owner/repo:42:terminal"]?.digest,
+    "sha256:terminal",
   );
   const epoch = state.lease?.epoch;
   assert.ok(epoch);

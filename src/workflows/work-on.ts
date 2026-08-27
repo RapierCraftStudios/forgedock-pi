@@ -12,7 +12,12 @@ import { createGitHubTokenProvider } from "../adapters/github-auth.ts";
 import { loadForgePolicy } from "../adapters/config.ts";
 import { loadRepositoryContext } from "../adapters/context-loader.ts";
 import { GitWorktreeManager, type PreparedWorktree } from "../adapters/git.ts";
-import { GitHubIssueProjector } from "../adapters/github-projection.ts";
+import {
+  GitHubIssueProjector,
+  githubCommentEffectId,
+  githubLabelEffectId,
+  type GitHubProjectionReceipt,
+} from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
 import { SubagentsRpcClient } from "../adapters/subagents.ts";
@@ -426,6 +431,7 @@ export class ForgeWorkOnController {
           link.repository,
           link.stateBranch,
         );
+        await this.#reconcileLifecycleProjections(link, projectionStore, ctx);
         await this.#reconcileWorkflowProjection(link, projectionStore, ctx);
         let directState:
           | import("../adapters/github-state.ts").ReadRunStateResult
@@ -628,6 +634,90 @@ export class ForgeWorkOnController {
     ctx.ui.notify(
       `ForgeDock issue #${link.issueNumber} durable state advanced, but workflow label projection will retry: ${errorMessage(lastError)}`,
       "warning",
+    );
+  }
+
+  async #reconcileLifecycleProjections(
+    link: ActiveRunLink,
+    store: GitHubStateBranchStore,
+    ctx: ExtensionContext,
+  ): Promise<void> {
+    const snapshot = await store.readRun(link.forgeRunId, ctx.signal);
+    if (!snapshot.state) return;
+    const projector = new GitHubIssueProjector(
+      new FetchGitHubTransport({
+        tokenProvider: createGitHubTokenProvider(
+          this.#pi,
+          link.prepared.repositoryRoot,
+        ),
+      }),
+      link.repository,
+    );
+    const journal = new RunJournal(store);
+    const sessionId = ctx.sessionManager.getSessionId();
+    const created = snapshot.events.find((event) => event.type === "run.created");
+    if (created) {
+      const ids = lifecycleProjectionEffectIds({
+        repository: link.repository,
+        issueNumber: link.issueNumber,
+        eventId: created.eventId,
+      });
+      if (!snapshot.state.effects[ids.comment]) {
+        const projection = await projector.projectEventWithReceipt({
+          issueNumber: link.issueNumber,
+          event: created,
+          markdown: startupRunMarkdown(
+            link.forgeRunId,
+            link.prepared.baseBranch,
+          ),
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+        await recordProjectionReceipts(
+          journal,
+          link.forgeRunId,
+          projection.receipts,
+          sessionId,
+          ctx.signal,
+        );
+      }
+    }
+    const completed = snapshot.events.find(
+      (event) => event.type === "run.completed",
+    );
+    if (!completed) return;
+    const latest = await store.readRun(link.forgeRunId, ctx.signal);
+    if (!latest.state) return;
+    const ids = lifecycleProjectionEffectIds({
+      repository: link.repository,
+      issueNumber: link.issueNumber,
+      eventId: completed.eventId,
+    });
+    const receipts: GitHubProjectionReceipt[] = [];
+    if (!latest.state.effects[ids.comment]) {
+      const projection = await projector.projectEventWithReceipt({
+        issueNumber: link.issueNumber,
+        event: completed,
+        markdown: terminalRunMarkdown(link, latest.state),
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      receipts.push(...projection.receipts);
+    }
+    if (latest.state.outcome === "merged" && !latest.state.effects[ids.workflow]) {
+      receipts.push(
+        await projector.setWorkflowLabelWithReceipt(
+          link.issueNumber,
+          WORKFLOW_LABEL_BY_STAGE.merged,
+          ctx.signal,
+          `${completed.eventId}:workflow`,
+        ),
+      );
+    }
+    await recordProjectionReceipts(
+      journal,
+      link.forgeRunId,
+      receipts,
+      sessionId,
+      ctx.signal,
     );
   }
 
@@ -944,6 +1034,7 @@ export class ForgeWorkOnController {
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
 
+    let durableRunInitialized = false;
     try {
       await preflightRequiredVerificationCommands(
         prepared.worktreePath,
@@ -966,30 +1057,7 @@ export class ForgeWorkOnController {
         leaseSeconds: policy.state.leaseSeconds,
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
-      const projector = new GitHubIssueProjector(
-        transport,
-        policy.repository.name,
-      );
-      const createdEvent = initialized.events[0];
-      if (!createdEvent)
-        throw new Error("Run initialization did not produce a genesis event.");
-      await projector.projectEvent({
-        issueNumber,
-        event: createdEvent,
-        markdown: `## ForgeDock Pi run started\n\nRun: \`${runId}\`\nIntegration base: \`${integrationBranch}\`\nWork is isolated and review will run through nested Pi subagents.`,
-        ...(ctx.signal ? { signal: ctx.signal } : {}),
-      });
-      const initialLabel = WORKFLOW_LABEL_BY_STAGE.investigation;
-      assertWorkflowLabel(initialLabel, "investigation");
-      try {
-        await projector.setWorkflowLabel(issueNumber, initialLabel, ctx.signal);
-      } catch (error) {
-        ctx.ui.notify(
-          `ForgeDock issue #${issueNumber} started durably, but workflow label projection will retry: ${errorMessage(error)}`,
-          "warning",
-        );
-      }
-
+      durableRunInitialized = true;
       const issueContext = JSON.stringify(
         {
           issue: { title: issue.title, body: issue.body, labels: issue.labels },
@@ -1034,7 +1102,45 @@ export class ForgeWorkOnController {
         issueContext,
         activeNodes: {},
       };
+      // Persist the durable run/worktree correlation before any external
+      // startup projection. A projection outage must resume this run rather
+      // than create a duplicate run, worktree, branch, or artifact set.
       this.#persistLink(link);
+      const projector = new GitHubIssueProjector(
+        transport,
+        policy.repository.name,
+      );
+      const createdEvent = initialized.events[0];
+      if (!createdEvent)
+        throw new Error("Run initialization did not produce a genesis event.");
+      try {
+        const projection = await projector.projectEventWithReceipt({
+          issueNumber,
+          event: createdEvent,
+          markdown: startupRunMarkdown(runId, integrationBranch),
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+        const initialLabel = WORKFLOW_LABEL_BY_STAGE.investigation;
+        assertWorkflowLabel(initialLabel, "investigation");
+        const labelReceipt = await projector.setWorkflowLabelWithReceipt(
+          issueNumber,
+          initialLabel,
+          ctx.signal,
+          `${createdEvent.eventId}:workflow`,
+        );
+        await recordProjectionReceipts(
+          journal,
+          runId,
+          [...projection.receipts, labelReceipt],
+          ctx.sessionManager.getSessionId(),
+          ctx.signal,
+        );
+      } catch (error) {
+        ctx.ui.notify(
+          `ForgeDock issue #${issueNumber} started durably, but startup projection will retry: ${errorMessage(error)}`,
+          "warning",
+        );
+      }
       let task: string | undefined;
       if (executionMode === "orchestrated") {
         const receipt = await this.#rpc.spawnWorkOn({
@@ -1107,9 +1213,10 @@ export class ForgeWorkOnController {
           candidate.forgeRunId === runId &&
           Object.keys(candidate.activeNodes).length > 0,
       );
-      if (!launched)
+      if (!launched && !durableRunInitialized)
         // Preparation cleanup is compensating work; do not let a cancelled
-        // launch leave its owned worktree or branch behind.
+        // launch leave its owned worktree or branch behind. Once run creation
+        // is durable, its persisted link owns recovery and cleanup instead.
         await this.#git.cleanup(prepared).catch(() => undefined);
       this.#clearDirectBinding(runId);
       throw error;
@@ -2715,9 +2822,47 @@ export class ForgeWorkOnController {
         message: `Complete ForgeDock run ${link.forgeRunId}`,
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
-      let terminalSnapshot = terminal;
-      if (!link.orchestrationId && terminal.state.lease) {
-        terminalSnapshot = await journal.append({
+      link.status = "completed";
+      this.#persistLink(link);
+      const event = terminal.events.find(
+        (candidate) => candidate.type === "run.completed",
+      );
+      let terminalProjectionComplete = false;
+      if (event) {
+        try {
+          const projection = await projector.projectEventWithReceipt({
+            issueNumber: link.issueNumber,
+            event,
+            markdown: terminalRunMarkdown(link, terminal.state),
+            ...(ctx.signal ? { signal: ctx.signal } : {}),
+          });
+          const receipts: GitHubProjectionReceipt[] = [...projection.receipts];
+          if (link.terminalOutcome === "merged")
+            receipts.push(
+              await projector.setWorkflowLabelWithReceipt(
+                link.issueNumber,
+                WORKFLOW_LABEL_BY_STAGE.merged,
+                ctx.signal,
+                `${event.eventId}:workflow`,
+              ),
+            );
+          await recordProjectionReceipts(
+            journal,
+            link.forgeRunId,
+            receipts,
+            sessionId,
+            ctx.signal,
+          );
+          terminalProjectionComplete = true;
+        } catch (error) {
+          ctx.ui.notify(
+            `ForgeDock run ${link.forgeRunId} is durably completed; terminal projection will replay: ${errorMessage(error)}`,
+            "warning",
+          );
+        }
+      }
+      if (!link.orchestrationId && terminal.state.lease && terminalProjectionComplete) {
+        await journal.append({
           runId: link.forgeRunId,
           type: "lease.released",
           payload: {
@@ -2730,20 +2875,6 @@ export class ForgeWorkOnController {
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
       }
-      const event = terminalSnapshot.events.at(-1);
-      if (event)
-        await projector.projectEvent({
-          issueNumber: link.issueNumber,
-          event,
-          markdown: `## ForgeDock Pi complete\n\nRun: ${link.forgeRunId}`,
-          ...(ctx.signal ? { signal: ctx.signal } : {}),
-        });
-      if (link.terminalOutcome === "merged")
-        await this.#projectWorkflowStage(link, "merged", ctx, projector).catch(
-          () => undefined,
-        );
-      link.status = "completed";
-      this.#persistLink(link);
       this.#emitLifecycle(link, {
         headSha,
         nodeId: node.nodeId,
@@ -3418,8 +3549,17 @@ export class ForgeWorkOnController {
         });
       }
       current = await store.readRun(link.forgeRunId, ctx.signal);
+      if (current.state?.status !== "cancelled")
+        throw new Error(
+          `Direct ForgeDock run ${link.forgeRunId} did not durably reach cancelled state.`,
+        );
+      await cleanupDurablyCancelledWorktree(
+        current.state.status,
+        link.prepared,
+        this.#git,
+      );
       const authority =
-        current.state?.authorityMode === "run-scoped"
+        current.state.authorityMode === "run-scoped"
           ? current.state.lease
           : current.lease;
       if (authority) {
@@ -3436,7 +3576,6 @@ export class ForgeWorkOnController {
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
       }
-      await this.#git.cleanup(link.prepared, ctx.signal).catch(() => undefined);
       link.status = "failed";
       link.activeNodes = {};
       link.currentNodeId = undefined;
@@ -3486,33 +3625,38 @@ export class ForgeWorkOnController {
             "warning",
           ),
         );
-      const current = await store.readRun(link.forgeRunId, ctx.signal);
+      let current = await store.readRun(link.forgeRunId, ctx.signal);
       if (!current.state || current.state.status === "completed") continue;
-      if (current.state.status === "cancelled") {
-        link.status = "failed";
-        link.activeNodes = {};
-        link.currentNodeId = undefined;
-        this.#persistLink(link);
-        continue;
+      if (current.state.status !== "cancelled") {
+        const providerRunIds = new Set(Object.keys(link.activeNodes));
+        if (
+          providerRunIds.size === 0 &&
+          ["running", "refreshing", "finalizing"].includes(link.status)
+        )
+          providerRunIds.add(link.subagentRunId);
+        for (const runId of providerRunIds) {
+          if (!isLaunchSentinel(runId)) await this.#rpc.stop(runId);
+        }
+        await new RunJournal(store).append({
+          runId: link.forgeRunId,
+          type: "run.cancelled",
+          payload: { reason },
+          idempotencyKey: "run:cancelled",
+          sessionId: ctx.sessionManager.getSessionId(),
+          message: `Cancel child ForgeDock run ${link.forgeRunId}`,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+        current = await store.readRun(link.forgeRunId, ctx.signal);
       }
-      const providerRunIds = new Set(Object.keys(link.activeNodes));
-      if (
-        providerRunIds.size === 0 &&
-        ["running", "refreshing", "finalizing"].includes(link.status)
-      )
-        providerRunIds.add(link.subagentRunId);
-      for (const runId of providerRunIds) {
-        if (!isLaunchSentinel(runId)) await this.#rpc.stop(runId);
-      }
-      await new RunJournal(store).append({
-        runId: link.forgeRunId,
-        type: "run.cancelled",
-        payload: { reason },
-        idempotencyKey: "run:cancelled",
-        sessionId: ctx.sessionManager.getSessionId(),
-        message: `Cancel child ForgeDock run ${link.forgeRunId}`,
-        ...(ctx.signal ? { signal: ctx.signal } : {}),
-      });
+      if (current.state?.status !== "cancelled")
+        throw new Error(
+          `Child ForgeDock run ${link.forgeRunId} did not durably reach cancelled state.`,
+        );
+      await cleanupDurablyCancelledWorktree(
+        current.state.status,
+        link.prepared,
+        this.#git,
+      );
       link.status = "failed";
       link.activeNodes = {};
       link.currentNodeId = undefined;
@@ -3867,7 +4011,6 @@ export class ForgeWorkOnController {
     );
     const transport = new FetchGitHubTransport({ tokenProvider });
     const github = new GitHubWorkflowAdapter(transport, link.repository);
-    const projector = new GitHubIssueProjector(transport, link.repository);
     const store = new GitHubStateBranchStore(
       transport,
       link.repository,
@@ -3940,6 +4083,11 @@ export class ForgeWorkOnController {
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
     }
+    link.status = "completed";
+    this.#persistLink(link);
+    // Reconcile and durably receipt terminal projections before releasing the
+    // last run-scoped authority that can append those receipts.
+    await this.#reconcileLifecycleProjections(link, store, ctx);
     const terminal = await journal.append({
       runId: link.forgeRunId,
       type: "lease.released",
@@ -3952,24 +4100,8 @@ export class ForgeWorkOnController {
       message: `Release recovered ForgeDock authority ${link.forgeRunId}`,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
-    const terminalEvent = terminal.events.at(-1);
-    if (terminalEvent) {
-      await projector
-        .projectEvent({
-          issueNumber: link.issueNumber,
-          event: terminalEvent,
-          markdown: `## ForgeDock Pi complete\n\nPR #${pullNumber} merged into \`${link.prepared.baseBranch}\`.\nRun: \`${link.forgeRunId}\`.`,
-          ...(ctx.signal ? { signal: ctx.signal } : {}),
-        })
-        .catch(() => undefined);
-      await this.#projectWorkflowStage(link, "merged", ctx, projector).catch(
-        () => undefined,
-      );
-    }
 
     this.#clearDirectBinding(link.forgeRunId);
-    link.status = "completed";
-    this.#persistLink(link);
     this.#emitLifecycle(link, {
       headSha: link.reviewHeadSha ?? mergeSha,
       baseSha: link.prepared.baseSha,
@@ -4606,35 +4738,59 @@ export class ForgeWorkOnController {
       message: `Complete ForgeDock run ${link.forgeRunId}`,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
-    const terminal = link.orchestrationId
-      ? completed
-      : await journal.append({
-          runId: link.forgeRunId,
-          type: "lease.released",
-          payload: {
-            ownerRunId: link.leaseOwnerRunId,
-            epoch: link.leaseEpoch,
-          },
-          idempotencyKey: "lease:release",
-          sessionId,
-          message: `Release ForgeDock lease ${link.forgeRunId}`,
+    link.reviewHeadSha = result.review.headSha;
+    link.status = "completed";
+    this.#persistLink(link);
+    const terminalEvent = completed.events.find(
+      (event) => event.type === "run.completed",
+    );
+    let terminalProjectionComplete = false;
+    if (terminalEvent) {
+      try {
+        const projection = await projector.projectEventWithReceipt({
+          issueNumber: link.issueNumber,
+          event: terminalEvent,
+          markdown: terminalRunMarkdown(link, completed.state),
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
-    const terminalEvent = terminal.events.at(-1);
-    if (terminalEvent) {
-      await projector.projectEvent({
-        issueNumber: link.issueNumber,
-        event: terminalEvent,
-        markdown: `## ForgeDock Pi complete\n\nPR #${pull.number} merged into \`${link.prepared.baseBranch}\`.\nNested review completed at \`${result.review.headSha}\`.\nRun: \`${link.forgeRunId}\`.`,
+        const labelReceipt = await projector.setWorkflowLabelWithReceipt(
+          link.issueNumber,
+          WORKFLOW_LABEL_BY_STAGE.merged,
+          ctx.signal,
+          `${terminalEvent.eventId}:workflow`,
+        );
+        await recordProjectionReceipts(
+          journal,
+          link.forgeRunId,
+          [...projection.receipts, labelReceipt],
+          sessionId,
+          ctx.signal,
+        );
+        terminalProjectionComplete = true;
+      } catch (error) {
+        ctx.ui.notify(
+          `ForgeDock run ${link.forgeRunId} is durably completed; terminal projection will replay: ${errorMessage(error)}`,
+          "warning",
+        );
+      }
+    }
+    if (!link.orchestrationId && terminalProjectionComplete) {
+      await journal.append({
+        runId: link.forgeRunId,
+        type: "lease.released",
+        payload: {
+          ownerRunId: link.leaseOwnerRunId,
+          epoch: link.leaseEpoch,
+        },
+        idempotencyKey: "lease:release",
+        sessionId,
+        message: `Release ForgeDock lease ${link.forgeRunId}`,
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
-      await this.#projectWorkflowStage(link, "merged", ctx, projector);
     }
 
     if (link.executionMode === "direct")
       this.#clearDirectBinding(link.forgeRunId);
-    link.status = "completed";
-    this.#persistLink(link);
     this.#emitLifecycle(link, {
       headSha: result.headSha,
       baseSha: result.baseSha,
@@ -4766,6 +4922,70 @@ async function appendPhase(
     message: `Checkpoint ${runId} ${phase} ${action}`,
     ...(signal ? { signal } : {}),
   });
+}
+
+export async function cleanupDurablyCancelledWorktree(
+  status: string,
+  prepared: PreparedWorktree,
+  git: Pick<GitWorktreeManager, "deleteRemoteBranch" | "cleanup">,
+): Promise<void> {
+  if (status !== "cancelled")
+    throw new Error("Owned cancellation cleanup requires durable cancelled state.");
+  // Do not forward an aborted operation signal: compensating cleanup must be
+  // retryable after the cancellation transition commits.
+  await git.deleteRemoteBranch(prepared);
+  await git.cleanup(prepared);
+}
+
+function startupRunMarkdown(runId: string, integrationBranch: string): string {
+  return `## ForgeDock Pi run started\n\nRun: \`${runId}\`\nIntegration base: \`${integrationBranch}\`\nWork is isolated and review will run through nested Pi subagents.`;
+}
+
+function terminalRunMarkdown(
+  link: Pick<ActiveRunLink, "forgeRunId" | "prepared" | "reviewHeadSha">,
+  state: Pick<import("../core/state.ts").RunState, "outcome" | "pullNumber">,
+): string {
+  if (state.outcome === "merged")
+    return `## ForgeDock Pi complete\n\nPR #${state.pullNumber ?? "unknown"} merged into \`${link.prepared.baseBranch}\`.\n${link.reviewHeadSha ? `Nested review completed at \`${link.reviewHeadSha}\`.\n` : ""}Run: \`${link.forgeRunId}\`.`;
+  return `## ForgeDock Pi complete\n\nRun: \`${link.forgeRunId}\`\nOutcome: closed.`;
+}
+
+async function recordProjectionReceipts(
+  journal: RunJournal,
+  runId: string,
+  receipts: readonly GitHubProjectionReceipt[],
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  for (const receipt of receipts) {
+    await journal.append({
+      runId,
+      type: "effect.recorded",
+      payload: {
+        effectType: receipt.effectType,
+        effectId: receipt.effectId,
+        digest: receipt.digest,
+      },
+      idempotencyKey: `effect:${receipt.effectId}`,
+      sessionId,
+      message: `Record verified ${receipt.effectType} projection ${receipt.effectId}`,
+      ...(signal ? { signal } : {}),
+    });
+  }
+}
+
+export function lifecycleProjectionEffectIds(input: {
+  repository: string;
+  issueNumber: number;
+  eventId: string;
+}): { comment: string; workflow: string } {
+  return {
+    comment: githubCommentEffectId(input),
+    workflow: githubLabelEffectId({
+      ...input,
+      eventId: `${input.eventId}:workflow`,
+    }),
+  };
 }
 
 async function appendEffect(

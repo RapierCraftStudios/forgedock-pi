@@ -32,6 +32,7 @@ import {
   isForgeRuntimePath,
   parseBoundReviewerResult,
   parseGitStatusPaths,
+  phaseProjectionLabels,
   reviewerStatusIsTerminal,
   writeTrustedResultFile,
 } from "../../src/agents/child-runtime.ts";
@@ -43,6 +44,12 @@ const execFileAsync = promisify(execFile);
 async function git(cwd: string, ...args: string[]) {
   return execFileAsync("git", args, { cwd, encoding: "utf8" });
 }
+
+test("technical phase failures do not project needs-human authority", () => {
+  assert.deepEqual(phaseProjectionLabels("fail"), []);
+  assert.deepEqual(phaseProjectionLabels("block"), []);
+  assert.deepEqual(phaseProjectionLabels("needs-human"), ["needs-human"]);
+});
 
 test("every bounded non-review node can persist its trusted result", () => {
   for (const node of [

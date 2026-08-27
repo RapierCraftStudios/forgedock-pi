@@ -270,23 +270,34 @@ export class GitWorktreeManager {
         baseSha: input.baseSha,
       };
     }
-    await this.#git(
-      root,
-      ["worktree", "add", "--detach", worktreePath, input.headSha],
-      120_000,
-      input.signal,
-    );
-    const canonicalWorktree = await realpath(worktreePath);
-    if (!isPathWithin(join(root, ".forge", "reviews"), canonicalWorktree))
-      throw new Error("Git created a review worktree outside the Forge review directory.");
-    return {
-      repositoryRoot: root,
-      worktreePath: canonicalWorktree,
-      headRef: input.headRef,
-      headSha: input.headSha,
-      baseRef: input.baseRef,
-      baseSha: input.baseSha,
-    };
+    let worktreeCreated = false;
+    try {
+      await this.#git(
+        root,
+        ["worktree", "add", "--detach", worktreePath, input.headSha],
+        120_000,
+        input.signal,
+      );
+      worktreeCreated = true;
+      const canonicalWorktree = await realpath(worktreePath);
+      if (!isPathWithin(join(root, ".forge", "reviews"), canonicalWorktree))
+        throw new Error("Git created a review worktree outside the Forge review directory.");
+      return {
+        repositoryRoot: root,
+        worktreePath: canonicalWorktree,
+        headRef: input.headRef,
+        headSha: input.headSha,
+        baseRef: input.baseRef,
+        baseSha: input.baseSha,
+      };
+    } catch (error) {
+      if (worktreeCreated)
+        await this.#cleanupFailedReviewPreparation(
+          root,
+          worktreePath,
+        ).catch(() => undefined);
+      throw error;
+    }
   }
 
   async cleanupReview(
@@ -431,6 +442,25 @@ export class GitWorktreeManager {
     } catch (error) {
       if (!isAlreadyAbsent(error)) throw error;
     }
+  }
+
+  async #cleanupFailedReviewPreparation(
+    repositoryRoot: string,
+    worktreePath: string,
+  ): Promise<void> {
+    if (await exists(worktreePath)) {
+      try {
+        await this.#git(
+          repositoryRoot,
+          ["worktree", "remove", "--force", worktreePath],
+          120_000,
+        );
+      } catch (error) {
+        if (!isAlreadyAbsent(error)) throw error;
+      }
+    }
+    if (await exists(worktreePath))
+      await rm(worktreePath, { recursive: true, force: true });
   }
 
   async #cleanupFailedPreparation(

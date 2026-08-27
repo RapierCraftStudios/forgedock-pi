@@ -855,10 +855,12 @@ export function applyRunEvent(
   if (!current) return createInitialState(event);
   assertEnvelopeContinuation(current, event);
   if (current.status === "completed" || current.status === "cancelled") {
-    if (event.type !== "lease.released")
+    const completedEffectReceipt =
+      current.status === "completed" && event.type === "effect.recorded";
+    if (event.type !== "lease.released" && !completedEffectReceipt)
       throw new StateTransitionError(
         "terminal-run",
-        "Terminal runs reject further mutations.",
+        "Terminal runs reject further mutations except completed-run effect receipts.",
       );
   }
   const state = cloneState(current);

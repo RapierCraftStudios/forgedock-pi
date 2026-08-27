@@ -8,6 +8,7 @@ import {
 } from "../../src/workflows/orchestrate.ts";
 import {
   canonicalReviewerName,
+  cleanupDurablyCancelledWorktree,
   directRunRecoveryAction,
   directTerminalEvidence,
   hasActiveDirectRun,
@@ -81,6 +82,33 @@ test("overlapping direct starts are rejected while a binding or run is live", ()
     ]),
     false,
   );
+});
+
+test("owned cancellation cleanup runs only after durable cancellation and deletes remote first", async () => {
+  const calls: string[] = [];
+  const prepared = {
+    repositoryRoot: "/repo",
+    worktreePath: "/repo/.forge/worktrees/run-1",
+    branch: "forge/issue-42-run-1",
+    baseBranch: "staging",
+    baseSha: "a".repeat(40),
+  };
+  const git = {
+    async deleteRemoteBranch(): Promise<void> {
+      calls.push("delete-remote");
+    },
+    async cleanup(): Promise<void> {
+      calls.push("cleanup-worktree");
+    },
+  };
+
+  await assert.rejects(
+    () => cleanupDurablyCancelledWorktree("active", prepared, git),
+    /requires durable cancelled state/,
+  );
+  assert.deepEqual(calls, []);
+  await cleanupDurablyCancelledWorktree("cancelled", prepared, git);
+  assert.deepEqual(calls, ["delete-remote", "cleanup-worktree"]);
 });
 
 test("direct restart selects terminal cleanup and authority release windows", () => {

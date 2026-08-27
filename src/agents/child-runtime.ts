@@ -1984,6 +1984,19 @@ async function appendProjectionReceipts(
   }
 }
 
+export function phaseProjectionLabels(
+  action:
+    | "queue"
+    | "start"
+    | "complete"
+    | "fail"
+    | "block"
+    | "needs-human"
+    | "abandon",
+): string[] {
+  return action === "needs-human" ? ["needs-human"] : [];
+}
+
 async function projectPhaseReport(
   projector: GitHubIssueProjector,
   event: RunEvent,
@@ -2054,9 +2067,7 @@ async function projectPhaseReport(
     issueNumber: binding.issueNumber,
     event,
     markdown: checkpointMarkdown(params, binding.runId),
-    addLabels: ["fail", "block", "needs-human"].includes(params.action)
-      ? ["needs-human"]
-      : [],
+    addLabels: phaseProjectionLabels(params.action),
     ...(signal ? { signal } : {}),
   });
   return [...projection.receipts];

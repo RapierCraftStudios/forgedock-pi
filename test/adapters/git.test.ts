@@ -212,6 +212,58 @@ test("failed worktree containment validation removes its branch and worktree", a
   }
 });
 
+test("failed review worktree containment validation removes the detached worktree", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-git-review-cleanup-"));
+  const origin = join(root, "origin.git");
+  const seed = join(root, "seed");
+  const clone = join(root, "clone");
+  const external = join(root, "external-reviews");
+  try {
+    await execFileAsync("git", ["init", "--bare", origin]);
+    await execFileAsync("git", ["init", "-b", "main", seed]);
+    await git(seed, "config", "user.name", "Test");
+    await git(seed, "config", "user.email", "test@example.invalid");
+    await writeFile(join(seed, "app.txt"), "base\n");
+    await git(seed, "add", "app.txt");
+    await git(seed, "commit", "-m", "initial");
+    const head = (
+      await execFileAsync("git", ["rev-parse", "HEAD"], {
+        cwd: seed,
+        encoding: "utf8",
+      })
+    ).stdout.trim();
+    await git(seed, "remote", "add", "origin", origin);
+    await git(seed, "push", "origin", "main");
+    await execFileAsync("git", ["clone", origin, clone]);
+
+    const reviewsParent = join(clone, ".forge", "reviews");
+    await mkdir(external, { recursive: true });
+    await mkdir(dirname(reviewsParent), { recursive: true });
+    await symlink(external, reviewsParent, "dir");
+
+    const manager = new GitWorktreeManager(executor);
+    await assert.rejects(
+      manager.prepareReview(clone, {
+        reviewId: "escaped-review",
+        headRef: "main",
+        headSha: head,
+        baseRef: "main",
+        baseSha: head,
+      }),
+      /outside the Forge review directory/,
+    );
+    await assert.rejects(access(join(external, "escaped-review")));
+    const worktrees = await execFileAsync(
+      "git",
+      ["-C", clone, "worktree", "list", "--porcelain"],
+      { encoding: "utf8" },
+    );
+    assert.doesNotMatch(worktrees.stdout, /escaped-review/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("local exclude update rejects a pre-existing metadata-parent symlink", async () => {
   const root = await mkdtemp(join(tmpdir(), "forgedock-git-parent-link-"));
   const origin = join(root, "origin.git");

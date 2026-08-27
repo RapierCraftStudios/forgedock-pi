@@ -64,12 +64,18 @@ class ProjectionTransport implements GitHubTransport {
     ) {
       data = { labels: [...this.labels].map((name) => ({ name })) };
     } else if (
-      (request.method === "POST" || request.method === "PUT") &&
+      request.method === "POST" &&
       request.path.endsWith("/labels")
     ) {
       const nextLabels = (request.body as { labels: string[] }).labels;
-      if (request.method === "PUT") this.labels.clear();
       for (const label of nextLabels) this.labels.add(label);
+      data = [...this.labels].map((name) => ({ name }));
+    } else if (
+      request.method === "DELETE" &&
+      /\/labels\/[^/]+$/.test(request.path)
+    ) {
+      const label = decodeURIComponent(request.path.split("/").at(-1) ?? "");
+      if (!this.labels.delete(label)) status = 404;
       data = [...this.labels].map((name) => ({ name }));
     } else
       throw new Error(`Unexpected request ${request.method} ${request.path}`);
@@ -158,6 +164,92 @@ test("workflow label transitions replace stale state while preserving unrelated 
     assert.equal(transport.labels.has("bug"), true);
     assert.equal(transport.labels.has("priority:P1"), true);
   }
+});
+
+test("workflow label transitions preserve unrelated labels added during mutation", async () => {
+  const transport = new ProjectionTransport();
+  transport.labels.add("workflow:building");
+  const request = transport.request.bind(transport);
+  let injected = false;
+  transport.request = async function <T>(input: GitHubRequest) {
+    if (!injected && input.method === "POST" && input.path.endsWith("/labels")) {
+      injected = true;
+      transport.labels.add("team:concurrently-added");
+    }
+    return request<T>(input);
+  };
+
+  await new GitHubIssueProjector(transport, "owner/repo").setWorkflowLabel(
+    42,
+    "workflow:in-review",
+  );
+
+  assert.equal(transport.labels.has("workflow:building"), false);
+  assert.equal(transport.labels.has("workflow:in-review"), true);
+  assert.equal(transport.labels.has("team:concurrently-added"), true);
+});
+
+test("concurrent projection of the same event posts one comment", async () => {
+  const transport = new ProjectionTransport();
+  const request = transport.request.bind(transport);
+  transport.request = async function <T>(input: GitHubRequest) {
+    if (input.method === "POST" && input.path.includes("/comments"))
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    return request<T>(input);
+  };
+  const event = createRunEvent({
+    runId: "run-concurrent",
+    repository: "owner/repo",
+    sequence: 1,
+    previousEventHash: null,
+    type: "run.created",
+    actor: { kind: "extension", sessionId: "session-1", leaseEpoch: 0 },
+    idempotencyKey: "create-concurrent",
+    payload: {
+      issueNumber: 42,
+      integrationBranch: "staging",
+      protectedBranch: "main",
+    },
+    eventId: "event-concurrent",
+    occurredAt: "2026-01-01T00:00:00.000Z",
+  });
+  const first = new GitHubIssueProjector(transport, "owner/repo");
+  const second = new GitHubIssueProjector(transport, "owner/repo");
+
+  const results = await Promise.all([
+    first.projectEvent({ issueNumber: 42, event, markdown: "One effect" }),
+    second.projectEvent({ issueNumber: 42, event, markdown: "One effect" }),
+  ]);
+
+  assert.equal(transport.commentPosts, 1);
+  assert.equal(results[0]?.commentId, results[1]?.commentId);
+});
+
+test("concurrent projection of the same artifact posts one comment", async () => {
+  const transport = new ProjectionTransport();
+  const request = transport.request.bind(transport);
+  transport.request = async function <T>(input: GitHubRequest) {
+    if (input.method === "POST" && input.path.includes("/comments"))
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    return request<T>(input);
+  };
+  const first = new GitHubIssueProjector(transport, "owner/repo");
+  const second = new GitHubIssueProjector(transport, "owner/repo");
+  const artifact = {
+    issueNumber: 42,
+    runId: "run-concurrent-artifact",
+    eventId: "head-a",
+    artifactKey: "review-started",
+    markdown: "One artifact effect",
+  } as const;
+
+  const ids = await Promise.all([
+    first.postArtifact(artifact),
+    second.postArtifact(artifact),
+  ]);
+
+  assert.equal(transport.commentPosts, 1);
+  assert.equal(ids[0], ids[1]);
 });
 
 test("logical issue artifacts are idempotent by revision and supersede older revisions", async () => {

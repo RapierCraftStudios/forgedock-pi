@@ -23,6 +23,29 @@ interface IssueLabel {
 
 type IssueLabelValue = IssueLabel | string;
 
+const commentProjectionQueues = new Map<string, Promise<void>>();
+
+async function coordinateCommentProjection<T>(
+  effectId: string,
+  project: () => Promise<T>,
+): Promise<T> {
+  const prior = commentProjectionQueues.get(effectId) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const queued = prior.catch(() => undefined).then(() => current);
+  commentProjectionQueues.set(effectId, queued);
+  await prior.catch(() => undefined);
+  try {
+    return await project();
+  } finally {
+    release();
+    if (commentProjectionQueues.get(effectId) === queued)
+      commentProjectionQueues.delete(effectId);
+  }
+}
+
 interface IssueResponse {
   labels: IssueLabelValue[];
 }
@@ -184,6 +207,19 @@ export class GitHubIssueProjector {
     input: ProjectIssueEventInput,
   ): Promise<ProjectionResult> {
     requireIssueNumber(input.issueNumber);
+    const effectId = githubCommentEffectId({
+      repository: this.#repository,
+      issueNumber: input.issueNumber,
+      eventId: input.event.eventId,
+    });
+    return coordinateCommentProjection(effectId, () =>
+      this.#projectEventWithReceipt(input),
+    );
+  }
+
+  async #projectEventWithReceipt(
+    input: ProjectIssueEventInput,
+  ): Promise<ProjectionResult> {
     const marker = `<!-- FORGEDOCK-EVENT:${input.event.eventId} -->`;
     const body = `${marker}\n<!-- FORGEDOCK-RUN:${input.event.runId} -->\n${input.markdown.trim()}\n`;
     const path = `${this.#apiRoot}/issues/${input.issueNumber}/comments`;
@@ -269,6 +305,25 @@ export class GitHubIssueProjector {
   }): Promise<number> {
     if (!/^[a-z0-9-]+$/.test(input.artifactKey))
       throw new TypeError("Artifact keys must be lowercase kebab-case.");
+    requireIssueNumber(input.issueNumber);
+    const effectId = githubCommentEffectId({
+      repository: this.#repository,
+      issueNumber: input.issueNumber,
+      eventId: `${input.eventId}:${input.artifactKey}`,
+    });
+    return coordinateCommentProjection(effectId, () =>
+      this.#postArtifact(input),
+    );
+  }
+
+  async #postArtifact(input: {
+    issueNumber: number;
+    runId: string;
+    eventId: string;
+    artifactKey: string;
+    markdown: string;
+    signal?: AbortSignal;
+  }): Promise<number> {
     const marker = `<!-- FORGEDOCK-ARTIFACT:${input.runId}:${input.eventId}:${input.artifactKey} -->`;
     const identityMarker = `<!-- FORGEDOCK-ARTIFACT-IDENTITY run=${input.runId} key=${input.artifactKey} -->`;
     const revisionMarker = `<!-- FORGEDOCK-ARTIFACT-REVISION revision=${input.eventId} -->`;
@@ -480,35 +535,34 @@ export class GitHubIssueProjector {
       ...(signal ? { signal } : {}),
     });
     const issue = requireGitHubSuccess(issueResponse, issuePath, [200]);
-    const labels = issue.labels
-      .map(issueLabelName)
-      .filter(
-        (label) => !label.startsWith("workflow:") && label !== "needs-human",
-      );
-    if (workflowLabel) labels.push(workflowLabel);
+    const currentLabels = issue.labels.map(issueLabelName);
     const labelsPath = `${this.#apiRoot}/issues/${issueNumber}/labels`;
-    const response = await this.#transport.request<IssueLabelValue[]>({
-      method: "PUT",
-      path: labelsPath,
-      body: { labels },
-      ...(signal ? { signal } : {}),
-    });
-    const updated = requireGitHubSuccess(response, labelsPath, [200]);
-    const updatedLabels = updated.map(issueLabelName);
-    const workflowLabels = updatedLabels.filter((label) =>
-      label.startsWith("workflow:"),
-    );
-    if (workflowLabel) {
-      if (workflowLabels.length !== 1 || workflowLabels[0] !== workflowLabel)
-        throw new GitHubApiError(422, labelsPath, {
-          message: `Workflow label read-back expected only ${workflowLabel}.`,
-          labels: updatedLabels,
-        });
-    } else if (workflowLabels.length !== 0)
-      throw new GitHubApiError(422, labelsPath, {
-        message: "Workflow label read-back expected no workflow labels.",
-        labels: updatedLabels,
+
+    // Mutate only Forge-owned labels. Replacing the whole label array from a
+    // stale issue read can erase an unrelated label added concurrently.
+    if (workflowLabel && !currentLabels.includes(workflowLabel)) {
+      const response = await this.#transport.request<IssueLabelValue[]>({
+        method: "POST",
+        path: labelsPath,
+        body: { labels: [workflowLabel] },
+        ...(signal ? { signal } : {}),
       });
+      requireGitHubSuccess(response, labelsPath, [200]);
+    }
+    const staleLabels = currentLabels.filter(
+      (label) =>
+        (label.startsWith("workflow:") && label !== workflowLabel) ||
+        label === "needs-human",
+    );
+    for (const label of staleLabels) {
+      const removePath = `${labelsPath}/${encodeURIComponent(label)}`;
+      const response = await this.#transport.request<IssueLabelValue[]>({
+        method: "DELETE",
+        path: removePath,
+        ...(signal ? { signal } : {}),
+      });
+      requireGitHubSuccess(response, removePath, [200, 404]);
+    }
 
     const verifyResponse = await this.#transport.request<IssueResponse>({
       method: "GET",
@@ -531,6 +585,11 @@ export class GitHubIssueProjector {
     )
       throw new GitHubApiError(422, labelsPath, {
         message: "Workflow label fresh read-back did not match the requested projection.",
+        labels: verifiedLabels,
+      });
+    if (verifiedLabels.includes("needs-human"))
+      throw new GitHubApiError(422, labelsPath, {
+        message: "Workflow label fresh read-back retained needs-human.",
         labels: verifiedLabels,
       });
     return createGitHubLabelReceipt({
