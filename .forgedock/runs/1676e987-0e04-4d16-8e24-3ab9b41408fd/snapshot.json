@@ -5,10 +5,10 @@
   "issueNumber": 205,
   "integrationBranch": "staging",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "authorityMode": "run-scoped",
-  "sequence": 9,
-  "lastEventHash": "sha256:5dabb8736ae994761d6a34302819202adde174423055af763350d6b9bbf4c5a1",
+  "sequence": 10,
+  "lastEventHash": "sha256:f584a41dd6ea69bbf4f119d6edd0ddf5a09cfb57ef5ce5ef624d87535bfa76c7",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -63,10 +63,12 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "abandoned",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
-          "evidence": []
+          "evidence": [],
+          "reason": "Operator-authorized reset after critical pagination, rate-limit, DAG, and projection integrity failures.",
+          "finishedAt": "2026-08-27T07:47:03.383Z"
         }
       ]
     }
@@ -82,7 +84,8 @@
     "phase:investigate:1:queue": "8a4eb41e-0dfb-4018-98b4-2a0d6629faf2",
     "phase:investigate:1:start": "7bd0c5c6-67e4-4b6a-bfd2-ef8946af1104",
     "phase:investigate:1:complete": "71bdace7-e177-4913-8a5b-eac170f64b41",
-    "phase:plan:1:queue": "60b35408-7cfa-4080-a51c-0e298ee8e687"
+    "phase:plan:1:queue": "60b35408-7cfa-4080-a51c-0e298ee8e687",
+    "run:cancelled": "7d6d3391-b4ae-4ce4-a483-88cd99a7ae2d"
   },
   "eventIds": {
     "5aa28980-f045-4f6c-89dc-4fb725134f1b": true,
@@ -93,7 +96,8 @@
     "8a4eb41e-0dfb-4018-98b4-2a0d6629faf2": true,
     "7bd0c5c6-67e4-4b6a-bfd2-ef8946af1104": true,
     "71bdace7-e177-4913-8a5b-eac170f64b41": true,
-    "60b35408-7cfa-4080-a51c-0e298ee8e687": true
+    "60b35408-7cfa-4080-a51c-0e298ee8e687": true,
+    "7d6d3391-b4ae-4ce4-a483-88cd99a7ae2d": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
@@ -105,5 +109,6 @@
     "lastHeartbeatAt": "2026-08-27T06:52:03.772Z",
     "expiresAt": "2027-08-27T06:52:03.772Z",
     "takeoverRequired": false
-  }
+  },
+  "cancellationReason": "Operator-authorized reset after critical pagination, rate-limit, DAG, and projection integrity failures."
 }
