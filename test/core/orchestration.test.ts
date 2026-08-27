@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   applyOrchestrationEvent,
   createOrchestrationEvent,
+  nextIntegrationLane,
   readyOrchestrationLanes,
   type OrchestrationEventType,
   type OrchestrationState,
@@ -93,6 +94,139 @@ test("GitHub budget adaptively bounds lane concurrency below the configured maxi
     }),
     0,
   );
+});
+
+test("dependency graph gates dispatch and integration topologically", () => {
+  let state = applyOrchestrationEvent(
+    undefined,
+    next(
+      undefined,
+      "orchestration.created",
+      {
+        issueNumbers: [1, 2],
+        integrationBranch: "staging",
+        maxConcurrent: 2,
+        leaseEpoch: 1,
+        dependencies: [
+          { fromIssue: 1, toIssue: 2, kind: "explicit", reason: "#2 needs #1" },
+        ],
+      },
+      "dependency-create",
+    ),
+  );
+  assert.deepEqual(
+    readyOrchestrationLanes(state).map((lane) => lane.issueNumber),
+    [1],
+  );
+  state = applyOrchestrationEvent(
+    state,
+    next(
+      state,
+      "lane.started",
+      { issueNumber: 1, forgeRunId: "run-1", subagentRunId: "child-1" },
+      "dependency-start-1",
+    ),
+  );
+  assert.deepEqual(readyOrchestrationLanes(state), []);
+  state = applyOrchestrationEvent(
+    state,
+    next(
+      state,
+      "lane.ready",
+      { issueNumber: 1, headSha: "head-1", baseSha: "base-1" },
+      "dependency-ready-1",
+    ),
+  );
+  assert.equal(nextIntegrationLane(state)?.issueNumber, 1);
+  state = applyOrchestrationEvent(
+    state,
+    next(state, "lane.integrating", { issueNumber: 1 }, "dependency-integrating-1"),
+  );
+  state = applyOrchestrationEvent(
+    state,
+    next(
+      state,
+      "lane.merged",
+      { issueNumber: 1, pullNumber: 11, headSha: "head-1" },
+      "dependency-merged-1",
+    ),
+  );
+  assert.equal(nextIntegrationLane(state), undefined);
+  state = applyOrchestrationEvent(
+    state,
+    next(
+      state,
+      "lane.started",
+      { issueNumber: 2, forgeRunId: "run-2", subagentRunId: "child-2" },
+      "dependency-start-2",
+    ),
+  );
+  state = applyOrchestrationEvent(
+    state,
+    next(
+      state,
+      "lane.ready",
+      { issueNumber: 2, headSha: "head-2", baseSha: "base-2" },
+      "dependency-ready-2",
+    ),
+  );
+  assert.equal(nextIntegrationLane(state)?.issueNumber, 2);
+});
+
+test("genesis rejects cycles and binds the persisted graph hash", () => {
+  const event = next(
+    undefined,
+    "orchestration.created",
+    {
+      issueNumbers: [1, 2],
+      integrationBranch: "staging",
+      maxConcurrent: 2,
+      leaseEpoch: 1,
+      dependencies: [
+        { fromIssue: 1, toIssue: 2, kind: "explicit", reason: "cycle" },
+        { fromIssue: 2, toIssue: 1, kind: "explicit", reason: "cycle" },
+      ],
+    },
+    "cycle-create",
+  );
+  assert.throws(
+    () => applyOrchestrationEvent(undefined, event),
+    (error) =>
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "dependency-cycle",
+  );
+
+  let state = initialized();
+  const tampered = { ...state, graphHash: "sha256:tampered" };
+  assert.throws(
+    () =>
+      applyOrchestrationEvent(
+        tampered,
+        next(tampered, "lease.heartbeat", { epoch: 1 }, "tampered-heartbeat"),
+      ),
+    (error) =>
+      error instanceof Error && "code" in error && error.code === "graph-integrity",
+  );
+});
+
+test("a 25-issue objective is not truncated by the ready queue", () => {
+  const state = applyOrchestrationEvent(
+    undefined,
+    next(
+      undefined,
+      "orchestration.created",
+      {
+        issueNumbers: Array.from({ length: 25 }, (_, index) => index + 1),
+        integrationBranch: "staging",
+        maxConcurrent: 16,
+        leaseEpoch: 1,
+      },
+      "twenty-five-create",
+    ),
+  );
+  assert.equal(readyOrchestrationLanes(state).length, 16);
+  assert.equal(readyOrchestrationLanes(state)[15]?.issueNumber, 16);
 });
 
 test("lane lifecycle follows the stable Forge run instead of rotating child receipts", () => {

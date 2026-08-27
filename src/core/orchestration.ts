@@ -145,6 +145,7 @@ export function applyOrchestrationEvent(
 ): OrchestrationState {
   validateOrchestrationEvent(event);
   if (!current) return createInitialState(event);
+  validateOrchestrationGraph(current);
   if (
     current.orchestrationId !== event.orchestrationId ||
     current.repository !== event.repository
@@ -241,9 +242,6 @@ export function readyOrchestrationLanes(
     throw new TypeError(
       "Effective orchestration concurrency must be within the configured limit.",
     );
-  const active = state.lanes.filter((lane) => lane.status === "running").length;
-  const slots = Math.max(0, effectiveMaxConcurrent - active);
-  if (slots === 0) return [];
   const dag = buildOrchestrationDag(state.lanes, state.dependencies);
   const completed = new Set(
     state.lanes
@@ -271,7 +269,10 @@ export function readyOrchestrationLanes(
     completed,
     active: activeNodes,
     blocked,
-    limit: slots,
+    // getReadyQueue treats limit as the total active capacity and subtracts
+    // active nodes itself. Passing only the remaining slots would subtract
+    // active nodes twice and under-fill the configured concurrency.
+    limit: effectiveMaxConcurrent,
   })
     .map((node) => byId.get(node.id))
     .filter((lane): lane is OrchestrationLane => lane?.status === "queued")
@@ -287,19 +288,20 @@ export function nextIntegrationLane(
     )
   )
     return undefined;
+  const dag = buildOrchestrationDag(state.lanes, state.dependencies);
   const completed = new Set(
     state.lanes
       .filter((lane) => lane.status === "merged" || lane.status === "closed")
-      .map((lane) => lane.issueNumber),
+      .map((lane) => issueNodeId(lane.issueNumber)),
   );
   const eligible = state.lanes
-    .filter(
-      (lane) =>
-        lane.status === "ready" &&
-        state.dependencies
-          .filter((edge) => edge.toIssue === lane.issueNumber)
-          .every((edge) => completed.has(edge.fromIssue)),
-    )
+    .filter((lane) => {
+      if (lane.status !== "ready") return false;
+      const nodeId = issueNodeId(lane.issueNumber);
+      return (dag.incoming.get(nodeId) ?? []).every((edge) =>
+        completed.has(edge.from),
+      );
+    })
     .sort((left, right) => left.ordinal - right.ordinal)[0];
   return eligible ? { ...eligible } : undefined;
 }
@@ -342,6 +344,37 @@ function buildOrchestrationDag(
     reason: edge.reason,
   }));
   return buildDag(nodes, edges);
+}
+
+function validateOrchestrationGraph(state: OrchestrationState): void {
+  const orderedLanes = [...state.lanes].sort(
+    (left, right) => left.ordinal - right.ordinal,
+  );
+  const issueNumbers = orderedLanes.map((lane) => lane.issueNumber);
+  let dependencies: OrchestrationDependencyEdge[];
+  try {
+    dependencies = parseDependencies(state.dependencies, issueNumbers);
+  } catch (error) {
+    throw new OrchestrationTransitionError(
+      "graph-integrity",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+  const expectedHash = hashOrchestrationGraph(issueNumbers, dependencies);
+  if (state.graphHash !== expectedHash)
+    throw new OrchestrationTransitionError(
+      "graph-integrity",
+      "Orchestration graph hash does not match its confirmed issue set and dependencies.",
+    );
+}
+
+export function hashOrchestrationGraph(
+  issueNumbers: readonly number[],
+  dependencies: readonly OrchestrationDependencyEdge[],
+): string {
+  return `sha256:${createHash("sha256")
+    .update(canonicalJson({ issueNumbers, dependencies }))
+    .digest("hex")}`;
 }
 
 function parseDependencies(
@@ -436,9 +469,7 @@ function createInitialState(event: OrchestrationEvent): OrchestrationState {
     event.payload.dependencies,
     issueNumbers,
   );
-  const graphHash = `sha256:${createHash("sha256")
-    .update(canonicalJson({ issueNumbers, dependencies }))
-    .digest("hex")}`;
+  const graphHash = hashOrchestrationGraph(issueNumbers, dependencies);
   const state: OrchestrationState = {
     schema: ORCHESTRATION_STATE_SCHEMA,
     orchestrationId: event.orchestrationId,

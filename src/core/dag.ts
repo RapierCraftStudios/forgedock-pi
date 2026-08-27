@@ -98,33 +98,37 @@ export function buildDag(
 }
 
 export function findDagCycle(dag: Dag): DagCycle | undefined {
-  const indegree = new Map<string, number>();
-  const ready: string[] = [];
-  for (const nodeId of dag.nodes.keys()) {
-    const count = dag.incoming.get(nodeId)?.length ?? 0;
-    indegree.set(nodeId, count);
-    if (count === 0) ready.push(nodeId);
-  }
+  // A DFS returns the cycle itself rather than every node left behind by a
+  // failed topological reduction (which would also include downstream nodes).
+  const colors = new Map<string, "unvisited" | "visiting" | "visited">();
+  const stack: string[] = [];
+  for (const nodeId of dag.nodes.keys()) colors.set(nodeId, "unvisited");
 
-  let visited = 0;
-  while (ready.length > 0) {
-    const nodeId = ready.shift();
-    if (!nodeId) break;
-    visited += 1;
+  const visit = (nodeId: string): DagCycle | undefined => {
+    colors.set(nodeId, "visiting");
+    stack.push(nodeId);
     for (const edge of dag.outgoing.get(nodeId) ?? []) {
-      const next = (indegree.get(edge.to) ?? 0) - 1;
-      indegree.set(edge.to, next);
-      if (next === 0) ready.push(edge.to);
+      const color = colors.get(edge.to);
+      if (color === "visiting") {
+        const start = stack.indexOf(edge.to);
+        return { nodeIds: stack.slice(start) };
+      }
+      if (color === "unvisited") {
+        const cycle = visit(edge.to);
+        if (cycle) return cycle;
+      }
     }
-  }
-
-  if (visited === dag.nodes.size) return undefined;
-  return {
-    nodeIds: [...indegree.entries()]
-      .filter(([, count]) => count > 0)
-      .map(([nodeId]) => nodeId)
-      .sort((left, right) => left.localeCompare(right)),
+    stack.pop();
+    colors.set(nodeId, "visited");
+    return undefined;
   };
+
+  for (const nodeId of dag.nodes.keys()) {
+    if (colors.get(nodeId) !== "unvisited") continue;
+    const cycle = visit(nodeId);
+    if (cycle) return cycle;
+  }
+  return undefined;
 }
 
 export function getReadyQueue(dag: Dag, input: ReadyQueueInput): DagNode[] {

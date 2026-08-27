@@ -1127,7 +1127,7 @@ export function registerForgeRuntime(
           ],
           maxRounds: binding.maxReviewRounds,
         },
-        orchestration: { maxConcurrent: 2, maxIssues: 20 },
+        orchestration: { maxConcurrent: 2, maxIssues: 100 },
         subagents: {
           maxConcurrent: 2,
           maxDepth: 2,

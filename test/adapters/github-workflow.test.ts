@@ -347,6 +347,39 @@ test("GitHub CI gate reports a missing required context as unknown", async () =>
   );
 });
 
+test("blocked_by dependency reads are typed, paginated, and deduplicated", async () => {
+  const transport = new MockTransport((request) => {
+    const url = new URL(request.path, "https://api.github.com");
+    const page = Number(url.searchParams.get("page") ?? "1");
+    if (page === 1)
+      return {
+        status: 200,
+        data: [{ number: 7 }, { number: 8 }],
+        headers: {
+          link: '<https://api.github.com/repos/owner/repo/issues/9/dependencies/blocked_by?per_page=100&page=2>; rel="next"',
+        },
+      };
+    return response(200, [{ number: 7, dependency_type: "blocked_by" }]);
+  });
+  const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
+
+  assert.deepEqual(await adapter.listIssueBlockedBy(9), [7, 8]);
+  assert.equal(transport.requests.length, 2);
+  assert.match(transport.requests[0]?.path ?? "", /blocked_by\?per_page=100$/);
+  assert.match(transport.requests[1]?.path ?? "", /blocked_by\?.*page=2$/);
+});
+
+test("blocked_by dependency reads reject untyped dependency records", async () => {
+  const transport = new MockTransport(() =>
+    response(200, [{ number: 7, pull_request: {} }]),
+  );
+  const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
+  await assert.rejects(
+    adapter.listIssueBlockedBy(9),
+    (error) => error instanceof GitHubApiError && error.status === 422,
+  );
+});
+
 test("issue label lookup follows pagination and excludes pull requests", async () => {
   const transport = new MockTransport((request) => {
     const url = new URL(request.path, "https://api.github.com");

@@ -317,7 +317,7 @@ export function parseForgePolicy(value: unknown): ForgePolicy {
             ),
       maxIssues:
         orchestration?.maxIssues === undefined
-          ? 20
+          ? 100
           : integer(
               orchestration.maxIssues,
               "orchestration.maxIssues",

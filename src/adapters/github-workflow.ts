@@ -110,6 +110,15 @@ interface IssueApiResponse {
   pull_request?: unknown;
 }
 
+/** The REST blocked_by endpoint returns issue-shaped records, not free-form
+ * issue text. Keep this narrow so orchestration can only persist typed edges
+ * observed from that endpoint. */
+interface BlockedByApiResponse {
+  number: number;
+  dependency_type?: string;
+  pull_request?: unknown;
+}
+
 interface PullApiResponse {
   number: number;
   html_url: string;
@@ -240,23 +249,26 @@ export class GitHubWorkflowAdapter {
     const seen = new Set<string>();
     let path: string | undefined =
       `${this.#apiRoot}/issues/${issueNumber}/dependencies/blocked_by?per_page=100`;
-    for (let page = 0; path && page < 100; page += 1) {
-      if (seen.has(path))
-        throw new GitHubApiError(422, path, {
+    for (let pageNumber = 0; path && pageNumber < 100; pageNumber += 1) {
+      const pagePath = path;
+      if (seen.has(pagePath))
+        throw new GitHubApiError(422, pagePath, {
           message: "GitHub issue-dependency pagination repeated a page.",
         });
-      seen.add(path);
+      seen.add(pagePath);
       const response = await this.#transport.request<IssueApiResponse[]>({
         method: "GET",
-        path,
+        path: pagePath,
         ...(signal ? { signal } : {}),
       });
       if (response.status === 404) return [];
+      const dependencies = requireGitHubSuccess(response, pagePath, [200]);
+      if (!Array.isArray(dependencies))
+        throw new GitHubApiError(422, pagePath, {
+          message: "GitHub returned a non-array blocked_by dependency page.",
+        });
       blockers.push(
-        ...requireGitHubSuccess(response, path, [200]).map((issue) => {
-          assertNumber(issue.number, "dependency issue");
-          return issue.number;
-        }),
+        ...dependencies.map((issue) => parseBlockedByIssue(issue, pagePath)),
       );
       path = nextGitHubPagePath(response.headers);
     }
@@ -1046,6 +1058,30 @@ export class GitHubWorkflowAdapter {
       left.name.localeCompare(right.name),
     );
   }
+}
+
+function parseBlockedByIssue(value: unknown, path: string): number {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new GitHubApiError(422, path, {
+      message: "GitHub returned a malformed blocked_by dependency.",
+    });
+  const issue = value as Partial<BlockedByApiResponse>;
+  if (
+    issue.dependency_type !== undefined &&
+    issue.dependency_type !== "blocked_by"
+  )
+    throw new GitHubApiError(422, path, {
+      message: "GitHub returned a dependency with the wrong type.",
+    });
+  if (issue.pull_request !== undefined)
+    throw new GitHubApiError(422, path, {
+      message: "GitHub returned a pull request as a blocked_by dependency.",
+    });
+  if (!Number.isSafeInteger(issue.number) || (issue.number as number) < 1)
+    throw new GitHubApiError(422, path, {
+      message: "GitHub returned a blocked_by dependency without a valid issue number.",
+    });
+  return issue.number as number;
 }
 
 function isReviewRouteSelector(
