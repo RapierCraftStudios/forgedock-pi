@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:7137341aa9c4f214a14b0b746f4b289c7c1fac9e88e5353921635f432171d58f",
+  "sequence": 8,
+  "lastEventHash": "sha256:51af84a1878b9d8295911c81e7553f7db44109153a26af8bbf6de05150e841d8",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -39,15 +39,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/verification-preflight.ts` recognizes only the complete basename of direct `npm`/`pnpm`/`yarn`/`bun` executables and does not parse Corepack dispatch tokens",
+            "`corepack pnpm@9 --dir web test` currently reaches no package-script validation because `packageScriptName` returns `undefined` for `corepack`",
+            "`src/agents/child-runtime.ts` resolves the bound cwd but does not revalidate the bound argv's package-manager script/location semantics before execution",
+            "Existing regression coverage exercises direct package-manager selectors but no Corepack or version-qualified manager forms"
+          ],
           "logicalNodeId": "work-on-investigate-1",
           "startedAt": "2026-08-27T06:48:08.543Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/d1a7fba5-bbbb-4dfd-b6c1-392c15d800ad",
           "branch": "forge/issue-200-d1a7fba5",
-          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22"
+          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22",
+          "finishedAt": "2026-08-27T06:50:58.835Z",
+          "outputArtifactHash": "sha256:investigation-issue-200-d1a7fba5"
         }
       ]
     }
@@ -61,7 +68,8 @@
     "phase:resolve:1:start": "afabcd54-70f8-46b4-b5b3-541c466f8d52",
     "phase:resolve:1:complete": "3c289090-9a49-4a23-abe1-b03797eed4bf",
     "phase:investigate:1:queue": "74a03002-de79-4011-9a85-0df67eb6dbbc",
-    "phase:investigate:1:start": "d07642a4-7572-4410-8693-8bf252a75427"
+    "phase:investigate:1:start": "d07642a4-7572-4410-8693-8bf252a75427",
+    "phase:investigate:1:complete": "2b958081-2d74-4a1b-bc28-577c6af1f652"
   },
   "eventIds": {
     "a951c635-347d-4169-8554-7a6a5052ec8a": true,
@@ -70,7 +78,8 @@
     "afabcd54-70f8-46b4-b5b3-541c466f8d52": true,
     "3c289090-9a49-4a23-abe1-b03797eed4bf": true,
     "74a03002-de79-4011-9a85-0df67eb6dbbc": true,
-    "d07642a4-7572-4410-8693-8bf252a75427": true
+    "d07642a4-7572-4410-8693-8bf252a75427": true,
+    "2b958081-2d74-4a1b-bc28-577c6af1f652": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
