@@ -189,6 +189,40 @@ test("workflow label transitions preserve unrelated labels added during mutation
   assert.equal(transport.labels.has("team:concurrently-added"), true);
 });
 
+test("workflow labels reject invalid issue numbers before transport access", async () => {
+  const transport = new ProjectionTransport();
+  const request = transport.request.bind(transport);
+  let requestCount = 0;
+  transport.request = async function <T>(input: GitHubRequest) {
+    requestCount += 1;
+    return request<T>(input);
+  };
+  const projector = new GitHubIssueProjector(transport, "owner/repo");
+  const invalidIssueNumbers: unknown[] = [
+    "42/labels?per_page=100",
+    0,
+    -1,
+    1.5,
+    Number.MAX_SAFE_INTEGER + 1,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+  ];
+
+  for (const issueNumber of invalidIssueNumbers)
+    await assert.rejects(
+      () =>
+        projector.setWorkflowLabel(
+          issueNumber as number,
+          "workflow:in-review",
+        ),
+      (error: unknown) =>
+        error instanceof TypeError &&
+        error.message === "Issue number must be positive.",
+    );
+
+  assert.equal(requestCount, 0);
+});
+
 test("concurrent projection of the same event posts one comment", async () => {
   const transport = new ProjectionTransport();
   const request = transport.request.bind(transport);
