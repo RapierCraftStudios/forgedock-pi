@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 16,
-  "lastEventHash": "sha256:a571cbae01c7a369ecfbabf9a3b19b1ebd1b962037e73c0601e45094f7835624",
+  "sequence": 17,
+  "lastEventHash": "sha256:1793d7566eb6d370e9a33eee14a072a46f12f6108633b1f4aa22e637ce313bd3",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -112,16 +112,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`test/adapters/verification-preflight.test.ts` now provisions a fake executable `pnpm` in the isolated fixture.",
+            "The new regression rejects both `pnpm --filter-prod web test` and `pnpm --filter-prod=web test` at root `cwd`, asserting the exact tracked policy path and fail-closed error.",
+            "The same test accepts package-local `pnpm test` from `web`, proving the owning package binding remains available.",
+            "No production source, policy, dependency, or workflow files changed."
+          ],
           "inputArtifactHash": "sha256:worktree-196-ready",
           "logicalNodeId": "work-on-196-implement-1",
           "startedAt": "2026-08-27T06:59:31.384Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/1912da16-d362-4685-a79b-576959e6bcbd",
           "branch": "forge/issue-196-1912da16",
-          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22"
+          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22",
+          "finishedAt": "2026-08-27T07:03:51.598Z",
+          "outputArtifactHash": "sha256:implement-196-pnmp-regression-tests"
         }
       ]
     }
@@ -144,7 +151,8 @@
     "phase:prepare-worktree:1:start": "311d9506-29bf-4ed6-aaa5-b97ef22c026e",
     "phase:prepare-worktree:1:complete": "d159eb17-f1e8-4cc5-a7fd-056301399093",
     "phase:implement:1:queue": "2ad1116b-1059-4e92-ae84-0d437f6d630a",
-    "phase:implement:1:start": "e4903b39-587d-40a3-8d1f-30892c93a940"
+    "phase:implement:1:start": "e4903b39-587d-40a3-8d1f-30892c93a940",
+    "phase:implement:1:complete": "08b80eff-877e-4f81-afdd-38f5bc1caa4e"
   },
   "eventIds": {
     "1e76bd54-c771-463b-b76c-0df6b477498c": true,
@@ -162,7 +170,8 @@
     "311d9506-29bf-4ed6-aaa5-b97ef22c026e": true,
     "d159eb17-f1e8-4cc5-a7fd-056301399093": true,
     "2ad1116b-1059-4e92-ae84-0d437f6d630a": true,
-    "e4903b39-587d-40a3-8d1f-30892c93a940": true
+    "e4903b39-587d-40a3-8d1f-30892c93a940": true,
+    "08b80eff-877e-4f81-afdd-38f5bc1caa4e": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
