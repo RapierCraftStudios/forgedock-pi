@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 22,
-  "lastEventHash": "sha256:b92967d656b5cf4131e73905aaadf21e1d664849351c221ad099331ac4dcb28e",
+  "sequence": 23,
+  "lastEventHash": "sha256:d9ba18c998734e380cf581973a04b8d286a5bae31ec3823faeec95b6afe0a447",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -162,15 +162,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Complete round-3 panel returned fresh correctness result `4b376428-94ad-4123-8401-afc73aa1f0f2` and security result `07f3b130-df77-4068-a7cc-6a90872f75ad`, both bound to `7cb6dc81a7d8249229fa32590763ffed51b3f610`.",
+            "All findings from the complete round-3 panel were remediated in commit `da44ad279f334feeb94e66e3686d35d7cfe5df72`.",
+            "`forge_verify` named check `check` passed after the remediation commit.",
+            "`forge_prepare_review` refreshed PR #193 to `da44ad279f334feeb94e66e3686d35d7cfe5df72`.",
+            "Configured `maxReviewRounds=3` prohibits a fourth fresh panel; the prior round-3 review identity is stale for the latest head."
+          ],
           "logicalNodeId": "review-1",
           "startedAt": "2026-08-27T01:11:04.376Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/53151d77-8a46-49b5-8caf-583e9c1ca9f0",
           "branch": "forge/issue-94-53151d77",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-27T03:24:57.292Z",
+          "outputArtifactHash": "sha256:review-94-cap-exhausted"
         }
       ]
     }
@@ -199,7 +207,8 @@
     "phase:verify:1:start": "a1edf3b7-537f-4803-a16d-7ee610a4c807",
     "phase:verify:1:complete": "c69984b9-8a6e-47e0-91d9-4550325259f8",
     "phase:review:1:queue": "aa0504c6-c211-42e9-954b-0fcc7ea8be67",
-    "phase:review:1:start": "0fd37574-a086-4d2a-a33b-3d22d093fab2"
+    "phase:review:1:start": "0fd37574-a086-4d2a-a33b-3d22d093fab2",
+    "phase:review:1:complete": "48321d30-894f-4811-9c88-39f0b029c44a"
   },
   "eventIds": {
     "d15aa630-283e-4178-8c5f-35cd1ea03050": true,
@@ -223,7 +232,8 @@
     "a1edf3b7-537f-4803-a16d-7ee610a4c807": true,
     "c69984b9-8a6e-47e0-91d9-4550325259f8": true,
     "aa0504c6-c211-42e9-954b-0fcc7ea8be67": true,
-    "0fd37574-a086-4d2a-a33b-3d22d093fab2": true
+    "0fd37574-a086-4d2a-a33b-3d22d093fab2": true,
+    "48321d30-894f-4811-9c88-39f0b029c44a": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
