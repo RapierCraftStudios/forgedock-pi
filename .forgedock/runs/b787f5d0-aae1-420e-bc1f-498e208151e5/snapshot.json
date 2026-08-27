@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 30,
-  "lastEventHash": "sha256:e16ea4e8e34cc955bc5aa14d720d65c47ca9ea02fe80785d3d9c905fa9b183df",
+  "sequence": 31,
+  "lastEventHash": "sha256:9b1a29deb1921fe603b5de1ff0c4559e2db7d0ec894df57c19ac7bdf36ca458c",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -100,10 +100,15 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": []
+          "evidence": [],
+          "logicalNodeId": "implement-1",
+          "startedAt": "2026-08-27T13:53:20.690Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/b787f5d0-aae1-420e-bc1f-498e208151e5",
+          "branch": "forge/issue-209-b787f5d0",
+          "baseSha": "0b7fcd2c596e05d7a98e57a4464d39aae987f71d"
         }
       ]
     }
@@ -231,7 +236,8 @@
     "effect:github-label:RapierCraftStudios/forgedock-pi:209:520fa38a-1715-4191-831d-038a5cfb3def": "85f53c02-b183-4495-9e9b-d05829b22318",
     "phase:prepare-worktree:1:complete": "3506e718-98bc-4a9a-9adb-2bc6806cb7ea",
     "effect:github-label:RapierCraftStudios/forgedock-pi:209:3506e718-98bc-4a9a-9adb-2bc6806cb7ea": "31a83b22-c306-47c4-bbf6-cc6c1bd3a23b",
-    "phase:implement:1:queue": "343d6a5b-9d97-404a-b223-a904e2da9256"
+    "phase:implement:1:queue": "343d6a5b-9d97-404a-b223-a904e2da9256",
+    "phase:implement:1:start": "23c4cdda-3009-4360-903d-4b34d91ea907"
   },
   "eventIds": {
     "ba899e3b-b3ad-4962-94bc-eefda2015ea8": true,
@@ -263,7 +269,8 @@
     "85f53c02-b183-4495-9e9b-d05829b22318": true,
     "3506e718-98bc-4a9a-9adb-2bc6806cb7ea": true,
     "31a83b22-c306-47c4-bbf6-cc6c1bd3a23b": true,
-    "343d6a5b-9d97-404a-b223-a904e2da9256": true
+    "343d6a5b-9d97-404a-b223-a904e2da9256": true,
+    "23c4cdda-3009-4360-903d-4b34d91ea907": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
