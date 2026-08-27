@@ -29,6 +29,7 @@ import {
   forgeCommitArguments,
   isForgeRuntimePath,
   parseBoundReviewerResult,
+  workflowLabelForCheckpoint,
   parseGitStatusPaths,
   reviewerStatusIsTerminal,
   writeTrustedResultFile,
@@ -94,6 +95,55 @@ test("runtime path classification follows the checkout case contract", () => {
   assert.equal(isForgeRuntimePath(".FORGE/CACHE/result", true), true);
   assert.equal(isForgeRuntimePath(".Forge/WorkTrees/run", true), true);
   assert.equal(isForgeRuntimePath("src/.pi-value.ts", true), false);
+});
+
+test("direct checkpoint labels cover every workflow lifecycle boundary", () => {
+  const label = (
+    phase:
+      | "resolve"
+      | "investigate"
+      | "plan"
+      | "prepare-worktree"
+      | "implement"
+      | "verify"
+      | "review",
+    action: "start" | "complete",
+    report?: string,
+  ) => workflowLabelForCheckpoint({ phase, action, ...(report ? { report } : {}) });
+
+  for (const phase of ["resolve", "investigate"] as const) {
+    assert.equal(label(phase, "start"), "workflow:investigating");
+  }
+  assert.equal(
+    label("investigate", "complete", "| Verdict | CONFIRMED |"),
+    "workflow:ready-to-build",
+  );
+  assert.equal(
+    label("investigate", "complete", "**Verdict**: INVALID"),
+    "workflow:invalid",
+  );
+  assert.equal(
+    label("investigate", "complete", "| Verdict | DECOMPOSE |"),
+    "workflow:decomposed",
+  );
+
+  for (const phase of [
+    "plan",
+    "prepare-worktree",
+    "implement",
+    "verify",
+  ] as const) {
+    assert.equal(label(phase, "start"), "workflow:building");
+    assert.equal(label(phase, "complete"), "workflow:building");
+  }
+  for (const phase of ["review"] as const) {
+    assert.equal(label(phase, "start"), "workflow:in-review");
+    assert.equal(label(phase, "complete"), "workflow:in-review");
+  }
+  assert.equal(
+    workflowLabelForCheckpoint({ phase: "verify", action: "fail" }),
+    undefined,
+  );
 });
 
 test("security evidence overflow stays typed across repeated output chunks", () => {

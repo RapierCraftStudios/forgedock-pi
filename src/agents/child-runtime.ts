@@ -50,6 +50,10 @@ import {
 import { RunJournal } from "../adapters/run-journal.ts";
 import { phaseArtifactValidationError } from "../core/comment-contract.ts";
 import {
+  assertWorkflowLabel,
+  WORKFLOW_LABEL_BY_STAGE,
+} from "../core/artifact-protocol.ts";
+import {
   canonicalizePotentialPath,
   isPathWithin,
   toolPath,
@@ -1452,9 +1456,6 @@ export function registerForgeRuntime(
           transport,
           binding.repository,
         );
-        if (params.action !== "start") {
-          await projectPhaseReport(projector, event, params, binding, signal);
-        }
         const workflowLabel = workflowLabelForCheckpoint(params);
         if (workflowLabel)
           await projector.setWorkflowLabel(
@@ -1462,6 +1463,9 @@ export function registerForgeRuntime(
             workflowLabel,
             signal,
           );
+        if (params.action !== "start") {
+          await projectPhaseReport(projector, event, params, binding, signal);
+        }
         await postDerivedPhaseArtifacts(
           projector,
           event,
@@ -1926,7 +1930,7 @@ async function postDerivedPhaseArtifacts(
   }
 }
 
-function workflowLabelForCheckpoint(params: {
+export function workflowLabelForCheckpoint(params: {
   phase: RunPhase;
   action:
     | "queue"
@@ -1938,23 +1942,56 @@ function workflowLabelForCheckpoint(params: {
     | "abandon";
   report?: string;
 }): string | undefined {
-  if (params.action === "start") {
-    if (params.phase === "investigate") return "workflow:investigating";
-    if (
-      params.phase === "plan" ||
-      params.phase === "prepare-worktree" ||
-      params.phase === "implement" ||
-      params.phase === "verify"
-    ) {
-      return "workflow:building";
+  const stage = workflowStageForCheckpoint(params);
+  if (!stage) return undefined;
+  const label = WORKFLOW_LABEL_BY_STAGE[stage];
+  assertWorkflowLabel(label, stage);
+  return label;
+}
+
+function workflowStageForCheckpoint(params: {
+  phase: RunPhase;
+  action:
+    | "queue"
+    | "start"
+    | "complete"
+    | "fail"
+    | "block"
+    | "needs-human"
+    | "abandon";
+  report?: string;
+}): keyof typeof WORKFLOW_LABEL_BY_STAGE | undefined {
+  if (params.action !== "start" && params.action !== "complete") return undefined;
+  switch (params.phase) {
+    case "resolve":
+      return "investigation";
+    case "investigate": {
+      if (params.action !== "complete") return "investigation";
+      const outcome = investigationOutcome(params.report);
+      return outcome ?? "readyToBuild";
     }
-    if (params.phase === "review") return "workflow:in-review";
+    case "plan":
+    case "prepare-worktree":
+    case "implement":
+    case "verify":
+      return "build";
+    case "review":
+      return "review";
+    default:
+      return undefined;
   }
-  if (params.action === "complete" && params.phase === "investigate") {
-    return params.report?.includes("**Verdict**: INVALID")
-      ? "workflow:invalid"
-      : "workflow:ready-to-build";
-  }
+}
+
+function investigationOutcome(
+  report: string | undefined,
+): "invalid" | "decomposed" | undefined {
+  if (!report) return undefined;
+  const match = report.match(
+    /(?:\|\s*Verdict\s*\|\s*|\*\*Verdict\*\*\s*:\s*|(?:^|\n)\s*Verdict\s*:\s*)(INVALID|DECOMPOSED?|CONFIRMED)\b/i,
+  );
+  const verdict = match?.[1]?.toLowerCase();
+  if (verdict === "invalid") return "invalid";
+  if (verdict === "decompose" || verdict === "decomposed") return "decomposed";
   return undefined;
 }
 

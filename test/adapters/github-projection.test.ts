@@ -107,6 +107,33 @@ test("issue projection is marker-idempotent and only adds missing labels", async
   assert.equal(transport.labels.has("priority:P1"), true);
 });
 
+test("workflow projection replaces stale labels across the complete lifecycle", async () => {
+  const transport = new ProjectionTransport();
+  transport.labels.add("priority:P1");
+  transport.labels.add("customer-visible");
+  transport.labels.add("workflow:stale");
+  const projector = new GitHubIssueProjector(transport, "owner/repo");
+  const lifecycle = [
+    "workflow:investigating",
+    "workflow:ready-to-build",
+    "workflow:building",
+    "workflow:in-review",
+    "workflow:awaiting-merge",
+    "workflow:merged",
+  ];
+
+  for (const workflowLabel of lifecycle) {
+    await projector.setWorkflowLabel(42, workflowLabel);
+    assert.deepEqual(
+      [...transport.labels].filter((label) => label.startsWith("workflow:")),
+      [workflowLabel],
+    );
+    assert.equal(transport.labels.has("bug"), true);
+    assert.equal(transport.labels.has("priority:P1"), true);
+    assert.equal(transport.labels.has("customer-visible"), true);
+  }
+});
+
 test("logical issue artifacts are idempotent by revision and supersede older revisions", async () => {
   const transport = new ProjectionTransport();
   const projector = new GitHubIssueProjector(transport, "owner/repo");
