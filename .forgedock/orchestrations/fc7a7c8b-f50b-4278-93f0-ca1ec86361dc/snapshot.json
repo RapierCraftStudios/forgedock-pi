@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 34,
-  "lastEventHash": "sha256:14dc64c2dcc4dcea92cd5b5b8d604a54bb983c1f9a0b7a5230f727dcf5b39f72",
+  "sequence": 35,
+  "lastEventHash": "sha256:d80cb3b4a3a004f84a0773bc8c6406a92f10a024063ce6edb868bded8846646d",
   "lanes": [
     {
       "issueNumber": 92,
@@ -83,12 +83,13 @@
     {
       "issueNumber": 119,
       "ordinal": 7,
-      "status": "refreshing",
+      "status": "needs-human",
       "refreshes": 1,
       "forgeRunId": "4902846e-02e3-412d-963c-fa81f8ab1d11",
       "subagentRunId": "14f93f92-7ec2-46c6-ab7e-571d0271c0e1",
       "headSha": "d04d339e43a2837b93fce0d9b9b5e4e4247ff0af",
-      "baseSha": "c0362f2eedd5a0c77e766ddc347e2471793ed127"
+      "baseSha": "c0362f2eedd5a0c77e766ddc347e2471793ed127",
+      "reason": "Fresh security review returned SECURITY-001 (possible low-severity production-safety finding); human disposition is required before merge."
     },
     {
       "issueNumber": 120,
@@ -135,7 +136,8 @@
     "lane:115:refresh:1": "03fde2bf-9063-4532-baf1-7aebbddec067",
     "lane:115:blocked": "a264f298-8fd1-47f9-9574-c2f317f21eeb",
     "lane:119:integrate:0": "f6ae11b5-bf0f-4c23-863b-e67572376b90",
-    "lane:119:refresh:1": "be51107b-0245-49f9-81b9-61d0e808d445"
+    "lane:119:refresh:1": "be51107b-0245-49f9-81b9-61d0e808d445",
+    "lane:119:needs-human": "181d372b-53fb-4339-a2ed-ed19d961fa50"
   },
   "createdAt": "2026-08-27T00:45:48.913Z"
 }
