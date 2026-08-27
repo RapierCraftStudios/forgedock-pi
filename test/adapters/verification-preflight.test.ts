@@ -32,10 +32,12 @@ async function fixture(): Promise<{
   await writeFile(join(root, "package.json"), JSON.stringify({ dependencies: {} }));
   await writeFile(
     join(root, "web", "package.json"),
-    JSON.stringify({ scripts: { test: "vitest run" } }),
+    JSON.stringify({ scripts: { test: "vitest run", workspace: "vitest run" } }),
   );
-  await writeFile(join(bin, "npm"), "#!/bin/sh\nexit 0\n");
-  await chmod(join(bin, "npm"), 0o755);
+  for (const manager of ["npm", "pnpm", "yarn", "bun"]) {
+    await writeFile(join(bin, manager), "#!/bin/sh\nexit 0\n");
+    await chmod(join(bin, manager), 0o755);
+  }
   return {
     root,
     outside,
@@ -111,6 +113,34 @@ test("preflight rejects package-selection flags instead of checking the wrong ma
     await preflightRequiredVerificationCommands(
       testFixture.root,
       { test: command("web", { argv: ["npm", "test", "--", "--prefix", "web"] }) },
+      { path: testFixture.path },
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
+test("package-manager selector aliases are rejected without blocking script names", async () => {
+  const testFixture = await fixture();
+  try {
+    for (const argv of [
+      ["pnpm", "-w", "test"],
+      ["pnpm", "recursive", "test"],
+      ["yarn", "workspace", "web", "test"],
+    ]) {
+      await assert.rejects(
+        preflightRequiredVerificationCommands(
+          testFixture.root,
+          { test: command("web", { argv }) },
+          { path: testFixture.path },
+        ),
+        /package-location option .*set cwd/,
+      );
+    }
+
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      { workspace: command("web", { argv: ["yarn", "run", "workspace"] }) },
       { path: testFixture.path },
     );
   } finally {

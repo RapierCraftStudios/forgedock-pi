@@ -137,9 +137,17 @@ const PACKAGE_SELECTION_OPTIONS: Readonly<
     "-C",
     "-F",
     "-r",
+    "-w",
   ],
-  yarn: ["--cwd", "workspace", "workspaces"],
+  yarn: ["--cwd"],
   bun: ["--cwd", "--filter", "--workspaces"],
+};
+
+const PACKAGE_SELECTION_COMMANDS: Readonly<
+  Record<string, readonly string[]>
+> = {
+  pnpm: ["recursive"],
+  yarn: ["workspace", "workspaces"],
 };
 
 function assertNoPackageSelectionOptions(
@@ -172,6 +180,9 @@ function packageSelectionOption(argv: readonly string[]): string | undefined {
     )
       return argument;
   }
+
+  if (PACKAGE_SELECTION_COMMANDS[manager]?.includes(argv[1] ?? ""))
+    return argv[1];
   return undefined;
 }
 
