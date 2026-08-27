@@ -69,12 +69,15 @@ export async function resolveVerificationCommandDirectory(
   const canonicalRoot = await realpath(repositoryRoot);
   const lexical = resolve(canonicalRoot, normalized);
   if (!pathWithin(canonicalRoot, lexical))
-    throw new VerificationPreflightError(path, "escapes the repository");
+    throw new VerificationPreflightError(
+      path,
+      "escapes the repository; set cwd to an in-repository package directory or use CI-only verification",
+    );
   const firstSegment = relative(canonicalRoot, lexical).split(/[\\/]/, 1)[0];
   if (firstSegment === ".git" || firstSegment === ".pi")
     throw new VerificationPreflightError(
       path,
-      "must not target Git or Forge runtime control directories",
+      "must not target Git or Forge runtime control directories; set cwd to an in-repository package directory or use CI-only verification",
     );
   let canonical: string;
   try {
@@ -82,13 +85,19 @@ export async function resolveVerificationCommandDirectory(
   } catch {
     throw new VerificationPreflightError(
       path,
-      `directory '${normalized}' does not exist`,
+      `directory '${normalized}' does not exist; set cwd to an existing package directory or use CI-only verification`,
     );
   }
   if (!pathWithin(canonicalRoot, canonical))
-    throw new VerificationPreflightError(path, "resolves outside the repository");
+    throw new VerificationPreflightError(
+      path,
+      "resolves outside the repository; set cwd to an in-repository package directory or use CI-only verification",
+    );
   if (!(await stat(canonical)).isDirectory())
-    throw new VerificationPreflightError(path, "must resolve to a directory");
+    throw new VerificationPreflightError(
+      path,
+      "must resolve to a directory; set cwd to an existing package directory or use CI-only verification",
+    );
   return canonical;
 }
 
@@ -141,13 +150,13 @@ async function assertPackageScript(
   } catch {
     throw new VerificationPreflightError(
       `${basePath}.cwd`,
-      `selected package directory has no package.json for script '${script}'`,
+      `selected package directory has no package.json for script '${script}'; set cwd to the package that defines it or use CI-only verification`,
     );
   }
   if (!pathWithin(repositoryRoot, canonicalManifest))
     throw new VerificationPreflightError(
       `${basePath}.cwd`,
-      "package.json resolves outside the repository",
+      "package.json resolves outside the repository; set cwd to an in-repository package directory or use CI-only verification",
     );
   let manifest: unknown;
   try {
@@ -155,7 +164,7 @@ async function assertPackageScript(
   } catch {
     throw new VerificationPreflightError(
       `${basePath}.cwd`,
-      "selected package.json is not valid JSON",
+      "selected package.json is not valid JSON; repair it or use CI-only verification",
     );
   }
   const scripts =

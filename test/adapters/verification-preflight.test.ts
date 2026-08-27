@@ -116,8 +116,17 @@ test("verification cwd rejects missing, control, and symlink-escape directories"
   try {
     await symlink(testFixture.outside, join(testFixture.root, "escaped"), "dir");
     await assert.rejects(
-      resolveVerificationCommandDirectory(testFixture.root, "missing"),
-      /does not exist/,
+      resolveVerificationCommandDirectory(
+        testFixture.root,
+        "missing",
+        "/repo/.forge/config.json verification.commands.test.cwd",
+      ),
+      (error: unknown) =>
+        error instanceof VerificationPreflightError &&
+        error.path ===
+          "/repo/.forge/config.json verification.commands.test.cwd" &&
+        /does not exist/.test(error.message) &&
+        /use CI-only verification/.test(error.message),
     );
     await assert.rejects(
       resolveVerificationCommandDirectory(testFixture.root, ".pi"),

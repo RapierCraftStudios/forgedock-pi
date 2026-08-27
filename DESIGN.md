@@ -262,20 +262,20 @@ The production/default branch is never auto-merged.
 
 ## Verification trust boundary
 
-`.forge/config.json` stores commands as argv arrays, for example:
+`.forge/config.json` stores commands as argv arrays. Each command may bind execution to a safe repository-relative package directory with `cwd`, for example:
 
 ```json
 {
   "verification": {
     "commands": {
-      "test": { "argv": ["npm", "test"], "required": true, "timeoutMs": 600000 },
-      "typecheck": { "argv": ["npm", "run", "typecheck"], "required": true, "timeoutMs": 300000 }
+      "web-test": { "argv": ["npm", "test"], "cwd": "web", "required": true, "timeoutMs": 600000 },
+      "web-typecheck": { "argv": ["npm", "run", "typecheck"], "cwd": "web", "required": true, "timeoutMs": 300000 }
     }
   }
 }
 ```
 
-The run snapshots policy from the trusted base commit. A PR/worktree modification to policy cannot change the active run. Models request checks by name and cannot supply shell source. The runner uses argv spawning, scrubs secrets, preserves the child exit code separately from truncated output, records hashes/artifacts, and fails closed for required checks.
+`cwd` defaults to `.` and is rejected when absolute, traversing, symlinked outside the repository, or inside Forge/Git control directories. `/forge:init` statically validates retained required commands without executing package scripts; a policy with `commands: {}` is the explicit GitHub-CI-only mode. Missing executables, package directories, manifests, or npm scripts fail closed with the exact config path and a cwd/config or CI-only remediation. The run snapshots policy from the trusted base commit. A PR/worktree modification to policy cannot change the active run. Models request checks by name and cannot supply shell source. The runner uses argv spawning, scrubs secrets, preserves the child exit code separately from truncated output, records hashes/artifacts, and fails closed for required checks.
 
 Executing repository code is still a security boundary. Production writer/verification runs require a containment mode. The first implementation must at minimum provide child environment scrubbing, worktree-root enforcement, no GitHub credentials, and a child-side guard against GitHub writes/push/merge. A stronger container/sandbox backend remains an explicit production-hardening option.
 

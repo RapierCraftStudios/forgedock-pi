@@ -9,7 +9,11 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-import { parseForgePolicy, type ForgePolicy } from "../core/policy.ts";
+import { preflightRequiredVerificationCommands } from "../adapters/verification-preflight.ts";
+import {
+  parseForgePolicy,
+  type ForgePolicy,
+} from "../core/policy.ts";
 import type { ForgeOrchestrationController } from "../workflows/orchestrate.ts";
 import type { ForgeWorkOnController } from "../workflows/work-on.ts";
 import {
@@ -49,6 +53,25 @@ export interface WorkOnConfirmationInput {
   issueNumber: number;
   sourceExpression: string;
   resolutionSummary: string;
+}
+
+/**
+ * Validate tracked local checks before `/forge:init` writes a new policy.
+ * This is deliberately static: it inspects command executables and package
+ * metadata but never runs repository code. An empty map is explicit CI-only
+ * verification.
+ */
+export async function validateForgeInitVerification(
+  repositoryRoot: string,
+  configPath: string,
+  commands: ForgePolicy["verification"]["commands"],
+  options: { path?: string } = {},
+): Promise<ForgePolicy["verification"]["commands"]> {
+  await preflightRequiredVerificationCommands(repositoryRoot, commands, {
+    configPath,
+    ...options,
+  });
+  return commands;
 }
 
 /** Require an operator gesture before an LLM-resolved issue can start writers. */
@@ -218,8 +241,11 @@ export function registerForgeCommands(
         configPath,
       });
       await reconcileWorkflowLabels(pi, root, config.repository.name);
+      const localVerification = Object.entries(config.verification.commands)
+        .map(([name, command]) => `${name} (cwd: ${command.cwd})`)
+        .join(", ");
       ctx.ui.notify(
-        `ForgeDock setup complete.\nPolicy: ${configPath}\nIntegration: ${config.branches.integration[0]}\nCI-required PR targets: ${config.verification.github.requiredBranches.join(", ")}\nAuto-merge: ${config.branches.autoMergeIntegration ? "enabled" : "disabled"}\nParallel lanes: ${config.orchestration.maxConcurrent}\nReview and commit the tracked policy.`,
+        `ForgeDock setup complete.\nPolicy: ${configPath}\nIntegration: ${config.branches.integration[0]}\nCI-required PR targets: ${config.verification.github.requiredBranches.join(", ")}\nLocal verification: ${localVerification || "CI-only (no tracked commands)"}\nAuto-merge: ${config.branches.autoMergeIntegration ? "enabled" : "disabled"}\nParallel lanes: ${config.orchestration.maxConcurrent}\nReview and commit the tracked policy.`,
         "info",
       );
       await orchestrator.resume(ctx);
@@ -442,13 +468,20 @@ async function configureForgePolicy(input: {
         waitTimeoutMs: config.verification.github.waitTimeoutMs,
         pollIntervalMs: config.verification.github.pollIntervalMs,
       },
-      commands: {},
+      // Keep explicitly configured commands only after static validation.
+      // A new template has no commands, which is the explicit CI-only mode.
+      commands: config.verification.commands,
     },
     orchestration: {
       ...config.orchestration,
       maxConcurrent,
     },
   };
+  await validateForgeInitVerification(
+    input.root,
+    input.configPath,
+    config.verification.commands,
+  );
   parseForgePolicy(config);
   const serializedPolicy = structuredClone(config) as unknown as Record<
     string,

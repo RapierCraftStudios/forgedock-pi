@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { chmod, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import type {
@@ -12,6 +15,7 @@ import {
   confirmWorkOnDispatch,
   issueResolverPrompt,
   registerForgeCommands,
+  validateForgeInitVerification,
 } from "../../src/ui/commands.ts";
 
 const input = {
@@ -19,6 +23,64 @@ const input = {
   sourceExpression: "https://github.com/owner/repo/issues",
   resolutionSummary: "Three eligible open issues; active-owned lanes excluded.",
 };
+
+test("/forge:init preserves package-local checks and makes CI-only verification explicit", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-init-verification-"));
+  const bin = join(root, "bin");
+  try {
+    await mkdir(join(root, "web"), { recursive: true });
+    await mkdir(bin);
+    await writeFile(join(root, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(root, "web", "package.json"),
+      JSON.stringify({ scripts: { test: "vitest run" } }),
+    );
+    await writeFile(join(bin, "npm"), "#!/bin/sh\nexit 0\n");
+    await chmod(join(bin, "npm"), 0o755);
+
+    const packageCommand = {
+      argv: ["npm", "test"],
+      cwd: "web",
+      required: true,
+      timeoutMs: 60_000,
+    };
+    const retained = await validateForgeInitVerification(
+      root,
+      "/repo/.forge/config.json",
+      { webTest: packageCommand },
+      { path: bin },
+    );
+    assert.equal(retained.webTest?.cwd, "web");
+
+    await assert.rejects(
+      validateForgeInitVerification(
+        root,
+        "/repo/.forge/config.json",
+        { test: { ...packageCommand, cwd: "." } },
+        { path: bin },
+      ),
+      (error: unknown) =>
+        error instanceof Error &&
+        error.message.includes(
+          "/repo/.forge/config.json verification.commands.test.argv",
+        ) &&
+        error.message.includes("set cwd to the package that defines it") &&
+        error.message.includes("CI-only verification"),
+    );
+
+    assert.deepEqual(
+      await validateForgeInitVerification(
+        root,
+        "/repo/.forge/config.json",
+        {},
+        { path: "" },
+      ),
+      {},
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("model-callable orchestration fails closed without interactive confirmation", async () => {
   const ui = {
