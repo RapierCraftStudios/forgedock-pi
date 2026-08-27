@@ -34,8 +34,10 @@ async function fixture(): Promise<{
     join(root, "web", "package.json"),
     JSON.stringify({ scripts: { test: "vitest run" } }),
   );
-  await writeFile(join(bin, "npm"), "#!/bin/sh\nexit 0\n");
-  await chmod(join(bin, "npm"), 0o755);
+  for (const executable of ["npm", "npm.cmd", "npm.exe"]) {
+    await writeFile(join(bin, executable), "#!/bin/sh\nexit 0\n");
+    await chmod(join(bin, executable), 0o755);
+  }
   return {
     root,
     outside,
@@ -131,23 +133,30 @@ test("npm package-selection options cannot override verification cwd", async () 
     const selectors = [
       ["--prefix", testFixture.outside],
       [`--prefix=${testFixture.outside}`],
+      ["-prefix", testFixture.outside],
+      ["--prefi", testFixture.outside],
       ["-C", testFixture.outside],
       [`-C${testFixture.outside}`],
       ["--workspace", "web"],
       ["--workspace=web"],
+      ["--work", "web"],
+      ["-workspace", "web"],
       ["-w", "web"],
       ["--workspaces"],
       ["--include-workspace-root"],
       ["--global"],
+      ["-global"],
       ["-g"],
       ["--location=global"],
+      ["--loc", "global"],
       ["--global-style"],
     ];
     for (const selector of selectors) {
-      for (const argv of [
-        ["npm", "test", ...selector],
-        ["npm", ...selector, "test"],
-      ]) {
+      for (const executable of ["npm", "npm.cmd", "npm.exe"]) {
+        for (const argv of [
+          [executable, "test", ...selector],
+          [executable, ...selector, "test"],
+        ]) {
         await assert.rejects(
           preflightRequiredVerificationCommands(
             testFixture.root,
@@ -165,7 +174,8 @@ test("npm package-selection options cannot override verification cwd", async () 
               "/repo/.forge/config.json verification.commands.test.argv" &&
             /npm package-selection option/.test(error.message),
           `npm ${selector.join(" ")} must not override verification cwd`,
-        );
+          );
+        }
       }
     }
 

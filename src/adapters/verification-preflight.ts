@@ -117,38 +117,53 @@ async function executableAvailable(
   return false;
 }
 
-const NPM_PACKAGE_SELECTION_OPTIONS = new Set([
-  "--prefix",
-  "-C",
-  "--workspace",
-  "-w",
-  "--workspaces",
-  "--include-workspace-root",
-  "--global",
-  "-g",
-  "--location",
-  "--global-style",
-]);
+const NPM_PACKAGE_SELECTION_OPTIONS = [
+  "prefix",
+  "workspace",
+  "workspaces",
+  "workspace-root",
+  "include-workspace-root",
+  "global",
+  "location",
+  "global-style",
+] as const;
 
 function assertNpmPackageSelectionUsesCwd(
   argv: readonly string[],
   cwd: string,
   basePath: string,
 ): void {
-  const manager = basename(argv[0] ?? "").replace(/\\.(?:cmd|exe)$/i, "");
+  const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
   if (manager !== "npm") return;
   for (const argument of argv.slice(1)) {
     if (argument === "--") break;
     const option = argument.split("=")[0] ?? argument;
-    const shortPrefix =
-      (argument.startsWith("-C") || argument.startsWith("-w")) &&
-      argument.length > 2;
-    if (!NPM_PACKAGE_SELECTION_OPTIONS.has(option) && !shortPrefix) continue;
+    if (!isNpmPackageSelectionOption(option)) continue;
     throw new VerificationPreflightError(
       `${basePath}.argv`,
       `npm package-selection option '${option}' cannot override verification cwd '${cwd}'`,
     );
   }
+}
+
+function isNpmPackageSelectionOption(option: string): boolean {
+  if (!option.startsWith("-")) return false;
+  if (
+    option.startsWith("-C") ||
+    option.startsWith("-w") ||
+    option.startsWith("-g")
+  )
+    return true;
+
+  const normalized = option.replace(/^-+/, "").toLowerCase();
+  if (!normalized) return false;
+  if (NPM_PACKAGE_SELECTION_OPTIONS.some((name) => name === normalized)) return true;
+  if (normalized.length < 3) return false;
+  return NPM_PACKAGE_SELECTION_OPTIONS.some((name) =>
+    name === "include-workspace-root"
+      ? normalized.startsWith("include-workspace") && name.startsWith(normalized)
+      : name.startsWith(normalized),
+  );
 }
 
 function packageScriptName(argv: readonly string[]): string | undefined {
