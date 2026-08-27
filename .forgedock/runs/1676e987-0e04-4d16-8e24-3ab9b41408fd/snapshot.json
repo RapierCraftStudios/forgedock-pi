@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:9a131e562b3b8111efe1993c327bd7cd269eedc8d068fa4ef854ba5501ba9ec1",
+  "sequence": 8,
+  "lastEventHash": "sha256:df12977d87cbcc336f700f952c3b77596cabc65ac2c7bb9e553af3c67e89fb7e",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -39,15 +39,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/verification-preflight.ts` only maps direct `test`/`run`/`run-script` argv forms to one cwd and one package script.",
+            "The cited `pnpm -r run test` is currently rejected early because `-r` is treated as an unsupported option, so that exact form is fail-closed rather than silently accepted.",
+            "Workspace subcommands/aliases such as `pnpm recursive run test` and `yarn workspaces foreach run test` are not recognized and return no script invocation, allowing executable-only preflight to skip package-script validation.",
+            "Focused tests cover direct package cwd selection and rejection of selector/options, but do not cover recursive workspace package validation."
+          ],
           "logicalNodeId": "work-on-investigate",
           "startedAt": "2026-08-27T06:56:52.047Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/1676e987-0e04-4d16-8e24-3ab9b41408fd",
           "branch": "forge/issue-205-1676e987",
-          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22"
+          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22",
+          "finishedAt": "2026-08-27T07:02:31.720Z",
+          "outputArtifactHash": "sha256:investigate-205-preflight"
         }
       ]
     }
@@ -61,7 +68,8 @@
     "phase:resolve:1:start": "7015326c-eebf-4fa5-994d-166a6ef425ad",
     "phase:resolve:1:complete": "63b4a430-e9c1-4421-97de-9a586c197d01",
     "phase:investigate:1:queue": "8a4eb41e-0dfb-4018-98b4-2a0d6629faf2",
-    "phase:investigate:1:start": "7bd0c5c6-67e4-4b6a-bfd2-ef8946af1104"
+    "phase:investigate:1:start": "7bd0c5c6-67e4-4b6a-bfd2-ef8946af1104",
+    "phase:investigate:1:complete": "71bdace7-e177-4913-8a5b-eac170f64b41"
   },
   "eventIds": {
     "5aa28980-f045-4f6c-89dc-4fb725134f1b": true,
@@ -70,7 +78,8 @@
     "7015326c-eebf-4fa5-994d-166a6ef425ad": true,
     "63b4a430-e9c1-4421-97de-9a586c197d01": true,
     "8a4eb41e-0dfb-4018-98b4-2a0d6629faf2": true,
-    "7bd0c5c6-67e4-4b6a-bfd2-ef8946af1104": true
+    "7bd0c5c6-67e4-4b6a-bfd2-ef8946af1104": true,
+    "71bdace7-e177-4913-8a5b-eac170f64b41": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
