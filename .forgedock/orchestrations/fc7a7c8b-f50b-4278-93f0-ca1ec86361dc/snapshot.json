@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 19,
-  "lastEventHash": "sha256:df0271360e05740c53dcc0646cf4a2c68fe44d8014f65788e50c7b77452728ae",
+  "sequence": 20,
+  "lastEventHash": "sha256:2751cca260b1f6812b5c205495d13d0bb518ea620e9d3d757d3cb45741152816",
   "lanes": [
     {
       "issueNumber": 92,
@@ -40,10 +40,11 @@
     {
       "issueNumber": 112,
       "ordinal": 3,
-      "status": "running",
+      "status": "blocked",
       "refreshes": 0,
       "forgeRunId": "43fa03b0-5247-45a5-9a17-a18e68a523d2",
-      "subagentRunId": "e23003ba-6c74-4f26-b7f9-592a726433b9"
+      "subagentRunId": "e23003ba-6c74-4f26-b7f9-592a726433b9",
+      "reason": "Configured maxReviewRounds=3 is exhausted after the final fresh correctness and security panel reported unresolved in-contract package-selection findings; the reviewed head must be preserved and no remediation/review round may proceed without an explicit policy change."
     },
     {
       "issueNumber": 113,
@@ -115,7 +116,8 @@
     "lane:92:merged": "90c05591-9ad3-4da0-bfd3-3531e8eb6b55",
     "lane:114:ready:0": "1f362aa1-2f28-4125-a73c-a0b407cb8ca7",
     "lane:111:blocked": "26360443-cd0c-4ecd-9387-d43c1abb90e2",
-    "lane:119:ready:0": "8472b692-83b6-4f13-a4fb-b912916a1d6f"
+    "lane:119:ready:0": "8472b692-83b6-4f13-a4fb-b912916a1d6f",
+    "lane:112:blocked": "bdeba95b-4774-4e3f-a257-720d60930140"
   },
   "createdAt": "2026-08-27T00:45:48.913Z"
 }
