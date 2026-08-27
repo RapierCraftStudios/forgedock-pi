@@ -5,10 +5,10 @@
   "issueNumber": 204,
   "integrationBranch": "staging",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "authorityMode": "run-scoped",
-  "sequence": 10,
-  "lastEventHash": "sha256:0ea433f04b38b06aa68c2257c693d0f1fdacad5a3584061068c519143158ce4a",
+  "sequence": 11,
+  "lastEventHash": "sha256:61171290f8a458958496a7c818eee7f3a2fd07ea490b0cb774b95f6a3a406767",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -63,7 +63,7 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "abandoned",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
           "evidence": [],
@@ -71,7 +71,9 @@
           "startedAt": "2026-08-27T07:03:45.327Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/e6d508c8-ee5f-4b3e-baff-0f8b9262ff2f",
           "branch": "forge/issue-204-e6d508c8",
-          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22"
+          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22",
+          "reason": "Operator-authorized reset after critical pagination, rate-limit, DAG, and projection integrity failures.",
+          "finishedAt": "2026-08-27T07:46:54.293Z"
         }
       ]
     }
@@ -88,7 +90,8 @@
     "phase:investigate:1:start": "86121528-db81-4eb6-99a8-cb6acc518e78",
     "phase:investigate:1:complete": "a9ccff0d-b71a-445b-b375-5764afee6706",
     "phase:plan:1:queue": "ec238e11-da17-44eb-a9a1-a47a1e62ebf9",
-    "phase:plan:1:start": "7ddb2244-4663-4afc-9e58-1299a6030713"
+    "phase:plan:1:start": "7ddb2244-4663-4afc-9e58-1299a6030713",
+    "run:cancelled": "8b447758-c66f-4597-98e7-f248454e6165"
   },
   "eventIds": {
     "546a1223-fcac-4049-b9da-64181b16d85e": true,
@@ -100,7 +103,8 @@
     "86121528-db81-4eb6-99a8-cb6acc518e78": true,
     "a9ccff0d-b71a-445b-b375-5764afee6706": true,
     "ec238e11-da17-44eb-a9a1-a47a1e62ebf9": true,
-    "7ddb2244-4663-4afc-9e58-1299a6030713": true
+    "7ddb2244-4663-4afc-9e58-1299a6030713": true,
+    "8b447758-c66f-4597-98e7-f248454e6165": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
@@ -112,5 +116,6 @@
     "lastHeartbeatAt": "2026-08-27T06:51:04.093Z",
     "expiresAt": "2027-08-27T06:51:04.093Z",
     "takeoverRequired": false
-  }
+  },
+  "cancellationReason": "Operator-authorized reset after critical pagination, rate-limit, DAG, and projection integrity failures."
 }
