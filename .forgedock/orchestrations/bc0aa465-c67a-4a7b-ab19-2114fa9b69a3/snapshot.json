@@ -3,11 +3,11 @@
   "orchestrationId": "bc0aa465-c67a-4a7b-ab19-2114fa9b69a3",
   "repository": "RapierCraftStudios/forgedock-pi",
   "integrationBranch": "staging",
-  "status": "running",
+  "status": "cancelled",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 18,
-  "lastEventHash": "sha256:632bb521aa4b493ef91d7fb0ced7ecaee90d2a44fa570143edfa7ab9fe3b45a0",
+  "sequence": 19,
+  "lastEventHash": "sha256:d6b32c2d7c207b0eae3198d1f646d61205e9b49af623705dc86763cc8a1483fe",
   "lanes": [
     {
       "issueNumber": 196,
@@ -182,7 +182,10 @@
     "lane:204:started": "5dfeebfe-20e4-497f-b2a5-d8a6f5f7f129",
     "lane:205:started": "0bf3c1ef-f2e8-4726-ab3d-f6e3963be701",
     "lane:206:started": "f5607536-9f3f-4e62-98b3-862dbb5cbc90",
-    "lane:111:ready:0": "99444005-0c1d-4937-ae31-901881da1938"
+    "lane:111:ready:0": "99444005-0c1d-4937-ae31-901881da1938",
+    "orchestration:cancel": "aaed688a-a2c2-4aa0-984f-4c1741644ac5"
   },
-  "createdAt": "2026-08-27T06:43:05.779Z"
+  "createdAt": "2026-08-27T06:43:05.779Z",
+  "reason": "Operator-authorized reset after critical pagination, rate-limit, DAG, and projection integrity failures.",
+  "completedAt": "2026-08-27T07:47:21.853Z"
 }
