@@ -29,6 +29,7 @@ import {
   shouldBufferLaunchCompletion,
   shouldTrustDurableWorkOnResult,
   workflowLabelForNode,
+  workflowStageForDurableMerge,
   workflowStageForNodeTransition,
 } from "../../src/workflows/work-on.ts";
 
@@ -284,6 +285,36 @@ test("awaiting-merge rollback stays best effort when projection fails", async ()
   };
 
   await assert.doesNotReject(() => rollbackAwaitingMergeLabel(projector, 42));
+});
+
+test("durable merge effects preserve the merged stage during recovery", () => {
+  const stateWithEffect = (effectType: "merge" | "pull-request") =>
+    ({
+      effects: {
+        effect: {
+          effectType,
+          effectId: `${effectType}:105`,
+          digest: "sha256:evidence",
+          eventId: "event-effect",
+        },
+      },
+    }) as Pick<import("../../src/core/state.ts").RunState, "effects">;
+
+  assert.equal(
+    workflowStageForDurableMerge(stateWithEffect("merge"), "awaitingMerge"),
+    "merged",
+  );
+  assert.equal(
+    workflowStageForDurableMerge(stateWithEffect("merge"), undefined),
+    "merged",
+  );
+  assert.equal(
+    workflowStageForDurableMerge(
+      stateWithEffect("pull-request"),
+      "awaitingMerge",
+    ),
+    "awaitingMerge",
+  );
 });
 
 test("workflow transitions cover the complete canonical label lifecycle", () => {

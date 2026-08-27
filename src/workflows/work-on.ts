@@ -734,8 +734,10 @@ export class ForgeWorkOnController {
     const snapshot = await store.readRun(link.forgeRunId, ctx.signal);
     if (!snapshot.state) return;
     if (
-      snapshot.state.status === "completed" &&
-      snapshot.state.outcome === "merged"
+      workflowStageForDurableMerge(snapshot.state, undefined) ===
+        "merged" ||
+      (snapshot.state.status === "completed" &&
+        snapshot.state.outcome === "merged")
     ) {
       await this.#projectWorkflowStage(link, "merged", ctx);
       return;
@@ -2097,17 +2099,20 @@ export class ForgeWorkOnController {
     const transport = new FetchGitHubTransport({ tokenProvider });
     const github = new GitHubWorkflowAdapter(transport, link.repository);
     const projector = new GitHubIssueProjector(transport, link.repository);
-    await this.#projectWorkflowStage(
-      link,
-      workflowStageForNodeTransition(node.node, "started"),
-      ctx,
-      projector,
-    );
     const current = await store.readRun(link.forgeRunId, ctx.signal);
     if (!current.state)
       throw new Error(
         `Run ${link.forgeRunId} state is missing for parent node.`,
       );
+    await this.#projectWorkflowStage(
+      link,
+      workflowStageForDurableMerge(
+        current.state,
+        workflowStageForNodeTransition(node.node, "started"),
+      ),
+      ctx,
+      projector,
+    );
     let pull = await github.findPullRequest(link.prepared.branch, ctx.signal);
     if (pull && (node.node === "decision" || node.node === "merge"))
       pull = await resolveMergeability(github, pull.number, ctx.signal);
@@ -5557,6 +5562,17 @@ export function shouldBufferLaunchCompletion(
   linkKnown: boolean,
 ): boolean {
   return receiptBindingInFlight || !linkKnown;
+}
+
+export function workflowStageForDurableMerge(
+  state: Pick<import("../core/state.ts").RunState, "effects">,
+  stage: WorkflowStage | undefined,
+): WorkflowStage | undefined {
+  return Object.values(state.effects).some(
+    (effect) => effect.effectType === "merge",
+  )
+    ? "merged"
+    : stage;
 }
 
 export function workflowStageForNodeTransition(
