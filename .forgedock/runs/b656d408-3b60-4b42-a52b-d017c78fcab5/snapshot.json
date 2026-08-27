@@ -5,10 +5,10 @@
   "issueNumber": 115,
   "integrationBranch": "staging",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "authorityMode": "run-scoped",
-  "sequence": 27,
-  "lastEventHash": "sha256:11cfdb14f624e2c8881c8915941802614052c415dd3d688ef470ccf0c93dac82",
+  "sequence": 28,
+  "lastEventHash": "sha256:793a7292e682a4be415fb4d8e6a99246586721adb900b2eb9233ee8321f4f6bb",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -184,12 +184,14 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "abandoned",
           "leaseEpoch": 1,
           "restartAction": "reconcile and retry parent-owned merge",
           "evidence": [],
           "logicalNodeId": "parent-merge-1",
-          "startedAt": "2026-08-27T03:45:11.795Z"
+          "startedAt": "2026-08-27T03:45:11.795Z",
+          "reason": "Orchestration is terminal with #94:failed, #111:blocked, #112:blocked, #113:blocked, #115:blocked, #119:needs-human; stopping nonterminal child runs before orchestration completion.",
+          "finishedAt": "2026-08-27T04:14:40.870Z"
         }
       ]
     }
@@ -236,7 +238,8 @@
     "phase:merge:1:queue": "24301bc1-365e-410c-850e-427ef49ca9fd",
     "phase:merge:1:start": "be1556a1-8e06-4ef2-bf03-9ddf5d3fdc41",
     "effect:branch:forge/issue-115-b656d408": "5c66be82-ac3c-456e-b5c3-70bd4a30f7a1",
-    "effect:pr:187": "35ea21ac-0417-4088-b1bd-39fbdb64f648"
+    "effect:pr:187": "35ea21ac-0417-4088-b1bd-39fbdb64f648",
+    "run:cancelled": "e901989a-7dbe-4ed4-a753-d6dc7da16c7e"
   },
   "eventIds": {
     "beff3578-0a7e-435c-9904-8c816d7d2394": true,
@@ -265,7 +268,8 @@
     "24301bc1-365e-410c-850e-427ef49ca9fd": true,
     "be1556a1-8e06-4ef2-bf03-9ddf5d3fdc41": true,
     "5c66be82-ac3c-456e-b5c3-70bd4a30f7a1": true,
-    "35ea21ac-0417-4088-b1bd-39fbdb64f648": true
+    "35ea21ac-0417-4088-b1bd-39fbdb64f648": true,
+    "e901989a-7dbe-4ed4-a753-d6dc7da16c7e": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
@@ -277,5 +281,6 @@
     "lastHeartbeatAt": "2026-08-27T00:48:27.127Z",
     "expiresAt": "2027-08-27T00:48:27.127Z",
     "takeoverRequired": false
-  }
+  },
+  "cancellationReason": "Orchestration is terminal with #94:failed, #111:blocked, #112:blocked, #113:blocked, #115:blocked, #119:needs-human; stopping nonterminal child runs before orchestration completion."
 }
