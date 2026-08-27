@@ -7,9 +7,22 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 4,
-  "lastEventHash": "sha256:6a4b4c5a024a13f6bcab97033f30448d78e2535fd1c113d36e29e41094bffefa",
-  "phases": {},
+  "sequence": 5,
+  "lastEventHash": "sha256:3a541a03babb57ecdc97a5b8a67154ffabf275efe480ea0e6fcee36b31cddc63",
+  "phases": {
+    "resolve": {
+      "phase": "resolve",
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "queued",
+          "leaseEpoch": 1,
+          "restartAction": "resume resolve attempt 1",
+          "evidence": []
+        }
+      ]
+    }
+  },
   "nodes": {},
   "effects": {
     "github-comment:RapierCraftStudios/forgedock-pi:196:9bdc34b4-a0fa-4afd-be6d-882d96e1d3e7": {
@@ -29,13 +42,15 @@
     "run:create": "9bdc34b4-a0fa-4afd-be6d-882d96e1d3e7",
     "lease:acquire:1": "bdda2d82-58ef-400d-9c88-939349305752",
     "effect:github-comment:RapierCraftStudios/forgedock-pi:196:9bdc34b4-a0fa-4afd-be6d-882d96e1d3e7": "57c3ad8d-721c-453f-ae60-31a1a6725709",
-    "effect:github-label:RapierCraftStudios/forgedock-pi:196:9bdc34b4-a0fa-4afd-be6d-882d96e1d3e7:workflow": "a5aac788-f6ca-468b-8a71-5083ce6b3960"
+    "effect:github-label:RapierCraftStudios/forgedock-pi:196:9bdc34b4-a0fa-4afd-be6d-882d96e1d3e7:workflow": "a5aac788-f6ca-468b-8a71-5083ce6b3960",
+    "phase:resolve:1:queue": "689df346-e5a0-459c-a24b-3eb4e7fe67d5"
   },
   "eventIds": {
     "9bdc34b4-a0fa-4afd-be6d-882d96e1d3e7": true,
     "bdda2d82-58ef-400d-9c88-939349305752": true,
     "57c3ad8d-721c-453f-ae60-31a1a6725709": true,
-    "a5aac788-f6ca-468b-8a71-5083ce6b3960": true
+    "a5aac788-f6ca-468b-8a71-5083ce6b3960": true,
+    "689df346-e5a0-459c-a24b-3eb4e7fe67d5": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
