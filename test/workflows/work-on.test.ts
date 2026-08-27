@@ -118,6 +118,7 @@ test("durable merge evidence takes precedence over an incomplete merge node", ()
       nodes: {},
       ...overrides,
     }) as unknown as import("../../src/core/state.ts").RunState;
+  const mergeDigest = `sha256:${"a".repeat(64)}`;
 
   assert.equal(hasDurableMergeEvidence(state()), false);
   assert.equal(
@@ -127,7 +128,7 @@ test("durable merge evidence takes precedence over an incomplete merge node", ()
           "pr:119:merge": {
             effectType: "merge",
             effectId: "pr:119:merge",
-            digest: "sha256:merge",
+            digest: mergeDigest,
             eventId: "event-merge",
           },
         },
@@ -141,6 +142,36 @@ test("durable merge evidence takes precedence over an incomplete merge node", ()
   assert.equal(
     hasDurableMergeEvidence(
       state({
+        effects: {
+          unbound: {
+            effectType: "merge",
+            effectId: "unbound",
+            digest: mergeDigest,
+            eventId: "event-merge",
+          },
+        },
+      }),
+    ),
+    false,
+  );
+  assert.equal(
+    hasDurableMergeEvidence(
+      state({
+        effects: {
+          "merge:0": {
+            effectType: "merge",
+            effectId: "merge:0",
+            digest: mergeDigest,
+            eventId: "event-merge",
+          },
+        },
+      }),
+    ),
+    false,
+  );
+  assert.equal(
+    hasDurableMergeEvidence(
+      state({
         phases: {
           merge: {
             attempts: [{ status: "completed" }],
@@ -148,21 +179,7 @@ test("durable merge evidence takes precedence over an incomplete merge node", ()
         },
       }),
     ),
-    true,
-  );
-  assert.equal(
-    hasDurableMergeEvidence(
-      state({
-        nodes: {
-          "merge-1": {
-            node: "merge",
-            status: "completed",
-            outcome: "merged",
-          },
-        },
-      }),
-    ),
-    true,
+    false,
   );
 });
 
@@ -172,10 +189,15 @@ test("merged projection is ordered before post-merge work in every merge path", 
   const parentEnd = source.indexOf('} else if (node.node === "close")', parentStart);
   assert.ok(parentStart >= 0 && parentEnd > parentStart);
   const parentMerge = source.slice(parentStart, parentEnd);
+  const parentEffect = parentMerge.indexOf('type: "effect.recorded"');
+  const parentProjection = parentMerge.indexOf(
+    'await this.#projectWorkflowStage(link, "merged", ctx, projector);',
+  );
   assert.ok(
-    parentMerge.indexOf('await this.#projectWorkflowStage(link, "merged", ctx, projector);') <
-      parentMerge.indexOf("await postReviewCompletionArtifacts"),
-    "dispatcher merge must project the merged label before review completion artifacts",
+    parentEffect >= 0 &&
+      parentProjection > parentEffect &&
+      parentProjection < parentMerge.indexOf("await postReviewCompletionArtifacts"),
+    "dispatcher merge must durably record the merge before projecting before review completion artifacts",
   );
 
   const recoveryStart = source.indexOf("  async #recoverDirectTerminal(");
@@ -192,11 +214,23 @@ test("merged projection is ordered before post-merge work in every merge path", 
   assert.ok(finalizeEnd > finalizeStart);
   const finalize = source.slice(finalizeStart, finalizeEnd);
   const mergeApi = finalize.indexOf("await github.mergePullRequest");
+  const mergeEffect = finalize.indexOf("await appendEffect(", mergeApi);
+  const mergePhaseComplete = finalize.indexOf(
+    '"merge",\n      "complete",',
+    mergeEffect,
+  );
   const mergedProjection = finalize.indexOf(
     'await this.#projectWorkflowStage(link, "merged", ctx, projector);',
   );
   const postMerge = finalize.indexOf("await postReviewCompletionArtifacts");
-  assert.ok(mergeApi >= 0 && mergedProjection > mergeApi && mergedProjection < postMerge);
+  assert.ok(
+    mergeApi >= 0 &&
+      mergeEffect > mergeApi &&
+      mergePhaseComplete > mergeEffect &&
+      mergedProjection > mergePhaseComplete &&
+      mergedProjection < postMerge,
+    "direct finalization must durably record merge evidence before projecting before post-merge work",
+  );
 });
 
 test("provider completion is buffered until its launch receipt is durably bound", () => {

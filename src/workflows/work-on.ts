@@ -224,28 +224,15 @@ export function directTerminalEvidence(
   return { pullNumber, mergeSha };
 }
 
-/** Durable merge evidence outranks an incomplete post-merge node during recovery. */
+/** A controller-recorded merge effect is durable evidence during recovery. */
 export function hasDurableMergeEvidence(
-  state: Pick<
-    import("../core/state.ts").RunState,
-    "effects" | "phases" | "nodes"
-  >,
+  state: Pick<import("../core/state.ts").RunState, "effects">,
 ): boolean {
-  if (
-    Object.values(state.effects).some((effect) => effect.effectType === "merge")
-  )
-    return true;
-  if (
-    state.phases.merge?.attempts.some(
-      (attempt) => attempt.status === "completed",
-    )
-  )
-    return true;
-  return Object.values(state.nodes).some(
-    (node) =>
-      node.node === "merge" &&
-      node.status === "completed" &&
-      node.outcome === "merged",
+  return Object.values(state.effects).some(
+    (effect) =>
+      effect.effectType === "merge" &&
+      /^(?:merge:[1-9]\d*|pr:[1-9]\d*:merge)$/.test(effect.effectId) &&
+      /^sha256:[0-9a-f]{64}$/i.test(effect.digest),
   );
 }
 
@@ -2199,11 +2186,11 @@ export class ForgeWorkOnController {
           .catch(() => undefined);
         throw error;
       }
-      await this.#projectWorkflowStage(link, "merged", ctx, projector);
       headSha = merged.sha;
       outcome = "merged";
       evidence = [`merge:${merged.sha}`];
       await journal.append({ runId: link.forgeRunId, type: "effect.recorded", payload: { effectType: "merge", effectId: `merge:${pull.number}`, digest: digest(merged.sha) }, idempotencyKey: `effect:merge:${pull.number}`, sessionId, message: `Record merge effect for ${pull.number}`, ...(ctx.signal ? { signal: ctx.signal } : {}) });
+      await this.#projectWorkflowStage(link, "merged", ctx, projector);
       const aggregate = await this.#aggregateFromState(
         link,
         authority.state as import("../core/state.ts").RunState,
@@ -3916,7 +3903,6 @@ export class ForgeWorkOnController {
           method: "squash",
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
-    await this.#projectWorkflowStage(link, "merged", ctx, projector);
     await appendEffect(
       journal,
       link.forgeRunId,
@@ -3937,6 +3923,7 @@ export class ForgeWorkOnController {
       undefined,
       [merged.sha],
     );
+    await this.#projectWorkflowStage(link, "merged", ctx, projector);
     if (!currentPull.merged)
       await postReviewCompletionArtifacts({
         github,
