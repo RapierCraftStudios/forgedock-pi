@@ -111,6 +111,62 @@ test("preflight checks executable availability without running the command", asy
   }
 });
 
+test("package-manager location flags cannot override the validated cwd", async () => {
+  const testFixture = await fixture();
+  try {
+    for (const argv of [
+      ["npm", "--prefix", "/tmp/outside", "test"],
+      ["npm", "--prefix=/tmp/outside", "test"],
+      ["pnpm", "--dir", "/tmp/outside", "test"],
+      ["yarn", "--cwd=/tmp/outside", "test"],
+      ["bun", "-C", "/tmp/outside", "test"],
+      ["npm", "test", "--", "--cwd", "/tmp/outside"],
+    ]) {
+      const shouldPassThroughScriptArgs = argv[2] === "--";
+      if (shouldPassThroughScriptArgs) {
+        await preflightRequiredVerificationCommands(
+          testFixture.root,
+          { test: command("web", { argv }) },
+          { path: testFixture.path },
+        );
+        continue;
+      }
+      await assert.rejects(
+        preflightRequiredVerificationCommands(
+          testFixture.root,
+          { test: command("web", { argv }) },
+          {
+            path: testFixture.path,
+            configPath: "/repo/.forge/config.json",
+          },
+        ),
+        (error: unknown) =>
+          error instanceof VerificationPreflightError &&
+          error.path ===
+            "/repo/.forge/config.json verification.commands.test.argv" &&
+          /location flag/.test(error.message) &&
+          /validated cwd/.test(error.message),
+      );
+    }
+
+    await assert.rejects(
+      preflightRequiredVerificationCommands(
+        testFixture.root,
+        {
+          optional: command("web", {
+            argv: ["npm", "--prefix", "/tmp/outside", "test"],
+            required: false,
+          }),
+        },
+        { path: testFixture.path },
+      ),
+      /location flag/,
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
 test("verification cwd rejects missing, control, and symlink-escape directories", async () => {
   const testFixture = await fixture();
   try {

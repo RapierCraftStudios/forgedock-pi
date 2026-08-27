@@ -379,6 +379,14 @@ async function configureForgePolicy(input: {
     repository: { provider: "github", name: input.repository },
   };
 
+  // Validate retained required commands before any setup path can create a
+  // remote integration branch. Empty commands are explicit CI-only mode.
+  await validateForgeInitVerification(
+    input.root,
+    input.configPath,
+    config.verification.commands,
+  );
+
   const defaultBranch = await resolveDefaultBranch(
     input.pi,
     input.root,
@@ -477,11 +485,6 @@ async function configureForgePolicy(input: {
       maxConcurrent,
     },
   };
-  await validateForgeInitVerification(
-    input.root,
-    input.configPath,
-    config.verification.commands,
-  );
   parseForgePolicy(config);
   const serializedPolicy = structuredClone(config) as unknown as Record<
     string,

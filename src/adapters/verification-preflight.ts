@@ -35,8 +35,9 @@ export async function preflightRequiredVerificationCommands(
   const canonicalRoot = await realpath(repositoryRoot);
   const configPath = options.configPath ?? ".forge/config.json";
   for (const [name, command] of Object.entries(commands)) {
-    if (!command.required) continue;
     const basePath = `${configPath} verification.commands.${name}`;
+    assertSafeVerificationCommandArguments(command.argv, `${basePath}.argv`);
+    if (!command.required) continue;
     const cwd = await resolveVerificationCommandDirectory(
       canonicalRoot,
       command.cwd,
@@ -126,8 +127,8 @@ async function executableAvailable(
 }
 
 function packageScriptName(argv: readonly string[]): string | undefined {
-  const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
-  if (!["npm", "pnpm", "yarn", "bun"].includes(manager)) return undefined;
+  const manager = packageManagerName(argv);
+  if (!manager) return undefined;
   const command = argv[1];
   if (command === "test") return "test";
   if (command === "run" || command === "run-script") {
@@ -135,6 +136,38 @@ function packageScriptName(argv: readonly string[]): string | undefined {
     return script || undefined;
   }
   return undefined;
+}
+
+function packageManagerName(argv: readonly string[]): string | undefined {
+  const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
+  return ["npm", "pnpm", "yarn", "bun"].includes(manager)
+    ? manager
+    : undefined;
+}
+
+function assertSafeVerificationCommandArguments(
+  argv: readonly string[],
+  path: string,
+): void {
+  if (!packageManagerName(argv)) return;
+  for (const argument of argv.slice(1)) {
+    if (argument === "--") break;
+    if (
+      argument === "--prefix" ||
+      argument.startsWith("--prefix=") ||
+      argument === "--dir" ||
+      argument.startsWith("--dir=") ||
+      argument === "--cwd" ||
+      argument.startsWith("--cwd=") ||
+      argument === "-C" ||
+      (argument.startsWith("-C") && argument.length > 2)
+    ) {
+      throw new VerificationPreflightError(
+        path,
+        `package-manager location flag '${argument}' is not allowed; use the validated cwd field to select a package or use CI-only verification`,
+      );
+    }
+  }
 }
 
 async function assertPackageScript(
