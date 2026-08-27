@@ -68,6 +68,11 @@
       "name": "reviewer:forge-review-deployment",
       "required": true,
       "status": "unknown"
+    },
+    {
+      "name": "material-change",
+      "required": true,
+      "status": "passed"
     }
   ],
   "findings": [
@@ -122,8 +127,8 @@
     }
   ],
   "status": "active",
-  "sequence": 11,
-  "lastEventHash": "sha256:bef6d481d06fe7fb97bcd5c7442bb8a19093b3c5418e0f8b81e6f3bdad36a560",
+  "sequence": 12,
+  "lastEventHash": "sha256:18f95cc086ea08451c82d0d57002e38a2cd3e564860c664a51d1cb51e7715b68",
   "idempotencyKeys": {
     "review:create": "c84f347e-b044-4335-84cf-e6acab99a577",
     "panel:1:start": "f9e92d66-9028-43e0-9eb7-58c6a2124f32",
@@ -135,7 +140,8 @@
     "check:reviewer:5:6c95c9cba8b6971f": "8830661c-361f-485f-b856-7686f5283f7d",
     "check:reviewer:6:1b1584de2862bc54": "07ebddd0-057b-40cb-a1c6-e1bb98e2aa04",
     "check:reviewer:7:ccf52d4ebe63e4bc": "911bc1ac-9f2c-4cb7-8a3f-4e1dcf035f5e",
-    "panel:1:findings": "f2bd2a5f-2c82-44f7-ac05-f0242510e9af"
+    "panel:1:findings": "f2bd2a5f-2c82-44f7-ac05-f0242510e9af",
+    "check:additional:0:f9f1e19f9e55cfa8": "1eeedde5-1399-41ba-b25b-097467d388f1"
   },
   "eventIds": {
     "c84f347e-b044-4335-84cf-e6acab99a577": true,
@@ -148,10 +154,11 @@
     "8830661c-361f-485f-b856-7686f5283f7d": true,
     "07ebddd0-057b-40cb-a1c6-e1bb98e2aa04": true,
     "911bc1ac-9f2c-4cb7-8a3f-4e1dcf035f5e": true,
-    "f2bd2a5f-2c82-44f7-ac05-f0242510e9af": true
+    "f2bd2a5f-2c82-44f7-ac05-f0242510e9af": true,
+    "1eeedde5-1399-41ba-b25b-097467d388f1": true
   },
   "createdAt": "2026-08-27T05:29:06.994Z",
-  "updatedAt": "2026-08-27T05:31:12.573Z",
+  "updatedAt": "2026-08-27T05:31:17.377Z",
   "panel": {
     "round": 1,
     "status": "running",
