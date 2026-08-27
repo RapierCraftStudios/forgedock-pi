@@ -63,12 +63,17 @@
       "name": "reviewer:forge-review-regression-risk",
       "required": true,
       "status": "passed"
+    },
+    {
+      "name": "reviewer:forge-review-deployment",
+      "required": true,
+      "status": "unknown"
     }
   ],
   "findings": [],
   "status": "active",
-  "sequence": 9,
-  "lastEventHash": "sha256:e22a01da42deea0cf32c2caa80aa1e1f6d0c14c51872943d29e95c4891ade8ba",
+  "sequence": 10,
+  "lastEventHash": "sha256:c0ed9184639d01cb1801a0f4f1582bc8a78070f8b0bb433e60a105c26c23c1c5",
   "idempotencyKeys": {
     "review:create": "c84f347e-b044-4335-84cf-e6acab99a577",
     "panel:1:start": "f9e92d66-9028-43e0-9eb7-58c6a2124f32",
@@ -78,7 +83,8 @@
     "check:reviewer:3:e15c6c64cbf9ee4b": "6f263009-647b-4640-af71-a80b1f768bea",
     "check:reviewer:4:decf53d74268865a": "dc7b865d-7043-4e9c-91f3-5bf654fadb7b",
     "check:reviewer:5:6c95c9cba8b6971f": "8830661c-361f-485f-b856-7686f5283f7d",
-    "check:reviewer:6:1b1584de2862bc54": "07ebddd0-057b-40cb-a1c6-e1bb98e2aa04"
+    "check:reviewer:6:1b1584de2862bc54": "07ebddd0-057b-40cb-a1c6-e1bb98e2aa04",
+    "check:reviewer:7:ccf52d4ebe63e4bc": "911bc1ac-9f2c-4cb7-8a3f-4e1dcf035f5e"
   },
   "eventIds": {
     "c84f347e-b044-4335-84cf-e6acab99a577": true,
@@ -89,10 +95,11 @@
     "6f263009-647b-4640-af71-a80b1f768bea": true,
     "dc7b865d-7043-4e9c-91f3-5bf654fadb7b": true,
     "8830661c-361f-485f-b856-7686f5283f7d": true,
-    "07ebddd0-057b-40cb-a1c6-e1bb98e2aa04": true
+    "07ebddd0-057b-40cb-a1c6-e1bb98e2aa04": true,
+    "911bc1ac-9f2c-4cb7-8a3f-4e1dcf035f5e": true
   },
   "createdAt": "2026-08-27T05:29:06.994Z",
-  "updatedAt": "2026-08-27T05:31:00.074Z",
+  "updatedAt": "2026-08-27T05:31:06.322Z",
   "panel": {
     "round": 1,
     "status": "running",
