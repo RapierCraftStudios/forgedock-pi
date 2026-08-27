@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 10,
-  "lastEventHash": "sha256:2e0a4c4222dbc27c12f2b5c40906c08cb0c5ccab614f89d0aebb59cd7c5b08bb",
+  "sequence": 11,
+  "lastEventHash": "sha256:6015392410df9ba470d53bf896872ec480ef2bd9b75f0660999df7f6b5a6b398",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -61,15 +61,21 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Contract is limited to `src/workflows/work-on.ts` and `test/workflows/work-on.test.ts`.",
+            "The state-aware stage selection is pure and preserves the existing `merge` started mapping when no durable merge effect exists.",
+            "Attach reconciliation and resumed parent-node projection will both consult the same durable merge-effect predicate before any recovery I/O can overwrite the merged label."
+          ],
           "logicalNodeId": "plan-1",
           "startedAt": "2026-08-27T06:55:47.075Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/ed3d82cd-fd0c-4518-863f-7799a693d92b",
           "branch": "forge/issue-147-ed3d82cd",
-          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22"
+          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22",
+          "finishedAt": "2026-08-27T06:56:41.389Z",
+          "outputArtifactHash": "sha256:147-plan-ready"
         }
       ]
     }
@@ -86,7 +92,8 @@
     "phase:investigate:1:start": "8c872ffb-c038-41d2-b01e-d57a4f608549",
     "phase:investigate:1:complete": "d4e860c9-50ed-42ef-b0cb-c9dbad5a5240",
     "phase:plan:1:queue": "bfd97a6d-9fc5-4d26-9e8a-58ca3a9119ee",
-    "phase:plan:1:start": "32a3ca2c-3f48-4dd8-9bb5-907e1e673a6b"
+    "phase:plan:1:start": "32a3ca2c-3f48-4dd8-9bb5-907e1e673a6b",
+    "phase:plan:1:complete": "cb8d2a19-9499-44d2-8d88-3fedd9c3772a"
   },
   "eventIds": {
     "2664d4e9-f72a-47c7-8a26-3f34942851d1": true,
@@ -98,7 +105,8 @@
     "8c872ffb-c038-41d2-b01e-d57a4f608549": true,
     "d4e860c9-50ed-42ef-b0cb-c9dbad5a5240": true,
     "bfd97a6d-9fc5-4d26-9e8a-58ca3a9119ee": true,
-    "32a3ca2c-3f48-4dd8-9bb5-907e1e673a6b": true
+    "32a3ca2c-3f48-4dd8-9bb5-907e1e673a6b": true,
+    "cb8d2a19-9499-44d2-8d88-3fedd9c3772a": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
