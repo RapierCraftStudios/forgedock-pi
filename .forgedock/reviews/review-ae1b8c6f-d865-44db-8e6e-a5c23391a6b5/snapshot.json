@@ -102,9 +102,9 @@
       ]
     }
   ],
-  "status": "active",
-  "sequence": 11,
-  "lastEventHash": "sha256:f88bd45af36d71212d9f2efe100ec864044f081381573b340522eae9618fa5cd",
+  "status": "completed",
+  "sequence": 12,
+  "lastEventHash": "sha256:11327f7057eed1487e53e8069742466a193422fbf23671ff4fe5c7fbcdf2a3cd",
   "idempotencyKeys": {
     "review:create": "ee876846-b77d-4962-bffe-3e4330751bbc",
     "panel:1:start": "8d1f7751-c269-40b9-ab0a-feb1f9cf5441",
@@ -116,7 +116,8 @@
     "check:github:1:2f175a86d52843ab": "7bbf61b5-8d79-4450-b75c-8c10f934a796",
     "panel:1:complete": "be67c078-501e-4e3f-87be-599ed219ef78",
     "review:verdict": "a625336a-e4e9-48f9-8ca7-cd6ddc986f7c",
-    "review:gate": "08086648-118c-4e7d-9c3f-324bd806f655"
+    "review:gate": "08086648-118c-4e7d-9c3f-324bd806f655",
+    "review:completed": "8bc08c08-ab31-40b4-b584-f70f5b7bb11c"
   },
   "eventIds": {
     "ee876846-b77d-4962-bffe-3e4330751bbc": true,
@@ -129,10 +130,11 @@
     "7bbf61b5-8d79-4450-b75c-8c10f934a796": true,
     "be67c078-501e-4e3f-87be-599ed219ef78": true,
     "a625336a-e4e9-48f9-8ca7-cd6ddc986f7c": true,
-    "08086648-118c-4e7d-9c3f-324bd806f655": true
+    "08086648-118c-4e7d-9c3f-324bd806f655": true,
+    "8bc08c08-ab31-40b4-b584-f70f5b7bb11c": true
   },
   "createdAt": "2026-08-27T04:55:52.189Z",
-  "updatedAt": "2026-08-27T05:27:16.583Z",
+  "updatedAt": "2026-08-27T05:27:28.615Z",
   "panel": {
     "round": 1,
     "status": "completed",
@@ -171,5 +173,9 @@
       "The pull request has merge conflicts.",
       "Required check reviewer:forge-review-correctness returned an unknown result."
     ]
+  },
+  "completion": {
+    "round": 1,
+    "outcome": "reviewed"
   }
 }
