@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 12,
-  "lastEventHash": "sha256:ae26b81dc3ae071dbc3b38dca241f2444a979b94e4f9858eb41312129b8efb34",
+  "sequence": 13,
+  "lastEventHash": "sha256:1d59b44d9153f832a8c9740f935206f8b94b54a20c626fbbb7e669f990a3ed66",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -39,16 +39,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "retry-investigate",
-          "evidence": [],
+          "evidence": [
+            "Current source rejects malformed issue numbers before path interpolation.",
+            "The finding is stale relative to the frozen integration base.",
+            "Focused test coverage remains justified and in scope."
+          ],
           "inputArtifactHash": "sha256:resolve-issue-209-c9957232",
           "logicalNodeId": "investigate-1",
           "startedAt": "2026-08-27T12:46:03.231Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/c9957232-12d8-4189-81a8-05e3c2503850",
           "branch": "forge/issue-209-c9957232",
-          "baseSha": "7817370b07c7e3d172f4971771e822aab548431a"
+          "baseSha": "7817370b07c7e3d172f4971771e822aab548431a",
+          "finishedAt": "2026-08-27T12:47:15.782Z",
+          "outputArtifactHash": "sha256:investigate-209-current-guard"
         }
       ]
     }
@@ -98,7 +104,8 @@
     "effect:github-label:RapierCraftStudios/forgedock-pi:209:c6756565-60dd-444b-9910-a17afb91cec4": "79ac3835-e31f-43dc-aab4-ea308f7e8dfc",
     "phase:investigate:1:queue": "659ff859-03ad-477a-883b-51b6b8c04ed9",
     "phase:investigate:1:start": "54141565-1051-4081-8d06-9fa79c304b03",
-    "effect:github-label:RapierCraftStudios/forgedock-pi:209:54141565-1051-4081-8d06-9fa79c304b03": "f181e2fb-7775-4300-ba2c-3d5ad95bea51"
+    "effect:github-label:RapierCraftStudios/forgedock-pi:209:54141565-1051-4081-8d06-9fa79c304b03": "f181e2fb-7775-4300-ba2c-3d5ad95bea51",
+    "phase:investigate:1:complete": "3bbbddee-21cf-4853-9c6f-5efda0229a8d"
   },
   "eventIds": {
     "8cb72a26-7f5e-4934-957a-d9f6c1bc63a0": true,
@@ -112,7 +119,8 @@
     "79ac3835-e31f-43dc-aab4-ea308f7e8dfc": true,
     "659ff859-03ad-477a-883b-51b6b8c04ed9": true,
     "54141565-1051-4081-8d06-9fa79c304b03": true,
-    "f181e2fb-7775-4300-ba2c-3d5ad95bea51": true
+    "f181e2fb-7775-4300-ba2c-3d5ad95bea51": true,
+    "3bbbddee-21cf-4853-9c6f-5efda0229a8d": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
