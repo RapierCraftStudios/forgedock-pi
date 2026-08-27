@@ -3,7 +3,10 @@ import test from "node:test";
 
 import type { GitHubWorkflowAdapter } from "../../src/adapters/github-workflow.ts";
 import type { ForgeWorkOnResult } from "../../src/agents/contracts.ts";
-import { reviewFindingFingerprint } from "../../src/workflows/review-findings.ts";
+import {
+  reviewFindingAuthorityReason,
+  reviewFindingFingerprint,
+} from "../../src/workflows/review-findings.ts";
 import {
   publishReviewFindingIssues,
   type ActiveRunLink,
@@ -72,6 +75,25 @@ const link: ActiveRunLink = {
   issueContext: "{}",
   activeNodes: {},
 };
+
+test("review findings expose only explicit high-level authority reasons", () => {
+  const finding = result.review.findings[0];
+  assert.ok(finding);
+  assert.equal(
+    reviewFindingAuthorityReason({
+      ...finding,
+      summary: "Legal approval is required before release",
+    }),
+    "legal-approval",
+  );
+  assert.equal(
+    reviewFindingAuthorityReason({
+      ...finding,
+      summary: "Provider API timeout is transient",
+    }),
+    undefined,
+  );
+});
 
 const result: ForgeWorkOnResult = {
   schema: "forgedock.work-on-result/v1",

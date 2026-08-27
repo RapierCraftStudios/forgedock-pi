@@ -4,6 +4,8 @@ import {
   type BuilderPathContract,
 } from "../core/builder-contract.ts";
 import { findingBlocksMerge } from "../core/review.ts";
+import { humanAuthorityReasonFromText } from "../core/policy.ts";
+import { reviewFindingAuthorityReason } from "./review-findings.ts";
 import type {
   ForgeReviewFindingResult,
   ForgeWorkOnResult,
@@ -47,15 +49,13 @@ export function classifyRemediationFindings(
   const dispositions: DispositionedFinding[] = [];
   for (const finding of findings) {
     const value = finding.finding;
-    const text = `${value.category} ${value.summary} ${value.evidence.join(" ")}`;
     const inContract =
       builderContract === undefined || builderPathAllowed(builderContract, value.file);
     const hasEvidence = value.evidence.some((entry) => entry.trim().length > 0);
-    const authorityDecision =
-      !inContract ||
-      /\b(product|policy|ux|scope|protected branch|release authority|out[- ]of[- ]contract|destructive|data loss|migration approval|credential authority)\b/i.test(
-        text,
-      );
+    // A builder-path mismatch is a planning/decomposition problem, not a
+    // human-authority request. Only explicit high-level authority language
+    // can enter the escalated bucket.
+    const authorityReason = reviewFindingAuthorityReason(value);
     let disposition: FindingDisposition;
     let reason: string;
     if (value.confidence === "possible" || !hasEvidence || value.line < 1) {
@@ -63,10 +63,14 @@ export function classifyRemediationFindings(
       reason = "Finding lacks confirmed evidence or a valid source location.";
       unvalidated.push(finding);
     } else if (findingBlocksMerge(value)) {
-      if (authorityDecision) {
+      if (authorityReason) {
         disposition = "authority-ambiguous";
-        reason = "Blocking fix requires an out-of-contract or authority decision.";
+        reason = `Blocking fix requires ${authorityReason}; autonomous execution must stop.`;
         escalated.push(finding);
+      } else if (!inContract) {
+        disposition = "validated-nonblocking";
+        reason = "Finding is outside the accepted builder contract; replan or decompose it instead of escalating authority.";
+        followUp.push(finding);
       } else {
         disposition = "actionable-blocking";
         reason = "Blocking finding is validated, deterministic, and in contract.";
@@ -88,10 +92,8 @@ export function isRemediationCandidate(
 ): boolean {
   return (
     fixable.length > 0 &&
-    (result.status === "blocked" || result.status === "needs-human") &&
-    !/\b(main|protected branch|product|policy|ux|scope|out[- ]of[- ]contract)\b/i.test(
-      result.blocker ?? "",
-    )
+    result.status === "blocked" &&
+    !humanAuthorityReasonFromText(result.blocker ?? "")
   );
 }
 

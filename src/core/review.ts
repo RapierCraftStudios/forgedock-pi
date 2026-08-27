@@ -1,3 +1,16 @@
+import {
+  HUMAN_AUTHORITY_REASONS,
+  humanAuthorityReasonFromText,
+  isHumanAuthorityReason,
+  type HumanAuthorityReason,
+} from "./policy.ts";
+
+export {
+  HUMAN_AUTHORITY_REASONS,
+  humanAuthorityReasonFromText,
+  type HumanAuthorityReason,
+};
+
 export const REVIEW_DECISIONS = [
   "approved",
   "approved-with-follow-ups",
@@ -58,6 +71,11 @@ export interface VerificationResult {
   exitCode?: number;
 }
 
+export interface HumanAuthorityRequest {
+  reason: HumanAuthorityReason;
+  detail: string;
+}
+
 export interface ReviewGateInput {
   identity: ReviewIdentity;
   currentHeadSha: string;
@@ -71,6 +89,8 @@ export interface ReviewGateInput {
   baseBranch: string;
   protectedBranches: readonly string[];
   autoMergeAuthorized: boolean;
+  /** Explicit high-level authority requests supplied by the review route. */
+  humanAuthorityRequests?: readonly HumanAuthorityRequest[];
   malformedResults?: readonly string[];
 }
 
@@ -82,6 +102,7 @@ export interface FinalReviewDecision {
   readonly followUpFindingIds: readonly string[];
   readonly checkResults: readonly VerificationResult[];
   readonly reasons: readonly string[];
+  readonly authorityReasons?: readonly HumanAuthorityReason[];
 }
 
 export type ReviewGateResult = FinalReviewDecision;
@@ -110,7 +131,7 @@ function unique(values: readonly string[]): string[] {
 export function evaluateReviewGate(input: ReviewGateInput): ReviewGateResult {
   const blocked: string[] = [];
   const changes: string[] = [];
-  const human: string[] = [];
+  const human: HumanAuthorityRequest[] = [];
 
   if (input.identity.headSha !== input.currentHeadSha) {
     blocked.push(
@@ -177,10 +198,23 @@ export function evaluateReviewGate(input: ReviewGateInput): ReviewGateResult {
     );
   }
 
+  if (input.humanAuthorityRequests) {
+    for (const request of input.humanAuthorityRequests) {
+      if (!request.detail.trim()) continue;
+      // Keep runtime callers honest even though the public input is typed.
+      if (!isHumanAuthorityReason(request.reason)) continue;
+      human.push({ reason: request.reason, detail: request.detail.trim() });
+    }
+  }
   if (input.protectedBranches.includes(input.baseBranch)) {
-    human.push(`Base branch ${input.baseBranch} is protected and human-only.`);
+    human.push({
+      reason: "physical-authority",
+      detail: `Base branch ${input.baseBranch} is protected and human-only.`,
+    });
   } else if (!input.autoMergeAuthorized) {
-    human.push(`Automatic merge is not authorized for ${input.baseBranch}.`);
+    // A local policy mismatch is recoverable/reconfigurable, not a request
+    // for product, legal, credential, or physical authority.
+    blocked.push(`Automatic merge is not authorized for ${input.baseBranch}.`);
   }
 
   if (blocked.length > 0) {
@@ -207,7 +241,8 @@ export function evaluateReviewGate(input: ReviewGateInput): ReviewGateResult {
       "needs-human",
       blockingFindingIds,
       followUpFindingIds,
-      human,
+      human.map((request) => `${request.reason}: ${request.detail}`),
+      human.map((request) => request.reason),
     );
   }
   return createFinalReviewDecision(
@@ -225,6 +260,7 @@ function createFinalReviewDecision(
   blockingFindingIds: readonly string[],
   followUpFindingIds: readonly string[],
   reasons: readonly string[],
+  authorityReasons: readonly HumanAuthorityReason[] = [],
 ): FinalReviewDecision {
   return Object.freeze({
     headSha: input.identity.headSha,
@@ -236,5 +272,8 @@ function createFinalReviewDecision(
       input.checks.map((check) => Object.freeze({ ...check })),
     ),
     reasons: Object.freeze([...reasons]),
+    ...(authorityReasons.length > 0
+      ? { authorityReasons: Object.freeze([...authorityReasons]) }
+      : {}),
   });
 }

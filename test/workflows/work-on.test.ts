@@ -264,7 +264,7 @@ test("normal matching provider receipts are inspected instead of escalated", () 
       activeRunId: "launch:resolve-1:nonce",
       resultArtifactPresent: false,
     }),
-    "needs-human",
+    "retry-launch",
   );
   assert.equal(
     reconcileLaunchState({
@@ -272,7 +272,7 @@ test("normal matching provider receipts are inspected instead of escalated", () 
       activeRunId: "launch:resolve-1:nonce",
       resultArtifactPresent: false,
     }),
-    "needs-human",
+    "retry-launch",
   );
 });
 
@@ -371,6 +371,18 @@ test("work-on recovery retries state branch contention but not real blockers", (
   );
   assert.equal(
     isRecoverableWorkOnBlocker("Product decision requires operator approval."),
+    false,
+  );
+  assert.equal(
+    isRecoverableWorkOnBlocker("stale integration base requires a rebase"),
+    true,
+  );
+  assert.equal(
+    isRecoverableWorkOnBlocker("Review remediation rounds exhausted"),
+    true,
+  );
+  assert.equal(
+    isRecoverableWorkOnBlocker("Invalid username or token"),
     false,
   );
 });

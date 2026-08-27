@@ -2,6 +2,44 @@ import { posix } from "node:path";
 
 export const FORGEDOCK_CONFIG_SCHEMA = "forgedock.config/v1" as const;
 
+/**
+ * The only kinds of authority that an autonomous run may hand to a person.
+ * Technical failures, policy mismatches, and uncertain evidence are not
+ * authority requests; they must be retried, repaired, or reported as a
+ * normal blocked outcome.
+ */
+export const HUMAN_AUTHORITY_REASONS = [
+  "product-decision",
+  "legal-approval",
+  "external-credential",
+  "physical-authority",
+] as const;
+export type HumanAuthorityReason = (typeof HUMAN_AUTHORITY_REASONS)[number];
+
+export function isHumanAuthorityReason(
+  value: unknown,
+): value is HumanAuthorityReason {
+  return (
+    typeof value === "string" &&
+    (HUMAN_AUTHORITY_REASONS as readonly string[]).includes(value)
+  );
+}
+
+/** Return a typed authority reason only for explicit high-level requests. */
+export function humanAuthorityReasonFromText(
+  text: string,
+): HumanAuthorityReason | undefined {
+  if (/\b(?:product|scope|ux)\s+(?:decision|approval|policy)|product decision|release authority/i.test(text))
+    return "product-decision";
+  if (/\b(?:legal|regulatory|compliance)\s+(?:approval|review)|legal approval/i.test(text))
+    return "legal-approval";
+  if (/\b(?:external|third[- ]party) credential|credential authority|token(?:s)? required/i.test(text))
+    return "external-credential";
+  if (/\bphysical(?:[- ]authority)?\b|manual release authority|protected branch/i.test(text))
+    return "physical-authority";
+  return undefined;
+}
+
 export interface VerificationCommandPolicy {
   argv: readonly string[];
   cwd: string;

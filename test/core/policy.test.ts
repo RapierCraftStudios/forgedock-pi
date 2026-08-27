@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   applyLocalOverrides,
   canAutoMerge,
+  humanAuthorityReasonFromText,
+  isHumanAuthorityReason,
   isGitHubCiRequired,
   isProtectedBranch,
   parseForgePolicy,
@@ -83,6 +85,19 @@ test("verification command cwd is portable, relative, and normalized", () => {
 
   for (const cwd of ["/tmp", "C:/tmp", "\\\\server\\share", "../web", "web/../api", "web\\api", "bad\0path"])
     assert.throws(() => parseForgePolicy(withCwd(cwd)), PolicyValidationError);
+});
+
+test("human authority reasons are narrow and typed", () => {
+  assert.equal(isHumanAuthorityReason("product-decision"), true);
+  assert.equal(isHumanAuthorityReason("merge-conflict"), false);
+  assert.equal(
+    humanAuthorityReasonFromText("A legal approval is required."),
+    "legal-approval",
+  );
+  assert.equal(
+    humanAuthorityReasonFromText("Provider API timed out during retry."),
+    undefined,
+  );
 });
 
 test("local overrides can only tighten tracked policy", () => {

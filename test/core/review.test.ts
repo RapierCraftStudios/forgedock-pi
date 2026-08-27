@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   evaluateReviewGate,
   findingBlocksMerge,
+  HUMAN_AUTHORITY_REASONS,
   type ReviewFinding,
   type ReviewGateInput,
 } from "../../src/core/review.ts";
@@ -126,8 +127,26 @@ test("protected branches always require a human", () => {
   assert.equal(result.decision, "needs-human");
 });
 
-test("disabled auto-merge on an integration branch requires a human", () => {
+test("disabled auto-merge is a blocked policy mismatch, not human authority", () => {
   const result = evaluateReviewGate(input({ autoMergeAuthorized: false }));
-  assert.equal(result.decision, "needs-human");
+  assert.equal(result.decision, "blocked");
   assert.ok(result.reasons.some((reason) => reason.includes("staging")));
+});
+
+test("human decisions carry only typed high-level authority reasons", () => {
+  const result = evaluateReviewGate(
+    input({
+      humanAuthorityRequests: [
+        { reason: "product-decision", detail: "Product decision is required." },
+      ],
+    }),
+  );
+  assert.equal(result.decision, "needs-human");
+  assert.deepEqual(result.authorityReasons, ["product-decision"]);
+  assert.deepEqual(HUMAN_AUTHORITY_REASONS, [
+    "product-decision",
+    "legal-approval",
+    "external-credential",
+    "physical-authority",
+  ]);
 });

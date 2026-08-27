@@ -137,8 +137,9 @@ test("remediation classification fixes in-contract blockers and escalates true a
     [fixable],
     createBuilderPathContract(["test/**"]),
   );
+  assert.deepEqual(outsideContract.escalated, []);
   assert.deepEqual(
-    outsideContract.escalated.map((item) => item.finding.id),
+    outsideContract.followUp.map((item) => item.finding.id),
     ["SEC-001"],
   );
   assert.equal(

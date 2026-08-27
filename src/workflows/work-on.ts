@@ -55,6 +55,7 @@ import {
 } from "../core/dispatcher.ts";
 import {
   canAutoMerge,
+  humanAuthorityReasonFromText,
   isGitHubCiRequired,
   isProtectedBranch,
   type ForgePolicy,
@@ -359,7 +360,7 @@ export class ForgeWorkOnController {
           completion.error,
           activeNode,
         ).catch((error) => {
-          link.status = "needs-human";
+          link.status = "failed";
           this.#persistLink(link);
           this.#emitLifecycle(link, {
             reason: errorMessage(error),
@@ -551,7 +552,7 @@ export class ForgeWorkOnController {
         if (isLaunchSentinel(link.subagentRunId)) {
           const reason =
             "A provider continuation receipt was not persisted; refusing to launch a duplicate continuation.";
-          link.status = "needs-human";
+          link.status = "failed";
           this.#persistLink(link);
           this.#emitLifecycle(link, { reason });
           continue;
@@ -567,7 +568,9 @@ export class ForgeWorkOnController {
           Boolean(link.currentNodeId) ||
           Object.keys(link.activeNodes).length > 0 ||
           isLaunchSentinel(link.subagentRunId);
-        link.status = hasDispatcherLaunch ? "needs-human" : "failed";
+        // Dispatcher/provider reconciliation is technical recovery. Keep the
+        // run retryable and reserve needs-human for explicit authority.
+        link.status = "failed";
         this.#persistLink(link);
         this.#emitLifecycle(link, {
           reason: hasDispatcherLaunch
@@ -718,10 +721,10 @@ export class ForgeWorkOnController {
         "warning",
       );
     } catch (error) {
-      link.status = "needs-human";
+      link.status = "failed";
       this.#persistLink(link);
       this.#emitLifecycle(link, {
-        reason: `Provider continuation is ambiguous after durable intent; refusing a duplicate resume: ${errorMessage(error)}`,
+        reason: `Provider continuation is ambiguous after durable intent; retry is required before resuming: ${errorMessage(error)}`,
       });
     } finally {
       this.#providerRecovering.delete(link.forgeRunId);
@@ -812,7 +815,7 @@ export class ForgeWorkOnController {
       const reason = `Provider continuation is ambiguous after durable resume intent; refusing a duplicate: ${errorMessage(error)}`;
       await journal.append({
         runId: link.forgeRunId,
-        type: "node.needs-human",
+        type: "node.failed",
         payload: {
           nodeId,
           node: node.node,
@@ -820,14 +823,14 @@ export class ForgeWorkOnController {
           ...(node.round ? { round: node.round } : {}),
           subagentRunId: intent.sentinelRunId,
           resultPath,
-          reason,
+          reason: `Technical provider recovery failed: ${reason}`,
         },
         idempotencyKey: `node:${nodeId}:transport-resume-ambiguous:${retry}`,
         sessionId: ctx.sessionManager.getSessionId(),
-        message: `Fail closed ambiguous resume for ForgeDock node ${nodeId}`,
+        message: `Record recoverable provider resume failure for ForgeDock node ${nodeId}`,
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
-      link.status = "needs-human";
+      link.status = "failed";
       this.#persistLink(link);
       this.#emitLifecycle(link, { reason, nodeId });
       return true;
@@ -1310,7 +1313,7 @@ export class ForgeWorkOnController {
         "Ambiguous in-flight provider launch; refusing duplicate spawn.";
       await new RunJournal(recoveryStore).append({
         runId: link.forgeRunId,
-        type: "node.needs-human",
+        type: "node.failed",
         payload: {
           nodeId,
           node: durableNode.node,
@@ -1321,14 +1324,14 @@ export class ForgeWorkOnController {
           ...(durableNode.launchNonce
             ? { launchNonce: durableNode.launchNonce }
             : {}),
-          reason,
+          reason: `Technical launch recovery required: ${reason}`,
         },
         idempotencyKey: `node:${nodeId}:ambiguous-launch`,
         sessionId: ctx.sessionManager.getSessionId(),
-        message: `Fail closed ambiguous launch for ForgeDock node ${nodeId}`,
+        message: `Record recoverable ambiguous launch for ForgeDock node ${nodeId}`,
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
-      link.status = "needs-human";
+      link.status = "failed";
       this.#persistLink(link);
       this.#emitLifecycle(link, { reason, nodeId });
       return;
@@ -1396,7 +1399,7 @@ export class ForgeWorkOnController {
             : "review-correctness",
           status:
             reviewerResult.verdict === "blocked"
-              ? ("needs-human" as const)
+              ? ("blocked" as const)
               : ("completed" as const),
           branch: link.prepared.branch,
           baseSha: link.prepared.baseSha,
@@ -1453,6 +1456,13 @@ export class ForgeWorkOnController {
       nodeResult.issueNumber !== link.issueNumber
     )
       throw new Error("Bound node result identity mismatch.");
+    if (
+      nodeResult.status === "needs-human" &&
+      !humanAuthorityReasonFromText(nodeResult.blocker ?? "")
+    )
+      throw new Error(
+        "Bound node requested needs-human without a typed high-level authority reason.",
+      );
     if (nodeResult.nodeId !== nodeId)
       throw new Error(
         `Node result ${nodeResult.nodeId} does not match ${nodeId}.`,
@@ -2074,7 +2084,7 @@ export class ForgeWorkOnController {
           message: `Block CI node ${node.nodeId}`,
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
-        link.status = "needs-human";
+        link.status = "blocked";
         this.#persistLink(link);
         this.#emitLifecycle(link, {
           reason,
@@ -2133,7 +2143,7 @@ export class ForgeWorkOnController {
           message: `Block CI node ${node.nodeId}`,
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
-        link.status = "needs-human";
+        link.status = "blocked";
         this.#persistLink(link);
         this.#emitLifecycle(link, {
           reason,
@@ -2350,8 +2360,7 @@ export class ForgeWorkOnController {
         gate.decision === "approved" ||
         gate.decision === "approved-with-follow-ups"
           ? "awaiting-merge"
-          : gate.decision === "needs-human" ||
-              (gate.decision === "changes-requested" && !canRemediate)
+          : gate.decision === "needs-human"
             ? "needs-human"
             : canRemediate
               ? "remediation-required"
@@ -2470,19 +2479,19 @@ export class ForgeWorkOnController {
           "Merge authority, reviewed SHA/base, integration branch, clean tree, or actual diff validation failed.";
         await journal.append({
           runId: link.forgeRunId,
-          type: "node.needs-human",
+          type: "node.blocked",
           payload: {
             ...common,
             headSha: pull.headSha,
-            reason,
+            reason: `Technical merge gate requires fresh reconciliation: ${reason}`,
             evidence: [reason],
           },
           idempotencyKey: `node:${node.nodeId}:authority`,
           sessionId,
-          message: `Gate merge node ${node.nodeId}`,
+          message: `Block merge node ${node.nodeId} pending autonomous reconciliation`,
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
-        link.status = "needs-human";
+        link.status = "blocked";
         this.#persistLink(link);
         this.#emitLifecycle(link, {
           reason,
@@ -3056,10 +3065,10 @@ export class ForgeWorkOnController {
             )
           : await this.#rpc.spawnNode(launchInput);
     } catch (error) {
-      const reason = `Provider launch is ambiguous after durable intent: ${errorMessage(error)}`;
+      const reason = `Provider launch requires autonomous retry after durable intent: ${errorMessage(error)}`;
       await journal.append({
         runId: link.forgeRunId,
-        type: "node.needs-human",
+        type: "node.failed",
         payload: {
           nodeId: node.nodeId,
           node: node.node,
@@ -3073,10 +3082,10 @@ export class ForgeWorkOnController {
         },
         idempotencyKey: `node:${node.nodeId}:launch-ambiguous`,
         sessionId: ctx.sessionManager.getSessionId(),
-        message: `Fail closed ambiguous launch for ForgeDock node ${node.nodeId}`,
+        message: `Record recoverable provider launch failure for ForgeDock node ${node.nodeId}`,
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
-      link.status = "needs-human";
+      link.status = "failed";
       this.#persistLink(link);
       this.#emitLifecycle(link, { reason, nodeId: node.nodeId });
       return;
@@ -3137,20 +3146,20 @@ export class ForgeWorkOnController {
       try {
         await journal.append({
           runId: link.forgeRunId,
-          type: "node.needs-human",
+          type: "node.failed",
           payload: {
             nodeId: node.nodeId,
             node: node.node,
             attempt: node.attempt,
             ...(node.round ? { round: node.round } : {}),
-            reason,
+            reason: `Technical receipt binding failure: ${reason}`,
             subagentRunId: sentinel,
             resultPath: receipt.resultPath,
             launchNonce: launchIntent.launchNonce,
           },
           idempotencyKey: `node:${node.nodeId}:receipt-bind-failed`,
           sessionId: ctx.sessionManager.getSessionId(),
-          message: `Fail closed receipt binding for ForgeDock node ${node.nodeId}`,
+          message: `Record recoverable receipt binding failure for ForgeDock node ${node.nodeId}`,
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
         recorded = true;
@@ -3159,7 +3168,7 @@ export class ForgeWorkOnController {
       } finally {
         this.#receiptBindings.delete(receipt.runId);
       }
-      link.status = "needs-human";
+      link.status = "failed";
       this.#persistLink(link);
       this.#emitLifecycle(link, { reason, nodeId: node.nodeId });
       if (!recorded) throw new Error(reason);
@@ -3210,7 +3219,7 @@ export class ForgeWorkOnController {
     );
     if (!link) return undefined;
     if (isLaunchSentinel(link.subagentRunId)) {
-      link.status = "needs-human";
+      link.status = "failed";
       this.#persistLink(link);
       return undefined;
     }
@@ -3247,7 +3256,7 @@ export class ForgeWorkOnController {
           `Resume the same ForgeDock run from durable checkpoints after a recoverable controller or provider failure. Do not repeat completed phases. Correct the rejected report or reload authoritative state as indicated, retry only that same checkpoint transition, and continue after it succeeds. Failure: ${completion?.error ?? recoverableBlocker}`,
         );
       } catch {
-        link.status = "needs-human";
+        link.status = "failed";
         this.#persistLink(link);
         return undefined;
       }
@@ -3285,7 +3294,7 @@ export class ForgeWorkOnController {
             "Resume the same ForgeDock run after a fixed idempotent projection defect. Retry verify complete attempt 1 exactly once; the authoritative phase event and implementation commit already exist. Then continue review preparation and nested review without repeating completed phases.",
           );
         } catch {
-          link.status = "needs-human";
+          link.status = "failed";
           this.#persistLink(link);
           return {
             forgeRunId: link.forgeRunId,
@@ -3570,11 +3579,29 @@ export class ForgeWorkOnController {
       ctx.signal,
     );
     if (currentBaseSha !== decision.baseSha) {
-      link.status = "needs-human";
-      this.#persistLink(link);
-      return this.#emitLifecycle(link, {
-        reason: `Integration base moved from ${decision.baseSha ?? "unknown"} to ${currentBaseSha}; fresh review is required.`,
-      });
+      // A moving integration base is a normal concurrency event. Refresh the
+      // same lane and force one fresh review rather than asking a person to
+      // reconcile stale state.
+      try {
+        const result = await this.#loadResult(link);
+        await this.#refreshForMovedBase(
+          link,
+          result,
+          policy,
+          currentBaseSha,
+          ctx,
+        );
+        return this.#emitLifecycle(link, {
+          baseSha: currentBaseSha,
+          reason: `Integration base moved from ${decision.baseSha ?? "unknown"} to ${currentBaseSha}; refreshing the same lane.`,
+        });
+      } catch (error) {
+        link.status = "blocked";
+        this.#persistLink(link);
+        return this.#emitLifecycle(link, {
+          reason: `Automatic base refresh requires retry: ${errorMessage(error)}`,
+        });
+      }
     }
     const next: import("../core/dispatcher.ts").WorkflowNodeRecord = {
       nodeId: `merge-${(Object.values(current.state.nodes).filter((node) => node.node === "merge").length ?? 0) + 1}`,
@@ -4053,7 +4080,10 @@ export class ForgeWorkOnController {
     )
       return;
     if (result.status !== "ready-for-merge") {
-      link.status = result.status === "needs-human" ? "needs-human" : "blocked";
+      const authorityEscalation =
+        result.status === "needs-human" &&
+        humanAuthorityReasonFromText(result.blocker ?? "") !== undefined;
+      link.status = authorityEscalation ? "needs-human" : "blocked";
       this.#persistLink(link);
       this.#emitLifecycle(link, {
         reason: result.blocker ?? result.status,
@@ -5497,6 +5527,7 @@ export type LaunchRecoveryAction =
   | "promote-running"
   | "inspect-active"
   | "recover-artifact"
+  | "retry-launch"
   | "needs-human";
 
 /** Reconciliation seam shared by restart recovery and live completion handling. */
@@ -5528,8 +5559,10 @@ export function reconcileLaunchState(input: {
   )
     return "inspect-active";
   if (input.resultArtifactPresent) return "recover-artifact";
-  if (isLaunchSentinel(input.activeRunId)) return "needs-human";
-  return "needs-human";
+  // A missing provider receipt is an interrupted technical launch. It must
+  // be retried/reconciled, never presented as a human authority decision.
+  if (isLaunchSentinel(input.activeRunId)) return "retry-launch";
+  return "retry-launch";
 }
 
 function extractJsonObject(text: string): string {
@@ -5539,7 +5572,8 @@ function extractJsonObject(text: string): string {
 }
 
 export function isRecoverableWorkOnBlocker(message: string): boolean {
-  return /State branch changed after|WebSocket|timed? out|timeout|connection (?:lost|reset|error)|\b50[0234]\b|\b429\b|checkpoint failed validation|omitted the required canonical|required canonical .* section|Invalid username or token|Bound branch push failed/i.test(
+  if (humanAuthorityReasonFromText(message)) return false;
+  return /State branch changed after|stale (?:state|head|base)|rebase|merge conflict|conflict(?:s|ing)?|rounds? (?:exhausted|limit)|remediation rounds|WebSocket|timed? out|timeout|connection (?:lost|reset|error)|\b50[0234]\b|\b429\b|checkpoint failed validation|omitted the required canonical|required canonical .* section|Bound branch push failed|provider|API (?:error|failure)|CI (?:failed|pending|timeout)/i.test(
     message,
   );
 }

@@ -39,6 +39,8 @@ import {
 } from "../core/builder-contract.ts";
 import { workflowLabelForPhaseBoundary } from "../core/artifact-protocol.ts";
 import {
+  HUMAN_AUTHORITY_REASONS,
+  isHumanAuthorityReason,
   normalizeVerificationCommandCwd,
   type ForgePolicy,
 } from "../core/policy.ts";
@@ -167,6 +169,7 @@ const CheckpointParameters = Type.Object({
   report: Type.Optional(Type.String({ minLength: 1, maxLength: 100_000 })),
   artifact: Type.Optional(Type.Unsafe(FORGE_PHASE_ARTIFACT_SCHEMA)),
   reason: Type.Optional(Type.String({ minLength: 1 })),
+  authorityReason: Type.Optional(StringEnum(HUMAN_AUTHORITY_REASONS)),
 });
 
 const VerifyParameters = Type.Object({
@@ -1471,6 +1474,14 @@ export function registerForgeRuntime(
         throw new Error(
           `Investigation completion requires its typed investigate artifact: ${phaseArtifactValidationError(params.artifact)}.`,
         );
+      if (params.action === "needs-human") {
+        if (!isHumanAuthorityReason(params.authorityReason))
+          throw new Error(
+            "needs-human requires one of the typed high-level authority reasons.",
+          );
+        if (!params.reason?.trim())
+          throw new Error("needs-human requires a non-empty authority detail.");
+      }
       const phaseArtifact = isPhaseArtifact(params.artifact)
         ? params.artifact
         : undefined;
@@ -1861,6 +1872,7 @@ function checkpointPayload(
     evidence?: string[];
     report?: string;
     reason?: string;
+    authorityReason?: string;
   },
   binding: ForgeChildBinding,
 ): Record<string, unknown> {
@@ -1895,6 +1907,19 @@ function checkpointPayload(
         ? { outputArtifactHash: params.outputArtifactHash }
         : {}),
       ...(params.commitSha ? { commitSha: params.commitSha } : {}),
+    };
+  }
+  if (params.action === "needs-human") {
+    if (!isHumanAuthorityReason(params.authorityReason))
+      throw new Error(
+        "needs-human requires one of the typed high-level authority reasons.",
+      );
+    if (!params.reason?.trim())
+      throw new Error("needs-human requires a non-empty authority detail.");
+    return {
+      ...common,
+      reason: params.reason.trim(),
+      authorityReason: params.authorityReason,
     };
   }
   return {
