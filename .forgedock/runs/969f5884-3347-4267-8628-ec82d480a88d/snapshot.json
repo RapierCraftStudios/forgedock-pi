@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 10,
-  "lastEventHash": "sha256:f6372abbbe150090b92015467d2d50b56f6bd68a3230616d26bf1f4c337bc95d",
+  "sequence": 11,
+  "lastEventHash": "sha256:f5fdeb762c340e0fa831f8aff77b0279be0abe801b25582d54ff38705001be9f",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -64,15 +64,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Implementation is limited to `src/adapters/verification-preflight.ts` and its focused adapter test.",
+            "The parser will determine script position from argv structure, not from arbitrary argument values.",
+            "Yarn built-in and selector commands remain non-script commands; custom Yarn shorthand commands are validated against `package.json`.",
+            "Regression tests will cover both trailing selector words and command-position selectors/options."
+          ],
           "logicalNodeId": "plan",
           "startedAt": "2026-08-27T06:59:36.488Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/969f5884-3347-4267-8628-ec82d480a88d",
           "branch": "forge/issue-194-969f5884",
-          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22"
+          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22",
+          "finishedAt": "2026-08-27T07:01:17.737Z",
+          "outputArtifactHash": "sha256:issue-194-plan"
         }
       ]
     }
@@ -89,7 +96,8 @@
     "phase:investigate:1:start": "e846a571-486e-4393-8b63-6259521fb2bc",
     "phase:investigate:1:complete": "ce7eff89-2739-4cf1-ac44-367e4d4ed4b8",
     "phase:plan:1:queue": "35045dc6-d1d3-43ac-a7a3-84c612093936",
-    "phase:plan:1:start": "0977f5a7-5050-4c75-b405-ce03848d356e"
+    "phase:plan:1:start": "0977f5a7-5050-4c75-b405-ce03848d356e",
+    "phase:plan:1:complete": "b150a8ee-06f9-47dd-b612-9398147eae67"
   },
   "eventIds": {
     "29e5d5b1-5777-40c6-9e31-840de0e148f0": true,
@@ -101,7 +109,8 @@
     "e846a571-486e-4393-8b63-6259521fb2bc": true,
     "ce7eff89-2739-4cf1-ac44-367e4d4ed4b8": true,
     "35045dc6-d1d3-43ac-a7a3-84c612093936": true,
-    "0977f5a7-5050-4c75-b405-ce03848d356e": true
+    "0977f5a7-5050-4c75-b405-ce03848d356e": true,
+    "b150a8ee-06f9-47dd-b612-9398147eae67": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
