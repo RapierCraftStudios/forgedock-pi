@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 32,
-  "lastEventHash": "sha256:388a9c02b348030ba1afd425d2c796fb05cf0e466aac36c0db19f363f5265d77",
+  "sequence": 33,
+  "lastEventHash": "sha256:40086ff360924941885e399e58b3275cea5f2305e3fffd094df17434052e15a6",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -112,16 +112,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`workflowStageForDurableState` makes a recorded merge effect dominate candidate workflow stages.",
+            "Attach-time reconciliation returns after projecting merged when authoritative effects contain a merge.",
+            "Parent-node startup now reads authoritative state before projection and applies durable-effect precedence.",
+            "Focused test simulates a later mergeability recovery failure and confirms the emitted stage remains merged while the no-effect control remains awaitingMerge."
+          ],
           "inputArtifactHash": "sha256:worktree-7053733d-7817370b",
           "logicalNodeId": "implement-1",
           "startedAt": "2026-08-27T12:53:29.938Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/7053733d-ea35-4801-b101-5893c883334a",
           "branch": "forge/issue-147-7053733d",
-          "baseSha": "7817370b07c7e3d172f4971771e822aab548431a"
+          "baseSha": "7817370b07c7e3d172f4971771e822aab548431a",
+          "finishedAt": "2026-08-27T12:55:10.277Z",
+          "outputArtifactHash": "sha256:implementation-147-durable-stage"
         }
       ]
     }
@@ -257,7 +264,8 @@
     "effect:github-label:RapierCraftStudios/forgedock-pi:147:e8f607c9-123f-4d04-950d-5228e227cf83": "0a0b14a9-06b5-4278-8036-faf886d432c6",
     "phase:implement:1:queue": "ba71c2c7-dc70-4763-9d3e-8ecc8f7d2e5b",
     "phase:implement:1:start": "59130b96-9572-4f04-aa57-0e170c3f80c7",
-    "effect:github-label:RapierCraftStudios/forgedock-pi:147:59130b96-9572-4f04-aa57-0e170c3f80c7": "6bbf1e6f-0708-427a-a3e3-e56548ce62df"
+    "effect:github-label:RapierCraftStudios/forgedock-pi:147:59130b96-9572-4f04-aa57-0e170c3f80c7": "6bbf1e6f-0708-427a-a3e3-e56548ce62df",
+    "phase:implement:1:complete": "ae3f2c7a-6f73-4feb-bef5-9d54729218d0"
   },
   "eventIds": {
     "97c07aaf-07c1-4107-95e3-0632108817f3": true,
@@ -291,7 +299,8 @@
     "0a0b14a9-06b5-4278-8036-faf886d432c6": true,
     "ba71c2c7-dc70-4763-9d3e-8ecc8f7d2e5b": true,
     "59130b96-9572-4f04-aa57-0e170c3f80c7": true,
-    "6bbf1e6f-0708-427a-a3e3-e56548ce62df": true
+    "6bbf1e6f-0708-427a-a3e3-e56548ce62df": true,
+    "ae3f2c7a-6f73-4feb-bef5-9d54729218d0": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
