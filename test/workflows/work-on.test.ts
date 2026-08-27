@@ -13,6 +13,7 @@ import {
   parentNodeFromId,
   parseAsyncCompletion,
   reconcileLaunchState,
+  restoreReviewLabelAfterMergeFailure,
   reviewFindingMarker,
   reviewInstanceMarker,
   reviewSummaryInstanceMarker,
@@ -148,6 +149,10 @@ test("workflow transitions cover the complete canonical label lifecycle", () => 
   );
   assert.equal(workflowLabelForNode("merge", "merged"), "workflow:merged");
   assert.equal(
+    workflowStageForNodeTransition("merge", "failed"),
+    "review",
+  );
+  assert.equal(
     workflowLabelForNode("investigate", "invalid"),
     "workflow:invalid",
   );
@@ -159,6 +164,33 @@ test("workflow transitions cover the complete canonical label lifecycle", () => 
     workflowLabelForNode("cleanup", "closed", "decomposed"),
     "workflow:decomposed",
   );
+});
+
+test("merge rollback retries with an independent signal after parent cancellation", async () => {
+  const parentController = new AbortController();
+  parentController.abort(new Error("merge context cancelled"));
+  const rollbackSignals: AbortSignal[] = [];
+  let attempts = 0;
+
+  await restoreReviewLabelAfterMergeFailure(
+    {
+      async setWorkflowLabel(issueNumber, workflowLabel, signal) {
+        assert.equal(issueNumber, 42);
+        assert.equal(workflowLabel, "workflow:in-review");
+        assert.ok(signal);
+        rollbackSignals.push(signal);
+        assert.equal(signal.aborted, false);
+        attempts += 1;
+        if (attempts === 1) throw new Error("transient label failure");
+      },
+    },
+    42,
+  );
+
+  assert.equal(attempts, 2);
+  assert.equal(rollbackSignals.length, 2);
+  assert.notEqual(rollbackSignals[0], parentController.signal);
+  assert.notEqual(rollbackSignals[0], rollbackSignals[1]);
 });
 
 test("normal matching provider receipts are inspected instead of escalated", () => {

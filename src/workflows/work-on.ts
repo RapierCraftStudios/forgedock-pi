@@ -86,9 +86,16 @@ import {
 } from "./remediation.ts";
 
 const RUN_LINK_ENTRY = "forgedock-run-link/v1";
+const WORKFLOW_LABEL_RETRY_ATTEMPTS = 3;
+const WORKFLOW_LABEL_RETRY_DELAY_MS = 500;
+const WORKFLOW_LABEL_ROLLBACK_TIMEOUT_MS = 30_000;
 
 export type WorkflowStage = keyof typeof WORKFLOW_LABEL_BY_STAGE;
-export type WorkflowTransition = "started" | "resumed" | "completed";
+export type WorkflowTransition =
+  | "started"
+  | "resumed"
+  | "completed"
+  | "failed";
 
 export type ActiveRunStatus =
   | "running"
@@ -579,7 +586,11 @@ export class ForgeWorkOnController {
     const label = WORKFLOW_LABEL_BY_STAGE[stage];
     assertWorkflowLabel(label, stage);
     let lastError: unknown;
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
+    for (
+      let attempt = 1;
+      attempt <= WORKFLOW_LABEL_RETRY_ATTEMPTS;
+      attempt += 1
+    ) {
       try {
         const activeProjector =
           projector ??
@@ -596,8 +607,10 @@ export class ForgeWorkOnController {
         return;
       } catch (error) {
         lastError = error;
-        if (attempt < 3)
-          await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
+        if (attempt < WORKFLOW_LABEL_RETRY_ATTEMPTS)
+          await new Promise((resolvePromise) =>
+            setTimeout(resolvePromise, WORKFLOW_LABEL_RETRY_DELAY_MS),
+          );
       }
     }
     ctx.ui.notify(
@@ -650,8 +663,17 @@ export class ForgeWorkOnController {
         (candidate) =>
           candidate.node === "investigate" && candidate.status === "completed",
       )?.outcome;
+    const failedMerge =
+      latest.node === "merge" &&
+      (latest.status === "failed" ||
+        latest.status === "blocked" ||
+        latest.status === "needs-human");
     const transition: WorkflowTransition =
-      latest.status === "completed" ? "completed" : "started";
+      latest.status === "completed"
+        ? "completed"
+        : failedMerge
+          ? "failed"
+          : "started";
     await this.#projectWorkflowStage(
       link,
       workflowStageForNodeTransition(
@@ -2164,12 +2186,17 @@ export class ForgeWorkOnController {
       try {
         merged = await github.mergePullRequest({ pullNumber: pull.number, expectedHeadSha: pull.headSha, method: "squash", ...(ctx.signal ? { signal: ctx.signal } : {}) });
       } catch (error) {
-        await projector
-          .setWorkflowLabel(
+        try {
+          await restoreReviewLabelAfterMergeFailure(
+            projector,
             link.issueNumber,
-            WORKFLOW_LABEL_BY_STAGE.review,
-          )
-          .catch(() => undefined);
+          );
+        } catch (rollbackError) {
+          ctx.ui.notify(
+            `Merge failed and restoring workflow:in-review also failed: ${errorMessage(rollbackError)}`,
+            "warning",
+          );
+        }
         throw error;
       }
       headSha = merged.sha;
@@ -4689,6 +4716,37 @@ export function shouldBufferLaunchCompletion(
   return receiptBindingInFlight || !linkKnown;
 }
 
+export async function restoreReviewLabelAfterMergeFailure(
+  projector: Pick<GitHubIssueProjector, "setWorkflowLabel">,
+  issueNumber: number,
+): Promise<void> {
+  let lastError: unknown;
+  for (
+    let attempt = 1;
+    attempt <= WORKFLOW_LABEL_RETRY_ATTEMPTS;
+    attempt += 1
+  ) {
+    try {
+      // Compensation must outlive cancellation of the merge operation. Each
+      // attempt gets its own bounded signal so one timed-out request cannot
+      // cancel the remaining retries.
+      await projector.setWorkflowLabel(
+        issueNumber,
+        WORKFLOW_LABEL_BY_STAGE.review,
+        AbortSignal.timeout(WORKFLOW_LABEL_ROLLBACK_TIMEOUT_MS),
+      );
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < WORKFLOW_LABEL_RETRY_ATTEMPTS)
+        await new Promise((resolvePromise) =>
+          setTimeout(resolvePromise, WORKFLOW_LABEL_RETRY_DELAY_MS),
+        );
+    }
+  }
+  throw lastError ?? new Error("Workflow label rollback failed.");
+}
+
 export function workflowStageForNodeTransition(
   node: string,
   transition: WorkflowTransition,
@@ -4709,10 +4767,12 @@ export function workflowStageForNodeTransition(
     return "awaitingMerge";
   if (node === "decision" && outcome === "remediation-required")
     return "build";
-  if (node === "merge")
+  if (node === "merge") {
+    if (transition === "failed") return "review";
     return transition === "completed" && outcome === "merged"
       ? "merged"
       : "awaitingMerge";
+  }
   if (node === "resolve") return "investigation";
   if (node === "investigate")
     return transition === "completed" ? "readyToBuild" : "investigation";
