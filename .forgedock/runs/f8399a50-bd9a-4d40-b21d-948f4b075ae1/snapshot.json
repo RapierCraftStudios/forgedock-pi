@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 52,
-  "lastEventHash": "sha256:435ddcfab518da0ee7ad7a7c03c416cc272e51d049c52ac88a0f5fc6f9ab9e97",
+  "sequence": 53,
+  "lastEventHash": "sha256:362d6cd09e745127033834c0a7b04e43a49d8c0f18d500ee2193e0465c31a3c5",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -324,6 +324,12 @@
       "effectId": "branch:forge/issue-209-f8399a50",
       "digest": "sha256:d33f145431532d40f9de1e2fa4c45e42726ae392b4a42d3d8c210be8f8ba3f9a",
       "eventId": "3a6e313b-95f2-42cb-b233-22d5e29ac402"
+    },
+    "pr:221": {
+      "effectType": "pull-request",
+      "effectId": "pr:221",
+      "digest": "sha256:12d80d1eceaa6d4c25c703382df556f5f7ce03618f3036c7299d594468e66d28",
+      "eventId": "9a1069f5-7c80-43db-9e9d-24e2aab765f3"
     }
   },
   "idempotencyKeys": {
@@ -378,7 +384,8 @@
     "effect:github-label:RapierCraftStudios/forgedock-pi:209:b52f0b79-8135-4f33-82f4-f9041712b712": "33a09a36-5fde-4492-843c-84f0c2113f80",
     "phase:merge:1:queue": "eb54a92f-11ba-47cb-9649-15260512abf4",
     "phase:merge:1:start": "7ae7b146-e9c3-434f-8481-e86d2f90c8a9",
-    "effect:branch:forge/issue-209-f8399a50": "3a6e313b-95f2-42cb-b233-22d5e29ac402"
+    "effect:branch:forge/issue-209-f8399a50": "3a6e313b-95f2-42cb-b233-22d5e29ac402",
+    "effect:pr:221": "9a1069f5-7c80-43db-9e9d-24e2aab765f3"
   },
   "eventIds": {
     "ef6f33d5-47a2-494d-8d14-c608d866bea6": true,
@@ -432,7 +439,8 @@
     "33a09a36-5fde-4492-843c-84f0c2113f80": true,
     "eb54a92f-11ba-47cb-9649-15260512abf4": true,
     "7ae7b146-e9c3-434f-8481-e86d2f90c8a9": true,
-    "3a6e313b-95f2-42cb-b233-22d5e29ac402": true
+    "3a6e313b-95f2-42cb-b233-22d5e29ac402": true,
+    "9a1069f5-7c80-43db-9e9d-24e2aab765f3": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
