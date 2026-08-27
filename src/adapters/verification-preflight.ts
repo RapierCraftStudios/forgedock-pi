@@ -138,6 +138,7 @@ const PACKAGE_LOCATION_OPTIONS: Readonly<
     "--workspace",
     "-w",
     "--workspaces",
+    "--ws",
     "--include-workspace-root",
     "--location",
     "--global",
@@ -149,6 +150,7 @@ const PACKAGE_LOCATION_OPTIONS: Readonly<
     "--dir",
     "-C",
     "--filter",
+    "--filter-prod",
     "-F",
     "--workspace-root",
     "-w",
@@ -157,7 +159,7 @@ const PACKAGE_LOCATION_OPTIONS: Readonly<
     "-r",
     "--recursive",
   ]),
-  yarn: new Set(["--cwd", "--top-level"]),
+  yarn: new Set(["--cwd", "--top-level", "-T"]),
   bun: new Set(["--cwd", "--filter", "--global", "-g"]),
 };
 
@@ -300,10 +302,11 @@ export function assertNoPackageLocationOptions(
   const args = argv.slice(invocation.argvOffset);
   const command = packageManagerCommand(invocation.manager, args);
   if (
-    invocation.manager === "yarn" &&
-    (command?.name === "workspace" || command?.name === "workspaces")
+    (invocation.manager === "yarn" &&
+      (command?.name === "workspace" || command?.name === "workspaces")) ||
+    (invocation.manager === "pnpm" && command?.name === "recursive")
   )
-    packageLocationError(path, command.name);
+    packageLocationError(path, command?.name ?? "workspace");
 
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
