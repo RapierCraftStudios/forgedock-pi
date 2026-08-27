@@ -29,7 +29,11 @@ import {
 } from "../core/orchestration.ts";
 import { isProtectedBranch, type ForgePolicy } from "../core/policy.ts";
 import { OrchestrationJournal } from "./orchestration-journal.ts";
-import type { ForgeWorkOnController, WorkOnLifecycleEvent } from "./work-on.ts";
+import {
+  isTransientProviderFailure,
+  type ForgeWorkOnController,
+  type WorkOnLifecycleEvent,
+} from "./work-on.ts";
 
 const ORCHESTRATION_LINK_ENTRY = "forgedock-orchestration-link/v1";
 
@@ -694,9 +698,23 @@ export class ForgeOrchestrationController {
             message: `Integrate issue ${integration.issueNumber}`,
             ...(ctx.signal ? { signal: ctx.signal } : {}),
           });
-          try {
-            await this.#workOn.integrateIssue(integration.forgeRunId, ctx);
-          } catch (error) {
+          let integrationError: unknown;
+          for (let attempt = 1; attempt <= 3; attempt += 1) {
+            try {
+              await this.#workOn.integrateIssue(integration.forgeRunId, ctx);
+              integrationError = undefined;
+              break;
+            } catch (error) {
+              integrationError = error;
+              if (
+                attempt === 3 ||
+                !isTransientProviderFailure(errorMessage(error))
+              )
+                break;
+              await orchestrationDelay(2_000 * 2 ** (attempt - 1), ctx.signal);
+            }
+          }
+          if (integrationError) {
             const latest = await this.#read(link, ctx.signal);
             await latest.journal.append({
               orchestrationId: link.orchestrationId,
@@ -704,7 +722,7 @@ export class ForgeOrchestrationController {
               payload: {
                 issueNumber: integration.issueNumber,
                 reason: normalizeReason(
-                  errorMessage(error),
+                  errorMessage(integrationError),
                   "Lane integration failed.",
                 ),
               },
@@ -918,6 +936,25 @@ export function rateLimitedOrchestrationConcurrency(
     configuredMax,
     Math.floor(available / GITHUB_LANE_ESTIMATED_REQUEST_COST),
   );
+}
+
+async function orchestrationDelay(
+  milliseconds: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (signal?.aborted) throw signal.reason;
+  await new Promise<void>((resolve, reject) => {
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new Error("Integration retry aborted."));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, milliseconds);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    timer.unref();
+  });
 }
 
 function chooseIntegrationBranch(policy: ForgePolicy): string {

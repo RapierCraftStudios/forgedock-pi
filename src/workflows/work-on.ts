@@ -2344,7 +2344,10 @@ export class ForgeWorkOnController {
           kind: "work-on",
           worktreePath: link.prepared.worktreePath,
         },
-        round: aggregate.review.rounds,
+        // Each synthetic work-on review ID owns one fresh journal, so its
+        // internal panel sequence always starts at round 1. The external work-on
+        // round remains encoded in sharedReviewId.
+        round: 1,
         reviewerTimeoutMs: policy.subagents.reviewerTimeoutMs,
         githubCheckTimeoutMs: policy.verification.github.waitTimeoutMs,
         githubCheckPollIntervalMs: policy.verification.github.pollIntervalMs,
@@ -3376,12 +3379,7 @@ export class ForgeWorkOnController {
       isRecoverableWorkOnBlocker(durableResult.blocker)
         ? durableResult.blocker
         : undefined;
-    if (
-      shouldTrustDurableWorkOnResult(
-        durableResult,
-        completion?.state,
-      )
-    ) {
+    if (shouldTrustDurableWorkOnResult(durableResult, completion?.state)) {
       link.status = "running";
       this.#persistLink(link);
       return {
@@ -3714,7 +3712,15 @@ export class ForgeWorkOnController {
       const result = await this.#loadResult(link);
       link.status = "finalizing";
       this.#persistLink(link);
-      await this.#finalize(link, ctx, result, true);
+      try {
+        await this.#finalize(link, ctx, result, true);
+      } catch (error) {
+        if (isTransientProviderFailure(errorMessage(error))) {
+          link.status = "ready";
+          this.#persistLink(link);
+        }
+        throw error;
+      }
       return this.#lifecycleEvent(link, {
         headSha: result.headSha,
         baseSha: result.baseSha,
@@ -4530,7 +4536,9 @@ export class ForgeWorkOnController {
         kind: "work-on",
         worktreePath: link.prepared.worktreePath,
       },
-      round: result.review.rounds,
+      // A refreshed work-on round uses a new review ID and therefore a fresh
+      // internal panel sequence beginning at round 1.
+      round: 1,
       reviewerTimeoutMs: policy.subagents.reviewerTimeoutMs,
       githubCheckTimeoutMs: policy.verification.github.waitTimeoutMs,
       githubCheckPollIntervalMs: policy.verification.github.pollIntervalMs,
