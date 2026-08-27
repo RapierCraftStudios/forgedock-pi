@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 12,
-  "lastEventHash": "sha256:bc4c0887c300501807012ca80eff43d1c966516463887878d96e2b22e8b03778",
+  "sequence": 13,
+  "lastEventHash": "sha256:4240aeb516682de72d52d9f0108cc087f74a324092254dba63f2982e284a4fc4",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -38,15 +38,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "Reinspect the frozen base and validate issue #209.",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/github-projection.ts:479-480` rejects non-safe, non-positive issue numbers in `setWorkflowLabel` before delegation.",
+            "`src/adapters/github-projection.ts:525` calls `requireIssueNumber(issueNumber)` before constructing either issue API path, providing shared defense for receipt and clear variants.",
+            "`test/adapters/github-projection.test.ts` exercises valid workflow-label transitions but has no focused invalid-issue-number regression case.",
+            "Issue #209 records the original PR #199 review finding and expected regression coverage."
+          ],
           "logicalNodeId": "investigate-1",
           "startedAt": "2026-08-27T14:31:10.664Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/6df31780-d744-4861-b63c-10444061fa07",
           "branch": "forge/issue-209-6df31780",
-          "baseSha": "6a8af2aaccf459b3ab45208032334e50a9ce629d"
+          "baseSha": "6a8af2aaccf459b3ab45208032334e50a9ce629d",
+          "finishedAt": "2026-08-27T14:31:59.755Z",
+          "outputArtifactHash": "sha256:investigate-209-invalid-current-base"
         }
       ]
     }
@@ -96,7 +103,8 @@
     "effect:github-label:RapierCraftStudios/forgedock-pi:209:8db6e700-aa55-40ca-9aec-25f5daba168b": "e6efc722-2cf0-42dc-b1f6-a1ae9e0461a2",
     "phase:investigate:1:queue": "8737413d-e385-48b1-8731-f92167d80ba8",
     "phase:investigate:1:start": "c78fdb79-25e7-48e3-8046-455dc8b998a6",
-    "effect:github-label:RapierCraftStudios/forgedock-pi:209:c78fdb79-25e7-48e3-8046-455dc8b998a6": "472954bb-443e-453d-9a92-c26128922639"
+    "effect:github-label:RapierCraftStudios/forgedock-pi:209:c78fdb79-25e7-48e3-8046-455dc8b998a6": "472954bb-443e-453d-9a92-c26128922639",
+    "phase:investigate:1:complete": "99d19c13-4f53-45e1-be49-af4434dea423"
   },
   "eventIds": {
     "c6df90f4-2328-4863-b964-4809c11f2ef1": true,
@@ -110,7 +118,8 @@
     "e6efc722-2cf0-42dc-b1f6-a1ae9e0461a2": true,
     "8737413d-e385-48b1-8731-f92167d80ba8": true,
     "c78fdb79-25e7-48e3-8046-455dc8b998a6": true,
-    "472954bb-443e-453d-9a92-c26128922639": true
+    "472954bb-443e-453d-9a92-c26128922639": true,
+    "99d19c13-4f53-45e1-be49-af4434dea423": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
