@@ -5,10 +5,10 @@
   "issueNumber": 194,
   "integrationBranch": "staging",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "authorityMode": "run-scoped",
-  "sequence": 15,
-  "lastEventHash": "sha256:0f2d0b8783fbe029d7c4c6fc75f195cdd2dacec309667c72646098a984a4305e",
+  "sequence": 16,
+  "lastEventHash": "sha256:b1c78c7d77fd57cc5c74c237256422904234649c199d5b539a28df72f4ccb5de",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -111,10 +111,12 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "abandoned",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": []
+          "evidence": [],
+          "reason": "Operator-authorized reset after critical pagination, rate-limit, DAG, and projection integrity failures.",
+          "finishedAt": "2026-08-27T07:46:05.784Z"
         }
       ]
     }
@@ -136,7 +138,8 @@
     "phase:prepare-worktree:1:queue": "3959cc14-fcc5-4ad9-9544-27e4b92860d7",
     "phase:prepare-worktree:1:start": "6efbc0e8-8d68-4178-870c-b98d7a3f9160",
     "phase:prepare-worktree:1:complete": "e5690e53-09e9-4b3a-be83-a6d1d86a2ec8",
-    "phase:implement:1:queue": "154267b6-339f-4354-bd67-bf2906a154ee"
+    "phase:implement:1:queue": "154267b6-339f-4354-bd67-bf2906a154ee",
+    "run:cancelled": "0f6fd0fc-151d-470b-91c0-1c31e563727f"
   },
   "eventIds": {
     "29e5d5b1-5777-40c6-9e31-840de0e148f0": true,
@@ -153,7 +156,8 @@
     "3959cc14-fcc5-4ad9-9544-27e4b92860d7": true,
     "6efbc0e8-8d68-4178-870c-b98d7a3f9160": true,
     "e5690e53-09e9-4b3a-be83-a6d1d86a2ec8": true,
-    "154267b6-339f-4354-bd67-bf2906a154ee": true
+    "154267b6-339f-4354-bd67-bf2906a154ee": true,
+    "0f6fd0fc-151d-470b-91c0-1c31e563727f": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
@@ -165,5 +169,6 @@
     "lastHeartbeatAt": "2026-08-27T06:46:55.837Z",
     "expiresAt": "2027-08-27T06:46:55.837Z",
     "takeoverRequired": false
-  }
+  },
+  "cancellationReason": "Operator-authorized reset after critical pagination, rate-limit, DAG, and projection integrity failures."
 }
