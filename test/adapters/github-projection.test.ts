@@ -18,8 +18,10 @@ class ProjectionTransport implements GitHubTransport {
   readonly comments: Comment[] = [];
   readonly labels = new Set<string>(["bug"]);
   commentPosts = 0;
+  requests = 0;
 
   async request<T>(request: GitHubRequest): Promise<GitHubResponse<T>> {
+    this.requests += 1;
     let status = 200;
     let data: unknown;
     let headers: Record<string, string> = {};
@@ -141,6 +143,30 @@ test("issue projection is marker-idempotent and only adds missing labels", async
   assert.equal(transport.labels.has("needs-human"), false);
   assert.equal(transport.labels.has("bug"), true);
   assert.equal(transport.labels.has("priority:P1"), true);
+});
+
+test("workflow label transitions reject malformed issue numbers before transport access", async () => {
+  const malformedIssueNumbers: unknown[] = [
+    0,
+    -1,
+    1.5,
+    Number.MAX_SAFE_INTEGER + 1,
+    "42/labels?per_page=100",
+  ];
+
+  for (const issueNumber of malformedIssueNumbers) {
+    const transport = new ProjectionTransport();
+    const projector = new GitHubIssueProjector(transport, "owner/repo");
+
+    await assert.rejects(
+      projector.setWorkflowLabel(
+        issueNumber as number,
+        "workflow:in-review",
+      ),
+      /Issue number must be positive/,
+    );
+    assert.equal(transport.requests, 0);
+  }
 });
 
 test("workflow label transitions replace stale state while preserving unrelated labels", async () => {
