@@ -3,11 +3,11 @@
   "orchestrationId": "52257135-4b9e-4615-952c-da8fcb9731db",
   "repository": "RapierCraftStudios/forgedock-pi",
   "integrationBranch": "staging",
-  "status": "running",
+  "status": "failed",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 11,
-  "lastEventHash": "sha256:93fda2ca8b42d5c9e46fdd0ee50ab9f9bdc984ecdf2e31de4e6d538616b1d904",
+  "sequence": 12,
+  "lastEventHash": "sha256:7ec6df9a8f0bc7964bf30bc6954c13ae6d984ff65ef69d7bdb5e585a62fd9934",
   "lanes": [
     {
       "issueNumber": 196,
@@ -54,7 +54,8 @@
     "lane:196:blocked": "7ee28c2a-ed70-4be9-8014-6cafbaa91cc1",
     "lane:209:integrate:0": "92101bd2-834d-4ba2-83a0-424ec6bc9f5d",
     "lane:147:failed": "7144ecdc-37d5-490d-a6a2-4df0b65d242b",
-    "lane:209:blocked": "615ebb18-a34e-44a5-b81f-75dd6ddf28fc"
+    "lane:209:blocked": "615ebb18-a34e-44a5-b81f-75dd6ddf28fc",
+    "orchestration:complete": "830914a8-ed73-493f-b8db-ad3a6384da64"
   },
   "eventIds": {
     "95dd08ac-18bf-49cc-b91a-3e4a3a02ef94": true,
@@ -67,7 +68,9 @@
     "7ee28c2a-ed70-4be9-8014-6cafbaa91cc1": true,
     "92101bd2-834d-4ba2-83a0-424ec6bc9f5d": true,
     "7144ecdc-37d5-490d-a6a2-4df0b65d242b": true,
-    "615ebb18-a34e-44a5-b81f-75dd6ddf28fc": true
+    "615ebb18-a34e-44a5-b81f-75dd6ddf28fc": true,
+    "830914a8-ed73-493f-b8db-ad3a6384da64": true
   },
-  "createdAt": "2026-08-27T13:09:14.511Z"
+  "createdAt": "2026-08-27T13:09:14.511Z",
+  "completedAt": "2026-08-27T13:37:12.631Z"
 }
