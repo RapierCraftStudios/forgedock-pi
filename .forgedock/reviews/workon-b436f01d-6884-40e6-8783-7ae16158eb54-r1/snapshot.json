@@ -38,19 +38,26 @@
       "name": "material-change",
       "required": true,
       "status": "passed"
+    },
+    {
+      "name": "local:check",
+      "required": true,
+      "status": "passed",
+      "exitCode": 0
     }
   ],
   "findings": [],
   "status": "active",
-  "sequence": 6,
-  "lastEventHash": "sha256:3fe14d962907ba08d75af67f6f374d098bd17ef72621369285c03f05f5b67cc9",
+  "sequence": 7,
+  "lastEventHash": "sha256:bfd0869276f915e145f82a37a1cb8e9a91e2fa3fdcef1ebfc7e57971aa34120e",
   "idempotencyKeys": {
     "review:create": "7c75e69c-c203-42c9-979c-fcc6041e3a9e",
     "panel:1:start": "d7855845-bc69-44d9-9610-4f95fec53d42",
     "check:reviewer:0:c9d99265137af9c6": "6c67b7d6-e476-4abe-a725-cc89b1a80236",
     "check:reviewer:1:67fcfdf7bc42337a": "0970bc8a-35ea-4ed2-a170-8e4baf8e57c7",
     "panel:1:findings": "523ecedc-6653-4b5b-89ae-4386f11bcef8",
-    "check:additional:0:f9f1e19f9e55cfa8": "df155025-8267-449a-b51c-5c19cc556844"
+    "check:additional:0:f9f1e19f9e55cfa8": "df155025-8267-449a-b51c-5c19cc556844",
+    "check:additional:1:1200c706f0cfc5ab": "64b94f32-ce16-403f-a19b-d8f9625425bc"
   },
   "eventIds": {
     "7c75e69c-c203-42c9-979c-fcc6041e3a9e": true,
@@ -58,10 +65,11 @@
     "6c67b7d6-e476-4abe-a725-cc89b1a80236": true,
     "0970bc8a-35ea-4ed2-a170-8e4baf8e57c7": true,
     "523ecedc-6653-4b5b-89ae-4386f11bcef8": true,
-    "df155025-8267-449a-b51c-5c19cc556844": true
+    "df155025-8267-449a-b51c-5c19cc556844": true,
+    "64b94f32-ce16-403f-a19b-d8f9625425bc": true
   },
   "createdAt": "2026-08-27T14:48:13.291Z",
-  "updatedAt": "2026-08-27T14:48:48.530Z",
+  "updatedAt": "2026-08-27T14:48:54.014Z",
   "panel": {
     "round": 1,
     "status": "running",
