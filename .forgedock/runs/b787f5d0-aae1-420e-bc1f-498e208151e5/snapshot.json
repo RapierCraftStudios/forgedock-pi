@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 35,
-  "lastEventHash": "sha256:0bab9499bf778bd58a73a6b0e7389d18d73db44f24d596e0f44c8dc562e945e2",
+  "sequence": 36,
+  "lastEventHash": "sha256:8d0c5400d2abb335bd9ef09073512cf58f01afe39a2e151d539156cbb7602790",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -114,6 +114,18 @@
           "branch": "forge/issue-209-b787f5d0",
           "baseSha": "0b7fcd2c596e05d7a98e57a4464d39aae987f71d",
           "finishedAt": "2026-08-27T13:54:08.744Z"
+        }
+      ]
+    },
+    "verify": {
+      "phase": "verify",
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "queued",
+          "leaseEpoch": 1,
+          "restartAction": "resume verify attempt 1",
+          "evidence": []
         }
       ]
     }
@@ -264,7 +276,8 @@
     "effect:github-label:RapierCraftStudios/forgedock-pi:209:23c4cdda-3009-4360-903d-4b34d91ea907": "b6a8b130-c8eb-4d1a-8fc3-7211902c266f",
     "phase:implement:1:complete": "160b0765-40b8-42ba-89d0-04400af36a1a",
     "effect:github-comment:RapierCraftStudios/forgedock-pi:209:160b0765-40b8-42ba-89d0-04400af36a1a": "173c4b88-3142-4415-90bc-f7642606a1d6",
-    "effect:github-label:RapierCraftStudios/forgedock-pi:209:160b0765-40b8-42ba-89d0-04400af36a1a": "4acb4c0a-e05c-4161-9d3d-58eb053fd6d3"
+    "effect:github-label:RapierCraftStudios/forgedock-pi:209:160b0765-40b8-42ba-89d0-04400af36a1a": "4acb4c0a-e05c-4161-9d3d-58eb053fd6d3",
+    "phase:verify:1:queue": "71be9fc9-1d1c-4184-a7eb-2c1481860085"
   },
   "eventIds": {
     "ba899e3b-b3ad-4962-94bc-eefda2015ea8": true,
@@ -301,7 +314,8 @@
     "b6a8b130-c8eb-4d1a-8fc3-7211902c266f": true,
     "160b0765-40b8-42ba-89d0-04400af36a1a": true,
     "173c4b88-3142-4415-90bc-f7642606a1d6": true,
-    "4acb4c0a-e05c-4161-9d3d-58eb053fd6d3": true
+    "4acb4c0a-e05c-4161-9d3d-58eb053fd6d3": true,
+    "71be9fc9-1d1c-4184-a7eb-2c1481860085": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
