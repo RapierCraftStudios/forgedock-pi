@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 22,
-  "lastEventHash": "sha256:8ae1defde3d62356059146a75efe02f9fd98286f604d716752c626ae7c5b5b09",
+  "sequence": 23,
+  "lastEventHash": "sha256:207d5067ac992a0f22e0cd79a0ad4470e35f76315efe791e6e41ec3d43da886e",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -166,16 +166,25 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume review attempt 1",
-          "evidence": [],
+          "evidence": [
+            "PR #185 prepared at reviewed head 4f69f3279e772466fa102260adc4da46714d36ba",
+            "forge-review-correctness completed with verdict pass and no findings",
+            "forge-review-security completed with verdict pass and no findings",
+            "both reviewers consumed the complete frozen patch and persisted schema-valid results",
+            "review identity matched run 83787819-55d0-4b47-a040-40adffbf6752 and frozen head 4f69f3279e772466fa102260adc4da46714d36ba"
+          ],
           "inputArtifactHash": "sha256:verified-113-4f69f327",
           "logicalNodeId": "work-on-review",
           "startedAt": "2026-08-27T01:01:25.487Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/83787819-55d0-4b47-a040-40adffbf6752",
           "branch": "forge/issue-113-83787819",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-27T01:03:58.133Z",
+          "outputArtifactHash": "sha256:review-113-4f69f327",
+          "commitSha": "4f69f3279e772466fa102260adc4da46714d36ba"
         }
       ]
     }
@@ -204,7 +213,8 @@
     "phase:verify:1:start": "c7368842-9003-4fe8-812e-9bd237b82f81",
     "phase:verify:1:complete": "3b4b5cd2-a190-4291-a9fa-a3699f9ccef4",
     "phase:review:1:queue": "34043608-9f25-440a-be30-bdcefde403aa",
-    "phase:review:1:start": "e3872f58-44ed-4f86-9933-eb74099eb3f4"
+    "phase:review:1:start": "e3872f58-44ed-4f86-9933-eb74099eb3f4",
+    "phase:review:1:complete": "d14ab8e5-2db3-48f8-bfa9-cd81b6e058d7"
   },
   "eventIds": {
     "68995099-547e-4db3-9686-fdfb11b01675": true,
@@ -228,7 +238,8 @@
     "c7368842-9003-4fe8-812e-9bd237b82f81": true,
     "3b4b5cd2-a190-4291-a9fa-a3699f9ccef4": true,
     "34043608-9f25-440a-be30-bdcefde403aa": true,
-    "e3872f58-44ed-4f86-9933-eb74099eb3f4": true
+    "e3872f58-44ed-4f86-9933-eb74099eb3f4": true,
+    "d14ab8e5-2db3-48f8-bfa9-cd81b6e058d7": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
