@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 23,
-  "lastEventHash": "sha256:fe932b54b616e201aa2d1fc16958f2858a1681b466f5808df59a488b14afa538",
+  "sequence": 24,
+  "lastEventHash": "sha256:386fb9774bcd9c654b7c6543dfefed8c9ed5f6437d1bebcac713b24cadbcfe44",
   "lanes": [
     {
       "issueNumber": 92,
@@ -50,12 +50,13 @@
     {
       "issueNumber": 113,
       "ordinal": 4,
-      "status": "refreshing",
+      "status": "blocked",
       "refreshes": 1,
       "forgeRunId": "83787819-55d0-4b47-a040-40adffbf6752",
       "subagentRunId": "b9c2f9da-2964-4d7f-8c69-87b038108a4e",
       "headSha": "4f69f3279e772466fa102260adc4da46714d36ba",
-      "baseSha": "2e5f7ff7b33a985b686cadb3a0e47b7ca3713f0b"
+      "baseSha": "2e5f7ff7b33a985b686cadb3a0e47b7ca3713f0b",
+      "reason": "forge_prepare_review failed with `assertBranchRef is not defined`, so the existing PR could not be updated or its new review head frozen."
     },
     {
       "issueNumber": 114,
@@ -121,7 +122,8 @@
     "lane:112:blocked": "bdeba95b-4774-4e3f-a257-720d60930140",
     "lane:94:failed": "364eb341-af91-445c-b510-a1f5b69722c2",
     "lane:113:integrate:0": "d1fa0caa-667c-418c-bc31-186270290ba8",
-    "lane:113:refresh:1": "a76ecbff-719c-4f1d-99fc-e761b050eef8"
+    "lane:113:refresh:1": "a76ecbff-719c-4f1d-99fc-e761b050eef8",
+    "lane:113:blocked": "7e842e3d-12d9-406e-b260-a5327c561b43"
   },
   "createdAt": "2026-08-27T00:45:48.913Z"
 }
