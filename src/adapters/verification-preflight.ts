@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
 import {
   access,
-  readdir,
+  opendir,
   readFile,
   realpath,
   stat,
@@ -39,7 +39,11 @@ export interface VerificationCommandCandidate {
 }
 
 const MAX_DISCOVERED_MANIFESTS = 256;
+const MAX_DISCOVERED_CANDIDATES = 512;
 const MAX_DISCOVERY_DEPTH = 8;
+const MAX_DISCOVERY_ENTRIES = 10_000;
+const MAX_MANIFEST_BYTES = 512 * 1024;
+const MAX_SCRIPTS_PER_MANIFEST = 256;
 const EXCLUDED_DISCOVERY_DIRECTORIES = new Set([
   ".forge",
   ".git",
@@ -66,12 +70,17 @@ export async function discoverVerificationCommandCandidates(
   repositoryRoot: string,
 ): Promise<VerificationCommandCandidate[]> {
   const canonicalRoot = await realpath(repositoryRoot);
-  const manifests: Array<{ directory: string; packagePath: string; scripts: Record<string, string> }> = [];
+  const manifests: Array<{
+    directory: string;
+    packagePath: string;
+    scripts: Record<string, string>;
+  }> = [];
   await collectPackageManifests(
     canonicalRoot,
     canonicalRoot,
     ".",
     0,
+    { entries: 0 },
     manifests,
   );
   const candidates: VerificationCommandCandidate[] = [];
@@ -86,8 +95,9 @@ export async function discoverVerificationCommandCandidates(
         candidateName(manifest.packagePath, script),
         usedNames,
       );
+      if (candidates.length >= MAX_DISCOVERED_CANDIDATES) return candidates;
       const argv =
-        script === "test"
+        script === "test" && packageManager !== "bun"
           ? [packageManager, "test"]
           : [packageManager, "run", script];
       candidates.push({
@@ -107,15 +117,30 @@ async function collectPackageManifests(
   directory: string,
   packagePath: string,
   depth: number,
-  manifests: Array<{ directory: string; packagePath: string; scripts: Record<string, string> }>,
+  budget: { entries: number },
+  manifests: Array<{
+    directory: string;
+    packagePath: string;
+    scripts: Record<string, string>;
+  }>,
 ): Promise<void> {
   if (depth > MAX_DISCOVERY_DEPTH || manifests.length >= MAX_DISCOVERED_MANIFESTS)
     return;
-  let entries;
+  let handle;
   try {
-    entries = await readdir(directory, { withFileTypes: true });
+    handle = await opendir(directory);
   } catch {
     return;
+  }
+  const entries = [];
+  try {
+    for await (const entry of handle) {
+      budget.entries += 1;
+      if (budget.entries > MAX_DISCOVERY_ENTRIES) return;
+      entries.push(entry);
+    }
+  } finally {
+    await handle.close().catch(() => undefined);
   }
   for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
     if (entry.isSymbolicLink()) continue;
@@ -130,7 +155,7 @@ async function collectPackageManifests(
     }
     if (
       !entry.isDirectory() ||
-      EXCLUDED_DISCOVERY_DIRECTORIES.has(entry.name)
+      EXCLUDED_DISCOVERY_DIRECTORIES.has(entry.name.toLowerCase())
     )
       continue;
     const childPackagePath =
@@ -140,6 +165,7 @@ async function collectPackageManifests(
       entryPath,
       childPackagePath,
       depth + 1,
+      budget,
       manifests,
     );
     if (manifests.length >= MAX_DISCOVERED_MANIFESTS) return;
@@ -157,6 +183,12 @@ async function readPackageScripts(
     return undefined;
   }
   if (!pathWithin(canonicalRoot, canonicalManifest)) return undefined;
+  try {
+    if ((await stat(canonicalManifest)).size > MAX_MANIFEST_BYTES)
+      return undefined;
+  } catch {
+    return undefined;
+  }
   let value: unknown;
   try {
     value = JSON.parse(await readFile(canonicalManifest, "utf8"));
@@ -168,8 +200,10 @@ async function readPackageScripts(
   const scripts = (value as { scripts?: unknown }).scripts;
   if (!scripts || typeof scripts !== "object" || Array.isArray(scripts))
     return {};
+  const scriptNames = Object.keys(scripts);
+  if (scriptNames.length > MAX_SCRIPTS_PER_MANIFEST) return undefined;
   return Object.fromEntries(
-    Object.entries(scripts).filter(
+    scriptNames.map((name) => [name, (scripts as Record<string, unknown>)[name]]).filter(
       (entry): entry is [string, string] =>
         typeof entry[0] === "string" &&
         entry[0].trim().length > 0 &&
@@ -266,9 +300,21 @@ export async function preflightRequiredVerificationCommands(
         `executable '${program}' is unavailable; install it or update the tracked command`,
       );
     }
-    const script = packageScriptName(command.argv, `${basePath}.argv`);
-    if (script)
-      await assertPackageScript(canonicalRoot, cwd, script, basePath);
+    const invocation = packageScriptInvocation(
+      command.argv,
+      `${basePath}.argv`,
+    );
+    const packageCwd =
+      invocation.cwdArgument === undefined
+        ? cwd
+        : await resolvePackageManagerDirectory(
+            canonicalRoot,
+            cwd,
+            invocation.cwdArgument,
+            `${basePath}.argv`,
+          );
+    if (invocation.script)
+      await assertPackageScript(canonicalRoot, packageCwd, invocation.script, basePath);
   }
 }
 
@@ -279,31 +325,12 @@ export async function resolveVerificationCommandDirectory(
 ): Promise<string> {
   const normalized = normalizeVerificationCommandCwd(configuredCwd, path);
   const canonicalRoot = await realpath(repositoryRoot);
-  const lexical = resolve(canonicalRoot, normalized);
-  if (!pathWithin(canonicalRoot, lexical))
-    throw new VerificationPreflightError(path, "escapes the repository");
-  const firstSegment = relative(canonicalRoot, lexical)
-    .split(/[\\/]/, 1)[0]
-    ?.toLowerCase();
-  if (firstSegment === ".git" || firstSegment === ".pi" || firstSegment === ".forge")
-    throw new VerificationPreflightError(
-      path,
-      "must not target Git or Forge runtime control directories",
-    );
-  let canonical: string;
-  try {
-    canonical = await realpath(lexical);
-  } catch {
-    throw new VerificationPreflightError(
-      path,
-      `directory '${normalized}' does not exist`,
-    );
-  }
-  if (!pathWithin(canonicalRoot, canonical))
-    throw new VerificationPreflightError(path, "resolves outside the repository");
-  if (!(await stat(canonical)).isDirectory())
-    throw new VerificationPreflightError(path, "must resolve to a directory");
-  return canonical;
+  return resolveExistingVerificationDirectory(
+    canonicalRoot,
+    resolve(canonicalRoot, normalized),
+    normalized,
+    path,
+  );
 }
 
 async function executableAvailable(
@@ -330,18 +357,27 @@ async function executableAvailable(
   return false;
 }
 
-function packageScriptName(
+interface PackageScriptInvocation {
+  script?: string;
+  cwdArgument?: string;
+}
+
+function packageScriptInvocation(
   argv: readonly string[],
   path: string,
-): string | undefined {
+): PackageScriptInvocation {
   const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
-  if (!["npm", "pnpm", "yarn", "bun"].includes(manager)) return undefined;
-  const commandIndex = packageManagerCommandIndex(manager, argv);
+  if (!["npm", "pnpm", "yarn", "bun"].includes(manager)) return {};
+  const { commandIndex, cwdArgument } = packageManagerCommand(
+    manager,
+    argv,
+    path,
+  );
   const command = commandIndex === undefined ? undefined : argv[commandIndex];
   // `bun test` is Bun's built-in test runner, unlike npm/pnpm/yarn test,
   // which dispatch a package.json script. `bun run test` remains script-bound.
-  if (manager === "bun" && command === "test") return undefined;
-  if (command === "test") return "test";
+  if (manager === "bun" && command === "test") return { cwdArgument };
+  if (command === "test") return { script: "test", cwdArgument };
   if (command === "run" || command === "run-script") {
     const script = argv
       .slice(commandIndex! + 1)
@@ -351,30 +387,115 @@ function packageScriptName(
         path,
         `${manager} ${command} must name a package script; configure a script name or use a direct executable`,
       );
-    return script;
+    return { script, cwdArgument };
   }
-  return undefined;
+  return { cwdArgument };
 }
 
-function packageManagerCommandIndex(
+function packageManagerCommand(
   manager: string,
   argv: readonly string[],
-): number | undefined {
+  path: string,
+): { commandIndex?: number; cwdArgument?: string } {
   const optionsWithValues =
     manager === "npm"
       ? new Set(["--prefix", "--userconfig", "--workspace", "-w"])
       : manager === "pnpm"
         ? new Set(["--dir", "--filter", "-C"])
-        : manager === "yarn"
-          ? new Set(["--cwd"])
-          : new Set(["--cwd"]);
+        : new Set(["--cwd"]);
+  const directoryOptions =
+    manager === "npm"
+      ? new Set(["--prefix"])
+      : manager === "pnpm"
+        ? new Set(["--dir", "-C"])
+        : new Set(["--cwd"]);
+  let cwdArgument: string | undefined;
   for (let index = 1; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (argument === "--") return undefined;
-    if (!argument?.startsWith("-")) return index;
-    if (optionsWithValues.has(argument)) index += 1;
+    if (argument === "--") return { cwdArgument };
+    if (!argument?.startsWith("-")) return { commandIndex: index, cwdArgument };
+    const option = argument.split("=", 1)[0] ?? argument;
+    const inlineValue =
+      argument.length > option.length && argument[option.length] === "="
+        ? argument.slice(option.length + 1)
+        : undefined;
+    if (directoryOptions.has(option)) {
+      const value = inlineValue ?? argv[index + 1];
+      if (!value || value.startsWith("-"))
+        throw new VerificationPreflightError(
+          path,
+          `${manager} ${option} must name a package directory`,
+        );
+      cwdArgument = value;
+      if (inlineValue === undefined) index += 1;
+      continue;
+    }
+    if (optionsWithValues.has(option) && inlineValue === undefined) index += 1;
   }
-  return undefined;
+  return { cwdArgument };
+}
+
+async function resolvePackageManagerDirectory(
+  repositoryRoot: string,
+  commandCwd: string,
+  configuredPath: string,
+  path: string,
+): Promise<string> {
+  if (!configuredPath || configuredPath.includes("\0"))
+    throw new VerificationPreflightError(
+      path,
+      "package directory must be a non-empty path without NUL bytes",
+    );
+  const lexical = isAbsolute(configuredPath)
+    ? resolve(configuredPath)
+    : resolve(commandCwd, configuredPath);
+  return resolveExistingVerificationDirectory(
+    repositoryRoot,
+    lexical,
+    configuredPath,
+    path,
+  );
+}
+
+async function resolveExistingVerificationDirectory(
+  repositoryRoot: string,
+  lexical: string,
+  displayPath: string,
+  path: string,
+): Promise<string> {
+  if (!pathWithin(repositoryRoot, lexical))
+    throw new VerificationPreflightError(path, "escapes the repository");
+  assertAllowedVerificationDirectory(repositoryRoot, lexical, path);
+  let canonical: string;
+  try {
+    canonical = await realpath(lexical);
+  } catch {
+    throw new VerificationPreflightError(
+      path,
+      `directory '${displayPath}' does not exist`,
+    );
+  }
+  if (!pathWithin(repositoryRoot, canonical))
+    throw new VerificationPreflightError(path, "resolves outside the repository");
+  assertAllowedVerificationDirectory(repositoryRoot, canonical, path);
+  if (!(await stat(canonical)).isDirectory())
+    throw new VerificationPreflightError(path, "must resolve to a directory");
+  return canonical;
+}
+
+function assertAllowedVerificationDirectory(
+  repositoryRoot: string,
+  target: string,
+  path: string,
+): void {
+  const firstSegment = relative(repositoryRoot, target)
+    .split(/[\\/]/, 1)[0]
+    ?.toLowerCase();
+  if (firstSegment === ".git" || firstSegment === ".pi" || firstSegment === ".forge")
+    throw new VerificationPreflightError(
+      path,
+      "must not target Git or Forge runtime control directories",
+    );
 }
 
 async function assertPackageScript(

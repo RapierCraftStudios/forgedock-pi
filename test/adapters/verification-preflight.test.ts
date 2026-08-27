@@ -105,7 +105,24 @@ test("discovery returns manifest-backed package scripts with safe cwd values", a
   }
 });
 
-test("preflight validates package-manager script syntax and built-in bun test", async () => {
+test("discovery uses bun run for a manifest test script", async () => {
+  const testFixture = await fixture();
+  try {
+    await writeFile(join(testFixture.root, "bun.lock"), "lockfileVersion: 1\n");
+    const candidates = await discoverVerificationCommandCandidates(testFixture.root);
+    assert.deepEqual(candidates[0], {
+      name: "web-test",
+      packagePath: "web",
+      packageManager: "bun",
+      script: "test",
+      argv: ["bun", "run", "test"],
+    });
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
+test("preflight validates package-manager script syntax, selectors, and built-in bun test", async () => {
   const testFixture = await fixture();
   try {
     await assert.rejects(
@@ -115,6 +132,11 @@ test("preflight validates package-manager script syntax and built-in bun test", 
         { path: testFixture.path },
       ),
       /must name a package script/,
+    );
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      { test: command(".", { argv: ["npm", "--prefix", "web", "test"] }) },
+      { path: testFixture.path },
     );
     await writeFile(join(testFixture.path, "bun"), "#!/bin/sh\nexit 0\n");
     await chmod(join(testFixture.path, "bun"), 0o755);
@@ -154,9 +176,11 @@ test("preflight checks executable availability without running the command", asy
   }
 });
 
-test("verification cwd rejects missing, control, and symlink-escape directories", async () => {
+test("verification cwd rejects missing, control, aliases, and symlink-escape directories", async () => {
   const testFixture = await fixture();
   try {
+    await mkdir(join(testFixture.root, ".forge"));
+    await symlink(join(testFixture.root, ".forge"), join(testFixture.root, "forge-alias"), "dir");
     await symlink(testFixture.outside, join(testFixture.root, "escaped"), "dir");
     await assert.rejects(
       resolveVerificationCommandDirectory(testFixture.root, "missing"),
@@ -168,6 +192,10 @@ test("verification cwd rejects missing, control, and symlink-escape directories"
     );
     await assert.rejects(
       resolveVerificationCommandDirectory(testFixture.root, ".forge"),
+      /runtime control directories/,
+    );
+    await assert.rejects(
+      resolveVerificationCommandDirectory(testFixture.root, "forge-alias"),
       /runtime control directories/,
     );
     await assert.rejects(
