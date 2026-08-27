@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:64094bcc6c7f480949d7f26ae49d10368277815b69fb40b285aeeb38bfad6056",
+  "sequence": 8,
+  "lastEventHash": "sha256:62a9dd3d58c058663214ef8a6bab3f922ef6ab5de1ac15ed8d5d00c900cb2bd0",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -38,15 +38,21 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/workflows/work-on.ts` records the merge effect immediately after `mergePullRequest` succeeds, before the merge parent node is completed.",
+            "On attach, `#reconcileWorkflowProjection` derives `workflow:awaiting-merge` from a running `merge-*` node, while `#runParentNode` unconditionally projects the merge-start stage (`awaitingMerge`) before recovery I/O.",
+            "The current tests cover `rollbackAwaitingMergeLabel` and pure label mappings but do not cover a durable merge effect with an incomplete/running merge node or the attach-to-parent projection order."
+          ],
           "logicalNodeId": "investigate-1",
           "startedAt": "2026-08-27T06:51:24.749Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/ed3d82cd-fd0c-4518-863f-7799a693d92b",
           "branch": "forge/issue-147-ed3d82cd",
-          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22"
+          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22",
+          "finishedAt": "2026-08-27T06:54:33.925Z",
+          "outputArtifactHash": "sha256:147-investigation-confirmed"
         }
       ]
     }
@@ -60,7 +66,8 @@
     "phase:resolve:1:start": "96b8a707-2006-4927-87a9-4313d2e1f3da",
     "phase:resolve:1:complete": "2efa2d0d-b406-4c72-9726-849245568dc6",
     "phase:investigate:1:queue": "4632280f-c9a6-4b2a-9363-edde5c3cc716",
-    "phase:investigate:1:start": "8c872ffb-c038-41d2-b01e-d57a4f608549"
+    "phase:investigate:1:start": "8c872ffb-c038-41d2-b01e-d57a4f608549",
+    "phase:investigate:1:complete": "d4e860c9-50ed-42ef-b0cb-c9dbad5a5240"
   },
   "eventIds": {
     "2664d4e9-f72a-47c7-8a26-3f34942851d1": true,
@@ -69,7 +76,8 @@
     "96b8a707-2006-4927-87a9-4313d2e1f3da": true,
     "2efa2d0d-b406-4c72-9726-849245568dc6": true,
     "4632280f-c9a6-4b2a-9363-edde5c3cc716": true,
-    "8c872ffb-c038-41d2-b01e-d57a4f608549": true
+    "8c872ffb-c038-41d2-b01e-d57a4f608549": true,
+    "d4e860c9-50ed-42ef-b0cb-c9dbad5a5240": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
