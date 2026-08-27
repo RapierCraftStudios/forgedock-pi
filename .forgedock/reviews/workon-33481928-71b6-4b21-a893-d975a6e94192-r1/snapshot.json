@@ -23,21 +23,29 @@
     "baseRef": "staging",
     "baseSha": "b7bfc323d992812b772c0cedce76b95a17922caa"
   },
-  "checks": [],
+  "checks": [
+    {
+      "name": "reviewer:forge-review-correctness",
+      "required": true,
+      "status": "passed"
+    }
+  ],
   "findings": [],
   "status": "active",
-  "sequence": 2,
-  "lastEventHash": "sha256:950471420ebdf9da2bffa917cfff293cf61bdc4c07bdd489230fc856f412ca96",
+  "sequence": 3,
+  "lastEventHash": "sha256:4c33107987a1b13e0b277c07af0b02d678bf2914735f5ab6baa723356fb5a3a7",
   "idempotencyKeys": {
     "review:create": "2ab09ca0-f32a-4896-b12a-410484a144b3",
-    "panel:1:start": "bbd12324-049a-4d35-8b8a-860b9719e0c5"
+    "panel:1:start": "bbd12324-049a-4d35-8b8a-860b9719e0c5",
+    "check:reviewer:0:c9d99265137af9c6": "5ee8aec2-5df3-4295-b21f-f21aa4a59f03"
   },
   "eventIds": {
     "2ab09ca0-f32a-4896-b12a-410484a144b3": true,
-    "bbd12324-049a-4d35-8b8a-860b9719e0c5": true
+    "bbd12324-049a-4d35-8b8a-860b9719e0c5": true,
+    "5ee8aec2-5df3-4295-b21f-f21aa4a59f03": true
   },
   "createdAt": "2026-08-27T15:15:01.223Z",
-  "updatedAt": "2026-08-27T15:15:13.781Z",
+  "updatedAt": "2026-08-27T15:15:19.182Z",
   "panel": {
     "round": 1,
     "status": "running",
