@@ -54,7 +54,7 @@ export async function preflightRequiredVerificationCommands(
         `executable '${program}' is unavailable; install it or update the tracked command`,
       );
     }
-    const script = packageScriptName(command.argv);
+    const script = packageScriptName(command.argv, basePath);
     if (script)
       await assertPackageScript(canonicalRoot, cwd, script, basePath);
   }
@@ -116,16 +116,54 @@ async function executableAvailable(
   return false;
 }
 
-function packageScriptName(argv: readonly string[]): string | undefined {
+function packageScriptName(
+  argv: readonly string[],
+  basePath: string,
+): string | undefined {
   const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
   if (!["npm", "pnpm", "yarn", "bun"].includes(manager)) return undefined;
+
   const command = argv[1];
-  if (command === "test") return "test";
+  if (command === undefined) return undefined;
+  if (command.startsWith("-"))
+    throw unsupportedPackageManagerOptionsError(basePath);
+  if (command === "test") {
+    assertNoPackageManagerOptions(argv, 2, basePath);
+    return "test";
+  }
   if (command === "run" || command === "run-script") {
-    const script = argv.slice(2).find((argument) => !argument.startsWith("-"));
-    return script || undefined;
+    const script = argv[2];
+    if (!script || script.startsWith("-"))
+      throw new VerificationPreflightError(
+        `${basePath}.argv`,
+        `package-manager '${command}' must name a script directly; set cwd to the package that defines it or use CI-only verification`,
+      );
+    assertNoPackageManagerOptions(argv, 3, basePath);
+    return script;
   }
   return undefined;
+}
+
+function assertNoPackageManagerOptions(
+  argv: readonly string[],
+  start: number,
+  basePath: string,
+): void {
+  for (let index = start; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument === "--") return;
+    if (argument?.startsWith("-"))
+      throw unsupportedPackageManagerOptionsError(basePath);
+  }
+}
+
+function unsupportedPackageManagerOptionsError(
+  basePath: string,
+): VerificationPreflightError {
+  return new VerificationPreflightError(
+    `${basePath}.argv`,
+    "package-manager options are not supported for tracked verification; set cwd to the package that owns the script or use CI-only verification",
+  );
 }
 
 async function assertPackageScript(
