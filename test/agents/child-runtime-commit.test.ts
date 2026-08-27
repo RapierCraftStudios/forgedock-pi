@@ -102,6 +102,12 @@ test("bound verification commands reject package location selectors", () => {
     ["npm", "-Cweb", "test"],
     ["npm", "test", "--prefix", "web"],
     ["npm", "run", "test", "--workspace", "web"],
+    ["npm", "exec", "--", "npm", "--prefix", "web", "test"],
+    ["pnpm", "-F", "web", "test"],
+    ["pnpm", "-r", "run", "test"],
+    ["yarn", "workspace", "web", "test"],
+    ["yarnpkg", "--cwd", "web", "test"],
+    ["corepack", "pnpm", "--dir", "web", "test"],
   ]) {
     assert.throws(
       () => validateBoundCommand("check", { ...base, argv }),

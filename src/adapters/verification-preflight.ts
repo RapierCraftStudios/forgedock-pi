@@ -119,6 +119,16 @@ async function executableAvailable(
 
 type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
 
+interface PackageManagerInvocation {
+  manager: PackageManager;
+  argvOffset: number;
+}
+
+interface PackageManagerCommand {
+  name: string;
+  index: number;
+}
+
 const PACKAGE_LOCATION_OPTIONS: Readonly<
   Record<PackageManager, ReadonlySet<string>>
 > = {
@@ -139,22 +149,139 @@ const PACKAGE_LOCATION_OPTIONS: Readonly<
     "--dir",
     "-C",
     "--filter",
+    "-F",
     "--workspace-root",
     "-w",
     "--global",
     "-g",
+    "-r",
+    "--recursive",
   ]),
   yarn: new Set(["--cwd", "--top-level"]),
   bun: new Set(["--cwd", "--filter", "--global", "-g"]),
 };
 
-function packageManager(argv: readonly string[]): PackageManager | undefined {
-  const manager = basename(argv[0] ?? "")
+const PACKAGE_MANAGER_OPTIONS_WITH_VALUES: Readonly<
+  Record<PackageManager, ReadonlySet<string>>
+> = {
+  npm: new Set([
+    "--cache",
+    "--registry",
+    "--user-agent",
+    "--otp",
+    "--script-shell",
+    "--loglevel",
+    "--heading",
+    "--fetch-retries",
+    "--fetch-retry-factor",
+    "--fetch-retry-mintimeout",
+    "--fetch-retry-maxtimeout",
+    "--tag",
+    "--before",
+  ]),
+  pnpm: new Set(["--lockfile-dir", "--config-dir"]),
+  yarn: new Set([
+    "--cache-folder",
+    "--modules-folder",
+    "--mutex",
+    "--network-timeout",
+    "--registry",
+  ]),
+  bun: new Set([]),
+};
+
+function packageManagerName(value: string): PackageManager | undefined {
+  const name = basename(value)
     .replace(/\.(?:cmd|exe)$/i, "")
     .toLowerCase();
-  return manager in PACKAGE_LOCATION_OPTIONS
-    ? (manager as PackageManager)
+  if (name === "yarnpkg") return "yarn";
+  return Object.hasOwn(PACKAGE_LOCATION_OPTIONS, name)
+    ? (name as PackageManager)
     : undefined;
+}
+
+function packageManagerInvocation(
+  argv: readonly string[],
+): PackageManagerInvocation | undefined {
+  const direct = packageManagerName(argv[0] ?? "");
+  if (direct) return { manager: direct, argvOffset: 1 };
+  const launcher = basename(argv[0] ?? "")
+    .replace(/\.(?:cmd|exe)$/i, "")
+    .toLowerCase();
+  if (launcher !== "corepack") return undefined;
+  const wrapped = packageManagerName(argv[1] ?? "");
+  return wrapped ? { manager: wrapped, argvOffset: 2 } : undefined;
+}
+
+function optionName(argument: string): string {
+  const equals = argument.indexOf("=");
+  return equals > 0 ? argument.slice(0, equals) : argument;
+}
+
+function optionTakesValue(
+  manager: PackageManager,
+  argument: string,
+): boolean {
+  const option = optionName(argument);
+  return (
+    PACKAGE_LOCATION_OPTIONS[manager].has(option) ||
+    PACKAGE_MANAGER_OPTIONS_WITH_VALUES[manager].has(option)
+  );
+}
+
+function packageManagerCommand(
+  manager: PackageManager,
+  args: readonly string[],
+): PackageManagerCommand | undefined {
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === undefined || argument === "--") return undefined;
+    if (!argument.startsWith("-")) return { name: argument, index };
+    if (optionTakesValue(manager, argument) && !argument.includes("="))
+      index += 1;
+  }
+  return undefined;
+}
+
+function packageLocationError(path: string, argument: string): never {
+  throw new VerificationPreflightError(
+    path,
+    `must not use package-location option '${argument}'; package selection is bound to the configured cwd`,
+  );
+}
+
+function isPackageLocationOption(
+  manager: PackageManager,
+  argument: string,
+): boolean {
+  const option = optionName(argument);
+  if (PACKAGE_LOCATION_OPTIONS[manager].has(option)) return true;
+  // npm and pnpm accept a compact -C<directory> spelling as well.
+  if (
+    (manager === "npm" || manager === "pnpm") &&
+    argument.startsWith("-C") &&
+    argument.length > 2
+  )
+    return true;
+  // pnpm accepts compact recursive/filter short-option spellings.
+  if (
+    manager === "pnpm" &&
+    ((argument.startsWith("-r") && argument.length > 2) ||
+      (argument.startsWith("-F") && argument.length > 2))
+  )
+    return true;
+  return false;
+}
+
+function nestedPackageManagerCommand(
+  manager: PackageManager,
+  command: string | undefined,
+): boolean {
+  if (!command) return false;
+  if (manager === "npm") return command === "exec" || command === "x";
+  if (manager === "pnpm") return command === "exec" || command === "dlx";
+  if (manager === "yarn") return command === "exec";
+  return command === "x" || command === "exec";
 }
 
 /**
@@ -168,51 +295,53 @@ export function assertNoPackageLocationOptions(
   argv: readonly string[],
   path = "verification command argv",
 ): void {
-  const manager = packageManager(argv);
-  if (!manager) return;
-  const options = PACKAGE_LOCATION_OPTIONS[manager];
-  for (const argument of argv.slice(1)) {
-    if (argument === "--") break;
-    const equals = argument.indexOf("=");
-    const option = equals > 0 ? argument.slice(0, equals) : argument;
-    if (options.has(option)) {
-      throw new VerificationPreflightError(
-        path,
-        `must not use package-location option '${argument}'; package selection is bound to the configured cwd`,
-      );
+  const invocation = packageManagerInvocation(argv);
+  if (!invocation) return;
+  const args = argv.slice(invocation.argvOffset);
+  const command = packageManagerCommand(invocation.manager, args);
+  if (
+    invocation.manager === "yarn" &&
+    (command?.name === "workspace" || command?.name === "workspaces")
+  )
+    packageLocationError(path, command.name);
+
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index];
+    if (argument === undefined) break;
+    if (argument === "--") {
+      if (nestedPackageManagerCommand(invocation.manager, command?.name))
+        assertNoPackageLocationOptions(args.slice(index + 1), path);
+      break;
     }
-    // npm and pnpm accept a compact -C<directory> spelling as well.
-    if (
-      (manager === "npm" || manager === "pnpm") &&
-      argument.startsWith("-C") &&
-      argument.length > 2
-    ) {
-      throw new VerificationPreflightError(
-        path,
-        `must not use package-location option '${argument}'; package selection is bound to the configured cwd`,
-      );
-    }
+    if (isPackageLocationOption(invocation.manager, argument))
+      packageLocationError(path, argument);
   }
 }
 
 function packageScriptName(argv: readonly string[]): string | undefined {
-  if (!packageManager(argv)) return undefined;
-  let commandIndex = -1;
-  for (let index = 1; index < argv.length; index += 1) {
-    const argument = argv[index];
-    if (argument === undefined || argument === "--") break;
-    if (!argument.startsWith("-")) {
-      commandIndex = index;
-      break;
-    }
-  }
-  if (commandIndex < 0) return undefined;
-  const command = argv[commandIndex];
-  if (command === "test") return "test";
-  if (command === "run" || command === "run-script") {
-    for (const argument of argv.slice(commandIndex + 1)) {
-      if (argument === "--") break;
-      if (!argument.startsWith("-")) return argument;
+  const invocation = packageManagerInvocation(argv);
+  if (!invocation) return undefined;
+  const args = argv.slice(invocation.argvOffset);
+  const command = packageManagerCommand(invocation.manager, args);
+  if (!command) return undefined;
+  if (command.name === "test") return "test";
+  if (command.name === "run" || command.name === "run-script") {
+    for (
+      let index = command.index + 1;
+      index < args.length;
+      index += 1
+    ) {
+      const argument = args[index];
+      if (argument === undefined || argument === "--") break;
+      if (argument.startsWith("-")) {
+        if (
+          optionTakesValue(invocation.manager, argument) &&
+          !argument.includes("=")
+        )
+          index += 1;
+        continue;
+      }
+      return argument;
     }
   }
   return undefined;

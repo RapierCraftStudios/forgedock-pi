@@ -97,6 +97,14 @@ test("preflight rejects package location selectors before package validation", a
       ["npm", "test", "--prefix", "web"],
       ["npm", "run", "test", "--workspace", "web"],
       ["npm", "--location=global", "test"],
+      ["npm", "exec", "--", "npm", "--prefix", "web", "test"],
+      ["pnpm", "-F", "web", "test"],
+      ["pnpm", "-r", "run", "test"],
+      ["pnpm", "--recursive", "run", "test"],
+      ["yarn", "workspace", "web", "test"],
+      ["yarn", "workspaces", "foreach", "run", "test"],
+      ["yarnpkg", "--cwd", "web", "test"],
+      ["corepack", "pnpm", "--dir", "web", "test"],
     ]) {
       await assert.rejects(
         preflightRequiredVerificationCommands(
@@ -119,6 +127,20 @@ test("preflight rejects package location selectors before package validation", a
       {
         test: command("web", {
           argv: ["npm", "test", "--", "--prefix", "not-a-package"],
+        }),
+      },
+      { path: testFixture.path },
+    );
+
+    await writeFile(
+      join(testFixture.root, "package.json"),
+      JSON.stringify({ scripts: { typecheck: "tsc --noEmit" } }),
+    );
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      {
+        typecheck: command(".", {
+          argv: ["npm", "--cache", "test", "run", "typecheck"],
         }),
       },
       { path: testFixture.path },
