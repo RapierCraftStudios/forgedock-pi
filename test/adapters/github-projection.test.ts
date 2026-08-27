@@ -113,6 +113,11 @@ test("issue projection is marker-idempotent and only adds missing labels", async
   assert.equal(second.created, false);
   assert.equal(first.commentId, second.commentId);
   assert.equal(transport.commentPosts, 1);
+  assert.equal(first.commentReceipt.effectType, "github-comment");
+  assert.equal(first.commentReceipt.effectId, second.commentReceipt.effectId);
+  assert.equal(first.commentReceipt.digest, second.commentReceipt.digest);
+  assert.equal(first.labelReceipt?.effectType, "github-label");
+  assert.notEqual(first.labelReceipt?.digest, undefined);
   assert.deepEqual(first.labelsAdded, ["workflow:investigating"]);
   assert.equal(transport.labels.has("workflow:investigating"), true);
 
@@ -251,6 +256,87 @@ test("artifact projection paginates and reads back the exact created comment", a
   assert.equal(repeated, created);
   assert.equal(transport.commentPosts, 1);
   assert.equal(transport.comments.length, 101);
+});
+
+test("event marker lookup paginates beyond the first 100 comments", async () => {
+  const transport = new ProjectionTransport();
+  for (let id = 1; id <= 100; id += 1)
+    transport.comments.push({ id, body: `Historical comment ${id}` });
+  transport.comments.push({
+    id: 101,
+    body: "<!-- FORGEDOCK-EVENT:event-page-two -->\n<!-- FORGEDOCK-RUN:run-page-two -->\nExisting\n",
+  });
+  const projector = new GitHubIssueProjector(transport, "owner/repo");
+  const event = createRunEvent({
+    runId: "run-page-two",
+    repository: "owner/repo",
+    sequence: 1,
+    previousEventHash: null,
+    type: "run.created",
+    actor: { kind: "extension", sessionId: "session-1", leaseEpoch: 0 },
+    idempotencyKey: "create-page-two",
+    payload: {
+      issueNumber: 42,
+      integrationBranch: "staging",
+      protectedBranch: "main",
+    },
+    eventId: "event-page-two",
+    occurredAt: "2026-01-01T00:00:00.000Z",
+  });
+  const result = await projector.projectEvent({
+    issueNumber: 42,
+    event,
+    markdown: "Existing",
+  });
+  assert.equal(result.commentId, 101);
+  assert.equal(result.created, false);
+  assert.equal(result.commentReceipt.resourceId, 101);
+  assert.equal(result.receipts.length, 1);
+});
+
+test("projection reconciles a committed comment after a crash before readback", async () => {
+  const transport = new ProjectionTransport();
+  let failReadback = true;
+  const request = transport.request.bind(transport);
+  transport.request = async function <T>(requestInput: GitHubRequest) {
+    if (
+      failReadback &&
+      requestInput.method === "GET" &&
+      /\/issues\/comments\/\d+$/.test(requestInput.path)
+    ) {
+      failReadback = false;
+      throw new Error("simulated crash after GitHub commit");
+    }
+    return request<T>(requestInput);
+  };
+  const projector = new GitHubIssueProjector(transport, "owner/repo");
+  const event = createRunEvent({
+    runId: "run-crash",
+    repository: "owner/repo",
+    sequence: 1,
+    previousEventHash: null,
+    type: "run.created",
+    actor: { kind: "extension", sessionId: "session-1", leaseEpoch: 0 },
+    idempotencyKey: "create-crash",
+    payload: {
+      issueNumber: 42,
+      integrationBranch: "staging",
+      protectedBranch: "main",
+    },
+    eventId: "event-crash",
+    occurredAt: "2026-01-01T00:00:00.000Z",
+  });
+  await assert.rejects(() =>
+    projector.projectEvent({ issueNumber: 42, event, markdown: "Crash safe" }),
+  );
+  const recovered = await projector.projectEvent({
+    issueNumber: 42,
+    event,
+    markdown: "Crash safe",
+  });
+  assert.equal(recovered.created, false);
+  assert.equal(recovered.commentId, 1);
+  assert.equal(transport.commentPosts, 1);
 });
 
 test("comment append is idempotent when the marker is already present", async () => {

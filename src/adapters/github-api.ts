@@ -114,15 +114,21 @@ export class GitHubApiError extends Error {
   }
 }
 
-function safeGitHubErrorDetail(response: unknown): string | undefined {
+export function safeGitHubErrorDetail(response: unknown): string | undefined {
   if (!response || typeof response !== "object" || Array.isArray(response))
     return undefined;
-  const message = (response as { message?: unknown }).message;
+  let message: unknown;
+  try {
+    message = (response as { message?: unknown }).message;
+  } catch {
+    return undefined;
+  }
   if (typeof message !== "string" || !message.trim()) return undefined;
-  const normalized = message.replace(/\s+/g, " ").trim().slice(0, 300);
+  const normalized = message.replace(/\s+/g, " ").trim();
   return normalized
     .replace(/Bearer\s+[A-Za-z0-9._~+/-]+/gi, "Bearer [redacted]")
-    .replace(/gh[oprsu]_[A-Za-z0-9_]+/g, "[redacted-token]");
+    .replace(/gh[oprsu]_[A-Za-z0-9_]+/g, "[redacted-token]")
+    .slice(0, 300);
 }
 
 export class FetchGitHubTransport implements GitHubTransport {
@@ -245,7 +251,10 @@ export function githubRequestRetryDelayMs(
   const retryableMethod =
     request.retryTransient ??
     (request.method === "GET" || request.method === "DELETE");
-  if (!retryableMethod && !isGitHubRateLimited(response)) return undefined;
+  // Mutation responses can be ambiguous: a timeout/rate-limit response may
+  // arrive after GitHub committed the write. Never retry one without an
+  // explicit reconciliation contract from the caller.
+  if (!retryableMethod) return undefined;
   return githubRetryDelayMs(response, attempt, nowMs);
 }
 

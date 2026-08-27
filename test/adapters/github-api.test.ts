@@ -89,7 +89,7 @@ test("GitHub transport retries only safe or explicitly reconciled methods", () =
       0,
       1_000_000,
     ),
-    6_000,
+    undefined,
   );
   assert.equal(
     githubRequestRetryDelayMs({ method: "GET" }, response, 0, Date.now()),

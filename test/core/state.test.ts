@@ -654,6 +654,56 @@ test("hash chain and idempotency conflicts fail closed", () => {
   );
 });
 
+test("effect receipts replay idempotently and reject digest conflicts", () => {
+  let state = initializedState();
+  state = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "effect.recorded",
+      {
+        effectType: "github-comment",
+        effectId: "github-comment:owner/repo:42:event-1",
+        digest: "sha256:comment-a",
+      },
+      "effect:comment-1",
+    ),
+  );
+  const replayed = applyRunEvent(
+    state,
+    nextEvent(
+      state,
+      "effect.recorded",
+      {
+        effectType: "github-comment",
+        effectId: "github-comment:owner/repo:42:event-1",
+        digest: "sha256:comment-a",
+      },
+      "effect:comment-replay",
+    ),
+  );
+  assert.equal(replayed.effects["github-comment:owner/repo:42:event-1"]?.digest, "sha256:comment-a");
+  assert.throws(
+    () =>
+      applyRunEvent(
+        replayed,
+        nextEvent(
+          replayed,
+          "effect.recorded",
+          {
+            effectType: "github-comment",
+            effectId: "github-comment:owner/repo:42:event-1",
+            digest: "sha256:comment-b",
+          },
+          "effect:comment-conflict",
+        ),
+      ),
+    (error) =>
+      error instanceof StateTransitionError &&
+      error.code === "effect-digest-conflict",
+  );
+});
+
 test("terminal runs release their repository lease", () => {
   let state = initializedState();
   for (const phase of RUN_PHASES) {

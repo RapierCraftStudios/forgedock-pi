@@ -1,5 +1,6 @@
 import {
   hashRunEvent,
+  isEffectType,
   isRunPhase,
   RUN_PHASES,
   type EffectRecordedPayload,
@@ -753,32 +754,29 @@ function applyEffect(state: RunState, event: RunEvent): void {
   assertLeaseEpoch(state, event);
   const record = payloadRecord(event);
   const effectId = requireString(record, "effectId");
-  if (state.effects[effectId]) {
-    throw new StateTransitionError(
-      "duplicate-effect",
-      `Effect ${effectId} is already recorded.`,
-    );
-  }
+  const digest = requireString(record, "digest");
   const effectType = record.effectType;
-  const supported = [
-    "github-comment",
-    "github-label",
-    "push",
-    "pull-request",
-    "merge",
-    "issue-close",
-    "cleanup",
-  ];
-  if (typeof effectType !== "string" || !supported.includes(effectType)) {
+  if (!isEffectType(effectType)) {
     throw new StateTransitionError(
       "invalid-effect",
       `Unsupported effect type: ${String(effectType)}.`,
     );
   }
+  const prior = state.effects[effectId];
+  if (prior) {
+    if (prior.effectType !== effectType || prior.digest !== digest)
+      throw new StateTransitionError(
+        "effect-digest-conflict",
+        `Effect ${effectId} was recorded with a different type or digest.`,
+      );
+    // A second journal entry with the same verified receipt is a harmless
+    // replay (for example, after a crash between persistence attempts).
+    return;
+  }
   state.effects[effectId] = {
-    effectType: effectType as RecordedEffect["effectType"],
+    effectType,
     effectId,
-    digest: requireString(record, "digest"),
+    digest,
     eventId: event.eventId,
   };
 }
