@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 16,
-  "lastEventHash": "sha256:757e6d17d080c21aefac68bcf5ee5e2cd8470bb1e2c89f47cda0093832c08446",
+  "sequence": 17,
+  "lastEventHash": "sha256:5f52f6035a0779d4949ef11a3576af2622e1d6bc976095b5d2083fa206103a27",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -107,15 +107,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Changed only `src/adapters/verification-preflight.ts` and `test/adapters/verification-preflight.test.ts`",
+            "npm `exec`/`x` option-bearing forms now use the existing fail-closed package-manager option guard",
+            "Regression cases cover `--call`, `-c`, `--call=...`, and npm `x -c` with nested selectors",
+            "Final implementation commit is intentionally deferred until required verify check passes"
+          ],
           "logicalNodeId": "work-on-implement",
           "startedAt": "2026-08-27T07:04:54.572Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/1e2284c4-374c-4c3b-aba9-c1a4d9bbb07f",
           "branch": "forge/issue-203-1e2284c4",
-          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22"
+          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22",
+          "finishedAt": "2026-08-27T07:06:29.846Z",
+          "outputArtifactHash": "sha256:203-implementation-working-tree"
         }
       ]
     }
@@ -138,7 +145,8 @@
     "phase:prepare-worktree:1:start": "58524d18-93d4-4b25-82fe-c53492a7a453",
     "phase:prepare-worktree:1:complete": "ccca0e84-3821-42ee-a7a7-e88d85c5e3c6",
     "phase:implement:1:queue": "a56e7915-d310-46a7-b0af-da620f7cc30c",
-    "phase:implement:1:start": "3cd0e342-e8bd-4e52-ae7e-38d4c28d444a"
+    "phase:implement:1:start": "3cd0e342-e8bd-4e52-ae7e-38d4c28d444a",
+    "phase:implement:1:complete": "092eb954-54cf-4489-827d-754a8f482af6"
   },
   "eventIds": {
     "6d59e785-3a99-4919-877d-efb24d01b7fc": true,
@@ -156,7 +164,8 @@
     "58524d18-93d4-4b25-82fe-c53492a7a453": true,
     "ccca0e84-3821-42ee-a7a7-e88d85c5e3c6": true,
     "a56e7915-d310-46a7-b0af-da620f7cc30c": true,
-    "3cd0e342-e8bd-4e52-ae7e-38d4c28d444a": true
+    "3cd0e342-e8bd-4e52-ae7e-38d4c28d444a": true,
+    "092eb954-54cf-4489-827d-754a8f482af6": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
