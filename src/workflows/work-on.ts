@@ -655,7 +655,9 @@ export class ForgeWorkOnController {
     );
     const journal = new RunJournal(store);
     const sessionId = ctx.sessionManager.getSessionId();
-    const created = snapshot.events.find((event) => event.type === "run.created");
+    const created = snapshot.events.find(
+      (event) => event.type === "run.created",
+    );
     if (created) {
       const ids = lifecycleProjectionEffectIds({
         repository: link.repository,
@@ -702,7 +704,10 @@ export class ForgeWorkOnController {
       });
       receipts.push(...projection.receipts);
     }
-    if (latest.state.outcome === "merged" && !latest.state.effects[ids.workflow]) {
+    if (
+      latest.state.outcome === "merged" &&
+      !latest.state.effects[ids.workflow]
+    ) {
       receipts.push(
         await projector.setWorkflowLabelWithReceipt(
           link.issueNumber,
@@ -2865,7 +2870,11 @@ export class ForgeWorkOnController {
           );
         }
       }
-      if (!link.orchestrationId && terminal.state.lease && terminalProjectionComplete) {
+      if (
+        !link.orchestrationId &&
+        terminal.state.lease &&
+        terminalProjectionComplete
+      ) {
         await journal.append({
           runId: link.forgeRunId,
           type: "lease.released",
@@ -3367,6 +3376,20 @@ export class ForgeWorkOnController {
       isRecoverableWorkOnBlocker(durableResult.blocker)
         ? durableResult.blocker
         : undefined;
+    if (
+      shouldTrustDurableWorkOnResult(
+        durableResult,
+        completion?.state,
+      )
+    ) {
+      link.status = "running";
+      this.#persistLink(link);
+      return {
+        forgeRunId: link.forgeRunId,
+        subagentRunId: link.subagentRunId,
+        state: "complete",
+      };
+    }
     if (
       (((completion?.state === "failed" || completion?.state === "complete") &&
         (isTransientProviderFailure(completion.error ?? "") ||
@@ -4482,10 +4505,7 @@ export class ForgeWorkOnController {
     const sharedReviewId = `workon-${link.forgeRunId}-r${result.review.rounds}`;
     const staticPanel: ReviewPanelRunner = {
       run: async () =>
-        rebindReviewerResults(
-          result.review.reviewerResults,
-          sharedReviewId,
-        ),
+        rebindReviewerResults(result.review.reviewerResults, sharedReviewId),
     };
     const sharedReview = await new ReviewPrCoordinator({
       github,
@@ -4523,11 +4543,7 @@ export class ForgeWorkOnController {
       autoMergeRequested: false,
       authorityValid: async () => {
         const authority = await store.readRun(link.forgeRunId, ctx.signal);
-        return runLeaseAuthorityMatches(
-          authority.state,
-          authority.lease,
-          link,
-        );
+        return runLeaseAuthorityMatches(authority.state, authority.lease, link);
       },
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
@@ -4938,7 +4954,9 @@ export async function cleanupDurablyCancelledWorktree(
   git: Pick<GitWorktreeManager, "deleteRemoteBranch" | "cleanup">,
 ): Promise<void> {
   if (status !== "cancelled")
-    throw new Error("Owned cancellation cleanup requires durable cancelled state.");
+    throw new Error(
+      "Owned cancellation cleanup requires durable cancelled state.",
+    );
   // Do not forward an aborted operation signal: compensating cleanup must be
   // retryable after the cancellation transition commits.
   await git.deleteRemoteBranch(prepared);
@@ -5823,6 +5841,17 @@ function extractJsonObject(text: string): string {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   return start >= 0 && end > start ? text.slice(start, end + 1) : "";
+}
+
+export function shouldTrustDurableWorkOnResult(
+  result: Pick<ForgeWorkOnResult, "blocker"> | undefined,
+  providerState: string | undefined,
+): boolean {
+  return Boolean(
+    result &&
+      !result.blocker &&
+      (providerState === "complete" || providerState === "failed"),
+  );
 }
 
 export function isRecoverableWorkOnBlocker(message: string): boolean {

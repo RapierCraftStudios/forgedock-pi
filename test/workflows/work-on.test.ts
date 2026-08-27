@@ -27,6 +27,7 @@ import {
   reviewSupersessionMarker,
   rollbackAwaitingMergeLabel,
   shouldBufferLaunchCompletion,
+  shouldTrustDurableWorkOnResult,
   workflowLabelForNode,
   workflowStageForNodeTransition,
 } from "../../src/workflows/work-on.ts";
@@ -64,6 +65,24 @@ test("work-on reviewer results are rebound to the shared frozen review identity"
   assert.equal(result.findings[0]?.runId, "forge-run-1");
 });
 
+test("trusted durable work-on output overrides an empty failed provider envelope", () => {
+  assert.equal(
+    shouldTrustDurableWorkOnResult({ blocker: undefined }, "failed"),
+    true,
+  );
+  assert.equal(
+    shouldTrustDurableWorkOnResult(
+      { blocker: "verification still pending" },
+      "failed",
+    ),
+    false,
+  );
+  assert.equal(
+    shouldTrustDurableWorkOnResult({ blocker: undefined }, "running"),
+    false,
+  );
+});
+
 test("dependency discovery fails dispatch with explicit external blocker evidence", async () => {
   const github = {
     async listIssueBlockedBy(issueNumber: number): Promise<number[]> {
@@ -90,13 +109,21 @@ test("short reviewer aliases normalize to configured agent names", () => {
 });
 
 test("restart recovery recognizes every parent-owned durable node", () => {
-  for (const node of ["review-join", "ci", "decision", "merge", "close", "cleanup"] as const)
+  for (const node of [
+    "review-join",
+    "ci",
+    "decision",
+    "merge",
+    "close",
+    "cleanup",
+  ] as const)
     assert.equal(parentNodeFromId(`${node}-2`), node);
   assert.equal(parentNodeFromId("implement-1"), undefined);
 });
 
 test("overlapping direct starts are rejected while a binding or run is live", () => {
-  const binding = {} as import("../../src/agents/child-runtime.ts").ForgeChildBinding;
+  const binding =
+    {} as import("../../src/agents/child-runtime.ts").ForgeChildBinding;
   assert.equal(hasActiveDirectRun(binding, []), true);
   assert.equal(
     hasActiveDirectRun(undefined, [
@@ -444,10 +471,7 @@ test("work-on recovery retries state branch contention but not real blockers", (
     isRecoverableWorkOnBlocker("Review remediation rounds exhausted"),
     true,
   );
-  assert.equal(
-    isRecoverableWorkOnBlocker("Invalid username or token"),
-    false,
-  );
+  assert.equal(isRecoverableWorkOnBlocker("Invalid username or token"), false);
 });
 
 test("provider retry classification includes WebSocket failures but excludes quota", () => {
