@@ -38,6 +38,8 @@ async function fixture(
   );
   await writeFile(join(bin, "npm"), "#!/bin/sh\nexit 0\n");
   await chmod(join(bin, "npm"), 0o755);
+  await writeFile(join(bin, "pnpm"), "#!/bin/sh\nexit 0\n");
+  await chmod(join(bin, "pnpm"), 0o755);
   return {
     root,
     outside,
@@ -99,6 +101,7 @@ test("malformed root test metadata cannot be bypassed by package selectors", asy
       ["npm", "--workspace=web", "test"],
       ["npm", "--registry", "https://registry.npmjs.org", "test"],
       ["npm", "--", "test"],
+      ["pnpm", "--filter-prod", "web", "test"],
       ["npm", "run", "--workspace", "web", "test"],
       ["npm", "run", "--prefix", "../outside", "check"],
       ["npm", "run", "--prefix", "web"],
