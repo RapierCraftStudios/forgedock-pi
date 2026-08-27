@@ -121,6 +121,8 @@ function packageScriptName(argv: readonly string[]): string | undefined {
   if (!["npm", "pnpm", "yarn", "bun"].includes(manager)) return undefined;
   const command = argv[1];
   if (command === "test") return "test";
+  if (manager === "npm" && (command === "t" || command === "tst"))
+    return "test";
   if (command === "run" || command === "run-script") {
     const script = argv.slice(2).find((argument) => !argument.startsWith("-"));
     return script || undefined;
