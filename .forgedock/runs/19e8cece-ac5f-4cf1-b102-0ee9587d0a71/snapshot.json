@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 9,
-  "lastEventHash": "sha256:cae9a73f40f96de36d6757c07a0917ac508f725dd6e44b9189f0d5293db1121c",
+  "sequence": 10,
+  "lastEventHash": "sha256:82ec13cecc66795fb785cb93c85a916057ef5c331b1d59ee7e4353846bffa901",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -26,6 +26,18 @@
           "baseSha": "7817370b07c7e3d172f4971771e822aab548431a",
           "finishedAt": "2026-08-27T12:44:53.274Z",
           "outputArtifactHash": "sha256:resolve-issue-196-7817370b"
+        }
+      ]
+    },
+    "investigate": {
+      "phase": "investigate",
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "queued",
+          "leaseEpoch": 1,
+          "restartAction": "Restart investigation attempt 1 from the resolved frozen base.",
+          "evidence": []
         }
       ]
     }
@@ -66,7 +78,8 @@
     "phase:resolve:1:start": "4a72f87c-594a-46ae-8cd7-de146504e7ac",
     "effect:github-label:RapierCraftStudios/forgedock-pi:196:4a72f87c-594a-46ae-8cd7-de146504e7ac": "6805b87d-6081-4886-b16b-e5d75a5d3c31",
     "phase:resolve:1:complete": "71bff898-b603-4d83-9918-a448650abcac",
-    "effect:github-label:RapierCraftStudios/forgedock-pi:196:71bff898-b603-4d83-9918-a448650abcac": "bb0fbdd9-634c-4f20-82c7-3611fa4ff29c"
+    "effect:github-label:RapierCraftStudios/forgedock-pi:196:71bff898-b603-4d83-9918-a448650abcac": "bb0fbdd9-634c-4f20-82c7-3611fa4ff29c",
+    "phase:investigate:1:queue": "f52dc7c2-a116-446a-a917-e85d9ebc073c"
   },
   "eventIds": {
     "1629794b-4c9e-4189-b0a9-ed07dc92837b": true,
@@ -77,7 +90,8 @@
     "4a72f87c-594a-46ae-8cd7-de146504e7ac": true,
     "6805b87d-6081-4886-b16b-e5d75a5d3c31": true,
     "71bff898-b603-4d83-9918-a448650abcac": true,
-    "bb0fbdd9-634c-4f20-82c7-3611fa4ff29c": true
+    "bb0fbdd9-634c-4f20-82c7-3611fa4ff29c": true,
+    "f52dc7c2-a116-446a-a917-e85d9ebc073c": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
