@@ -54,7 +54,7 @@ export async function preflightRequiredVerificationCommands(
         `executable '${program}' is unavailable; install it or update the tracked command`,
       );
     }
-    const script = packageScriptName(command.argv);
+    const script = packageScriptName(command.argv, basePath);
     if (script)
       await assertPackageScript(canonicalRoot, cwd, script, basePath);
   }
@@ -116,76 +116,54 @@ async function executableAvailable(
   return false;
 }
 
-type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
-
-const PACKAGE_MANAGER_OPTIONS_WITH_VALUES: Readonly<
-  Record<PackageManager, readonly string[]>
-> = {
-  npm: ["--prefix", "--workspace", "-w"],
-  pnpm: ["--dir", "-C", "--filter", "-F"],
-  yarn: ["--cwd"],
-  bun: ["--cwd"],
-};
-
-function packageScriptName(argv: readonly string[]): string | undefined {
-  const managerName = basename(argv[0] ?? "").replace(
-    /\.(?:cmd|exe)$/i,
-    "",
-  );
-  if (!Object.hasOwn(PACKAGE_MANAGER_OPTIONS_WITH_VALUES, managerName))
-    return undefined;
-  const manager = managerName as PackageManager;
-  const commandIndex = packageManagerCommandIndex(argv, manager);
-  if (commandIndex === undefined) return undefined;
-  const command = argv[commandIndex];
-  if (command === "test") return "test";
-  if (command === "run" || command === "run-script") {
-    const script = packageManagerScriptArgument(argv, commandIndex + 1, manager);
-    return script || undefined;
-  }
-  return undefined;
-}
-
-function packageManagerCommandIndex(
+function packageScriptName(
   argv: readonly string[],
-  manager: PackageManager,
-): number | undefined {
-  let index = 1;
-  while (index < argv.length) {
-    const argument = argv[index];
-    if (argument === undefined) return undefined;
-    if (argument === "--") return index + 1 < argv.length ? index + 1 : undefined;
-    if (!argument.startsWith("-")) return index;
-    index += packageManagerOptionHasValue(manager, argument) ? 2 : 1;
+  basePath: string,
+): string | undefined {
+  const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
+  if (!["npm", "pnpm", "yarn", "bun"].includes(manager)) return undefined;
+
+  const command = argv[1];
+  if (command === undefined) return undefined;
+  if (command.startsWith("-"))
+    throw unsupportedPackageManagerOptionsError(basePath);
+  if (command === "test") {
+    assertNoPackageManagerOptions(argv, 2, basePath);
+    return "test";
+  }
+  if (command === "run" || command === "run-script") {
+    const script = argv[2];
+    if (!script || script.startsWith("-"))
+      throw new VerificationPreflightError(
+        `${basePath}.argv`,
+        `package-manager '${command}' must name a script directly; set cwd to the package that defines it or use CI-only verification`,
+      );
+    assertNoPackageManagerOptions(argv, 3, basePath);
+    return script;
   }
   return undefined;
 }
 
-function packageManagerScriptArgument(
+function assertNoPackageManagerOptions(
   argv: readonly string[],
   start: number,
-  manager: PackageManager,
-): string | undefined {
-  let index = start;
-  while (index < argv.length) {
+  basePath: string,
+): void {
+  for (let index = start; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (argument === undefined) return undefined;
-    if (argument === "--") {
-      index += 1;
-      continue;
-    }
-    if (!argument.startsWith("-")) return argument;
-    index += packageManagerOptionHasValue(manager, argument) ? 2 : 1;
+    if (argument === "--") return;
+    if (argument?.startsWith("-"))
+      throw unsupportedPackageManagerOptionsError(basePath);
   }
-  return undefined;
 }
 
-function packageManagerOptionHasValue(
-  manager: PackageManager,
-  argument: string,
-): boolean {
-  if (argument.includes("=")) return false;
-  return PACKAGE_MANAGER_OPTIONS_WITH_VALUES[manager].includes(argument);
+function unsupportedPackageManagerOptionsError(
+  basePath: string,
+): VerificationPreflightError {
+  return new VerificationPreflightError(
+    `${basePath}.argv`,
+    "package-manager options are not supported for tracked verification; set cwd to the package that owns the script or use CI-only verification",
+  );
 }
 
 async function assertPackageScript(

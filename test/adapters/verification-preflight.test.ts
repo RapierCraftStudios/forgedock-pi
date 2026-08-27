@@ -97,8 +97,11 @@ test("malformed root test metadata cannot be bypassed by package selectors", asy
       ["npm", "--prefix", "web", "test"],
       ["npm", "--workspace", "web", "test"],
       ["npm", "--workspace=web", "test"],
+      ["npm", "--registry", "https://registry.npmjs.org", "test"],
       ["npm", "--", "test"],
       ["npm", "run", "--workspace", "web", "test"],
+      ["npm", "run", "--prefix", "../outside", "check"],
+      ["npm", "run", "--prefix", "web"],
     ]) {
       await assert.rejects(
         preflightRequiredVerificationCommands(
@@ -109,7 +112,9 @@ test("malformed root test metadata cannot be bypassed by package selectors", asy
         (error: unknown) =>
           error instanceof VerificationPreflightError &&
           error.path === ".forge/config.json verification.commands.test.argv" &&
-          /no 'test' script/.test(error.message),
+          /package-manager (?:options are not supported|'run' must name a script directly)/.test(
+            error.message,
+          ),
         `expected malformed root metadata to reject ${argv.join(" ")}`,
       );
     }
