@@ -2165,12 +2165,7 @@ export class ForgeWorkOnController {
       try {
         merged = await github.mergePullRequest({ pullNumber: pull.number, expectedHeadSha: pull.headSha, method: "squash", ...(ctx.signal ? { signal: ctx.signal } : {}) });
       } catch (error) {
-        await projector
-          .setWorkflowLabel(
-            link.issueNumber,
-            WORKFLOW_LABEL_BY_STAGE.review,
-          )
-          .catch(() => undefined);
+        await rollbackAwaitingMergeLabel(projector, link.issueNumber);
         throw error;
       }
       headSha = merged.sha;
@@ -4121,6 +4116,31 @@ export class ForgeWorkOnController {
     this.#links.set(link.subagentRunId, link);
     for (const runId of Object.keys(link.activeNodes))
       this.#links.set(runId, link);
+  }
+}
+
+/**
+ * Restore the review projection after an awaiting-merge failure.
+ *
+ * This compensating effect deliberately has no AbortSignal parameter. The
+ * merge attempt is cancellation-aware, but its failure can be reported after
+ * that signal is aborted; forwarding it here would prevent the label rollback
+ * and leave the issue projecting an awaiting-merge state for an unmerged PR.
+ * Projection remains best effort, and the caller retains the original merge
+ * error.
+ */
+export async function rollbackAwaitingMergeLabel(
+  projector: Pick<GitHubIssueProjector, "setWorkflowLabel">,
+  issueNumber: number,
+): Promise<void> {
+  try {
+    await projector.setWorkflowLabel(
+      issueNumber,
+      WORKFLOW_LABEL_BY_STAGE.review,
+    );
+  } catch {
+    // A projection outage must not mask the merge failure or change its retry
+    // path. Durable workflow state remains authoritative for reconciliation.
   }
 }
 
