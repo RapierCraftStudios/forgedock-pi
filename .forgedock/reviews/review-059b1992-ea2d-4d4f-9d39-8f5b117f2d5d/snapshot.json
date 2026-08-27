@@ -31,14 +31,32 @@
   "checks": [],
   "findings": [],
   "status": "active",
-  "sequence": 1,
-  "lastEventHash": "sha256:61eec73564972ba4450fbb9d926ed4d32245917458b0176e949fe16bafc2dd4e",
+  "sequence": 2,
+  "lastEventHash": "sha256:ffd3478b18cbec38f3d3dba1daf7ccf96adf83f001da0fca6bb9034641017b6c",
   "idempotencyKeys": {
-    "review:create": "c84f347e-b044-4335-84cf-e6acab99a577"
+    "review:create": "c84f347e-b044-4335-84cf-e6acab99a577",
+    "panel:1:start": "f9e92d66-9028-43e0-9eb7-58c6a2124f32"
   },
   "eventIds": {
-    "c84f347e-b044-4335-84cf-e6acab99a577": true
+    "c84f347e-b044-4335-84cf-e6acab99a577": true,
+    "f9e92d66-9028-43e0-9eb7-58c6a2124f32": true
   },
   "createdAt": "2026-08-27T05:29:06.994Z",
-  "updatedAt": "2026-08-27T05:29:06.994Z"
+  "updatedAt": "2026-08-27T05:29:16.129Z",
+  "panel": {
+    "round": 1,
+    "status": "running",
+    "reviewers": [
+      "forge-review-correctness",
+      "forge-review-security",
+      "forge-review-api",
+      "forge-review-worker",
+      "forge-review-web",
+      "forge-review-code-quality",
+      "forge-review-regression-risk",
+      "forge-review-deployment"
+    ],
+    "completedReviewers": [],
+    "startedAt": "2026-08-27T05:29:16.129Z"
+  }
 }
