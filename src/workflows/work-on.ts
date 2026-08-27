@@ -199,6 +199,14 @@ export interface DirectTerminalEvidence {
   mergeSha: string;
 }
 
+export function hasDurableMergeEffect(
+  state: Pick<import("../core/state.ts").RunState, "effects">,
+): boolean {
+  return Object.values(state.effects).some(
+    (effect) => effect.effectType === "merge",
+  );
+}
+
 export function directTerminalEvidence(
   state: import("../core/state.ts").RunState,
 ): DirectTerminalEvidence | undefined {
@@ -618,6 +626,10 @@ export class ForgeWorkOnController {
       snapshot.state.status === "completed" &&
       snapshot.state.outcome === "merged"
     ) {
+      await this.#projectWorkflowStage(link, "merged", ctx);
+      return;
+    }
+    if (hasDurableMergeEffect(snapshot.state)) {
       await this.#projectWorkflowStage(link, "merged", ctx);
       return;
     }
@@ -1805,7 +1817,7 @@ export class ForgeWorkOnController {
     const projector = new GitHubIssueProjector(transport, link.repository);
     await this.#projectWorkflowStage(
       link,
-      workflowStageForNodeTransition(node.node, "started"),
+      workflowStageForParentNodeStart(node.node, initial.state),
       ctx,
       projector,
     );
@@ -4826,6 +4838,14 @@ export function shouldBufferLaunchCompletion(
   linkKnown: boolean,
 ): boolean {
   return receiptBindingInFlight || !linkKnown;
+}
+
+export function workflowStageForParentNodeStart(
+  node: string,
+  state: Pick<import("../core/state.ts").RunState, "effects">,
+): WorkflowStage | undefined {
+  if (node === "merge" && hasDurableMergeEffect(state)) return "merged";
+  return workflowStageForNodeTransition(node, "started");
 }
 
 export function workflowStageForNodeTransition(

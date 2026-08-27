@@ -8,6 +8,7 @@ import {
   directTerminalEvidence,
   finalReviewDecisionMarker,
   findingPriority,
+  hasDurableMergeEffect,
   isRecoverableWorkOnBlocker,
   isTransientProviderFailure,
   parentNodeFromId,
@@ -21,6 +22,7 @@ import {
   shouldBufferLaunchCompletion,
   workflowLabelForNode,
   workflowStageForNodeTransition,
+  workflowStageForParentNodeStart,
 } from "../../src/workflows/work-on.ts";
 
 test("short reviewer aliases normalize to configured agent names", () => {
@@ -112,6 +114,30 @@ test("provider completion is buffered until its launch receipt is durably bound"
   assert.equal(shouldBufferLaunchCompletion(true, true), true);
   assert.equal(shouldBufferLaunchCompletion(false, false), true);
   assert.equal(shouldBufferLaunchCompletion(false, true), false);
+});
+
+test("durable merge effects take precedence over a resumed merge start label", () => {
+  const state = (effects: Record<string, unknown>) =>
+    ({ effects }) as unknown as Pick<
+      import("../../src/core/state.ts").RunState,
+      "effects"
+    >;
+  const mergedState = state({
+    "merge:42": {
+      effectType: "merge",
+      effectId: "merge:42",
+      digest: "sha256:merge",
+      eventId: "event-merge",
+    },
+  });
+
+  assert.equal(hasDurableMergeEffect(mergedState), true);
+  assert.equal(workflowStageForParentNodeStart("merge", mergedState), "merged");
+  assert.equal(
+    workflowStageForParentNodeStart("merge", state({})),
+    "awaitingMerge",
+  );
+  assert.equal(workflowStageForParentNodeStart("close", mergedState), undefined);
 });
 
 test("awaiting-merge rollback restores review without forwarding cancellation", async () => {
