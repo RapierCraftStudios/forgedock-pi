@@ -30,6 +30,7 @@ import {
   isForgeRuntimePath,
   parseBoundReviewerResult,
   parseGitStatusPaths,
+  validateBoundCommand,
   reviewerStatusIsTerminal,
   writeTrustedResultFile,
 } from "../../src/agents/child-runtime.ts";
@@ -40,6 +41,39 @@ const execFileAsync = promisify(execFile);
 async function git(cwd: string, ...args: string[]) {
   return execFileAsync("git", args, { cwd, encoding: "utf8" });
 }
+
+test("bound verification commands reject npm package-location options", () => {
+  const locationOptions = [
+    ["npm", "--prefix", "web", "test"],
+    ["npm", "--prefix=web", "test"],
+    ["npm", "test", "--prefix", "web"],
+    ["npm", "--workspace=web", "test"],
+    ["npm", "-w", "web", "test"],
+    ["npm", "--global", "test"],
+    ["npm", "--location", "global", "test"],
+  ] as const;
+  for (const argv of locationOptions) {
+    assert.throws(
+      () =>
+        validateBoundCommand("check", {
+          argv,
+          cwd: ".",
+          required: true,
+          timeoutMs: 60_000,
+        }),
+      /package-location option/,
+      argv.join(" "),
+    );
+  }
+  assert.doesNotThrow(() =>
+    validateBoundCommand("check", {
+      argv: ["npm", "test", "--", "--prefix", "web"],
+      cwd: ".",
+      required: true,
+      timeoutMs: 60_000,
+    }),
+  );
+});
 
 test("every bounded non-review node can persist its trusted result", () => {
   for (const node of [

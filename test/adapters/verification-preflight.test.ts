@@ -12,6 +12,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  assertNoPackageLocationOptions,
   preflightRequiredVerificationCommands,
   resolveVerificationCommandDirectory,
   VerificationPreflightError,
@@ -79,6 +80,64 @@ test("required monorepo verification preflight selects the package cwd", async (
       testFixture.root,
       { test: command("web") },
       { path: testFixture.path },
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
+test("npm package-location options cannot override the bound cwd", async () => {
+  const locationOptions = [
+    ["npm", "--prefix", "web", "test"],
+    ["npm", "--prefix=web", "test"],
+    ["npm", "test", "--prefix", "web"],
+    ["npm", "test", "--prefix=web"],
+    ["npm", "--workspace", "web", "test"],
+    ["npm", "--workspace=web", "test"],
+    ["npm", "-w", "web", "test"],
+    ["npm", "--workspaces", "test"],
+    ["npm", "--global", "test"],
+    ["npm", "-g", "test"],
+    ["npm", "--location=global", "test"],
+  ] as const;
+  for (const argv of locationOptions) {
+    assert.throws(
+      () => assertNoPackageLocationOptions(argv, "verification.commands.test.argv"),
+      (error: unknown) =>
+        error instanceof VerificationPreflightError &&
+        error.path === "verification.commands.test.argv" &&
+        /package-location option/.test(error.message),
+      argv.join(" "),
+    );
+  }
+
+  assert.doesNotThrow(() =>
+    assertNoPackageLocationOptions(
+      ["npm", "test", "--", "--prefix", "web"],
+      "verification.commands.test.argv",
+    ),
+  );
+  assert.doesNotThrow(() =>
+    assertNoPackageLocationOptions(["npm", "test"], "verification.commands.test.argv"),
+  );
+  assert.doesNotThrow(() =>
+    assertNoPackageLocationOptions(["pnpm", "--dir", "web", "test"], "verification.commands.test.argv"),
+  );
+});
+
+test("preflight rejects npm package-location options before package validation", async () => {
+  const testFixture = await fixture();
+  try {
+    await assert.rejects(
+      preflightRequiredVerificationCommands(
+        testFixture.root,
+        { test: command(".", { argv: ["npm", "--prefix", "web", "test"] }) },
+        { path: testFixture.path },
+      ),
+      (error: unknown) =>
+        error instanceof VerificationPreflightError &&
+        error.path === ".forge/config.json verification.commands.test.argv" &&
+        /package-location option/.test(error.message),
     );
   } finally {
     await testFixture.cleanup();
