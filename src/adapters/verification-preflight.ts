@@ -125,6 +125,8 @@ const NPM_PACKAGE_SELECTION_OPTIONS = [
   "include-workspace-root",
   "global",
   "location",
+  "ws",
+  "iwr",
   "global-style",
 ] as const;
 
@@ -151,7 +153,8 @@ function isNpmPackageSelectionOption(option: string): boolean {
   if (
     option.startsWith("-C") ||
     option.startsWith("-w") ||
-    option.startsWith("-g")
+    option.startsWith("-g") ||
+    option.startsWith("-L")
   )
     return true;
 

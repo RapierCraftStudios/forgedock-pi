@@ -143,12 +143,15 @@ test("npm package-selection options cannot override verification cwd", async () 
       ["-workspace", "web"],
       ["-w", "web"],
       ["--workspaces"],
+      ["--ws"],
       ["--include-workspace-root"],
+      ["--iwr"],
       ["--global"],
       ["-global"],
       ["-g"],
       ["--location=global"],
       ["--loc", "global"],
+      ["-L", "global"],
       ["--global-style"],
     ];
     for (const selector of selectors) {
