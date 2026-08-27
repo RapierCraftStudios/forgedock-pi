@@ -42,6 +42,11 @@
       "name": "github:check (22)",
       "required": true,
       "status": "passed"
+    },
+    {
+      "name": "github:check (24)",
+      "required": true,
+      "status": "passed"
     }
   ],
   "findings": [
@@ -98,8 +103,8 @@
     }
   ],
   "status": "active",
-  "sequence": 7,
-  "lastEventHash": "sha256:2861e43fff7617119f8ec077de06eb5b796dc71d3261b4882627faa76c1ed41e",
+  "sequence": 8,
+  "lastEventHash": "sha256:dc659adcb61c8d53a37cbfe586bf0f6b208ba82364471d7f0780f2cf18d1f4ba",
   "idempotencyKeys": {
     "review:create": "ee876846-b77d-4962-bffe-3e4330751bbc",
     "panel:1:start": "8d1f7751-c269-40b9-ab0a-feb1f9cf5441",
@@ -107,7 +112,8 @@
     "check:reviewer:1:67fcfdf7bc42337a": "1d25aa4a-c0c8-4c61-af53-babf1b3a47df",
     "panel:1:findings": "3466851c-ee12-40b8-838b-b998586c5bd7",
     "check:additional:0:f9f1e19f9e55cfa8": "227f728b-8c6a-42bc-9017-060bb30abdd8",
-    "check:github:0:ff03855406f48f83": "33c0f5d2-96c5-4787-996f-ecc57143e834"
+    "check:github:0:ff03855406f48f83": "33c0f5d2-96c5-4787-996f-ecc57143e834",
+    "check:github:1:2f175a86d52843ab": "7bbf61b5-8d79-4450-b75c-8c10f934a796"
   },
   "eventIds": {
     "ee876846-b77d-4962-bffe-3e4330751bbc": true,
@@ -116,10 +122,11 @@
     "1d25aa4a-c0c8-4c61-af53-babf1b3a47df": true,
     "3466851c-ee12-40b8-838b-b998586c5bd7": true,
     "227f728b-8c6a-42bc-9017-060bb30abdd8": true,
-    "33c0f5d2-96c5-4787-996f-ecc57143e834": true
+    "33c0f5d2-96c5-4787-996f-ecc57143e834": true,
+    "7bbf61b5-8d79-4450-b75c-8c10f934a796": true
   },
   "createdAt": "2026-08-27T04:55:52.189Z",
-  "updatedAt": "2026-08-27T05:26:56.352Z",
+  "updatedAt": "2026-08-27T05:27:01.255Z",
   "panel": {
     "round": 1,
     "status": "running",
