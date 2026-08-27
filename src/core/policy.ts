@@ -407,6 +407,14 @@ export function isIntegrationBranch(
   );
 }
 
+/** Return the first concrete branch name from policy patterns, or a safe default. */
+export function resolveConcreteBranch(
+  patterns: readonly string[],
+  fallback: string,
+): string {
+  return patterns.find((pattern) => !pattern.includes("*")) ?? fallback;
+}
+
 export function canAutoMerge(policy: ForgePolicy, branch: string): boolean {
   return (
     policy.branches.autoMergeIntegration &&

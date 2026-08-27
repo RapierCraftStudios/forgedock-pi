@@ -453,6 +453,18 @@ test("automatic merge requires both an explicit request and authorization", asyn
   );
 });
 
+test("standard route review honors an explicit auto-merge request", async () => {
+  const h = harness();
+
+  const result = await h.coordinator.review(
+    request({ mode: "standard", autoMergeRequested: true }),
+  );
+
+  assert.equal(result.state.mode, "standard");
+  assert.equal(result.merged, true);
+  assert.equal(h.github.mergeInputs.length, 1);
+});
+
 test("staging review rejects merge requests and never calls merge", async () => {
   const h = harness();
 

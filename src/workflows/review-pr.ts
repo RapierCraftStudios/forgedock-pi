@@ -46,7 +46,11 @@ import type {
   ReviewRoster,
   ReviewState,
 } from "../core/review-state.ts";
-import { canAutoMerge, isGitHubCiRequired } from "../core/policy.ts";
+import {
+  canAutoMerge,
+  isGitHubCiRequired,
+  resolveConcreteBranch,
+} from "../core/policy.ts";
 import type {
   ParsedReviewArguments,
   ReviewSelector,
@@ -736,10 +740,9 @@ export class ForgeReviewController {
         "--gh-flag is not supported by the typed GitHub adapter; no flag was executed.",
       );
     const environment = await this.#environment(ctx);
-    const effectiveMode: ReviewMode =
-      mode === "staging" || parsed.selector.kind === "route"
-        ? "staging"
-        : "standard";
+    // A route selector chooses the PR, not the execution policy. Only the
+    // staging command explicitly opts into the non-merging staging mode.
+    const effectiveMode: ReviewMode = mode;
     const pulls = await environment.github.resolveReviewSelector(
       selectorValue(parsed.selector),
       ctx.signal,
@@ -926,8 +929,14 @@ export class ForgeReviewController {
       transport,
       policy.repository.name,
       {
-        integrationBranch: policy.branches.integration[0],
-        defaultBranch: policy.branches.protected[0],
+        integrationBranch: resolveConcreteBranch(
+          policy.branches.integration,
+          "staging",
+        ),
+        defaultBranch: resolveConcreteBranch(
+          policy.branches.protected,
+          "main",
+        ),
       },
     );
     const store = new GitHubStateBranchStore(

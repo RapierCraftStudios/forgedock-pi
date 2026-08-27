@@ -29,6 +29,12 @@ test("review parser accepts exact selectors and typed flags", () => {
     kind: "route",
     route: "staging:feature",
   });
+  assert.deepEqual(parseReviewArguments("staging --auto-merge"), {
+    selector: { kind: "route", route: "staging" },
+    autoMerge: true,
+    ghFlags: [],
+    thorough: false,
+  });
 
   assert.deepEqual(
     parseReviewArguments(

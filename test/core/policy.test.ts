@@ -8,6 +8,7 @@ import {
   isProtectedBranch,
   parseForgePolicy,
   PolicyValidationError,
+  resolveConcreteBranch,
 } from "../../src/core/policy.ts";
 
 const rawPolicy = {
@@ -37,6 +38,19 @@ const rawPolicy = {
   review: { required: ["correctness", "security"], maxRounds: 3 },
   subagents: { maxConcurrent: 4, maxDepth: 2 },
 };
+
+test("wildcard-first branch policies resolve concrete route defaults", () => {
+  assert.equal(
+    resolveConcreteBranch(["release/*", "staging"], "fallback-staging"),
+    "staging",
+  );
+  assert.equal(
+    resolveConcreteBranch(["production/*", "main"], "fallback-main"),
+    "main",
+  );
+  assert.equal(resolveConcreteBranch(["release/*"], "staging"), "staging");
+  assert.equal(resolveConcreteBranch(["production/*"], "main"), "main");
+});
 
 test("tracked policy enables only non-protected integration auto-merge", () => {
   const policy = parseForgePolicy(rawPolicy);
