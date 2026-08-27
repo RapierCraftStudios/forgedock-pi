@@ -12,6 +12,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  assertNoPackageLocationOptions,
   preflightRequiredVerificationCommands,
   resolveVerificationCommandDirectory,
   VerificationPreflightError,
@@ -78,6 +79,48 @@ test("required monorepo verification preflight selects the package cwd", async (
     await preflightRequiredVerificationCommands(
       testFixture.root,
       { test: command("web") },
+      { path: testFixture.path },
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
+test("preflight rejects package location selectors before package validation", async () => {
+  const testFixture = await fixture();
+  try {
+    for (const argv of [
+      ["npm", "--prefix", "web", "test"],
+      ["npm", "--prefix=web", "test"],
+      ["npm", "-C", "web", "test"],
+      ["npm", "-Cweb", "test"],
+      ["npm", "test", "--prefix", "web"],
+      ["npm", "run", "test", "--workspace", "web"],
+      ["npm", "--location=global", "test"],
+    ]) {
+      await assert.rejects(
+        preflightRequiredVerificationCommands(
+          testFixture.root,
+          { test: command(".", { argv }) },
+          { path: testFixture.path },
+        ),
+        (error: unknown) =>
+          error instanceof VerificationPreflightError &&
+          error.path === ".forge/config.json verification.commands.test.argv" &&
+          /package-location option/.test(error.message),
+      );
+    }
+
+    assert.doesNotThrow(() =>
+      assertNoPackageLocationOptions(["npm", "test", "--", "--prefix", "web"]),
+    );
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      {
+        test: command("web", {
+          argv: ["npm", "test", "--", "--prefix", "not-a-package"],
+        }),
+      },
       { path: testFixture.path },
     );
   } finally {

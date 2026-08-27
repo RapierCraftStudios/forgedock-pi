@@ -48,6 +48,7 @@ export async function preflightRequiredVerificationCommands(
         `${basePath}.argv`,
         "must name an executable",
       );
+    assertNoPackageLocationOptions(command.argv, `${basePath}.argv`);
     if (!(await executableAvailable(program, cwd, options.path ?? process.env.PATH))) {
       throw new VerificationPreflightError(
         `${basePath}.argv`,
@@ -116,14 +117,103 @@ async function executableAvailable(
   return false;
 }
 
+type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
+
+const PACKAGE_LOCATION_OPTIONS: Readonly<
+  Record<PackageManager, ReadonlySet<string>>
+> = {
+  npm: new Set([
+    "--prefix",
+    "-C",
+    "--workspace",
+    "-w",
+    "--workspaces",
+    "--include-workspace-root",
+    "--location",
+    "--global",
+    "-g",
+    "--userconfig",
+    "--globalconfig",
+  ]),
+  pnpm: new Set([
+    "--dir",
+    "-C",
+    "--filter",
+    "--workspace-root",
+    "-w",
+    "--global",
+    "-g",
+  ]),
+  yarn: new Set(["--cwd", "--top-level"]),
+  bun: new Set(["--cwd", "--filter", "--global", "-g"]),
+};
+
+function packageManager(argv: readonly string[]): PackageManager | undefined {
+  const manager = basename(argv[0] ?? "")
+    .replace(/\.(?:cmd|exe)$/i, "")
+    .toLowerCase();
+  return manager in PACKAGE_LOCATION_OPTIONS
+    ? (manager as PackageManager)
+    : undefined;
+}
+
+/**
+ * Keep package-manager verification anchored to the command's bound cwd.
+ *
+ * Package managers accept location and workspace selectors in argv in addition
+ * to the process cwd. Those selectors would make static package-script
+ * preflight and the eventual child process observe different packages.
+ */
+export function assertNoPackageLocationOptions(
+  argv: readonly string[],
+  path = "verification command argv",
+): void {
+  const manager = packageManager(argv);
+  if (!manager) return;
+  const options = PACKAGE_LOCATION_OPTIONS[manager];
+  for (const argument of argv.slice(1)) {
+    if (argument === "--") break;
+    const equals = argument.indexOf("=");
+    const option = equals > 0 ? argument.slice(0, equals) : argument;
+    if (options.has(option)) {
+      throw new VerificationPreflightError(
+        path,
+        `must not use package-location option '${argument}'; package selection is bound to the configured cwd`,
+      );
+    }
+    // npm and pnpm accept a compact -C<directory> spelling as well.
+    if (
+      (manager === "npm" || manager === "pnpm") &&
+      argument.startsWith("-C") &&
+      argument.length > 2
+    ) {
+      throw new VerificationPreflightError(
+        path,
+        `must not use package-location option '${argument}'; package selection is bound to the configured cwd`,
+      );
+    }
+  }
+}
+
 function packageScriptName(argv: readonly string[]): string | undefined {
-  const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
-  if (!["npm", "pnpm", "yarn", "bun"].includes(manager)) return undefined;
-  const command = argv[1];
+  if (!packageManager(argv)) return undefined;
+  let commandIndex = -1;
+  for (let index = 1; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument === undefined || argument === "--") break;
+    if (!argument.startsWith("-")) {
+      commandIndex = index;
+      break;
+    }
+  }
+  if (commandIndex < 0) return undefined;
+  const command = argv[commandIndex];
   if (command === "test") return "test";
   if (command === "run" || command === "run-script") {
-    const script = argv.slice(2).find((argument) => !argument.startsWith("-"));
-    return script || undefined;
+    for (const argument of argv.slice(commandIndex + 1)) {
+      if (argument === "--") break;
+      if (!argument.startsWith("-")) return argument;
+    }
   }
   return undefined;
 }

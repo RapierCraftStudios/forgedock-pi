@@ -24,6 +24,7 @@ import {
   assertCompleteReviewDiff,
   assertReviewerDiffCoverage,
   assertUniqueReviewerProfileIds,
+  validateBoundCommand,
   boundedToolDenial,
   diffChunk,
   forgeCommitArguments,
@@ -86,6 +87,33 @@ test("read-only nodes deny shell and file mutation tools", () => {
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_checkpoint"), true);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_run_review_panel"), true);
   assert.equal(allowedNodeTools(undefined).has("forge_run_review_panel"), true);
+});
+
+test("bound verification commands reject package location selectors", () => {
+  const base = {
+    cwd: ".",
+    required: true,
+    timeoutMs: 60_000,
+  };
+  for (const argv of [
+    ["npm", "--prefix", "web", "test"],
+    ["npm", "--prefix=web", "test"],
+    ["npm", "-C", "web", "test"],
+    ["npm", "-Cweb", "test"],
+    ["npm", "test", "--prefix", "web"],
+    ["npm", "run", "test", "--workspace", "web"],
+  ]) {
+    assert.throws(
+      () => validateBoundCommand("check", { ...base, argv }),
+      /package-location option/,
+    );
+  }
+  assert.doesNotThrow(() =>
+    validateBoundCommand("check", {
+      ...base,
+      argv: ["npm", "test", "--", "--prefix", "web"],
+    }),
+  );
 });
 
 test("runtime path classification follows the checkout case contract", () => {
