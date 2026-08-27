@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 16,
-  "lastEventHash": "sha256:4e60817c7b996ce125105b026ad922f74670e28845d473cbbe2d154f95dbb6c2",
+  "sequence": 17,
+  "lastEventHash": "sha256:ffe31f41b157272e538f1abeeef35f0219593c0517284af506d20d6ed6272d4e",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -107,16 +107,21 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Updated `src/agents/child-runtime.ts` to resolve labels for direct checkpoint starts/completions, recognize table/prose investigation outcomes, and project the label immediately after durable append.",
+            "Added direct lifecycle mapping tests in `test/agents/child-runtime-commit.test.ts`.",
+            "Added complete replacement lifecycle coverage in `test/adapters/github-projection.test.ts`; `forge_diff` reports three changed files and no out-of-contract paths."
+          ],
           "inputArtifactHash": "sha256:plan-92-direct-labels",
           "logicalNodeId": "implement-1",
           "startedAt": "2026-08-26T23:57:26.229Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/35466040-09a8-42db-8246-fdbdc3d7bf2e",
           "branch": "forge/issue-92-35466040",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-27T00:01:07.147Z"
         }
       ]
     }
@@ -139,7 +144,8 @@
     "phase:prepare-worktree:1:start": "119f4b83-5f62-4526-86e2-a958fae7eb98",
     "phase:prepare-worktree:1:complete": "97d5c225-d992-4d1a-9724-52b5b1f61b85",
     "phase:implement:1:queue": "43fd6a1f-7845-451a-ae56-7d5bdec7e17d",
-    "phase:implement:1:start": "cd06bd96-dcaa-4ce3-b8a9-f976b90f97ee"
+    "phase:implement:1:start": "cd06bd96-dcaa-4ce3-b8a9-f976b90f97ee",
+    "phase:implement:1:complete": "1f74db68-955c-457f-9f67-f1e94f2d9ce4"
   },
   "eventIds": {
     "2f9de7d7-ccbc-4ec8-b273-57d93d8d88fd": true,
@@ -157,7 +163,8 @@
     "119f4b83-5f62-4526-86e2-a958fae7eb98": true,
     "97d5c225-d992-4d1a-9724-52b5b1f61b85": true,
     "43fd6a1f-7845-451a-ae56-7d5bdec7e17d": true,
-    "cd06bd96-dcaa-4ce3-b8a9-f976b90f97ee": true
+    "cd06bd96-dcaa-4ce3-b8a9-f976b90f97ee": true,
+    "1f74db68-955c-457f-9f67-f1e94f2d9ce4": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
