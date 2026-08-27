@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:d553a7c4cc112352984d1b47bc6dccb852de71fa051be427b1b3e96a33c7eddd",
+  "sequence": 8,
+  "lastEventHash": "sha256:685814136970d3319e96e0e3a9c5018c21775f0d3b11244b6e001270cecd4a3d",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -39,15 +39,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/workflows/work-on.ts` sends `ctx.signal` to `github.mergePullRequest` in the parent merge node.",
+            "The merge-failure rollback at the frozen base calls `projector.setWorkflowLabel(link.issueNumber, WORKFLOW_LABEL_BY_STAGE.review)` without `ctx.signal`; this avoids the cited aborted-signal failure but is implicit and untested.",
+            "`GitHubIssueProjector.setWorkflowLabel` forwards a supplied signal to both the issue GET and labels PUT; `FetchGitHubTransport` passes it to `fetch`, so an already-aborted signal prevents rollback requests.",
+            "The parent merge path suppresses rollback errors as best effort, while the outer failure path marks the run failed; focused regression coverage is absent.",
+            "The legacy/direct finalization path has a separate merge operation and does not perform this awaiting-merge rollback."
+          ],
           "logicalNodeId": "investigate-1",
           "startedAt": "2026-08-27T00:52:36.537Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/e0e819e1-181d-4356-b4c4-43c7ed6f7b0a",
           "branch": "forge/issue-120-e0e819e1",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-27T00:56:49.948Z",
+          "outputArtifactHash": "sha256:investigation-issue-120-captured-signal"
         }
       ]
     }
@@ -61,7 +69,8 @@
     "phase:resolve:1:start": "d638c5ba-06ed-4b40-9742-9516d844bfb3",
     "phase:resolve:1:complete": "c99dbd1f-cd6a-49c8-9e2d-ca062c477283",
     "phase:investigate:1:queue": "0c3824ea-a685-4fb9-8e48-840f6d105f01",
-    "phase:investigate:1:start": "38ddeef8-5d09-49ea-928f-fe9c59f00aad"
+    "phase:investigate:1:start": "38ddeef8-5d09-49ea-928f-fe9c59f00aad",
+    "phase:investigate:1:complete": "7cfcfa61-5d3d-411b-985d-2047bd198094"
   },
   "eventIds": {
     "051eed88-dcc2-4a51-afaa-c0801edf39e3": true,
@@ -70,7 +79,8 @@
     "d638c5ba-06ed-4b40-9742-9516d844bfb3": true,
     "c99dbd1f-cd6a-49c8-9e2d-ca062c477283": true,
     "0c3824ea-a685-4fb9-8e48-840f6d105f01": true,
-    "38ddeef8-5d09-49ea-928f-fe9c59f00aad": true
+    "38ddeef8-5d09-49ea-928f-fe9c59f00aad": true,
+    "7cfcfa61-5d3d-411b-985d-2047bd198094": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
