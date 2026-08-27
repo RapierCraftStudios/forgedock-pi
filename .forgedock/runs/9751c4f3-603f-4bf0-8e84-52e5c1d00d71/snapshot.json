@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 16,
-  "lastEventHash": "sha256:64490a2e892439d2b8e585302ddc6770b048378fb2f4f7d64617faa7f0380669",
+  "sequence": 17,
+  "lastEventHash": "sha256:f3e25cf97067fd00b7e08056ef95a7030ed5f08c099adc6f23c3179ba32bf6fb",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -104,15 +104,21 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Added `assertNoPackageLocationOptions` and invoked it from required-command preflight.",
+            "Invoked the same guard from child `validateBoundCommand`, preserving defense at execution ingress.",
+            "Added regression tests for npm prefix, workspace, global, location, short-alias, delimiter, and valid-command cases.",
+            "No implementation commit exists yet; commit is intentionally deferred until the verify phase check passes."
+          ],
           "logicalNodeId": "implement",
           "startedAt": "2026-08-26T23:59:26.971Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/9751c4f3-603f-4bf0-8e84-52e5c1d00d71",
           "branch": "forge/issue-112-9751c4f3",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-27T00:02:52.597Z"
         }
       ]
     }
@@ -135,7 +141,8 @@
     "phase:prepare-worktree:1:start": "3ef8f6d0-fcc9-4adb-92d1-628c9dbce2d9",
     "phase:prepare-worktree:1:complete": "37a08360-d589-4036-8301-d175fd9efee1",
     "phase:implement:1:queue": "b2081e1b-c3b6-4c6a-b6ac-1a98533f9407",
-    "phase:implement:1:start": "36e0cd29-64e3-4e4c-aee1-c5d61c0f7d58"
+    "phase:implement:1:start": "36e0cd29-64e3-4e4c-aee1-c5d61c0f7d58",
+    "phase:implement:1:complete": "8f7744c7-0052-40f2-959c-377f43844204"
   },
   "eventIds": {
     "8109ba08-dcc1-449b-9ee8-3b5402453dc9": true,
@@ -153,7 +160,8 @@
     "3ef8f6d0-fcc9-4adb-92d1-628c9dbce2d9": true,
     "37a08360-d589-4036-8301-d175fd9efee1": true,
     "b2081e1b-c3b6-4c6a-b6ac-1a98533f9407": true,
-    "36e0cd29-64e3-4e4c-aee1-c5d61c0f7d58": true
+    "36e0cd29-64e3-4e4c-aee1-c5d61c0f7d58": true,
+    "8f7744c7-0052-40f2-959c-377f43844204": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
