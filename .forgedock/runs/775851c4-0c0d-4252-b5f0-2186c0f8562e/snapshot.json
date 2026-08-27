@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 35,
-  "lastEventHash": "sha256:f3d44b11e40b6516431c715e6ed78dbdca3068a116a2ba4eabbb1e9ef169c628",
+  "sequence": 36,
+  "lastEventHash": "sha256:b0c33f1b867dfe191f7e2264e2d3607d45106fdc255c6cad53427d33f1b82072",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -97,6 +97,18 @@
           "branch": "forge/issue-196-775851c4",
           "baseSha": "297621681ac15a325eed4d51903ada13c7330423",
           "finishedAt": "2026-08-27T13:20:55.841Z"
+        }
+      ]
+    },
+    "verify": {
+      "phase": "verify",
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "queued",
+          "leaseEpoch": 1,
+          "restartAction": "resume verify attempt 1",
+          "evidence": []
         }
       ]
     }
@@ -247,7 +259,8 @@
     "effect:github-label:RapierCraftStudios/forgedock-pi:196:bc93b948-32f8-4dbe-8af6-8d59ba125bcc": "4dbc2a80-14c1-4fc7-9d8a-5ea3a9310cd9",
     "phase:implement:1:complete": "72da3152-3df2-47d9-953f-dc83c2cb972e",
     "effect:github-comment:RapierCraftStudios/forgedock-pi:196:72da3152-3df2-47d9-953f-dc83c2cb972e": "7bd5d71a-5350-4cba-9bf8-d793a7dee062",
-    "effect:github-label:RapierCraftStudios/forgedock-pi:196:72da3152-3df2-47d9-953f-dc83c2cb972e": "10b11ce0-411a-4197-b256-912667a56f02"
+    "effect:github-label:RapierCraftStudios/forgedock-pi:196:72da3152-3df2-47d9-953f-dc83c2cb972e": "10b11ce0-411a-4197-b256-912667a56f02",
+    "phase:verify:1:queue": "887461f2-8cf7-4eb1-9d2b-bd4b12c8b850"
   },
   "eventIds": {
     "9bdc34b4-a0fa-4afd-be6d-882d96e1d3e7": true,
@@ -284,7 +297,8 @@
     "4dbc2a80-14c1-4fc7-9d8a-5ea3a9310cd9": true,
     "72da3152-3df2-47d9-953f-dc83c2cb972e": true,
     "7bd5d71a-5350-4cba-9bf8-d793a7dee062": true,
-    "10b11ce0-411a-4197-b256-912667a56f02": true
+    "10b11ce0-411a-4197-b256-912667a56f02": true,
+    "887461f2-8cf7-4eb1-9d2b-bd4b12c8b850": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
