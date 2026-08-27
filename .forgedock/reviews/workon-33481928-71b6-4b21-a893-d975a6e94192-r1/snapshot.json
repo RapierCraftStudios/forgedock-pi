@@ -37,22 +37,24 @@
   ],
   "findings": [],
   "status": "active",
-  "sequence": 4,
-  "lastEventHash": "sha256:9c74f631d7205a310788967d7ff19d69a5843b37f672ee06b45b65bda0094987",
+  "sequence": 5,
+  "lastEventHash": "sha256:e90919c8045f44dfa2b7cd2186cce822acd6af58bc60e3ec35c9275faf59c9a8",
   "idempotencyKeys": {
     "review:create": "2ab09ca0-f32a-4896-b12a-410484a144b3",
     "panel:1:start": "bbd12324-049a-4d35-8b8a-860b9719e0c5",
     "check:reviewer:0:c9d99265137af9c6": "5ee8aec2-5df3-4295-b21f-f21aa4a59f03",
-    "check:reviewer:1:67fcfdf7bc42337a": "df4d7209-a92c-47f3-908e-94a641dc4c8e"
+    "check:reviewer:1:67fcfdf7bc42337a": "df4d7209-a92c-47f3-908e-94a641dc4c8e",
+    "panel:1:findings": "4cb6945a-6c5b-482d-8f2b-9498fcb95f5a"
   },
   "eventIds": {
     "2ab09ca0-f32a-4896-b12a-410484a144b3": true,
     "bbd12324-049a-4d35-8b8a-860b9719e0c5": true,
     "5ee8aec2-5df3-4295-b21f-f21aa4a59f03": true,
-    "df4d7209-a92c-47f3-908e-94a641dc4c8e": true
+    "df4d7209-a92c-47f3-908e-94a641dc4c8e": true,
+    "4cb6945a-6c5b-482d-8f2b-9498fcb95f5a": true
   },
   "createdAt": "2026-08-27T15:15:01.223Z",
-  "updatedAt": "2026-08-27T15:15:26.618Z",
+  "updatedAt": "2026-08-27T15:15:33.573Z",
   "panel": {
     "round": 1,
     "status": "running",
