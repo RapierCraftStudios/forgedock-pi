@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import type {
@@ -9,6 +12,7 @@ import type {
 import {
   confirmExpiredLeaseTakeover,
   confirmOrchestrationDispatch,
+  chooseLocalVerificationCommands,
   confirmWorkOnDispatch,
   issueResolverPrompt,
   registerForgeCommands,
@@ -132,6 +136,77 @@ test("work-on resolver accepts free-form intent but requires exactly one issue",
   assert.match(prompt, /interactive exact-issue confirmation/);
   assert.match(prompt, /Original expression:/);
   assert.doesNotMatch(prompt, /call forge_orchestrate exactly once/);
+});
+
+test("init local verification selection is manifest-backed and package-scoped", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-init-verification-"));
+  try {
+    await mkdir(join(root, "web"), { recursive: true });
+    await writeFile(join(root, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(root, "web", "package.json"),
+      JSON.stringify({ scripts: { test: "vitest run" } }),
+    );
+    let offered: string[] = [];
+    const ui = {
+      select: async (_title: string, choices: string[]) => {
+        offered = choices;
+        return choices.find((choice) => choice === "Use npm test in web") ?? "";
+      },
+    } as never;
+    const selected = await chooseLocalVerificationCommands(
+      { ui },
+      root,
+      {},
+    );
+    assert.ok(offered.includes("GitHub CI only (no local verification commands)"));
+    assert.equal(offered.includes("Use npm test in ."), false);
+    assert.deepEqual(selected, {
+      "web-test": {
+        argv: ["npm", "test"],
+        cwd: "web",
+        required: true,
+        timeoutMs: 600_000,
+      },
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("init local verification selection makes CI-only and preservation explicit", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-init-verification-"));
+  try {
+    await writeFile(
+      join(root, "package.json"),
+      JSON.stringify({ scripts: { test: "vitest run" } }),
+    );
+    const current = {
+      test: {
+        argv: ["npm", "test"],
+        cwd: ".",
+        required: true,
+        timeoutMs: 60_000,
+      },
+    };
+    const keepUi = {
+      select: async (_title: string, choices: string[]) => choices[0] ?? "",
+    } as never;
+    assert.deepEqual(
+      await chooseLocalVerificationCommands({ ui: keepUi }, root, current),
+      current,
+    );
+    const ciUi = {
+      select: async (_title: string, choices: string[]) =>
+        choices.find((choice) => choice.startsWith("GitHub CI only")) ?? "",
+    } as never;
+    assert.deepEqual(
+      await chooseLocalVerificationCommands({ ui: ciUi }, root, current),
+      {},
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("work-on slash command sends free-form intent to the resolver", async () => {

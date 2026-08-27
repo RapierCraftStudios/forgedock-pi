@@ -12,6 +12,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  discoverVerificationCommandCandidates,
   preflightRequiredVerificationCommands,
   resolveVerificationCommandDirectory,
   VerificationPreflightError,
@@ -85,6 +86,48 @@ test("required monorepo verification preflight selects the package cwd", async (
   }
 });
 
+test("discovery returns manifest-backed package scripts with safe cwd values", async () => {
+  const testFixture = await fixture();
+  try {
+    await symlink(testFixture.outside, join(testFixture.root, "linked"), "dir");
+    const candidates = await discoverVerificationCommandCandidates(testFixture.root);
+    assert.deepEqual(candidates, [
+      {
+        name: "web-test",
+        packagePath: "web",
+        packageManager: "npm",
+        script: "test",
+        argv: ["npm", "test"],
+      },
+    ]);
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
+test("preflight validates package-manager script syntax and built-in bun test", async () => {
+  const testFixture = await fixture();
+  try {
+    await assert.rejects(
+      preflightRequiredVerificationCommands(
+        testFixture.root,
+        { test: command("web", { argv: ["npm", "run"] }) },
+        { path: testFixture.path },
+      ),
+      /must name a package script/,
+    );
+    await writeFile(join(testFixture.path, "bun"), "#!/bin/sh\nexit 0\n");
+    await chmod(join(testFixture.path, "bun"), 0o755);
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      { test: command(".", { argv: ["bun", "test"] }) },
+      { path: testFixture.path },
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
 test("preflight checks executable availability without running the command", async () => {
   const testFixture = await fixture();
   try {
@@ -121,6 +164,10 @@ test("verification cwd rejects missing, control, and symlink-escape directories"
     );
     await assert.rejects(
       resolveVerificationCommandDirectory(testFixture.root, ".pi"),
+      /runtime control directories/,
+    );
+    await assert.rejects(
+      resolveVerificationCommandDirectory(testFixture.root, ".forge"),
       /runtime control directories/,
     );
     await assert.rejects(

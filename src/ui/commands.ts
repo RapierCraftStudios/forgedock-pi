@@ -9,7 +9,11 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-import { parseForgePolicy, type ForgePolicy } from "../core/policy.ts";
+import { parseForgePolicy, type ForgePolicy, type VerificationCommandPolicy } from "../core/policy.ts";
+import {
+  discoverVerificationCommandCandidates,
+  type VerificationCommandCandidate,
+} from "../adapters/verification-preflight.ts";
 import type { ForgeOrchestrationController } from "../workflows/orchestrate.ts";
 import type { ForgeWorkOnController } from "../workflows/work-on.ts";
 import {
@@ -218,8 +222,9 @@ export function registerForgeCommands(
         configPath,
       });
       await reconcileWorkflowLabels(pi, root, config.repository.name);
+      const localVerification = formatLocalVerification(config.verification.commands);
       ctx.ui.notify(
-        `ForgeDock setup complete.\nPolicy: ${configPath}\nIntegration: ${config.branches.integration[0]}\nCI-required PR targets: ${config.verification.github.requiredBranches.join(", ")}\nAuto-merge: ${config.branches.autoMergeIntegration ? "enabled" : "disabled"}\nParallel lanes: ${config.orchestration.maxConcurrent}\nReview and commit the tracked policy.`,
+        `ForgeDock setup complete.\nPolicy: ${configPath}\nIntegration: ${config.branches.integration[0]}\nCI-required PR targets: ${config.verification.github.requiredBranches.join(", ")}\nLocal verification: ${localVerification}\nAuto-merge: ${config.branches.autoMergeIntegration ? "enabled" : "disabled"}\nParallel lanes: ${config.orchestration.maxConcurrent}\nReview and commit the tracked policy.`,
         "info",
       );
       await orchestrator.resume(ctx);
@@ -419,6 +424,12 @@ async function configureForgePolicy(input: {
   if (!Number.isSafeInteger(maxConcurrent) || maxConcurrent < 1)
     throw new Error("Invalid orchestration concurrency selection.");
 
+  const localCommands = await chooseLocalVerificationCommands(
+    input.ctx,
+    input.root,
+    config.verification.commands,
+  );
+
   config = {
     ...config,
     repository: { provider: "github", name: input.repository },
@@ -442,7 +453,7 @@ async function configureForgePolicy(input: {
         waitTimeoutMs: config.verification.github.waitTimeoutMs,
         pollIntervalMs: config.verification.github.pollIntervalMs,
       },
-      commands: {},
+      commands: localCommands,
     },
     orchestration: {
       ...config.orchestration,
@@ -464,6 +475,75 @@ async function configureForgePolicy(input: {
     "utf8",
   );
   return config;
+}
+
+const CI_ONLY_VERIFICATION_CHOICE =
+  "GitHub CI only (no local verification commands)";
+const KEEP_LOCAL_VERIFICATION_CHOICE =
+  "Keep current local verification commands";
+
+export async function chooseLocalVerificationCommands(
+  ctx: Pick<ExtensionCommandContext, "ui">,
+  root: string,
+  current: Readonly<Record<string, VerificationCommandPolicy>>,
+): Promise<Record<string, VerificationCommandPolicy>> {
+  const candidates = await discoverVerificationCommandCandidates(root);
+  const candidateChoices = candidates.map((candidate) =>
+    formatVerificationCandidateChoice(candidate),
+  );
+  const choices = [
+    ...(Object.keys(current).length > 0 ? [KEEP_LOCAL_VERIFICATION_CHOICE] : []),
+    CI_ONLY_VERIFICATION_CHOICE,
+    ...candidateChoices,
+  ];
+  const choice = await requiredSelection(
+    ctx,
+    "Which local verification policy should ForgeDock track?",
+    choices,
+  );
+  if (choice === CI_ONLY_VERIFICATION_CHOICE)
+    return {};
+  if (choice === KEEP_LOCAL_VERIFICATION_CHOICE)
+    return cloneVerificationCommands(current);
+  const candidate = candidates.find(
+    (entry) => formatVerificationCandidateChoice(entry) === choice,
+  );
+  if (!candidate)
+    throw new Error("Invalid local verification selection.");
+  return {
+    [candidate.name]: {
+      argv: [...candidate.argv],
+      cwd: candidate.packagePath,
+      required: true,
+      timeoutMs: 600_000,
+    },
+  };
+}
+
+function formatVerificationCandidateChoice(
+  candidate: VerificationCommandCandidate,
+): string {
+  return `Use ${candidate.packageManager} ${candidate.script} in ${candidate.packagePath}`;
+}
+
+function cloneVerificationCommands(
+  commands: Readonly<Record<string, VerificationCommandPolicy>>,
+): Record<string, VerificationCommandPolicy> {
+  return Object.fromEntries(
+    Object.entries(commands).map(([name, command]) => [
+      name,
+      { ...command, argv: [...command.argv] },
+    ]),
+  );
+}
+
+function formatLocalVerification(
+  commands: Readonly<Record<string, VerificationCommandPolicy>>,
+): string {
+  const names = Object.keys(commands);
+  return names.length === 0
+    ? "GitHub CI only (no local commands)"
+    : names.map((name) => `${name} (${commands[name]?.cwd ?? "."})`).join(", ");
 }
 
 async function chooseIntegrationBranch(input: {
@@ -693,7 +773,7 @@ function parsePolicyText(text: string, path: string): ForgePolicy {
 }
 
 async function requiredSelection(
-  ctx: ExtensionCommandContext,
+  ctx: Pick<ExtensionCommandContext, "ui">,
   title: string,
   options: string[],
 ): Promise<string> {

@@ -87,7 +87,7 @@ From a trusted GitHub repository:
 /forge:init
 ```
 
-This creates `.forge/config.json` and reconciles canonical workflow labels. Review and commit that policy before running work.
+This creates `.forge/config.json` and reconciles canonical workflow labels. During setup, ForgeDock reads package manifests (without running scripts) and lets you select a package-backed local command or explicitly choose GitHub-CI-only verification. Existing local commands are preserved only when you choose to keep them. Review and commit that policy before running work.
 
 For an initial production pilot, set:
 
@@ -118,7 +118,7 @@ For monorepo-local checks, bind each tracked command to the package that owns it
 }
 ```
 
-`cwd` is optional and defaults to the repository root. It must be a safe repository-relative directory. ForgeDock statically preflights required executables and package scripts against the frozen integration worktree before launching a writer; absolute paths, traversal, missing scripts, and symlink escapes fail closed with the exact policy path to fix. Use `commands: {}` for CI-only verification.
+`cwd` is optional and defaults to the repository root. It must be a safe repository-relative directory. ForgeDock statically preflights required executables and package scripts against the frozen integration worktree before launching a writer; absolute paths, traversal, missing scripts, and symlink escapes fail closed with the exact policy path to fix. Use `commands: {}` for explicit CI-only verification. If a command later fails preflight, set `cwd` to the package that defines the script or select CI-only verification in `/forge:init`; repository code is never executed during this check.
 
 Then run:
 
