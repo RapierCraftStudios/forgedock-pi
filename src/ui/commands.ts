@@ -424,10 +424,15 @@ async function configureForgePolicy(input: {
   if (!Number.isSafeInteger(maxConcurrent) || maxConcurrent < 1)
     throw new Error("Invalid orchestration concurrency selection.");
 
+  const trackedManifestPaths = await resolveTrackedPackageManifestPaths(
+    input.pi,
+    input.root,
+  );
   const localCommands = await chooseLocalVerificationCommands(
     input.ctx,
     input.root,
     config.verification.commands,
+    { trackedManifestPaths },
   );
 
   config = {
@@ -477,6 +482,27 @@ async function configureForgePolicy(input: {
   return config;
 }
 
+async function resolveTrackedPackageManifestPaths(
+  pi: ExtensionAPI,
+  root: string,
+): Promise<Set<string>> {
+  const result = await pi.exec(
+    "git",
+    ["ls-files", "-z", "--", "package.json", "**/package.json"],
+    { cwd: root, timeout: 30_000 },
+  );
+  if (result.code !== 0)
+    throw new Error(
+      `Unable to inspect tracked package manifests: ${result.stderr || result.stdout}`,
+    );
+  return new Set(
+    result.stdout
+      .split("\0")
+      .filter(Boolean)
+      .map((path) => path.replaceAll("\\", "/")),
+  );
+}
+
 const CI_ONLY_VERIFICATION_CHOICE =
   "GitHub CI only (no local verification commands)";
 const KEEP_LOCAL_VERIFICATION_CHOICE =
@@ -486,10 +512,13 @@ export async function chooseLocalVerificationCommands(
   ctx: Pick<ExtensionCommandContext, "ui">,
   root: string,
   current: Readonly<Record<string, VerificationCommandPolicy>>,
+  options: { trackedManifestPaths?: ReadonlySet<string> } = {},
 ): Promise<Record<string, VerificationCommandPolicy>> {
-  const candidates = await discoverVerificationCommandCandidates(root);
+  const candidates = await discoverVerificationCommandCandidates(root, {
+    trackedManifestPaths: options.trackedManifestPaths,
+  });
   const candidateChoices = candidates.map((candidate) =>
-    formatVerificationCandidateChoice(candidate),
+    formatVerificationCandidateChoice(candidate, candidates),
   );
   const choices = [
     ...(Object.keys(current).length > 0 ? [KEEP_LOCAL_VERIFICATION_CHOICE] : []),
@@ -506,7 +535,7 @@ export async function chooseLocalVerificationCommands(
   if (choice === KEEP_LOCAL_VERIFICATION_CHOICE)
     return cloneVerificationCommands(current);
   const candidate = candidates.find(
-    (entry) => formatVerificationCandidateChoice(entry) === choice,
+    (entry) => formatVerificationCandidateChoice(entry, candidates) === choice,
   );
   if (!candidate)
     throw new Error("Invalid local verification selection.");
@@ -522,8 +551,24 @@ export async function chooseLocalVerificationCommands(
 
 function formatVerificationCandidateChoice(
   candidate: VerificationCommandCandidate,
+  candidates: readonly VerificationCommandCandidate[],
 ): string {
-  return `Use ${candidate.packageManager} ${candidate.script} in ${candidate.packagePath}`;
+  const base = formatVerificationCandidateBase(candidate);
+  const duplicate = candidates.some(
+    (entry) =>
+      entry !== candidate && formatVerificationCandidateBase(entry) === base,
+  );
+  return duplicate ? `${base} [${candidate.name}]` : base;
+}
+
+function formatVerificationCandidateBase(
+  candidate: VerificationCommandCandidate,
+): string {
+  return `Use ${candidate.packageManager} ${sanitizeSelectionText(candidate.script)} in ${sanitizeSelectionText(candidate.packagePath)}`;
+}
+
+function sanitizeSelectionText(value: string): string {
+  return value.replace(/[\u0000-\u001f\u007f]/g, "?");
 }
 
 function cloneVerificationCommands(

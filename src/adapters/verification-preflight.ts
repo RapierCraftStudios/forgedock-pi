@@ -13,6 +13,7 @@ import {
   join,
   relative,
   resolve,
+  sep,
 } from "node:path";
 
 import {
@@ -36,6 +37,13 @@ export interface VerificationCommandCandidate {
   packageManager: "npm" | "pnpm" | "yarn" | "bun";
   script: string;
   argv: readonly string[];
+}
+
+interface DiscoveredPackageManifest {
+  directory: string;
+  packagePath: string;
+  packageName?: string;
+  scripts: Record<string, string>;
 }
 
 const MAX_DISCOVERED_MANIFESTS = 256;
@@ -68,13 +76,10 @@ const PACKAGE_MANAGER_LOCKFILES: ReadonlyArray<{
  */
 export async function discoverVerificationCommandCandidates(
   repositoryRoot: string,
+  options: { trackedManifestPaths?: ReadonlySet<string> } = {},
 ): Promise<VerificationCommandCandidate[]> {
   const canonicalRoot = await realpath(repositoryRoot);
-  const manifests: Array<{
-    directory: string;
-    packagePath: string;
-    scripts: Record<string, string>;
-  }> = [];
+  const manifests: DiscoveredPackageManifest[] = [];
   await collectPackageManifests(
     canonicalRoot,
     canonicalRoot,
@@ -82,6 +87,7 @@ export async function discoverVerificationCommandCandidates(
     0,
     { entries: 0 },
     manifests,
+    options.trackedManifestPaths,
   );
   const candidates: VerificationCommandCandidate[] = [];
   const usedNames = new Set<string>();
@@ -118,11 +124,8 @@ async function collectPackageManifests(
   packagePath: string,
   depth: number,
   budget: { entries: number },
-  manifests: Array<{
-    directory: string;
-    packagePath: string;
-    scripts: Record<string, string>;
-  }>,
+  manifests: DiscoveredPackageManifest[],
+  trackedManifestPaths?: ReadonlySet<string>,
 ): Promise<void> {
   if (depth > MAX_DISCOVERY_DEPTH || manifests.length >= MAX_DISCOVERED_MANIFESTS)
     return;
@@ -146,9 +149,17 @@ async function collectPackageManifests(
     if (entry.isSymbolicLink()) continue;
     const entryPath = join(directory, entry.name);
     if (entry.isFile() && entry.name === "package.json") {
-      const manifest = await readPackageScripts(canonicalRoot, entryPath);
+      const relativeManifestPath = toRepositoryPath(
+        relative(canonicalRoot, entryPath),
+      );
+      if (
+        trackedManifestPaths &&
+        !trackedManifestPaths.has(relativeManifestPath)
+      )
+        continue;
+      const manifest = await readPackageManifest(canonicalRoot, entryPath);
       if (manifest) {
-        manifests.push({ directory, packagePath, scripts: manifest });
+        manifests.push({ directory, packagePath, ...manifest });
         if (manifests.length >= MAX_DISCOVERED_MANIFESTS) return;
       }
       continue;
@@ -167,15 +178,18 @@ async function collectPackageManifests(
       depth + 1,
       budget,
       manifests,
+      trackedManifestPaths,
     );
     if (manifests.length >= MAX_DISCOVERED_MANIFESTS) return;
   }
 }
 
-async function readPackageScripts(
+async function readPackageManifest(
   canonicalRoot: string,
   manifestPath: string,
-): Promise<Record<string, string> | undefined> {
+): Promise<
+  Omit<DiscoveredPackageManifest, "directory" | "packagePath"> | undefined
+> {
   let canonicalManifest: string;
   try {
     canonicalManifest = await realpath(manifestPath);
@@ -197,20 +211,38 @@ async function readPackageScripts(
   }
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
-  const scripts = (value as { scripts?: unknown }).scripts;
-  if (!scripts || typeof scripts !== "object" || Array.isArray(scripts))
-    return {};
+  const manifest = value as { name?: unknown; scripts?: unknown };
+  const scriptsValue = manifest.scripts;
+  const scripts =
+    !scriptsValue ||
+    typeof scriptsValue !== "object" ||
+    Array.isArray(scriptsValue)
+      ? {}
+      : scriptsValue;
   const scriptNames = Object.keys(scripts);
   if (scriptNames.length > MAX_SCRIPTS_PER_MANIFEST) return undefined;
-  return Object.fromEntries(
-    scriptNames.map((name) => [name, (scripts as Record<string, unknown>)[name]]).filter(
-      (entry): entry is [string, string] =>
-        typeof entry[0] === "string" &&
-        entry[0].trim().length > 0 &&
-        typeof entry[1] === "string" &&
-        entry[1].trim().length > 0,
-    ),
+  const safeScripts = Object.fromEntries(
+    scriptNames
+      .map((name) => [name, (scripts as Record<string, unknown>)[name]])
+      .filter(
+        (entry): entry is [string, string] =>
+          typeof entry[0] === "string" &&
+          isSafeManifestText(entry[0]) &&
+          typeof entry[1] === "string" &&
+          entry[1].trim().length > 0 &&
+          isSafeManifestText(entry[1]),
+      ),
   );
+  const packageName =
+    typeof manifest.name === "string" &&
+    manifest.name.trim().length > 0 &&
+    isSafeManifestText(manifest.name)
+      ? manifest.name
+      : undefined;
+  return {
+    scripts: safeScripts,
+    ...(packageName === undefined ? {} : { packageName }),
+  };
 }
 
 async function packageManagerForDirectory(
@@ -255,7 +287,8 @@ function candidateName(packagePath: string, script: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  return (normalized || "verification").slice(0, 64);
+  const safe = normalized || "verification";
+  return (/^[a-z]/.test(safe) ? safe : `verification-${safe}`).slice(0, 64);
 }
 
 function uniqueCandidateName(name: string, usedNames: Set<string>): string {
@@ -288,6 +321,11 @@ export async function preflightRequiredVerificationCommands(
       command.cwd,
       `${basePath}.cwd`,
     );
+    if (command.argv.some((argument) => argument.includes("\0")))
+      throw new VerificationPreflightError(
+        `${basePath}.argv`,
+        "must not contain NUL bytes",
+      );
     const program = command.argv[0];
     if (!program)
       throw new VerificationPreflightError(
@@ -304,7 +342,7 @@ export async function preflightRequiredVerificationCommands(
       command.argv,
       `${basePath}.argv`,
     );
-    const packageCwd =
+    const commandCwd =
       invocation.cwdArgument === undefined
         ? cwd
         : await resolvePackageManagerDirectory(
@@ -313,8 +351,22 @@ export async function preflightRequiredVerificationCommands(
             invocation.cwdArgument,
             `${basePath}.argv`,
           );
+    const packageCwds = invocation.packageSelectors.length
+      ? await resolvePackageSelectorDirectories(
+          canonicalRoot,
+          commandCwd,
+          invocation.packageSelectors,
+          `${basePath}.argv`,
+        )
+      : [commandCwd];
     if (invocation.script)
-      await assertPackageScript(canonicalRoot, packageCwd, invocation.script, basePath);
+      for (const packageCwd of packageCwds)
+        await assertPackageScript(
+          canonicalRoot,
+          packageCwd,
+          invocation.script,
+          basePath,
+        );
   }
 }
 
@@ -347,19 +399,31 @@ async function executableAvailable(
         .filter(Boolean)
         .map((entry) => resolve(cwd, entry, program));
   for (const candidate of candidates) {
-    try {
-      await access(candidate, constants.X_OK);
-      if ((await stat(candidate)).isFile()) return true;
-    } catch {
-      // Try the next tracked PATH entry.
+    for (const executable of executableNames(candidate)) {
+      try {
+        await access(executable, constants.X_OK);
+        if ((await stat(executable)).isFile()) return true;
+      } catch {
+        // Try the next tracked PATH entry or Windows shim suffix.
+      }
     }
   }
   return false;
 }
 
+function executableNames(candidate: string): string[] {
+  if (process.platform !== "win32") return [candidate];
+  if (basename(candidate).includes(".")) return [candidate];
+  const suffixes = (process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD")
+    .split(";")
+    .filter(Boolean);
+  return [candidate, ...suffixes.map((suffix) => `${candidate}${suffix}`)];
+}
+
 interface PackageScriptInvocation {
   script?: string;
   cwdArgument?: string;
+  packageSelectors: string[];
 }
 
 function packageScriptInvocation(
@@ -367,17 +431,34 @@ function packageScriptInvocation(
   path: string,
 ): PackageScriptInvocation {
   const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
-  if (!["npm", "pnpm", "yarn", "bun"].includes(manager)) return {};
-  const { commandIndex, cwdArgument } = packageManagerCommand(
+  if (!["npm", "pnpm", "yarn", "bun"].includes(manager))
+    return { packageSelectors: [] };
+  const { commandIndex, cwdArgument, packageSelectors } = packageManagerCommand(
     manager,
     argv,
     path,
   );
   const command = commandIndex === undefined ? undefined : argv[commandIndex];
+  if (manager === "yarn" && command === "workspace") {
+    const selector = argv[commandIndex! + 1];
+    const script = argv[commandIndex! + 2];
+    if (!selector || !script || selector.startsWith("-") || script.startsWith("-"))
+      throw new VerificationPreflightError(
+        path,
+        "yarn workspace must name a package and script; use a direct executable otherwise",
+      );
+    return {
+      script,
+      cwdArgument,
+      packageSelectors: [...packageSelectors, selector],
+    };
+  }
   // `bun test` is Bun's built-in test runner, unlike npm/pnpm/yarn test,
   // which dispatch a package.json script. `bun run test` remains script-bound.
-  if (manager === "bun" && command === "test") return { cwdArgument };
-  if (command === "test") return { script: "test", cwdArgument };
+  if (manager === "bun" && command === "test")
+    return { cwdArgument, packageSelectors };
+  if (command === "test")
+    return { script: "test", cwdArgument, packageSelectors };
   if (command === "run" || command === "run-script") {
     const script = argv
       .slice(commandIndex! + 1)
@@ -387,52 +468,68 @@ function packageScriptInvocation(
         path,
         `${manager} ${command} must name a package script; configure a script name or use a direct executable`,
       );
-    return { script, cwdArgument };
+    return { script, cwdArgument, packageSelectors };
   }
-  return { cwdArgument };
+  return { cwdArgument, packageSelectors };
 }
 
 function packageManagerCommand(
   manager: string,
   argv: readonly string[],
   path: string,
-): { commandIndex?: number; cwdArgument?: string } {
+): {
+  commandIndex?: number;
+  cwdArgument?: string;
+  packageSelectors: string[];
+} {
   const optionsWithValues =
     manager === "npm"
       ? new Set(["--prefix", "--userconfig", "--workspace", "-w"])
       : manager === "pnpm"
         ? new Set(["--dir", "--filter", "-C"])
         : new Set(["--cwd"]);
+  const selectorOptions =
+    manager === "npm"
+      ? new Set(["--workspace", "-w"])
+      : manager === "pnpm"
+        ? new Set(["--filter"])
+        : new Set<string>();
   const directoryOptions =
     manager === "npm"
       ? new Set(["--prefix"])
       : manager === "pnpm"
         ? new Set(["--dir", "-C"])
         : new Set(["--cwd"]);
+  let commandIndex: number | undefined;
   let cwdArgument: string | undefined;
+  const packageSelectors: string[] = [];
   for (let index = 1; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (argument === "--") return { cwdArgument };
-    if (!argument?.startsWith("-")) return { commandIndex: index, cwdArgument };
+    if (argument === "--") return { cwdArgument, packageSelectors };
+    if (!argument?.startsWith("-")) {
+      if (commandIndex === undefined) commandIndex = index;
+      continue;
+    }
     const option = argument.split("=", 1)[0] ?? argument;
     const inlineValue =
       argument.length > option.length && argument[option.length] === "="
         ? argument.slice(option.length + 1)
         : undefined;
-    if (directoryOptions.has(option)) {
+    if (directoryOptions.has(option) || selectorOptions.has(option)) {
       const value = inlineValue ?? argv[index + 1];
       if (!value || value.startsWith("-"))
         throw new VerificationPreflightError(
           path,
-          `${manager} ${option} must name a package directory`,
+          `${manager} ${option} must name a package selector or directory`,
         );
-      cwdArgument = value;
+      if (directoryOptions.has(option)) cwdArgument = value;
+      else packageSelectors.push(value);
       if (inlineValue === undefined) index += 1;
       continue;
     }
     if (optionsWithValues.has(option) && inlineValue === undefined) index += 1;
   }
-  return { cwdArgument };
+  return { commandIndex, cwdArgument, packageSelectors };
 }
 
 async function resolvePackageManagerDirectory(
@@ -455,6 +552,78 @@ async function resolvePackageManagerDirectory(
     configuredPath,
     path,
   );
+}
+
+async function resolvePackageSelectorDirectories(
+  repositoryRoot: string,
+  commandCwd: string,
+  selectors: readonly string[],
+  path: string,
+): Promise<string[]> {
+  const manifests: DiscoveredPackageManifest[] = [];
+  await collectPackageManifests(
+    repositoryRoot,
+    repositoryRoot,
+    ".",
+    0,
+    { entries: 0 },
+    manifests,
+  );
+  const directories: string[] = [];
+  for (const selector of selectors) {
+    if (!selector || selector.includes("\0") || selector.includes("*"))
+      throw new VerificationPreflightError(
+        path,
+        `package selector '${selector}' must be an exact package path or name; use cwd for a workspace glob`,
+      );
+    if (selector.includes("..."))
+      throw new VerificationPreflightError(
+        path,
+        `package selector '${selector}' is a dependency graph selector; use cwd for an exact package`,
+      );
+    const lexical = isAbsolute(selector)
+      ? resolve(selector)
+      : resolve(commandCwd, selector);
+    if (pathWithin(repositoryRoot, lexical)) {
+      try {
+        const canonical = await resolveExistingVerificationDirectory(
+          repositoryRoot,
+          lexical,
+          selector,
+          path,
+        );
+        directories.push(canonical);
+        continue;
+      } catch (error) {
+        if (
+          error instanceof VerificationPreflightError &&
+          !/does not exist/.test(error.message)
+        )
+          throw error;
+      }
+    } else if (isAbsolute(selector)) {
+      throw new VerificationPreflightError(path, "escapes the repository");
+    }
+    const matches = manifests.filter(
+      (manifest) =>
+        manifest.packagePath === selector || manifest.packageName === selector,
+    );
+    if (matches.length !== 1) {
+      throw new VerificationPreflightError(
+        path,
+        `package selector '${selector}' does not identify exactly one package; set cwd to the package directory`,
+      );
+    }
+    directories.push(
+      await resolveExistingVerificationDirectory(
+        repositoryRoot,
+        matches[0]!.directory,
+        matches[0]!.packagePath,
+        path,
+      ),
+    );
+  }
+  return directories;
 }
 
 async function resolveExistingVerificationDirectory(
@@ -519,29 +688,27 @@ async function assertPackageScript(
       `${basePath}.cwd`,
       "package.json resolves outside the repository",
     );
-  let manifest: unknown;
-  try {
-    manifest = JSON.parse(await readFile(canonicalManifest, "utf8"));
-  } catch {
+  const manifest = await readPackageManifest(repositoryRoot, canonicalManifest);
+  if (!manifest)
     throw new VerificationPreflightError(
       `${basePath}.cwd`,
-      "selected package.json is not valid JSON",
+      "selected package.json is missing, too large, or not valid JSON",
     );
-  }
-  const scripts =
-    manifest && typeof manifest === "object" && !Array.isArray(manifest)
-      ? (manifest as { scripts?: unknown }).scripts
-      : undefined;
-  const value =
-    scripts && typeof scripts === "object" && !Array.isArray(scripts)
-      ? (scripts as Record<string, unknown>)[script]
-      : undefined;
+  const value = manifest.scripts[script];
   if (typeof value !== "string" || !value.trim()) {
     throw new VerificationPreflightError(
       `${basePath}.argv`,
       `package.json in '${relative(repositoryRoot, cwd) || "."}' has no '${script}' script; set cwd to the package that defines it or use CI-only verification`,
     );
   }
+}
+
+function isSafeManifestText(value: string): boolean {
+  return !/[\u0000-\u001f\u007f]/.test(value);
+}
+
+function toRepositoryPath(value: string): string {
+  return value.split(sep).join("/") || ".";
 }
 
 function pathWithin(root: string, target: string): boolean {

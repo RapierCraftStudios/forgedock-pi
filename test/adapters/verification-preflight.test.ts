@@ -105,6 +105,21 @@ test("discovery returns manifest-backed package scripts with safe cwd values", a
   }
 });
 
+test("discovery keeps generated names valid for numeric package paths", async () => {
+  const testFixture = await fixture();
+  try {
+    await mkdir(join(testFixture.root, "1"));
+    await writeFile(
+      join(testFixture.root, "1", "package.json"),
+      JSON.stringify({ scripts: { test: "vitest run" } }),
+    );
+    const candidates = await discoverVerificationCommandCandidates(testFixture.root);
+    assert.equal(candidates[0]?.name, "verification-1-test");
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
 test("discovery uses bun run for a manifest test script", async () => {
   const testFixture = await fixture();
   try {
@@ -133,9 +148,34 @@ test("preflight validates package-manager script syntax, selectors, and built-in
       ),
       /must name a package script/,
     );
+    await assert.rejects(
+      preflightRequiredVerificationCommands(
+        testFixture.root,
+        { test: command("web", { argv: ["npm", "run", "test\0"] }) },
+        { path: testFixture.path },
+      ),
+      /must not contain NUL bytes/,
+    );
     await preflightRequiredVerificationCommands(
       testFixture.root,
       { test: command(".", { argv: ["npm", "--prefix", "web", "test"] }) },
+      { path: testFixture.path },
+    );
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      { test: command(".", { argv: ["npm", "--workspace", "web", "test"] }) },
+      { path: testFixture.path },
+    );
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      { test: command(".", { argv: ["npm", "test", "--workspace=web"] }) },
+      { path: testFixture.path },
+    );
+    await writeFile(join(testFixture.path, "pnpm"), "#!/bin/sh\nexit 0\n");
+    await chmod(join(testFixture.path, "pnpm"), 0o755);
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      { test: command(".", { argv: ["pnpm", "--filter", "web", "test"] }) },
       { path: testFixture.path },
     );
     await writeFile(join(testFixture.path, "bun"), "#!/bin/sh\nexit 0\n");
