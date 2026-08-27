@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 32,
-  "lastEventHash": "sha256:c9846b030659cdd7e291d8bc674acfedc4fb83d2215f51b07eb9cd48a6ab86c2",
+  "sequence": 33,
+  "lastEventHash": "sha256:561fc8b716aed4079695af650a5cc829f660a8a4f2b465fcc3352f67ab71e7f9",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -87,15 +87,20 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Assigned diff changes only test/adapters/verification-preflight.test.ts.",
+            "The pnpm executable shim ensures the exact regression reaches package-manager option validation.",
+            "Production source is unchanged."
+          ],
           "logicalNodeId": "implement-1",
           "startedAt": "2026-08-27T13:52:01.715Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/fe0ab98a-42d2-4bab-b97f-e38cec6dc7e2",
           "branch": "forge/issue-196-fe0ab98a",
-          "baseSha": "0b7fcd2c596e05d7a98e57a4464d39aae987f71d"
+          "baseSha": "0b7fcd2c596e05d7a98e57a4464d39aae987f71d",
+          "finishedAt": "2026-08-27T13:52:59.657Z"
         }
       ]
     }
@@ -231,7 +236,8 @@
     "effect:github-label:RapierCraftStudios/forgedock-pi:196:3c7f4692-c7fc-48b3-85fc-47e5ab3f96c5": "c0761be3-928f-4179-866b-342ec916c354",
     "phase:implement:1:queue": "390556a0-2266-4657-9525-1bbf48118d1a",
     "phase:implement:1:start": "4db51d4f-9334-4055-93a8-57847b54b9b6",
-    "effect:github-label:RapierCraftStudios/forgedock-pi:196:4db51d4f-9334-4055-93a8-57847b54b9b6": "8c1f979d-360f-4f5c-bae2-77b41a34820f"
+    "effect:github-label:RapierCraftStudios/forgedock-pi:196:4db51d4f-9334-4055-93a8-57847b54b9b6": "8c1f979d-360f-4f5c-bae2-77b41a34820f",
+    "phase:implement:1:complete": "e3e1b28e-ed1a-4b9c-901b-7e074e12c183"
   },
   "eventIds": {
     "f41dde77-26c3-4dac-b144-9698dec3e280": true,
@@ -265,7 +271,8 @@
     "c0761be3-928f-4179-866b-342ec916c354": true,
     "390556a0-2266-4657-9525-1bbf48118d1a": true,
     "4db51d4f-9334-4055-93a8-57847b54b9b6": true,
-    "8c1f979d-360f-4f5c-bae2-77b41a34820f": true
+    "8c1f979d-360f-4f5c-bae2-77b41a34820f": true,
+    "e3e1b28e-ed1a-4b9c-901b-7e074e12c183": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
