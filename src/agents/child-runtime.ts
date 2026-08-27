@@ -599,6 +599,8 @@ export function registerForgeRuntime(
         }
         if (nextCursor !== undefined) {
           output += `\n\n[Forge diff chunk ${cursor}-${chunk.end} of ${totalBytes} bytes. Call forge_diff again with mode=patch and cursor=${nextCursor}.]`;
+        } else {
+          output += `\n\n[Forge diff coverage complete: ${totalBytes}/${totalBytes} bytes; sha256=${patchSha256}.]`;
         }
       } else if (cursor !== 0) {
         throw new Error("Diff cursor exceeds the available patch.");
@@ -2146,32 +2148,38 @@ async function postDerivedPhaseArtifacts(
   if (params.action !== "complete") return [];
   const receipts: GitHubProjectionReceipt[] = [];
   if (params.phase === "investigate") {
-    receipts.push(await projector.postArtifactWithReceipt({
-      issueNumber: binding.issueNumber,
-      runId: binding.runId,
-      eventId: event.eventId,
-      artifactKey: "investigation-checkpoint",
-      markdown: `<!-- FORGE:CHECKPOINT -->\n\`\`\`json\n${JSON.stringify({ phase: "INVESTIGATION", status: "COMPLETE", next_phase: "BUILD", timestamp: event.occurredAt })}\n\`\`\``,
-      ...(signal ? { signal } : {}),
-    }));
+    receipts.push(
+      await projector.postArtifactWithReceipt({
+        issueNumber: binding.issueNumber,
+        runId: binding.runId,
+        eventId: event.eventId,
+        artifactKey: "investigation-checkpoint",
+        markdown: `<!-- FORGE:CHECKPOINT -->\n\`\`\`json\n${JSON.stringify({ phase: "INVESTIGATION", status: "COMPLETE", next_phase: "BUILD", timestamp: event.occurredAt })}\n\`\`\``,
+        ...(signal ? { signal } : {}),
+      }),
+    );
   }
   if (params.phase === "verify") {
-    receipts.push(await projector.appendToLatestCommentWithReceipt({
-      issueNumber: binding.issueNumber,
-      marker: "<!-- FORGE:BUILDER -->",
-      append: "<!-- FORGE:BUILDER:COMPLETE -->",
-      skipIfContains: "<!-- FORGE:BUILDER:COMPLETE -->",
-      eventId: event.eventId,
-      ...(signal ? { signal } : {}),
-    }));
-    receipts.push(await projector.postArtifactWithReceipt({
-      issueNumber: binding.issueNumber,
-      runId: binding.runId,
-      eventId: event.eventId,
-      artifactKey: "build-checkpoint",
-      markdown: `<!-- FORGE:CHECKPOINT -->\n${JSON.stringify({ phase: "BUILD", status: "COMPLETE", next_phase: "REVIEW", timestamp: event.occurredAt, commit: params.commitSha ?? null, local_verification: "COMPLETE", github_ci: "PENDING_PARENT_GATE" })}`,
-      ...(signal ? { signal } : {}),
-    }));
+    receipts.push(
+      await projector.appendToLatestCommentWithReceipt({
+        issueNumber: binding.issueNumber,
+        marker: "<!-- FORGE:BUILDER -->",
+        append: "<!-- FORGE:BUILDER:COMPLETE -->",
+        skipIfContains: "<!-- FORGE:BUILDER:COMPLETE -->",
+        eventId: event.eventId,
+        ...(signal ? { signal } : {}),
+      }),
+    );
+    receipts.push(
+      await projector.postArtifactWithReceipt({
+        issueNumber: binding.issueNumber,
+        runId: binding.runId,
+        eventId: event.eventId,
+        artifactKey: "build-checkpoint",
+        markdown: `<!-- FORGE:CHECKPOINT -->\n${JSON.stringify({ phase: "BUILD", status: "COMPLETE", next_phase: "REVIEW", timestamp: event.occurredAt, commit: params.commitSha ?? null, local_verification: "COMPLETE", github_ci: "PENDING_PARENT_GATE" })}`,
+        ...(signal ? { signal } : {}),
+      }),
+    );
   }
   return receipts;
 }
@@ -2651,7 +2659,8 @@ export function forgePushArguments(
   args: readonly string[],
 ): string[] {
   const pushIndex = args.indexOf("push");
-  if (pushIndex < 0) throw new TypeError("Git push arguments must include push.");
+  if (pushIndex < 0)
+    throw new TypeError("Git push arguments must include push.");
   return [
     "-c",
     `core.hooksPath=${hooksPath}`,
