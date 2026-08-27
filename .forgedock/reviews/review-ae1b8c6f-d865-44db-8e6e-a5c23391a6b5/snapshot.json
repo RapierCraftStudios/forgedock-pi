@@ -103,8 +103,8 @@
     }
   ],
   "status": "active",
-  "sequence": 9,
-  "lastEventHash": "sha256:6823e2b23d0565b056b93b2243b0451769704b89eef206a235b4f07d3579ac34",
+  "sequence": 10,
+  "lastEventHash": "sha256:403cad275865d719863fb71c332a307db8f0c30bc056ba66454d347744065aa7",
   "idempotencyKeys": {
     "review:create": "ee876846-b77d-4962-bffe-3e4330751bbc",
     "panel:1:start": "8d1f7751-c269-40b9-ab0a-feb1f9cf5441",
@@ -114,7 +114,8 @@
     "check:additional:0:f9f1e19f9e55cfa8": "227f728b-8c6a-42bc-9017-060bb30abdd8",
     "check:github:0:ff03855406f48f83": "33c0f5d2-96c5-4787-996f-ecc57143e834",
     "check:github:1:2f175a86d52843ab": "7bbf61b5-8d79-4450-b75c-8c10f934a796",
-    "panel:1:complete": "be67c078-501e-4e3f-87be-599ed219ef78"
+    "panel:1:complete": "be67c078-501e-4e3f-87be-599ed219ef78",
+    "review:verdict": "a625336a-e4e9-48f9-8ca7-cd6ddc986f7c"
   },
   "eventIds": {
     "ee876846-b77d-4962-bffe-3e4330751bbc": true,
@@ -125,10 +126,11 @@
     "227f728b-8c6a-42bc-9017-060bb30abdd8": true,
     "33c0f5d2-96c5-4787-996f-ecc57143e834": true,
     "7bbf61b5-8d79-4450-b75c-8c10f934a796": true,
-    "be67c078-501e-4e3f-87be-599ed219ef78": true
+    "be67c078-501e-4e3f-87be-599ed219ef78": true,
+    "a625336a-e4e9-48f9-8ca7-cd6ddc986f7c": true
   },
   "createdAt": "2026-08-27T04:55:52.189Z",
-  "updatedAt": "2026-08-27T05:27:06.524Z",
+  "updatedAt": "2026-08-27T05:27:11.948Z",
   "panel": {
     "round": 1,
     "status": "completed",
@@ -142,5 +144,20 @@
     ],
     "startedAt": "2026-08-27T04:56:00.772Z",
     "completedAt": "2026-08-27T05:27:06.524Z"
+  },
+  "verdict": {
+    "decision": "blocked",
+    "headSha": "a618dbaf461e6428180733a2a3c02a10c3c4e7b3",
+    "baseSha": "74e07982ef2312987c024715d41a631afdb4fdcc",
+    "reasons": [
+      "The pull request has merge conflicts.",
+      "Required check reviewer:forge-review-correctness returned an unknown result."
+    ],
+    "blockingFindingIds": [],
+    "followUpFindingIds": [
+      "correctness-1",
+      "correctness-2",
+      "security-001"
+    ]
   }
 }
