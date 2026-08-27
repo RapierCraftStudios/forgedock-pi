@@ -112,7 +112,7 @@ test("a falsely failed lane can rebind to its still-active child", () => {
   assert.equal(state.lanes[0]?.reason, undefined);
 });
 
-test("terminal failed lanes require child cleanup before lease release", () => {
+test("terminal failed lanes require child cleanup before completion", () => {
   let state = initialized();
   assert.equal(childCleanupReason(state), undefined);
   state = applyOrchestrationEvent(

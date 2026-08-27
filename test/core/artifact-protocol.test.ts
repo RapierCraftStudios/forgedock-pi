@@ -11,6 +11,7 @@ import {
   POST_MERGE_PR_MARKERS,
   PRE_MERGE_ISSUE_MARKERS,
   PRE_MERGE_PR_MARKERS,
+  workflowLabelForPhaseBoundary,
 } from "../../src/core/artifact-protocol.ts";
 
 function comments(markers: readonly string[]): string[] {
@@ -135,5 +136,46 @@ test("workflow labels are exact stage projections", () => {
   assert.throws(
     () => assertWorkflowLabel("workflow:investigating", "review"),
     /workflow:in-review/,
+  );
+});
+
+test("canonical phase boundaries cover the complete workflow label lifecycle", () => {
+  const lifecycle = [
+    ["resolve", "started", "workflow:investigating"],
+    ["resolve", "completed", "workflow:investigating"],
+    ["investigate", "started", "workflow:investigating"],
+    ["investigate", "completed", "workflow:ready-to-build"],
+    ["plan", "started", "workflow:building"],
+    ["prepare-worktree", "completed", "workflow:building"],
+    ["implement", "completed", "workflow:building"],
+    ["verify", "completed", "workflow:building"],
+    ["prepare-pr", "started", "workflow:in-review"],
+    ["review", "completed", "workflow:in-review"],
+    ["decision", "completed", "workflow:awaiting-merge"],
+    ["merge", "started", "workflow:awaiting-merge"],
+    ["merge", "completed", "workflow:merged"],
+  ] as const;
+  for (const [phase, transition, expected] of lifecycle)
+    assert.equal(
+      workflowLabelForPhaseBoundary(
+        phase,
+        transition,
+        phase === "decision"
+          ? "awaiting-merge"
+          : phase === "merge"
+            ? transition === "completed"
+              ? "merged"
+              : undefined
+            : undefined,
+      ),
+      expected,
+    );
+  assert.equal(
+    workflowLabelForPhaseBoundary("investigate", "completed", "invalid"),
+    "workflow:invalid",
+  );
+  assert.equal(
+    workflowLabelForPhaseBoundary("investigate", "completed", "decomposed"),
+    "workflow:decomposed",
   );
 });

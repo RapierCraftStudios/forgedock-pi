@@ -18,7 +18,9 @@ import {
 } from "../../src/adapters/verification-preflight.ts";
 import type { VerificationCommandPolicy } from "../../src/core/policy.ts";
 
-async function fixture(): Promise<{
+async function fixture(
+  rootManifest: unknown = { dependencies: {} },
+): Promise<{
   root: string;
   outside: string;
   path: string;
@@ -29,7 +31,7 @@ async function fixture(): Promise<{
   const bin = join(root, "bin");
   await mkdir(join(root, "web"), { recursive: true });
   await mkdir(bin);
-  await writeFile(join(root, "package.json"), JSON.stringify({ dependencies: {} }));
+  await writeFile(join(root, "package.json"), JSON.stringify(rootManifest));
   await writeFile(
     join(root, "web", "package.json"),
     JSON.stringify({ scripts: { test: "vitest run" } }),
@@ -80,6 +82,42 @@ test("required monorepo verification preflight selects the package cwd", async (
       { test: command("web") },
       { path: testFixture.path },
     );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
+test("malformed root test metadata cannot be bypassed by package selectors", async () => {
+  const testFixture = await fixture({
+    dependencies: {},
+    scripts: { test: { command: "not-a-script" } },
+  });
+  try {
+    for (const argv of [
+      ["npm", "--prefix", "web", "test"],
+      ["npm", "--workspace", "web", "test"],
+      ["npm", "--workspace=web", "test"],
+      ["npm", "--registry", "https://registry.npmjs.org", "test"],
+      ["npm", "--", "test"],
+      ["npm", "run", "--workspace", "web", "test"],
+      ["npm", "run", "--prefix", "../outside", "check"],
+      ["npm", "run", "--prefix", "web"],
+    ]) {
+      await assert.rejects(
+        preflightRequiredVerificationCommands(
+          testFixture.root,
+          { test: command(".", { argv }) },
+          { path: testFixture.path },
+        ),
+        (error: unknown) =>
+          error instanceof VerificationPreflightError &&
+          error.path === ".forge/config.json verification.commands.test.argv" &&
+          /package-manager (?:options are not supported|'run' must name a script directly)/.test(
+            error.message,
+          ),
+        `expected malformed root metadata to reject ${argv.join(" ")}`,
+      );
+    }
   } finally {
     await testFixture.cleanup();
   }

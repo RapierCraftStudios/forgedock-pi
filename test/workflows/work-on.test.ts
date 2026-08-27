@@ -8,8 +8,8 @@ import {
   directTerminalEvidence,
   finalReviewDecisionMarker,
   findingPriority,
+  isRecoverableWorkOnBlocker,
   isTransientProviderFailure,
-  lineWithinTolerance,
   parentNodeFromId,
   parseAsyncCompletion,
   reconcileLaunchState,
@@ -17,8 +17,8 @@ import {
   reviewInstanceMarker,
   reviewSummaryInstanceMarker,
   reviewSupersessionMarker,
+  rollbackAwaitingMergeLabel,
   shouldBufferLaunchCompletion,
-  similarFindingTitle,
   workflowLabelForNode,
   workflowStageForNodeTransition,
 } from "../../src/workflows/work-on.ts";
@@ -114,6 +114,42 @@ test("provider completion is buffered until its launch receipt is durably bound"
   assert.equal(shouldBufferLaunchCompletion(false, true), false);
 });
 
+test("awaiting-merge rollback restores review without forwarding cancellation", async () => {
+  const mergeAttempt = new AbortController();
+  mergeAttempt.abort(new Error("merge request cancelled"));
+  const calls: Array<{
+    issueNumber: number;
+    label: string;
+    signal?: AbortSignal;
+  }> = [];
+  const projector = {
+    async setWorkflowLabel(
+      issueNumber: number,
+      label: string,
+      signal?: AbortSignal,
+    ): Promise<void> {
+      calls.push({ issueNumber, label, signal });
+    },
+  };
+
+  await rollbackAwaitingMergeLabel(projector, 42);
+
+  assert.equal(mergeAttempt.signal.aborted, true);
+  assert.deepEqual(calls, [
+    { issueNumber: 42, label: "workflow:in-review", signal: undefined },
+  ]);
+});
+
+test("awaiting-merge rollback stays best effort when projection fails", async () => {
+  const projector = {
+    async setWorkflowLabel(): Promise<void> {
+      throw new Error("projection unavailable");
+    },
+  };
+
+  await assert.doesNotReject(() => rollbackAwaitingMergeLabel(projector, 42));
+});
+
 test("workflow transitions cover the complete canonical label lifecycle", () => {
   assert.equal(
     workflowStageForNodeTransition("resolve", "started"),
@@ -141,6 +177,10 @@ test("workflow transitions cover the complete canonical label lifecycle", () => 
   assert.equal(
     workflowLabelForNode("decision", "awaiting-merge"),
     "workflow:awaiting-merge",
+  );
+  assert.equal(
+    workflowStageForNodeTransition("merge", "started"),
+    "awaitingMerge",
   );
   assert.equal(
     workflowLabelForNode("decision", "remediation-required"),
@@ -206,15 +246,6 @@ test("review-finding metadata follows legacy severity and dedup rules", () => {
     reviewFindingMarker(6, "SEC-001", "abcdef1"),
     "<!-- FORGE:REVIEW_FINDING source-pr=6 finding=SEC-001 head=abcdef1 -->",
   );
-  assert.equal(lineWithinTolerance("**Line**: 105", 100), true);
-  assert.equal(lineWithinTolerance("**Line**: 106", 100), false);
-  assert.equal(
-    similarFindingTitle(
-      "fix: fail closed on truncated reviewer input",
-      "forge_diff reviewer input truncation does not fail closed",
-    ),
-    true,
-  );
 });
 
 test("review instance markers bind run, domain, round, and full head", () => {
@@ -270,6 +301,31 @@ test("detached workflow continuation failure remains distinguishable for durable
       error:
         "unsupported-continuation: detached workflow child settled, but JavaScript workflow continuation was not persisted.",
     },
+  );
+});
+
+test("work-on recovery retries state branch contention but not real blockers", () => {
+  assert.equal(
+    isRecoverableWorkOnBlocker(
+      "State branch changed after abc123; reload before retrying.",
+    ),
+    true,
+  );
+  assert.equal(
+    isRecoverableWorkOnBlocker(
+      "Investigation checkpoint failed validation: omitted the required canonical Acceptance Spec section.",
+    ),
+    true,
+  );
+  assert.equal(
+    isRecoverableWorkOnBlocker(
+      "Bound branch push failed: Invalid username or token.",
+    ),
+    true,
+  );
+  assert.equal(
+    isRecoverableWorkOnBlocker("Product decision requires operator approval."),
+    false,
   );
 });
 

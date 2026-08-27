@@ -130,6 +130,12 @@ export function parseAuthoritativeReviewFindingIssue(input: {
     /<!-- FORGE:REVIEW_FINDING source-pr=(\d+) finding=([^\s]+) head=([^\s]+) -->/,
   );
   if (!marker) return undefined;
+  let findingId: string;
+  try {
+    findingId = decodeURIComponent(marker[2] as string);
+  } catch {
+    return undefined;
+  }
   const sourceIssue = field(input.body, "Source issue", /#(\d+)/);
   const runId = field(input.body, "Forge run", /`([^`]+)`/);
   const reviewer = field(input.body, "Reviewer", /`([^`]+)`/);
@@ -168,7 +174,7 @@ export function parseAuthoritativeReviewFindingIssue(input: {
     sourcePullNumber: Number(marker[1]),
     sourceIssueNumber: Number(sourceIssue),
     finding: {
-      id: marker[2] as string,
+      id: findingId,
       reviewer,
       runId,
       headSha: marker[3] as string,
@@ -237,6 +243,20 @@ export async function closeAddressedReviewFindingIssues(input: {
     input.priorFindingIssueMap,
   )) {
     if (input.activeFindingIds.has(findingId)) continue;
+    const issue = await input.github.getIssue(issueNumber, input.signal);
+    const authority = parseAuthoritativeReviewFindingIssue({
+      number: issue.number,
+      body: issue.body,
+    });
+    if (
+      !authority ||
+      authority.sourcePullNumber !== input.pullNumber ||
+      authority.finding.id !== findingId ||
+      authority.finding.runId !== input.runId
+    )
+      throw new Error(
+        `Review-finding issue #${issueNumber} is not authorized for cleanup by ${input.runId}.`,
+      );
     const marker = remediationFindingClosedMarker(
       input.runId,
       findingId,
@@ -249,7 +269,6 @@ export async function closeAddressedReviewFindingIssues(input: {
         `${marker}\nFixed by remediation of PR #${input.pullNumber} at commit \`${input.remediationCommitSha}\`.`,
         input.signal,
       );
-    const issue = await input.github.getIssue(issueNumber, input.signal);
     if (issue.state === "open")
       await input.github.closeIssue(issueNumber, input.signal);
   }

@@ -37,6 +37,7 @@ import {
   acceptanceGatePassed,
   assertWorkflowLabel,
   checkCurrentReviewAuditTrail,
+  workflowStageForPhaseBoundary,
   checkPreMergeAuditTrail,
   checkReviewDecisionAuditTrail,
 } from "../core/artifact-protocol.ts";
@@ -59,20 +60,21 @@ import {
   type ForgePolicy,
 } from "../core/policy.ts";
 import type { RepositoryLease } from "../core/lease.ts";
-import {
-  evaluateReviewGate,
-  type FinalReviewDecision,
-  type ReviewFinding,
-  type VerificationResult,
+import type {
+  FinalReviewDecision,
+  VerificationResult,
 } from "../core/review.ts";
 import { RunJournal } from "./journal.ts";
+import { ReviewJournal } from "../adapters/review-journal.ts";
+import {
+  ReviewPrCoordinator,
+  type ReviewPanelRunner,
+} from "./review-pr.ts";
 import { publishReviewFindingIssues } from "./review-findings.ts";
 export {
   findingPriority,
-  lineWithinTolerance,
   publishReviewFindingIssues,
   reviewFindingMarker,
-  similarFindingTitle,
 } from "./review-findings.ts";
 import {
   classifyRemediationFindings,
@@ -164,7 +166,6 @@ export interface StartIssueResult {
 
 export interface StartIssueOptions {
   orchestrationId?: string;
-  leaseEpoch?: number;
 }
 
 export interface ParsedAsyncCompletion {
@@ -1993,10 +1994,58 @@ export class ForgeWorkOnController {
           ? ["missing current joined review summary"]
           : []),
       ];
-      const gate = evaluateReviewGate({ identity: { repository: link.repository, runId: link.forgeRunId, pullRequest: pull.number, headSha: aggregate.review.headSha, baseSha: aggregate.baseSha, rosterVersion: "forgedock.review-roster/v1" }, currentHeadSha: pull.headSha, currentBaseSha: pull.baseSha, requiredReviewers: policy.review.required, completedReviewers: aggregate.review.completedReviewers, findings: aggregate.review.findings as readonly ReviewFinding[], checks, mergeability: pull.mergeability, leaseValid: runLeaseAuthorityMatches(current.state, current.lease, link), baseBranch: pull.baseRef, protectedBranches: policy.branches.protected, autoMergeAuthorized: canAutoMerge(policy, pull.baseRef), malformedResults: currentReviewFailures });
+      const sharedReviewId = `workon-${link.forgeRunId}-r${aggregate.review.rounds}`;
+      const staticPanel: ReviewPanelRunner = {
+        run: async () => aggregate.review.reviewerResults,
+      };
+      const sharedReview = await new ReviewPrCoordinator({
+        github,
+        journal: new ReviewJournal(store),
+        git: this.#git,
+        panel: staticPanel,
+      }).review({
+        reviewId: sharedReviewId,
+        repository: link.repository,
+        pullNumber: pull.number,
+        issueNumber: link.issueNumber,
+        mode: "standard",
+        route: await github.getPullRequestRouteSnapshot(
+          pull.number,
+          ctx.signal,
+        ),
+        roster: {
+          version: "forgedock.review-roster/v1",
+          reviewers: policy.review.required,
+        },
+        execution: {
+          kind: "work-on",
+          worktreePath: link.prepared.worktreePath,
+        },
+        round: aggregate.review.rounds,
+        reviewerTimeoutMs: policy.subagents.reviewerTimeoutMs,
+        githubCheckTimeoutMs: policy.verification.github.waitTimeoutMs,
+        githubCheckPollIntervalMs:
+          policy.verification.github.pollIntervalMs,
+        githubChecksRequired: isGitHubCiRequired(policy, pull.baseRef),
+        additionalChecks: localChecks,
+        malformedResults: currentReviewFailures,
+        mergeability: pull.mergeability,
+        protectedBranches: policy.branches.protected,
+        autoMergeAuthorized: canAutoMerge(policy, pull.baseRef),
+        autoMergeRequested: false,
+        authorityValid: async () => {
+          const authority = await store.readRun(link.forgeRunId, ctx.signal);
+          return Boolean(
+            authority.state &&
+              runLeaseAuthorityMatches(authority.state, authority.lease, link),
+          );
+        },
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      const gate = sharedReview.decision;
       finalReviewDecision = gate;
       const priorFindingIssueMap = { ...link.findingIssueMap };
-      link.findingIssueMap = await publishReviewFindingIssues({ github, pullNumber: pull.number, link, result: aggregate, signal: ctx.signal });
+      link.findingIssueMap = { ...sharedReview.findingIssues };
       if (aggregate.review.rounds > 1) {
         await closeAddressedReviewFindingIssues({
           github,
@@ -2162,14 +2211,9 @@ export class ForgeWorkOnController {
         ReturnType<GitHubWorkflowAdapter["mergePullRequest"]>
       >;
       try {
-        merged = await github.mergePullRequest({ pullNumber: pull.number, expectedHeadSha: pull.headSha, method: "squash", ...(ctx.signal ? { signal: ctx.signal } : {}) });
+        merged = await github.mergePullRequest({ pullNumber: pull.number, expectedHeadSha: pull.headSha, expectedBaseRef: link.prepared.baseBranch, method: "squash", ...(ctx.signal ? { signal: ctx.signal } : {}) });
       } catch (error) {
-        await projector
-          .setWorkflowLabel(
-            link.issueNumber,
-            WORKFLOW_LABEL_BY_STAGE.review,
-          )
-          .catch(() => undefined);
+        await rollbackAwaitingMergeLabel(projector, link.issueNumber);
         throw error;
       }
       headSha = merged.sha;
@@ -2715,8 +2759,13 @@ export class ForgeWorkOnController {
       await this.#reconcileActiveNode(link, ctx, observed.error, activeNode);
   }
 
-  listRuns(): ActiveRunLink[] {
-    return [...this.#links.values()].map((link) => ({
+  listRuns(mode: "all" | "direct" = "all"): ActiveRunLink[] {
+    const unique = new Map<string, ActiveRunLink>();
+    for (const link of this.#links.values()) {
+      if (mode === "direct" && link.orchestrationId) continue;
+      unique.set(link.forgeRunId, link);
+    }
+    return [...unique.values()].map((link) => ({
       ...link,
       prepared: { ...link.prepared },
     }));
@@ -2742,21 +2791,25 @@ export class ForgeWorkOnController {
     if (isLaunchSentinel(link.subagentRunId)) {
       link.status = "needs-human";
       this.#persistLink(link);
-      return {
-        forgeRunId: link.forgeRunId,
-        subagentRunId: link.subagentRunId,
-        state: "paused",
-      };
+      return undefined;
     }
     const payload = await this.#rpc.status(link.subagentRunId);
     const completion = findAsyncCompletionForRun(
       payload,
       link.subagentRunId,
     );
+    const resultText = await readFile(link.resultPath, "utf8").catch(() => "");
+    const durableResult = findForgeWorkOnResult(resultText);
+    const recoverableBlocker =
+      durableResult?.blocker &&
+      isRecoverableWorkOnBlocker(durableResult.blocker)
+        ? durableResult.blocker
+        : undefined;
     if (
-      completion?.state === "failed" &&
-      completion.error &&
-      isTransientProviderFailure(completion.error) &&
+      (((completion?.state === "failed" || completion?.state === "complete") &&
+        (isTransientProviderFailure(completion.error ?? "") ||
+          Boolean(recoverableBlocker))) ||
+        (!completion && Boolean(recoverableBlocker))) &&
       link.providerRetries < 3
     ) {
       const previousRunId = link.subagentRunId;
@@ -2773,16 +2826,12 @@ export class ForgeWorkOnController {
       try {
         receipt = await this.#rpc.resume(
           previousRunId,
-          `Resume the same ForgeDock run from durable checkpoints after terminal transient failure. Do not repeat completed phases. Failure: ${completion.error}`,
+          `Resume the same ForgeDock run from durable checkpoints after a recoverable controller or provider failure. Do not repeat completed phases. Correct the rejected report or reload authoritative state as indicated, retry only that same checkpoint transition, and continue after it succeeds. Failure: ${completion?.error ?? recoverableBlocker}`,
         );
       } catch {
         link.status = "needs-human";
         this.#persistLink(link);
-        return {
-          forgeRunId: link.forgeRunId,
-          subagentRunId: link.subagentRunId,
-          state: "paused",
-        };
+        return undefined;
       }
       this.#links.delete(intent.sentinelRunId);
       link.subagentRunId = receipt.runId;
@@ -2796,13 +2845,11 @@ export class ForgeWorkOnController {
       };
     }
     if (completion?.state === "complete") {
-      const resultText = await readFile(link.resultPath, "utf8").catch(
-        () => "",
-      );
-      const result = findForgeWorkOnResult(resultText);
       if (
-        result?.blocker &&
-        /No comment found for marker.*FORGE:BUILDER/i.test(result.blocker)
+        durableResult?.blocker &&
+        /No comment found for marker.*FORGE:BUILDER/i.test(
+          durableResult.blocker,
+        )
       ) {
         const previousRunId = link.subagentRunId;
         const intent = createNodeLaunchIntent(
@@ -2855,10 +2902,7 @@ export class ForgeWorkOnController {
       completion.error &&
       /unsupported-continuation/i.test(completion.error)
     ) {
-      const resultText = await readFile(link.resultPath, "utf8").catch(
-        () => "",
-      );
-      if (findForgeWorkOnResult(resultText)) recoverableState = "complete";
+      if (durableResult) recoverableState = "complete";
     }
     if (!recoverableState) return undefined;
     link.status = "running";
@@ -2868,6 +2912,35 @@ export class ForgeWorkOnController {
       subagentRunId: link.subagentRunId,
       state: recoverableState,
     };
+  }
+
+  async reconcileOrchestrationIssue(
+    orchestrationId: string,
+    issueNumber: number,
+    ctx: ExtensionContext,
+  ): Promise<WorkOnLifecycleEvent | undefined> {
+    const link = [...this.#links.values()].find(
+      (candidate) =>
+        candidate.orchestrationId === orchestrationId &&
+        candidate.issueNumber === issueNumber,
+    );
+    if (!link || isLaunchSentinel(link.subagentRunId)) return undefined;
+    const payload = await this.#rpc.status(link.subagentRunId).catch(
+      () => undefined,
+    );
+    const completion = findAsyncCompletionForRun(payload, link.subagentRunId);
+    if (completion?.state === "running" || completion?.state === "paused")
+      return undefined;
+    const result = await this.#loadResult(link).catch(() => undefined);
+    if (!result) return undefined;
+    link.status = "finalizing";
+    this.#persistLink(link);
+    await this.#finalize(link, ctx, result);
+    return this.#lifecycleEvent(link, {
+      headSha: result.headSha,
+      baseSha: result.baseSha,
+      ...(result.blocker ? { reason: result.blocker } : {}),
+    });
   }
 
   async reconcileRun(
@@ -2982,11 +3055,20 @@ export class ForgeWorkOnController {
         link.prepared.repositoryRoot,
         ctx.signal,
       );
+      const transport = new FetchGitHubTransport({ token });
       const store = new GitHubStateBranchStore(
-        new FetchGitHubTransport({ token }),
+        transport,
         link.repository,
         link.stateBranch,
       );
+      await new GitHubIssueProjector(transport, link.repository)
+        .clearWorkflowLabel(link.issueNumber, ctx.signal)
+        .catch((error) =>
+          ctx.ui.notify(
+            `ForgeDock issue #${link.issueNumber} cancellation label cleanup will need reconciliation: ${errorMessage(error)}`,
+            "warning",
+          ),
+        );
       const current = await store.readRun(link.forgeRunId, ctx.signal);
       if (!current.state || current.state.status === "completed") continue;
       if (current.state.status === "cancelled") {
@@ -3788,34 +3870,59 @@ export class ForgeWorkOnController {
       ...refreshedAudit.missingReviewerDomains.map(
         (domain) => `missing reviewer artifact ${domain}`,
       ),
+      ...(currentPull.baseRef === link.prepared.baseBranch
+        ? []
+        : [
+            `pull request targets ${currentPull.baseRef}, expected ${link.prepared.baseBranch}`,
+          ]),
     ];
-    const findings = result.review.findings as readonly ReviewFinding[];
-    const gate = evaluateReviewGate({
-      identity: {
-        repository: link.repository,
-        runId: link.forgeRunId,
-        pullRequest: currentPull.number,
-        headSha: result.review.headSha,
-        baseSha: result.baseSha,
-        rosterVersion: "forgedock.review-roster/v1",
-      },
-      currentHeadSha: currentPull.headSha,
-      currentBaseSha: currentPull.baseSha,
-      requiredReviewers: policy.review.required,
-      completedReviewers: result.review.completedReviewers,
-      findings,
-      checks,
-      mergeability: currentPull.mergeability,
-      leaseValid: runLeaseAuthorityMatches(
-        currentRun.state,
-        currentRun.lease,
-        link,
+    const sharedReviewId = `workon-${link.forgeRunId}-r${result.review.rounds}`;
+    const staticPanel: ReviewPanelRunner = {
+      run: async () => result.review.reviewerResults,
+    };
+    const sharedReview = await new ReviewPrCoordinator({
+      github,
+      journal: new ReviewJournal(store),
+      git: this.#git,
+      panel: staticPanel,
+    }).review({
+      reviewId: sharedReviewId,
+      repository: link.repository,
+      pullNumber: currentPull.number,
+      issueNumber: link.issueNumber,
+      mode: "standard",
+      route: await github.getPullRequestRouteSnapshot(
+        currentPull.number,
+        ctx.signal,
       ),
-      baseBranch: currentPull.baseRef,
+      roster: {
+        version: "forgedock.review-roster/v1",
+        reviewers: policy.review.required,
+      },
+      execution: {
+        kind: "work-on",
+        worktreePath: link.prepared.worktreePath,
+      },
+      round: result.review.rounds,
+      reviewerTimeoutMs: policy.subagents.reviewerTimeoutMs,
+      githubCheckTimeoutMs: policy.verification.github.waitTimeoutMs,
+      githubCheckPollIntervalMs: policy.verification.github.pollIntervalMs,
+      githubChecksRequired: githubCiRequired,
+      additionalChecks: localChecks,
+      malformedResults: auditFailures,
+      mergeability: currentPull.mergeability,
       protectedBranches: policy.branches.protected,
       autoMergeAuthorized: canAutoMerge(policy, currentPull.baseRef),
-      malformedResults: auditFailures,
+      autoMergeRequested: false,
+      authorityValid: () =>
+        runLeaseAuthorityMatches(currentRun.state, currentRun.lease, link),
+      ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
+    const gate = sharedReview.decision;
+    link.findingIssueMap = {
+      ...link.findingIssueMap,
+      ...sharedReview.findingIssues,
+    };
     await publishReviewSummary(
       github,
       currentPull.number,
@@ -3866,6 +3973,12 @@ export class ForgeWorkOnController {
       return;
     }
 
+    await this.#projectWorkflowStage(
+      link,
+      "awaitingMerge",
+      ctx,
+      projector,
+    );
     const durableMergeSha = currentRun.state?.phases.merge?.attempts
       .filter((attempt) => attempt.status === "completed")
       .at(-1)?.evidence[0];
@@ -3882,6 +3995,7 @@ export class ForgeWorkOnController {
       : await github.mergePullRequest({
           pullNumber: pull.number,
           expectedHeadSha: result.review.headSha,
+          expectedBaseRef: link.prepared.baseBranch,
           method: "squash",
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
@@ -4114,6 +4228,31 @@ export class ForgeWorkOnController {
     this.#links.set(link.subagentRunId, link);
     for (const runId of Object.keys(link.activeNodes))
       this.#links.set(runId, link);
+  }
+}
+
+/**
+ * Restore the review projection after an awaiting-merge failure.
+ *
+ * This compensating effect deliberately has no AbortSignal parameter. The
+ * merge attempt is cancellation-aware, but its failure can be reported after
+ * that signal is aborted; forwarding it here would prevent the label rollback
+ * and leave the issue projecting an awaiting-merge state for an unmerged PR.
+ * Projection remains best effort, and the caller retains the original merge
+ * error.
+ */
+export async function rollbackAwaitingMergeLabel(
+  projector: Pick<GitHubIssueProjector, "setWorkflowLabel">,
+  issueNumber: number,
+): Promise<void> {
+  try {
+    await projector.setWorkflowLabel(
+      issueNumber,
+      WORKFLOW_LABEL_BY_STAGE.review,
+    );
+  } catch {
+    // A projection outage must not mask the merge failure or change its retry
+    // path. Durable workflow state remains authoritative for reconciliation.
   }
 }
 
@@ -4705,33 +4844,8 @@ export function workflowStageForNodeTransition(
     if (terminalInvestigation === "invalid") return "invalid";
     if (terminalInvestigation === "decomposed") return "decomposed";
   }
-  if (node === "decision" && outcome === "awaiting-merge")
-    return "awaitingMerge";
-  if (node === "decision" && outcome === "remediation-required")
-    return "build";
-  if (node === "merge")
-    return transition === "completed" && outcome === "merged"
-      ? "merged"
-      : "awaitingMerge";
-  if (node === "resolve") return "investigation";
-  if (node === "investigate")
-    return transition === "completed" ? "readyToBuild" : "investigation";
-  if (
-    node === "plan" ||
-    node === "prepare-worktree" ||
-    node === "implement" ||
-    node === "verify"
-  )
-    return "build";
-  if (
-    node === "prepare-pr" ||
-    node === "review-correctness" ||
-    node === "review-security" ||
-    node === "review-join" ||
-    node === "ci" ||
-    node === "decision"
-  )
-    return "review";
+  const phaseStage = workflowStageForPhaseBoundary(node, transition, outcome);
+  if (phaseStage) return phaseStage;
   return undefined;
 }
 
@@ -4960,6 +5074,12 @@ function extractJsonObject(text: string): string {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   return start >= 0 && end > start ? text.slice(start, end + 1) : "";
+}
+
+export function isRecoverableWorkOnBlocker(message: string): boolean {
+  return /State branch changed after|WebSocket|timed? out|timeout|connection (?:lost|reset|error)|\b50[0234]\b|\b429\b|checkpoint failed validation|omitted the required canonical|required canonical .* section|Invalid username or token|Bound branch push failed/i.test(
+    message,
+  );
 }
 
 export function isTransientProviderFailure(message: string): boolean {

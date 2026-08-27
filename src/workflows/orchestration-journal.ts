@@ -1,24 +1,17 @@
 import {
-  GitHubStateBranchStore,
+  type GitHubStateBranchStore,
   StateBranchConflictError,
 } from "../adapters/github-state.ts";
 import {
+  MAX_STATE_CAS_ATTEMPTS,
+  stateCasBackoff,
+} from "../adapters/state-cas.ts";
+import {
   applyOrchestrationEvent,
   createOrchestrationEvent,
-  type OrchestrationEvent,
   type OrchestrationEventType,
   type OrchestrationState,
 } from "../core/orchestration.ts";
-import type { RepositoryLease } from "../core/lease.ts";
-
-const MAX_CAS_ATTEMPTS = 12;
-
-export interface OrchestrationJournalSnapshot {
-  tip: string;
-  events: readonly OrchestrationEvent[];
-  state: OrchestrationState;
-  lease?: RepositoryLease;
-}
 
 export class OrchestrationJournal {
   readonly #store: GitHubStateBranchStore;
@@ -33,13 +26,11 @@ export class OrchestrationJournal {
     issueNumbers: readonly number[];
     integrationBranch: string;
     maxConcurrent: number;
-    sessionId: string;
-    leaseSeconds: number;
     now?: Date;
     signal?: AbortSignal;
-  }): Promise<OrchestrationJournalSnapshot> {
+  }): Promise<OrchestrationState> {
     await this.#store.ensureBranch(input.now ?? new Date(), input.signal);
-    for (let attempt = 1; attempt <= MAX_CAS_ATTEMPTS; attempt += 1) {
+    for (let attempt = 1; attempt <= MAX_STATE_CAS_ATTEMPTS; attempt += 1) {
       const current = await this.#store.readOrchestration(
         input.orchestrationId,
         input.signal,
@@ -66,22 +57,21 @@ export class OrchestrationJournal {
       });
       const state = applyOrchestrationEvent(undefined, event);
       try {
-        const tip = await this.#store.commitOrchestrationState({
+        await this.#store.commitOrchestrationState({
           expectedTip: current.tip,
           events: [event],
           state,
-          leaseUpdate: null,
           message: `Initialize ForgeDock orchestration ${input.orchestrationId}`,
           ...(input.signal ? { signal: input.signal } : {}),
         });
-        return { tip, events: [event], state };
+        return state;
       } catch (error) {
         if (
           !(error instanceof StateBranchConflictError) ||
-          attempt === MAX_CAS_ATTEMPTS
+          attempt === MAX_STATE_CAS_ATTEMPTS
         )
           throw error;
-        await casBackoff(attempt, input.signal);
+        await stateCasBackoff(attempt, input.signal);
       }
     }
     throw new Error(
@@ -96,39 +86,14 @@ export class OrchestrationJournal {
     idempotencyKey: string;
     message: string;
     signal?: AbortSignal;
-  }): Promise<OrchestrationJournalSnapshot> {
-    return this.#mutate(input, false);
-  }
-
-  async heartbeat(input: {
-    orchestrationId: string;
-    sessionId: string;
-    leaseSeconds: number;
-    now?: Date;
-    signal?: AbortSignal;
-  }): Promise<OrchestrationJournalSnapshot> {
-    return this.#mutate(
-      {
-        orchestrationId: input.orchestrationId,
-        type: "lease.heartbeat",
-        payload: { epoch: 0 },
-        idempotencyKey: `lease:heartbeat:${(input.now ?? new Date()).toISOString()}`,
-        message: `Heartbeat ForgeDock orchestration ${input.orchestrationId}`,
-        ...(input.signal ? { signal: input.signal } : {}),
-      },
-      false,
-      {
-        sessionId: input.sessionId,
-        leaseSeconds: input.leaseSeconds,
-        now: input.now ?? new Date(),
-      },
-    );
+  }): Promise<OrchestrationState> {
+    return this.#mutate(input);
   }
 
   async complete(input: {
     orchestrationId: string;
     signal?: AbortSignal;
-  }): Promise<OrchestrationJournalSnapshot> {
+  }): Promise<OrchestrationState> {
     return this.#mutate(
       {
         orchestrationId: input.orchestrationId,
@@ -138,7 +103,6 @@ export class OrchestrationJournal {
         message: `Complete ForgeDock orchestration ${input.orchestrationId}`,
         ...(input.signal ? { signal: input.signal } : {}),
       },
-      true,
     );
   }
 
@@ -146,7 +110,7 @@ export class OrchestrationJournal {
     orchestrationId: string;
     reason: string;
     signal?: AbortSignal;
-  }): Promise<OrchestrationJournalSnapshot> {
+  }): Promise<OrchestrationState> {
     const reason = input.reason.trim();
     if (!reason) throw new Error("Cancellation reason must be non-empty.");
     return this.#mutate(
@@ -158,9 +122,6 @@ export class OrchestrationJournal {
         message: `Cancel ForgeDock orchestration ${input.orchestrationId}`,
         ...(input.signal ? { signal: input.signal } : {}),
       },
-      true,
-      undefined,
-      true,
     );
   }
 
@@ -173,11 +134,8 @@ export class OrchestrationJournal {
       message: string;
       signal?: AbortSignal;
     },
-    _release: boolean,
-    _heartbeat?: { sessionId: string; leaseSeconds: number; now: Date },
-    _allowExpired = false,
-  ): Promise<OrchestrationJournalSnapshot> {
-    for (let attempt = 1; attempt <= MAX_CAS_ATTEMPTS; attempt += 1) {
+  ): Promise<OrchestrationState> {
+    for (let attempt = 1; attempt <= MAX_STATE_CAS_ATTEMPTS; attempt += 1) {
       const current = await this.#store.readOrchestration(
         input.orchestrationId,
         input.signal,
@@ -187,17 +145,7 @@ export class OrchestrationJournal {
           `Orchestration ${input.orchestrationId} is not initialized.`,
         );
       const prior = current.state.idempotencyKeys[input.idempotencyKey];
-      if (prior)
-        return {
-          tip: current.tip,
-          events: current.events,
-          state: current.state,
-          ...(current.lease ? { lease: current.lease } : {}),
-        };
-      const payload =
-        input.type === "lease.heartbeat"
-          ? { ...input.payload, epoch: current.state.leaseEpoch }
-          : input.payload;
+      if (prior) return current.state;
       const event = createOrchestrationEvent({
         orchestrationId: input.orchestrationId,
         repository: current.state.repository,
@@ -205,51 +153,30 @@ export class OrchestrationJournal {
         previousEventHash: current.state.lastEventHash,
         type: input.type,
         idempotencyKey: input.idempotencyKey,
-        payload,
+        payload: input.payload,
       });
       const state = applyOrchestrationEvent(current.state, event);
       const events = [...current.events, event];
       try {
-        const tip = await this.#store.commitOrchestrationState({
+        await this.#store.commitOrchestrationState({
           expectedTip: current.tip,
           events,
           state,
-          leaseUpdate: null,
           message: input.message,
           ...(input.signal ? { signal: input.signal } : {}),
         });
-        return { tip, events, state };
+        return state;
       } catch (error) {
         if (
           !(error instanceof StateBranchConflictError) ||
-          attempt === MAX_CAS_ATTEMPTS
+          attempt === MAX_STATE_CAS_ATTEMPTS
         )
           throw error;
-        await casBackoff(attempt, input.signal);
+        await stateCasBackoff(attempt, input.signal);
       }
     }
     throw new Error(
       `Unable to update orchestration ${input.orchestrationId}.`,
     );
   }
-}
-
-async function casBackoff(
-  attempt: number,
-  signal?: AbortSignal,
-): Promise<void> {
-  const delayMs = Math.min(2_000, 50 * 2 ** Math.min(attempt - 1, 5));
-  const jitterMs = Math.floor(Math.random() * 100);
-  await new Promise<void>((resolve, reject) => {
-    const onAbort = (): void => {
-      clearTimeout(timer);
-      reject(signal?.reason ?? new Error("CAS retry aborted."));
-    };
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, delayMs + jitterMs);
-    signal?.addEventListener("abort", onAbort, { once: true });
-    timer.unref();
-  });
 }

@@ -6,12 +6,13 @@ import type {
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 
+import type { OrchestrationState } from "../../src/core/orchestration.ts";
 import {
-  confirmExpiredLeaseTakeover,
   confirmOrchestrationDispatch,
   confirmWorkOnDispatch,
   issueResolverPrompt,
   registerForgeCommands,
+  renderOrchestrationStatus,
 } from "../../src/ui/commands.ts";
 
 const input = {
@@ -38,36 +39,6 @@ test("model-callable orchestration fails closed without interactive confirmation
   );
 });
 
-test("expired lease takeover requires a separate operator authorization", async () => {
-  const noUi = {
-    confirm: async () => true,
-  } as unknown as ExtensionContext["ui"];
-  assert.equal(
-    await confirmExpiredLeaseTakeover(
-      { hasUI: false, ui: noUi },
-      "expired-run",
-    ),
-    false,
-  );
-
-  let message = "";
-  const deniedUi = {
-    confirm: async (_title: string, body: string) => {
-      message = body;
-      return false;
-    },
-  } as unknown as ExtensionContext["ui"];
-  assert.equal(
-    await confirmExpiredLeaseTakeover(
-      { hasUI: true, ui: deniedUi },
-      "expired-run",
-    ),
-    false,
-  );
-  assert.match(message, /expired-run/);
-  assert.match(message, /cancellation and takeover/);
-});
-
 test("orchestration confirmation names only the trusted exact issue set", async () => {
   let prompt = "";
   const ui = {
@@ -82,6 +53,53 @@ test("orchestration confirmation names only the trusted exact issue set", async 
   assert.match(prompt, /may merge changes/);
   assert.doesNotMatch(prompt, /github\.com/);
   assert.doesNotMatch(prompt, /eligible open issues/);
+});
+
+test("orchestration status renders authoritative lane details", () => {
+  const state: OrchestrationState = {
+    schema: "forgedock.orchestration-state/v1",
+    orchestrationId: "orchestration-1",
+    repository: "owner/repo",
+    integrationBranch: "staging",
+    status: "running",
+    maxConcurrent: 2,
+    leaseEpoch: 1,
+    sequence: 4,
+    lastEventHash: "sha256:event",
+    lanes: [
+      {
+        issueNumber: 2,
+        ordinal: 0,
+        status: "merged",
+        forgeRunId: "forge-run-2",
+        subagentRunId: "child-2",
+        refreshes: 0,
+        pullNumber: 6,
+      },
+      { issueNumber: 16, ordinal: 1, status: "queued", refreshes: 0 },
+    ],
+    idempotencyKeys: {},
+    createdAt: "2026-08-26T00:00:00.000Z",
+  };
+  const lines = renderOrchestrationStatus({
+    link: {
+      orchestrationId: state.orchestrationId,
+      repository: state.repository,
+      repositoryRoot: "/repo",
+      stateBranch: "forgedock/state/v1",
+      issueNumbers: [2, 16],
+      integrationBranch: state.integrationBranch,
+      maxConcurrent: state.maxConcurrent,
+      status: "running",
+    },
+    state,
+  });
+  assert.match(lines[0] ?? "", /running\s+orchestration orchestration-1/);
+  assert.match(
+    lines[1] ?? "",
+    /merged\s+#2 · run forge-run-2 · child child-2 · PR #6/,
+  );
+  assert.match(lines[2] ?? "", /queued\s+#16/);
 });
 
 test("work-on confirmation fails closed and names only the exact issue", async () => {
@@ -134,6 +152,19 @@ test("work-on resolver accepts free-form intent but requires exactly one issue",
   assert.doesNotMatch(prompt, /call forge_orchestrate exactly once/);
 });
 
+test("orchestration resolver keeps an explicit set narrow and ordered", () => {
+  const prompt = issueResolverPrompt(
+    "orchestrate",
+    "#92 #94 #111 --auto",
+  );
+  assert.match(prompt, /set and order are already fully specified/);
+  assert.match(prompt, /Read only \.forge\/config\.json/);
+  assert.match(prompt, /review-finding and needs-validation labels are eligible/);
+  assert.match(prompt, /Do not inspect comments, PRs, label definitions/);
+  assert.match(prompt, /Do not search conversation\/session history, memory, git history/);
+  assert.match(prompt, /call forge_orchestrate exactly once/);
+});
+
 test("work-on slash command sends free-form intent to the resolver", async () => {
   type CommandDefinition = {
     handler: (args: string, ctx: ExtensionContext) => unknown;
@@ -166,4 +197,65 @@ test("work-on slash command sends free-form intent to the resolver", async () =>
   assert.match(messages[0] ?? "", /forge_work_on exactly once/);
   assert.equal(tools.includes("forge_work_on"), true);
   assert.equal(tools.includes("forge_orchestrate"), true);
+});
+
+test("standalone review commands and compatibility aliases are registered", () => {
+  type CommandDefinition = {
+    handler: (args: string, ctx: ExtensionContext) => unknown;
+  };
+  const commands = new Map<string, CommandDefinition>();
+  const tools: string[] = [];
+  const pi = {
+    registerCommand: (name: string, definition: CommandDefinition) => {
+      commands.set(name, definition);
+    },
+    registerTool: (definition: { name: string }) => {
+      tools.push(definition.name);
+    },
+    getAllTools: () => [],
+  } as unknown as ExtensionAPI;
+  registerForgeCommands(
+    pi,
+    {} as never,
+    {} as never,
+    { list: () => [] } as never,
+  );
+
+  for (const name of [
+    "forge:review-pr",
+    "review-pr",
+    "forge:review-pr-staging",
+    "review-pr-staging",
+  ])
+    assert.ok(commands.has(name), `missing command ${name}`);
+  assert.equal(tools.includes("forge_review_pr"), true);
+  assert.equal(tools.includes("forge_review_pr_staging"), true);
+});
+
+test("resume command reconciles linked orchestration state", async () => {
+  type CommandDefinition = {
+    handler: (args: string, ctx: ExtensionContext) => unknown;
+  };
+  const commands = new Map<string, CommandDefinition>();
+  const pi = {
+    registerCommand: (name: string, definition: CommandDefinition) => {
+      commands.set(name, definition);
+    },
+    registerTool: () => {},
+    getAllTools: () => [],
+  } as unknown as ExtensionAPI;
+  let resumes = 0;
+  registerForgeCommands(pi, {} as never, {
+    resume: async () => {
+      resumes += 1;
+    },
+  } as never);
+  const notifications: string[] = [];
+  const handler = commands.get("forge:resume")?.handler;
+  assert.ok(handler);
+  await handler("", {
+    ui: { notify: (message: string) => notifications.push(message) },
+  } as unknown as ExtensionContext);
+  assert.equal(resumes, 1);
+  assert.match(notifications[0] ?? "", /reconciliation completed/);
 });

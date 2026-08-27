@@ -1,22 +1,26 @@
 import { createHash } from "node:crypto";
 
 import type { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
-import type {
-  ForgeReviewFindingResult,
-  ForgeWorkOnResult,
-} from "../agents/contracts.ts";
+import type { ForgeReviewFindingResult } from "../agents/contracts.ts";
 
 export interface ReviewFindingRunIdentity {
   forgeRunId: string;
-  issueNumber: number;
+  issueNumber?: number;
   repository?: string;
+}
+
+export interface ReviewFindingProjectionResult {
+  review: {
+    headSha: string;
+    findings: readonly ForgeReviewFindingResult[];
+  };
 }
 
 export async function publishReviewFindingIssues(input: {
   github: GitHubWorkflowAdapter;
   pullNumber: number;
   link: ReviewFindingRunIdentity;
-  result: ForgeWorkOnResult;
+  result: ReviewFindingProjectionResult;
   signal?: AbortSignal;
 }): Promise<Record<string, number>> {
   const existing = await input.github.listIssuesByLabel(
@@ -44,17 +48,6 @@ export async function publishReviewFindingIssues(input: {
     );
     if (exact?.state === "open") {
       issueMap[finding.id] = exact.number;
-      continue;
-    }
-    const similar = existing.find(
-      (issue) =>
-        issue.state === "open" &&
-        issue.body.includes(`**File**: \`${finding.file}\``) &&
-        lineWithinTolerance(issue.body, finding.line) &&
-        similarFindingTitle(issue.title, finding.summary),
-    );
-    if (similar) {
-      issueMap[finding.id] = similar.number;
       continue;
     }
     const regression = exact?.state === "closed";
@@ -108,7 +101,7 @@ export function reviewFindingMarker(
 
 export function reviewFindingFingerprint(input: {
   repository: string;
-  sourceIssueNumber: number;
+  sourceIssueNumber?: number;
   sourcePullNumber: number;
   finding: ForgeReviewFindingResult;
 }): string {
@@ -135,27 +128,6 @@ export function findingPriority(
   }[severity];
 }
 
-export function lineWithinTolerance(body: string, line: number): boolean {
-  const match = /\*\*Line\*\*:\s*(\d+)/.exec(body);
-  if (!match?.[1]) return false;
-  return Math.abs(Number(match[1]) - line) <= 5;
-}
-
-export function similarFindingTitle(title: string, summary: string): boolean {
-  const words = (value: string): Set<string> =>
-    new Set(
-      value
-        .toLowerCase()
-        .split(/[^a-z0-9]+/)
-        .filter((word) => word.length > 3),
-    );
-  const left = words(title);
-  const right = words(summary);
-  let shared = 0;
-  for (const word of left) if (right.has(word)) shared += 1;
-  return shared >= 3;
-}
-
 function renderFindingIssueBody(input: {
   finding: ForgeReviewFindingResult;
   pullNumber: number;
@@ -167,7 +139,7 @@ function renderFindingIssueBody(input: {
   const evidence = input.finding.evidence
     .map((entry) => `- ${entry}`)
     .join("\n");
-  return `${input.marker}\n## Review Finding\n\n**Source PR**: #${input.pullNumber}\n**Source issue**: #${input.link.issueNumber}\n**Forge run**: \`${input.link.forgeRunId}\`\n**Reviewed head**: \`${input.headSha}\`\n**Reviewer**: \`${input.finding.reviewer}\`\n**Finding ID**: \`${input.finding.id}\`\n**Confidence**: ${input.finding.confidence.toUpperCase()}\n**Severity**: ${input.finding.severity.toUpperCase()}\n**Category**: ${input.finding.category}\n**File**: \`${input.finding.file}\`\n**Line**: ${input.finding.line}\n${input.regressionIssue ? `**Regression of**: #${input.regressionIssue}\n` : ""}\n### Problem\n\n${input.finding.summary}\n\n### Evidence\n\n${evidence || "- Reviewer supplied no additional evidence."}\n\n### Acceptance Criteria\n\n- [ ] Reproduce or validate the finding against the current integration branch.\n- [ ] Fix the root cause without expanding unrelated scope.\n- [ ] Add focused regression coverage.\n- [ ] Re-review the exact remediation head.\n\n<!-- FORGE:PATTERN: ${findingPattern(input.finding)} -->\n<!-- FORGE:CLASS: ${findingPattern(input.finding)} -->`;
+  return `${input.marker}\n## Review Finding\n\n**Source PR**: #${input.pullNumber}\n**Source issue**: ${input.link.issueNumber === undefined ? "unlinked" : `#${input.link.issueNumber}`}\n**Forge run**: \`${input.link.forgeRunId}\`\n**Reviewed head**: \`${input.headSha}\`\n**Reviewer**: \`${input.finding.reviewer}\`\n**Finding ID**: \`${input.finding.id}\`\n**Confidence**: ${input.finding.confidence.toUpperCase()}\n**Severity**: ${input.finding.severity.toUpperCase()}\n**Category**: ${input.finding.category}\n**File**: \`${input.finding.file}\`\n**Line**: ${input.finding.line}\n${input.regressionIssue ? `**Regression of**: #${input.regressionIssue}\n` : ""}\n### Problem\n\n${input.finding.summary}\n\n### Evidence\n\n${evidence || "- Reviewer supplied no additional evidence."}\n\n### Acceptance Criteria\n\n- [ ] Reproduce or validate the finding against the current integration branch.\n- [ ] Fix the root cause without expanding unrelated scope.\n- [ ] Add focused regression coverage.\n- [ ] Re-review the exact remediation head.\n\n<!-- FORGE:PATTERN: ${findingPattern(input.finding)} -->\n<!-- FORGE:CLASS: ${findingPattern(input.finding)} -->`;
 }
 
 function findingPattern(finding: ForgeReviewFindingResult): string {

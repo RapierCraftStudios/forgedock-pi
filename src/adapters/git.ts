@@ -48,6 +48,15 @@ export interface PreparedWorktree {
   baseSha: string;
 }
 
+export interface PreparedReviewWorktree {
+  repositoryRoot: string;
+  worktreePath: string;
+  headRef: string;
+  headSha: string;
+  baseRef: string;
+  baseSha: string;
+}
+
 export class GitOperationError extends Error {
   readonly operation: string;
   readonly result: ExecResult;
@@ -180,6 +189,100 @@ export class GitWorktreeManager {
     };
   }
 
+  async prepareReview(
+    repositoryRoot: string,
+    input: {
+      reviewId: string;
+      headRef: string;
+      headSha: string;
+      baseRef: string;
+      baseSha: string;
+      signal?: AbortSignal;
+    },
+  ): Promise<PreparedReviewWorktree> {
+    assertSafeIdentifier(input.reviewId, "reviewId");
+    assertSafeBranchRef(input.headRef, "headRef");
+    assertSafeBranchRef(input.baseRef, "baseRef");
+    assertCommitSha(input.headSha, "headSha");
+    assertCommitSha(input.baseSha, "baseSha");
+    const root = await realpath(repositoryRoot);
+    await this.#git(
+      root,
+      ["fetch", "--no-tags", "origin", input.headRef, input.baseRef],
+      120_000,
+      input.signal,
+    );
+    const [headResult, baseResult] = await Promise.all([
+      this.#git(
+        root,
+        ["rev-parse", `origin/${input.headRef}^{commit}`],
+        30_000,
+        input.signal,
+      ),
+      this.#git(
+        root,
+        ["rev-parse", `origin/${input.baseRef}^{commit}`],
+        30_000,
+        input.signal,
+      ),
+    ]);
+    const currentHead = headResult.stdout.trim();
+    const currentBase = baseResult.stdout.trim();
+    if (currentHead !== input.headSha || currentBase !== input.baseSha)
+      throw new Error(
+        "Pull request head/base changed before review worktree preparation.",
+      );
+    const worktreePath = join(root, ".forge", "reviews", input.reviewId);
+    await mkdir(dirname(worktreePath), { recursive: true });
+    if (await exists(worktreePath)) {
+      const canonicalWorktree = await realpath(worktreePath);
+      if (!isPathWithin(join(root, ".forge", "reviews"), canonicalWorktree))
+        throw new Error("Existing review worktree is outside the Forge review directory.");
+      const existingHead = await this.head(canonicalWorktree, input.signal);
+      if (existingHead !== input.headSha)
+        throw new Error(
+          `Existing review worktree head ${existingHead} does not match ${input.headSha}.`,
+        );
+      await this.assertClean(canonicalWorktree, input.signal);
+      return {
+        repositoryRoot: root,
+        worktreePath: canonicalWorktree,
+        headRef: input.headRef,
+        headSha: input.headSha,
+        baseRef: input.baseRef,
+        baseSha: input.baseSha,
+      };
+    }
+    await this.#git(
+      root,
+      ["worktree", "add", "--detach", worktreePath, input.headSha],
+      120_000,
+      input.signal,
+    );
+    const canonicalWorktree = await realpath(worktreePath);
+    if (!isPathWithin(join(root, ".forge", "reviews"), canonicalWorktree))
+      throw new Error("Git created a review worktree outside the Forge review directory.");
+    return {
+      repositoryRoot: root,
+      worktreePath: canonicalWorktree,
+      headRef: input.headRef,
+      headSha: input.headSha,
+      baseRef: input.baseRef,
+      baseSha: input.baseSha,
+    };
+  }
+
+  async cleanupReview(
+    prepared: PreparedReviewWorktree,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await this.#cleanupWorktree(
+      prepared.repositoryRoot,
+      prepared.worktreePath,
+      signal,
+    );
+  }
+
   async remoteBaseSha(
     repositoryRoot: string,
     baseBranch: string,
@@ -296,23 +399,11 @@ export class GitWorktreeManager {
   ): Promise<void> {
     // Cleanup is a retryable owned effect. A crash may happen after Git has
     // removed either the worktree or the branch, so absence is success.
-    const worktreePresent = await exists(prepared.worktreePath);
-    if (worktreePresent) {
-      await cleanupForgeRuntime(prepared.worktreePath);
-      await this.assertClean(prepared.worktreePath, signal);
-      try {
-        await this.#git(
-          prepared.repositoryRoot,
-          ["worktree", "remove", prepared.worktreePath],
-          120_000,
-          signal,
-        );
-      } catch (error) {
-        if (!isAlreadyAbsent(error)) throw error;
-      }
-    }
-    if (await exists(prepared.worktreePath))
-      await rm(prepared.worktreePath, { recursive: true, force: true });
+    await this.#cleanupWorktree(
+      prepared.repositoryRoot,
+      prepared.worktreePath,
+      signal,
+    );
     try {
       await this.#git(
         prepared.repositoryRoot,
@@ -323,6 +414,29 @@ export class GitWorktreeManager {
     } catch (error) {
       if (!isAlreadyAbsent(error)) throw error;
     }
+  }
+
+  async #cleanupWorktree(
+    repositoryRoot: string,
+    worktreePath: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (await exists(worktreePath)) {
+      await cleanupForgeRuntime(worktreePath);
+      await this.assertClean(worktreePath, signal);
+      try {
+        await this.#git(
+          repositoryRoot,
+          ["worktree", "remove", worktreePath],
+          120_000,
+          signal,
+        );
+      } catch (error) {
+        if (!isAlreadyAbsent(error)) throw error;
+      }
+    }
+    if (await exists(worktreePath))
+      await rm(worktreePath, { recursive: true, force: true });
   }
 
   async #git(
@@ -566,6 +680,24 @@ async function exists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function assertSafeBranchRef(value: string, field: string): void {
+  if (
+    !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$/.test(value) ||
+    value.includes("..") ||
+    value.includes("@{") ||
+    value.includes("//") ||
+    value.endsWith("/") ||
+    value.endsWith(".") ||
+    value.split("/").some((part) => !part || part.startsWith("."))
+  )
+    throw new TypeError(`${field} contains an unsafe Git branch ref.`);
+}
+
+function assertCommitSha(value: string, field: string): void {
+  if (!/^[0-9a-f]{40}$/i.test(value))
+    throw new TypeError(`${field} must be a full Git commit SHA.`);
 }
 
 function assertSafeIdentifier(value: string, field: string): void {

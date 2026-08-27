@@ -9,6 +9,71 @@ export const WORKFLOW_LABEL_BY_STAGE = {
   decomposed: "workflow:decomposed",
 } as const;
 
+export type WorkflowStage = keyof typeof WORKFLOW_LABEL_BY_STAGE;
+export type WorkflowBoundaryTransition =
+  | "started"
+  | "resumed"
+  | "completed";
+
+/**
+ * Derive the issue-label stage from a durable phase boundary. Keeping this
+ * mapping beside the canonical labels prevents child and controller paths from
+ * drifting as they project the same run state.
+ */
+export function workflowStageForPhaseBoundary(
+  phase: string,
+  transition: WorkflowBoundaryTransition,
+  outcome?: string,
+): WorkflowStage | undefined {
+  if (phase === "resolve") return "investigation";
+  if (phase === "investigate") {
+    if (transition !== "completed") return "investigation";
+    const normalizedOutcome = outcome?.trim().toLowerCase();
+    if (normalizedOutcome === "invalid") return "invalid";
+    if (
+      normalizedOutcome === "decompose" ||
+      normalizedOutcome === "decomposed"
+    )
+      return "decomposed";
+    return "readyToBuild";
+  }
+  if (
+    phase === "plan" ||
+    phase === "prepare-worktree" ||
+    phase === "implement" ||
+    phase === "verify"
+  )
+    return "build";
+  if (
+    phase === "prepare-pr" ||
+    phase === "review" ||
+    phase === "review-correctness" ||
+    phase === "review-security" ||
+    phase === "review-join" ||
+    phase === "ci"
+  )
+    return "review";
+  if (phase === "decision") {
+    if (outcome === "awaiting-merge") return "awaitingMerge";
+    if (outcome === "remediation-required") return "build";
+    return "review";
+  }
+  if (phase === "merge")
+    return transition === "completed" && outcome === "merged"
+      ? "merged"
+      : "awaitingMerge";
+  return undefined;
+}
+
+export function workflowLabelForPhaseBoundary(
+  phase: string,
+  transition: WorkflowBoundaryTransition,
+  outcome?: string,
+): string | undefined {
+  const stage = workflowStageForPhaseBoundary(phase, transition, outcome);
+  return stage ? WORKFLOW_LABEL_BY_STAGE[stage] : undefined;
+}
+
 export const ACCEPTANCE_GATE_SUCCESS_MARKER =
   "<!-- FORGE:ACCEPTANCE_GATE:COMPLETE -->" as const;
 

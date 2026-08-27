@@ -15,8 +15,10 @@ import {
   type RepositoryLease,
 } from "../core/lease.ts";
 import { applyRunEvent, type RunState } from "../core/state.ts";
-
-const MAX_CAS_ATTEMPTS = 12;
+import {
+  MAX_STATE_CAS_ATTEMPTS,
+  stateCasBackoff,
+} from "./state-cas.ts";
 
 export interface InitializeRunInput {
   runId: string;
@@ -50,7 +52,7 @@ export class RunJournal {
 
   async initialize(input: InitializeRunInput): Promise<JournalSnapshot> {
     await this.#store.ensureBranch(input.now ?? new Date(), input.signal);
-    for (let attempt = 1; attempt <= MAX_CAS_ATTEMPTS; attempt += 1) {
+    for (let attempt = 1; attempt <= MAX_STATE_CAS_ATTEMPTS; attempt += 1) {
       const existing = await this.#store.readRun(input.runId, input.signal);
       if (existing.events.length > 0)
         throw new Error(`Run ${input.runId} already exists.`);
@@ -121,10 +123,10 @@ export class RunJournal {
       } catch (error) {
         if (
           !(error instanceof StateBranchConflictError) ||
-          attempt === MAX_CAS_ATTEMPTS
+          attempt === MAX_STATE_CAS_ATTEMPTS
         )
           throw error;
-        await casBackoff(attempt, input.signal);
+        await stateCasBackoff(attempt, input.signal);
       }
     }
     throw new Error(`Unable to initialize run ${input.runId}.`);
@@ -171,12 +173,12 @@ export class RunJournal {
     message: string;
     signal?: AbortSignal;
   }): Promise<JournalSnapshot> {
-    for (let attempt = 1; attempt <= MAX_CAS_ATTEMPTS; attempt += 1) {
+    for (let attempt = 1; attempt <= MAX_STATE_CAS_ATTEMPTS; attempt += 1) {
       const current = await this.#store.readRun(input.runId, input.signal);
       if (!current.state) {
-        if (attempt === MAX_CAS_ATTEMPTS)
+        if (attempt === MAX_STATE_CAS_ATTEMPTS)
           throw new Error(`Run ${input.runId} does not exist.`);
-        await casBackoff(attempt, input.signal);
+        await stateCasBackoff(attempt, input.signal);
         continue;
       }
       assertCurrentAuthority(current.state, current.lease);
@@ -226,34 +228,14 @@ export class RunJournal {
       } catch (error) {
         if (
           !(error instanceof StateBranchConflictError) ||
-          attempt === MAX_CAS_ATTEMPTS
+          attempt === MAX_STATE_CAS_ATTEMPTS
         )
           throw error;
-        await casBackoff(attempt, input.signal);
+        await stateCasBackoff(attempt, input.signal);
       }
     }
     throw new Error(`Unable to append run ${input.runId}.`);
   }
-}
-
-async function casBackoff(
-  attempt: number,
-  signal?: AbortSignal,
-): Promise<void> {
-  const delayMs = Math.min(2_000, 50 * 2 ** Math.min(attempt - 1, 5));
-  const jitterMs = Math.floor(Math.random() * 100);
-  await new Promise<void>((resolve, reject) => {
-    const onAbort = (): void => {
-      clearTimeout(timer);
-      reject(signal?.reason ?? new Error("CAS retry aborted."));
-    };
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, delayMs + jitterMs);
-    signal?.addEventListener("abort", onAbort, { once: true });
-    timer.unref();
-  });
 }
 
 function validateOrchestrationLease(

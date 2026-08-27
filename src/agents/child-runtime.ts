@@ -38,6 +38,9 @@ import {
   validateBuilderPathContract,
 } from "../core/builder-contract.ts";
 import {
+  workflowLabelForPhaseBoundary,
+} from "../core/artifact-protocol.ts";
+import {
   normalizeVerificationCommandCwd,
   type ForgePolicy,
 } from "../core/policy.ts";
@@ -58,7 +61,6 @@ import {
   FORGE_NODE_OUTPUT_SCHEMA,
   FORGE_REVIEWER_OUTPUT_SCHEMA,
   FORGE_WORK_ON_OUTPUT_SCHEMA,
-  findForgeReviewerResult,
   isForgeNodeResult,
   isForgeReviewerResult,
   isForgeWorkOnResult,
@@ -86,13 +88,15 @@ interface BoundVerificationCommand {
 }
 
 export interface ForgeChildBinding {
+  authorityMode?: "work-on" | "review";
   runId: string;
+  reviewId?: string;
   resultPath: string;
   repository: string;
-  issueNumber: number;
-  leaseEpoch: number;
-  leaseOwnerRunId: string;
-  stateBranch: string;
+  issueNumber?: number;
+  leaseEpoch?: number;
+  leaseOwnerRunId?: string;
+  stateBranch?: string;
   worktreeRoot: string;
   branch: string;
   baseBranch: string;
@@ -108,6 +112,14 @@ export interface ForgeChildBinding {
   refresh: boolean;
   previousReviewRounds?: number;
 }
+
+export type WorkOnForgeChildBinding = ForgeChildBinding & {
+  authorityMode?: "work-on";
+  issueNumber: number;
+  leaseEpoch: number;
+  leaseOwnerRunId: string;
+  stateBranch: string;
+};
 
 export interface ProcessResult {
   exitCode: number | null;
@@ -211,6 +223,18 @@ export interface ForgeRuntimeOptions {
   registerAgents?: boolean;
 }
 
+export const FORGE_REVIEWER_CAPABILITY_CEILING = {
+  allowedAgents: [
+    FORGE_REVIEW_CORRECTNESS_AGENT,
+    FORGE_REVIEW_SECURITY_AGENT,
+  ],
+  allowedTools: [
+    "forge_diff",
+    "forge_finalize_reviewer",
+  ],
+  denyExtensions: false,
+} as const;
+
 export function registerForgeRuntime(
   pi: ExtensionAPI,
   options: ForgeRuntimeOptions = {},
@@ -234,7 +258,6 @@ export function registerForgeRuntime(
   let ceiling: SubagentCapabilityCeilingHandle | undefined;
   let canonicalRoot: string | undefined;
   let caseInsensitivePaths: boolean | undefined;
-  let githubToken: string | undefined;
   let refreshPushLeaseSha: string | undefined;
   let reviewDiffCoverage:
     | { headSha: string; sha256: string; bytes: number; coveredBytes: number }
@@ -262,14 +285,7 @@ export function registerForgeRuntime(
     ceiling = registerSubagentCapabilityCeiling({
       sessionId: ctx.sessionManager.getSessionId(),
       source: "forgedock-work-on",
-      ceiling: {
-        allowedAgents: [
-          FORGE_REVIEW_CORRECTNESS_AGENT,
-          FORGE_REVIEW_SECURITY_AGENT,
-        ],
-        allowedTools: ["read", "grep", "find", "ls"],
-        denyExtensions: true,
-      },
+      ceiling: FORGE_REVIEWER_CAPABILITY_CEILING,
     });
   });
 
@@ -277,8 +293,12 @@ export function registerForgeRuntime(
     if (options.mainSession && !options.bindingProvider?.()) {
       if (
         event.toolName.startsWith("forge_") &&
-        event.toolName !== "forge_work_on" &&
-        event.toolName !== "forge_orchestrate"
+        ![
+          "forge_work_on",
+          "forge_orchestrate",
+          "forge_review_pr",
+          "forge_review_pr_staging",
+        ].includes(event.toolName)
       )
         return {
           block: true,
@@ -863,6 +883,7 @@ export function registerForgeRuntime(
       "Push the bound clean branch, create or reuse its PR, post FORGE:REVIEW_STARTED, and return the frozen review identity",
     parameters: PrepareReviewParameters,
     async execute(_toolCallId, _params, signal) {
+      assertWorkOnAuthority(binding);
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
       const status = await runProcess(
         "git",
@@ -941,10 +962,11 @@ export function registerForgeRuntime(
         "origin",
         binding.branch,
       ];
-      const token =
-        githubToken ??
-        (await resolveGitHubToken(pi, binding.worktreeRoot, signal));
-      githubToken = token;
+      const token = await resolveGitHubToken(
+        pi,
+        binding.worktreeRoot,
+        signal,
+      );
       const push = await pushWithGitHubToken(
         root,
         pushArgs,
@@ -1033,6 +1055,7 @@ export function registerForgeRuntime(
       "Launch and join a fresh risk-derived reviewer panel with trusted bindings",
     parameters: ReviewPanelParameters,
     async execute(_toolCallId, params, signal) {
+      assertWorkOnAuthority(binding);
       if (binding.node)
         throw new Error("Review panels can only be launched by the work-on coordinator.");
       const rpc = new SubagentsRpcClient(pi);
@@ -1392,14 +1415,16 @@ export function registerForgeRuntime(
       "Request a typed, core-validated phase transition in the authoritative GitHub run journal",
     parameters: CheckpointParameters,
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+      assertWorkOnAuthority(binding);
       if (binding.refresh)
         throw new Error(
           "Refresh-review runs cannot mutate the original phase journal.",
         );
-      const token =
-        githubToken ??
-        (await resolveGitHubToken(pi, binding.worktreeRoot, signal));
-      githubToken = token;
+      const token = await resolveGitHubToken(
+        pi,
+        binding.worktreeRoot,
+        signal,
+      );
       const transport = new FetchGitHubTransport({ token });
       const store = new GitHubStateBranchStore(
         transport,
@@ -1501,6 +1526,19 @@ export default function forgeChildRuntime(pi: ExtensionAPI): void {
   registerForgeRuntime(pi);
 }
 
+function assertWorkOnAuthority(
+  binding: ForgeChildBinding,
+): asserts binding is WorkOnForgeChildBinding {
+  if (
+    binding.authorityMode === "review" ||
+    !binding.issueNumber ||
+    !binding.leaseEpoch ||
+    !binding.leaseOwnerRunId ||
+    !binding.stateBranch
+  )
+    throw new Error("This Forge tool requires a work-on authority binding.");
+}
+
 function readBinding(): ForgeChildBinding {
   const raw = process.env[BINDING_ENV];
   if (!raw)
@@ -1519,12 +1557,11 @@ function readBinding(): ForgeChildBinding {
   if (!binding || typeof binding !== "object" || Array.isArray(binding))
     throw new Error(`Missing ${BINDING_NAMESPACE} binding.`);
   const value = binding as Record<string, unknown>;
+  const authorityMode = value.authorityMode === "review" ? "review" : "work-on";
   const requiredStrings = [
     "runId",
     "resultPath",
     "repository",
-    "leaseOwnerRunId",
-    "stateBranch",
     "worktreeRoot",
     "branch",
     "baseBranch",
@@ -1534,16 +1571,30 @@ function readBinding(): ForgeChildBinding {
     if (typeof value[field] !== "string" || !(value[field] as string).trim())
       throw new Error(`Forge binding ${field} is required.`);
   }
-  if (
-    !Number.isSafeInteger(value.issueNumber) ||
-    (value.issueNumber as number) < 1
-  )
-    throw new Error("Forge binding issueNumber must be positive.");
-  if (
-    !Number.isSafeInteger(value.leaseEpoch) ||
-    (value.leaseEpoch as number) < 1
-  )
-    throw new Error("Forge binding leaseEpoch must be positive.");
+  if (authorityMode === "review") {
+    if (typeof value.reviewId !== "string" || !value.reviewId.trim())
+      throw new Error("Standalone reviewer bindings require reviewId.");
+    if (
+      value.issueNumber !== undefined &&
+      (!Number.isSafeInteger(value.issueNumber) || (value.issueNumber as number) < 1)
+    )
+      throw new Error("Forge binding issueNumber must be positive when supplied.");
+  } else {
+    if (
+      !Number.isSafeInteger(value.issueNumber) ||
+      (value.issueNumber as number) < 1
+    )
+      throw new Error("Forge binding issueNumber must be positive.");
+    if (
+      !Number.isSafeInteger(value.leaseEpoch) ||
+      (value.leaseEpoch as number) < 1
+    )
+      throw new Error("Forge binding leaseEpoch must be positive.");
+    for (const field of ["leaseOwnerRunId", "stateBranch"] as const) {
+      if (typeof value[field] !== "string" || !(value[field] as string).trim())
+        throw new Error(`Forge binding ${field} is required.`);
+    }
+  }
   if (
     !Number.isSafeInteger(value.maxReviewRounds) ||
     (value.maxReviewRounds as number) < 1 ||
@@ -1599,13 +1650,25 @@ function readBinding(): ForgeChildBinding {
     );
   }
   return {
+    authorityMode,
     runId: value.runId as string,
+    ...(authorityMode === "review"
+      ? { reviewId: value.reviewId as string }
+      : {}),
     resultPath: value.resultPath as string,
     repository: value.repository as string,
-    issueNumber: value.issueNumber as number,
-    leaseEpoch: value.leaseEpoch as number,
-    leaseOwnerRunId: value.leaseOwnerRunId as string,
-    stateBranch: value.stateBranch as string,
+    ...(value.issueNumber === undefined
+      ? {}
+      : { issueNumber: value.issueNumber as number }),
+    ...(value.leaseEpoch === undefined
+      ? {}
+      : { leaseEpoch: value.leaseEpoch as number }),
+    ...(typeof value.leaseOwnerRunId === "string"
+      ? { leaseOwnerRunId: value.leaseOwnerRunId }
+      : {}),
+    ...(typeof value.stateBranch === "string"
+      ? { stateBranch: value.stateBranch }
+      : {}),
     worktreeRoot: value.worktreeRoot as string,
     branch: value.branch as string,
     baseBranch: value.baseBranch as string,
@@ -1632,7 +1695,18 @@ function readBinding(): ForgeChildBinding {
 }
 
 export function allowedNodeTools(node: string | undefined): ReadonlySet<string> {
-  if (!node) return new Set(["subagent", "forge_run_review_panel", "forge_refresh_base", "forge_checkpoint", "forge_verify", "forge_diff", "forge_commit", "forge_prepare_review", "forge_finalize_work_on"]);
+  if (!node)
+    return new Set([
+      "subagent",
+      "forge_refresh_base",
+      "forge_checkpoint",
+      "forge_verify",
+      "forge_diff",
+      "forge_commit",
+      "forge_prepare_review",
+      "forge_finalize_reviewer",
+      "forge_finalize_work_on",
+    ]);
   if (node.startsWith("review-"))
     return new Set(["forge_diff", "forge_finalize_reviewer"]);
   const common = ["forge_diff", "forge_finalize_node"];
@@ -1779,7 +1853,7 @@ async function projectPhaseReport(
     report?: string;
     reason?: string;
   },
-  binding: ForgeChildBinding,
+  binding: WorkOnForgeChildBinding,
   signal?: AbortSignal,
 ): Promise<void> {
   if (
@@ -1885,7 +1959,7 @@ async function postDerivedPhaseArtifacts(
     commitSha?: string;
     report?: string;
   },
-  binding: ForgeChildBinding,
+  binding: WorkOnForgeChildBinding,
   signal?: AbortSignal,
 ): Promise<void> {
   if (params.action !== "complete") return;
@@ -1938,24 +2012,21 @@ function workflowLabelForCheckpoint(params: {
     | "abandon";
   report?: string;
 }): string | undefined {
-  if (params.action === "start") {
-    if (params.phase === "investigate") return "workflow:investigating";
-    if (
-      params.phase === "plan" ||
-      params.phase === "prepare-worktree" ||
-      params.phase === "implement" ||
-      params.phase === "verify"
-    ) {
-      return "workflow:building";
-    }
-    if (params.phase === "review") return "workflow:in-review";
+  const transition =
+    params.action === "start"
+      ? "started"
+      : params.action === "complete"
+        ? "completed"
+        : undefined;
+  if (!transition) return undefined;
+
+  let outcome: string | undefined;
+  if (params.phase === "investigate" && params.action === "complete") {
+    outcome = params.report?.match(
+      /\*\*Verdict\*\*\s*:\s*(confirmed|invalid|decompose(?:d)?)/i,
+    )?.[1];
   }
-  if (params.action === "complete" && params.phase === "investigate") {
-    return params.report?.includes("**Verdict**: INVALID")
-      ? "workflow:invalid"
-      : "workflow:ready-to-build";
-  }
-  return undefined;
+  return workflowLabelForPhaseBoundary(params.phase, transition, outcome);
 }
 
 function validatePhaseReport(phase: RunPhase, report: string): void {
@@ -2230,7 +2301,7 @@ async function readTrustedResultFile(
   return readFile(resultPath, "utf8");
 }
 
-interface ExpectedReviewerResult {
+export interface ExpectedReviewerResult {
   runId: string;
   headSha: string;
   reviewer: string;
@@ -2274,7 +2345,7 @@ function isTerminalReviewerState(state: string): boolean {
   );
 }
 
-async function waitForReviewerResult(
+export async function waitForReviewerResult(
   rpc: SubagentsRpcClient,
   receipt: SubagentSpawnReceipt,
   timeoutMs: number,
@@ -2302,11 +2373,6 @@ async function waitForReviewerResult(
     if (fileResult) return fileResult;
 
     const payload = await rpc.status(receipt.runId).catch(() => undefined);
-    const result = findForgeReviewerResult(payload);
-    if (result) {
-      assertReviewerResultIdentity(result, expected);
-      return result;
-    }
     if (reviewerStatusIsTerminal(payload)) {
       const terminalFileResult = await loadBoundResult();
       if (terminalFileResult) return terminalFileResult;

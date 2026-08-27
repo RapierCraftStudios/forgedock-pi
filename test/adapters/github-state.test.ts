@@ -17,6 +17,10 @@ import {
   type RunEventType,
 } from "../../src/core/events.ts";
 import { acquireLease } from "../../src/core/lease.ts";
+import {
+  applyOrchestrationEvent,
+  createOrchestrationEvent,
+} from "../../src/core/orchestration.ts";
 import { applyRunEvent, type RunState } from "../../src/core/state.ts";
 
 class MockTransport implements GitHubTransport {
@@ -217,6 +221,64 @@ test("run-scoped state commits do not update the global repository lock", async 
   const entries = (treeBody as { tree: Array<{ path: string; sha: string | null }> }).tree;
   assert.equal(
     entries.some((entry) => entry.path === ".forgedock/locks/repository.json"),
+    false,
+  );
+});
+
+test("orchestration commits preserve an unrelated repository lock", async () => {
+  const orchestrationId = "orchestration-1";
+  const event = createOrchestrationEvent({
+    orchestrationId,
+    repository,
+    sequence: 1,
+    previousEventHash: null,
+    type: "orchestration.created",
+    idempotencyKey: "orchestration:create",
+    payload: {
+      issueNumbers: [42],
+      integrationBranch: "staging",
+      maxConcurrent: 2,
+      leaseEpoch: 1,
+    },
+    eventId: "orchestration-event-1",
+    occurredAt: timestamp,
+  });
+  const state = applyOrchestrationEvent(undefined, event);
+
+  let treeBody: unknown;
+  let blobCounter = 0;
+  const transport = new MockTransport((request) => {
+    if (request.method === "GET" && request.path.endsWith("/git/commits/tip-1"))
+      return response(200, { sha: "tip-1", tree: { sha: "base-tree" } });
+    if (request.method === "POST" && request.path.endsWith("/git/blobs"))
+      return response(201, { sha: `blob-${++blobCounter}` });
+    if (request.method === "POST" && request.path.endsWith("/git/trees")) {
+      treeBody = request.body;
+      return response(201, { sha: "tree-orchestration" });
+    }
+    if (request.method === "POST" && request.path.endsWith("/git/commits"))
+      return response(201, { sha: "commit-orchestration" });
+    if (request.method === "PATCH" && request.path.includes("/git/refs/heads/"))
+      return response(200, { object: { sha: "commit-orchestration" } });
+    throw new Error(`Unexpected request ${request.method} ${request.path}`);
+  });
+  const store = new GitHubStateBranchStore(transport, repository);
+  await store.commitOrchestrationState({
+    expectedTip: "tip-1",
+    events: [event],
+    state,
+    message: "Initialize orchestration",
+  });
+
+  const body = treeBody as {
+    base_tree: string;
+    tree: Array<{ path: string; sha: string | null }>;
+  };
+  assert.equal(body.base_tree, "base-tree");
+  assert.equal(
+    body.tree.some(
+      (entry) => entry.path === ".forgedock/locks/repository.json",
+    ),
     false,
   );
 });

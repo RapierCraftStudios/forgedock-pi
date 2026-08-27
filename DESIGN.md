@@ -65,7 +65,9 @@ work-on coordinator (root standalone, depth 1 when orchestrated)
 └── security reviewer       (fresh every round, read-only)
 ```
 
-The coordinator owns typed context capsules, durable transitions, reviewer joining, finding disposition, integration requests, and escalation. The retained builder owns implementation, verification, PR preparation, and in-contract remediation on the same PR. Reviewers are always fresh siblings bound to the exact head SHA and never receive the builder transcript or `subagent` tool.
+The coordinator owns typed context capsules, durable transitions, finding disposition, integration requests, and escalation. Review authority is not embedded in work-on: work-on Phase 5 calls the same typed `ReviewPrCoordinator` used by `/forge:review-pr`. That shared coordinator freezes the PR route, persists a review-specific journal, joins the frozen reviewer roster, records checks/findings/verdict, and projects GitHub artifacts. The retained builder owns implementation, verification, PR preparation, and in-contract remediation on the same PR. Reviewers are always fresh siblings bound to the exact head SHA and never receive the builder transcript or `subagent` tool.
+
+`/forge:review-pr-staging` applies a stricter deployment strategy to the configured staging→protected-target route. It carries unresolved review findings into the decision, permits no open finding, emits exactly one read-back-verified `FORGE:GATE_PASS` or `FORGE:GATE_FAILURE`, and never approves, merges, deploys, closes an issue, or cleans a work-on-owned tree.
 
 Later, `/forge:orchestrate` launches multiple independent work-on coordinators. Orchestration schedules lanes and integration order; it does not replace or bypass each lane’s work-on, review, or remediation workflow.
 
@@ -108,6 +110,7 @@ src/
     dag.ts                    dependency graph and ready queue
   adapters/
     github-state.ts           state branch, CAS append/replay/snapshot
+    review-journal.ts         durable issue-less PR review journal
     github.ts                 issues, PRs, labels, projections
     git.ts                    worktrees, ancestry, commits, cleanup
     subagents.ts              public pi-subagents integration
@@ -117,9 +120,10 @@ src/
     child-guard.ts            worktree and side-effect containment
     prompts/                  compact role contracts
   workflows/
-    work-on.ts                single-issue controller
-    review.ts                 frozen-SHA review controller
-    orchestrate.ts            later multi-issue scheduler
+    work-on.ts                single-issue implementation/lifecycle controller
+    review-pr.ts              shared frozen-SHA PR review coordinator
+    review-pr-staging.ts      strict non-merging deployment gate strategy
+    orchestrate.ts            multi-issue scheduler
   ui/
     commands.ts               /forge:* commands
     tools.ts                  model-callable Forge tools
@@ -142,6 +146,8 @@ Use a dedicated branch, defaulting to `forgedock/state/v1`. It contains only wor
   locks/repository.json
   runs/<run-id>/events.ndjson
   runs/<run-id>/snapshot.json
+  reviews/<review-id>/events.ndjson
+  reviews/<review-id>/snapshot.json
 ```
 
 Create commits through the GitHub Git Data API. Every update:
