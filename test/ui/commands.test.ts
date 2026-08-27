@@ -204,6 +204,8 @@ test("orchestration resolver keeps an explicit set narrow and ordered", () => {
     /Do not search conversation\/session history, memory, git history/,
   );
   assert.match(prompt, /call forge_orchestrate exactly once/);
+  assert.match(prompt, /GitHub branch protection and rulesets.*supported/);
+  assert.doesNotMatch(prompt, /non-protected integration branch/);
   assert.match(prompt, /sole authoritative interactive confirmation/);
   assert.doesNotMatch(prompt, /obtain conversational confirmation/);
 });
