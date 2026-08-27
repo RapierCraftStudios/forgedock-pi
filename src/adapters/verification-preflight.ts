@@ -52,6 +52,7 @@ const MAX_DISCOVERY_DEPTH = 8;
 const MAX_DISCOVERY_ENTRIES = 10_000;
 const MAX_MANIFEST_BYTES = 512 * 1024;
 const MAX_SCRIPTS_PER_MANIFEST = 256;
+const MAX_SCRIPT_NAME_LENGTH = 128;
 const EXCLUDED_DISCOVERY_DIRECTORIES = new Set([
   ".forge",
   ".git",
@@ -227,6 +228,8 @@ async function readPackageManifest(
       .filter(
         (entry): entry is [string, string] =>
           typeof entry[0] === "string" &&
+          !entry[0].startsWith("-") &&
+          entry[0].length <= MAX_SCRIPT_NAME_LENGTH &&
           isSafeManifestText(entry[0]) &&
           typeof entry[1] === "string" &&
           entry[1].trim().length > 0 &&
@@ -358,7 +361,12 @@ export async function preflightRequiredVerificationCommands(
           invocation.packageSelectors,
           `${basePath}.argv`,
         )
-      : [commandCwd];
+      : invocation.recursive
+        ? await resolveRecursivePackageDirectories(
+            canonicalRoot,
+            commandCwd,
+          )
+        : [commandCwd];
     if (invocation.script)
       for (const packageCwd of packageCwds)
         await assertPackageScript(
@@ -424,6 +432,7 @@ interface PackageScriptInvocation {
   script?: string;
   cwdArgument?: string;
   packageSelectors: string[];
+  recursive: boolean;
 }
 
 function packageScriptInvocation(
@@ -432,16 +441,28 @@ function packageScriptInvocation(
 ): PackageScriptInvocation {
   const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
   if (!["npm", "pnpm", "yarn", "bun"].includes(manager))
-    return { packageSelectors: [] };
-  const { commandIndex, cwdArgument, packageSelectors } = packageManagerCommand(
-    manager,
-    argv,
-    path,
-  );
+    return { packageSelectors: [], recursive: false };
+  const { commandIndex, cwdArgument, packageSelectors, recursive } =
+    packageManagerCommand(manager, argv, path);
   const command = commandIndex === undefined ? undefined : argv[commandIndex];
   if (manager === "yarn" && command === "workspace") {
     const selector = argv[commandIndex! + 1];
-    const script = argv[commandIndex! + 2];
+    const nestedCommand = argv[commandIndex! + 2];
+    if (!selector || selector.startsWith("-"))
+      throw new VerificationPreflightError(
+        path,
+        "yarn workspace must name a package and script; use a direct executable otherwise",
+      );
+    if (nestedCommand === "exec")
+      return {
+        cwdArgument,
+        packageSelectors: [...packageSelectors, selector],
+        recursive: false,
+      };
+    const script =
+      nestedCommand === "run" || nestedCommand === "run-script"
+        ? argv[commandIndex! + 3]
+        : nestedCommand;
     if (!selector || !script || selector.startsWith("-") || script.startsWith("-"))
       throw new VerificationPreflightError(
         path,
@@ -451,14 +472,15 @@ function packageScriptInvocation(
       script,
       cwdArgument,
       packageSelectors: [...packageSelectors, selector],
+      recursive: false,
     };
   }
   // `bun test` is Bun's built-in test runner, unlike npm/pnpm/yarn test,
   // which dispatch a package.json script. `bun run test` remains script-bound.
   if (manager === "bun" && command === "test")
-    return { cwdArgument, packageSelectors };
+    return { cwdArgument, packageSelectors, recursive };
   if (command === "test")
-    return { script: "test", cwdArgument, packageSelectors };
+    return { script: "test", cwdArgument, packageSelectors, recursive };
   if (command === "run" || command === "run-script") {
     const script = argv
       .slice(commandIndex! + 1)
@@ -468,9 +490,9 @@ function packageScriptInvocation(
         path,
         `${manager} ${command} must name a package script; configure a script name or use a direct executable`,
       );
-    return { script, cwdArgument, packageSelectors };
+    return { script, cwdArgument, packageSelectors, recursive };
   }
-  return { cwdArgument, packageSelectors };
+  return { cwdArgument, packageSelectors, recursive };
 }
 
 function packageManagerCommand(
@@ -481,6 +503,7 @@ function packageManagerCommand(
   commandIndex?: number;
   cwdArgument?: string;
   packageSelectors: string[];
+  recursive: boolean;
 } {
   const optionsWithValues =
     manager === "npm"
@@ -503,14 +526,20 @@ function packageManagerCommand(
   let commandIndex: number | undefined;
   let cwdArgument: string | undefined;
   const packageSelectors: string[] = [];
+  let recursive = false;
   for (let index = 1; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (argument === "--") return { cwdArgument, packageSelectors };
+    if (argument === "--")
+      return { commandIndex, cwdArgument, packageSelectors, recursive };
     if (!argument?.startsWith("-")) {
       if (commandIndex === undefined) commandIndex = index;
       continue;
     }
     const option = argument.split("=", 1)[0] ?? argument;
+    if (option === "-r" || option === "--recursive" || option === "--workspaces") {
+      recursive = true;
+      continue;
+    }
     const inlineValue =
       argument.length > option.length && argument[option.length] === "="
         ? argument.slice(option.length + 1)
@@ -529,7 +558,7 @@ function packageManagerCommand(
     }
     if (optionsWithValues.has(option) && inlineValue === undefined) index += 1;
   }
-  return { commandIndex, cwdArgument, packageSelectors };
+  return { commandIndex, cwdArgument, packageSelectors, recursive };
 }
 
 async function resolvePackageManagerDirectory(
@@ -552,6 +581,29 @@ async function resolvePackageManagerDirectory(
     configuredPath,
     path,
   );
+}
+
+async function resolveRecursivePackageDirectories(
+  repositoryRoot: string,
+  commandCwd: string,
+): Promise<string[]> {
+  const manifests: DiscoveredPackageManifest[] = [];
+  await collectPackageManifests(
+    repositoryRoot,
+    repositoryRoot,
+    ".",
+    0,
+    { entries: 0 },
+    manifests,
+  );
+  const directories = manifests
+    .filter((manifest) => pathWithin(commandCwd, manifest.directory))
+    .map((manifest) => manifest.directory);
+  const uniqueDirectories = [...new Set(directories)];
+  const nestedDirectories = uniqueDirectories.filter(
+    (directory) => directory !== commandCwd,
+  );
+  return nestedDirectories.length > 0 ? nestedDirectories : [commandCwd];
 }
 
 async function resolvePackageSelectorDirectories(
@@ -581,6 +633,32 @@ async function resolvePackageSelectorDirectories(
         path,
         `package selector '${selector}' is a dependency graph selector; use cwd for an exact package`,
       );
+    const explicitPath =
+      selector === "." ||
+      selector.startsWith("./") ||
+      selector.startsWith("../") ||
+      isAbsolute(selector);
+    if (!explicitPath) {
+      const namedMatches = manifests.filter(
+        (manifest) => manifest.packageName === selector,
+      );
+      if (namedMatches.length > 1)
+        throw new VerificationPreflightError(
+          path,
+          `package selector '${selector}' matches multiple package names; set cwd to an exact package directory`,
+        );
+      if (namedMatches.length === 1) {
+        directories.push(
+          await resolveExistingVerificationDirectory(
+            repositoryRoot,
+            namedMatches[0]!.directory,
+            namedMatches[0]!.packagePath,
+            path,
+          ),
+        );
+        continue;
+      }
+    }
     const lexical = isAbsolute(selector)
       ? resolve(selector)
       : resolve(commandCwd, selector);
@@ -604,11 +682,10 @@ async function resolvePackageSelectorDirectories(
     } else if (isAbsolute(selector)) {
       throw new VerificationPreflightError(path, "escapes the repository");
     }
-    const matches = manifests.filter(
-      (manifest) =>
-        manifest.packagePath === selector || manifest.packageName === selector,
+    const pathMatches = manifests.filter(
+      (manifest) => manifest.packagePath === selector,
     );
-    if (matches.length !== 1) {
+    if (pathMatches.length !== 1) {
       throw new VerificationPreflightError(
         path,
         `package selector '${selector}' does not identify exactly one package; set cwd to the package directory`,
@@ -617,8 +694,8 @@ async function resolvePackageSelectorDirectories(
     directories.push(
       await resolveExistingVerificationDirectory(
         repositoryRoot,
-        matches[0]!.directory,
-        matches[0]!.packagePath,
+        pathMatches[0]!.directory,
+        pathMatches[0]!.packagePath,
         path,
       ),
     );

@@ -178,6 +178,22 @@ test("preflight validates package-manager script syntax, selectors, and built-in
       { test: command(".", { argv: ["pnpm", "--filter", "web", "test"] }) },
       { path: testFixture.path },
     );
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      { test: command(".", { argv: ["pnpm", "-r", "run", "test"] }) },
+      { path: testFixture.path },
+    );
+    await writeFile(join(testFixture.path, "yarn"), "#!/bin/sh\nexit 0\n");
+    await chmod(join(testFixture.path, "yarn"), 0o755);
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      {
+        test: command(".", {
+          argv: ["yarn", "workspace", "web", "run", "test"],
+        }),
+      },
+      { path: testFixture.path },
+    );
     await writeFile(join(testFixture.path, "bun"), "#!/bin/sh\nexit 0\n");
     await chmod(join(testFixture.path, "bun"), 0o755);
     await preflightRequiredVerificationCommands(

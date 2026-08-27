@@ -517,9 +517,21 @@ export async function chooseLocalVerificationCommands(
   const candidates = await discoverVerificationCommandCandidates(root, {
     trackedManifestPaths: options.trackedManifestPaths,
   });
-  const candidateChoices = candidates.map((candidate) =>
-    formatVerificationCandidateChoice(candidate, candidates),
-  );
+  const baseLabels = candidates.map(formatVerificationCandidateBase);
+  const labelCounts = new Map<string, number>();
+  for (const label of baseLabels)
+    labelCounts.set(label, (labelCounts.get(label) ?? 0) + 1);
+  const candidateChoices: string[] = [];
+  const choiceByCandidate = new Map<string, string>();
+  for (const [index, candidate] of candidates.entries()) {
+    const base = baseLabels[index] ?? formatVerificationCandidateBase(candidate);
+    const choice =
+      (labelCounts.get(base) ?? 0) > 1
+        ? `${base} [${candidate.name}]`
+        : base;
+    candidateChoices.push(choice);
+    choiceByCandidate.set(candidate.name, choice);
+  }
   const choices = [
     ...(Object.keys(current).length > 0 ? [KEEP_LOCAL_VERIFICATION_CHOICE] : []),
     CI_ONLY_VERIFICATION_CHOICE,
@@ -535,7 +547,7 @@ export async function chooseLocalVerificationCommands(
   if (choice === KEEP_LOCAL_VERIFICATION_CHOICE)
     return cloneVerificationCommands(current);
   const candidate = candidates.find(
-    (entry) => formatVerificationCandidateChoice(entry, candidates) === choice,
+    (entry) => choiceByCandidate.get(entry.name) === choice,
   );
   if (!candidate)
     throw new Error("Invalid local verification selection.");
@@ -549,17 +561,7 @@ export async function chooseLocalVerificationCommands(
   };
 }
 
-function formatVerificationCandidateChoice(
-  candidate: VerificationCommandCandidate,
-  candidates: readonly VerificationCommandCandidate[],
-): string {
-  const base = formatVerificationCandidateBase(candidate);
-  const duplicate = candidates.some(
-    (entry) =>
-      entry !== candidate && formatVerificationCandidateBase(entry) === base,
-  );
-  return duplicate ? `${base} [${candidate.name}]` : base;
-}
+
 
 function formatVerificationCandidateBase(
   candidate: VerificationCommandCandidate,
@@ -568,7 +570,7 @@ function formatVerificationCandidateBase(
 }
 
 function sanitizeSelectionText(value: string): string {
-  return value.replace(/[\u0000-\u001f\u007f]/g, "?");
+  return value.replace(/[\u0000-\u001f\u007f]/g, "?").slice(0, 120);
 }
 
 function cloneVerificationCommands(
