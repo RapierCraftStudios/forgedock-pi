@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 10,
-  "lastEventHash": "sha256:e45d8d4ce11170a8f567032748f9d5764bc529683fcec4417cb2f34324bd119c",
+  "sequence": 11,
+  "lastEventHash": "sha256:491def0cec89b633fed45f056c63e332f86234e0d227cd76c5d1d92c9a9a4f32",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -64,15 +64,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Builder contract is limited to `src/workflows/work-on.ts` and `test/workflows/work-on.test.ts`.",
+            "The production change will introduce a named compensating-label helper whose signature excludes the parent abort signal, then route the parent merge catch through it.",
+            "Focused coverage will assert the helper restores `workflow:in-review` even when the merge operation's signal is already aborted and preserves best-effort error suppression.",
+            "No adapter, policy, API, UX, branch, or security-authority changes are planned.",
+            "The trusted local verification command is `check` (`npm run check`)."
+          ],
           "logicalNodeId": "plan-1",
           "startedAt": "2026-08-27T00:57:19.323Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/e0e819e1-181d-4356-b4c4-43c7ed6f7b0a",
           "branch": "forge/issue-120-e0e819e1",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-27T00:58:46.663Z",
+          "outputArtifactHash": "sha256:contract-issue-120-work-on-rollback"
         }
       ]
     }
@@ -89,7 +97,8 @@
     "phase:investigate:1:start": "38ddeef8-5d09-49ea-928f-fe9c59f00aad",
     "phase:investigate:1:complete": "7cfcfa61-5d3d-411b-985d-2047bd198094",
     "phase:plan:1:queue": "51901883-02fc-4480-9330-92db372cc51d",
-    "phase:plan:1:start": "068a73e4-a536-4bf1-bf84-cdb095d661c8"
+    "phase:plan:1:start": "068a73e4-a536-4bf1-bf84-cdb095d661c8",
+    "phase:plan:1:complete": "c1261cb4-0352-4368-a7f9-f1d355cc06c6"
   },
   "eventIds": {
     "051eed88-dcc2-4a51-afaa-c0801edf39e3": true,
@@ -101,7 +110,8 @@
     "38ddeef8-5d09-49ea-928f-fe9c59f00aad": true,
     "7cfcfa61-5d3d-411b-985d-2047bd198094": true,
     "51901883-02fc-4480-9330-92db372cc51d": true,
-    "068a73e4-a536-4bf1-bf84-cdb095d661c8": true
+    "068a73e4-a536-4bf1-bf84-cdb095d661c8": true,
+    "c1261cb4-0352-4368-a7f9-f1d355cc06c6": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
