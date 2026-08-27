@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 12,
-  "lastEventHash": "sha256:1c3a425daeb95877d1a8fb23ce87bcc45f77e65885bb8acea41997a0c1c135a5",
+  "sequence": 13,
+  "lastEventHash": "sha256:6d725d4b5aaa497e974269004b0be968b68f5a8ae9997f108629f700f70621d0",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -40,16 +40,24 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`attach()` invokes `#reconcileWorkflowProjection` and then resumes a persisted parent node through `#runParentNode`.",
+            "`#reconcileWorkflowProjection` derives `awaitingMerge` from a running merge node without checking `state.effects` for a durable merge effect.",
+            "`#runParentNode` projects `workflowStageForNodeTransition(node.node, \"started\")` before reading durable run state, so merge recovery writes `workflow:awaiting-merge` even after a merge effect exists.",
+            "The merge path records `effect.recorded` before attempting the merged projection and before completing the node, establishing the crash window.",
+            "Existing lifecycle coverage in `test/workflows/work-on.test.ts` validates pure mapping only and does not cover durable-effect dominance during resumed projection."
+          ],
           "inputArtifactHash": "sha256:resolve-issue-147-7817370b",
           "logicalNodeId": "investigate-1",
           "startedAt": "2026-08-27T12:46:41.515Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/7053733d-ea35-4801-b101-5893c883334a",
           "branch": "forge/issue-147-7053733d",
-          "baseSha": "7817370b07c7e3d172f4971771e822aab548431a"
+          "baseSha": "7817370b07c7e3d172f4971771e822aab548431a",
+          "finishedAt": "2026-08-27T12:48:21.382Z",
+          "outputArtifactHash": "sha256:investigate-147-durable-merge-projection"
         }
       ]
     }
@@ -99,7 +107,8 @@
     "effect:github-label:RapierCraftStudios/forgedock-pi:147:0dce990a-e0ff-4950-972b-908e1f6a851e": "38e13d21-a562-4612-bcb3-cad282f7f8cb",
     "phase:investigate:1:queue": "0bb3ee7e-f39f-4264-a5c9-13db0431af4d",
     "phase:investigate:1:start": "5a4a814d-eff9-4fff-b704-ad11ba9d4adf",
-    "effect:github-label:RapierCraftStudios/forgedock-pi:147:5a4a814d-eff9-4fff-b704-ad11ba9d4adf": "5fbcd781-eb20-4210-b3e6-62502489069d"
+    "effect:github-label:RapierCraftStudios/forgedock-pi:147:5a4a814d-eff9-4fff-b704-ad11ba9d4adf": "5fbcd781-eb20-4210-b3e6-62502489069d",
+    "phase:investigate:1:complete": "8efebb23-237f-4014-9845-cc2c8aba52dd"
   },
   "eventIds": {
     "97c07aaf-07c1-4107-95e3-0632108817f3": true,
@@ -113,7 +122,8 @@
     "38e13d21-a562-4612-bcb3-cad282f7f8cb": true,
     "0bb3ee7e-f39f-4264-a5c9-13db0431af4d": true,
     "5a4a814d-eff9-4fff-b704-ad11ba9d4adf": true,
-    "5fbcd781-eb20-4210-b3e6-62502489069d": true
+    "5fbcd781-eb20-4210-b3e6-62502489069d": true,
+    "8efebb23-237f-4014-9845-cc2c8aba52dd": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
