@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 16,
-  "lastEventHash": "sha256:2c74f0d583a3fd23fad0c6cec84ea1a0d46534915c6f1e50372a60db8169f92d",
+  "sequence": 17,
+  "lastEventHash": "sha256:7d508c32aa5083b3f5b6c1c36c3a493fdc2792a1fbaf5edd8c84c40d7b9871cb",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -107,15 +107,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Added `restoreReviewLabelAfterMergeFailure` with fresh bounded timeout signals and three bounded attempts.",
+            "Merge catch now reports rollback failure while rethrowing the original merge error.",
+            "Failed, blocked, and needs-human merge nodes now project the review stage during reconciliation.",
+            "Added focused tests for cancellation independence/retry and failed merge label mapping.",
+            "Final diff is limited to the two contract paths."
+          ],
           "logicalNodeId": "work-on-implement",
           "startedAt": "2026-08-26T23:57:33.276Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/e7579265-9eef-4dda-88a8-182c9e01502d",
           "branch": "forge/issue-120-e7579265",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-27T00:01:32.094Z"
         }
       ]
     }
@@ -138,7 +145,8 @@
     "phase:prepare-worktree:1:start": "684d38bc-4130-4283-9ce3-376c5c28e08d",
     "phase:prepare-worktree:1:complete": "225d60e5-a434-45f8-a19c-8c41455a902c",
     "phase:implement:1:queue": "7ef0bbd1-0cc7-4b9e-833d-76674cb8cbd8",
-    "phase:implement:1:start": "fc557531-28b5-4c75-932f-4f9e6b5bb252"
+    "phase:implement:1:start": "fc557531-28b5-4c75-932f-4f9e6b5bb252",
+    "phase:implement:1:complete": "20f1d781-06f3-49da-b212-58ef522ad4ef"
   },
   "eventIds": {
     "743f78a0-8338-4952-94d1-68b7ba52daf1": true,
@@ -156,7 +164,8 @@
     "684d38bc-4130-4283-9ce3-376c5c28e08d": true,
     "225d60e5-a434-45f8-a19c-8c41455a902c": true,
     "7ef0bbd1-0cc7-4b9e-833d-76674cb8cbd8": true,
-    "fc557531-28b5-4c75-932f-4f9e6b5bb252": true
+    "fc557531-28b5-4c75-932f-4f9e6b5bb252": true,
+    "20f1d781-06f3-49da-b212-58ef522ad4ef": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
