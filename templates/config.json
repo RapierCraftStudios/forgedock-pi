@@ -27,7 +27,7 @@
   },
   "orchestration": {
     "maxConcurrent": 2,
-    "maxIssues": 20
+    "maxIssues": 100
   },
   "subagents": {
     "maxConcurrent": 2,

@@ -2,6 +2,7 @@ import type { RunEvent } from "../core/events.ts";
 import {
   GitHubApiError,
   type GitHubTransport,
+  nextGitHubPagePath,
   repositoryApiPath,
   requireGitHubSuccess,
 } from "./github-api.ts";
@@ -52,17 +53,21 @@ export class GitHubIssueProjector {
     if (!Number.isSafeInteger(input.issueNumber) || input.issueNumber < 1)
       throw new TypeError("Issue number must be positive.");
     const marker = `<!-- FORGEDOCK-EVENT:${input.event.eventId} -->`;
+    const body = `${marker}\n<!-- FORGEDOCK-RUN:${input.event.runId} -->\n${input.markdown.trim()}\n`;
+    const path = `${this.#apiRoot}/issues/${input.issueNumber}/comments`;
     const existing = await this.#findComment(
       input.issueNumber,
       marker,
       input.signal,
     );
+    if (existing && existing.body !== body)
+      throw new GitHubApiError(422, path, {
+        message: `Projection ${marker} exists with a different payload.`,
+      });
     let commentId = existing?.id;
     let created = false;
 
     if (!commentId) {
-      const path = `${this.#apiRoot}/issues/${input.issueNumber}/comments`;
-      const body = `${marker}\n<!-- FORGEDOCK-RUN:${input.event.runId} -->\n${input.markdown.trim()}\n`;
       const response = await this.#transport.request<IssueComment>({
         method: "POST",
         path,
@@ -72,16 +77,12 @@ export class GitHubIssueProjector {
       const comment = requireGitHubSuccess(response, path, [201]);
       commentId = comment.id;
       created = true;
-      const readBack = await this.#findComment(
-        input.issueNumber,
-        marker,
-        input.signal,
-      );
-      if (!readBack || readBack.id !== commentId) {
+      const readBack = await this.#readComment(comment.id, input.signal);
+      if (readBack.id !== comment.id || readBack.body !== body)
         throw new GitHubApiError(422, path, {
-          message: `Projection read-back missing ${marker}`,
+          message: `Projection read-back mismatch for ${marker}.`,
+          commentId: comment.id,
         });
-      }
     }
 
     const labelsAdded = await this.#addMissingLabels(
@@ -115,9 +116,13 @@ export class GitHubIssueProjector {
     );
     if (existing) {
       if (!existing.body.includes(rendered))
-        throw new GitHubApiError(422, `${this.#apiRoot}/issues/${input.issueNumber}/comments`, {
-          message: `Artifact ${marker} exists with a different rendered payload.`,
-        });
+        throw new GitHubApiError(
+          422,
+          `${this.#apiRoot}/issues/${input.issueNumber}/comments`,
+          {
+            message: `Artifact ${marker} exists with a different rendered payload.`,
+          },
+        );
       return existing.id;
     }
     const prior = comments
@@ -139,22 +144,12 @@ export class GitHubIssueProjector {
       ...(input.signal ? { signal: input.signal } : {}),
     });
     const comment = requireGitHubSuccess(response, path, [201]);
-    const readBack = await this.#findComment(
-      input.issueNumber,
-      marker,
-      input.signal,
-    );
-    if (
-      !readBack ||
-      readBack.id !== comment.id ||
-      !readBack.body.includes(identityMarker) ||
-      !readBack.body.includes(revisionMarker) ||
-      !readBack.body.includes(rendered)
-    ) {
+    const readBack = await this.#readComment(comment.id, input.signal);
+    if (readBack.id !== comment.id || readBack.body !== body)
       throw new GitHubApiError(422, path, {
-        message: `Artifact read-back missing ${marker}`,
+        message: `Artifact read-back mismatch for ${marker}.`,
+        commentId: comment.id,
       });
-    }
     return comment.id;
   }
 
@@ -187,9 +182,11 @@ export class GitHubIssueProjector {
       ...(input.signal ? { signal: input.signal } : {}),
     });
     const updated = requireGitHubSuccess(response, path, [200]);
-    if (!updated.body.includes(input.append.trim()))
+    const readBack = await this.#readComment(updated.id, input.signal);
+    if (readBack.body !== body)
       throw new GitHubApiError(422, path, {
-        message: "Comment append read-back failed",
+        message: "Comment append read-back failed.",
+        commentId: updated.id,
       });
     return updated.id;
   }
@@ -269,8 +266,37 @@ export class GitHubIssueProjector {
     issueNumber: number,
     signal?: AbortSignal,
   ): Promise<IssueComment[]> {
-    const path = `${this.#apiRoot}/issues/${issueNumber}/comments?per_page=100&cache_bust=${Date.now()}`;
-    const response = await this.#transport.request<IssueComment[]>({
+    const comments: IssueComment[] = [];
+    const seen = new Set<string>();
+    let path: string | undefined =
+      `${this.#apiRoot}/issues/${issueNumber}/comments?per_page=100&cache_bust=${Date.now()}`;
+    for (let page = 0; path && page < 100; page += 1) {
+      if (seen.has(path))
+        throw new GitHubApiError(422, path, {
+          message: "GitHub comment pagination repeated a page.",
+        });
+      seen.add(path);
+      const response = await this.#transport.request<IssueComment[]>({
+        method: "GET",
+        path,
+        ...(signal ? { signal } : {}),
+      });
+      comments.push(...requireGitHubSuccess(response, path, [200]));
+      path = nextGitHubPagePath(response.headers);
+    }
+    if (path)
+      throw new GitHubApiError(422, path, {
+        message: "GitHub comment pagination exceeded 100 pages.",
+      });
+    return comments;
+  }
+
+  async #readComment(
+    commentId: number,
+    signal?: AbortSignal,
+  ): Promise<IssueComment> {
+    const path = `${this.#apiRoot}/issues/comments/${commentId}`;
+    const response = await this.#transport.request<IssueComment>({
       method: "GET",
       path,
       ...(signal ? { signal } : {}),

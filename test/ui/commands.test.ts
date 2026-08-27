@@ -10,6 +10,7 @@ import type { OrchestrationState } from "../../src/core/orchestration.ts";
 import {
   confirmOrchestrationDispatch,
   confirmWorkOnDispatch,
+  ensureIntegrationBranchPreservation,
   issueResolverPrompt,
   registerForgeCommands,
   renderOrchestrationStatus,
@@ -20,6 +21,29 @@ const input = {
   sourceExpression: "https://github.com/owner/repo/issues",
   resolutionSummary: "Three eligible open issues; active-owned lanes excluded.",
 };
+
+test("Forge init disables merged-head deletion and verifies read-back", async () => {
+  let reads = 0;
+  let patches = 0;
+  const pi = {
+    exec: async (_command: string, args: string[]) => {
+      if (args.includes("PATCH")) {
+        patches += 1;
+        return { code: 0, stdout: "{}", stderr: "" };
+      }
+      reads += 1;
+      return {
+        code: 0,
+        stdout: reads === 1 ? "true\n" : "false\n",
+        stderr: "",
+      };
+    },
+  } as unknown as ExtensionAPI;
+
+  await ensureIntegrationBranchPreservation(pi, "/repo", "owner/repo");
+  assert.equal(patches, 1);
+  assert.equal(reads, 2);
+});
 
 test("model-callable orchestration fails closed without interactive confirmation", async () => {
   const ui = {
@@ -78,6 +102,15 @@ test("orchestration status renders authoritative lane details", () => {
       },
       { issueNumber: 16, ordinal: 1, status: "queued", refreshes: 0 },
     ],
+    dependencies: [
+      {
+        fromIssue: 2,
+        toIssue: 16,
+        kind: "explicit",
+        reason: "#16 is blocked by #2",
+      },
+    ],
+    graphHash: "sha256:graph",
     idempotencyKeys: {},
     createdAt: "2026-08-26T00:00:00.000Z",
   };
@@ -95,11 +128,15 @@ test("orchestration status renders authoritative lane details", () => {
     state,
   });
   assert.match(lines[0] ?? "", /running\s+orchestration orchestration-1/);
-  assert.match(
-    lines[1] ?? "",
-    /merged\s+#2 · run forge-run-2 · child child-2 · PR #6/,
+  assert.ok(
+    lines.some((line) => /sha256:graph · 1 dependency edge/.test(line)),
   );
-  assert.match(lines[2] ?? "", /queued\s+#16/);
+  assert.ok(
+    lines.some((line) =>
+      /merged\s+#2 · run forge-run-2 · child child-2 · PR #6/.test(line),
+    ),
+  );
+  assert.ok(lines.some((line) => /queued\s+#16 · after #2/.test(line)));
 });
 
 test("work-on confirmation fails closed and names only the exact issue", async () => {
@@ -147,22 +184,28 @@ test("work-on resolver accepts free-form intent but requires exactly one issue",
   assert.match(prompt, /Resolve exactly one eligible issue/);
   assert.match(prompt, /ask the user to disambiguate/);
   assert.match(prompt, /forge_work_on exactly once/);
-  assert.match(prompt, /interactive exact-issue confirmation/);
+  assert.match(prompt, /sole authoritative interactive confirmation/);
+  assert.doesNotMatch(prompt, /obtain conversational confirmation/);
   assert.match(prompt, /Original expression:/);
   assert.doesNotMatch(prompt, /call forge_orchestrate exactly once/);
 });
 
 test("orchestration resolver keeps an explicit set narrow and ordered", () => {
-  const prompt = issueResolverPrompt(
-    "orchestrate",
-    "#92 #94 #111 --auto",
-  );
+  const prompt = issueResolverPrompt("orchestrate", "#92 #94 #111 --auto");
   assert.match(prompt, /set and order are already fully specified/);
   assert.match(prompt, /Read only \.forge\/config\.json/);
-  assert.match(prompt, /review-finding and needs-validation labels are eligible/);
+  assert.match(
+    prompt,
+    /review-finding and needs-validation labels are eligible/,
+  );
   assert.match(prompt, /Do not inspect comments, PRs, label definitions/);
-  assert.match(prompt, /Do not search conversation\/session history, memory, git history/);
+  assert.match(
+    prompt,
+    /Do not search conversation\/session history, memory, git history/,
+  );
   assert.match(prompt, /call forge_orchestrate exactly once/);
+  assert.match(prompt, /sole authoritative interactive confirmation/);
+  assert.doesNotMatch(prompt, /obtain conversational confirmation/);
 });
 
 test("work-on slash command sends free-form intent to the resolver", async () => {
@@ -245,11 +288,15 @@ test("resume command reconciles linked orchestration state", async () => {
     getAllTools: () => [],
   } as unknown as ExtensionAPI;
   let resumes = 0;
-  registerForgeCommands(pi, {} as never, {
-    resume: async () => {
-      resumes += 1;
-    },
-  } as never);
+  registerForgeCommands(
+    pi,
+    {} as never,
+    {
+      resume: async () => {
+        resumes += 1;
+      },
+    } as never,
+  );
   const notifications: string[] = [];
   const handler = commands.get("forge:resume")?.handler;
   assert.ok(handler);

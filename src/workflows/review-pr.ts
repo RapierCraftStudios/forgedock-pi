@@ -13,7 +13,7 @@ import {
   type PreparedReviewWorktree,
 } from "../adapters/git.ts";
 import { FetchGitHubTransport } from "../adapters/github-api.ts";
-import { resolveGitHubToken } from "../adapters/github-auth.ts";
+import { createGitHubTokenProvider } from "../adapters/github-auth.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import {
   GitHubWorkflowAdapter,
@@ -46,10 +46,7 @@ import type {
   ReviewRoster,
   ReviewState,
 } from "../core/review-state.ts";
-import {
-  canAutoMerge,
-  isGitHubCiRequired,
-} from "../core/policy.ts";
+import { canAutoMerge, isGitHubCiRequired } from "../core/policy.ts";
 import type {
   ParsedReviewArguments,
   ReviewSelector,
@@ -135,7 +132,9 @@ export class ReviewPrCoordinator {
   readonly #journal: ReviewJournal;
   readonly #git: GitWorktreeManager;
   readonly #panel: ReviewPanelRunner;
-  readonly #materializeAgents: (worktreePath: string) => Promise<readonly string[]>;
+  readonly #materializeAgents: (
+    worktreePath: string,
+  ) => Promise<readonly string[]>;
 
   constructor(dependencies: ReviewPrCoordinatorDependencies) {
     this.#github = dependencies.github;
@@ -152,7 +151,8 @@ export class ReviewPrCoordinator {
     if (mode === "staging" && input.autoMergeRequested)
       throw new Error("Staging review cannot merge or deploy.");
 
-    const route = input.route ??
+    const route =
+      input.route ??
       (await this.#github.getPullRequestRouteSnapshot(
         input.pullNumber,
         input.signal,
@@ -183,7 +183,12 @@ export class ReviewPrCoordinator {
     await this.#github.postPullArtifact({
       pullNumber: route.pullNumber,
       marker: reviewRouteMarker(input.reviewId, route),
-      body: renderReviewRoute(input.reviewId, mode, route, input.roster.reviewers),
+      body: renderReviewRoute(
+        input.reviewId,
+        mode,
+        route,
+        input.roster.reviewers,
+      ),
       ...(input.signal ? { signal: input.signal } : {}),
     });
 
@@ -210,19 +215,17 @@ export class ReviewPrCoordinator {
     let prepared: PreparedReviewWorktree | undefined;
     const worktreePath =
       input.execution.kind === "standalone"
-        ? (
-            (prepared = await this.#git.prepareReview(
-              input.execution.repositoryRoot,
-              {
-                reviewId: input.reviewId,
-                headRef: route.headRef,
-                headSha: route.headSha,
-                baseRef: route.baseRef,
-                baseSha: route.baseSha,
-                ...(input.signal ? { signal: input.signal } : {}),
-              },
-            ))
-          ).worktreePath
+        ? (prepared = await this.#git.prepareReview(
+            input.execution.repositoryRoot,
+            {
+              reviewId: input.reviewId,
+              headRef: route.headRef,
+              headSha: route.headSha,
+              baseRef: route.baseRef,
+              baseSha: route.baseSha,
+              ...(input.signal ? { signal: input.signal } : {}),
+            },
+          )).worktreePath
         : input.execution.worktreePath;
 
     try {
@@ -232,7 +235,12 @@ export class ReviewPrCoordinator {
           `Review worktree head ${localHead} does not match frozen PR head ${route.headSha}.`,
         );
       await this.#materializeAgents(worktreePath);
-      snapshot = await this.#runPanelIfNeeded(snapshot.state, input, route, worktreePath);
+      snapshot = await this.#runPanelIfNeeded(
+        snapshot.state,
+        input,
+        route,
+        worktreePath,
+      );
       if (snapshot.state.panel?.status === "running") {
         const additionalChecks: readonly VerificationResult[] = [
           {
@@ -261,7 +269,10 @@ export class ReviewPrCoordinator {
         pollIntervalMs: input.githubCheckPollIntervalMs,
         ...(input.signal ? { signal: input.signal } : {}),
       });
-      const githubChecks = normalizeGitHubChecks(ci, input.githubChecksRequired);
+      const githubChecks = normalizeGitHubChecks(
+        ci,
+        input.githubChecksRequired,
+      );
       if (snapshot.state.panel?.status === "running") {
         for (const [index, check] of githubChecks.entries()) {
           snapshot = await this.#journal.append({
@@ -305,15 +316,13 @@ export class ReviewPrCoordinator {
         currentHeadSha: currentPull.headSha,
         currentBaseSha: currentPull.baseSha,
         requiredReviewers: input.roster.reviewers,
-        completedReviewers:
-          snapshot.state.panel?.completedReviewers ?? [],
+        completedReviewers: snapshot.state.panel?.completedReviewers ?? [],
         findings,
         checks: snapshot.state.checks,
         mergeability: input.mergeability ?? currentPull.mergeability,
         leaseValid: authorityValid,
         baseBranch: route.baseRef,
-        protectedBranches:
-          mode === "staging" ? [] : input.protectedBranches,
+        protectedBranches: mode === "staging" ? [] : input.protectedBranches,
         autoMergeAuthorized:
           mode === "staging" ? true : input.autoMergeAuthorized,
         ...(input.malformedResults
@@ -372,7 +381,8 @@ export class ReviewPrCoordinator {
         ...(input.signal ? { signal: input.signal } : {}),
       });
 
-      const forgeFindings = snapshot.state.findings as readonly ForgeReviewFindingResult[];
+      const forgeFindings = snapshot.state
+        .findings as readonly ForgeReviewFindingResult[];
       const findingIssues = await publishReviewFindingIssues({
         github: this.#github,
         pullNumber: route.pullNumber,
@@ -401,7 +411,11 @@ export class ReviewPrCoordinator {
         await this.#github.postPullArtifact({
           pullNumber: route.pullNumber,
           marker,
-          body: renderStagingGate(decision, snapshot.state.checks, forgeFindings),
+          body: renderStagingGate(
+            decision,
+            snapshot.state.checks,
+            forgeFindings,
+          ),
           ...(input.signal ? { signal: input.signal } : {}),
         });
       }
@@ -409,7 +423,9 @@ export class ReviewPrCoordinator {
       let merge: MergeResult | undefined;
       if (input.autoMergeRequested && passed) {
         if (mode !== "standard" || !input.autoMergeAuthorized)
-          throw new Error("Review passed, but this route is not authorized for automatic merge.");
+          throw new Error(
+            "Review passed, but this route is not authorized for automatic merge.",
+          );
         await this.#github.revalidatePullRequestRoute(route, input.signal);
         snapshot = await this.#journal.append({
           reviewId: input.reviewId,
@@ -597,7 +613,9 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
     this.#rpc = rpc;
   }
 
-  async run(input: ReviewPanelRunInput): Promise<readonly ForgeReviewerResult[]> {
+  async run(
+    input: ReviewPanelRunInput,
+  ): Promise<readonly ForgeReviewerResult[]> {
     await this.#rpc.ping();
     const receipts: Array<{
       receipt: SubagentSpawnReceipt;
@@ -726,11 +744,9 @@ export class ForgeReviewController {
       selectorValue(parsed.selector),
       ctx.signal,
     );
-    if (pulls.length === 0) throw new Error("No pull requests matched the review selector.");
-    if (
-      parsed.selector.kind === "route" &&
-      pulls.length !== 1
-    )
+    if (pulls.length === 0)
+      throw new Error("No pull requests matched the review selector.");
+    if (parsed.selector.kind === "route" && pulls.length !== 1)
       throw new Error(
         `Configured review route matched ${pulls.length} pull requests; expected exactly one.`,
       );
@@ -830,7 +846,10 @@ export class ForgeReviewController {
     return state;
   }
 
-  async resume(reviewId: string, ctx: ExtensionContext): Promise<ReviewPrResult> {
+  async resume(
+    reviewId: string,
+    ctx: ExtensionContext,
+  ): Promise<ReviewPrResult> {
     const environment = await this.#environment(ctx);
     const current = await environment.journal.read(reviewId, ctx.signal);
     if (!current) throw new Error(`Review ${reviewId} does not exist.`);
@@ -858,7 +877,8 @@ export class ForgeReviewController {
       },
       round: state.panel?.round ?? 1,
       reviewerTimeoutMs: environment.policy.subagents.reviewerTimeoutMs,
-      githubCheckTimeoutMs: environment.policy.verification.github.waitTimeoutMs,
+      githubCheckTimeoutMs:
+        environment.policy.verification.github.waitTimeoutMs,
       githubCheckPollIntervalMs:
         environment.policy.verification.github.pollIntervalMs,
       githubChecksRequired: isGitHubCiRequired(
@@ -900,12 +920,8 @@ export class ForgeReviewController {
     );
     await this.#git.ensureRuntimeIgnored(repositoryRoot, ctx.signal);
     const { policy } = await loadForgePolicy(repositoryRoot);
-    const token = await resolveGitHubToken(
-      this.#pi,
-      repositoryRoot,
-      ctx.signal,
-    );
-    const transport = new FetchGitHubTransport({ token });
+    const tokenProvider = createGitHubTokenProvider(this.#pi, repositoryRoot);
+    const transport = new FetchGitHubTransport({ tokenProvider });
     const github = new GitHubWorkflowAdapter(
       transport,
       policy.repository.name,
@@ -947,7 +963,9 @@ function normalizePanelResults(
       value.headSha !== headSha ||
       byReviewer.has(reviewer)
     )
-      throw new Error("Reviewer result does not match the frozen panel identity.");
+      throw new Error(
+        "Reviewer result does not match the frozen panel identity.",
+      );
     const findings = value.findings.map((finding) => {
       const findingReviewer = canonicalReviewer(finding.reviewer, roster);
       if (
@@ -962,12 +980,15 @@ function normalizePanelResults(
   }
   const results = roster.map((reviewer) => {
     const result = byReviewer.get(reviewer);
-    if (!result) throw new Error(`Required reviewer ${reviewer} did not complete.`);
+    if (!result)
+      throw new Error(`Required reviewer ${reviewer} did not complete.`);
     return result;
   });
   const findings = results.flatMap((result) => result.findings);
   if (new Set(findings.map((finding) => finding.id)).size !== findings.length)
-    throw new Error("Reviewer finding IDs must be unique across the complete panel.");
+    throw new Error(
+      "Reviewer finding IDs must be unique across the complete panel.",
+    );
   return { results, findings };
 }
 
@@ -983,7 +1004,9 @@ function canonicalReviewer(value: string, roster: readonly string[]): string {
 }
 
 function normalizeGitHubChecks(
-  result: Awaited<ReturnType<GitHubWorkflowAdapter["waitForPullRequestChecks"]>>,
+  result: Awaited<
+    ReturnType<GitHubWorkflowAdapter["waitForPullRequestChecks"]>
+  >,
   required: boolean,
 ): VerificationResult[] {
   if (result.checks.length === 0)
@@ -991,7 +1014,8 @@ function normalizeGitHubChecks(
       {
         name: "github-ci",
         required,
-        status: result.configuredWorkflowCount > 0 ? "unknown" : "not-configured",
+        status:
+          result.configuredWorkflowCount > 0 ? "unknown" : "not-configured",
       },
     ];
   return result.checks.map((check) => ({
@@ -1081,7 +1105,9 @@ function strictStagingDecision(
   const reasons = [
     ...decision.reasons,
     ...(findings.length > 0
-      ? [`Staging gate requires zero open findings; received ${findings.length}.`]
+      ? [
+          `Staging gate requires zero open findings; received ${findings.length}.`,
+        ]
       : []),
     ...(unresolvedIssueNumbers.length > 0
       ? [
@@ -1111,9 +1137,7 @@ function strictStagingDecision(
   });
 }
 
-function selectorValue(
-  selector: ReviewSelector,
-): number | string {
+function selectorValue(selector: ReviewSelector): number | string {
   switch (selector.kind) {
     case "pull-request":
       return selector.pullNumber;

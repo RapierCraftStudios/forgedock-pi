@@ -4,12 +4,14 @@ import test from "node:test";
 import {
   applyOrchestrationEvent,
   createOrchestrationEvent,
+  readyOrchestrationLanes,
   type OrchestrationEventType,
   type OrchestrationState,
 } from "../../src/core/orchestration.ts";
 import {
   childCleanupReason,
   lifecycleMatchesForgeRun,
+  rateLimitedOrchestrationConcurrency,
 } from "../../src/workflows/orchestrate.ts";
 
 const orchestrationId = "orchestration-1";
@@ -49,6 +51,49 @@ function initialized(): OrchestrationState {
     ),
   );
 }
+
+test("GitHub budget adaptively bounds lane concurrency below the configured maximum", () => {
+  const state = applyOrchestrationEvent(
+    undefined,
+    next(
+      undefined,
+      "orchestration.created",
+      {
+        issueNumbers: [1, 2, 3, 4, 5, 6],
+        integrationBranch: "staging",
+        maxConcurrent: 16,
+        leaseEpoch: 1,
+      },
+      "rate-create",
+    ),
+  );
+  const effective = rateLimitedOrchestrationConcurrency(16, {
+    limit: 5_000,
+    remaining: 5_000,
+    resetAt: Date.now() + 60_000,
+  });
+  assert.equal(effective, 5);
+  assert.equal(
+    rateLimitedOrchestrationConcurrency(16, {
+      limit: 15_000,
+      remaining: 15_000,
+      resetAt: Date.now() + 60_000,
+    }),
+    16,
+  );
+  assert.deepEqual(
+    readyOrchestrationLanes(state, effective).map((lane) => lane.issueNumber),
+    [1, 2, 3, 4, 5],
+  );
+  assert.equal(
+    rateLimitedOrchestrationConcurrency(16, {
+      limit: 5_000,
+      remaining: 1_000,
+      resetAt: Date.now() + 60_000,
+    }),
+    0,
+  );
+});
 
 test("lane lifecycle follows the stable Forge run instead of rotating child receipts", () => {
   assert.equal(

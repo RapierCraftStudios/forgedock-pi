@@ -27,12 +27,14 @@ function response(status: number, data: unknown): GitHubResponse<unknown> {
   return { status, data, headers: {} };
 }
 
-function pullData(input: {
-  number?: number;
-  headRef?: string;
-  baseRef?: string;
-  state?: "open" | "closed";
-} = {}) {
+function pullData(
+  input: {
+    number?: number;
+    headRef?: string;
+    baseRef?: string;
+    state?: "open" | "closed";
+  } = {},
+) {
   return {
     number: input.number ?? 6,
     html_url: `https://example.test/pr/${input.number ?? 6}`,
@@ -60,10 +62,7 @@ function common(request: GitHubRequest): GitHubResponse<unknown> | undefined {
 
 test("PR lookup qualifies and exactly matches the bound head branch", async () => {
   const transport = new MockTransport((request) => {
-    assert.match(
-      request.path,
-      /head=owner%3Aforge%2Fissue-2&per_page=20$/,
-    );
+    assert.match(request.path, /head=owner%3Aforge%2Fissue-2&per_page=20$/);
     return response(200, [
       {
         number: 5,
@@ -238,9 +237,7 @@ test("branch deletion reconciles a missing auto-deleted ref", async () => {
     throw new Error(`Unexpected request ${request.method} ${request.path}`);
   });
   const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
-  await assert.doesNotReject(
-    adapter.deleteBranch("forge/issue-2-run"),
-  );
+  await assert.doesNotReject(adapter.deleteBranch("forge/issue-2-run"));
   assert.equal(transport.requests.length, 2);
 });
 
@@ -350,6 +347,37 @@ test("GitHub CI gate reports a missing required context as unknown", async () =>
   );
 });
 
+test("issue label lookup follows pagination and excludes pull requests", async () => {
+  const transport = new MockTransport((request) => {
+    const url = new URL(request.path, "https://api.github.com");
+    const page = Number(url.searchParams.get("page") ?? "1");
+    const issue = (number: number) => ({
+      number,
+      title: `Issue ${number}`,
+      body: "body",
+      state: "open",
+      labels: [{ name: "review-finding" }],
+      html_url: `https://example.test/issues/${number}`,
+    });
+    if (page === 1)
+      return {
+        status: 200,
+        data: [issue(1), { ...issue(99), pull_request: {} }],
+        headers: {
+          link: '<https://api.github.com/repos/owner/repo/issues?state=open&labels=review-finding&per_page=100&page=2>; rel="next"',
+        },
+      };
+    return response(200, [issue(2)]);
+  });
+  const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
+
+  const issues = await adapter.listIssuesByLabel("review-finding", "open");
+  assert.deepEqual(
+    issues.map((issue) => issue.number),
+    [1, 2],
+  );
+});
+
 test("PR collection helpers sort results and resolve route aliases", async () => {
   const transport = new MockTransport((request) => {
     assert.equal(request.method, "GET");
@@ -364,11 +392,78 @@ test("PR collection helpers sort results and resolve route aliases", async () =>
   });
   const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
   const pulls = await adapter.listPullRequests("feature");
-  assert.deepEqual(pulls.map((pull) => pull.number), [3, 9]);
+  assert.deepEqual(
+    pulls.map((pull) => pull.number),
+    [3, 9],
+  );
   assert.deepEqual(adapter.configuredStagingToMainRoute(), {
     headRef: "staging",
     baseRef: "main",
   });
+});
+
+test("pull artifacts paginate markers and read back the exact created comment", async () => {
+  const comments = Array.from({ length: 100 }, (_, index) => ({
+    id: index + 1,
+    body: `Historical comment ${index + 1}`,
+  }));
+  let posts = 0;
+  const transport = new MockTransport((request) => {
+    const exact = request.path.match(/\/issues\/comments\/(\d+)$/);
+    if (request.method === "GET" && exact) {
+      const comment = comments.find((entry) => entry.id === Number(exact[1]));
+      return response(comment ? 200 : 404, comment ?? {});
+    }
+    if (
+      request.method === "GET" &&
+      request.path.includes("/issues/6/comments")
+    ) {
+      const url = new URL(request.path, "https://api.github.com");
+      const page = Number(url.searchParams.get("page") ?? "1");
+      const start = (page - 1) * 100;
+      const headers: Record<string, string> =
+        start + 100 < comments.length
+          ? {
+              link: `<https://api.github.com/repos/owner/repo/issues/6/comments?per_page=100&page=${page + 1}>; rel="next"`,
+            }
+          : {};
+      return {
+        status: 200,
+        data: comments.slice(start, start + 100),
+        headers,
+      };
+    }
+    if (
+      request.method === "POST" &&
+      request.path.endsWith("/issues/6/comments")
+    ) {
+      const comment = {
+        id: Math.max(...comments.map((entry) => entry.id)) + 1,
+        body: (request.body as { body: string }).body,
+      };
+      comments.push(comment);
+      posts += 1;
+      return response(201, comment);
+    }
+    throw new Error(`Unexpected request ${request.method} ${request.path}`);
+  });
+  const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
+
+  const created = await adapter.postPullArtifact({
+    pullNumber: 6,
+    marker: "<!-- FORGE:REVIEW_SUMMARY id=review-1 -->",
+    body: "Review summary",
+  });
+  const repeated = await adapter.postPullArtifact({
+    pullNumber: 6,
+    marker: "<!-- FORGE:REVIEW_SUMMARY id=review-1 -->",
+    body: "Review summary",
+  });
+
+  assert.equal(created, 101);
+  assert.equal(repeated, created);
+  assert.equal(posts, 1);
+  assert.equal(comments.length, 101);
 });
 
 test("PR URL resolution is repository-bound and route snapshots revalidate all refs and SHAs", async () => {
@@ -380,7 +475,10 @@ test("PR URL resolution is repository-bound and route snapshots revalidate all r
     reads += 1;
     return response(200, {
       ...pullData({ number: 6 }),
-      head: { ref: "forge/issue-2", sha: reads === 1 ? "head-sha" : "changed-head" },
+      head: {
+        ref: "forge/issue-2",
+        sha: reads === 1 ? "head-sha" : "changed-head",
+      },
       base: { ref: "staging", sha: "base-sha" },
     });
   });

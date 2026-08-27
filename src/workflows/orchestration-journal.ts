@@ -9,6 +9,7 @@ import {
 import {
   applyOrchestrationEvent,
   createOrchestrationEvent,
+  type OrchestrationDependencyEdge,
   type OrchestrationEventType,
   type OrchestrationState,
 } from "../core/orchestration.ts";
@@ -26,6 +27,7 @@ export class OrchestrationJournal {
     issueNumbers: readonly number[];
     integrationBranch: string;
     maxConcurrent: number;
+    dependencies?: readonly OrchestrationDependencyEdge[];
     now?: Date;
     signal?: AbortSignal;
   }): Promise<OrchestrationState> {
@@ -51,6 +53,7 @@ export class OrchestrationJournal {
           issueNumbers: [...input.issueNumbers],
           integrationBranch: input.integrationBranch,
           maxConcurrent: input.maxConcurrent,
+          dependencies: [...(input.dependencies ?? [])],
           leaseEpoch: 1,
         },
         occurredAt: now.toISOString(),
@@ -94,16 +97,14 @@ export class OrchestrationJournal {
     orchestrationId: string;
     signal?: AbortSignal;
   }): Promise<OrchestrationState> {
-    return this.#mutate(
-      {
-        orchestrationId: input.orchestrationId,
-        type: "orchestration.completed",
-        payload: {},
-        idempotencyKey: "orchestration:complete",
-        message: `Complete ForgeDock orchestration ${input.orchestrationId}`,
-        ...(input.signal ? { signal: input.signal } : {}),
-      },
-    );
+    return this.#mutate({
+      orchestrationId: input.orchestrationId,
+      type: "orchestration.completed",
+      payload: {},
+      idempotencyKey: "orchestration:complete",
+      message: `Complete ForgeDock orchestration ${input.orchestrationId}`,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
   }
 
   async cancel(input: {
@@ -113,28 +114,24 @@ export class OrchestrationJournal {
   }): Promise<OrchestrationState> {
     const reason = input.reason.trim();
     if (!reason) throw new Error("Cancellation reason must be non-empty.");
-    return this.#mutate(
-      {
-        orchestrationId: input.orchestrationId,
-        type: "orchestration.cancelled",
-        payload: { reason },
-        idempotencyKey: "orchestration:cancel",
-        message: `Cancel ForgeDock orchestration ${input.orchestrationId}`,
-        ...(input.signal ? { signal: input.signal } : {}),
-      },
-    );
+    return this.#mutate({
+      orchestrationId: input.orchestrationId,
+      type: "orchestration.cancelled",
+      payload: { reason },
+      idempotencyKey: "orchestration:cancel",
+      message: `Cancel ForgeDock orchestration ${input.orchestrationId}`,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
   }
 
-  async #mutate(
-    input: {
-      orchestrationId: string;
-      type: OrchestrationEventType;
-      payload: Record<string, unknown>;
-      idempotencyKey: string;
-      message: string;
-      signal?: AbortSignal;
-    },
-  ): Promise<OrchestrationState> {
+  async #mutate(input: {
+    orchestrationId: string;
+    type: OrchestrationEventType;
+    payload: Record<string, unknown>;
+    idempotencyKey: string;
+    message: string;
+    signal?: AbortSignal;
+  }): Promise<OrchestrationState> {
     for (let attempt = 1; attempt <= MAX_STATE_CAS_ATTEMPTS; attempt += 1) {
       const current = await this.#store.readOrchestration(
         input.orchestrationId,
@@ -175,8 +172,6 @@ export class OrchestrationJournal {
         await stateCasBackoff(attempt, input.signal);
       }
     }
-    throw new Error(
-      `Unable to update orchestration ${input.orchestrationId}.`,
-    );
+    throw new Error(`Unable to update orchestration ${input.orchestrationId}.`);
   }
 }

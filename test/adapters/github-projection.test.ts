@@ -22,11 +22,29 @@ class ProjectionTransport implements GitHubTransport {
   async request<T>(request: GitHubRequest): Promise<GitHubResponse<T>> {
     let status = 200;
     let data: unknown;
-    if (request.method === "GET" && request.path.includes("/comments"))
-      data = this.comments;
-    else if (request.method === "POST" && request.path.includes("/comments")) {
+    let headers: Record<string, string> = {};
+    const exactComment = request.path.match(/\/issues\/comments\/(\d+)$/);
+    if (request.method === "GET" && exactComment) {
+      data = this.comments.find(
+        (entry) => entry.id === Number(exactComment[1]),
+      );
+      if (!data) status = 404;
+    } else if (request.method === "GET" && request.path.includes("/comments")) {
+      const url = new URL(request.path, "https://api.github.com");
+      const page = Number(url.searchParams.get("page") ?? "1");
+      const start = (page - 1) * 100;
+      data = this.comments.slice(start, start + 100);
+      if (start + 100 < this.comments.length)
+        headers = {
+          link: `<https://api.github.com${url.pathname}?per_page=100&page=${page + 1}>; rel="next"`,
+        };
+    } else if (
+      request.method === "POST" &&
+      request.path.includes("/comments")
+    ) {
       const body = (request.body as { body: string }).body;
-      const comment = { id: this.comments.length + 1, body };
+      const nextId = Math.max(0, ...this.comments.map((entry) => entry.id)) + 1;
+      const comment = { id: nextId, body };
       this.comments.push(comment);
       this.commentPosts += 1;
       status = 201;
@@ -55,7 +73,7 @@ class ProjectionTransport implements GitHubTransport {
       data = [...this.labels].map((name) => ({ name }));
     } else
       throw new Error(`Unexpected request ${request.method} ${request.path}`);
-    return { status, data: data as T, headers: {} };
+    return { status, data: data as T, headers };
   }
 }
 
@@ -201,8 +219,38 @@ test("artifact identity is scoped to the Forge run even when node revisions repe
   assert.notEqual(oldRun, newRun);
   assert.equal(newRun, repeated);
   assert.equal(transport.commentPosts, 2);
-  assert.match(transport.comments[1]?.body ?? "", /FORGEDOCK-ARTIFACT:run-new:node-resolve-1:node-resolve/);
+  assert.match(
+    transport.comments[1]?.body ?? "",
+    /FORGEDOCK-ARTIFACT:run-new:node-resolve-1:node-resolve/,
+  );
   assert.match(transport.comments[1]?.body ?? "", /New resolve/);
+});
+
+test("artifact projection paginates and reads back the exact created comment", async () => {
+  const transport = new ProjectionTransport();
+  for (let id = 1; id <= 100; id += 1)
+    transport.comments.push({ id, body: `Historical comment ${id}` });
+  const projector = new GitHubIssueProjector(transport, "owner/repo");
+
+  const created = await projector.postArtifact({
+    issueNumber: 42,
+    runId: "run-page-two",
+    eventId: "plan-1",
+    artifactKey: "architecture-plan",
+    markdown: "Typed architecture plan",
+  });
+  const repeated = await projector.postArtifact({
+    issueNumber: 42,
+    runId: "run-page-two",
+    eventId: "plan-1",
+    artifactKey: "architecture-plan",
+    markdown: "Typed architecture plan",
+  });
+
+  assert.equal(created, 101);
+  assert.equal(repeated, created);
+  assert.equal(transport.commentPosts, 1);
+  assert.equal(transport.comments.length, 101);
 });
 
 test("comment append is idempotent when the marker is already present", async () => {

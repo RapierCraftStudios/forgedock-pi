@@ -1,5 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 
+import {
+  buildDag,
+  findDagCycle,
+  getReadyQueue,
+  type Dag,
+  type DagEdge,
+} from "./dag.ts";
 import { canonicalJson } from "./events.ts";
 
 export const ORCHESTRATION_EVENT_SCHEMA =
@@ -27,6 +34,13 @@ export type OrchestrationStatus =
   | "failed"
   | "cancelled";
 
+export interface OrchestrationDependencyEdge {
+  fromIssue: number;
+  toIssue: number;
+  kind: "explicit";
+  reason: string;
+}
+
 export interface OrchestrationLane {
   issueNumber: number;
   ordinal: number;
@@ -51,6 +65,8 @@ export interface OrchestrationState {
   sequence: number;
   lastEventHash: string;
   lanes: readonly OrchestrationLane[];
+  dependencies: readonly OrchestrationDependencyEdge[];
+  graphHash: string;
   idempotencyKeys: Readonly<Record<string, string>>;
   createdAt: string;
   completedAt?: string;
@@ -110,10 +126,7 @@ export function createOrchestrationEvent(input: {
   const event: OrchestrationEvent = {
     schema: ORCHESTRATION_EVENT_SCHEMA,
     eventId: input.eventId ?? randomUUID(),
-    orchestrationId: requiredString(
-      input.orchestrationId,
-      "orchestrationId",
-    ),
+    orchestrationId: requiredString(input.orchestrationId, "orchestrationId"),
     repository: requiredString(input.repository, "repository"),
     sequence: positiveInteger(input.sequence, "sequence"),
     previousEventHash: input.previousEventHash,
@@ -218,13 +231,50 @@ export function replayOrchestrationEvents(
 
 export function readyOrchestrationLanes(
   state: OrchestrationState,
+  effectiveMaxConcurrent = state.maxConcurrent,
 ): OrchestrationLane[] {
+  if (
+    !Number.isSafeInteger(effectiveMaxConcurrent) ||
+    effectiveMaxConcurrent < 0 ||
+    effectiveMaxConcurrent > state.maxConcurrent
+  )
+    throw new TypeError(
+      "Effective orchestration concurrency must be within the configured limit.",
+    );
   const active = state.lanes.filter((lane) => lane.status === "running").length;
-  const slots = Math.max(0, state.maxConcurrent - active);
-  return state.lanes
-    .filter((lane) => lane.status === "queued")
-    .sort((left, right) => left.ordinal - right.ordinal)
-    .slice(0, slots)
+  const slots = Math.max(0, effectiveMaxConcurrent - active);
+  if (slots === 0) return [];
+  const dag = buildOrchestrationDag(state.lanes, state.dependencies);
+  const completed = new Set(
+    state.lanes
+      .filter((lane) => lane.status === "merged" || lane.status === "closed")
+      .map((lane) => issueNodeId(lane.issueNumber)),
+  );
+  const activeNodes = new Set(
+    state.lanes
+      .filter((lane) =>
+        ["running", "ready", "refreshing", "integrating"].includes(lane.status),
+      )
+      .map((lane) => issueNodeId(lane.issueNumber)),
+  );
+  const blocked = new Set(
+    state.lanes
+      .filter((lane) =>
+        ["blocked", "needs-human", "failed"].includes(lane.status),
+      )
+      .map((lane) => issueNodeId(lane.issueNumber)),
+  );
+  const byId = new Map(
+    state.lanes.map((lane) => [issueNodeId(lane.issueNumber), lane]),
+  );
+  return getReadyQueue(dag, {
+    completed,
+    active: activeNodes,
+    blocked,
+    limit: slots,
+  })
+    .map((node) => byId.get(node.id))
+    .filter((lane): lane is OrchestrationLane => lane?.status === "queued")
     .map((lane) => ({ ...lane }));
 }
 
@@ -233,27 +283,37 @@ export function nextIntegrationLane(
 ): OrchestrationLane | undefined {
   if (
     state.lanes.some(
-      (lane) =>
-        lane.status === "refreshing" || lane.status === "integrating",
+      (lane) => lane.status === "refreshing" || lane.status === "integrating",
     )
   )
     return undefined;
-  const firstNonTerminal = [...state.lanes]
-    .sort((left, right) => left.ordinal - right.ordinal)
-    .find((lane) => !isTerminalLane(lane));
-  return firstNonTerminal?.status === "ready"
-    ? { ...firstNonTerminal }
-    : undefined;
+  const completed = new Set(
+    state.lanes
+      .filter((lane) => lane.status === "merged" || lane.status === "closed")
+      .map((lane) => lane.issueNumber),
+  );
+  const eligible = state.lanes
+    .filter(
+      (lane) =>
+        lane.status === "ready" &&
+        state.dependencies
+          .filter((edge) => edge.toIssue === lane.issueNumber)
+          .every((edge) => completed.has(edge.fromIssue)),
+    )
+    .sort((left, right) => left.ordinal - right.ordinal)[0];
+  return eligible ? { ...eligible } : undefined;
 }
 
 export function aggregateOrchestrationStatus(
   lanes: readonly OrchestrationLane[],
 ): OrchestrationStatus {
   if (lanes.some((lane) => lane.status === "failed")) return "failed";
-  if (lanes.some((lane) => lane.status === "needs-human"))
-    return "needs-human";
+  if (lanes.some((lane) => lane.status === "needs-human")) return "needs-human";
   if (lanes.some((lane) => lane.status === "blocked")) return "blocked";
-  if (lanes.every((lane) => lane.status === "merged" || lane.status === "closed")) return "completed";
+  if (
+    lanes.every((lane) => lane.status === "merged" || lane.status === "closed")
+  )
+    return "completed";
   return "running";
 }
 
@@ -261,6 +321,90 @@ export function isTerminalLane(lane: OrchestrationLane): boolean {
   return ["merged", "closed", "blocked", "needs-human", "failed"].includes(
     lane.status,
   );
+}
+
+function issueNodeId(issueNumber: number): string {
+  return `issue:${issueNumber}`;
+}
+
+function buildOrchestrationDag(
+  lanes: readonly Pick<OrchestrationLane, "issueNumber" | "ordinal">[],
+  dependencies: readonly OrchestrationDependencyEdge[],
+): Dag {
+  const nodes = lanes.map((lane) => ({
+    id: issueNodeId(lane.issueNumber),
+    priority: lanes.length - lane.ordinal,
+  }));
+  const edges: DagEdge[] = dependencies.map((edge) => ({
+    from: issueNodeId(edge.fromIssue),
+    to: issueNodeId(edge.toIssue),
+    kind: edge.kind,
+    reason: edge.reason,
+  }));
+  return buildDag(nodes, edges);
+}
+
+function parseDependencies(
+  value: unknown,
+  issueNumbers: readonly number[],
+): OrchestrationDependencyEdge[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value))
+    throw new OrchestrationTransitionError(
+      "invalid-dependencies",
+      "Orchestration dependencies must be an array.",
+    );
+  const issueSet = new Set(issueNumbers);
+  const seen = new Set<string>();
+  const dependencies = value.map((entry, index) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry))
+      throw new OrchestrationTransitionError(
+        "invalid-dependencies",
+        `dependencies[${index}] must be an object.`,
+      );
+    const record = entry as Record<string, unknown>;
+    const fromIssue = positiveInteger(
+      record.fromIssue,
+      `dependencies[${index}].fromIssue`,
+    );
+    const toIssue = positiveInteger(
+      record.toIssue,
+      `dependencies[${index}].toIssue`,
+    );
+    if (!issueSet.has(fromIssue) || !issueSet.has(toIssue))
+      throw new OrchestrationTransitionError(
+        "unknown-dependency-issue",
+        `Dependency ${fromIssue} -> ${toIssue} is outside the confirmed issue set.`,
+      );
+    if (record.kind !== "explicit")
+      throw new OrchestrationTransitionError(
+        "invalid-dependency-kind",
+        `dependencies[${index}].kind must be explicit.`,
+      );
+    const reason = requiredString(
+      record.reason,
+      `dependencies[${index}].reason`,
+    );
+    const identity = `${fromIssue}:${toIssue}:explicit`;
+    if (seen.has(identity))
+      throw new OrchestrationTransitionError(
+        "duplicate-dependency",
+        `Duplicate dependency ${fromIssue} -> ${toIssue}.`,
+      );
+    seen.add(identity);
+    return { fromIssue, toIssue, kind: "explicit" as const, reason };
+  });
+  const dag = buildOrchestrationDag(
+    issueNumbers.map((issueNumber, ordinal) => ({ issueNumber, ordinal })),
+    dependencies,
+  );
+  const cycle = findDagCycle(dag);
+  if (cycle)
+    throw new OrchestrationTransitionError(
+      "dependency-cycle",
+      `Orchestration dependency cycle: ${cycle.nodeIds.join(" -> ")}.`,
+    );
+  return dependencies;
 }
 
 function createInitialState(event: OrchestrationEvent): OrchestrationState {
@@ -288,6 +432,13 @@ function createInitialState(event: OrchestrationEvent): OrchestrationState {
       "duplicate-issue",
       "Orchestration issue numbers must be unique.",
     );
+  const dependencies = parseDependencies(
+    event.payload.dependencies,
+    issueNumbers,
+  );
+  const graphHash = `sha256:${createHash("sha256")
+    .update(canonicalJson({ issueNumbers, dependencies }))
+    .digest("hex")}`;
   const state: OrchestrationState = {
     schema: ORCHESTRATION_STATE_SCHEMA,
     orchestrationId: event.orchestrationId,
@@ -307,6 +458,8 @@ function createInitialState(event: OrchestrationEvent): OrchestrationState {
       status: "queued",
       refreshes: 0,
     })),
+    dependencies,
+    graphHash,
     idempotencyKeys: { [event.idempotencyKey]: event.eventId },
     createdAt: event.occurredAt,
   };
@@ -339,13 +492,7 @@ function applyLaneEvent(
     merged: ["integrating"],
     closed: ["running", "ready", "integrating"],
     blocked: ["queued", "running", "ready", "refreshing", "integrating"],
-    "needs-human": [
-      "queued",
-      "running",
-      "ready",
-      "refreshing",
-      "integrating",
-    ],
+    "needs-human": ["queued", "running", "ready", "refreshing", "integrating"],
     failed: ["queued", "running", "ready", "refreshing", "integrating"],
   };
   if (!(allowed[transition] ?? []).includes(current.status))
@@ -407,9 +554,7 @@ function positiveInteger(value: unknown, field: string): number {
   return value as number;
 }
 
-function validateOrchestrationEvent(
-  event: OrchestrationEvent,
-): void {
+function validateOrchestrationEvent(event: OrchestrationEvent): void {
   if (event.schema !== ORCHESTRATION_EVENT_SCHEMA)
     throw new OrchestrationTransitionError(
       "unsupported-schema",

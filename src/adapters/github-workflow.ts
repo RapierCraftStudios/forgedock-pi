@@ -1,6 +1,7 @@
 import {
   GitHubApiError,
   type GitHubTransport,
+  nextGitHubPagePath,
   repositoryApiPath,
   requireGitHubSuccess,
 } from "./github-api.ts";
@@ -55,9 +56,7 @@ export interface GitHubWorkflowRouteConfig {
   /** Explicit route form, useful when names are loaded from policy. */
   stagingToMain?: { headRef: string; baseRef: string };
   /** Explicit route aliases used by older command integrations. */
-  route?:
-    | { headRef: string; baseRef: string }
-    | { from: string; to: string };
+  route?: { headRef: string; baseRef: string } | { from: string; to: string };
 }
 
 export type PullRequestCollectionSelector =
@@ -232,18 +231,70 @@ export class GitHubWorkflowAdapter {
     };
   }
 
+  async listIssueBlockedBy(
+    issueNumber: number,
+    signal?: AbortSignal,
+  ): Promise<number[]> {
+    assertNumber(issueNumber, "issue");
+    const blockers: number[] = [];
+    const seen = new Set<string>();
+    let path: string | undefined =
+      `${this.#apiRoot}/issues/${issueNumber}/dependencies/blocked_by?per_page=100`;
+    for (let page = 0; path && page < 100; page += 1) {
+      if (seen.has(path))
+        throw new GitHubApiError(422, path, {
+          message: "GitHub issue-dependency pagination repeated a page.",
+        });
+      seen.add(path);
+      const response = await this.#transport.request<IssueApiResponse[]>({
+        method: "GET",
+        path,
+        ...(signal ? { signal } : {}),
+      });
+      if (response.status === 404) return [];
+      blockers.push(
+        ...requireGitHubSuccess(response, path, [200]).map((issue) => {
+          assertNumber(issue.number, "dependency issue");
+          return issue.number;
+        }),
+      );
+      path = nextGitHubPagePath(response.headers);
+    }
+    if (path)
+      throw new GitHubApiError(422, path, {
+        message: "GitHub issue-dependency pagination exceeded 100 pages.",
+      });
+    return [...new Set(blockers)];
+  }
+
   async listIssuesByLabel(
     label: string,
     state: "open" | "closed" | "all" = "all",
     signal?: AbortSignal,
   ): Promise<GitHubIssueData[]> {
-    const path = `${this.#apiRoot}/issues?state=${state}&labels=${encodeURIComponent(label)}&per_page=100`;
-    const response = await this.#transport.request<IssueApiResponse[]>({
-      method: "GET",
-      path,
-      ...(signal ? { signal } : {}),
-    });
-    return requireGitHubSuccess(response, path, [200])
+    const issues: IssueApiResponse[] = [];
+    const seen = new Set<string>();
+    let path: string | undefined =
+      `${this.#apiRoot}/issues?state=${state}&labels=${encodeURIComponent(label)}&per_page=100`;
+    for (let page = 0; path && page < 100; page += 1) {
+      if (seen.has(path))
+        throw new GitHubApiError(422, path, {
+          message: "GitHub issue pagination repeated a page.",
+        });
+      seen.add(path);
+      const response = await this.#transport.request<IssueApiResponse[]>({
+        method: "GET",
+        path,
+        ...(signal ? { signal } : {}),
+      });
+      issues.push(...requireGitHubSuccess(response, path, [200]));
+      path = nextGitHubPagePath(response.headers);
+    }
+    if (path)
+      throw new GitHubApiError(422, path, {
+        message: "GitHub issue pagination exceeded 100 pages.",
+      });
+    return issues
       .filter((issue) => !issue.pull_request)
       .map((issue) => ({
         number: issue.number,
@@ -311,26 +362,43 @@ export class GitHubWorkflowAdapter {
     const options: ListPullRequestsInput =
       typeof input === "string" ? { selector: input } : input;
     const selector = options.selector;
-    const route = selector && isReviewRouteSelector(selector)
-      ? this.configuredReviewRoute(selector)
-      : undefined;
+    const route =
+      selector && isReviewRouteSelector(selector)
+        ? this.configuredReviewRoute(selector)
+        : undefined;
     const state = options.state ?? (selector === "all" ? "all" : "open");
     const requestedHeadRef = options.headRef ?? options.head;
     const requestedBaseRef = options.baseRef ?? options.base;
     const headRef = route?.headRef ?? requestedHeadRef;
     const baseRef = route?.baseRef ?? requestedBaseRef;
-    if (options.headRef !== undefined && options.head !== undefined && options.headRef !== options.head)
-      throw new Error("Conflicting pull request head selectors are not allowed.");
-    if (options.baseRef !== undefined && options.base !== undefined && options.baseRef !== options.base)
-      throw new Error("Conflicting pull request base selectors are not allowed.");
+    if (
+      options.headRef !== undefined &&
+      options.head !== undefined &&
+      options.headRef !== options.head
+    )
+      throw new Error(
+        "Conflicting pull request head selectors are not allowed.",
+      );
+    if (
+      options.baseRef !== undefined &&
+      options.base !== undefined &&
+      options.baseRef !== options.base
+    )
+      throw new Error(
+        "Conflicting pull request base selectors are not allowed.",
+      );
     if (
       route &&
       ((requestedHeadRef !== undefined && requestedHeadRef !== route.headRef) ||
         (requestedBaseRef !== undefined && requestedBaseRef !== route.baseRef))
     )
-      throw new Error("Explicit pull request refs conflict with the configured review route.");
+      throw new Error(
+        "Explicit pull request refs conflict with the configured review route.",
+      );
     if (selector && selector !== "open" && selector !== "all" && !route)
-      throw new Error(`Unknown pull request collection selector '${selector}'.`);
+      throw new Error(
+        `Unknown pull request collection selector '${selector}'.`,
+      );
     if (state !== "open" && state !== "closed" && state !== "all")
       throw new TypeError("Pull request state must be open, closed, or all.");
     if (headRef !== undefined) assertBranchRef(headRef, "pull request head");
@@ -365,7 +433,7 @@ export class GitHubWorkflowAdapter {
           .filter((pull) => headRef === undefined || pull.headRef === headRef)
           .filter((pull) => baseRef === undefined || pull.baseRef === baseRef),
       );
-      nextPath = nextPagePath(response.headers);
+      nextPath = nextGitHubPagePath(response.headers);
     }
     return pulls.sort(comparePullRequests);
   }
@@ -386,7 +454,10 @@ export class GitHubWorkflowAdapter {
   ): Promise<GitHubPullRequestData[]> {
     if (typeof selector === "number" || isExactPullRequestString(selector))
       return [await this.resolvePullRequest(selector, signal)];
-    return this.listPullRequests(selector as PullRequestCollectionSelector, signal);
+    return this.listPullRequests(
+      selector as PullRequestCollectionSelector,
+      signal,
+    );
   }
 
   /** Alias with an explicit selector-oriented name for command adapters. */
@@ -638,10 +709,7 @@ export class GitHubWorkflowAdapter {
       this.#configuredWorkflowCount(input.signal),
     ]);
     while (true) {
-      const checks = await this.#checksForCommit(
-        input.headSha,
-        input.signal,
-      );
+      const checks = await this.#checksForCommit(input.headSha, input.signal);
       const missingRequired = requiredContexts.filter(
         (context) => !checks.some((check) => check.name === context),
       );
@@ -712,7 +780,11 @@ export class GitHubWorkflowAdapter {
     );
     const path = `${this.#apiRoot}/pulls/${input.pullNumber}/merge`;
     if (input.expectedRoute) {
-      assertPullRequestRouteSnapshot(input.expectedRoute, current, this.#apiRoot);
+      assertPullRequestRouteSnapshot(
+        input.expectedRoute,
+        current,
+        this.#apiRoot,
+      );
     } else {
       if (!input.expectedBaseRef || !input.expectedHeadSha)
         throw new TypeError(
@@ -723,19 +795,16 @@ export class GitHubWorkflowAdapter {
           message: `Pull request targets ${current.baseRef}; expected ${input.expectedBaseRef}`,
         });
     }
-    const expectedHeadSha = input.expectedRoute?.headSha ?? input.expectedHeadSha;
+    const expectedHeadSha =
+      input.expectedRoute?.headSha ?? input.expectedHeadSha;
     if (!expectedHeadSha)
       throw new TypeError("merge requires an expected head SHA.");
     if (current.merged)
       return { merged: true, sha: current.headSha, message: "Already merged" };
     if (current.headSha !== expectedHeadSha) {
-      throw new GitHubApiError(
-        409,
-        path,
-        {
-          message: `Stale reviewed SHA ${expectedHeadSha}; current head is ${current.headSha}`,
-        },
-      );
+      throw new GitHubApiError(409, path, {
+        message: `Stale reviewed SHA ${expectedHeadSha}; current head is ${current.headSha}`,
+      });
     }
     const response = await this.#transport.request<MergeApiResponse>({
       method: "PUT",
@@ -766,8 +835,37 @@ export class GitHubWorkflowAdapter {
     signal?: AbortSignal,
   ): Promise<CommentApiResponse[]> {
     assertNumber(issueOrPullNumber, "issue or pull request");
-    const path = `${this.#apiRoot}/issues/${issueOrPullNumber}/comments?per_page=100&cache_bust=${Date.now()}`;
-    const response = await this.#transport.request<CommentApiResponse[]>({
+    const comments: CommentApiResponse[] = [];
+    const seen = new Set<string>();
+    let path: string | undefined =
+      `${this.#apiRoot}/issues/${issueOrPullNumber}/comments?per_page=100&cache_bust=${Date.now()}`;
+    for (let page = 0; path && page < 100; page += 1) {
+      if (seen.has(path))
+        throw new GitHubApiError(422, path, {
+          message: "GitHub comment pagination repeated a page.",
+        });
+      seen.add(path);
+      const response = await this.#transport.request<CommentApiResponse[]>({
+        method: "GET",
+        path,
+        ...(signal ? { signal } : {}),
+      });
+      comments.push(...requireGitHubSuccess(response, path, [200]));
+      path = nextGitHubPagePath(response.headers);
+    }
+    if (path)
+      throw new GitHubApiError(422, path, {
+        message: "GitHub comment pagination exceeded 100 pages.",
+      });
+    return comments;
+  }
+
+  async #getCommentRecord(
+    commentId: number,
+    signal?: AbortSignal,
+  ): Promise<CommentApiResponse> {
+    const path = `${this.#apiRoot}/issues/comments/${commentId}`;
+    const response = await this.#transport.request<CommentApiResponse>({
       method: "GET",
       path,
       ...(signal ? { signal } : {}),
@@ -786,32 +884,36 @@ export class GitHubWorkflowAdapter {
       input.pullNumber,
       input.signal,
     );
+    const body = `${input.marker}\n${input.body.trim()}\n`;
     const existingComment = existing.find((comment) =>
       comment.body.includes(input.marker),
     );
-    if (existingComment) return existingComment.id;
+    if (existingComment) {
+      if (existingComment.body !== body)
+        throw new GitHubApiError(
+          422,
+          `${this.#apiRoot}/issues/${input.pullNumber}/comments`,
+          {
+            message: `Pull request artifact ${input.marker} exists with a different payload.`,
+            commentId: existingComment.id,
+          },
+        );
+      return existingComment.id;
+    }
     const path = `${this.#apiRoot}/issues/${input.pullNumber}/comments`;
     const response = await this.#transport.request<CommentApiResponse>({
       method: "POST",
       path,
-      body: { body: `${input.marker}\n${input.body.trim()}\n` },
+      body: { body },
       ...(input.signal ? { signal: input.signal } : {}),
     });
     const comment = requireGitHubSuccess(response, path, [201]);
-    const readBack = await this.#getCommentRecords(
-      input.pullNumber,
-      input.signal,
-    );
-    if (
-      !readBack.some(
-        (candidate) =>
-          candidate.id === comment.id && candidate.body.includes(input.marker),
-      )
-    ) {
+    const readBack = await this.#getCommentRecord(comment.id, input.signal);
+    if (readBack.id !== comment.id || readBack.body !== body)
       throw new GitHubApiError(422, path, {
-        message: `Pull request artifact read-back missing ${input.marker}`,
+        message: `Pull request artifact read-back mismatch for ${input.marker}.`,
+        commentId: comment.id,
       });
-    }
     return comment.id;
   }
 
@@ -873,11 +975,7 @@ export class GitHubWorkflowAdapter {
       }),
     ]);
     if (protection.status !== 404) {
-      const required = requireGitHubSuccess(
-        protection,
-        protectionPath,
-        [200],
-      );
+      const required = requireGitHubSuccess(protection, protectionPath, [200]);
       for (const context of required.contexts ?? []) contexts.add(context);
       for (const check of required.checks ?? []) contexts.add(check.context);
     }
@@ -897,9 +995,8 @@ export class GitHubWorkflowAdapter {
     });
     if (response.status === 404) return 0;
     const workflows = requireGitHubSuccess(response, path, [200]);
-    return workflows.workflows.filter(
-      (workflow) => workflow.state === "active",
-    ).length;
+    return workflows.workflows.filter((workflow) => workflow.state === "active")
+      .length;
   }
 
   async #checksForCommit(
@@ -948,20 +1045,6 @@ export class GitHubWorkflowAdapter {
     return [...checks.values()].sort((left, right) =>
       left.name.localeCompare(right.name),
     );
-  }
-}
-
-function nextPagePath(headers: Readonly<Record<string, string>>): string | undefined {
-  const link = headers.link ?? headers.Link;
-  if (!link) return undefined;
-  const match = link.match(/<([^>]+)>;\s*rel="next"/i);
-  if (!match?.[1]) return undefined;
-  try {
-    const url = new URL(match[1], "https://api.github.com");
-    if (url.origin !== "https://api.github.com") return undefined;
-    return `${url.pathname}${url.search}`;
-  } catch {
-    return undefined;
   }
 }
 
@@ -1023,7 +1106,11 @@ function pullNumberFromSelector(
     );
   }
   const match = url.pathname.match(/^\/([^/]+)\/([^/]+)\/pull\/(\d+)$/);
-  if (!match || `${decodeURIComponent(match[1] as string)}/${decodeURIComponent(match[2] as string)}` !== repository)
+  if (
+    !match ||
+    `${decodeURIComponent(match[1] as string)}/${decodeURIComponent(match[2] as string)}` !==
+      repository
+  )
     throw new Error(`Pull request URL must address ${repository}.`);
   const value = Number(match[3]);
   assertNumber(value, "pull request");
@@ -1114,10 +1201,7 @@ function legacyStatus(state: string): GitHubCiCheck["status"] {
   return "unknown";
 }
 
-function collectRequiredContexts(
-  value: unknown,
-  contexts: Set<string>,
-): void {
+function collectRequiredContexts(value: unknown, contexts: Set<string>): void {
   if (Array.isArray(value)) {
     for (const entry of value) collectRequiredContexts(entry, contexts);
     return;
