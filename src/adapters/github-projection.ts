@@ -179,7 +179,10 @@ export class GitHubIssueProjector {
     this.#apiRoot = repositoryApiPath(repository);
   }
 
-  async projectEvent(input: ProjectIssueEventInput): Promise<ProjectionResult> {
+  /** Project/reconcile an event and expose its verified external effect receipts. */
+  async projectEventWithReceipt(
+    input: ProjectIssueEventInput,
+  ): Promise<ProjectionResult> {
     requireIssueNumber(input.issueNumber);
     const marker = `<!-- FORGEDOCK-EVENT:${input.event.eventId} -->`;
     const body = `${marker}\n<!-- FORGEDOCK-RUN:${input.event.runId} -->\n${input.markdown.trim()}\n`;
@@ -325,6 +328,11 @@ export class GitHubIssueProjector {
   }
 
   /** Post/reconcile an artifact and expose its verified comment receipt. */
+  /** Backwards-compatible alias for callers that do not persist receipts. */
+  projectEvent(input: ProjectIssueEventInput): Promise<ProjectionResult> {
+    return this.projectEventWithReceipt(input);
+  }
+
   async postArtifactWithReceipt(input: {
     issueNumber: number;
     runId: string;
@@ -391,6 +399,8 @@ export class GitHubIssueProjector {
     marker: string;
     append: string;
     skipIfContains?: string;
+    /** Stable journal event identity for this append transition. */
+    eventId?: string;
     signal?: AbortSignal;
   }): Promise<GitHubProjectionReceipt> {
     const commentId = await this.appendToLatestComment(input);
@@ -398,7 +408,9 @@ export class GitHubIssueProjector {
     return createGitHubCommentReceipt({
       repository: this.#repository,
       issueNumber: input.issueNumber,
-      eventId: `append:${input.marker}:${input.skipIfContains ?? input.append}`,
+      eventId:
+        input.eventId ??
+        `append:${input.marker}:${input.skipIfContains ?? input.append}`,
       body: comment.body,
       commentId: comment.id,
     });
@@ -421,10 +433,16 @@ export class GitHubIssueProjector {
     issueNumber: number,
     workflowLabel: string,
     signal?: AbortSignal,
+    eventId?: string,
   ): Promise<GitHubProjectionReceipt> {
     if (!workflowLabel.startsWith("workflow:"))
       throw new TypeError("Workflow labels must start with workflow:.");
-    return this.#replaceWorkflowLabel(issueNumber, workflowLabel, signal);
+    return this.#replaceWorkflowLabel(
+      issueNumber,
+      workflowLabel,
+      signal,
+      eventId,
+    );
   }
 
   async clearWorkflowLabel(
@@ -438,14 +456,21 @@ export class GitHubIssueProjector {
   async clearWorkflowLabelWithReceipt(
     issueNumber: number,
     signal?: AbortSignal,
+    eventId?: string,
   ): Promise<GitHubProjectionReceipt> {
-    return this.#replaceWorkflowLabel(issueNumber, undefined, signal);
+    return this.#replaceWorkflowLabel(
+      issueNumber,
+      undefined,
+      signal,
+      eventId,
+    );
   }
 
   async #replaceWorkflowLabel(
     issueNumber: number,
     workflowLabel: string | undefined,
     signal?: AbortSignal,
+    eventId?: string,
   ): Promise<GitHubProjectionReceipt> {
     requireIssueNumber(issueNumber);
     const issuePath = `${this.#apiRoot}/issues/${issueNumber}`;
@@ -511,7 +536,7 @@ export class GitHubIssueProjector {
     return createGitHubLabelReceipt({
       repository: this.#repository,
       issueNumber,
-      eventId: `workflow:${workflowLabel ?? "clear"}`,
+      eventId: eventId ?? `workflow:${workflowLabel ?? "clear"}`,
       labels: workflowLabel ? [workflowLabel] : [],
     });
   }

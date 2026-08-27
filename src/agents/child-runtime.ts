@@ -24,7 +24,10 @@ import {
 import { FetchGitHubTransport } from "../adapters/github-api.ts";
 import { createGitHubTokenProvider } from "../adapters/github-auth.ts";
 import { parseChangedGitPaths } from "../adapters/git.ts";
-import { GitHubIssueProjector } from "../adapters/github-projection.ts";
+import {
+  GitHubIssueProjector,
+  type GitHubProjectionReceipt,
+} from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
 import {
@@ -921,7 +924,7 @@ export function registerForgeRuntime(
     description:
       "Push the bound clean branch, create or reuse its PR, post FORGE:REVIEW_STARTED, and return the frozen review identity",
     parameters: PrepareReviewParameters,
-    async execute(_toolCallId, _params, signal) {
+    async execute(_toolCallId, _params, signal, _onUpdate, ctx) {
       assertWorkOnAuthority(binding);
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
       const status = await runProcess(
@@ -1050,7 +1053,8 @@ export function registerForgeRuntime(
           "Cannot post review-started artifact without a run event.",
         );
       const projector = new GitHubIssueProjector(transport, binding.repository);
-      await projector.postArtifact({
+      const journal = new RunJournal(store);
+      const artifactReceipt = await projector.postArtifactWithReceipt({
         issueNumber: binding.issueNumber,
         runId: binding.runId,
         eventId: `${event.eventId}-${headSha}`,
@@ -1058,9 +1062,17 @@ export function registerForgeRuntime(
         markdown: `PR #${pull.number} created targeting \`${binding.baseBranch}\`. The isolated review route is active for the required domains at commit \`${headSha}\`.\n\nReview will verify the builder contract, acceptance evidence, changed behavior, and absence of security/regression findings before merge.\n\n<!-- FORGE:REVIEW_STARTED -->`,
         ...(signal ? { signal } : {}),
       });
-      await projector.setWorkflowLabel(
+      const labelReceipt = await projector.setWorkflowLabelWithReceipt(
         binding.issueNumber,
         "workflow:in-review",
+        signal,
+        event.eventId,
+      );
+      await appendProjectionReceipts(
+        journal,
+        binding.runId,
+        [artifactReceipt, labelReceipt],
+        ctx.sessionManager.getSessionId(),
         signal,
       );
       await github.postPullArtifact({
@@ -1543,30 +1555,45 @@ export function registerForgeRuntime(
           transport,
           binding.repository,
         );
+        const projectionReceipts: GitHubProjectionReceipt[] = [];
         if (params.action !== "start") {
-          await projectPhaseReport(
-            projector,
-            event,
-            {
-              ...checkpointParams,
-              ...(phaseArtifact ? { artifact: phaseArtifact } : {}),
-            },
-            binding,
-            signal,
+          projectionReceipts.push(
+            ...(await projectPhaseReport(
+              projector,
+              event,
+              {
+                ...checkpointParams,
+                ...(phaseArtifact ? { artifact: phaseArtifact } : {}),
+              },
+              binding,
+              signal,
+            )),
           );
         }
         const workflowLabel = workflowLabelForCheckpoint(params);
         if (workflowLabel)
-          await projector.setWorkflowLabel(
-            binding.issueNumber,
-            workflowLabel,
-            signal,
+          projectionReceipts.push(
+            await projector.setWorkflowLabelWithReceipt(
+              binding.issueNumber,
+              workflowLabel,
+              signal,
+              event.eventId,
+            ),
           );
-        await postDerivedPhaseArtifacts(
-          projector,
-          event,
-          params,
-          binding,
+        projectionReceipts.push(
+          ...(await postDerivedPhaseArtifacts(
+            projector,
+            event,
+            params,
+            binding,
+            signal,
+          )),
+        );
+        await appendProjectionReceipts(
+          journal,
+          binding.runId,
+          projectionReceipts,
+          ctx.sessionManager.getSessionId(),
           signal,
         );
       }
@@ -1930,6 +1957,30 @@ function checkpointPayload(
   };
 }
 
+async function appendProjectionReceipts(
+  journal: RunJournal,
+  runId: string,
+  receipts: readonly GitHubProjectionReceipt[],
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  for (const receipt of receipts) {
+    await journal.append({
+      runId,
+      type: "effect.recorded",
+      payload: {
+        effectType: receipt.effectType,
+        effectId: receipt.effectId,
+        digest: receipt.digest,
+      },
+      idempotencyKey: `effect:${receipt.effectId}`,
+      sessionId,
+      message: `Record verified ${receipt.effectType} projection ${receipt.effectId}`,
+      ...(signal ? { signal } : {}),
+    });
+  }
+}
+
 async function projectPhaseReport(
   projector: GitHubIssueProjector,
   event: RunEvent,
@@ -1951,28 +2002,29 @@ async function projectPhaseReport(
   },
   binding: WorkOnForgeChildBinding,
   signal?: AbortSignal,
-): Promise<void> {
+): Promise<GitHubProjectionReceipt[]> {
   if (
     params.action === "complete" &&
     (params.phase === "resolve" ||
       params.phase === "prepare-worktree" ||
       params.phase === "review")
   )
-    return;
+    return [];
   if (
     params.phase === "investigate" &&
     params.action === "complete" &&
     params.artifact?.phase === "investigate"
   ) {
-    await projector.postArtifact({
-      issueNumber: binding.issueNumber,
-      runId: binding.runId,
-      eventId: event.eventId,
-      artifactKey: "investigation",
-      markdown: renderPhaseArtifact(params.artifact),
-      ...(signal ? { signal } : {}),
-    });
-    return;
+    return [
+      await projector.postArtifactWithReceipt({
+        issueNumber: binding.issueNumber,
+        runId: binding.runId,
+        eventId: event.eventId,
+        artifactKey: "investigation",
+        markdown: renderPhaseArtifact(params.artifact),
+        ...(signal ? { signal } : {}),
+      }),
+    ];
   }
   if (
     params.phase === "plan" &&
@@ -1980,19 +2032,22 @@ async function projectPhaseReport(
     params.report
   ) {
     const blocks = splitPlanReport(params.report);
+    const receipts: GitHubProjectionReceipt[] = [];
     for (const block of blocks) {
-      await projector.postArtifact({
-        issueNumber: binding.issueNumber,
-        runId: binding.runId,
-        eventId: event.eventId,
-        artifactKey: block.key,
-        markdown: block.body,
-        ...(signal ? { signal } : {}),
-      });
+      receipts.push(
+        await projector.postArtifactWithReceipt({
+          issueNumber: binding.issueNumber,
+          runId: binding.runId,
+          eventId: event.eventId,
+          artifactKey: block.key,
+          markdown: block.body,
+          ...(signal ? { signal } : {}),
+        }),
+      );
     }
-    return;
+    return receipts;
   }
-  await projector.projectEvent({
+  const projection = await projector.projectEventWithReceipt({
     issueNumber: binding.issueNumber,
     event,
     markdown: checkpointMarkdown(params, binding.runId),
@@ -2001,6 +2056,7 @@ async function projectPhaseReport(
       : [],
     ...(signal ? { signal } : {}),
   });
+  return [...projection.receipts];
 }
 
 function splitPlanReport(report: string): Array<{ key: string; body: string }> {
@@ -2072,35 +2128,38 @@ async function postDerivedPhaseArtifacts(
   },
   binding: WorkOnForgeChildBinding,
   signal?: AbortSignal,
-): Promise<void> {
-  if (params.action !== "complete") return;
+): Promise<GitHubProjectionReceipt[]> {
+  if (params.action !== "complete") return [];
+  const receipts: GitHubProjectionReceipt[] = [];
   if (params.phase === "investigate") {
-    await projector.postArtifact({
+    receipts.push(await projector.postArtifactWithReceipt({
       issueNumber: binding.issueNumber,
       runId: binding.runId,
       eventId: event.eventId,
       artifactKey: "investigation-checkpoint",
       markdown: `<!-- FORGE:CHECKPOINT -->\n\`\`\`json\n${JSON.stringify({ phase: "INVESTIGATION", status: "COMPLETE", next_phase: "BUILD", timestamp: event.occurredAt })}\n\`\`\``,
       ...(signal ? { signal } : {}),
-    });
+    }));
   }
   if (params.phase === "verify") {
-    await projector.appendToLatestComment({
+    receipts.push(await projector.appendToLatestCommentWithReceipt({
       issueNumber: binding.issueNumber,
       marker: "<!-- FORGE:BUILDER -->",
       append: "<!-- FORGE:BUILDER:COMPLETE -->",
       skipIfContains: "<!-- FORGE:BUILDER:COMPLETE -->",
+      eventId: event.eventId,
       ...(signal ? { signal } : {}),
-    });
-    await projector.postArtifact({
+    }));
+    receipts.push(await projector.postArtifactWithReceipt({
       issueNumber: binding.issueNumber,
       runId: binding.runId,
       eventId: event.eventId,
       artifactKey: "build-checkpoint",
       markdown: `<!-- FORGE:CHECKPOINT -->\n${JSON.stringify({ phase: "BUILD", status: "COMPLETE", next_phase: "REVIEW", timestamp: event.occurredAt, commit: params.commitSha ?? null, local_verification: "COMPLETE", github_ci: "PENDING_PARENT_GATE" })}`,
       ...(signal ? { signal } : {}),
-    });
+    }));
   }
+  return receipts;
 }
 
 function workflowLabelForCheckpoint(params: {
