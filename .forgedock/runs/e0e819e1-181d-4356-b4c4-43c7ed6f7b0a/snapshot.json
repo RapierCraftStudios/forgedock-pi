@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 19,
-  "lastEventHash": "sha256:e81ff1158f24b690b47e864bfef00c7fc1f98a4c6a6c104bc0887c1ba9dd34e9",
+  "sequence": 20,
+  "lastEventHash": "sha256:5f15d5276452e83e9001c9fb6e2313c6ce91607e646cc79b78581cbcc109dd8c",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -138,15 +138,24 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume verify attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Named bound check `check` passed with exit code 0.",
+            "`npm run typecheck` passed as part of `check`.",
+            "`npm test` passed as part of `check`: 151 tests passed, 0 failed.",
+            "Focused rollback tests passed, including cancellation isolation, exact `workflow:in-review` restoration, and best-effort projection failure handling.",
+            "Post-commit diff is limited to `src/workflows/work-on.ts` and `test/workflows/work-on.test.ts`."
+          ],
           "logicalNodeId": "verify-1",
           "startedAt": "2026-08-27T01:05:01.882Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/e0e819e1-181d-4356-b4c4-43c7ed6f7b0a",
           "branch": "forge/issue-120-e0e819e1",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-27T01:06:26.594Z",
+          "outputArtifactHash": "sha256:verification-issue-120-f3e03e00269bcd91e52db7a179ab393d571c2717",
+          "commitSha": "f3e03e00269bcd91e52db7a179ab393d571c2717"
         }
       ]
     }
@@ -172,7 +181,8 @@
     "phase:implement:1:start": "80c32abe-abf6-4979-8900-8367f9c8e8f9",
     "phase:implement:1:complete": "151ce9bf-8040-47a7-ba71-b3862f1f99b2",
     "phase:verify:1:queue": "3ff09b87-9e5b-4074-9966-96ac0d0bd13a",
-    "phase:verify:1:start": "e0340204-ad4a-45c8-88a4-f598edfebd9b"
+    "phase:verify:1:start": "e0340204-ad4a-45c8-88a4-f598edfebd9b",
+    "phase:verify:1:complete": "057538b7-d908-4f0f-a46a-c3ee0ed0845b"
   },
   "eventIds": {
     "051eed88-dcc2-4a51-afaa-c0801edf39e3": true,
@@ -193,7 +203,8 @@
     "80c32abe-abf6-4979-8900-8367f9c8e8f9": true,
     "151ce9bf-8040-47a7-ba71-b3862f1f99b2": true,
     "3ff09b87-9e5b-4074-9966-96ac0d0bd13a": true,
-    "e0340204-ad4a-45c8-88a4-f598edfebd9b": true
+    "e0340204-ad4a-45c8-88a4-f598edfebd9b": true,
+    "057538b7-d908-4f0f-a46a-c3ee0ed0845b": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
