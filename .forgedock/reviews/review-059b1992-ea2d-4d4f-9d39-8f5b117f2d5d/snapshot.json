@@ -70,10 +70,60 @@
       "status": "unknown"
     }
   ],
-  "findings": [],
+  "findings": [
+    {
+      "id": "api-001",
+      "reviewer": "forge-review-api",
+      "runId": "review-059b1992-ea2d-4d4f-9d39-8f5b117f2d5d",
+      "headSha": "74e07982ef2312987c024715d41a631afdb4fdcc",
+      "confidence": "confirmed",
+      "severity": "medium",
+      "category": "production-safety",
+      "file": "src/workflows/work-on.ts",
+      "line": 3867,
+      "summary": "Awaiting-merge label is not rolled back when the resumed merge attempt fails",
+      "evidence": [
+        "The changed resume path calls #projectWorkflowStage(link, \"awaitingMerge\", ...) before invoking github.mergePullRequest.",
+        "That github.mergePullRequest call has no catch invoking rollbackAwaitingMergeLabel, so a provider error leaves the issue labeled workflow:awaiting-merge even though the PR remains unmerged.",
+        "The new rollback helper is only used by the separate earlier merge path, not this newly labeled resume path."
+      ]
+    },
+    {
+      "id": "forge-review-web-001",
+      "reviewer": "forge-review-web",
+      "runId": "review-059b1992-ea2d-4d4f-9d39-8f5b117f2d5d",
+      "headSha": "74e07982ef2312987c024715d41a631afdb4fdcc",
+      "confidence": "confirmed",
+      "severity": "medium",
+      "category": "production-safety",
+      "file": "src/workflows/work-on.ts",
+      "line": 3847,
+      "summary": "Projects awaiting-merge before validating already-merged PR evidence",
+      "evidence": [
+        "The new #projectWorkflowStage(..., \"awaitingMerge\", ...) call runs before the durableMergeSha lookup and before the guard that throws when currentPull.merged is true but no durable merge-complete SHA exists.",
+        "In that recovery state, the function throws after successfully updating the issue label, leaving a merged pull request projected as workflow:awaiting-merge until a later reconciliation succeeds; the prior flow did not introduce this update before the guard."
+      ]
+    },
+    {
+      "id": "deployment-001",
+      "reviewer": "forge-review-deployment",
+      "runId": "review-059b1992-ea2d-4d4f-9d39-8f5b117f2d5d",
+      "headSha": "74e07982ef2312987c024715d41a631afdb4fdcc",
+      "confidence": "confirmed",
+      "severity": "medium",
+      "category": "production-safety",
+      "file": "src/workflows/work-on.ts",
+      "line": 3863,
+      "summary": "Merged pull requests can be left labeled awaiting-merge when durable merge evidence is missing.",
+      "evidence": [
+        "The new #projectWorkflowStage(link, \"awaitingMerge\", ...) call executes before the currentPull.merged && !durableMergeSha consistency check.",
+        "That check then throws when a merged PR has no durable merge SHA, but this path has no compensating label rollback, so the issue projection remains workflow:awaiting-merge despite the PR already being merged."
+      ]
+    }
+  ],
   "status": "active",
-  "sequence": 10,
-  "lastEventHash": "sha256:c0ed9184639d01cb1801a0f4f1582bc8a78070f8b0bb433e60a105c26c23c1c5",
+  "sequence": 11,
+  "lastEventHash": "sha256:bef6d481d06fe7fb97bcd5c7442bb8a19093b3c5418e0f8b81e6f3bdad36a560",
   "idempotencyKeys": {
     "review:create": "c84f347e-b044-4335-84cf-e6acab99a577",
     "panel:1:start": "f9e92d66-9028-43e0-9eb7-58c6a2124f32",
@@ -84,7 +134,8 @@
     "check:reviewer:4:decf53d74268865a": "dc7b865d-7043-4e9c-91f3-5bf654fadb7b",
     "check:reviewer:5:6c95c9cba8b6971f": "8830661c-361f-485f-b856-7686f5283f7d",
     "check:reviewer:6:1b1584de2862bc54": "07ebddd0-057b-40cb-a1c6-e1bb98e2aa04",
-    "check:reviewer:7:ccf52d4ebe63e4bc": "911bc1ac-9f2c-4cb7-8a3f-4e1dcf035f5e"
+    "check:reviewer:7:ccf52d4ebe63e4bc": "911bc1ac-9f2c-4cb7-8a3f-4e1dcf035f5e",
+    "panel:1:findings": "f2bd2a5f-2c82-44f7-ac05-f0242510e9af"
   },
   "eventIds": {
     "c84f347e-b044-4335-84cf-e6acab99a577": true,
@@ -96,10 +147,11 @@
     "dc7b865d-7043-4e9c-91f3-5bf654fadb7b": true,
     "8830661c-361f-485f-b856-7686f5283f7d": true,
     "07ebddd0-057b-40cb-a1c6-e1bb98e2aa04": true,
-    "911bc1ac-9f2c-4cb7-8a3f-4e1dcf035f5e": true
+    "911bc1ac-9f2c-4cb7-8a3f-4e1dcf035f5e": true,
+    "f2bd2a5f-2c82-44f7-ac05-f0242510e9af": true
   },
   "createdAt": "2026-08-27T05:29:06.994Z",
-  "updatedAt": "2026-08-27T05:31:06.322Z",
+  "updatedAt": "2026-08-27T05:31:12.573Z",
   "panel": {
     "round": 1,
     "status": "running",
