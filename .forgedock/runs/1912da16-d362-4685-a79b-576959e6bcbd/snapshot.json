@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 18,
-  "lastEventHash": "sha256:b1b28c68fea835842a75305fdf5ce1cd81f4c136fc39dae9e2b37d9ccbecff9a",
+  "sequence": 19,
+  "lastEventHash": "sha256:8ef1a6cabb19b00340f2a106428bb9322a367a753f40005a13110cfd5bc461c4",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -137,11 +137,16 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "resume verify attempt 1",
           "evidence": [],
-          "inputArtifactHash": "sha256:implement-196-pnmp-regression-tests"
+          "inputArtifactHash": "sha256:implement-196-pnmp-regression-tests",
+          "logicalNodeId": "work-on-196-verify-1",
+          "startedAt": "2026-08-27T07:06:07.585Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/1912da16-d362-4685-a79b-576959e6bcbd",
+          "branch": "forge/issue-196-1912da16",
+          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22"
         }
       ]
     }
@@ -166,7 +171,8 @@
     "phase:implement:1:queue": "2ad1116b-1059-4e92-ae84-0d437f6d630a",
     "phase:implement:1:start": "e4903b39-587d-40a3-8d1f-30892c93a940",
     "phase:implement:1:complete": "08b80eff-877e-4f81-afdd-38f5bc1caa4e",
-    "phase:verify:1:queue": "14524258-deef-4cfb-b4a4-81ec1e26a6c2"
+    "phase:verify:1:queue": "14524258-deef-4cfb-b4a4-81ec1e26a6c2",
+    "phase:verify:1:start": "fd2a2381-2a32-4de7-bcf7-a1642ab25d58"
   },
   "eventIds": {
     "1e76bd54-c771-463b-b76c-0df6b477498c": true,
@@ -186,7 +192,8 @@
     "2ad1116b-1059-4e92-ae84-0d437f6d630a": true,
     "e4903b39-587d-40a3-8d1f-30892c93a940": true,
     "08b80eff-877e-4f81-afdd-38f5bc1caa4e": true,
-    "14524258-deef-4cfb-b4a4-81ec1e26a6c2": true
+    "14524258-deef-4cfb-b4a4-81ec1e26a6c2": true,
+    "fd2a2381-2a32-4de7-bcf7-a1642ab25d58": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
