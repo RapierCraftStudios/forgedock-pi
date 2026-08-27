@@ -7,18 +7,23 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 5,
-  "lastEventHash": "sha256:cc14b8fc4a361229376bcbc071f1b414c23cc17deb8cdd50fdd8aba8a70e4cdb",
+  "sequence": 6,
+  "lastEventHash": "sha256:a575a0c114e8db01ed89244b53887907c3be310bd61ddccfd76c434d053e76b3",
   "phases": {
     "resolve": {
       "phase": "resolve",
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "Resume issue #209 resolution from the frozen staging base.",
-          "evidence": []
+          "evidence": [],
+          "logicalNodeId": "resolve-1",
+          "startedAt": "2026-08-27T13:12:08.969Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/f8399a50-bd9a-4d40-b21d-948f4b075ae1",
+          "branch": "forge/issue-209-f8399a50",
+          "baseSha": "297621681ac15a325eed4d51903ada13c7330423"
         }
       ]
     }
@@ -43,14 +48,16 @@
     "lease:acquire:1": "904ad74b-b272-4b99-ab22-54bbe15e5e50",
     "effect:github-comment:RapierCraftStudios/forgedock-pi:209:ef6f33d5-47a2-494d-8d14-c608d866bea6": "f12abed4-d790-40e7-a9df-c876fb383b64",
     "effect:github-label:RapierCraftStudios/forgedock-pi:209:ef6f33d5-47a2-494d-8d14-c608d866bea6:workflow": "20aedf8f-8dec-48f5-8b6e-1d32cb948fc4",
-    "phase:resolve:1:queue": "ba9e34cf-8acb-4a41-883f-04adbf3ebb66"
+    "phase:resolve:1:queue": "ba9e34cf-8acb-4a41-883f-04adbf3ebb66",
+    "phase:resolve:1:start": "72b578fd-d69c-45a5-9d58-016c4c59c31c"
   },
   "eventIds": {
     "ef6f33d5-47a2-494d-8d14-c608d866bea6": true,
     "904ad74b-b272-4b99-ab22-54bbe15e5e50": true,
     "f12abed4-d790-40e7-a9df-c876fb383b64": true,
     "20aedf8f-8dec-48f5-8b6e-1d32cb948fc4": true,
-    "ba9e34cf-8acb-4a41-883f-04adbf3ebb66": true
+    "ba9e34cf-8acb-4a41-883f-04adbf3ebb66": true,
+    "72b578fd-d69c-45a5-9d58-016c4c59c31c": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
