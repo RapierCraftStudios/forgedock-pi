@@ -20,6 +20,7 @@ import {
   shouldBufferLaunchCompletion,
   similarFindingTitle,
   workflowLabelForNode,
+  workflowStageForDurableState,
   workflowStageForNodeTransition,
 } from "../../src/workflows/work-on.ts";
 
@@ -112,6 +113,51 @@ test("provider completion is buffered until its launch receipt is durably bound"
   assert.equal(shouldBufferLaunchCompletion(true, true), true);
   assert.equal(shouldBufferLaunchCompletion(false, false), true);
   assert.equal(shouldBufferLaunchCompletion(false, true), false);
+});
+
+test("durable merge evidence wins over the latest pre-merge node during recovery", () => {
+  const state = {
+    status: "active",
+    phases: {},
+    nodes: {
+      decision: {
+        node: "decision",
+        status: "completed",
+        outcome: "awaiting-merge",
+      },
+    },
+    effects: {},
+  } as unknown as import("../../src/core/state.ts").RunState;
+
+  assert.equal(workflowStageForDurableState(state), undefined);
+
+  state.phases.merge = {
+    phase: "merge",
+    attempts: [
+      {
+        attempt: 1,
+        status: "completed",
+        leaseEpoch: 1,
+        restartAction: "reconcile and retry parent-owned merge",
+        evidence: ["merge:sha"],
+      },
+    ],
+  };
+  assert.equal(workflowStageForDurableState(state), "merged");
+
+  state.phases = {};
+  state.effects.merge = {
+    effectType: "merge",
+    effectId: "pr:119:merge",
+    digest: "sha256:merge",
+    eventId: "event-merge",
+  };
+  assert.equal(workflowStageForDurableState(state), "merged");
+
+  state.effects = {};
+  state.status = "completed";
+  state.outcome = "merged";
+  assert.equal(workflowStageForDurableState(state), "merged");
 });
 
 test("workflow transitions cover the complete canonical label lifecycle", () => {
