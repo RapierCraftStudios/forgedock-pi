@@ -198,20 +198,36 @@ export interface DirectTerminalEvidence {
   mergeSha: string;
 }
 
+export interface DurableMergeEvidence {
+  pullNumber: number;
+  mergeSha?: string;
+}
+
 export function directTerminalEvidence(
   state: import("../core/state.ts").RunState,
 ): DirectTerminalEvidence | undefined {
   const pullEffect = Object.values(state.effects).find(
-    (effect) => effect.effectType === "pull-request",
+    (effect) =>
+      effect.effectType === "pull-request" && /^pr:\d+$/.test(effect.effectId),
   );
-  const pullNumber =
-    state.pullNumber ??
-    Number(pullEffect?.effectId.match(/^pr:(\d+)$/)?.[1] ?? 0);
-  const mergeEvidence = state.phases.merge?.attempts
-    .at(-1)
-    ?.evidence.find((entry) => /^(?:merge:)?[0-9a-f]{40}$/i.test(entry));
+  const pullEffectNumber = Number(
+    pullEffect?.effectId.match(/^pr:(\d+)$/)?.[1] ?? 0,
+  );
+  const pullNumber = state.pullNumber ?? pullEffectNumber;
+  const mergeAttempt = state.phases.merge?.attempts.at(-1);
+  const mergeEvidence =
+    mergeAttempt?.status === "completed"
+      ? mergeAttempt.evidence.find((entry) =>
+          /^(?:merge:)?[0-9a-f]{40}$/i.test(entry),
+        )
+      : undefined;
   const mergeSha = mergeEvidence?.replace(/^merge:/i, "");
-  if (!Number.isSafeInteger(pullNumber) || pullNumber < 1 || !mergeSha)
+  if (
+    !Number.isSafeInteger(pullNumber) ||
+    pullNumber < 1 ||
+    pullEffectNumber !== pullNumber ||
+    !mergeSha
+  )
     return undefined;
   const mergeEffect = Object.values(state.effects).find(
     (effect) =>
@@ -221,6 +237,48 @@ export function directTerminalEvidence(
   );
   if (!mergeEffect || mergeEffect.digest !== digest(mergeSha)) return undefined;
   return { pullNumber, mergeSha };
+}
+
+export function durableMergeEvidenceForState(
+  state: import("../core/state.ts").RunState,
+): DurableMergeEvidence | undefined {
+  const directEvidence = directTerminalEvidence(state);
+  if (directEvidence) return directEvidence;
+  // Direct runs carry a merge phase whose evidence must bind the merge
+  // effect to its returned SHA. Never reinterpret malformed direct-phase
+  // state as the parent-node effect form below.
+  if (state.phases.merge) return undefined;
+  const pullNumbers = Object.values(state.effects)
+    .filter(
+      (effect) =>
+        effect.effectType === "pull-request" &&
+        /^pr:\d+$/.test(effect.effectId),
+    )
+    .map((effect) => Number(effect.effectId.match(/^pr:(\d+)$/)?.[1] ?? 0))
+    .filter((pullNumber) => Number.isSafeInteger(pullNumber) && pullNumber > 0);
+  const completedMergeNode = Object.values(state.nodes)
+    .filter(
+      (node) =>
+        node.node === "merge" && node.status === "completed" && node.headSha,
+    )
+    .sort((left, right) => right.attempt - left.attempt)[0];
+  for (const pullNumber of pullNumbers) {
+    const mergeEffect = Object.values(state.effects).find(
+      (effect) =>
+        effect.effectType === "merge" &&
+        (effect.effectId === `merge:${pullNumber}` ||
+          effect.effectId === `pr:${pullNumber}:merge`),
+    );
+    if (!mergeEffect || !/^sha256:[0-9a-f]{64}$/i.test(mergeEffect.digest))
+      continue;
+    if (
+      completedMergeNode?.headSha &&
+      mergeEffect.digest !== digest(completedMergeNode.headSha)
+    )
+      continue;
+    return { pullNumber };
+  }
+  return undefined;
 }
 
 export function directRunResumeTask(
@@ -617,6 +675,30 @@ export class ForgeWorkOnController {
     if (durableMergeStage) {
       await this.#projectWorkflowStage(link, durableMergeStage, ctx);
       return;
+    }
+    const mergeEvidence = durableMergeEvidenceForState(snapshot.state);
+    if (mergeEvidence) {
+      const token = await resolveGitHubToken(
+        this.#pi,
+        link.prepared.repositoryRoot,
+        ctx.signal,
+      );
+      const github = new GitHubWorkflowAdapter(
+        new FetchGitHubTransport({ token }),
+        link.repository,
+      );
+      const pull = await github.getPullRequest(
+        mergeEvidence.pullNumber,
+        ctx.signal,
+      );
+      if (
+        pull.number === mergeEvidence.pullNumber &&
+        isMergedPullForLink(pull, link) &&
+        workflowStageForDurableState(snapshot.state, true)
+      ) {
+        await this.#projectWorkflowStage(link, "merged", ctx);
+        return;
+      }
     }
     const nodes = Object.values(snapshot.state.nodes);
     const latest = nodes.at(-1);
@@ -1800,17 +1882,24 @@ export class ForgeWorkOnController {
     const transport = new FetchGitHubTransport({ token });
     const github = new GitHubWorkflowAdapter(transport, link.repository);
     const projector = new GitHubIssueProjector(transport, link.repository);
-    await this.#projectWorkflowStage(
-      link,
-      workflowStageForNodeTransition(node.node, "started"),
-      ctx,
-      projector,
-    );
     const current = await store.readRun(link.forgeRunId, ctx.signal);
     if (!current.state) throw new Error(`Run ${link.forgeRunId} state is missing for parent node.`);
     let pull = await github.findPullRequest(link.prepared.branch, ctx.signal);
     if (pull && (node.node === "decision" || node.node === "merge"))
       pull = await resolveMergeability(github, pull.number, ctx.signal);
+    const mergeEvidence = durableMergeEvidenceForState(current.state);
+    const verifiedMergedPull = Boolean(
+      pull &&
+        mergeEvidence?.pullNumber === pull.number &&
+        isMergedPullForLink(pull, link),
+    );
+    await this.#projectWorkflowStage(
+      link,
+      workflowStageForDurableState(current.state, verifiedMergedPull) ??
+        workflowStageForNodeTransition(node.node, "started"),
+      ctx,
+      projector,
+    );
     let evidence: string[] = [];
     let outcome: string | undefined;
     let finalReviewDecision: FinalReviewDecision | undefined;
@@ -4646,6 +4735,23 @@ function digest(value: string): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
+function isMergedPullForLink(
+  pull:
+    | {
+        merged: boolean;
+        baseRef: string;
+        headRef: string;
+      }
+    | undefined,
+  link: ActiveRunLink,
+): boolean {
+  return Boolean(
+    pull?.merged &&
+      pull.baseRef === link.prepared.baseBranch &&
+      pull.headRef === link.prepared.branch,
+  );
+}
+
 function sameStrings(
   left: readonly string[],
   right: readonly string[],
@@ -4689,14 +4795,11 @@ export function shouldBufferLaunchCompletion(
 
 export function workflowStageForDurableState(
   state: import("../core/state.ts").RunState,
+  verifiedMergedPull = false,
 ): WorkflowStage | undefined {
   if (state.status === "completed" && state.outcome === "merged")
     return "merged";
-  if (state.phases.merge?.attempts.at(-1)?.status === "completed")
-    return "merged";
-  if (
-    Object.values(state.effects).some((effect) => effect.effectType === "merge")
-  )
+  if (verifiedMergedPull && durableMergeEvidenceForState(state))
     return "merged";
   return undefined;
 }

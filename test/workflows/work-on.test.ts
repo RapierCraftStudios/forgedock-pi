@@ -6,6 +6,7 @@ import {
   canonicalReviewerName,
   directRunRecoveryAction,
   directTerminalEvidence,
+  durableMergeEvidenceForState,
   finalReviewDecisionMarker,
   findingPriority,
   isTransientProviderFailure,
@@ -115,10 +116,24 @@ test("provider completion is buffered until its launch receipt is durably bound"
   assert.equal(shouldBufferLaunchCompletion(false, true), false);
 });
 
-test("durable merge evidence wins over the latest pre-merge node during recovery", () => {
+test("durable merge evidence is validated before it can override the latest node", () => {
+  const mergeSha = "b".repeat(40);
   const state = {
     status: "active",
-    phases: {},
+    phases: {
+      merge: {
+        phase: "merge",
+        attempts: [
+          {
+            attempt: 1,
+            status: "completed",
+            leaseEpoch: 1,
+            restartAction: "reconcile and retry parent-owned merge",
+            evidence: ["merge:sha"],
+          },
+        ],
+      },
+    },
     nodes: {
       decision: {
         node: "decision",
@@ -126,33 +141,54 @@ test("durable merge evidence wins over the latest pre-merge node during recovery
         outcome: "awaiting-merge",
       },
     },
-    effects: {},
+    effects: {
+      pull: {
+        effectType: "pull-request",
+        effectId: "pr:119",
+        digest: "sha256:pull",
+        eventId: "event-pull",
+      },
+      merge: {
+        effectType: "merge",
+        effectId: "pr:119:merge",
+        digest: `sha256:${createHash("sha256").update(mergeSha).digest("hex")}`,
+        eventId: "event-merge",
+      },
+    },
   } as unknown as import("../../src/core/state.ts").RunState;
 
+  assert.equal(durableMergeEvidenceForState(state), undefined);
   assert.equal(workflowStageForDurableState(state), undefined);
 
   state.phases.merge = {
-    phase: "merge",
+    ...state.phases.merge!,
     attempts: [
       {
-        attempt: 1,
-        status: "completed",
-        leaseEpoch: 1,
-        restartAction: "reconcile and retry parent-owned merge",
-        evidence: ["merge:sha"],
+        ...state.phases.merge!.attempts[0]!,
+        evidence: [`merge:${mergeSha}`],
       },
     ],
   };
-  assert.equal(workflowStageForDurableState(state), "merged");
+  assert.deepEqual(durableMergeEvidenceForState(state), {
+    pullNumber: 119,
+    mergeSha,
+  });
+  assert.equal(
+    workflowStageForDurableState(state),
+    undefined,
+    "state evidence alone must not select merged",
+  );
+  assert.equal(workflowStageForDurableState(state, true), "merged");
 
   state.phases = {};
-  state.effects.merge = {
-    effectType: "merge",
-    effectId: "pr:119:merge",
-    digest: "sha256:merge",
-    eventId: "event-merge",
-  };
-  assert.equal(workflowStageForDurableState(state), "merged");
+  state.effects.merge!.digest = "sha256:merge";
+  assert.equal(durableMergeEvidenceForState(state), undefined);
+
+  state.effects.merge!.digest = `sha256:${"a".repeat(64)}`;
+  assert.deepEqual(durableMergeEvidenceForState(state), {
+    pullNumber: 119,
+  });
+  assert.equal(workflowStageForDurableState(state, true), "merged");
 
   state.effects = {};
   state.status = "completed";
