@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 16,
-  "lastEventHash": "sha256:2b93080692b0de9337ee70193484937d6e1fb593f4b2bfb702b9d4adf5000799",
+  "sequence": 17,
+  "lastEventHash": "sha256:7337dc051180826a99e7fbdb86416859087f26dfc80c40da7f7c6993ca2cbb33",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -112,15 +112,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume implement attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`discoverVerificationCommandCandidates` reads only bounded, non-symlink package manifests and emits normalized package-scoped candidates.",
+            "`chooseLocalVerificationCommands` offers explicit CI-only, current-command preservation, and manifest-backed package-script choices.",
+            "`preflightRequiredVerificationCommands` now rejects nameless package-manager `run` commands and does not require a package script for built-in `bun test`.",
+            "Regression tests cover root-without-test/web-with-test discovery, symlink exclusion, missing script syntax, Bun behavior, init selection, preservation, and CI-only mode.",
+            "README documents the init choice and static preflight remediation."
+          ],
           "logicalNodeId": "implement-1",
           "startedAt": "2026-08-27T01:08:17.451Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/53151d77-8a46-49b5-8caf-583e9c1ca9f0",
           "branch": "forge/issue-94-53151d77",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-27T01:08:49.484Z",
+          "outputArtifactHash": "sha256:implement-94-repository-aware-verification"
         }
       ]
     }
@@ -143,7 +151,8 @@
     "phase:prepare-worktree:1:start": "b35b7ab5-1722-42de-8b8b-74dce6d4f303",
     "phase:prepare-worktree:1:complete": "4081fadc-a09d-4f66-96f4-0dc01d47a2cc",
     "phase:implement:1:queue": "af7c8e06-833c-4029-9800-91349b85f307",
-    "phase:implement:1:start": "addea1b7-50c8-4bc2-b5fb-a706ddfd8991"
+    "phase:implement:1:start": "addea1b7-50c8-4bc2-b5fb-a706ddfd8991",
+    "phase:implement:1:complete": "86e6c065-983e-4594-a875-edbafaf8a2a5"
   },
   "eventIds": {
     "d15aa630-283e-4178-8c5f-35cd1ea03050": true,
@@ -161,7 +170,8 @@
     "b35b7ab5-1722-42de-8b8b-74dce6d4f303": true,
     "4081fadc-a09d-4f66-96f4-0dc01d47a2cc": true,
     "af7c8e06-833c-4029-9800-91349b85f307": true,
-    "addea1b7-50c8-4bc2-b5fb-a706ddfd8991": true
+    "addea1b7-50c8-4bc2-b5fb-a706ddfd8991": true,
+    "86e6c065-983e-4594-a875-edbafaf8a2a5": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
