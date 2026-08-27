@@ -34,9 +34,6 @@ export interface ActiveOrchestrationLink {
   issueNumbers: readonly number[];
   integrationBranch: string;
   maxConcurrent: number;
-  leaseEpoch: number;
-  leaseSeconds: number;
-  heartbeatSeconds: number;
   status:
     | "running"
     | "completed"
@@ -44,8 +41,6 @@ export interface ActiveOrchestrationLink {
     | "needs-human"
     | "failed"
     | "cancelled";
-  sequence: number;
-  lastHeartbeatAt: string;
 }
 
 export interface StartOrchestrationResult {
@@ -53,6 +48,12 @@ export interface StartOrchestrationResult {
   issueNumbers: readonly number[];
   maxConcurrent: number;
   integrationBranch: string;
+}
+
+export interface OrchestrationStatusSnapshot {
+  link: ActiveOrchestrationLink;
+  state?: OrchestrationState;
+  error?: string;
 }
 
 export class ForgeOrchestrationController {
@@ -86,9 +87,22 @@ export class ForgeOrchestrationController {
     for (const link of this.#links.values()) {
       if (link.status !== "running") continue;
       try {
-        const snapshot = await this.#read(link, ctx.signal);
+        let snapshot = await this.#read(link, ctx.signal);
         this.#syncLink(link, snapshot.state);
         this.#persistLink(link);
+        await this.#recoverFalseFailures(link, snapshot.state, ctx);
+        snapshot = await this.#read(link, ctx.signal);
+        for (const lane of snapshot.state.lanes) {
+          if (lane.status !== "running") continue;
+          const event = await this.#workOn.reconcileOrchestrationIssue(
+            link.orchestrationId,
+            lane.issueNumber,
+            ctx,
+          );
+          if (event) await this.#handleLifecycle(event, ctx);
+        }
+        await this.#lifecycleQueues.get(link.orchestrationId);
+        snapshot = await this.#read(link, ctx.signal);
         await this.#recoverFalseFailures(link, snapshot.state, ctx);
         await this.#pump(link, ctx);
       } catch (error) {
@@ -110,9 +124,6 @@ export class ForgeOrchestrationController {
   async start(
     issueNumbers: readonly number[],
     ctx: ExtensionContext,
-    _options: {
-      confirmExpiredTakeover?: (ownerRunId: string) => Promise<boolean>;
-    } = {},
   ): Promise<StartOrchestrationResult> {
     validateIssueNumbers(issueNumbers);
     const repositoryRoot = await this.#git.resolveRepositoryRoot(
@@ -141,14 +152,12 @@ export class ForgeOrchestrationController {
     const orchestrationId = randomUUID();
     await store.ensureBranch(new Date(), ctx.signal);
     const journal = new OrchestrationJournal(store);
-    const initialized = await journal.initialize({
+    await journal.initialize({
       orchestrationId,
       repository: policy.repository.name,
       issueNumbers,
       integrationBranch,
       maxConcurrent: policy.orchestration.maxConcurrent,
-      sessionId: ctx.sessionManager.getSessionId(),
-      leaseSeconds: policy.state.leaseSeconds,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
     const link: ActiveOrchestrationLink = {
@@ -159,12 +168,7 @@ export class ForgeOrchestrationController {
       issueNumbers: [...issueNumbers],
       integrationBranch,
       maxConcurrent: policy.orchestration.maxConcurrent,
-      leaseEpoch: initialized.state.leaseEpoch,
-      leaseSeconds: policy.state.leaseSeconds,
-      heartbeatSeconds: policy.state.heartbeatSeconds,
       status: "running",
-      sequence: initialized.state.sequence,
-      lastHeartbeatAt: initialized.state.createdAt,
     };
     this.#links.set(orchestrationId, link);
     this.#persistLink(link);
@@ -181,11 +185,18 @@ export class ForgeOrchestrationController {
     };
   }
 
-  list(): ActiveOrchestrationLink[] {
-    return [...this.#links.values()].map((link) => ({
-      ...link,
-      issueNumbers: [...link.issueNumbers],
-    }));
+  async inspect(signal?: AbortSignal): Promise<OrchestrationStatusSnapshot[]> {
+    return Promise.all(
+      [...this.#links.values()].map(async (link) => {
+        const snapshot = cloneLink(link);
+        try {
+          const current = await this.#read(link, signal);
+          return { link: snapshot, state: current.state };
+        } catch (error) {
+          return { link: snapshot, error: errorMessage(error) };
+        }
+      }),
+    );
   }
 
   async cancel(
@@ -226,10 +237,10 @@ export class ForgeOrchestrationController {
     });
     const link = this.#links.get(orchestrationId);
     if (link) {
-      this.#syncLink(link, cancelled.state);
+      this.#syncLink(link, cancelled);
       this.#persistLink(link);
     }
-    return cancelled.state;
+    return cancelled;
   }
 
   async shutdown(ctx: ExtensionContext, reason: string): Promise<void> {
@@ -297,11 +308,37 @@ export class ForgeOrchestrationController {
     state: OrchestrationState,
     ctx: ExtensionContext,
   ): Promise<void> {
+    const runs = this.#workOn.listRuns();
     for (const lane of state.lanes) {
+      const run = runs.find(
+        (candidate) =>
+          candidate.orchestrationId === link.orchestrationId &&
+          candidate.issueNumber === lane.issueNumber,
+      );
+      if (
+        lane.status === "running" &&
+        run?.status === "needs-human" &&
+        run.subagentRunId.startsWith("launch:")
+      ) {
+        const current = await this.#read(link, ctx.signal);
+        await current.journal.append({
+          orchestrationId: link.orchestrationId,
+          type: "lane.failed",
+          payload: {
+            issueNumber: lane.issueNumber,
+            reason:
+              "Provider continuation did not return a durable receipt; rerun this issue in a new orchestration.",
+          },
+          idempotencyKey: `lane:${lane.issueNumber}:continuation-unbound`,
+          message: `Fail issue ${lane.issueNumber} unbound continuation`,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+        continue;
+      }
       if (
         !["failed", "blocked", "needs-human"].includes(lane.status) ||
         !lane.reason ||
-        !/schema-valid Forge result artifact|State branch changed after|unsupported-continuation|WebSocket|timed? out|timeout|connection (?:lost|reset|error)|\b50[0234]\b|\b429\b|No comment found for marker.*FORGE:BUILDER/i.test(
+        !/schema-valid Forge result artifact|State branch changed after|unsupported-continuation|WebSocket|timed? out|timeout|connection (?:lost|reset|error)|\b50[0234]\b|\b429\b|No comment found for marker.*FORGE:BUILDER|checkpoint failed validation|omitted the required canonical|required canonical .* section|Invalid username or token|Bound branch push failed|^forge-work-on:\s*$/i.test(
           lane.reason,
         )
       )
@@ -481,7 +518,6 @@ export class ForgeOrchestrationController {
                 ctx,
                 {
                   orchestrationId: link.orchestrationId,
-                  leaseEpoch: link.leaseEpoch,
                 },
               );
             } catch (error) {
@@ -601,12 +637,12 @@ export class ForgeOrchestrationController {
             orchestrationId: link.orchestrationId,
             ...(ctx.signal ? { signal: ctx.signal } : {}),
           });
-          this.#syncLink(link, completed.state);
+          this.#syncLink(link, completed);
           this.#persistLink(link);
           ctx.ui.setStatus("forgedock", undefined);
           ctx.ui.notify(
-            renderCompletion(completed.state),
-            completed.state.status === "completed" ? "info" : "warning",
+            renderCompletion(completed),
+            completed.status === "completed" ? "info" : "warning",
           );
           break;
         }
@@ -659,7 +695,6 @@ export class ForgeOrchestrationController {
     state: OrchestrationState,
   ): void {
     link.status = state.status;
-    link.sequence = state.sequence;
   }
 
   #restoreLinks(ctx: ExtensionContext): void {
@@ -703,6 +738,10 @@ function validateIssueNumbers(issueNumbers: readonly number[]): void {
     throw new Error("Orchestration issue numbers must be unique.");
 }
 
+function cloneLink(link: ActiveOrchestrationLink): ActiveOrchestrationLink {
+  return { ...link, issueNumbers: [...link.issueNumbers] };
+}
+
 function normalizeLink(value: unknown): ActiveOrchestrationLink | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
@@ -716,12 +755,7 @@ function normalizeLink(value: unknown): ActiveOrchestrationLink | undefined {
     !link.issueNumbers.every(Number.isSafeInteger) ||
     typeof link.integrationBranch !== "string" ||
     !Number.isSafeInteger(link.maxConcurrent) ||
-    !Number.isSafeInteger(link.leaseEpoch) ||
-    !Number.isSafeInteger(link.leaseSeconds) ||
-    !Number.isSafeInteger(link.heartbeatSeconds) ||
-    typeof link.status !== "string" ||
-    !Number.isSafeInteger(link.sequence) ||
-    typeof link.lastHeartbeatAt !== "string"
+    typeof link.status !== "string"
   )
     return undefined;
   return link as ActiveOrchestrationLink;
@@ -747,7 +781,7 @@ export function childCleanupReason(
   if (unsuccessful.length === 0) return undefined;
   return `Orchestration is terminal with ${unsuccessful
     .map((lane) => `#${lane.issueNumber}:${lane.status}`)
-    .join(", ")}; cancelling nonterminal child runs before lease release.`;
+    .join(", ")}; stopping nonterminal child runs before orchestration completion.`;
 }
 
 export function lifecycleMatchesForgeRun(

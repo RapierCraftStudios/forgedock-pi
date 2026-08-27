@@ -203,6 +203,21 @@ export class GitHubIssueProjector {
       throw new TypeError("Issue number must be positive.");
     if (!workflowLabel.startsWith("workflow:"))
       throw new TypeError("Workflow labels must start with workflow:.");
+    await this.#replaceWorkflowLabel(issueNumber, workflowLabel, signal);
+  }
+
+  async clearWorkflowLabel(
+    issueNumber: number,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await this.#replaceWorkflowLabel(issueNumber, undefined, signal);
+  }
+
+  async #replaceWorkflowLabel(
+    issueNumber: number,
+    workflowLabel: string | undefined,
+    signal?: AbortSignal,
+  ): Promise<void> {
     const issuePath = `${this.#apiRoot}/issues/${issueNumber}`;
     const issueResponse = await this.#transport.request<IssueResponse>({
       method: "GET",
@@ -210,15 +225,12 @@ export class GitHubIssueProjector {
       ...(signal ? { signal } : {}),
     });
     const issue = requireGitHubSuccess(issueResponse, issuePath, [200]);
-    const labels = [
-      ...issue.labels
-        .map(issueLabelName)
-        .filter(
-          (label) =>
-            !label.startsWith("workflow:") && label !== "needs-human",
-        ),
-      workflowLabel,
-    ];
+    const labels = issue.labels
+      .map(issueLabelName)
+      .filter(
+        (label) => !label.startsWith("workflow:") && label !== "needs-human",
+      );
+    if (workflowLabel) labels.push(workflowLabel);
     const labelsPath = `${this.#apiRoot}/issues/${issueNumber}/labels`;
     const response = await this.#transport.request<IssueLabelValue[]>({
       method: "PUT",
@@ -231,12 +243,15 @@ export class GitHubIssueProjector {
     const workflowLabels = updatedLabels.filter((label) =>
       label.startsWith("workflow:"),
     );
-    if (
-      workflowLabels.length !== 1 ||
-      workflowLabels[0] !== workflowLabel
-    )
+    if (workflowLabel) {
+      if (workflowLabels.length !== 1 || workflowLabels[0] !== workflowLabel)
+        throw new GitHubApiError(422, labelsPath, {
+          message: `Workflow label read-back expected only ${workflowLabel}.`,
+          labels: updatedLabels,
+        });
+    } else if (workflowLabels.length !== 0)
       throw new GitHubApiError(422, labelsPath, {
-        message: `Workflow label read-back expected only ${workflowLabel}.`,
+        message: "Workflow label read-back expected no workflow labels.",
         labels: updatedLabels,
       });
   }

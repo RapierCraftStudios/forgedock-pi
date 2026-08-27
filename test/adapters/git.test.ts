@@ -75,8 +75,25 @@ test("worktree manager creates an issue branch from integration and cleans it sa
     await git(seed, "add", "app.txt");
     await git(seed, "commit", "-m", "initial");
     await git(seed, "branch", "staging");
+    await git(seed, "switch", "-c", "feature/review");
+    await writeFile(join(seed, "app.txt"), "review\n");
+    await git(seed, "add", "app.txt");
+    await git(seed, "commit", "-m", "review");
+    const reviewHead = (
+      await execFileAsync("git", ["rev-parse", "HEAD"], {
+        cwd: seed,
+        encoding: "utf8",
+      })
+    ).stdout.trim();
+    await git(seed, "switch", "main");
+    const baseHead = (
+      await execFileAsync("git", ["rev-parse", "HEAD"], {
+        cwd: seed,
+        encoding: "utf8",
+      })
+    ).stdout.trim();
     await git(seed, "remote", "add", "origin", origin);
-    await git(seed, "push", "origin", "main", "staging");
+    await git(seed, "push", "origin", "main", "staging", "feature/review");
     await execFileAsync("git", ["clone", origin, clone]);
 
     const manager = new GitWorktreeManager(executor);
@@ -85,6 +102,26 @@ test("worktree manager creates an issue branch from integration and cleans it sa
       await readFile(join(clone, ".git", "info", "exclude"), "utf8"),
       /^\.pi\/$/m,
     );
+    const review = await manager.prepareReview(clone, {
+      reviewId: "review-1234",
+      headRef: "feature/review",
+      headSha: reviewHead,
+      baseRef: "main",
+      baseSha: baseHead,
+    });
+    assert.equal(await manager.head(review.worktreePath), reviewHead);
+    assert.equal(
+      await readFile(join(review.worktreePath, "app.txt"), "utf8"),
+      "review\n",
+    );
+    await mkdir(join(review.worktreePath, ".pi", "forge"), {
+      recursive: true,
+    });
+    await writeFile(join(review.worktreePath, ".pi", "forge", "result.json"), "{}\n");
+    await manager.cleanupReview(review);
+    await manager.cleanupReview(review);
+    await assert.rejects(readFile(join(review.worktreePath, "app.txt"), "utf8"));
+
     const prepared = await manager.prepare(clone, {
       runId: "run-1234",
       issueNumber: 7,

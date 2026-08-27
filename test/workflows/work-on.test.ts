@@ -8,8 +8,8 @@ import {
   directTerminalEvidence,
   finalReviewDecisionMarker,
   findingPriority,
+  isRecoverableWorkOnBlocker,
   isTransientProviderFailure,
-  lineWithinTolerance,
   parentNodeFromId,
   parseAsyncCompletion,
   reconcileLaunchState,
@@ -19,7 +19,6 @@ import {
   reviewSupersessionMarker,
   rollbackAwaitingMergeLabel,
   shouldBufferLaunchCompletion,
-  similarFindingTitle,
   workflowLabelForNode,
   workflowStageForNodeTransition,
 } from "../../src/workflows/work-on.ts";
@@ -247,15 +246,6 @@ test("review-finding metadata follows legacy severity and dedup rules", () => {
     reviewFindingMarker(6, "SEC-001", "abcdef1"),
     "<!-- FORGE:REVIEW_FINDING source-pr=6 finding=SEC-001 head=abcdef1 -->",
   );
-  assert.equal(lineWithinTolerance("**Line**: 105", 100), true);
-  assert.equal(lineWithinTolerance("**Line**: 106", 100), false);
-  assert.equal(
-    similarFindingTitle(
-      "fix: fail closed on truncated reviewer input",
-      "forge_diff reviewer input truncation does not fail closed",
-    ),
-    true,
-  );
 });
 
 test("review instance markers bind run, domain, round, and full head", () => {
@@ -311,6 +301,31 @@ test("detached workflow continuation failure remains distinguishable for durable
       error:
         "unsupported-continuation: detached workflow child settled, but JavaScript workflow continuation was not persisted.",
     },
+  );
+});
+
+test("work-on recovery retries state branch contention but not real blockers", () => {
+  assert.equal(
+    isRecoverableWorkOnBlocker(
+      "State branch changed after abc123; reload before retrying.",
+    ),
+    true,
+  );
+  assert.equal(
+    isRecoverableWorkOnBlocker(
+      "Investigation checkpoint failed validation: omitted the required canonical Acceptance Spec section.",
+    ),
+    true,
+  );
+  assert.equal(
+    isRecoverableWorkOnBlocker(
+      "Bound branch push failed: Invalid username or token.",
+    ),
+    true,
+  );
+  assert.equal(
+    isRecoverableWorkOnBlocker("Product decision requires operator approval."),
+    false,
   );
 });
 

@@ -23,7 +23,7 @@
   },
   "review": {
     "required": ["forge-review-correctness", "forge-review-security"],
-    "maxRounds": 3
+    "maxRounds": 4
   },
   "orchestration": {
     "maxConcurrent": 2,
@@ -33,6 +33,6 @@
     "maxConcurrent": 2,
     "maxDepth": 2,
     "workOnTimeoutMs": 14400000,
-    "reviewerTimeoutMs": 900000
+    "reviewerTimeoutMs": 1800000
   }
 }

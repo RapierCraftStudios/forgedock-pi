@@ -105,6 +105,13 @@ test("issue projection is marker-idempotent and only adds missing labels", async
   assert.equal(transport.labels.has("workflow:merged"), true);
   assert.equal(transport.labels.has("bug"), true);
   assert.equal(transport.labels.has("priority:P1"), true);
+
+  transport.labels.add("needs-human");
+  await projector.clearWorkflowLabel(42);
+  assert.equal(transport.labels.has("workflow:merged"), false);
+  assert.equal(transport.labels.has("needs-human"), false);
+  assert.equal(transport.labels.has("bug"), true);
+  assert.equal(transport.labels.has("priority:P1"), true);
 });
 
 test("workflow label transitions replace stale state while preserving unrelated labels", async () => {

@@ -130,11 +130,18 @@ Then run:
 ## Commands
 
 | Command | Purpose |
-|---|---|
+| --- | --- |
 | `/forge:about` | Show extension, schema, and `pi-subagents` availability |
 | `/forge:init` | Create tracked policy and canonical labels |
-| `/forge:work-on <issue intent>` | Resolve exactly one issue from a number, URL, or natural-language selector, then launch work-on |
-| `/forge:status` | Show ForgeDock runs linked to the Pi session |
+| `/forge:work-on <issue intent>` | Resolve exactly one issue, implement it, and call the shared typed review-pr workflow before work-on-owned merge/close/cleanup |
+| `/forge:orchestrate <issue set>` | Run one complete work-on coordinator per issue with bounded parallelism and serialized integration |
+| `/forge:review-pr <PR selector> [flags]` | Review one PR, URL, `open`, `all`, or the configured route; `--auto-merge` remains explicit and policy-gated |
+| `/review-pr ...` | Compatibility alias for `/forge:review-pr` |
+| `/forge:review-pr-staging [staging | feature | staging:feature]` | Strict staging deployment review; emits `FORGE:GATE_PASS` or `FORGE:GATE_FAILURE` and never merges or deploys |
+| `/review-pr-staging ...` | Compatibility alias for `/forge:review-pr-staging` |
+| `/forge:status` | Show linked orchestrations, work-on runs, and standalone reviews |
+| `/forge:resume [review-id]` | Resume one durable review or reconcile linked orchestrations |
+| `/forge:cancel <workflow-id>` | Cancel an orchestration or review while preserving its durable audit history |
 
 ## GitHub audit trail
 

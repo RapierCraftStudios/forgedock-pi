@@ -67,7 +67,7 @@ export async function materializeForgeAgents(
               prompt: FORGE_WORK_ON_PROMPT,
               maxDepth: FORGE_WORK_ON_MAX_DEPTH,
               acceptanceRole: "writer",
-              completionGuard: true,
+              completionGuard: false,
               async: true,
               extensions: [subagentsExtensionPath, childRuntimePath],
               timeoutMs: FORGE_WORK_ON_TIMEOUT_MS,
@@ -83,7 +83,7 @@ export async function materializeForgeAgents(
               prompt: FORGE_REFRESH_REVIEW_PROMPT,
               maxDepth: FORGE_WORK_ON_MAX_DEPTH,
               acceptanceRole: "writer",
-              completionGuard: true,
+              completionGuard: false,
               async: true,
               extensions: [subagentsExtensionPath, childRuntimePath],
               timeoutMs: FORGE_WORK_ON_TIMEOUT_MS,
@@ -101,6 +101,7 @@ export async function materializeForgeAgents(
               acceptanceRole: "read-only",
               completionGuard: false,
               async: false,
+              thinking: "medium",
               extensions: [childRuntimePath],
               timeoutMs: FORGE_REVIEW_TIMEOUT_MS,
             }),
@@ -117,6 +118,7 @@ export async function materializeForgeAgents(
               acceptanceRole: "read-only",
               completionGuard: false,
               async: false,
+              thinking: "medium",
               extensions: [childRuntimePath],
               timeoutMs: FORGE_REVIEW_TIMEOUT_MS,
             }),
@@ -133,6 +135,7 @@ export async function materializeForgeAgents(
               acceptanceRole: "read-only",
               completionGuard: false,
               async: false,
+              thinking: "medium",
               extensions: [childRuntimePath],
               timeoutMs: FORGE_REVIEW_TIMEOUT_MS,
             }),
@@ -350,6 +353,7 @@ function agentFile(input: {
   acceptanceRole: "read-only" | "writer";
   completionGuard: boolean;
   async: boolean;
+  thinking?: "low" | "medium" | "high";
   extensions?: readonly string[];
   timeoutMs?: number;
 }): string {
@@ -364,7 +368,7 @@ inheritProjectContext: true
 inheritSkills: false
 defaultContext: fresh
 async: ${input.async}
-tools: ${input.tools.join(", ")}
+${input.thinking ? `thinking: ${input.thinking}\n` : ""}tools: ${input.tools.join(", ")}
 acceptanceRole: ${input.acceptanceRole}
 maxSubagentDepth: ${input.maxDepth}
 completionGuard: ${input.completionGuard}

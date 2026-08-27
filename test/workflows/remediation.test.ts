@@ -184,6 +184,29 @@ test("addressed finding closure is commit-bearing and idempotent", async () => {
   );
 });
 
+test("review-finding cleanup revalidates source authority and decodes finding IDs", async () => {
+  const encoded = parseAuthoritativeReviewFindingIssue({
+    number: 103,
+    body: findingBody(7, "SEC%2F001", "security"),
+  });
+  assert.equal(encoded?.finding.id, "SEC/001");
+
+  const fake = new RemediationGitHubFake();
+  await assert.rejects(
+    closeAddressedReviewFindingIssues({
+      github: fake as unknown as GitHubWorkflowAdapter,
+      pullNumber: 7,
+      priorFindingIssueMap: { "SEC-002": 102 },
+      activeFindingIds: new Set<string>(),
+      remediationCommitSha: "new-head",
+      runId: "run-1",
+    }),
+    /not authorized for cleanup/i,
+  );
+  assert.equal(fake.issues[2]?.state, "open");
+  assert.equal(fake.comments.get(102), undefined);
+});
+
 function findingBody(
   pullNumber: number,
   findingId: string,
