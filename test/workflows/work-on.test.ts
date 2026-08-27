@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -8,6 +9,7 @@ import {
   directTerminalEvidence,
   finalReviewDecisionMarker,
   findingPriority,
+  hasDurableMergeEvidence,
   isTransientProviderFailure,
   lineWithinTolerance,
   parentNodeFromId,
@@ -106,6 +108,95 @@ test("direct terminal evidence binds PR, merge phase, and merge effect", () => {
   });
   state.effects.merge!.digest = "sha256:wrong";
   assert.equal(directTerminalEvidence(state), undefined);
+});
+
+test("durable merge evidence takes precedence over an incomplete merge node", () => {
+  const state = (overrides: Record<string, unknown> = {}) =>
+    ({
+      effects: {},
+      phases: {},
+      nodes: {},
+      ...overrides,
+    }) as unknown as import("../../src/core/state.ts").RunState;
+
+  assert.equal(hasDurableMergeEvidence(state()), false);
+  assert.equal(
+    hasDurableMergeEvidence(
+      state({
+        effects: {
+          "pr:119:merge": {
+            effectType: "merge",
+            effectId: "pr:119:merge",
+            digest: "sha256:merge",
+            eventId: "event-merge",
+          },
+        },
+        nodes: {
+          "merge-1": { node: "merge", status: "running" },
+        },
+      }),
+    ),
+    true,
+  );
+  assert.equal(
+    hasDurableMergeEvidence(
+      state({
+        phases: {
+          merge: {
+            attempts: [{ status: "completed" }],
+          },
+        },
+      }),
+    ),
+    true,
+  );
+  assert.equal(
+    hasDurableMergeEvidence(
+      state({
+        nodes: {
+          "merge-1": {
+            node: "merge",
+            status: "completed",
+            outcome: "merged",
+          },
+        },
+      }),
+    ),
+    true,
+  );
+});
+
+test("merged projection is ordered before post-merge work in every merge path", async () => {
+  const source = await readFile("src/workflows/work-on.ts", "utf8");
+  const parentStart = source.indexOf('} else if (node.node === "merge")');
+  const parentEnd = source.indexOf('} else if (node.node === "close")', parentStart);
+  assert.ok(parentStart >= 0 && parentEnd > parentStart);
+  const parentMerge = source.slice(parentStart, parentEnd);
+  assert.ok(
+    parentMerge.indexOf('await this.#projectWorkflowStage(link, "merged", ctx, projector);') <
+      parentMerge.indexOf("await postReviewCompletionArtifacts"),
+    "dispatcher merge must project the merged label before review completion artifacts",
+  );
+
+  const recoveryStart = source.indexOf("  async #recoverDirectTerminal(");
+  const finalizeStart = source.indexOf("  async #finalize(", recoveryStart);
+  assert.ok(recoveryStart >= 0 && finalizeStart > recoveryStart);
+  const recovery = source.slice(recoveryStart, finalizeStart);
+  assert.ok(
+    recovery.indexOf('await this.#projectWorkflowStage(link, "merged", ctx, projector);') <
+      recovery.indexOf("await github.deleteBranch"),
+    "terminal recovery must project the merged label before cleanup",
+  );
+
+  const finalizeEnd = source.indexOf("  #lifecycleEvent(", finalizeStart);
+  assert.ok(finalizeEnd > finalizeStart);
+  const finalize = source.slice(finalizeStart, finalizeEnd);
+  const mergeApi = finalize.indexOf("await github.mergePullRequest");
+  const mergedProjection = finalize.indexOf(
+    'await this.#projectWorkflowStage(link, "merged", ctx, projector);',
+  );
+  const postMerge = finalize.indexOf("await postReviewCompletionArtifacts");
+  assert.ok(mergeApi >= 0 && mergedProjection > mergeApi && mergedProjection < postMerge);
 });
 
 test("provider completion is buffered until its launch receipt is durably bound", () => {

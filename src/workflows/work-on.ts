@@ -224,6 +224,31 @@ export function directTerminalEvidence(
   return { pullNumber, mergeSha };
 }
 
+/** Durable merge evidence outranks an incomplete post-merge node during recovery. */
+export function hasDurableMergeEvidence(
+  state: Pick<
+    import("../core/state.ts").RunState,
+    "effects" | "phases" | "nodes"
+  >,
+): boolean {
+  if (
+    Object.values(state.effects).some((effect) => effect.effectType === "merge")
+  )
+    return true;
+  if (
+    state.phases.merge?.attempts.some(
+      (attempt) => attempt.status === "completed",
+    )
+  )
+    return true;
+  return Object.values(state.nodes).some(
+    (node) =>
+      node.node === "merge" &&
+      node.status === "completed" &&
+      node.outcome === "merged",
+  );
+}
+
 export function directRunResumeTask(
   link: ActiveRunLink,
   state: import("../core/state.ts").RunState,
@@ -615,8 +640,9 @@ export class ForgeWorkOnController {
     const snapshot = await store.readRun(link.forgeRunId, ctx.signal);
     if (!snapshot.state) return;
     if (
-      snapshot.state.status === "completed" &&
-      snapshot.state.outcome === "merged"
+      hasDurableMergeEvidence(snapshot.state) ||
+      (snapshot.state.status === "completed" &&
+        snapshot.state.outcome === "merged")
     ) {
       await this.#projectWorkflowStage(link, "merged", ctx);
       return;
@@ -2173,13 +2199,11 @@ export class ForgeWorkOnController {
           .catch(() => undefined);
         throw error;
       }
+      await this.#projectWorkflowStage(link, "merged", ctx, projector);
       headSha = merged.sha;
       outcome = "merged";
       evidence = [`merge:${merged.sha}`];
       await journal.append({ runId: link.forgeRunId, type: "effect.recorded", payload: { effectType: "merge", effectId: `merge:${pull.number}`, digest: digest(merged.sha) }, idempotencyKey: `effect:merge:${pull.number}`, sessionId, message: `Record merge effect for ${pull.number}`, ...(ctx.signal ? { signal: ctx.signal } : {}) });
-      await this.#projectWorkflowStage(link, "merged", ctx, projector).catch(
-        () => undefined,
-      );
       const aggregate = await this.#aggregateFromState(
         link,
         authority.state as import("../core/state.ts").RunState,
@@ -3334,6 +3358,8 @@ export class ForgeWorkOnController {
       );
     }
 
+    await this.#projectWorkflowStage(link, "merged", ctx, projector);
+
     if (action === "terminal-cleanup") {
       await appendPhase(
         journal,
@@ -3410,9 +3436,7 @@ export class ForgeWorkOnController {
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         })
         .catch(() => undefined);
-      await this.#projectWorkflowStage(link, "merged", ctx, projector).catch(
-        () => undefined,
-      );
+      await this.#projectWorkflowStage(link, "merged", ctx, projector);
     }
 
     this.#directBinding = undefined;
@@ -3892,6 +3916,7 @@ export class ForgeWorkOnController {
           method: "squash",
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
+    await this.#projectWorkflowStage(link, "merged", ctx, projector);
     await appendEffect(
       journal,
       link.forgeRunId,
@@ -3912,7 +3937,6 @@ export class ForgeWorkOnController {
       undefined,
       [merged.sha],
     );
-    await this.#projectWorkflowStage(link, "merged", ctx, projector);
     if (!currentPull.merged)
       await postReviewCompletionArtifacts({
         github,
