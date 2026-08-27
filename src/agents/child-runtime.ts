@@ -38,6 +38,9 @@ import {
   validateBuilderPathContract,
 } from "../core/builder-contract.ts";
 import {
+  workflowLabelForPhaseBoundary,
+} from "../core/artifact-protocol.ts";
+import {
   normalizeVerificationCommandCwd,
   type ForgePolicy,
 } from "../core/policy.ts";
@@ -1938,24 +1941,21 @@ function workflowLabelForCheckpoint(params: {
     | "abandon";
   report?: string;
 }): string | undefined {
-  if (params.action === "start") {
-    if (params.phase === "investigate") return "workflow:investigating";
-    if (
-      params.phase === "plan" ||
-      params.phase === "prepare-worktree" ||
-      params.phase === "implement" ||
-      params.phase === "verify"
-    ) {
-      return "workflow:building";
-    }
-    if (params.phase === "review") return "workflow:in-review";
+  const transition =
+    params.action === "start"
+      ? "started"
+      : params.action === "complete"
+        ? "completed"
+        : undefined;
+  if (!transition) return undefined;
+
+  let outcome: string | undefined;
+  if (params.phase === "investigate" && params.action === "complete") {
+    outcome = params.report?.match(
+      /\*\*Verdict\*\*\s*:\s*(confirmed|invalid|decompose(?:d)?)/i,
+    )?.[1];
   }
-  if (params.action === "complete" && params.phase === "investigate") {
-    return params.report?.includes("**Verdict**: INVALID")
-      ? "workflow:invalid"
-      : "workflow:ready-to-build";
-  }
-  return undefined;
+  return workflowLabelForPhaseBoundary(params.phase, transition, outcome);
 }
 
 function validatePhaseReport(phase: RunPhase, report: string): void {

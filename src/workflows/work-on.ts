@@ -37,6 +37,7 @@ import {
   acceptanceGatePassed,
   assertWorkflowLabel,
   checkCurrentReviewAuditTrail,
+  workflowStageForPhaseBoundary,
   checkPreMergeAuditTrail,
   checkReviewDecisionAuditTrail,
 } from "../core/artifact-protocol.ts";
@@ -3866,6 +3867,12 @@ export class ForgeWorkOnController {
       return;
     }
 
+    await this.#projectWorkflowStage(
+      link,
+      "awaitingMerge",
+      ctx,
+      projector,
+    );
     const durableMergeSha = currentRun.state?.phases.merge?.attempts
       .filter((attempt) => attempt.status === "completed")
       .at(-1)?.evidence[0];
@@ -4705,33 +4712,8 @@ export function workflowStageForNodeTransition(
     if (terminalInvestigation === "invalid") return "invalid";
     if (terminalInvestigation === "decomposed") return "decomposed";
   }
-  if (node === "decision" && outcome === "awaiting-merge")
-    return "awaitingMerge";
-  if (node === "decision" && outcome === "remediation-required")
-    return "build";
-  if (node === "merge")
-    return transition === "completed" && outcome === "merged"
-      ? "merged"
-      : "awaitingMerge";
-  if (node === "resolve") return "investigation";
-  if (node === "investigate")
-    return transition === "completed" ? "readyToBuild" : "investigation";
-  if (
-    node === "plan" ||
-    node === "prepare-worktree" ||
-    node === "implement" ||
-    node === "verify"
-  )
-    return "build";
-  if (
-    node === "prepare-pr" ||
-    node === "review-correctness" ||
-    node === "review-security" ||
-    node === "review-join" ||
-    node === "ci" ||
-    node === "decision"
-  )
-    return "review";
+  const phaseStage = workflowStageForPhaseBoundary(node, transition, outcome);
+  if (phaseStage) return phaseStage;
   return undefined;
 }
 

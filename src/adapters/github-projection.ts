@@ -15,8 +15,10 @@ interface IssueLabel {
   name: string;
 }
 
+type IssueLabelValue = IssueLabel | string;
+
 interface IssueResponse {
-  labels: IssueLabel[];
+  labels: IssueLabelValue[];
 }
 
 export interface ProjectIssueEventInput {
@@ -31,6 +33,10 @@ export interface ProjectionResult {
   commentId: number;
   created: boolean;
   labelsAdded: readonly string[];
+}
+
+function issueLabelName(label: IssueLabelValue): string {
+  return typeof label === "string" ? label : label.name;
 }
 
 export class GitHubIssueProjector {
@@ -193,6 +199,8 @@ export class GitHubIssueProjector {
     workflowLabel: string,
     signal?: AbortSignal,
   ): Promise<void> {
+    if (!Number.isSafeInteger(issueNumber) || issueNumber < 1)
+      throw new TypeError("Issue number must be positive.");
     if (!workflowLabel.startsWith("workflow:"))
       throw new TypeError("Workflow labels must start with workflow:.");
     const issuePath = `${this.#apiRoot}/issues/${issueNumber}`;
@@ -204,7 +212,7 @@ export class GitHubIssueProjector {
     const issue = requireGitHubSuccess(issueResponse, issuePath, [200]);
     const labels = [
       ...issue.labels
-        .map((label) => label.name)
+        .map(issueLabelName)
         .filter(
           (label) =>
             !label.startsWith("workflow:") && label !== "needs-human",
@@ -212,13 +220,25 @@ export class GitHubIssueProjector {
       workflowLabel,
     ];
     const labelsPath = `${this.#apiRoot}/issues/${issueNumber}/labels`;
-    const response = await this.#transport.request<IssueLabel[]>({
+    const response = await this.#transport.request<IssueLabelValue[]>({
       method: "PUT",
       path: labelsPath,
       body: { labels },
       ...(signal ? { signal } : {}),
     });
-    requireGitHubSuccess(response, labelsPath, [200]);
+    const updated = requireGitHubSuccess(response, labelsPath, [200]);
+    const updatedLabels = updated.map(issueLabelName);
+    const workflowLabels = updatedLabels.filter((label) =>
+      label.startsWith("workflow:"),
+    );
+    if (
+      workflowLabels.length !== 1 ||
+      workflowLabels[0] !== workflowLabel
+    )
+      throw new GitHubApiError(422, labelsPath, {
+        message: `Workflow label read-back expected only ${workflowLabel}.`,
+        labels: updatedLabels,
+      });
   }
 
   async #findComment(
@@ -261,7 +281,7 @@ export class GitHubIssueProjector {
       ...(signal ? { signal } : {}),
     });
     const issue = requireGitHubSuccess(issueResponse, issuePath, [200]);
-    const current = new Set(issue.labels.map((label) => label.name));
+    const current = new Set(issue.labels.map(issueLabelName));
     const missing = requested.filter((label) => !current.has(label));
     if (missing.length === 0) return [];
 
