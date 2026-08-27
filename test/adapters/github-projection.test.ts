@@ -166,6 +166,38 @@ test("workflow label transitions replace stale state while preserving unrelated 
   }
 });
 
+test("workflow label transitions reject invalid issue numbers before transport access", async () => {
+  const transport = new ProjectionTransport();
+  const request = transport.request.bind(transport);
+  let requests = 0;
+  transport.request = async function <T>(input: GitHubRequest) {
+    requests += 1;
+    return request<T>(input);
+  };
+  const projector = new GitHubIssueProjector(transport, "owner/repo");
+  const invalidIssueNumbers: unknown[] = [
+    0,
+    -1,
+    1.5,
+    Number.MAX_SAFE_INTEGER + 1,
+    "42/comments?per_page=100",
+  ];
+
+  for (const issueNumber of invalidIssueNumbers)
+    await assert.rejects(
+      projector.setWorkflowLabel(
+        issueNumber as number,
+        "workflow:in-review",
+      ),
+      {
+        name: "TypeError",
+        message: "Issue number must be positive.",
+      },
+    );
+
+  assert.equal(requests, 0);
+});
+
 test("workflow label transitions preserve unrelated labels added during mutation", async () => {
   const transport = new ProjectionTransport();
   transport.labels.add("workflow:building");

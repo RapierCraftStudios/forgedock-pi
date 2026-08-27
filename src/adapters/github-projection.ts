@@ -476,8 +476,7 @@ export class GitHubIssueProjector {
     workflowLabel: string,
     signal?: AbortSignal,
   ): Promise<void> {
-    if (!Number.isSafeInteger(issueNumber) || issueNumber < 1)
-      throw new TypeError("Issue number must be positive.");
+    requireIssueNumber(issueNumber);
     if (!workflowLabel.startsWith("workflow:"))
       throw new TypeError("Workflow labels must start with workflow:.");
     await this.#replaceWorkflowLabel(issueNumber, workflowLabel, signal);
