@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 38,
-  "lastEventHash": "sha256:858d9eaed4d6cd1a3b9b1102b61e575b3b622b250da17cbeb157f2a697364fbd",
+  "sequence": 39,
+  "lastEventHash": "sha256:32f700ef4dc03a91df42016b3a745ac433e8d4b34321a4b24fa6a5ce38d4d651",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -131,15 +131,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "Run the required bound `check` command, then create the implementation commit.",
-          "evidence": [],
+          "evidence": [
+            "Bound verification `check` passed: TypeScript typecheck succeeded and 243 tests passed with zero failures.",
+            "Focused regression test `workflow label transitions reject malformed issue numbers before transport access` passed.",
+            "Implementation commit `5687e984fec9662169d3f32f18793254b61069e1` was created after successful verification."
+          ],
           "logicalNodeId": "verify-1",
           "startedAt": "2026-08-27T14:37:55.533Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/6df31780-d744-4861-b63c-10444061fa07",
           "branch": "forge/issue-209-6df31780",
-          "baseSha": "6a8af2aaccf459b3ab45208032334e50a9ce629d"
+          "baseSha": "6a8af2aaccf459b3ab45208032334e50a9ce629d",
+          "finishedAt": "2026-08-27T14:39:07.342Z",
+          "outputArtifactHash": "sha256:verify-check-pass-5687e984",
+          "commitSha": "5687e984fec9662169d3f32f18793254b61069e1"
         }
       ]
     }
@@ -299,7 +306,8 @@
     "effect:github-label:RapierCraftStudios/forgedock-pi:209:da983584-dc4a-4759-9757-e730120d24ed": "5841849d-193b-4d2a-9fed-2fbeb62e89f9",
     "phase:verify:1:queue": "f612266e-1e6b-4024-9905-a1bd539f3567",
     "phase:verify:1:start": "e4decdc0-9557-4fef-830d-2b3c91bc46b2",
-    "effect:github-label:RapierCraftStudios/forgedock-pi:209:e4decdc0-9557-4fef-830d-2b3c91bc46b2": "14329670-e682-459a-bdc0-bd3c7d606ec7"
+    "effect:github-label:RapierCraftStudios/forgedock-pi:209:e4decdc0-9557-4fef-830d-2b3c91bc46b2": "14329670-e682-459a-bdc0-bd3c7d606ec7",
+    "phase:verify:1:complete": "4e0b6af8-795e-4a33-93e7-223caeca8b06"
   },
   "eventIds": {
     "c6df90f4-2328-4863-b964-4809c11f2ef1": true,
@@ -339,7 +347,8 @@
     "5841849d-193b-4d2a-9fed-2fbeb62e89f9": true,
     "f612266e-1e6b-4024-9905-a1bd539f3567": true,
     "e4decdc0-9557-4fef-830d-2b3c91bc46b2": true,
-    "14329670-e682-459a-bdc0-bd3c7d606ec7": true
+    "14329670-e682-459a-bdc0-bd3c7d606ec7": true,
+    "4e0b6af8-795e-4a33-93e7-223caeca8b06": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
