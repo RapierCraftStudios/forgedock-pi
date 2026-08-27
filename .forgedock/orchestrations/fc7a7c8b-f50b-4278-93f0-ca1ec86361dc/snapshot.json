@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 17,
-  "lastEventHash": "sha256:04229471b1d6839614d1fcedee86ea03ef546622b66eafab75c790610097caaa",
+  "sequence": 18,
+  "lastEventHash": "sha256:7fbabe7b9ea93b58b9153d4931be9939597275e9c660cc4547d09d2fa51ce99b",
   "lanes": [
     {
       "issueNumber": 92,
@@ -31,10 +31,11 @@
     {
       "issueNumber": 111,
       "ordinal": 2,
-      "status": "running",
+      "status": "blocked",
       "refreshes": 0,
       "forgeRunId": "277bd64e-b22c-481f-861f-8a0a0ebad31e",
-      "subagentRunId": "729ecab7-1520-4dbd-82a6-79739d8b4377"
+      "subagentRunId": "729ecab7-1520-4dbd-82a6-79739d8b4377",
+      "reason": "Review round cap (3) exhausted after remediation; PR #192 is refreshed to `2f73b07c214ea388a9744b1f30398223ae70f075` but requires an explicit new review identity/configuration before merge."
     },
     {
       "issueNumber": 112,
@@ -110,7 +111,8 @@
     "lane:92:ready:0": "0080fa99-afab-4879-a366-62dd50a65e85",
     "lane:92:integrate:0": "c7a6b32f-35c6-46ea-bd08-63451da98ecd",
     "lane:92:merged": "90c05591-9ad3-4da0-bfd3-3531e8eb6b55",
-    "lane:114:ready:0": "1f362aa1-2f28-4125-a73c-a0b407cb8ca7"
+    "lane:114:ready:0": "1f362aa1-2f28-4125-a73c-a0b407cb8ca7",
+    "lane:111:blocked": "26360443-cd0c-4ecd-9387-d43c1abb90e2"
   },
   "createdAt": "2026-08-27T00:45:48.913Z"
 }
