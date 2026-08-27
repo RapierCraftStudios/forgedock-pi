@@ -94,6 +94,7 @@ test("preflight rejects package-selection flags instead of checking the wrong ma
       ["npm", "--prefix", "web", "test"],
       ["npm", "run", "test", "--prefix", "web"],
       ["npm", "--prefix=web", "run", "test"],
+      ["npm", "-C", "web", "test"],
       ["npm", "run", "test", "--workspace", "web"],
     ];
     for (const argv of packageSelectionArgv) {
@@ -126,7 +127,9 @@ test("package-manager selector aliases are rejected without blocking script name
     for (const argv of [
       ["pnpm", "-w", "test"],
       ["pnpm", "recursive", "test"],
+      ["pnpm", "--silent", "recursive", "test"],
       ["yarn", "workspace", "web", "test"],
+      ["yarn", "--silent", "workspace", "web", "test"],
     ]) {
       await assert.rejects(
         preflightRequiredVerificationCommands(
@@ -141,6 +144,11 @@ test("package-manager selector aliases are rejected without blocking script name
     await preflightRequiredVerificationCommands(
       testFixture.root,
       { workspace: command("web", { argv: ["yarn", "run", "workspace"] }) },
+      { path: testFixture.path },
+    );
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      { test: command("web", { argv: ["yarn", "test", "workspace"] }) },
       { path: testFixture.path },
     );
   } finally {

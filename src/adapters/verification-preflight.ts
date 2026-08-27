@@ -127,6 +127,7 @@ const PACKAGE_SELECTION_OPTIONS: Readonly<
     "--workspace-root",
     "--include-workspace-root",
     "--ws",
+    "-C",
     "-w",
   ],
   pnpm: [
@@ -167,6 +168,7 @@ function packageSelectionOption(argv: readonly string[]): string | undefined {
   const selectors = PACKAGE_SELECTION_OPTIONS[manager];
   if (!selectors) return undefined;
 
+  let scriptCommandSeen = false;
   for (const argument of argv.slice(1)) {
     if (argument === "--") break;
     const option = argument.split("=", 1)[0] ?? argument;
@@ -179,10 +181,16 @@ function packageSelectionOption(argv: readonly string[]): string | undefined {
       option.length > 2
     )
       return argument;
+    if (argument === "test" || argument === "run" || argument === "run-script") {
+      scriptCommandSeen = true;
+      continue;
+    }
+    if (
+      !scriptCommandSeen &&
+      PACKAGE_SELECTION_COMMANDS[manager]?.includes(argument)
+    )
+      return argument;
   }
-
-  if (PACKAGE_SELECTION_COMMANDS[manager]?.includes(argv[1] ?? ""))
-    return argv[1];
   return undefined;
 }
 
