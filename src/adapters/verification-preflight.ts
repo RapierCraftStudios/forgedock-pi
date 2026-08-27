@@ -127,7 +127,15 @@ function packageScriptName(
   if (command === undefined) return undefined;
   if (command.startsWith("-"))
     throw unsupportedPackageManagerOptionsError(basePath);
-  if (command === "test") {
+  if (
+    manager === "npm" &&
+    (command === "workspace" || command === "workspaces")
+  )
+    throw unsupportedPackageManagerOptionsError(basePath);
+  if (
+    command === "test" ||
+    (manager === "npm" && (command === "t" || command === "tst"))
+  ) {
     assertNoPackageManagerOptions(argv, 2, basePath);
     return "test";
   }

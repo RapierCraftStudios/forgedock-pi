@@ -102,6 +102,10 @@ test("malformed root test metadata cannot be bypassed by package selectors", asy
       ["npm", "run", "--workspace", "web", "test"],
       ["npm", "run", "--prefix", "../outside", "check"],
       ["npm", "run", "--prefix", "web"],
+      ["npm", "workspace", "web", "test"],
+      ["npm", "workspaces", "test"],
+      ["npm", "t", "--workspace", "web"],
+      ["npm", "tst", "--prefix", "web"],
     ]) {
       await assert.rejects(
         preflightRequiredVerificationCommands(
