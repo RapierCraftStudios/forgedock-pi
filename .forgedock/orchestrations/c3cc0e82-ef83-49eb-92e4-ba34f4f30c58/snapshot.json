@@ -6,8 +6,8 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 3,
-  "lastEventHash": "sha256:7b1f24916787931607438cbab23efca6e5e7ce2894ae343fde64f2075791a730",
+  "sequence": 4,
+  "lastEventHash": "sha256:9c0394b92f0ee72e5abcd4d880eca0fabae41f87728c1c83053e00785a300715",
   "lanes": [
     {
       "issueNumber": 147,
@@ -20,10 +20,11 @@
     {
       "issueNumber": 209,
       "ordinal": 1,
-      "status": "running",
+      "status": "blocked",
       "refreshes": 0,
       "forgeRunId": "6df31780-d744-4861-b63c-10444061fa07",
-      "subagentRunId": "a6231ea5-9079-4e67-8a11-8e2362663f9a"
+      "subagentRunId": "a6231ea5-9079-4e67-8a11-8e2362663f9a",
+      "reason": "The required correctness reviewer returned a blocked verdict after `forge_diff` failed to provide complete consumable patch coverage; merge readiness cannot be established."
     }
   ],
   "dependencies": [],
@@ -31,12 +32,14 @@
   "idempotencyKeys": {
     "orchestration:create": "ae75644d-3941-4dbd-a460-2a019ea21e02",
     "lane:147:started": "28f955db-9abe-4cbe-989d-e48033be389f",
-    "lane:209:started": "37d1fe88-ee4a-4a01-863b-8b4d72799f79"
+    "lane:209:started": "37d1fe88-ee4a-4a01-863b-8b4d72799f79",
+    "lane:209:blocked": "8c51dcc4-636d-454b-8249-d669f1376dc1"
   },
   "eventIds": {
     "ae75644d-3941-4dbd-a460-2a019ea21e02": true,
     "28f955db-9abe-4cbe-989d-e48033be389f": true,
-    "37d1fe88-ee4a-4a01-863b-8b4d72799f79": true
+    "37d1fe88-ee4a-4a01-863b-8b4d72799f79": true,
+    "8c51dcc4-636d-454b-8249-d669f1376dc1": true
   },
   "createdAt": "2026-08-27T14:28:07.623Z"
 }
