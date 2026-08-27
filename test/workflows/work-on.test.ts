@@ -17,6 +17,7 @@ import {
   reviewInstanceMarker,
   reviewSummaryInstanceMarker,
   reviewSupersessionMarker,
+  rollbackAwaitingMergeLabel,
   shouldBufferLaunchCompletion,
   similarFindingTitle,
   workflowLabelForNode,
@@ -112,6 +113,42 @@ test("provider completion is buffered until its launch receipt is durably bound"
   assert.equal(shouldBufferLaunchCompletion(true, true), true);
   assert.equal(shouldBufferLaunchCompletion(false, false), true);
   assert.equal(shouldBufferLaunchCompletion(false, true), false);
+});
+
+test("awaiting-merge rollback restores review without forwarding cancellation", async () => {
+  const mergeAttempt = new AbortController();
+  mergeAttempt.abort(new Error("merge request cancelled"));
+  const calls: Array<{
+    issueNumber: number;
+    label: string;
+    signal?: AbortSignal;
+  }> = [];
+  const projector = {
+    async setWorkflowLabel(
+      issueNumber: number,
+      label: string,
+      signal?: AbortSignal,
+    ): Promise<void> {
+      calls.push({ issueNumber, label, signal });
+    },
+  };
+
+  await rollbackAwaitingMergeLabel(projector, 42);
+
+  assert.equal(mergeAttempt.signal.aborted, true);
+  assert.deepEqual(calls, [
+    { issueNumber: 42, label: "workflow:in-review", signal: undefined },
+  ]);
+});
+
+test("awaiting-merge rollback stays best effort when projection fails", async () => {
+  const projector = {
+    async setWorkflowLabel(): Promise<void> {
+      throw new Error("projection unavailable");
+    },
+  };
+
+  await assert.doesNotReject(() => rollbackAwaitingMergeLabel(projector, 42));
 });
 
 test("workflow transitions cover the complete canonical label lifecycle", () => {
