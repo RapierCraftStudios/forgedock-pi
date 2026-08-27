@@ -6,16 +6,18 @@
   "status": "running",
   "maxConcurrent": 16,
   "leaseEpoch": 1,
-  "sequence": 4,
-  "lastEventHash": "sha256:9c0394b92f0ee72e5abcd4d880eca0fabae41f87728c1c83053e00785a300715",
+  "sequence": 5,
+  "lastEventHash": "sha256:ef852d5c50e98e9dd4e4b19db329c4dad35ba04aecd644abb3c2c1850b57997c",
   "lanes": [
     {
       "issueNumber": 147,
       "ordinal": 0,
-      "status": "running",
+      "status": "ready",
       "refreshes": 0,
       "forgeRunId": "b436f01d-6884-40e6-8783-7ae16158eb54",
-      "subagentRunId": "6a9d9bdc-f27c-485d-8d1e-f1f6654c1a29"
+      "subagentRunId": "6a9d9bdc-f27c-485d-8d1e-f1f6654c1a29",
+      "headSha": "7e1e78dce05768df453ac15c3423fbd685450f41",
+      "baseSha": "6a8af2aaccf459b3ab45208032334e50a9ce629d"
     },
     {
       "issueNumber": 209,
@@ -33,13 +35,15 @@
     "orchestration:create": "ae75644d-3941-4dbd-a460-2a019ea21e02",
     "lane:147:started": "28f955db-9abe-4cbe-989d-e48033be389f",
     "lane:209:started": "37d1fe88-ee4a-4a01-863b-8b4d72799f79",
-    "lane:209:blocked": "8c51dcc4-636d-454b-8249-d669f1376dc1"
+    "lane:209:blocked": "8c51dcc4-636d-454b-8249-d669f1376dc1",
+    "lane:147:ready:0": "4885645a-7270-42a9-a1b9-76584e26341c"
   },
   "eventIds": {
     "ae75644d-3941-4dbd-a460-2a019ea21e02": true,
     "28f955db-9abe-4cbe-989d-e48033be389f": true,
     "37d1fe88-ee4a-4a01-863b-8b4d72799f79": true,
-    "8c51dcc4-636d-454b-8249-d669f1376dc1": true
+    "8c51dcc4-636d-454b-8249-d669f1376dc1": true,
+    "4885645a-7270-42a9-a1b9-76584e26341c": true
   },
   "createdAt": "2026-08-27T14:28:07.623Z"
 }
