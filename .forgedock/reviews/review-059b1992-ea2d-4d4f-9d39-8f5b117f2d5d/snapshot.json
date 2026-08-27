@@ -152,8 +152,8 @@
     }
   ],
   "status": "active",
-  "sequence": 17,
-  "lastEventHash": "sha256:6d45ef5df737d955a1a03dbc14d686d99e5f896962391288d10c70ad0300b064",
+  "sequence": 18,
+  "lastEventHash": "sha256:206bda4dd9f56df4053d0e95d4a399e18c021f8d57cf149f5e07a25093c32a12",
   "idempotencyKeys": {
     "review:create": "c84f347e-b044-4335-84cf-e6acab99a577",
     "panel:1:start": "f9e92d66-9028-43e0-9eb7-58c6a2124f32",
@@ -171,7 +171,8 @@
     "check:github:1:fa4a19b007401c93": "e8b0f2db-9d88-4d6f-a2da-0aca7da6872b",
     "check:github:2:ff03855406f48f83": "d42726c9-85cf-47fc-b755-9d235a3d39b4",
     "check:github:3:2f175a86d52843ab": "1d4ebd57-ba59-4ec3-a3fd-f94f0716c8bb",
-    "check:github:4:a1fba9901075bd5f": "291bc033-cdc0-4677-b54e-ab2f501d85dc"
+    "check:github:4:a1fba9901075bd5f": "291bc033-cdc0-4677-b54e-ab2f501d85dc",
+    "panel:1:complete": "3e1bbf92-f174-48d3-a187-0410a5ea131a"
   },
   "eventIds": {
     "c84f347e-b044-4335-84cf-e6acab99a577": true,
@@ -190,13 +191,14 @@
     "e8b0f2db-9d88-4d6f-a2da-0aca7da6872b": true,
     "d42726c9-85cf-47fc-b755-9d235a3d39b4": true,
     "1d4ebd57-ba59-4ec3-a3fd-f94f0716c8bb": true,
-    "291bc033-cdc0-4677-b54e-ab2f501d85dc": true
+    "291bc033-cdc0-4677-b54e-ab2f501d85dc": true,
+    "3e1bbf92-f174-48d3-a187-0410a5ea131a": true
   },
   "createdAt": "2026-08-27T05:29:06.994Z",
-  "updatedAt": "2026-08-27T05:31:45.475Z",
+  "updatedAt": "2026-08-27T05:31:50.255Z",
   "panel": {
     "round": 1,
-    "status": "running",
+    "status": "completed",
     "reviewers": [
       "forge-review-correctness",
       "forge-review-security",
@@ -207,7 +209,17 @@
       "forge-review-regression-risk",
       "forge-review-deployment"
     ],
-    "completedReviewers": [],
-    "startedAt": "2026-08-27T05:29:16.129Z"
+    "completedReviewers": [
+      "forge-review-correctness",
+      "forge-review-security",
+      "forge-review-api",
+      "forge-review-worker",
+      "forge-review-web",
+      "forge-review-code-quality",
+      "forge-review-regression-risk",
+      "forge-review-deployment"
+    ],
+    "startedAt": "2026-08-27T05:29:16.129Z",
+    "completedAt": "2026-08-27T05:31:50.255Z"
   }
 }
