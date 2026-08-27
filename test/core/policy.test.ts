@@ -45,10 +45,27 @@ const rawPolicy = {
 test("orchestration policy accepts large campaigns within the tool capacity", () => {
   const configured = {
     ...structuredClone(rawPolicy),
-    orchestration: { maxConcurrent: 16, maxIssues: 300 },
+    orchestration: { maxConcurrent: 200, maxIssues: 300 },
+    subagents: { maxConcurrent: 50, maxDepth: 2 },
   };
+  assert.equal(parseForgePolicy(configured).orchestration.maxConcurrent, 200);
   assert.equal(parseForgePolicy(configured).orchestration.maxIssues, 300);
+  assert.equal(parseForgePolicy(configured).subagents.maxConcurrent, 50);
   assert.equal(MAX_ORCHESTRATION_ISSUES, 500);
+  assert.equal(
+    parseForgePolicy({
+      ...configured,
+      orchestration: { ...configured.orchestration, maxConcurrent: 10_000 },
+    }).orchestration.maxConcurrent,
+    10_000,
+  );
+  assert.equal(
+    parseForgePolicy({
+      ...configured,
+      subagents: { ...configured.subagents, maxConcurrent: 10_000 },
+    }).subagents.maxConcurrent,
+    10_000,
+  );
   assert.throws(
     () =>
       parseForgePolicy({

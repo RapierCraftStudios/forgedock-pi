@@ -366,7 +366,7 @@ export function parseForgePolicy(value: unknown): ForgePolicy {
               orchestration.maxConcurrent,
               "orchestration.maxConcurrent",
               1,
-              16,
+              Number.MAX_SAFE_INTEGER,
             ),
       maxIssues:
         orchestration?.maxIssues === undefined
@@ -383,7 +383,7 @@ export function parseForgePolicy(value: unknown): ForgePolicy {
         subagents.maxConcurrent,
         "subagents.maxConcurrent",
         1,
-        32,
+        Number.MAX_SAFE_INTEGER,
       ),
       maxDepth:
         subagents.maxDepth === undefined
