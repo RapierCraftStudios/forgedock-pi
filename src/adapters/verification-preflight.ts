@@ -133,6 +133,7 @@ const PACKAGE_SELECTION_OPTIONS: Readonly<
   pnpm: [
     "--dir",
     "--filter",
+    "--filter-prod",
     "--recursive",
     "--workspace-root",
     "-C",
@@ -144,11 +145,33 @@ const PACKAGE_SELECTION_OPTIONS: Readonly<
   bun: ["--cwd", "--filter", "--workspaces"],
 };
 
+const ATTACHED_PACKAGE_SELECTION_OPTIONS: Readonly<
+  Record<string, readonly string[]>
+> = {
+  npm: ["-C", "-w"],
+  pnpm: ["-C", "-F", "-r", "-w"],
+};
+
 const PACKAGE_SELECTION_COMMANDS: Readonly<
   Record<string, readonly string[]>
 > = {
   pnpm: ["recursive"],
   yarn: ["workspace", "workspaces"],
+};
+
+const PACKAGE_MANAGER_OPTIONS_WITH_VALUES: Readonly<
+  Record<string, readonly string[]>
+> = {
+  pnpm: ["--config", "--dir", "--filter", "--filter-prod", "--reporter", "--store-dir"],
+  yarn: [
+    "--cache-folder",
+    "--cwd",
+    "--modules-folder",
+    "--mutex",
+    "--network-concurrency",
+    "--network-timeout",
+    "--registry",
+  ],
 };
 
 function assertNoPackageSelectionOptions(
@@ -164,38 +187,65 @@ function assertNoPackageSelectionOptions(
 }
 
 function packageSelectionOption(argv: readonly string[]): string | undefined {
-  const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
-  const selectors = PACKAGE_SELECTION_OPTIONS[manager];
+  const manager = packageManagerName(argv);
+  const selectors = ownLookup(PACKAGE_SELECTION_OPTIONS, manager);
   if (!selectors) return undefined;
 
-  let scriptCommandSeen = false;
   for (const argument of argv.slice(1)) {
     if (argument === "--") break;
     const option = argument.split("=", 1)[0] ?? argument;
     if (selectors.includes(option)) return argument;
+    const attachedSelectors = ownLookup(
+      ATTACHED_PACKAGE_SELECTION_OPTIONS,
+      manager,
+    );
     if (
-      (option.startsWith("-C") ||
-        option.startsWith("-F") ||
-        option.startsWith("-r") ||
-        option.startsWith("-w")) &&
-      option.length > 2
+      attachedSelectors?.some(
+        (selector) =>
+          option.startsWith(selector) && option.length > selector.length,
+      )
     )
       return argument;
-    if (argument === "test" || argument === "run" || argument === "run-script") {
-      scriptCommandSeen = true;
-      continue;
-    }
-    if (
-      !scriptCommandSeen &&
-      PACKAGE_SELECTION_COMMANDS[manager]?.includes(argument)
-    )
-      return argument;
+  }
+
+  const command = firstPackageManagerCommand(argv, manager);
+  const commandSelectors = ownLookup(PACKAGE_SELECTION_COMMANDS, manager);
+  return commandSelectors?.includes(command ?? "") ? command : undefined;
+}
+
+function firstPackageManagerCommand(
+  argv: readonly string[],
+  manager: string,
+): string | undefined {
+  const optionsWithValues = ownLookup(
+    PACKAGE_MANAGER_OPTIONS_WITH_VALUES,
+    manager,
+  );
+  for (let index = 1; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument === "--") return undefined;
+    if (!argument?.startsWith("-")) return argument;
+    const option = argument.split("=", 1)[0] ?? argument;
+    if (argument === option && optionsWithValues?.includes(option)) index += 1;
   }
   return undefined;
 }
 
+function packageManagerName(argv: readonly string[]): string {
+  return basename(argv[0] ?? "")
+    .replace(/\.(?:cmd|exe)$/i, "")
+    .toLowerCase();
+}
+
+function ownLookup<T>(
+  table: Readonly<Record<string, T>>,
+  key: string,
+): T | undefined {
+  return Object.hasOwn(table, key) ? table[key] : undefined;
+}
+
 function packageScriptName(argv: readonly string[]): string | undefined {
-  const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
+  const manager = packageManagerName(argv);
   if (!["npm", "pnpm", "yarn", "bun"].includes(manager)) return undefined;
   const command = argv[1];
   if (command === "test") return "test";

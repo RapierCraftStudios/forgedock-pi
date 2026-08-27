@@ -32,7 +32,9 @@ async function fixture(): Promise<{
   await writeFile(join(root, "package.json"), JSON.stringify({ dependencies: {} }));
   await writeFile(
     join(root, "web", "package.json"),
-    JSON.stringify({ scripts: { test: "vitest run", workspace: "vitest run" } }),
+    JSON.stringify({
+      scripts: { test: "vitest run", workspace: "vitest run", build: "vite build" },
+    }),
   );
   for (const manager of ["npm", "pnpm", "yarn", "bun"]) {
     await writeFile(join(bin, manager), "#!/bin/sh\nexit 0\n");
@@ -95,6 +97,7 @@ test("preflight rejects package-selection flags instead of checking the wrong ma
       ["npm", "run", "test", "--prefix", "web"],
       ["npm", "--prefix=web", "run", "test"],
       ["npm", "-C", "web", "test"],
+      ["NPM.CMD", "--prefix", "web", "test"],
       ["npm", "run", "test", "--workspace", "web"],
     ];
     for (const argv of packageSelectionArgv) {
@@ -128,8 +131,10 @@ test("package-manager selector aliases are rejected without blocking script name
       ["pnpm", "-w", "test"],
       ["pnpm", "recursive", "test"],
       ["pnpm", "--silent", "recursive", "test"],
+      ["pnpm", "--filter-prod", "web", "test"],
       ["yarn", "workspace", "web", "test"],
       ["yarn", "--silent", "workspace", "web", "test"],
+      ["yarn", "--cache-folder", "test", "workspace", "web", "test"],
     ]) {
       await assert.rejects(
         preflightRequiredVerificationCommands(
@@ -150,6 +155,19 @@ test("package-manager selector aliases are rejected without blocking script name
       testFixture.root,
       { test: command("web", { argv: ["yarn", "test", "workspace"] }) },
       { path: testFixture.path },
+    );
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      { build: command("web", { argv: ["yarn", "run", "build", "-rfoo"] }) },
+      { path: testFixture.path },
+    );
+    await assert.rejects(
+      preflightRequiredVerificationCommands(
+        testFixture.root,
+        { unusual: command(".", { argv: ["constructor", "test"] }) },
+        { path: testFixture.path },
+      ),
+      /executable 'constructor' is unavailable/,
     );
   } finally {
     await testFixture.cleanup();
