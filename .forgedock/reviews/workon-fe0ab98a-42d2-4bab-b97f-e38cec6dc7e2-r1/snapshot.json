@@ -58,8 +58,8 @@
   ],
   "findings": [],
   "status": "active",
-  "sequence": 9,
-  "lastEventHash": "sha256:c22e45aa02b8dc4748b1ac830089db9f8a2798d080fcaac4bbfbd37c08cc70cc",
+  "sequence": 10,
+  "lastEventHash": "sha256:11c7062526e516eab38cf090769c21bb6581f321044de1a78d5305fd53cd79d0",
   "idempotencyKeys": {
     "review:create": "9180f124-1240-4bb4-8e34-c45a0217573b",
     "panel:1:start": "d4fbb885-3402-4e3e-b5d1-116c6d0cdb58",
@@ -69,7 +69,8 @@
     "check:additional:0:f9f1e19f9e55cfa8": "45a492dc-f5f2-417c-b70b-00fb1f34e2da",
     "check:additional:1:1200c706f0cfc5ab": "6be01c7d-00ed-4e8d-8ca8-d275aeb4d52b",
     "check:github:0:ff03855406f48f83": "b7d57bad-1357-40c7-99fd-08ebc8d04b21",
-    "check:github:1:2f175a86d52843ab": "3ba6da1e-53da-4a3e-88b0-17a5ebbc85fe"
+    "check:github:1:2f175a86d52843ab": "3ba6da1e-53da-4a3e-88b0-17a5ebbc85fe",
+    "panel:1:complete": "f51d01d9-98a4-4e85-aebe-61effd184d4a"
   },
   "eventIds": {
     "9180f124-1240-4bb4-8e34-c45a0217573b": true,
@@ -80,18 +81,23 @@
     "45a492dc-f5f2-417c-b70b-00fb1f34e2da": true,
     "6be01c7d-00ed-4e8d-8ca8-d275aeb4d52b": true,
     "b7d57bad-1357-40c7-99fd-08ebc8d04b21": true,
-    "3ba6da1e-53da-4a3e-88b0-17a5ebbc85fe": true
+    "3ba6da1e-53da-4a3e-88b0-17a5ebbc85fe": true,
+    "f51d01d9-98a4-4e85-aebe-61effd184d4a": true
   },
   "createdAt": "2026-08-27T14:03:07.799Z",
-  "updatedAt": "2026-08-27T14:04:04.112Z",
+  "updatedAt": "2026-08-27T14:04:10.073Z",
   "panel": {
     "round": 1,
-    "status": "running",
+    "status": "completed",
     "reviewers": [
       "forge-review-correctness",
       "forge-review-security"
     ],
-    "completedReviewers": [],
-    "startedAt": "2026-08-27T14:03:17.372Z"
+    "completedReviewers": [
+      "forge-review-correctness",
+      "forge-review-security"
+    ],
+    "startedAt": "2026-08-27T14:03:17.372Z",
+    "completedAt": "2026-08-27T14:04:10.073Z"
   }
 }
