@@ -44,12 +44,17 @@
       "required": true,
       "status": "passed",
       "exitCode": 0
+    },
+    {
+      "name": "github:check (22)",
+      "required": true,
+      "status": "passed"
     }
   ],
   "findings": [],
   "status": "active",
-  "sequence": 7,
-  "lastEventHash": "sha256:b99b15ace2ca301c018b7c358a1265fe58c8e3e09ddb42f5370058dff4d02524",
+  "sequence": 8,
+  "lastEventHash": "sha256:b06235f73e8a4322b66d301b589f61f65826e0009d16c4e167752ea96db00809",
   "idempotencyKeys": {
     "review:create": "2ab09ca0-f32a-4896-b12a-410484a144b3",
     "panel:1:start": "bbd12324-049a-4d35-8b8a-860b9719e0c5",
@@ -57,7 +62,8 @@
     "check:reviewer:1:67fcfdf7bc42337a": "df4d7209-a92c-47f3-908e-94a641dc4c8e",
     "panel:1:findings": "4cb6945a-6c5b-482d-8f2b-9498fcb95f5a",
     "check:additional:0:f9f1e19f9e55cfa8": "67554ede-341f-4217-abb0-62c034d892e9",
-    "check:additional:1:1200c706f0cfc5ab": "4c335358-2fec-4a30-9e18-670192089821"
+    "check:additional:1:1200c706f0cfc5ab": "4c335358-2fec-4a30-9e18-670192089821",
+    "check:github:0:ff03855406f48f83": "afaf9004-79c7-4ef4-bd86-8cc634f0ed6a"
   },
   "eventIds": {
     "2ab09ca0-f32a-4896-b12a-410484a144b3": true,
@@ -66,10 +72,11 @@
     "df4d7209-a92c-47f3-908e-94a641dc4c8e": true,
     "4cb6945a-6c5b-482d-8f2b-9498fcb95f5a": true,
     "67554ede-341f-4217-abb0-62c034d892e9": true,
-    "4c335358-2fec-4a30-9e18-670192089821": true
+    "4c335358-2fec-4a30-9e18-670192089821": true,
+    "afaf9004-79c7-4ef4-bd86-8cc634f0ed6a": true
   },
   "createdAt": "2026-08-27T15:15:01.223Z",
-  "updatedAt": "2026-08-27T15:15:45.568Z",
+  "updatedAt": "2026-08-27T15:15:53.169Z",
   "panel": {
     "round": 1,
     "status": "running",
