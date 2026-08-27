@@ -115,6 +115,43 @@ test("malformed root test metadata cannot select a nested package", async () => 
   }
 });
 
+test("inherited root test metadata cannot satisfy preflight", async () => {
+  const testFixture = await fixture();
+  const previousDescriptor = Object.getOwnPropertyDescriptor(
+    Object.prototype,
+    "test",
+  );
+  try {
+    await writeFile(
+      join(testFixture.root, "package.json"),
+      JSON.stringify({ scripts: {} }),
+    );
+    Object.defineProperty(Object.prototype, "test", {
+      configurable: true,
+      value: "inherited test script",
+    });
+
+    await assert.rejects(
+      preflightRequiredVerificationCommands(
+        testFixture.root,
+        { test: command(".") },
+        { path: testFixture.path },
+      ),
+      (error: unknown) =>
+        error instanceof VerificationPreflightError &&
+        error.path === ".forge/config.json verification.commands.test.argv" &&
+        /no 'test' script/.test(error.message),
+    );
+  } finally {
+    if (previousDescriptor) {
+      Object.defineProperty(Object.prototype, "test", previousDescriptor);
+    } else {
+      Reflect.deleteProperty(Object.prototype, "test");
+    }
+    await testFixture.cleanup();
+  }
+});
+
 test("preflight checks executable availability without running the command", async () => {
   const testFixture = await fixture();
   try {
