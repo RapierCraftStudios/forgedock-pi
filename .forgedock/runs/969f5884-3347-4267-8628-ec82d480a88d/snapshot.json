@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:513b8e137a3f6c334d875148d262548c7c03bfa6280d435f497f8c32e8e3f77f",
+  "sequence": 8,
+  "lastEventHash": "sha256:276df52e7dab4e5ae791fb371f11991acf8a7226b1d9f929b4f75c0a9c28f233",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -40,15 +40,22 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "`src/adapters/verification-preflight.ts` currently recognizes only `test`, `run`, and `run-script` as package scripts; arbitrary Yarn shorthand is not identified.",
+            "The literal cited `scriptCommandSeen` path is absent from the frozen snapshot, so `yarn build workspace` does not currently throw; it bypasses package-script validation instead.",
+            "The safe root fix is to recognize Yarn shorthand at argv position 1, treat `workspace`/`workspaces` as selectors only when they are the command token, and validate the selected script.",
+            "Existing tests establish fail-closed handling for npm selector/options forms and provide a fixture pattern for focused regression coverage."
+          ],
           "logicalNodeId": "investigate",
           "startedAt": "2026-08-27T06:51:35.646Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/969f5884-3347-4267-8628-ec82d480a88d",
           "branch": "forge/issue-194-969f5884",
-          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22"
+          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22",
+          "finishedAt": "2026-08-27T06:55:57.288Z",
+          "outputArtifactHash": "sha256:issue-194-investigation"
         }
       ]
     }
@@ -62,7 +69,8 @@
     "phase:resolve:1:start": "b975f716-b979-4fd9-adbf-2515655215b9",
     "phase:resolve:1:complete": "c3fc0761-c21b-4b58-bde7-33feacc68747",
     "phase:investigate:1:queue": "72ac4e2a-ae12-4d86-9cec-c64f83dcfd2a",
-    "phase:investigate:1:start": "e846a571-486e-4393-8b63-6259521fb2bc"
+    "phase:investigate:1:start": "e846a571-486e-4393-8b63-6259521fb2bc",
+    "phase:investigate:1:complete": "ce7eff89-2739-4cf1-ac44-367e4d4ed4b8"
   },
   "eventIds": {
     "29e5d5b1-5777-40c6-9e31-840de0e148f0": true,
@@ -71,7 +79,8 @@
     "b975f716-b979-4fd9-adbf-2515655215b9": true,
     "c3fc0761-c21b-4b58-bde7-33feacc68747": true,
     "72ac4e2a-ae12-4d86-9cec-c64f83dcfd2a": true,
-    "e846a571-486e-4393-8b63-6259521fb2bc": true
+    "e846a571-486e-4393-8b63-6259521fb2bc": true,
+    "ce7eff89-2739-4cf1-ac44-367e4d4ed4b8": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
