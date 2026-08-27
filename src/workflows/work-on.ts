@@ -728,53 +728,9 @@ export class ForgeWorkOnController {
   ): Promise<void> {
     const snapshot = await store.readRun(link.forgeRunId, ctx.signal);
     if (!snapshot.state) return;
-    if (
-      snapshot.state.status === "completed" &&
-      snapshot.state.outcome === "merged"
-    ) {
-      await this.#projectWorkflowStage(link, "merged", ctx);
-      return;
-    }
-    const nodes = Object.values(snapshot.state.nodes);
-    const latest = nodes.at(-1);
-    if (!latest) {
-      const phaseAttempt = (phase: keyof typeof snapshot.state.phases) =>
-        snapshot.state?.phases[phase]?.attempts.at(-1);
-      const merge = phaseAttempt("merge");
-      const stage: WorkflowStage =
-        merge?.status === "completed"
-          ? "merged"
-          : merge
-            ? "awaitingMerge"
-            : phaseAttempt("review")
-              ? "review"
-              : phaseAttempt("verify") ||
-                  phaseAttempt("implement") ||
-                  phaseAttempt("prepare-worktree") ||
-                  phaseAttempt("plan")
-                ? "build"
-                : phaseAttempt("investigate")?.status === "completed"
-                  ? "readyToBuild"
-                  : "investigation";
-      await this.#projectWorkflowStage(link, stage, ctx);
-      return;
-    }
-    const investigationOutcome = [...nodes]
-      .reverse()
-      .find(
-        (candidate) =>
-          candidate.node === "investigate" && candidate.status === "completed",
-      )?.outcome;
-    const transition: WorkflowTransition =
-      latest.status === "completed" ? "completed" : "started";
     await this.#projectWorkflowStage(
       link,
-      workflowStageForNodeTransition(
-        latest.node,
-        transition,
-        latest.outcome,
-        investigationOutcome,
-      ),
+      workflowStageForRecoveredRun(snapshot.state),
       ctx,
     );
   }
@@ -2094,7 +2050,7 @@ export class ForgeWorkOnController {
     const projector = new GitHubIssueProjector(transport, link.repository);
     await this.#projectWorkflowStage(
       link,
-      workflowStageForNodeTransition(node.node, "started"),
+      workflowStageForParentNodeStart(node.node, initial.state),
       ctx,
       projector,
     );
@@ -5539,6 +5495,66 @@ export function shouldBufferLaunchCompletion(
   linkKnown: boolean,
 ): boolean {
   return receiptBindingInFlight || !linkKnown;
+}
+
+export function hasDurableMergeEffect(
+  state: import("../core/state.ts").RunState,
+): boolean {
+  return Object.values(state.effects).some(
+    (effect) => effect.effectType === "merge",
+  );
+}
+
+export function workflowStageForParentNodeStart(
+  node: string,
+  state: import("../core/state.ts").RunState,
+): WorkflowStage | undefined {
+  if (node === "merge" && hasDurableMergeEffect(state)) return "merged";
+  return workflowStageForNodeTransition(node, "started");
+}
+
+export function workflowStageForRecoveredRun(
+  state: import("../core/state.ts").RunState,
+): WorkflowStage | undefined {
+  if (
+    hasDurableMergeEffect(state) ||
+    (state.status === "completed" && state.outcome === "merged")
+  )
+    return "merged";
+  const nodes = Object.values(state.nodes);
+  const latest = nodes.at(-1);
+  if (!latest) {
+    const phaseAttempt = (phase: keyof typeof state.phases) =>
+      state.phases[phase]?.attempts.at(-1);
+    const merge = phaseAttempt("merge");
+    if (merge?.status === "completed") return "merged";
+    if (merge) return "awaitingMerge";
+    if (phaseAttempt("review")) return "review";
+    if (
+      phaseAttempt("verify") ||
+      phaseAttempt("implement") ||
+      phaseAttempt("prepare-worktree") ||
+      phaseAttempt("plan")
+    )
+      return "build";
+    return phaseAttempt("investigate")?.status === "completed"
+      ? "readyToBuild"
+      : "investigation";
+  }
+  const investigationOutcome = [...nodes]
+    .reverse()
+    .find(
+      (candidate) =>
+        candidate.node === "investigate" && candidate.status === "completed",
+    )?.outcome;
+  const transition: WorkflowTransition =
+    latest.status === "completed" ? "completed" : "started";
+  return workflowStageForNodeTransition(
+    latest.node,
+    transition,
+    latest.outcome,
+    investigationOutcome,
+  );
 }
 
 export function workflowStageForNodeTransition(

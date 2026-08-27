@@ -15,6 +15,7 @@ import {
   hasActiveDirectRun,
   finalReviewDecisionMarker,
   findingPriority,
+  hasDurableMergeEffect,
   isRecoverableWorkOnBlocker,
   isTransientProviderFailure,
   parentNodeFromId,
@@ -29,6 +30,8 @@ import {
   shouldBufferLaunchCompletion,
   workflowLabelForNode,
   workflowStageForNodeTransition,
+  workflowStageForParentNodeStart,
+  workflowStageForRecoveredRun,
 } from "../../src/workflows/work-on.ts";
 
 test("work-on reviewer results are rebound to the shared frozen review identity", () => {
@@ -215,6 +218,41 @@ test("direct terminal evidence binds PR, merge phase, and merge effect", () => {
   });
   state.effects.merge!.digest = "sha256:wrong";
   assert.equal(directTerminalEvidence(state), undefined);
+});
+
+test("durable merge effects take precedence during workflow projection recovery", () => {
+  const state = {
+    status: "active",
+    phases: {},
+    nodes: {
+      "merge-1": {
+        nodeId: "merge-1",
+        node: "merge",
+        attempt: 1,
+        status: "running",
+      },
+    },
+    effects: {
+      merge: {
+        effectType: "merge",
+        effectId: "merge:105",
+        digest: "sha256:merge",
+        eventId: "event-merge",
+      },
+    },
+  } as unknown as import("../../src/core/state.ts").RunState;
+
+  assert.equal(hasDurableMergeEffect(state), true);
+  assert.equal(workflowStageForRecoveredRun(state), "merged");
+  assert.equal(workflowStageForParentNodeStart("merge", state), "merged");
+
+  delete state.effects.merge;
+  assert.equal(hasDurableMergeEffect(state), false);
+  assert.equal(workflowStageForRecoveredRun(state), "awaitingMerge");
+  assert.equal(
+    workflowStageForParentNodeStart("merge", state),
+    "awaitingMerge",
+  );
 });
 
 test("provider completion is buffered until its launch receipt is durably bound", () => {
