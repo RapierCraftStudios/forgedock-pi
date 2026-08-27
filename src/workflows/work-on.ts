@@ -70,6 +70,7 @@ import type {
   FinalReviewDecision,
   VerificationResult,
 } from "../core/review.ts";
+import type { RunState } from "../core/state.ts";
 import { RunJournal } from "./journal.ts";
 import { ReviewJournal } from "../adapters/review-journal.ts";
 import { ReviewPrCoordinator, type ReviewPanelRunner } from "./review-pr.ts";
@@ -734,8 +735,9 @@ export class ForgeWorkOnController {
     const snapshot = await store.readRun(link.forgeRunId, ctx.signal);
     if (!snapshot.state) return;
     if (
-      snapshot.state.status === "completed" &&
-      snapshot.state.outcome === "merged"
+      hasDurableMergeEffect(snapshot.state) ||
+      (snapshot.state.status === "completed" &&
+        snapshot.state.outcome === "merged")
     ) {
       await this.#projectWorkflowStage(link, "merged", ctx);
       return;
@@ -2097,17 +2099,21 @@ export class ForgeWorkOnController {
     const transport = new FetchGitHubTransport({ tokenProvider });
     const github = new GitHubWorkflowAdapter(transport, link.repository);
     const projector = new GitHubIssueProjector(transport, link.repository);
-    await this.#projectWorkflowStage(
-      link,
-      workflowStageForNodeTransition(node.node, "started"),
-      ctx,
-      projector,
-    );
     const current = await store.readRun(link.forgeRunId, ctx.signal);
     if (!current.state)
       throw new Error(
         `Run ${link.forgeRunId} state is missing for parent node.`,
       );
+    await this.#projectWorkflowStage(
+      link,
+      workflowStageForRecoveredNodeTransition(
+        current.state,
+        node.node,
+        "started",
+      ),
+      ctx,
+      projector,
+    );
     let pull = await github.findPullRequest(link.prepared.branch, ctx.signal);
     if (pull && (node.node === "decision" || node.node === "merge"))
       pull = await resolveMergeability(github, pull.number, ctx.signal);
@@ -2631,7 +2637,11 @@ export class ForgeWorkOnController {
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
       } catch (error) {
-        await rollbackAwaitingMergeLabel(projector, link.issueNumber);
+        await restoreWorkflowLabelAfterMergeFailure(
+          projector,
+          link.issueNumber,
+          hasDurableMergeEffect(current.state),
+        );
         throw error;
       }
       headSha = merged.sha;
@@ -4891,28 +4901,34 @@ export class ForgeWorkOnController {
 }
 
 /**
- * Restore the review projection after an awaiting-merge failure.
+ * Restore the authoritative workflow projection after a merge failure.
  *
  * This compensating effect deliberately has no AbortSignal parameter. The
  * merge attempt is cancellation-aware, but its failure can be reported after
- * that signal is aborted; forwarding it here would prevent the label rollback
- * and leave the issue projecting an awaiting-merge state for an unmerged PR.
- * Projection remains best effort, and the caller retains the original merge
- * error.
+ * that signal is aborted. A durable merge receipt is terminal evidence and
+ * must never be downgraded to review by a resumed parent node.
  */
-export async function rollbackAwaitingMergeLabel(
+export async function restoreWorkflowLabelAfterMergeFailure(
   projector: Pick<GitHubIssueProjector, "setWorkflowLabel">,
   issueNumber: number,
+  durableMergeRecorded: boolean,
 ): Promise<void> {
   try {
     await projector.setWorkflowLabel(
       issueNumber,
-      WORKFLOW_LABEL_BY_STAGE.review,
+      WORKFLOW_LABEL_BY_STAGE[durableMergeRecorded ? "merged" : "review"],
     );
   } catch {
     // A projection outage must not mask the merge failure or change its retry
     // path. Durable workflow state remains authoritative for reconciliation.
   }
+}
+
+export async function rollbackAwaitingMergeLabel(
+  projector: Pick<GitHubIssueProjector, "setWorkflowLabel">,
+  issueNumber: number,
+): Promise<void> {
+  await restoreWorkflowLabelAfterMergeFailure(projector, issueNumber, false);
 }
 
 async function appendPhase(
@@ -5565,6 +5581,28 @@ export function shouldBufferLaunchCompletion(
   linkKnown: boolean,
 ): boolean {
   return receiptBindingInFlight || !linkKnown;
+}
+
+export function hasDurableMergeEffect(state: RunState): boolean {
+  return Object.values(state.effects).some(
+    (effect) => effect.effectType === "merge",
+  );
+}
+
+export function workflowStageForRecoveredNodeTransition(
+  state: RunState,
+  node: string,
+  transition: WorkflowTransition,
+  outcome?: string,
+  investigationOutcome?: string,
+): WorkflowStage | undefined {
+  if (hasDurableMergeEffect(state)) return "merged";
+  return workflowStageForNodeTransition(
+    node,
+    transition,
+    outcome,
+    investigationOutcome,
+  );
 }
 
 export function workflowStageForNodeTransition(
