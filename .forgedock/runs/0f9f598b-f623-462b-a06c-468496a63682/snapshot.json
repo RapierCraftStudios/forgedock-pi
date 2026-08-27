@@ -5,10 +5,10 @@
   "issueNumber": 147,
   "integrationBranch": "staging",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "authorityMode": "run-scoped",
-  "sequence": 55,
-  "lastEventHash": "sha256:f824e67958011f83c2de36c96596fa59f30fccc98423f8ff8d8cc064e2add76e",
+  "sequence": 56,
+  "lastEventHash": "sha256:073b3730ff6986eec42cde5eee5bd34ce1331f706633b5b5977f1a3dd63cec69",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -188,12 +188,14 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "abandoned",
           "leaseEpoch": 1,
           "restartAction": "reconcile and retry parent-owned merge",
           "evidence": [],
           "logicalNodeId": "parent-merge-1",
-          "startedAt": "2026-08-27T14:07:44.599Z"
+          "startedAt": "2026-08-27T14:07:44.599Z",
+          "reason": "Orchestration is terminal with #147:failed, #209:failed; stopping nonterminal child runs before orchestration completion.",
+          "finishedAt": "2026-08-27T14:13:40.611Z"
         }
       ]
     }
@@ -436,7 +438,8 @@
     "effect:branch:forge/issue-147-0f9f598b": "122fe55a-e7ba-478b-aa50-26b45583d7f1",
     "effect:pr:225": "b046cfa7-90c0-4d2a-9a72-1b36fe4ebed6",
     "effect:github-comment:RapierCraftStudios/forgedock-pi:147:b046cfa7-90c0-4d2a-9a72-1b36fe4ebed6-de4ecfc79d3553a2364d6290a0530e261a39e502:review-started": "3c0d2765-b85a-47a6-8be8-6d2975b03bb8",
-    "effect:github-label:RapierCraftStudios/forgedock-pi:147:b046cfa7-90c0-4d2a-9a72-1b36fe4ebed6": "f76fbd1c-ea0b-474a-bd28-a597f4d05bcf"
+    "effect:github-label:RapierCraftStudios/forgedock-pi:147:b046cfa7-90c0-4d2a-9a72-1b36fe4ebed6": "f76fbd1c-ea0b-474a-bd28-a597f4d05bcf",
+    "run:cancelled": "f3492514-edf2-457f-96ee-b6e20e07454c"
   },
   "eventIds": {
     "5caff6ef-706b-4775-976a-4ed196c51b65": true,
@@ -493,7 +496,8 @@
     "122fe55a-e7ba-478b-aa50-26b45583d7f1": true,
     "b046cfa7-90c0-4d2a-9a72-1b36fe4ebed6": true,
     "3c0d2765-b85a-47a6-8be8-6d2975b03bb8": true,
-    "f76fbd1c-ea0b-474a-bd28-a597f4d05bcf": true
+    "f76fbd1c-ea0b-474a-bd28-a597f4d05bcf": true,
+    "f3492514-edf2-457f-96ee-b6e20e07454c": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
@@ -505,5 +509,6 @@
     "lastHeartbeatAt": "2026-08-27T13:41:46.663Z",
     "expiresAt": "2027-08-27T13:41:46.663Z",
     "takeoverRequired": false
-  }
+  },
+  "cancellationReason": "Orchestration is terminal with #147:failed, #209:failed; stopping nonterminal child runs before orchestration completion."
 }
