@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 27,
-  "lastEventHash": "sha256:2535606c5859dabde5aca7ee178a07a3c5ab6543e51210360b0761fa25eaca55",
+  "sequence": 28,
+  "lastEventHash": "sha256:c878ae6c5c41be2a6423df1e642e8d4de0904b32921a34cda23a00d70e43c4a0",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -89,16 +89,21 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume prepare-worktree attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Assigned worktree exists and repository files are readable.",
+            "The run binding fixes the branch and frozen base; no worktree creation or branch selection was performed by the child."
+          ],
           "inputArtifactHash": "sha256:plan-147-two-file-contract",
           "logicalNodeId": "prepare-worktree-1",
           "startedAt": "2026-08-27T12:52:34.394Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/7053733d-ea35-4801-b101-5893c883334a",
           "branch": "forge/issue-147-7053733d",
-          "baseSha": "7817370b07c7e3d172f4971771e822aab548431a"
+          "baseSha": "7817370b07c7e3d172f4971771e822aab548431a",
+          "finishedAt": "2026-08-27T12:52:57.684Z",
+          "outputArtifactHash": "sha256:worktree-7053733d-7817370b"
         }
       ]
     }
@@ -217,7 +222,8 @@
     "effect:github-label:RapierCraftStudios/forgedock-pi:147:6387a745-9737-4f33-8f9b-16f1a164a0cb": "8f85bb77-37ba-4506-951f-a917fbc7ecf4",
     "phase:prepare-worktree:1:queue": "d583b4eb-b806-4113-9b39-7f5c93f20476",
     "phase:prepare-worktree:1:start": "8387f7ce-e7a9-4a0d-8fe7-65a12e420768",
-    "effect:github-label:RapierCraftStudios/forgedock-pi:147:8387f7ce-e7a9-4a0d-8fe7-65a12e420768": "70f6f5a4-8303-4aa1-a384-75107c8e6666"
+    "effect:github-label:RapierCraftStudios/forgedock-pi:147:8387f7ce-e7a9-4a0d-8fe7-65a12e420768": "70f6f5a4-8303-4aa1-a384-75107c8e6666",
+    "phase:prepare-worktree:1:complete": "e8f607c9-123f-4d04-950d-5228e227cf83"
   },
   "eventIds": {
     "97c07aaf-07c1-4107-95e3-0632108817f3": true,
@@ -246,7 +252,8 @@
     "8f85bb77-37ba-4506-951f-a917fbc7ecf4": true,
     "d583b4eb-b806-4113-9b39-7f5c93f20476": true,
     "8387f7ce-e7a9-4a0d-8fe7-65a12e420768": true,
-    "70f6f5a4-8303-4aa1-a384-75107c8e6666": true
+    "70f6f5a4-8303-4aa1-a384-75107c8e6666": true,
+    "e8f607c9-123f-4d04-950d-5228e227cf83": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
