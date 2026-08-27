@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 38,
-  "lastEventHash": "sha256:8d29af4f1acca73764a598f0bc1109e8e41269ecfeed355680202f24dc36cc0c",
+  "sequence": 39,
+  "lastEventHash": "sha256:5670120306c58a48d35d927b499a1fe44b5a6d728e672a95effa7bbafda85934",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -136,16 +136,24 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume verify attempt 1",
-          "evidence": [],
+          "evidence": [
+            "Bound verification `check` passed with exit code 0.",
+            "TypeScript typecheck passed.",
+            "All 242 tests passed, including `durable merge effects preserve the merged stage during recovery`.",
+            "Implementation commit: `9a4929e82243143982b15512d0c8266f9384aa05`."
+          ],
           "inputArtifactHash": "implementation-147-uncommitted",
           "logicalNodeId": "verify-1",
           "startedAt": "2026-08-27T13:55:36.622Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/0f9f598b-f623-462b-a06c-468496a63682",
           "branch": "forge/issue-147-0f9f598b",
-          "baseSha": "0b7fcd2c596e05d7a98e57a4464d39aae987f71d"
+          "baseSha": "0b7fcd2c596e05d7a98e57a4464d39aae987f71d",
+          "finishedAt": "2026-08-27T13:57:59.379Z",
+          "outputArtifactHash": "9a4929e82243143982b15512d0c8266f9384aa05",
+          "commitSha": "9a4929e82243143982b15512d0c8266f9384aa05"
         }
       ]
     }
@@ -305,7 +313,8 @@
     "effect:github-label:RapierCraftStudios/forgedock-pi:147:168eab2e-4c56-4815-a985-df44a63c5eb4": "40305e48-9f69-4587-b5ef-291fa394e248",
     "phase:verify:1:queue": "7ceedd7c-16e0-41ae-ab8f-701c2ef05489",
     "phase:verify:1:start": "0c648339-56b2-42bf-a702-2086c0b2aaa7",
-    "effect:github-label:RapierCraftStudios/forgedock-pi:147:0c648339-56b2-42bf-a702-2086c0b2aaa7": "06390f84-628b-4f5f-adda-5716a95260af"
+    "effect:github-label:RapierCraftStudios/forgedock-pi:147:0c648339-56b2-42bf-a702-2086c0b2aaa7": "06390f84-628b-4f5f-adda-5716a95260af",
+    "phase:verify:1:complete": "f2fec121-7107-44f7-a97c-9e93e83f84d5"
   },
   "eventIds": {
     "5caff6ef-706b-4775-976a-4ed196c51b65": true,
@@ -345,7 +354,8 @@
     "40305e48-9f69-4587-b5ef-291fa394e248": true,
     "7ceedd7c-16e0-41ae-ab8f-701c2ef05489": true,
     "0c648339-56b2-42bf-a702-2086c0b2aaa7": true,
-    "06390f84-628b-4f5f-adda-5716a95260af": true
+    "06390f84-628b-4f5f-adda-5716a95260af": true,
+    "f2fec121-7107-44f7-a97c-9e93e83f84d5": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
