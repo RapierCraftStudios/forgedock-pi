@@ -177,6 +177,22 @@ export type DirectRunRecoveryAction =
   | "release-authority"
   | "none";
 
+/** A direct binding is process-global, so only one live direct run is safe. */
+export function hasActiveDirectRun(
+  binding: ForgeChildBinding | undefined,
+  links: Iterable<Pick<ActiveRunLink, "executionMode" | "status">>,
+): boolean {
+  return (
+    Boolean(binding) ||
+    [...links].some(
+      (link) =>
+        link.executionMode === "direct" &&
+        link.status !== "completed" &&
+        link.status !== "failed",
+    )
+  );
+}
+
 export function directRunRecoveryAction(
   state: import("../core/state.ts").RunState,
   hasAuthority: boolean,
@@ -256,6 +272,7 @@ export class ForgeWorkOnController {
   readonly #receiptBindings = new Set<string>();
   readonly #earlyCompletions = new Map<string, ParsedAsyncCompletion>();
   readonly #reconcilingNodes = new Set<string>();
+  #directStartInFlight = false;
   #completionUnsubscribe: (() => void) | undefined;
   #directFinalizeUnsubscribe: (() => void) | undefined;
   #directBinding: ForgeChildBinding | undefined;
@@ -296,6 +313,7 @@ export class ForgeWorkOnController {
         link.status = "finalizing";
         this.#persistLink(link);
         void this.#finalize(link, ctx).catch((error) => {
+          this.#clearDirectBinding(link.forgeRunId);
           link.status = "failed";
           this.#persistLink(link);
           this.#emitLifecycle(link, { reason: errorMessage(error) });
@@ -359,6 +377,7 @@ export class ForgeWorkOnController {
           link.status = "finalizing";
           this.#persistLink(link);
           void this.#finalize(link, ctx).catch((error) => {
+            this.#clearDirectBinding(link.forgeRunId);
             link.status = "failed";
             this.#persistLink(link);
             this.#emitLifecycle(link, { reason: errorMessage(error) });
@@ -373,6 +392,7 @@ export class ForgeWorkOnController {
           void this.#retryProviderFailure(link, ctx, failure);
           return;
         }
+        this.#clearDirectBinding(link.forgeRunId);
         link.status = "failed";
         this.#persistLink(link);
         this.#emitLifecycle(link, { reason: failure });
@@ -381,6 +401,7 @@ export class ForgeWorkOnController {
       link.status = "finalizing";
       this.#persistLink(link);
       void this.#finalize(link, ctx).catch((error) => {
+        this.#clearDirectBinding(link.forgeRunId);
         link.status = "failed";
         this.#persistLink(link);
         this.#emitLifecycle(link, { reason: errorMessage(error) });
@@ -563,7 +584,7 @@ export class ForgeWorkOnController {
     this.#completionUnsubscribe = undefined;
     this.#directFinalizeUnsubscribe?.();
     this.#directFinalizeUnsubscribe = undefined;
-    this.#directBinding = undefined;
+    this.#clearDirectBinding();
     this.#lifecycleListeners.clear();
     this.#providerRecovering.clear();
   }
@@ -865,6 +886,28 @@ export class ForgeWorkOnController {
     ctx: ExtensionContext,
     options: StartIssueOptions = {},
   ): Promise<StartIssueResult> {
+    if (options.orchestrationId)
+      return this.#startIssue(issueNumber, ctx, options);
+    if (
+      this.#directStartInFlight ||
+      hasActiveDirectRun(this.#directBinding, this.#links.values())
+    )
+      throw new Error(
+        "A direct ForgeDock work-on run is already active in this session.",
+      );
+    this.#directStartInFlight = true;
+    try {
+      return await this.#startIssue(issueNumber, ctx, options);
+    } finally {
+      this.#directStartInFlight = false;
+    }
+  }
+
+  async #startIssue(
+    issueNumber: number,
+    ctx: ExtensionContext,
+    options: StartIssueOptions = {},
+  ): Promise<StartIssueResult> {
     if (!Number.isSafeInteger(issueNumber) || issueNumber < 1)
       throw new TypeError("Issue number must be positive.");
     const repositoryRoot = await this.#git.resolveRepositoryRoot(
@@ -1062,7 +1105,10 @@ export class ForgeWorkOnController {
           Object.keys(candidate.activeNodes).length > 0,
       );
       if (!launched)
-        await this.#git.cleanup(prepared, ctx.signal).catch(() => undefined);
+        // Preparation cleanup is compensating work; do not let a cancelled
+        // launch leave its owned worktree or branch behind.
+        await this.#git.cleanup(prepared).catch(() => undefined);
+      this.#clearDirectBinding(runId);
       throw error;
     }
   }
@@ -3387,8 +3433,7 @@ export class ForgeWorkOnController {
       link.currentNodeId = undefined;
       this.#persistLink(link);
     }
-    this.#directBinding = undefined;
-    delete process.env.PI_SUBAGENT_EXTENSION_BINDINGS;
+    this.#clearDirectBinding();
   }
 
   async stopProviderRuns(runIds: readonly string[]): Promise<void> {
@@ -3765,8 +3810,7 @@ export class ForgeWorkOnController {
         message: `Release completed ForgeDock authority ${link.forgeRunId}`,
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
-      this.#directBinding = undefined;
-      delete process.env.PI_SUBAGENT_EXTENSION_BINDINGS;
+      this.#clearDirectBinding(link.forgeRunId);
       link.status = "completed";
       this.#persistLink(link);
       this.#emitLifecycle(link, {
@@ -3896,8 +3940,7 @@ export class ForgeWorkOnController {
       );
     }
 
-    this.#directBinding = undefined;
-    delete process.env.PI_SUBAGENT_EXTENSION_BINDINGS;
+    this.#clearDirectBinding(link.forgeRunId);
     link.status = "completed";
     this.#persistLink(link);
     this.#emitLifecycle(link, {
@@ -4552,10 +4595,8 @@ export class ForgeWorkOnController {
       await this.#projectWorkflowStage(link, "merged", ctx, projector);
     }
 
-    if (link.executionMode === "direct") {
-      this.#directBinding = undefined;
-      delete process.env.PI_SUBAGENT_EXTENSION_BINDINGS;
-    }
+    if (link.executionMode === "direct")
+      this.#clearDirectBinding(link.forgeRunId);
     link.status = "completed";
     this.#persistLink(link);
     this.#emitLifecycle(link, {
@@ -4568,6 +4609,12 @@ export class ForgeWorkOnController {
       `ForgeDock issue #${link.issueNumber} merged through PR #${pull.number}.`,
       "info",
     );
+  }
+
+  #clearDirectBinding(runId?: string): void {
+    if (runId && this.#directBinding?.runId !== runId) return;
+    this.#directBinding = undefined;
+    delete process.env.PI_SUBAGENT_EXTENSION_BINDINGS;
   }
 
   #lifecycleEvent(

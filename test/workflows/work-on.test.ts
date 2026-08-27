@@ -10,6 +10,7 @@ import {
   canonicalReviewerName,
   directRunRecoveryAction,
   directTerminalEvidence,
+  hasActiveDirectRun,
   finalReviewDecisionMarker,
   findingPriority,
   isRecoverableWorkOnBlocker,
@@ -56,6 +57,30 @@ test("restart recovery recognizes every parent-owned durable node", () => {
   for (const node of ["review-join", "ci", "decision", "merge", "close", "cleanup"] as const)
     assert.equal(parentNodeFromId(`${node}-2`), node);
   assert.equal(parentNodeFromId("implement-1"), undefined);
+});
+
+test("overlapping direct starts are rejected while a binding or run is live", () => {
+  const binding = {} as import("../../src/agents/child-runtime.ts").ForgeChildBinding;
+  assert.equal(hasActiveDirectRun(binding, []), true);
+  assert.equal(
+    hasActiveDirectRun(undefined, [
+      { executionMode: "direct", status: "running" },
+    ]),
+    true,
+  );
+  assert.equal(
+    hasActiveDirectRun(undefined, [
+      { executionMode: "direct", status: "completed" },
+      { executionMode: "direct", status: "failed" },
+    ]),
+    false,
+  );
+  assert.equal(
+    hasActiveDirectRun(undefined, [
+      { executionMode: "orchestrated", status: "running" },
+    ]),
+    false,
+  );
 });
 
 test("direct restart selects terminal cleanup and authority release windows", () => {

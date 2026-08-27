@@ -168,25 +168,42 @@ export class GitWorktreeManager {
     await mkdir(dirname(worktreePath), { recursive: true });
     if (await exists(worktreePath))
       throw new Error(`Owned worktree path already exists: ${worktreePath}`);
-    await this.#git(
-      root,
-      ["worktree", "add", "-b", branch, worktreePath, baseSha],
-      120_000,
-      input.signal,
-    );
-    const canonicalWorktree = await realpath(worktreePath);
-    if (!isPathWithin(join(root, ".forge", "worktrees"), canonicalWorktree)) {
-      throw new Error(
-        "Git created a worktree outside the owned Forge directory.",
-      );
-    }
-    return {
+    const prepared = {
       repositoryRoot: root,
-      worktreePath: canonicalWorktree,
+      worktreePath,
       branch,
       baseBranch: input.baseBranch,
       baseSha,
     };
+    let worktreeCreated = false;
+    try {
+      await this.#git(
+        root,
+        ["worktree", "add", "-b", branch, worktreePath, baseSha],
+        120_000,
+        input.signal,
+      );
+      worktreeCreated = true;
+      const canonicalWorktree = await realpath(worktreePath);
+      if (!isPathWithin(join(root, ".forge", "worktrees"), canonicalWorktree)) {
+        throw new Error(
+          "Git created a worktree outside the owned Forge directory.",
+        );
+      }
+      return { ...prepared, worktreePath: canonicalWorktree };
+    } catch (error) {
+      // The caller cannot clean up a preparation that never returned. Remove
+      // both resources here, including when canonicalization rejects Git's
+      // newly-created path.
+      if (worktreeCreated) {
+        // Preparation cleanup is compensating work; it must still run when
+        // the caller's operation was cancelled.
+        await this.#cleanupFailedPreparation(prepared).catch(
+          () => undefined,
+        );
+      }
+      throw error;
+    }
   }
 
   async prepareReview(
@@ -410,6 +427,35 @@ export class GitWorktreeManager {
         ["branch", "-D", prepared.branch],
         30_000,
         signal,
+      );
+    } catch (error) {
+      if (!isAlreadyAbsent(error)) throw error;
+    }
+  }
+
+  async #cleanupFailedPreparation(
+    prepared: PreparedWorktree,
+  ): Promise<void> {
+    // No user work can exist before prepare returns, so force removal is
+    // appropriate if canonicalization or validation rejects the new worktree.
+    if (await exists(prepared.worktreePath)) {
+      try {
+        await this.#git(
+          prepared.repositoryRoot,
+          ["worktree", "remove", "--force", prepared.worktreePath],
+          120_000,
+        );
+      } catch (error) {
+        if (!isAlreadyAbsent(error)) throw error;
+      }
+    }
+    if (await exists(prepared.worktreePath))
+      await rm(prepared.worktreePath, { recursive: true, force: true });
+    try {
+      await this.#git(
+        prepared.repositoryRoot,
+        ["branch", "-D", prepared.branch],
+        30_000,
       );
     } catch (error) {
       if (!isAlreadyAbsent(error)) throw error;
