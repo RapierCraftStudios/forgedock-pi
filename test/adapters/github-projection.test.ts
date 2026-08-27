@@ -143,6 +143,40 @@ test("issue projection is marker-idempotent and only adds missing labels", async
   assert.equal(transport.labels.has("priority:P1"), true);
 });
 
+test("setWorkflowLabel rejects unsafe issue numbers before transport", async () => {
+  let requests = 0;
+  const transport: GitHubTransport = {
+    async request<T>(): Promise<GitHubResponse<T>> {
+      requests += 1;
+      throw new Error("transport must not be called");
+    },
+  };
+  const projector = new GitHubIssueProjector(transport, "owner/repo");
+  const invalidIssueNumbers: readonly unknown[] = [
+    0,
+    -1,
+    1.5,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.MAX_SAFE_INTEGER + 1,
+    "42/labels?per_page=100",
+  ];
+
+  for (const issueNumber of invalidIssueNumbers)
+    await assert.rejects(
+      projector.setWorkflowLabel(
+        issueNumber as number,
+        "workflow:in-review",
+      ),
+      {
+        name: "TypeError",
+        message: "Issue number must be positive.",
+      },
+    );
+
+  assert.equal(requests, 0);
+});
+
 test("workflow label transitions replace stale state while preserving unrelated labels", async () => {
   const transport = new ProjectionTransport();
   transport.labels.add("priority:P1");
