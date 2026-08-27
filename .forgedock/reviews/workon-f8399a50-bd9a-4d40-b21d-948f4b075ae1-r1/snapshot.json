@@ -58,8 +58,8 @@
   ],
   "findings": [],
   "status": "active",
-  "sequence": 11,
-  "lastEventHash": "sha256:0fbd70b1b2b20e335617e1e6aec2c85be6e248090b3329b68d74c56b2d78cc29",
+  "sequence": 12,
+  "lastEventHash": "sha256:509bc2d69cc03bb39d69e1670434109bad288675b4a3b61181c08590b7211cd3",
   "idempotencyKeys": {
     "review:create": "ca89bde2-c5b0-4456-8eaa-3e4dc10a2754",
     "panel:1:start": "2520906b-70b8-45cd-bb9e-c7ca7d5106fe",
@@ -71,7 +71,8 @@
     "check:github:0:ff03855406f48f83": "fd8922eb-4ee3-48d7-9f7c-b7a6953879e5",
     "check:github:1:2f175a86d52843ab": "6db7f87c-cd55-4ea1-947d-5fa7de2e39f7",
     "panel:1:complete": "88bbbb6f-2ee2-4a95-814b-28a90e3bea63",
-    "review:verdict": "2bfcfe60-85bc-4c4c-b7ba-93604d5093b8"
+    "review:verdict": "2bfcfe60-85bc-4c4c-b7ba-93604d5093b8",
+    "review:gate": "1bb3bbba-5336-485e-82e2-1b2c64eee205"
   },
   "eventIds": {
     "ca89bde2-c5b0-4456-8eaa-3e4dc10a2754": true,
@@ -84,10 +85,11 @@
     "fd8922eb-4ee3-48d7-9f7c-b7a6953879e5": true,
     "6db7f87c-cd55-4ea1-947d-5fa7de2e39f7": true,
     "88bbbb6f-2ee2-4a95-814b-28a90e3bea63": true,
-    "2bfcfe60-85bc-4c4c-b7ba-93604d5093b8": true
+    "2bfcfe60-85bc-4c4c-b7ba-93604d5093b8": true,
+    "1bb3bbba-5336-485e-82e2-1b2c64eee205": true
   },
   "createdAt": "2026-08-27T13:34:05.438Z",
-  "updatedAt": "2026-08-27T13:35:11.185Z",
+  "updatedAt": "2026-08-27T13:35:16.376Z",
   "panel": {
     "round": 1,
     "status": "completed",
@@ -112,5 +114,15 @@
     ],
     "blockingFindingIds": [],
     "followUpFindingIds": []
+  },
+  "gate": {
+    "decision": "blocked",
+    "passed": false,
+    "headSha": "96498b0176059c7b580bf6e4908d785bfea4fd58",
+    "baseSha": "297621681ac15a325eed4d51903ada13c7330423",
+    "reasons": [
+      "Required check reviewer:forge-review-correctness returned an unknown result.",
+      "Required check reviewer:forge-review-security returned an unknown result."
+    ]
   }
 }
