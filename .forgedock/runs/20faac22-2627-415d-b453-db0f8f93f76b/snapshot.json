@@ -5,10 +5,10 @@
   "issueNumber": 147,
   "integrationBranch": "staging",
   "protectedBranch": "main",
-  "status": "active",
+  "status": "cancelled",
   "authorityMode": "run-scoped",
-  "sequence": 49,
-  "lastEventHash": "sha256:3f6700260914f166e21139108deb7a5a2b7840f3f3e0ebbea8654274cfe46110",
+  "sequence": 50,
+  "lastEventHash": "sha256:9a5be4c9b7efad7228bff9100fdd1ea7bf0f4f78153f0d5b04133cfeb057bea8",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -347,7 +347,8 @@
     "phase:review:1:start": "2e12e418-c822-4b7d-84f6-d5d11085af65",
     "effect:github-label:RapierCraftStudios/forgedock-pi:147:2e12e418-c822-4b7d-84f6-d5d11085af65": "9ab0364d-63f6-448f-a889-05fe9ffa421b",
     "phase:review:1:complete": "7390e20c-ed80-48b8-8c99-793443bfc292",
-    "effect:github-label:RapierCraftStudios/forgedock-pi:147:7390e20c-ed80-48b8-8c99-793443bfc292": "63f2ed95-9e0f-4198-a6bb-6991a2ea462a"
+    "effect:github-label:RapierCraftStudios/forgedock-pi:147:7390e20c-ed80-48b8-8c99-793443bfc292": "63f2ed95-9e0f-4198-a6bb-6991a2ea462a",
+    "run:cancelled": "0ca307a9-f854-460d-8f47-9023e4cb07a1"
   },
   "eventIds": {
     "08d07b88-4fbf-4168-b7c7-644ca32ba9bb": true,
@@ -398,7 +399,8 @@
     "2e12e418-c822-4b7d-84f6-d5d11085af65": true,
     "9ab0364d-63f6-448f-a889-05fe9ffa421b": true,
     "7390e20c-ed80-48b8-8c99-793443bfc292": true,
-    "63f2ed95-9e0f-4198-a6bb-6991a2ea462a": true
+    "63f2ed95-9e0f-4198-a6bb-6991a2ea462a": true,
+    "0ca307a9-f854-460d-8f47-9023e4cb07a1": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
@@ -410,5 +412,6 @@
     "lastHeartbeatAt": "2026-08-27T13:10:01.641Z",
     "expiresAt": "2027-08-27T13:10:01.641Z",
     "takeoverRequired": false
-  }
+  },
+  "cancellationReason": "Orchestration is terminal with #196:blocked, #147:failed, #209:blocked; stopping nonterminal child runs before orchestration completion."
 }
