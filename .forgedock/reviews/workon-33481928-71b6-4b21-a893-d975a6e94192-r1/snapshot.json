@@ -57,9 +57,9 @@
     }
   ],
   "findings": [],
-  "status": "active",
-  "sequence": 12,
-  "lastEventHash": "sha256:6222873149c9e55e6086456ab967cf65a128cf14b021361f845e200b07c99aef",
+  "status": "completed",
+  "sequence": 13,
+  "lastEventHash": "sha256:a3f8d476694b94549f2ec28fd1ef60284c4bde282b04d151c0176661b2deec3b",
   "idempotencyKeys": {
     "review:create": "2ab09ca0-f32a-4896-b12a-410484a144b3",
     "panel:1:start": "bbd12324-049a-4d35-8b8a-860b9719e0c5",
@@ -72,7 +72,8 @@
     "check:github:1:2f175a86d52843ab": "bc195096-5004-43ec-b94b-72ff6f454444",
     "panel:1:complete": "818bc594-da28-4876-8708-e56dc70ce1db",
     "review:verdict": "b87913a3-4b3a-476d-aa78-d2e008334937",
-    "review:gate": "5ef6c2a4-bbe7-47f0-944d-ce640c70cf76"
+    "review:gate": "5ef6c2a4-bbe7-47f0-944d-ce640c70cf76",
+    "review:completed": "0e0ea6c7-f917-49a5-bd5e-3ed7c507efe4"
   },
   "eventIds": {
     "2ab09ca0-f32a-4896-b12a-410484a144b3": true,
@@ -86,10 +87,11 @@
     "bc195096-5004-43ec-b94b-72ff6f454444": true,
     "818bc594-da28-4876-8708-e56dc70ce1db": true,
     "b87913a3-4b3a-476d-aa78-d2e008334937": true,
-    "5ef6c2a4-bbe7-47f0-944d-ce640c70cf76": true
+    "5ef6c2a4-bbe7-47f0-944d-ce640c70cf76": true,
+    "0e0ea6c7-f917-49a5-bd5e-3ed7c507efe4": true
   },
   "createdAt": "2026-08-27T15:15:01.223Z",
-  "updatedAt": "2026-08-27T15:16:19.777Z",
+  "updatedAt": "2026-08-27T15:16:28.675Z",
   "panel": {
     "round": 1,
     "status": "completed",
@@ -118,5 +120,9 @@
     "headSha": "6adb2d1bfa188fef38bbe7ee3d828680ec04348e",
     "baseSha": "b7bfc323d992812b772c0cedce76b95a17922caa",
     "reasons": []
+  },
+  "completion": {
+    "round": 1,
+    "outcome": "reviewed"
   }
 }
