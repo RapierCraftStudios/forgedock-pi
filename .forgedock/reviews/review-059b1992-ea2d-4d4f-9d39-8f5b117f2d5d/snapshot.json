@@ -152,8 +152,8 @@
     }
   ],
   "status": "active",
-  "sequence": 19,
-  "lastEventHash": "sha256:b5dd109c41a5d594ac3439925eb00272923171c13294c28b9105f7e344f2854b",
+  "sequence": 20,
+  "lastEventHash": "sha256:c0c331d5c165cac92b34b141229570561ae6c45cde90a76826278a6754a0710c",
   "idempotencyKeys": {
     "review:create": "c84f347e-b044-4335-84cf-e6acab99a577",
     "panel:1:start": "f9e92d66-9028-43e0-9eb7-58c6a2124f32",
@@ -173,7 +173,8 @@
     "check:github:3:2f175a86d52843ab": "1d4ebd57-ba59-4ec3-a3fd-f94f0716c8bb",
     "check:github:4:a1fba9901075bd5f": "291bc033-cdc0-4677-b54e-ab2f501d85dc",
     "panel:1:complete": "3e1bbf92-f174-48d3-a187-0410a5ea131a",
-    "review:verdict": "0001a74d-48d7-463c-afb4-a40f9b3a0edf"
+    "review:verdict": "0001a74d-48d7-463c-afb4-a40f9b3a0edf",
+    "review:gate": "88573afb-1059-4168-83b9-35a24d361d28"
   },
   "eventIds": {
     "c84f347e-b044-4335-84cf-e6acab99a577": true,
@@ -194,10 +195,11 @@
     "1d4ebd57-ba59-4ec3-a3fd-f94f0716c8bb": true,
     "291bc033-cdc0-4677-b54e-ab2f501d85dc": true,
     "3e1bbf92-f174-48d3-a187-0410a5ea131a": true,
-    "0001a74d-48d7-463c-afb4-a40f9b3a0edf": true
+    "0001a74d-48d7-463c-afb4-a40f9b3a0edf": true,
+    "88573afb-1059-4168-83b9-35a24d361d28": true
   },
   "createdAt": "2026-08-27T05:29:06.994Z",
-  "updatedAt": "2026-08-27T05:31:57.369Z",
+  "updatedAt": "2026-08-27T05:32:02.442Z",
   "panel": {
     "round": 1,
     "status": "completed",
@@ -242,5 +244,19 @@
       "deployment-001"
     ],
     "followUpFindingIds": []
+  },
+  "gate": {
+    "decision": "blocked",
+    "passed": false,
+    "headSha": "74e07982ef2312987c024715d41a631afdb4fdcc",
+    "baseSha": "eaee8a176eeb5c822ce90858395fff93190f3334",
+    "reasons": [
+      "Required check reviewer:forge-review-correctness returned an unknown result.",
+      "Required check reviewer:forge-review-security returned an unknown result.",
+      "Required check reviewer:forge-review-api returned an unknown result.",
+      "Required check reviewer:forge-review-worker returned an unknown result.",
+      "Required check reviewer:forge-review-deployment returned an unknown result.",
+      "Staging gate requires zero open findings; received 3."
+    ]
   }
 }
