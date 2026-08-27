@@ -463,7 +463,7 @@ function packageScriptInvocation(
       nestedCommand === "run" || nestedCommand === "run-script"
         ? argv[commandIndex! + 3]
         : nestedCommand;
-    if (!selector || !script || selector.startsWith("-") || script.startsWith("-"))
+    if (!script || script.startsWith("-"))
       throw new VerificationPreflightError(
         path,
         "yarn workspace must name a package and script; use a direct executable otherwise",
@@ -474,6 +474,29 @@ function packageScriptInvocation(
       packageSelectors: [...packageSelectors, selector],
       recursive: false,
     };
+  }
+  if (manager === "yarn" && command === "workspaces") {
+    const foreachIndex = argv.findIndex(
+      (argument, index) =>
+        index > commandIndex! + 1 && argument === "foreach",
+    );
+    if (foreachIndex >= 0) {
+      const runIndex = argv.findIndex(
+        (argument, index) =>
+          index > foreachIndex &&
+          (argument === "run" || argument === "run-script"),
+      );
+      const script =
+        runIndex >= 0
+          ? argv.slice(runIndex + 1).find((argument) => !argument.startsWith("-"))
+          : undefined;
+      if (!script)
+        throw new VerificationPreflightError(
+          path,
+          "yarn workspaces foreach must name a package script; use a direct executable otherwise",
+        );
+      return { script, cwdArgument, packageSelectors, recursive: true };
+    }
   }
   // `bun test` is Bun's built-in test runner, unlike npm/pnpm/yarn test,
   // which dispatch a package.json script. `bun run test` remains script-bound.

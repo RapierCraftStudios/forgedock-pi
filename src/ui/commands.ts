@@ -590,7 +590,12 @@ function formatLocalVerification(
   const names = Object.keys(commands);
   return names.length === 0
     ? "GitHub CI only (no local commands)"
-    : names.map((name) => `${name} (${commands[name]?.cwd ?? "."})`).join(", ");
+    : names
+        .map(
+          (name) =>
+            `${sanitizeSelectionText(name)} (${sanitizeSelectionText(commands[name]?.cwd ?? ".")})`,
+        )
+        .join(", ");
 }
 
 async function chooseIntegrationBranch(input: {
