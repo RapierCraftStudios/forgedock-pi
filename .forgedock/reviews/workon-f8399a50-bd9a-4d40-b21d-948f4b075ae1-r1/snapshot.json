@@ -26,14 +26,26 @@
   "checks": [],
   "findings": [],
   "status": "active",
-  "sequence": 1,
-  "lastEventHash": "sha256:81efb162d1759e809d652ff9fbc2e0b11f32d10f2aaea5bb2d4703e5c166112e",
+  "sequence": 2,
+  "lastEventHash": "sha256:18270fc5c079bb1717fd20b156f6e2d8d04bdaa1d3a4543404da79e4f34ce2ef",
   "idempotencyKeys": {
-    "review:create": "ca89bde2-c5b0-4456-8eaa-3e4dc10a2754"
+    "review:create": "ca89bde2-c5b0-4456-8eaa-3e4dc10a2754",
+    "panel:1:start": "2520906b-70b8-45cd-bb9e-c7ca7d5106fe"
   },
   "eventIds": {
-    "ca89bde2-c5b0-4456-8eaa-3e4dc10a2754": true
+    "ca89bde2-c5b0-4456-8eaa-3e4dc10a2754": true,
+    "2520906b-70b8-45cd-bb9e-c7ca7d5106fe": true
   },
   "createdAt": "2026-08-27T13:34:05.438Z",
-  "updatedAt": "2026-08-27T13:34:05.438Z"
+  "updatedAt": "2026-08-27T13:34:14.747Z",
+  "panel": {
+    "round": 1,
+    "status": "running",
+    "reviewers": [
+      "forge-review-correctness",
+      "forge-review-security"
+    ],
+    "completedReviewers": [],
+    "startedAt": "2026-08-27T13:34:14.747Z"
+  }
 }
