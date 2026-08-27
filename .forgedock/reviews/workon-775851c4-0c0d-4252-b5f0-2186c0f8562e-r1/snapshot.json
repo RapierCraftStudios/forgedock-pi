@@ -57,9 +57,9 @@
     }
   ],
   "findings": [],
-  "status": "active",
-  "sequence": 12,
-  "lastEventHash": "sha256:00ac8ee9fab920af332d316fad62903e99fb3e810a88f20624aa8ebacd48f565",
+  "status": "completed",
+  "sequence": 13,
+  "lastEventHash": "sha256:5c0867907d35143dd39477161d72ae73e24c0467eebb6bcb4e705a0260ab24d8",
   "idempotencyKeys": {
     "review:create": "53869949-a8ec-4eae-bc64-b8a6659d86fb",
     "panel:1:start": "ef12da76-1084-482f-bfbf-0427a0bbe7bc",
@@ -72,7 +72,8 @@
     "check:github:1:2f175a86d52843ab": "69b65099-4d85-4f68-8765-ced63129845c",
     "panel:1:complete": "fb39092a-679e-4be1-b0e2-7ee2d88dcaf0",
     "review:verdict": "2f957deb-034f-4e3d-9279-101a0649101b",
-    "review:gate": "ef1fb944-176d-4b9c-85b6-b1e7fd0bc084"
+    "review:gate": "ef1fb944-176d-4b9c-85b6-b1e7fd0bc084",
+    "review:completed": "8ec62476-8a70-4ea0-b60a-4b319571a2ee"
   },
   "eventIds": {
     "53869949-a8ec-4eae-bc64-b8a6659d86fb": true,
@@ -86,10 +87,11 @@
     "69b65099-4d85-4f68-8765-ced63129845c": true,
     "fb39092a-679e-4be1-b0e2-7ee2d88dcaf0": true,
     "2f957deb-034f-4e3d-9279-101a0649101b": true,
-    "ef1fb944-176d-4b9c-85b6-b1e7fd0bc084": true
+    "ef1fb944-176d-4b9c-85b6-b1e7fd0bc084": true,
+    "8ec62476-8a70-4ea0-b60a-4b319571a2ee": true
   },
   "createdAt": "2026-08-27T13:30:51.053Z",
-  "updatedAt": "2026-08-27T13:32:15.466Z",
+  "updatedAt": "2026-08-27T13:32:28.338Z",
   "panel": {
     "round": 1,
     "status": "completed",
@@ -124,5 +126,9 @@
       "Required check reviewer:forge-review-correctness returned an unknown result.",
       "Required check reviewer:forge-review-security returned an unknown result."
     ]
+  },
+  "completion": {
+    "round": 1,
+    "outcome": "reviewed"
   }
 }
