@@ -116,16 +116,76 @@ async function executableAvailable(
   return false;
 }
 
+type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
+
+const PACKAGE_MANAGER_OPTIONS_WITH_VALUES: Readonly<
+  Record<PackageManager, readonly string[]>
+> = {
+  npm: ["--prefix", "--workspace", "-w"],
+  pnpm: ["--dir", "-C", "--filter", "-F"],
+  yarn: ["--cwd"],
+  bun: ["--cwd"],
+};
+
 function packageScriptName(argv: readonly string[]): string | undefined {
-  const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
-  if (!["npm", "pnpm", "yarn", "bun"].includes(manager)) return undefined;
-  const command = argv[1];
+  const managerName = basename(argv[0] ?? "").replace(
+    /\.(?:cmd|exe)$/i,
+    "",
+  );
+  if (!Object.hasOwn(PACKAGE_MANAGER_OPTIONS_WITH_VALUES, managerName))
+    return undefined;
+  const manager = managerName as PackageManager;
+  const commandIndex = packageManagerCommandIndex(argv, manager);
+  if (commandIndex === undefined) return undefined;
+  const command = argv[commandIndex];
   if (command === "test") return "test";
   if (command === "run" || command === "run-script") {
-    const script = argv.slice(2).find((argument) => !argument.startsWith("-"));
+    const script = packageManagerScriptArgument(argv, commandIndex + 1, manager);
     return script || undefined;
   }
   return undefined;
+}
+
+function packageManagerCommandIndex(
+  argv: readonly string[],
+  manager: PackageManager,
+): number | undefined {
+  let index = 1;
+  while (index < argv.length) {
+    const argument = argv[index];
+    if (argument === undefined) return undefined;
+    if (argument === "--") return index + 1 < argv.length ? index + 1 : undefined;
+    if (!argument.startsWith("-")) return index;
+    index += packageManagerOptionHasValue(manager, argument) ? 2 : 1;
+  }
+  return undefined;
+}
+
+function packageManagerScriptArgument(
+  argv: readonly string[],
+  start: number,
+  manager: PackageManager,
+): string | undefined {
+  let index = start;
+  while (index < argv.length) {
+    const argument = argv[index];
+    if (argument === undefined) return undefined;
+    if (argument === "--") {
+      index += 1;
+      continue;
+    }
+    if (!argument.startsWith("-")) return argument;
+    index += packageManagerOptionHasValue(manager, argument) ? 2 : 1;
+  }
+  return undefined;
+}
+
+function packageManagerOptionHasValue(
+  manager: PackageManager,
+  argument: string,
+): boolean {
+  if (argument.includes("=")) return false;
+  return PACKAGE_MANAGER_OPTIONS_WITH_VALUES[manager].includes(argument);
 }
 
 async function assertPackageScript(
