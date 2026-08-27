@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 7,
-  "lastEventHash": "sha256:d90272e1ab9e2a0cad6d2649164e85881722f0c473c5daa49da6d9374414eb92",
+  "sequence": 8,
+  "lastEventHash": "sha256:5b13cf39b630f16a6be5d73c428aa4c00c5972ff28e7a351aac2c3f22a52d269",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -40,16 +40,23 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume investigate attempt 1",
-          "evidence": [],
+          "evidence": [
+            "src/adapters/verification-preflight.ts:119-128 maps only argv[1] === test for package-manager test validation",
+            "npm test, npm t, and npm tst are aliases for the package.json test script; npm tst currently returns undefined from packageScriptName",
+            "existing preflight regression fixture has a root package.json without scripts and a web package that defines test, so it can cover both rejection and acceptance",
+            "no diff exists before implementation; scope is one adapter function plus focused adapter regression coverage"
+          ],
           "inputArtifactHash": "sha256:resolve-113-89f2fa1c",
           "logicalNodeId": "work-on-investigate",
           "startedAt": "2026-08-27T00:52:03.083Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/83787819-55d0-4b47-a040-40adffbf6752",
           "branch": "forge/issue-113-83787819",
-          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302",
+          "finishedAt": "2026-08-27T00:53:35.231Z",
+          "outputArtifactHash": "sha256:investigation-113-vp003"
         }
       ]
     }
@@ -63,7 +70,8 @@
     "phase:resolve:1:start": "216c741b-bbe3-48c7-9516-a36c94fe29a4",
     "phase:resolve:1:complete": "705d1894-264b-4f49-9993-e3b0a0f8a153",
     "phase:investigate:1:queue": "f488b4b2-bb57-4b1e-b0cf-6dbe84a9bcb3",
-    "phase:investigate:1:start": "1559e89e-2655-41fa-baa0-5c5abb3a036a"
+    "phase:investigate:1:start": "1559e89e-2655-41fa-baa0-5c5abb3a036a",
+    "phase:investigate:1:complete": "f4727e95-1db7-48ff-a3b1-8909d8ab6afe"
   },
   "eventIds": {
     "68995099-547e-4db3-9686-fdfb11b01675": true,
@@ -72,7 +80,8 @@
     "216c741b-bbe3-48c7-9516-a36c94fe29a4": true,
     "705d1894-264b-4f49-9993-e3b0a0f8a153": true,
     "f488b4b2-bb57-4b1e-b0cf-6dbe84a9bcb3": true,
-    "1559e89e-2655-41fa-baa0-5c5abb3a036a": true
+    "1559e89e-2655-41fa-baa0-5c5abb3a036a": true,
+    "f4727e95-1db7-48ff-a3b1-8909d8ab6afe": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
