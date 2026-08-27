@@ -735,6 +735,12 @@ export class ForgeWorkOnController {
       await this.#projectWorkflowStage(link, "merged", ctx);
       return;
     }
+    if (
+      workflowStageForDurableState(snapshot.state, undefined) === "merged"
+    ) {
+      await this.#projectWorkflowStage(link, "merged", ctx);
+      return;
+    }
     const nodes = Object.values(snapshot.state.nodes);
     const latest = nodes.at(-1);
     if (!latest) {
@@ -2092,17 +2098,20 @@ export class ForgeWorkOnController {
     const transport = new FetchGitHubTransport({ tokenProvider });
     const github = new GitHubWorkflowAdapter(transport, link.repository);
     const projector = new GitHubIssueProjector(transport, link.repository);
-    await this.#projectWorkflowStage(
-      link,
-      workflowStageForNodeTransition(node.node, "started"),
-      ctx,
-      projector,
-    );
     const current = await store.readRun(link.forgeRunId, ctx.signal);
     if (!current.state)
       throw new Error(
         `Run ${link.forgeRunId} state is missing for parent node.`,
       );
+    await this.#projectWorkflowStage(
+      link,
+      workflowStageForDurableState(
+        current.state,
+        workflowStageForNodeTransition(node.node, "started"),
+      ),
+      ctx,
+      projector,
+    );
     let pull = await github.findPullRequest(link.prepared.branch, ctx.signal);
     if (pull && (node.node === "decision" || node.node === "merge"))
       pull = await resolveMergeability(github, pull.number, ctx.signal);
@@ -5516,6 +5525,17 @@ export function shouldBufferLaunchCompletion(
   linkKnown: boolean,
 ): boolean {
   return receiptBindingInFlight || !linkKnown;
+}
+
+export function workflowStageForDurableState(
+  state: Pick<import("../core/state.ts").RunState, "effects">,
+  candidate: WorkflowStage | undefined,
+): WorkflowStage | undefined {
+  return Object.values(state.effects).some(
+    (effect) => effect.effectType === "merge",
+  )
+    ? "merged"
+    : candidate;
 }
 
 export function workflowStageForNodeTransition(

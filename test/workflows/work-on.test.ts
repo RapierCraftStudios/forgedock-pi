@@ -26,6 +26,7 @@ import {
   rollbackAwaitingMergeLabel,
   shouldBufferLaunchCompletion,
   workflowLabelForNode,
+  workflowStageForDurableState,
   workflowStageForNodeTransition,
 } from "../../src/workflows/work-on.ts";
 
@@ -272,6 +273,38 @@ test("workflow transitions cover the complete canonical label lifecycle", () => 
   assert.equal(
     workflowLabelForNode("cleanup", "closed", "decomposed"),
     "workflow:decomposed",
+  );
+});
+
+test("durable merge effect preserves merged recovery projection when resumed work fails", async () => {
+  const state = {
+    effects: {
+      merge: {
+        effectType: "merge" as const,
+        effectId: "merge:42",
+        digest: "sha256:merge",
+        eventId: "event-merge",
+      },
+    },
+  };
+  const projectedStages: string[] = [];
+
+  await assert.rejects(async () => {
+    const stage = workflowStageForDurableState(
+      state,
+      workflowStageForNodeTransition("merge", "started"),
+    );
+    if (stage) projectedStages.push(stage);
+    throw new Error("simulated mergeability recovery failure");
+  }, /simulated mergeability recovery failure/);
+
+  assert.deepEqual(projectedStages, ["merged"]);
+  assert.equal(
+    workflowStageForDurableState(
+      { effects: {} },
+      workflowStageForNodeTransition("merge", "started"),
+    ),
+    "awaitingMerge",
   );
 });
 
