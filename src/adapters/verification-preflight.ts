@@ -37,6 +37,7 @@ export async function preflightRequiredVerificationCommands(
   for (const [name, command] of Object.entries(commands)) {
     if (!command.required) continue;
     const basePath = `${configPath} verification.commands.${name}`;
+    assertNoPackageSelectionOptions(command.argv, basePath);
     const cwd = await resolveVerificationCommandDirectory(
       canonicalRoot,
       command.cwd,
@@ -114,6 +115,64 @@ async function executableAvailable(
     }
   }
   return false;
+}
+
+const PACKAGE_SELECTION_OPTIONS: Readonly<
+  Record<string, readonly string[]>
+> = {
+  npm: [
+    "--prefix",
+    "--workspace",
+    "--workspaces",
+    "--workspace-root",
+    "--include-workspace-root",
+    "--ws",
+    "-w",
+  ],
+  pnpm: [
+    "--dir",
+    "--filter",
+    "--recursive",
+    "--workspace-root",
+    "-C",
+    "-F",
+    "-r",
+  ],
+  yarn: ["--cwd", "workspace", "workspaces"],
+  bun: ["--cwd", "--filter", "--workspaces"],
+};
+
+function assertNoPackageSelectionOptions(
+  argv: readonly string[],
+  basePath: string,
+): void {
+  const option = packageSelectionOption(argv);
+  if (!option) return;
+  throw new VerificationPreflightError(
+    `${basePath}.argv`,
+    `package-location option '${option}' is unsupported; set cwd to the selected package and remove package-selection flags`,
+  );
+}
+
+function packageSelectionOption(argv: readonly string[]): string | undefined {
+  const manager = basename(argv[0] ?? "").replace(/\.(?:cmd|exe)$/i, "");
+  const selectors = PACKAGE_SELECTION_OPTIONS[manager];
+  if (!selectors) return undefined;
+
+  for (const argument of argv.slice(1)) {
+    if (argument === "--") break;
+    const option = argument.split("=", 1)[0] ?? argument;
+    if (selectors.includes(option)) return argument;
+    if (
+      (option.startsWith("-C") ||
+        option.startsWith("-F") ||
+        option.startsWith("-r") ||
+        option.startsWith("-w")) &&
+      option.length > 2
+    )
+      return argument;
+  }
+  return undefined;
 }
 
 function packageScriptName(argv: readonly string[]): string | undefined {

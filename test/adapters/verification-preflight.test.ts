@@ -85,6 +85,39 @@ test("required monorepo verification preflight selects the package cwd", async (
   }
 });
 
+test("preflight rejects package-selection flags instead of checking the wrong manifest", async () => {
+  const testFixture = await fixture();
+  try {
+    const packageSelectionArgv = [
+      ["npm", "--prefix", "web", "test"],
+      ["npm", "run", "test", "--prefix", "web"],
+      ["npm", "--prefix=web", "run", "test"],
+      ["npm", "run", "test", "--workspace", "web"],
+    ];
+    for (const argv of packageSelectionArgv) {
+      await assert.rejects(
+        preflightRequiredVerificationCommands(
+          testFixture.root,
+          { test: command(".", { argv }) },
+          { path: testFixture.path, configPath: "/repo/.forge/config.json" },
+        ),
+        (error: unknown) =>
+          error instanceof VerificationPreflightError &&
+          error.path === "/repo/.forge/config.json verification.commands.test.argv" &&
+          /package-location option .*set cwd/.test(error.message),
+      );
+    }
+
+    await preflightRequiredVerificationCommands(
+      testFixture.root,
+      { test: command("web", { argv: ["npm", "test", "--", "--prefix", "web"] }) },
+      { path: testFixture.path },
+    );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
 test("preflight checks executable availability without running the command", async () => {
   const testFixture = await fixture();
   try {
