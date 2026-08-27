@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 18,
-  "lastEventHash": "sha256:65f3eee614e7be0ff0668103d49c961e68081db1e7932b9f5ba3821029597d6c",
+  "sequence": 19,
+  "lastEventHash": "sha256:e70f2637187bbfaf9a1f34357e0c72b1cdbfa968f8ab9568bf7ce2e4175d8e65",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -143,11 +143,16 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "resume verify attempt 1",
           "evidence": [],
-          "inputArtifactHash": "sha256:implement-119-merge-projection"
+          "inputArtifactHash": "sha256:implement-119-merge-projection",
+          "logicalNodeId": "work-on-verify-1",
+          "startedAt": "2026-08-27T01:04:33.743Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/4902846e-02e3-412d-963c-fa81f8ab1d11",
+          "branch": "forge/issue-119-4902846e",
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
         }
       ]
     }
@@ -172,7 +177,8 @@
     "phase:implement:1:queue": "f5b39d1e-919b-4e81-a976-5ebfbf802064",
     "phase:implement:1:start": "07a1a487-8d00-4608-a086-80fadedcacb7",
     "phase:implement:1:complete": "6fcc4f9e-945a-4cdc-b738-49e94136716c",
-    "phase:verify:1:queue": "b1817eef-6bca-4f10-8fd4-4333f5ac65d6"
+    "phase:verify:1:queue": "b1817eef-6bca-4f10-8fd4-4333f5ac65d6",
+    "phase:verify:1:start": "bae6df66-71cd-4014-9e78-9c720a3d3513"
   },
   "eventIds": {
     "17d34ee0-51cb-4c34-ae10-f1c43008d1ac": true,
@@ -192,7 +198,8 @@
     "f5b39d1e-919b-4e81-a976-5ebfbf802064": true,
     "07a1a487-8d00-4608-a086-80fadedcacb7": true,
     "6fcc4f9e-945a-4cdc-b738-49e94136716c": true,
-    "b1817eef-6bca-4f10-8fd4-4333f5ac65d6": true
+    "b1817eef-6bca-4f10-8fd4-4333f5ac65d6": true,
+    "bae6df66-71cd-4014-9e78-9c720a3d3513": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
