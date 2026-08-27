@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 9,
-  "lastEventHash": "sha256:9721ebf6f6fbcb50ab837f1cd179bf19c15837e53c064a0551b08afebedddee5",
+  "sequence": 10,
+  "lastEventHash": "sha256:ca0875a90cc5162778091548ece668125309de7a29659d778abd3d581d0c4769",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -66,11 +66,16 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "queued",
+          "status": "running",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
           "evidence": [],
-          "inputArtifactHash": "sha256:investigate-119-merge-projection"
+          "inputArtifactHash": "sha256:investigate-119-merge-projection",
+          "logicalNodeId": "work-on-plan-1",
+          "startedAt": "2026-08-27T00:56:31.483Z",
+          "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/4902846e-02e3-412d-963c-fa81f8ab1d11",
+          "branch": "forge/issue-119-4902846e",
+          "baseSha": "89f2fa1c7e7020b695803e9a1b556d55076f2302"
         }
       ]
     }
@@ -86,7 +91,8 @@
     "phase:investigate:1:queue": "505b20f9-80db-4dc5-a56d-a205917d4a54",
     "phase:investigate:1:start": "89b24c71-1d43-4aa0-9b66-f207e9de1b06",
     "phase:investigate:1:complete": "5f942090-5c16-4140-8813-8e7228ebc0d9",
-    "phase:plan:1:queue": "29c3c362-0a1b-4179-a804-5f9f06c6da9d"
+    "phase:plan:1:queue": "29c3c362-0a1b-4179-a804-5f9f06c6da9d",
+    "phase:plan:1:start": "b10c5603-a050-4ab0-919e-74f423cee62a"
   },
   "eventIds": {
     "17d34ee0-51cb-4c34-ae10-f1c43008d1ac": true,
@@ -97,7 +103,8 @@
     "505b20f9-80db-4dc5-a56d-a205917d4a54": true,
     "89b24c71-1d43-4aa0-9b66-f207e9de1b06": true,
     "5f942090-5c16-4140-8813-8e7228ebc0d9": true,
-    "29c3c362-0a1b-4179-a804-5f9f06c6da9d": true
+    "29c3c362-0a1b-4179-a804-5f9f06c6da9d": true,
+    "b10c5603-a050-4ab0-919e-74f423cee62a": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
