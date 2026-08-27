@@ -9,7 +9,11 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-import { parseForgePolicy, type ForgePolicy } from "../core/policy.ts";
+import {
+  MAX_ORCHESTRATION_ISSUES,
+  parseForgePolicy,
+  type ForgePolicy,
+} from "../core/policy.ts";
 import type {
   ForgeOrchestrationController,
   OrchestrationStatusSnapshot,
@@ -161,7 +165,7 @@ export function registerForgeCommands(
     parameters: Type.Object({
       issueNumbers: Type.Array(Type.Integer({ minimum: 1 }), {
         minItems: 1,
-        maxItems: 100,
+        maxItems: MAX_ORCHESTRATION_ISSUES,
         description:
           "Resolved, eligible GitHub issue numbers in deterministic dispatch order",
       }),
@@ -582,7 +586,7 @@ export function issueResolverPrompt(
     workOn
       ? "Interpret explicit issue numbers, #N, GitHub issue/repository URLs, and natural-language single-issue selectors."
       : "Interpret the retained original /orchestrate contract, including explicit issue numbers, GitHub issue/repository URLs, milestone selectors, next N, fast-lane, and priority filters.",
-    `Before resolution or confirmation, verify that .forge/config.json exists, is valid, and names an existing non-protected integration branch. If setup is missing or invalid, stop and tell the user to run /forge:init; do not call ${tool}.`,
+    `Before resolution or confirmation, verify that .forge/config.json exists, is valid, names an existing integration branch, and keeps that branch distinct from tracked production/protected targets. GitHub branch protection and rulesets on the integration branch are supported and must be honored through PR gates; they do not make setup invalid. If setup is missing or invalid, stop and tell the user to run /forge:init; do not call ${tool}.`,
     "Use read-only GitHub/repository inspection. Exclude closed, terminal, actively owned, duplicate, and otherwise ineligible issues.",
     cardinality,
     workOn
