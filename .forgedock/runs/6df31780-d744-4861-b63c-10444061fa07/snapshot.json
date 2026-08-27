@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 19,
-  "lastEventHash": "sha256:dd6add44cfebb0e5ced68de5756f5f5a74d78d6a9fd4197c752f56ac42f36abf",
+  "sequence": 20,
+  "lastEventHash": "sha256:4baef98c9c9f409c3ddd52acd9d3373f79596f857f1517b7e0d2b7c256050028",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -62,15 +62,21 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "Rebuild the bounded test-only contract from the completed investigation.",
-          "evidence": [],
+          "evidence": [
+            "The existing production guard makes a production edit unnecessary.",
+            "The adapter test suite has a reusable transport fake whose request count can prove fail-before-I/O behavior.",
+            "The required bound verification command is `check`."
+          ],
           "logicalNodeId": "plan-1",
           "startedAt": "2026-08-27T14:32:56.418Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/6df31780-d744-4861-b63c-10444061fa07",
           "branch": "forge/issue-209-6df31780",
-          "baseSha": "6a8af2aaccf459b3ab45208032334e50a9ce629d"
+          "baseSha": "6a8af2aaccf459b3ab45208032334e50a9ce629d",
+          "finishedAt": "2026-08-27T14:33:53.062Z",
+          "outputArtifactHash": "sha256:plan-209-test-only-regression"
         }
       ]
     }
@@ -151,7 +157,8 @@
     "effect:github-comment:RapierCraftStudios/forgedock-pi:209:99d19c13-4f53-45e1-be49-af4434dea423:investigation-checkpoint": "5acbb744-9e3a-423b-8588-b5c2094abca0",
     "phase:plan:1:queue": "10c01605-8015-40d5-957d-101e371e08f4",
     "phase:plan:1:start": "0292df77-f236-459f-b674-ec4ac9bc8bce",
-    "effect:github-label:RapierCraftStudios/forgedock-pi:209:0292df77-f236-459f-b674-ec4ac9bc8bce": "d3b8a4ad-1fd0-4e74-89c6-23c600ac18bb"
+    "effect:github-label:RapierCraftStudios/forgedock-pi:209:0292df77-f236-459f-b674-ec4ac9bc8bce": "d3b8a4ad-1fd0-4e74-89c6-23c600ac18bb",
+    "phase:plan:1:complete": "debcf5b8-613d-448a-b8a3-b14817baa152"
   },
   "eventIds": {
     "c6df90f4-2328-4863-b964-4809c11f2ef1": true,
@@ -172,7 +179,8 @@
     "5acbb744-9e3a-423b-8588-b5c2094abca0": true,
     "10c01605-8015-40d5-957d-101e371e08f4": true,
     "0292df77-f236-459f-b674-ec4ac9bc8bce": true,
-    "d3b8a4ad-1fd0-4e74-89c6-23c600ac18bb": true
+    "d3b8a4ad-1fd0-4e74-89c6-23c600ac18bb": true,
+    "debcf5b8-613d-448a-b8a3-b14817baa152": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
