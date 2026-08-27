@@ -7,8 +7,8 @@
   "protectedBranch": "main",
   "status": "active",
   "authorityMode": "run-scoped",
-  "sequence": 10,
-  "lastEventHash": "sha256:95edbc3216eb161cc329855b162ca71601ff02f187cede02680e07f8f12f805c",
+  "sequence": 11,
+  "lastEventHash": "sha256:4cbef7a594fdafbdb5946258344d069263e447218dd3679618fc6b4ca245a37f",
   "phases": {
     "resolve": {
       "phase": "resolve",
@@ -54,7 +54,7 @@
       "attempts": [
         {
           "attempt": 1,
-          "status": "running",
+          "status": "completed",
           "leaseEpoch": 1,
           "restartAction": "resume plan attempt 1",
           "evidence": [],
@@ -63,7 +63,9 @@
           "startedAt": "2026-08-27T06:52:42.113Z",
           "worktreePath": "/home/dev/Projects/forgedock-pi/.forge/worktrees/4e2ca839-596b-48fa-8591-2b0865218fd3",
           "branch": "forge/issue-113-4e2ca839",
-          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22"
+          "baseSha": "723b0bca407fbc66dd41e5607e012618f4c6ca22",
+          "finishedAt": "2026-08-27T06:57:35.273Z",
+          "outputArtifactHash": "sha256:issue113-plan-npm-aliases"
         }
       ]
     }
@@ -80,7 +82,8 @@
     "phase:investigate:1:start": "202e5c7c-e824-4f8e-b370-0e27f917c8e7",
     "phase:investigate:1:complete": "715f03c1-8517-41b4-b993-da72ecb2d5a7",
     "phase:plan:1:queue": "b33eb271-7a0e-485c-9119-bb10aabb1858",
-    "phase:plan:1:start": "4fca9c83-d64a-4ba5-ab70-f0c380f05e6a"
+    "phase:plan:1:start": "4fca9c83-d64a-4ba5-ab70-f0c380f05e6a",
+    "phase:plan:1:complete": "c31b51c0-3a78-4a72-bb8f-1ee20252e68d"
   },
   "eventIds": {
     "5dc01628-67a7-4a74-ab59-f2ccce43f77a": true,
@@ -92,7 +95,8 @@
     "202e5c7c-e824-4f8e-b370-0e27f917c8e7": true,
     "715f03c1-8517-41b4-b993-da72ecb2d5a7": true,
     "b33eb271-7a0e-485c-9119-bb10aabb1858": true,
-    "4fca9c83-d64a-4ba5-ab70-f0c380f05e6a": true
+    "4fca9c83-d64a-4ba5-ab70-f0c380f05e6a": true,
+    "c31b51c0-3a78-4a72-bb8f-1ee20252e68d": true
   },
   "lease": {
     "schema": "forgedock.repository-lease/v1",
