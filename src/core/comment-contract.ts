@@ -87,6 +87,10 @@ export interface ImplementationArtifact extends PhaseArtifactBase {
   branch: string;
   baseSha: string;
   commitSha: string;
+  /** Authorial narrative: the defect and why it matters (mined into the PR body). */
+  problemSummary: string;
+  /** Authorial narrative: the fix strategy and design decisions. */
+  approach: string;
   changedFiles: Array<{ path: string; additions: number; deletions: number; change: string }>;
   acceptanceChecks: AcceptanceCheck[];
   checksRun: Array<{ name: string; status: "passed" | "failed" | "skipped" | "not-configured"; evidence: string }>;

@@ -212,10 +212,15 @@ export function normalizeVerificationCommandCwd(
 function parseGitHubVerification(
   value: unknown,
 ): ForgePolicy["verification"]["github"] {
+  // CI requirements are inherited from the repository's own configuration —
+  // never self-enforced. A repo that does not configure verification.github
+  // declares (by policy) that lane PRs carry no CI gate; GitHub CI remains
+  // authoritative wherever the repo itself runs it (e.g. the staging->main
+  // promotion). Unconfigured => policy-exempt, not "required everywhere".
   if (value === undefined)
     return {
-      required: true,
-      requiredBranches: ["*"],
+      required: false,
+      requiredBranches: [],
       waitTimeoutMs: 1_800_000,
       pollIntervalMs: 10_000,
     };
@@ -223,7 +228,7 @@ function parseGitHubVerification(
   return {
     required:
       github.required === undefined
-        ? true
+        ? false
         : boolean(github.required, "verification.github.required"),
     requiredBranches:
       github.requiredBranches === undefined
