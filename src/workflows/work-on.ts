@@ -4231,6 +4231,75 @@ export class ForgeWorkOnController {
     );
   }
 
+  /**
+   * Terminal path for zero-diff lanes: the finding was stale or already
+   * clean on the frozen base (implement recorded FORGE:COMMIT:NO-CHANGE), so
+   * no PR can exist for the empty diff — attempting one fails with an
+   * unactionable 422. Close the issue autonomously and complete the run as
+   * a no-change closure.
+   */
+  async #finalizeNoChangeClosure(deps: {
+    link: ActiveRunLink;
+    journal: RunJournal;
+    github: GitHubWorkflowAdapter;
+    sessionId: string;
+    ctx: ExtensionContext;
+  }): Promise<void> {
+    const { link, journal, github, sessionId, ctx } = deps;
+    await appendPhase(
+      journal,
+      link.forgeRunId,
+      "merge",
+      "complete",
+      1,
+      sessionId,
+      ctx.signal,
+      undefined,
+      [
+        "no-change closure: frozen diff is empty; no PR created",
+        "FORGE:COMMIT:NO-CHANGE",
+      ],
+    );
+    await github.closeIssue(link.issueNumber, ctx.signal);
+    const closed = await github.getIssue(link.issueNumber, ctx.signal);
+    if (closed.state !== "closed")
+      throw new Error("Issue close read-back failed.");
+    await appendEffect(
+      journal,
+      link.forgeRunId,
+      "issue-close",
+      `issue-close:${link.issueNumber}`,
+      digest(String(link.issueNumber)),
+      sessionId,
+      ctx.signal,
+    );
+    await appendPhase(
+      journal,
+      link.forgeRunId,
+      "cleanup",
+      "complete",
+      1,
+      sessionId,
+      ctx.signal,
+      undefined,
+      ["no-change closure terminal"],
+    );
+    await journal.append({
+      runId: link.forgeRunId,
+      type: "run.completed",
+      payload: { outcome: "closed" },
+      idempotencyKey: "run:complete",
+      sessionId,
+      message: `Complete ForgeDock run ${link.forgeRunId} as no-change closure`,
+      ...(ctx.signal ? { signal: ctx.signal } : {}),
+    });
+    link.status = "completed";
+    link.terminalOutcome = "closed";
+    link.activeNodes = {};
+    link.currentNodeId = undefined;
+    this.#persistLink(link);
+  }
+
   async #finalize(
     link: ActiveRunLink,
     ctx: ExtensionContext,
@@ -4387,62 +4456,13 @@ export class ForgeWorkOnController {
       assertBuilderContractPaths(link.builderContract, actualFiles);
 
     if (actualFiles.length === 0) {
-      // Zero-diff closure: the finding was stale or already clean on the
-      // frozen base (the implement node recorded FORGE:COMMIT:NO-CHANGE).
-      // No PR can exist for an empty diff — attempting one fails with an
-      // unactionable 422 — so close the issue autonomously instead.
-      await appendPhase(
+      await this.#finalizeNoChangeClosure({
+        link,
         journal,
-        link.forgeRunId,
-        "merge",
-        "complete",
-        1,
+        github,
         sessionId,
-        ctx.signal,
-        undefined,
-        [
-          "no-change closure: frozen diff is empty; no PR created",
-          "FORGE:COMMIT:NO-CHANGE",
-        ],
-      );
-      await github.closeIssue(link.issueNumber, ctx.signal);
-      const closed = await github.getIssue(link.issueNumber, ctx.signal);
-      if (closed.state !== "closed")
-        throw new Error("Issue close read-back failed.");
-      await appendEffect(
-        journal,
-        link.forgeRunId,
-        "issue-close",
-        `issue-close:${link.issueNumber}`,
-        digest(String(link.issueNumber)),
-        sessionId,
-        ctx.signal,
-      );
-      await appendPhase(
-        journal,
-        link.forgeRunId,
-        "cleanup",
-        "complete",
-        1,
-        sessionId,
-        ctx.signal,
-        undefined,
-        ["no-change closure terminal"],
-      );
-      await journal.append({
-        runId: link.forgeRunId,
-        type: "run.completed",
-        payload: { outcome: "closed" },
-        idempotencyKey: "run:complete",
-        sessionId,
-        message: `Complete ForgeDock run ${link.forgeRunId} as no-change closure`,
-        ...(ctx.signal ? { signal: ctx.signal } : {}),
+        ctx,
       });
-      link.status = "completed";
-      link.terminalOutcome = "closed";
-      link.activeNodes = {};
-      link.currentNodeId = undefined;
-      this.#persistLink(link);
       return;
     }
 

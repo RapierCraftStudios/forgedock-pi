@@ -1,10 +1,8 @@
 import {
   type GitHubStateBranchStore,
-  StateBranchConflictError,
 } from "../adapters/github-state.ts";
 import {
-  MAX_STATE_CAS_ATTEMPTS,
-  stateCasBackoff,
+  stateCas,
 } from "../adapters/state-cas.ts";
 import {
   applyOrchestrationEvent,
@@ -32,7 +30,7 @@ export class OrchestrationJournal {
     signal?: AbortSignal;
   }): Promise<OrchestrationState> {
     await this.#store.ensureBranch(input.now ?? new Date(), input.signal);
-    for (let attempt = 1; attempt <= MAX_STATE_CAS_ATTEMPTS; attempt += 1) {
+    return stateCas(async () => {
       const current = await this.#store.readOrchestration(
         input.orchestrationId,
         input.signal,
@@ -59,27 +57,15 @@ export class OrchestrationJournal {
         occurredAt: now.toISOString(),
       });
       const state = applyOrchestrationEvent(undefined, event);
-      try {
-        await this.#store.commitOrchestrationState({
-          expectedTip: current.tip,
-          events: [event],
-          state,
-          message: `Initialize ForgeDock orchestration ${input.orchestrationId}`,
-          ...(input.signal ? { signal: input.signal } : {}),
-        });
-        return state;
-      } catch (error) {
-        if (
-          !(error instanceof StateBranchConflictError) ||
-          attempt === MAX_STATE_CAS_ATTEMPTS
-        )
-          throw error;
-        await stateCasBackoff(attempt, input.signal);
-      }
-    }
-    throw new Error(
-      `Unable to initialize orchestration ${input.orchestrationId}.`,
-    );
+      await this.#store.commitOrchestrationState({
+        expectedTip: current.tip,
+        events: [event],
+        state,
+        message: `Initialize ForgeDock orchestration ${input.orchestrationId}`,
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+      return state;
+    }, input.signal);
   }
 
   async append(input: {
@@ -132,7 +118,7 @@ export class OrchestrationJournal {
     message: string;
     signal?: AbortSignal;
   }): Promise<OrchestrationState> {
-    for (let attempt = 1; attempt <= MAX_STATE_CAS_ATTEMPTS; attempt += 1) {
+    return stateCas(async () => {
       const current = await this.#store.readOrchestration(
         input.orchestrationId,
         input.signal,
@@ -154,24 +140,14 @@ export class OrchestrationJournal {
       });
       const state = applyOrchestrationEvent(current.state, event);
       const events = [...current.events, event];
-      try {
-        await this.#store.commitOrchestrationState({
-          expectedTip: current.tip,
-          events,
-          state,
-          message: input.message,
-          ...(input.signal ? { signal: input.signal } : {}),
-        });
-        return state;
-      } catch (error) {
-        if (
-          !(error instanceof StateBranchConflictError) ||
-          attempt === MAX_STATE_CAS_ATTEMPTS
-        )
-          throw error;
-        await stateCasBackoff(attempt, input.signal);
-      }
-    }
-    throw new Error(`Unable to update orchestration ${input.orchestrationId}.`);
+      await this.#store.commitOrchestrationState({
+        expectedTip: current.tip,
+        events,
+        state,
+        message: input.message,
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+      return state;
+    }, input.signal);
   }
 }
