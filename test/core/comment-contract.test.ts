@@ -175,3 +175,21 @@ test("plan rendering deterministically separates contract, context, and architec
   assert.match(markdown, /test\/core\/review\.test\.ts/);
   assert.match(markdown, /Assert needs-human/);
 });
+
+test("invalid verdict markers are detected in comment bodies", async () => {
+  const { commentBodySignalsInvalidVerdict } = await import(
+    "../../src/core/comment-contract.ts"
+  );
+  assert.equal(
+    commentBodySignalsInvalidVerdict("<!-- FORGE:INVALID -->\nClosed invalid."),
+    true,
+  );
+  assert.equal(
+    commentBodySignalsInvalidVerdict("evidence: FORGE:COMMIT:NO-CHANGE"),
+    true,
+  );
+  assert.equal(
+    commentBodySignalsInvalidVerdict("normal review comment"),
+    false,
+  );
+});

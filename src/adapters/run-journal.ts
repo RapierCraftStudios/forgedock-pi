@@ -112,6 +112,8 @@ export class RunJournal {
     idempotencyKey: string;
     sessionId: string;
     actorKind?: "extension" | "human";
+    /** Explicit actor epoch for authority re-authorization events (takeover). */
+    actorLeaseEpoch?: number;
     message: string;
     signal?: AbortSignal;
   }): Promise<JournalSnapshot> {
@@ -125,7 +127,10 @@ export class RunJournal {
         new Date(),
         input.type,
       );
-      const epoch = current.state.lease?.epoch ?? current.state.leaseBinding?.epoch;
+      const epoch =
+        input.actorLeaseEpoch ??
+        current.state.lease?.epoch ??
+        current.state.leaseBinding?.epoch;
       if (epoch === undefined)
         throw new Error(`Run ${input.runId} has no active lease authority.`);
       const priorEvent = current.state.idempotencyKeys[input.idempotencyKey];
@@ -186,18 +191,19 @@ function assertCurrentAuthority(
   now: Date,
   eventType?: RunEventType,
 ): void {
-  // Cancellation and lease release are terminal, safety-positive transitions
-  // and must never be blocked by lease expiry: a stale or crashed run must
-  // stay cancellable and releasable by the operator or orchestrator
-  // regardless of authority state (they cannot advance work, only stop it;
-  // ownership/epoch identity is still enforced downstream).
-  const terminalSafetyTransition =
-    eventType === "run.cancelled" || eventType === "lease.released";
+  // Cancellation, lease release, and takeover are authority transitions that
+  // must never be blocked by lease expiry: a stale or crashed run must stay
+  // cancellable by the operator, and recovery/adoption re-arms authority with
+  // a new epoch (takeoverLease enforces expiry + authorization identity).
+  const authorityTransition =
+    eventType === "run.cancelled" ||
+    eventType === "lease.released" ||
+    eventType === "lease.taken-over";
   if (state.authorityMode === "run-scoped") {
     if (
       !state.lease ||
       state.lease.ownerRunId !== state.runId ||
-      (!terminalSafetyTransition && isLeaseExpired(state.lease, now))
+      (!authorityTransition && isLeaseExpired(state.lease, now))
     )
       throw new Error(`Run ${state.runId} has invalid or expired run-scoped authority.`);
     return;
@@ -207,7 +213,7 @@ function assertCurrentAuthority(
       !repositoryLease ||
       repositoryLease.ownerRunId !== state.runId ||
       repositoryLease.epoch !== state.lease.epoch ||
-      (!terminalSafetyTransition &&
+      (!authorityTransition &&
         (isLeaseExpired(state.lease, now) ||
           isLeaseExpired(repositoryLease, now)))
     )
@@ -219,7 +225,7 @@ function assertCurrentAuthority(
       !repositoryLease ||
       repositoryLease.ownerRunId !== state.leaseBinding.ownerRunId ||
       repositoryLease.epoch !== state.leaseBinding.epoch ||
-      (!terminalSafetyTransition && isLeaseExpired(repositoryLease, now))
+      (!authorityTransition && isLeaseExpired(repositoryLease, now))
     ) {
       throw new Error(
         `Run ${state.runId} orchestration lease binding is stale.`,

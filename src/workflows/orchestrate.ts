@@ -27,6 +27,7 @@ import {
   type OrchestrationDependencyEdge,
   type OrchestrationState,
 } from "../core/orchestration.ts";
+import { isLeaseExpired } from "../core/lease.ts";
 import { isProtectedBranch, type ForgePolicy } from "../core/policy.ts";
 import { OrchestrationJournal } from "./orchestration-journal.ts";
 import {
@@ -81,6 +82,9 @@ export interface OrchestrationStatusSnapshot {
 }
 
 export class ForgeOrchestrationController {
+  readonly #priorInvalidVerdicts = new Map<string, boolean>();
+  readonly #gateGithub = new Map<string, GitHubWorkflowAdapter>();
+
   readonly #pi: ExtensionAPI;
   readonly #workOn: ForgeWorkOnController;
   readonly #git: GitWorktreeManager;
@@ -104,6 +108,26 @@ export class ForgeOrchestrationController {
 
   async attach(ctx: ExtensionContext): Promise<void> {
     this.#restoreLinks(ctx);
+    // Zero-touch crash recovery: when configured, adopt orphaned campaigns
+    // (every active lane's lease expired) directly at session start.
+    void loadForgePolicy(ctx.cwd)
+      .then(({ policy }) =>
+        policy.orchestration.autoAdopt
+          ? this.adoptOrphaned(ctx).then((ids) => {
+              if (ids.length > 0)
+                ctx.ui.notify(
+                  `ForgeDock adopted orphaned orchestration(s): ${ids.join(", ")}`,
+                  "info",
+                );
+            })
+          : undefined,
+      )
+      .catch((error) =>
+        ctx.ui.notify(
+          `ForgeDock orphan adoption failed: ${errorMessage(error)}`,
+          "warning",
+        ),
+      );
     this.#lifecycleUnsubscribe?.();
     this.#lifecycleUnsubscribe = this.#workOn.onLifecycle((event) => {
       if (!event.orchestrationId) return;
@@ -111,7 +135,169 @@ export class ForgeOrchestrationController {
     });
   }
 
+  /** Lazily built adapter for dispatch-gate and adoption side effects. */
+  #githubFor(link: ActiveOrchestrationLink): GitHubWorkflowAdapter {
+    let adapter = this.#gateGithub.get(link.orchestrationId);
+    if (!adapter) {
+      const tokenProvider = createGitHubTokenProvider(
+        this.#pi,
+        link.repositoryRoot,
+      );
+      adapter = new GitHubWorkflowAdapter(
+        new FetchGitHubTransport({ tokenProvider }),
+        link.repository,
+      );
+      this.#gateGithub.set(link.orchestrationId, adapter);
+    }
+    return adapter;
+  }
+
+  /**
+   * Consume durable prior verdicts before dispatch: an issue already
+   * adjudicated invalid/no-change (FORGE:INVALID / FORGE:COMMIT:NO-CHANGE)
+   * must be closed, never re-built.
+   */
+  async #priorInvalidVerdict(
+    link: ActiveOrchestrationLink,
+    issueNumber: number,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    const key = `${link.orchestrationId}:${issueNumber}`;
+    const cached = this.#priorInvalidVerdicts.get(key);
+    if (cached !== undefined) return cached;
+    const verdict = await this.#githubFor(link)
+      .hasInvalidVerdictMarker(issueNumber, signal)
+      .catch(() => false);
+    this.#priorInvalidVerdicts.set(key, verdict);
+    return verdict;
+  }
+
+  /**
+   * Adopt orphaned orchestrations whose owning session is gone: every active
+   * lane's run lease must be expired (the liveness signal), after which lanes
+   * are re-armed via human-authorized takeover, finishable lanes are
+   * reconciled to merge, and non-finishable lanes fail with labels cleared so
+   * the next campaign re-dispatches them. Returns the adopted ids.
+   */
+  async adoptOrphaned(ctx: ExtensionContext): Promise<string[]> {
+    const repositoryRoot = await this.#git.resolveRepositoryRoot(
+      ctx.cwd,
+      ctx.signal,
+    );
+    const { policy } = await loadForgePolicy(repositoryRoot);
+    const tokenProvider = createGitHubTokenProvider(this.#pi, repositoryRoot);
+    const store = new GitHubStateBranchStore(
+      new FetchGitHubTransport({ tokenProvider }),
+      policy.repository.name,
+      policy.state.branch,
+    );
+    const listed = await store.listOrchestrations(ctx.signal);
+    const adopted: string[] = [];
+    for (const { orchestrationId, state: persisted } of listed) {
+      if (!persisted || persisted.status !== "running") continue;
+      if (this.#links.has(orchestrationId)) continue;
+      const activeLanes = persisted.lanes.filter((lane) =>
+        ["running", "ready", "integrating"].includes(lane.status),
+      );
+      if (activeLanes.length === 0) continue;
+      // Owner-liveness gate: adopt only when EVERY active lane's run lease
+      // has expired. Live-owned campaigns are left to their owner.
+      const liveness: boolean[] = [];
+      for (const lane of activeLanes) {
+        if (!lane.forgeRunId) {
+          liveness.push(false);
+          continue;
+        }
+        const run = await store.readRun(lane.forgeRunId, ctx.signal);
+        const lease = run.state?.lease;
+        liveness.push(lease ? !isLeaseExpired(lease, new Date()) : false);
+      }
+      if (liveness.some(Boolean)) continue;
+      const link: ActiveOrchestrationLink = {
+        orchestrationId,
+        repository: persisted.repository,
+        repositoryRoot,
+        stateBranch: policy.state.branch,
+        issueNumbers: persisted.lanes.map((lane) => lane.issueNumber),
+        integrationBranch: persisted.integrationBranch,
+        maxConcurrent: persisted.maxConcurrent,
+        status: "running",
+      };
+      this.#links.set(orchestrationId, link);
+      adopted.push(orchestrationId);
+      for (const lane of activeLanes) {
+        if (!lane.forgeRunId) continue;
+        let event: WorkOnLifecycleEvent | undefined;
+        try {
+          event = await this.#workOn.adoptOrphanedRun({
+            orchestrationId,
+            forgeRunId: lane.forgeRunId,
+            subagentRunId: lane.subagentRunId ?? "",
+            repositoryRoot,
+            ctx,
+          });
+        } catch {
+          event = undefined;
+        }
+        if (event) {
+          await this.#handleLifecycle(event, ctx);
+          continue;
+        }
+        await this.#failOrphanedLane(
+          store,
+          link,
+          { issueNumber: lane.issueNumber, forgeRunId: lane.forgeRunId },
+          ctx,
+        );
+      }
+      await this.#pump(link, ctx);
+    }
+    return adopted;
+  }
+
+  /** Fail a non-finishable orphan lane durably and restore dispatch eligibility. */
+  async #failOrphanedLane(
+    store: GitHubStateBranchStore,
+    link: ActiveOrchestrationLink,
+    lane: { issueNumber: number; forgeRunId: string },
+    ctx: ExtensionContext,
+  ): Promise<void> {
+    const reason =
+      "Orphaned: the work-on child was lost before completion and no durable result could be reconstructed; the issue is re-dispatched by the next campaign.";
+    await new OrchestrationJournal(store).append({
+      orchestrationId: link.orchestrationId,
+      type: "lane.failed",
+      payload: { issueNumber: lane.issueNumber, reason },
+      idempotencyKey: `lane:${lane.issueNumber}:orphaned`,
+      message: `Fail orphaned lane for issue ${lane.issueNumber}`,
+      ...(ctx.signal ? { signal: ctx.signal } : {}),
+    });
+    await new RunJournal(store).append({
+      runId: lane.forgeRunId,
+      type: "run.cancelled",
+      payload: { reason },
+      idempotencyKey: "run:cancelled",
+      sessionId: ctx.sessionManager.getSessionId(),
+      message: `Cancel orphaned ForgeDock run ${lane.forgeRunId}`,
+      ...(ctx.signal ? { signal: ctx.signal } : {}),
+    });
+    const adapter = this.#githubFor(link);
+    await adapter
+      .removeIssueLabels(
+        lane.issueNumber,
+        ["workflow:building", "workflow:in-review", "workflow:ready-to-build", "needs-human", "staging-review"],
+        ctx.signal,
+      )
+      .catch(() => undefined);
+  }
+
   async resume(ctx: ExtensionContext): Promise<void> {
+    await this.adoptOrphaned(ctx).catch((error) =>
+      ctx.ui.notify(
+        `ForgeDock orphan adoption failed: ${errorMessage(error)}`,
+        "warning",
+      ),
+    );
     for (const link of this.#links.values()) {
       if (link.status !== "running") continue;
       try {
@@ -601,6 +787,37 @@ export class ForgeOrchestrationController {
             laneReservationKey(link.orchestrationId, lane.issueNumber),
           );
           if (!reservation) break;
+          if (
+            await this.#priorInvalidVerdict(link, lane.issueNumber, ctx.signal)
+          ) {
+            reservation.release();
+            await current.journal.append({
+              orchestrationId: link.orchestrationId,
+              type: "lane.closed",
+              payload: {
+                issueNumber: lane.issueNumber,
+                reason:
+                  "Prior durable invalid/no-change verdict for this finding; closed invalid instead of re-building.",
+              },
+              idempotencyKey: `lane:${lane.issueNumber}:closed-prevalidated`,
+              message: `Close pre-validated invalid issue ${lane.issueNumber}`,
+              ...(ctx.signal ? { signal: ctx.signal } : {}),
+            });
+            const gateGithub = this.#githubFor(link);
+            await gateGithub
+              .postIssueComment(
+                lane.issueNumber,
+                "<!-- FORGE:INVALID -->\nClosed invalid: a prior run durably adjudicated this finding (FORGE:COMMIT:NO-CHANGE / FORGE:INVALID). Re-build skipped by dispatch gate.",
+                ctx.signal,
+              )
+              .catch(() => undefined);
+            await gateGithub.closeIssue(lane.issueNumber, ctx.signal).catch(
+              () => undefined,
+            );
+            progress = true;
+            current = await this.#read(link, ctx.signal);
+            continue;
+          }
           const existing = this.#workOn
             .listRuns()
             .find(

@@ -246,6 +246,51 @@ export class GitHubStateBranchStore {
     };
   }
 
+  /**
+   * Enumerate durable orchestrations from the state branch tree. Returns the
+   * persisted snapshot per id (fast liveness filtering); callers must re-read
+   * via readOrchestration for the authoritative event-replayed state.
+   */
+  async listOrchestrations(
+    signal?: AbortSignal,
+  ): Promise<Array<{ orchestrationId: string; state?: OrchestrationState }>> {
+    const tip = await this.getTip(signal);
+    if (!tip) return [];
+    const entries = await this.#readTree(tip, signal);
+    const ids = new Set<string>();
+    for (const entry of entries) {
+      const match = /^\.forgedock\/orchestrations\/([^/]+)\/snapshot\.json$/.exec(
+        entry.path,
+      );
+      if (match?.[1]) ids.add(match[1]);
+    }
+    const out: Array<{
+      orchestrationId: string;
+      state?: OrchestrationState;
+    }> = [];
+    for (const orchestrationId of ids) {
+      const text = await this.#readPath(
+        entries,
+        orchestrationSnapshotPath(orchestrationId),
+        signal,
+      );
+      if (!text) continue;
+      try {
+        const parsed: unknown = parseJson(text, "orchestration snapshot");
+        if (
+          !parsed ||
+          typeof parsed !== "object" ||
+          typeof (parsed as { status?: unknown }).status !== "string"
+        )
+          continue;
+        out.push({ orchestrationId, state: parsed as OrchestrationState });
+      } catch {
+        // Unreadable snapshots cannot block adoption of the others.
+      }
+    }
+    return out;
+  }
+
   async readOrchestration(
     orchestrationId: string,
     signal?: AbortSignal,

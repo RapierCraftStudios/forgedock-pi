@@ -96,6 +96,8 @@ export interface ForgePolicy {
   orchestration: {
     maxConcurrent: number;
     maxIssues: number;
+    /** Adopt orphaned campaigns from durable state on session start. */
+    autoAdopt?: boolean;
   };
   subagents: {
     maxConcurrent: number;
@@ -114,6 +116,7 @@ export interface LocalForgeOverrides {
   };
   orchestration?: {
     maxConcurrent?: number;
+    autoAdopt?: boolean;
   };
   subagents?: {
     maxConcurrent?: number;
@@ -359,6 +362,10 @@ export function parseForgePolicy(value: unknown): ForgePolicy {
           : integer(review.maxRounds, "review.maxRounds", 1, 5),
     },
     orchestration: {
+      autoAdopt:
+        orchestration?.autoAdopt === undefined
+          ? undefined
+          : boolean(orchestration.autoAdopt, "orchestration.autoAdopt"),
       maxConcurrent:
         orchestration?.maxConcurrent === undefined
           ? 2

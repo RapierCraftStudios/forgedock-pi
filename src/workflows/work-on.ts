@@ -66,7 +66,11 @@ import {
   isProtectedBranch,
   type ForgePolicy,
 } from "../core/policy.ts";
-import { isLeaseExpired, type RepositoryLease } from "../core/lease.ts";
+import {
+  isLeaseExpired,
+  takeoverLease,
+  type RepositoryLease,
+} from "../core/lease.ts";
 import type {
   FinalReviewDecision,
   VerificationResult,
@@ -3504,6 +3508,118 @@ export class ForgeWorkOnController {
     };
   }
 
+  /**
+   * Adopt an orphaned run whose owning session is gone: the run lease has
+   * expired (the liveness signal), so re-arm authority with a human-authorized
+   * takeover, reconstruct the run link from durable state, and reconcile the
+   * lane — finalizing/merging when a result is recoverable. Returns undefined
+   * when the run is not orphaned or cannot be finished.
+   */
+  async adoptOrphanedRun(input: {
+    orchestrationId: string;
+    forgeRunId: string;
+    subagentRunId: string;
+    repositoryRoot: string;
+    ctx: ExtensionContext;
+  }): Promise<WorkOnLifecycleEvent | undefined> {
+    const { orchestrationId, forgeRunId, subagentRunId, repositoryRoot, ctx } =
+      input;
+    const { policy } = await loadForgePolicy(repositoryRoot);
+    const tokenProvider = createGitHubTokenProvider(this.#pi, repositoryRoot);
+    const store = new GitHubStateBranchStore(
+      new FetchGitHubTransport({ tokenProvider }),
+      policy.repository.name,
+      policy.state.branch,
+    );
+    const current = await store.readRun(forgeRunId, ctx.signal);
+    const state: import("../core/state.ts").RunState | undefined = current.state;
+    if (!state || state.status !== "active" || !state.lease) return undefined;
+    const now = new Date();
+    if (!isLeaseExpired(state.lease, now)) return undefined; // owner alive
+    const sessionId = ctx.sessionManager.getSessionId();
+    const newLease = takeoverLease(state.lease, {
+      repository: state.repository,
+      owner: { runId: forgeRunId, sessionId },
+      now,
+      ttlSeconds: policy.state.leaseSeconds,
+      authorizedBy: `operator-directed adoption via session ${sessionId}`,
+    });
+    const journal = new RunJournal(store);
+    await journal.append({
+      runId: forgeRunId,
+      type: "lease.taken-over",
+      payload: { lease: newLease },
+      actorLeaseEpoch: newLease.epoch,
+      actorKind: "human",
+      idempotencyKey: `lease:takeover:${newLease.epoch}`,
+      sessionId,
+      message: `Adopt orphaned ForgeDock run ${forgeRunId} (operator-directed takeover)`,
+      ...(ctx.signal ? { signal: ctx.signal } : {}),
+    });
+    let link = this.#links.get(forgeRunId);
+    if (!link) {
+      const worktreePath = join(
+        repositoryRoot,
+        ".forge",
+        "worktrees",
+        forgeRunId,
+      );
+      const branch = `forge/issue-${state.issueNumber}-${forgeRunId.slice(0, 8)}`;
+      const baseSha = this.#adoptedBaseSha(state) ?? "";
+      link = {
+        forgeRunId,
+        subagentRunId,
+        issueNumber: state.issueNumber,
+        repository: state.repository,
+        stateBranch: policy.state.branch,
+        resultPath: join(
+          worktreePath,
+          ".pi",
+          "forge",
+          `${forgeRunId}-work-on.json`,
+        ),
+        prepared: {
+          repositoryRoot,
+          worktreePath,
+          branch,
+          baseBranch: state.integrationBranch,
+          baseSha,
+        },
+        status: "running",
+        executionMode: "orchestrated",
+        orchestrationId,
+        leaseOwnerRunId: forgeRunId,
+        leaseEpoch: newLease.epoch,
+        leaseSeconds: policy.state.leaseSeconds,
+        heartbeatSeconds: policy.state.heartbeatSeconds,
+        lastHeartbeatAt: newLease.lastHeartbeatAt,
+        reviewBaseSha: baseSha,
+        refreshes: 0,
+        providerRetries: 0,
+        remediationAttempts: 0,
+        findingIssueMap: {},
+        issueContext: "Adopted orphaned run; complete from durable state.",
+        activeNodes: {},
+      };
+      this.#persistLink(link);
+    }
+    return this.reconcileOrchestrationIssue(
+      orchestrationId,
+      state.issueNumber,
+      ctx,
+    );
+  }
+
+  /** Frozen base SHA recorded by prepare-worktree, when reconstructable. */
+  #adoptedBaseSha(state: import("../core/state.ts").RunState): string | undefined {
+    const attempt = state.phases["prepare-worktree"]?.attempts.at(-1);
+    for (const evidence of attempt?.evidence ?? []) {
+      const match = /Frozen base is ([0-9a-f]{40})/.exec(evidence);
+      if (match?.[1]) return match[1];
+    }
+    return undefined;
+  }
+
   async reconcileOrchestrationIssue(
     orchestrationId: string,
     issueNumber: number,
@@ -3882,8 +3998,14 @@ export class ForgeWorkOnController {
   async #loadResult(link: ActiveRunLink): Promise<ForgeWorkOnResult> {
     let result: ForgeWorkOnResult | undefined;
     if (link.executionMode !== "direct") {
-      const statusPayload = await this.#rpc.status(link.subagentRunId);
-      result = findForgeWorkOnResult(statusPayload);
+      // An adopting session has no rpc knowledge of the original child; a
+      // dead/unreachable child must fall through to the durable result file
+      // and worktree reconstruction instead of failing the load.
+      const statusPayload = await this.#rpc
+        .status(link.subagentRunId)
+        .catch(() => undefined);
+      if (statusPayload !== undefined)
+        result = findForgeWorkOnResult(statusPayload);
     }
     if (!result) {
       const resultText = await readFile(link.resultPath, "utf8").catch(
