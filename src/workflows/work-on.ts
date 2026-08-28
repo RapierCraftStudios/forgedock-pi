@@ -26,6 +26,7 @@ import {
   findForgeNodeResult,
   findForgeReviewerResult,
   findForgeWorkOnResult,
+  isForgeWorkOnResult,
   type ForgeNodeResult,
   type ForgeReviewerResult,
   type ForgeWorkOnResult,
@@ -3892,11 +3893,84 @@ export class ForgeWorkOnController {
         findForgeWorkOnResult(resultText) ??
         findForgeWorkOnResult(extractJsonObject(resultText));
     }
+    if (!result) {
+      // A child that died between reviewer finalization and its own trusted
+      // result write leaves an empty result file. The durable reviewer
+      // artifacts plus Git facts are sufficient to reconstruct the identical
+      // result; requiring the child's file would burn the completed lane.
+      result = await this.#reconstructResultFromWorktree(link).catch(
+        () => undefined,
+      );
+    }
     if (!result)
       throw new Error(
         "Completed work-on subagent did not return a schema-valid Forge result artifact.",
       );
     return result;
+  }
+
+  /** Rebuild the final result from trusted reviewer artifacts and Git facts. */
+  async #reconstructResultFromWorktree(
+    link: ActiveRunLink,
+  ): Promise<ForgeWorkOnResult> {
+    if (link.executionMode === "direct" || link.refreshes > 0) {
+      throw new Error(
+        "Result reconstruction is not supported for this run binding.",
+      );
+    }
+    const worktree = link.prepared.worktreePath;
+    const headSha = (await this.#git.head(worktree)).trim();
+    const baseSha = link.reviewBaseSha || link.prepared.baseSha;
+    if (!headSha || headSha === baseSha)
+      throw new Error("Worktree head does not carry a reviewable diff.");
+    const changedFiles = (
+      await this.#git.changedFiles(worktree, baseSha)
+    ).filter(Boolean);
+    const forgeDir = join(worktree, ".pi", "forge");
+    const reviewers = [];
+    for (const reviewer of [
+      "forge-review-correctness",
+      "forge-review-security",
+    ]) {
+      const text = await readFile(
+        join(forgeDir, `${link.forgeRunId}-${reviewer}.json`),
+        "utf8",
+      ).catch(() => "");
+      const parsed = findForgeReviewerResult(text);
+      if (!parsed || parsed.headSha !== headSha)
+        throw new Error(
+          `Reviewer artifact ${reviewer} is missing or bound to a different head.`,
+        );
+      reviewers.push(parsed);
+    }
+    const findings = reviewers.flatMap((entry) => entry.findings ?? []);
+    const reconstructed: ForgeWorkOnResult = {
+      schema: "forgedock.work-on-result/v1",
+      runId: link.forgeRunId,
+      issueNumber: link.issueNumber,
+      status: "ready-for-merge",
+      branch: link.prepared.branch,
+      baseSha,
+      headSha,
+      changedFiles,
+      verification: [
+        {
+          name: "local-verification",
+          status: "skipped",
+        },
+      ],
+      residualRisks: [],
+      review: {
+        headSha,
+        rounds: 1,
+        completedReviewers: reviewers.map((entry) => entry.reviewer),
+        reviewerResults: reviewers,
+        findings,
+      },
+    };
+    if (!isForgeWorkOnResult(reconstructed))
+      throw new Error("Reconstructed result failed schema validation.");
+    return reconstructed;
   }
 
   async #attemptRemediation(input: {
@@ -4311,6 +4385,66 @@ export class ForgeWorkOnController {
       );
     if (link.builderContract)
       assertBuilderContractPaths(link.builderContract, actualFiles);
+
+    if (actualFiles.length === 0) {
+      // Zero-diff closure: the finding was stale or already clean on the
+      // frozen base (the implement node recorded FORGE:COMMIT:NO-CHANGE).
+      // No PR can exist for an empty diff — attempting one fails with an
+      // unactionable 422 — so close the issue autonomously instead.
+      await appendPhase(
+        journal,
+        link.forgeRunId,
+        "merge",
+        "complete",
+        1,
+        sessionId,
+        ctx.signal,
+        undefined,
+        [
+          "no-change closure: frozen diff is empty; no PR created",
+          "FORGE:COMMIT:NO-CHANGE",
+        ],
+      );
+      await github.closeIssue(link.issueNumber, ctx.signal);
+      const closed = await github.getIssue(link.issueNumber, ctx.signal);
+      if (closed.state !== "closed")
+        throw new Error("Issue close read-back failed.");
+      await appendEffect(
+        journal,
+        link.forgeRunId,
+        "issue-close",
+        `issue-close:${link.issueNumber}`,
+        digest(String(link.issueNumber)),
+        sessionId,
+        ctx.signal,
+      );
+      await appendPhase(
+        journal,
+        link.forgeRunId,
+        "cleanup",
+        "complete",
+        1,
+        sessionId,
+        ctx.signal,
+        undefined,
+        ["no-change closure terminal"],
+      );
+      await journal.append({
+        runId: link.forgeRunId,
+        type: "run.completed",
+        payload: { outcome: "closed" },
+        idempotencyKey: "run:complete",
+        sessionId,
+        message: `Complete ForgeDock run ${link.forgeRunId} as no-change closure`,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      link.status = "completed";
+      link.terminalOutcome = "closed";
+      link.activeNodes = {};
+      link.currentNodeId = undefined;
+      this.#persistLink(link);
+      return;
+    }
 
     await appendPhase(
       journal,
