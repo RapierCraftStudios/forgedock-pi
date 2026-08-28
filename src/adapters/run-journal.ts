@@ -181,7 +181,12 @@ export class RunJournal {
         await stateCasBackoff(attempt, input.signal);
         continue;
       }
-      assertCurrentAuthority(current.state, current.lease, new Date());
+      assertCurrentAuthority(
+        current.state,
+        current.lease,
+        new Date(),
+        input.type,
+      );
       const epoch = current.state.lease?.epoch ?? current.state.leaseBinding?.epoch;
       if (epoch === undefined)
         throw new Error(`Run ${input.runId} has no active lease authority.`);
@@ -263,12 +268,18 @@ function assertCurrentAuthority(
   state: RunState,
   repositoryLease: RepositoryLease | undefined,
   now: Date,
+  eventType?: RunEventType,
 ): void {
+  // Cancellation is a terminal, safety-positive transition and must never be
+  // blocked by lease expiry: a stale or crashed run must stay cancellable by
+  // the operator or orchestrator regardless of authority state (cancellation
+  // cannot advance work, it can only stop it).
+  const cancellationAllowed = eventType === "run.cancelled";
   if (state.authorityMode === "run-scoped") {
     if (
       !state.lease ||
       state.lease.ownerRunId !== state.runId ||
-      isLeaseExpired(state.lease, now)
+      (!cancellationAllowed && isLeaseExpired(state.lease, now))
     )
       throw new Error(`Run ${state.runId} has invalid or expired run-scoped authority.`);
     return;
@@ -278,8 +289,9 @@ function assertCurrentAuthority(
       !repositoryLease ||
       repositoryLease.ownerRunId !== state.runId ||
       repositoryLease.epoch !== state.lease.epoch ||
-      isLeaseExpired(state.lease, now) ||
-      isLeaseExpired(repositoryLease, now)
+      (!cancellationAllowed &&
+        (isLeaseExpired(state.lease, now) ||
+          isLeaseExpired(repositoryLease, now)))
     )
       throw new Error(`Run ${state.runId} no longer owns the repository lease.`);
     return;
@@ -289,7 +301,7 @@ function assertCurrentAuthority(
       !repositoryLease ||
       repositoryLease.ownerRunId !== state.leaseBinding.ownerRunId ||
       repositoryLease.epoch !== state.leaseBinding.epoch ||
-      isLeaseExpired(repositoryLease, now)
+      (!cancellationAllowed && isLeaseExpired(repositoryLease, now))
     ) {
       throw new Error(
         `Run ${state.runId} orchestration lease binding is stale.`,
