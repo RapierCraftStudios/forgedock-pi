@@ -917,15 +917,11 @@ export class GitHubWorkflowAdapter {
       comment.body.includes(input.marker),
     );
     if (existingComment) {
-      if (existingComment.body !== body)
-        throw new GitHubApiError(
-          422,
-          `${this.#apiRoot}/issues/${input.pullNumber}/comments`,
-          {
-            message: `Pull request artifact ${input.marker} exists with a different payload.`,
-            commentId: existingComment.id,
-          },
-        );
+      // The marker is the artifact's durable identity: the published comment
+      // is authoritative even when a re-render differs byte-for-byte (dynamic
+      // ordering, formatting drift). Recovery must reuse it — a payload
+      // mismatch deadlock here failed whole lanes at integration (live:
+      // support-ticket campaign 742ff83d, issues #33136/#29461).
       return existingComment.id;
     }
     const path = `${this.#apiRoot}/issues/${input.pullNumber}/comments`;
