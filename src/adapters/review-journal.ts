@@ -2,7 +2,6 @@ import {
   type CommitReviewStateInput,
   type GitHubStateBranchStore,
   type ReadReviewStateResult,
-  StateBranchConflictError,
 } from "./github-state.ts";
 import { canonicalJson } from "../core/events.ts";
 import {
@@ -17,8 +16,7 @@ import {
   type ReviewState,
 } from "../core/review-state.ts";
 import {
-  MAX_STATE_CAS_ATTEMPTS,
-  stateCasBackoff,
+  stateCas,
 } from "./state-cas.ts";
 
 export interface InitializeReviewInput {
@@ -74,7 +72,7 @@ export class ReviewJournal {
       throw new TypeError("pullNumber and pullRequest must match.");
 
     await this.#store.ensureBranch(input.now ?? new Date(), input.signal);
-    for (let attempt = 1; attempt <= MAX_STATE_CAS_ATTEMPTS; attempt += 1) {
+    return stateCas(async () => {
       const existing = await this.#store.readReview(input.reviewId, input.signal);
       if (!existing.snapshotMatchesJournal)
         throw new Error(`Review ${input.reviewId} has an invalid snapshot/journal pair.`);
@@ -114,25 +112,15 @@ export class ReviewJournal {
       });
       const state = applyReviewEvent(undefined, event);
       const events: ReviewEvent[] = [event];
-      try {
-        const tip = await this.#store.commitReviewState({
-          expectedTip: existing.tip,
-          events,
-          state,
-          message: `Initialize ForgeDock review ${input.reviewId}`,
-          ...(input.signal ? { signal: input.signal } : {}),
-        });
-        return { tip, events, state, snapshotMatchesJournal: true };
-      } catch (error) {
-        if (
-          !(error instanceof StateBranchConflictError) ||
-          attempt === MAX_STATE_CAS_ATTEMPTS
-        )
-          throw error;
-        await stateCasBackoff(attempt, input.signal);
-      }
-    }
-    throw new Error(`Unable to initialize review ${input.reviewId}.`);
+      const tip = await this.#store.commitReviewState({
+        expectedTip: existing.tip,
+        events,
+        state,
+        message: `Initialize ForgeDock review ${input.reviewId}`,
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+      return { tip, events, state, snapshotMatchesJournal: true };
+    }, input.signal);
   }
 
   async read(
@@ -152,7 +140,7 @@ export class ReviewJournal {
   }
 
   async append(input: AppendReviewEventInput): Promise<ReviewJournalSnapshot> {
-    for (let attempt = 1; attempt <= MAX_STATE_CAS_ATTEMPTS; attempt += 1) {
+    return stateCas(async () => {
       const current = await this.#store.readReview(input.reviewId, input.signal);
       if (!current.snapshotMatchesJournal)
         throw new Error(`Review ${input.reviewId} has an invalid snapshot/journal pair.`);
@@ -196,19 +184,9 @@ export class ReviewJournal {
         message: input.message,
         ...(input.signal ? { signal: input.signal } : {}),
       };
-      try {
-        const tip = await this.#store.commitReviewState(commit);
-        return { tip, events, state, snapshotMatchesJournal: true };
-      } catch (error) {
-        if (
-          !(error instanceof StateBranchConflictError) ||
-          attempt === MAX_STATE_CAS_ATTEMPTS
-        )
-          throw error;
-        await stateCasBackoff(attempt, input.signal);
-      }
-    }
-    throw new Error(`Unable to append review ${input.reviewId}.`);
+      const tip = await this.#store.commitReviewState(commit);
+      return { tip, events, state, snapshotMatchesJournal: true };
+    }, input.signal);
   }
 
   /** Explicit name for callers that append a review event. */

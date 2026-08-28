@@ -1,6 +1,6 @@
 import {
+  type CommitRunStateInput,
   type GitHubStateBranchStore,
-  StateBranchConflictError,
 } from "./github-state.ts";
 import {
   createRunEvent,
@@ -15,8 +15,8 @@ import {
 } from "../core/lease.ts";
 import { applyRunEvent, type RunState } from "../core/state.ts";
 import {
-  MAX_STATE_CAS_ATTEMPTS,
-  stateCasBackoff,
+  stateCas,
+  StateCasRetry,
 } from "./state-cas.ts";
 
 export interface InitializeRunInput {
@@ -47,7 +47,7 @@ export class RunJournal {
 
   async initialize(input: InitializeRunInput): Promise<JournalSnapshot> {
     await this.#store.ensureBranch(input.now ?? new Date(), input.signal);
-    for (let attempt = 1; attempt <= MAX_STATE_CAS_ATTEMPTS; attempt += 1) {
+    return stateCas(async () => {
       const existing = await this.#store.readRun(input.runId, input.signal);
       if (existing.events.length > 0)
         throw new Error(`Run ${input.runId} already exists.`);
@@ -76,45 +76,33 @@ export class RunJournal {
       });
       let state = applyRunEvent(undefined, created);
       const events: RunEvent[] = [created];
-      {
-        const acquired = createRunEvent({
-          runId: input.runId,
-          repository: input.repository,
-          sequence: 2,
-          previousEventHash: state.lastEventHash,
-          type: "lease.acquired",
-          actor: {
-            kind: "extension",
-            sessionId: input.sessionId,
-            leaseEpoch: lease.epoch,
-          },
-          idempotencyKey: `lease:acquire:${lease.epoch}`,
-          payload: { lease },
-          occurredAt: now.toISOString(),
-        });
-        state = applyRunEvent(state, acquired);
-        events.push(acquired);
-      }
-      try {
-        const tip = await this.#store.commitRunState({
-          expectedTip: existing.tip,
-          events,
-          state,
-          runScopedAuthority: true,
-          message: `Initialize ForgeDock run ${input.runId}`,
-          ...(input.signal ? { signal: input.signal } : {}),
-        });
-        return { tip, events, state, lease };
-      } catch (error) {
-        if (
-          !(error instanceof StateBranchConflictError) ||
-          attempt === MAX_STATE_CAS_ATTEMPTS
-        )
-          throw error;
-        await stateCasBackoff(attempt, input.signal);
-      }
-    }
-    throw new Error(`Unable to initialize run ${input.runId}.`);
+      const acquired = createRunEvent({
+        runId: input.runId,
+        repository: input.repository,
+        sequence: 2,
+        previousEventHash: state.lastEventHash,
+        type: "lease.acquired",
+        actor: {
+          kind: "extension",
+          sessionId: input.sessionId,
+          leaseEpoch: lease.epoch,
+        },
+        idempotencyKey: `lease:acquire:${lease.epoch}`,
+        payload: { lease },
+        occurredAt: now.toISOString(),
+      });
+      state = applyRunEvent(state, acquired);
+      events.push(acquired);
+      const tip = await this.#store.commitRunState({
+        expectedTip: existing.tip,
+        events,
+        state,
+        runScopedAuthority: true,
+        message: `Initialize ForgeDock run ${input.runId}`,
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+      return { tip, events, state, lease };
+    }, input.signal);
   }
 
   async append(input: {
@@ -127,14 +115,10 @@ export class RunJournal {
     message: string;
     signal?: AbortSignal;
   }): Promise<JournalSnapshot> {
-    for (let attempt = 1; attempt <= MAX_STATE_CAS_ATTEMPTS; attempt += 1) {
+    return stateCas(async () => {
       const current = await this.#store.readRun(input.runId, input.signal);
-      if (!current.state) {
-        if (attempt === MAX_STATE_CAS_ATTEMPTS)
-          throw new Error(`Run ${input.runId} does not exist.`);
-        await stateCasBackoff(attempt, input.signal);
-        continue;
-      }
+      if (!current.state)
+        throw new StateCasRetry(`Run ${input.runId} does not exist.`);
       assertCurrentAuthority(
         current.state,
         current.lease,
@@ -168,33 +152,32 @@ export class RunJournal {
       });
       const state = applyRunEvent(current.state, event);
       const events = [...current.events, event];
-      try {
-        const tip = await this.#store.commitRunState({
-          expectedTip: current.tip,
-          events,
-          state,
-          ...(state.authorityMode === "run-scoped"
-            ? { runScopedAuthority: true }
-            : state.lease
-              ? { lease: state.lease }
-              : state.leaseBinding
-                ? { preserveRepositoryLease: true }
-                : {}),
-          message: input.message,
-          ...(input.signal ? { signal: input.signal } : {}),
-        });
-        return { tip, events, state, ...(state.lease ? { lease: state.lease } : {}) };
-      } catch (error) {
-        if (
-          !(error instanceof StateBranchConflictError) ||
-          attempt === MAX_STATE_CAS_ATTEMPTS
-        )
-          throw error;
-        await stateCasBackoff(attempt, input.signal);
-      }
-    }
-    throw new Error(`Unable to append run ${input.runId}.`);
+      const tip = await this.#store.commitRunState({
+        expectedTip: current.tip,
+        events,
+        state,
+        ...commitAuthorityFlags(state),
+        message: input.message,
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+      return { tip, events, state, ...(state.lease ? { lease: state.lease } : {}) };
+    }, input.signal);
   }
+}
+
+/** Select the durable-authority flags a run-state commit must carry. */
+function commitAuthorityFlags(
+  state: RunState,
+): Partial<
+  Pick<
+    CommitRunStateInput,
+    "runScopedAuthority" | "lease" | "preserveRepositoryLease"
+  >
+> {
+  if (state.authorityMode === "run-scoped") return { runScopedAuthority: true };
+  if (state.lease) return { lease: state.lease };
+  if (state.leaseBinding) return { preserveRepositoryLease: true };
+  return {};
 }
 
 function assertCurrentAuthority(
