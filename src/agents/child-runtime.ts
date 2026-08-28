@@ -44,6 +44,7 @@ import {
   validateBuilderPathContract,
 } from "../core/builder-contract.ts";
 import { workflowLabelForPhaseBoundary } from "../core/artifact-protocol.ts";
+import { renderPullBody } from "../core/pr-body.ts";
 import {
   HUMAN_AUTHORITY_REASONS,
   isHumanAuthorityReason,
@@ -116,6 +117,7 @@ export interface ForgeChildBinding {
   maxReviewRounds: number;
   reviewerTimeoutMs: number;
   verificationCommands: Readonly<Record<string, BoundVerificationCommand>>;
+  verificationGithub?: ForgePolicy["verification"]["github"];
   builderContract?: BuilderPathContract;
   nodeId?: string;
   node?: string;
@@ -207,7 +209,24 @@ interface ForgeCommitDetails {
   hooksDisabled?: boolean;
 }
 
-const PrepareReviewParameters = Type.Object({});
+const PrepareReviewParameters = Type.Object({
+  summary: Type.String({
+    minLength: 1,
+    description:
+      "Authorial summary for the PR body: the defect, why it matters, and the fix in one tight narrative.",
+  }),
+  approach: Type.String({
+    minLength: 1,
+    description:
+      "Authorial approach: the fix strategy, design decisions, and explicit scope boundaries.",
+  }),
+  testingNotes: Type.Optional(
+    Type.String({
+      description:
+        "What was actually run and what happened (commands, results, deploy-surface notes).",
+    }),
+  ),
+});
 
 const ReviewPanelParameters = Type.Object({
   headSha: Type.String({ minLength: 7 }),
@@ -284,6 +303,7 @@ export function registerForgeRuntime(
   let canonicalRoot: string | undefined;
   let caseInsensitivePaths: boolean | undefined;
   let refreshPushLeaseSha: string | undefined;
+  let preparedPull: { number: number; headSha: string } | undefined;
   let reviewDiffCoverage:
     | { headSha: string; sha256: string; bytes: number; coveredBytes: number }
     | undefined;
@@ -964,7 +984,7 @@ export function registerForgeRuntime(
     description:
       "Push the bound clean branch, create or reuse its PR, post FORGE:REVIEW_STARTED, and return the frozen review identity",
     parameters: PrepareReviewParameters,
-    async execute(_toolCallId, _params, signal, _onUpdate, ctx) {
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       assertWorkOnAuthority(binding);
       const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
       const status = await runProcess(
@@ -1064,9 +1084,53 @@ export function registerForgeRuntime(
       const transport = new FetchGitHubTransport({ tokenProvider });
       const github = new GitHubWorkflowAdapter(transport, binding.repository);
       const issue = await github.getIssue(binding.issueNumber, signal);
+      const stat = await runProcess(
+        "git",
+        [
+          "-C",
+          root,
+          "diff",
+          "--numstat",
+          "--find-renames",
+          binding.baseSha,
+          headSha,
+        ],
+        {
+          cwd: root,
+          timeoutMs: 30_000,
+          env: safeEnvironment(binding.runId),
+          ...(signal ? { signal } : {}),
+        },
+      );
+      const fileNotes = stat.stdout
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => {
+          const [additions, deletions, path] = line.split("\t");
+          return {
+            path: path ?? "",
+            change: `+${additions ?? "?"} / −${deletions ?? "?"}`,
+          };
+        })
+        .filter((entry) => entry.path);
+      const changedFiles = fileNotes.map((entry) => entry.path);
       const initialPull = await github.createPullRequest({
         title: issue.title,
-        body: `## Summary\n\nImplements #${binding.issueNumber} through ForgeDock Pi run \`${binding.runId}\`.\n\n## Testing\n\nRequired checks passed before review.\n\nCloses #${binding.issueNumber}\n\n**Reviewed head**: \`${headSha}\``,
+        body: renderPullBody({
+          issueNumber: binding.issueNumber,
+          issueTitle: issue.title,
+          issueBody: issue.body,
+          runId: binding.runId,
+          branch: binding.branch,
+          baseBranch: binding.baseBranch,
+          headSha,
+          summary: params.summary,
+          approach: params.approach,
+          testingNotes: params.testingNotes,
+          fileNotes,
+          changedFiles,
+        }),
         head: binding.branch,
         base: binding.baseBranch,
         ...(signal ? { signal } : {}),
@@ -1080,6 +1144,7 @@ export function registerForgeRuntime(
               headRef: binding.branch,
               ...(signal ? { signal } : {}),
             });
+      preparedPull = { number: pull.number, headSha };
 
       const store = new GitHubStateBranchStore(
         transport,
@@ -1168,10 +1233,15 @@ export function registerForgeRuntime(
         },
         verification: {
           github: {
-            required: true,
-            requiredBranches: [binding.baseBranch],
-            waitTimeoutMs: 1_800_000,
-            pollIntervalMs: 10_000,
+            // Inherited from the repository's own verification config — the
+            // pipeline never enforces CI requirements the repo did not set.
+            // Unconfigured => policy-exempt on lane PRs; GitHub CI remains
+            // authoritative on the staging->main promotion.
+            required: binding.verificationGithub?.required === true,
+            requiredBranches:
+              binding.verificationGithub?.requiredBranches ?? [binding.baseBranch],
+            waitTimeoutMs: binding.verificationGithub?.waitTimeoutMs ?? 1_800_000,
+            pollIntervalMs: binding.verificationGithub?.pollIntervalMs ?? 10_000,
           },
           commands: binding.verificationCommands,
         },
@@ -1610,6 +1680,26 @@ export function registerForgeRuntime(
             )),
           );
         }
+        // Mirror the review report onto the PR itself: future agents mine the
+        // PR for review verdicts and findings, not just the issue.
+        if (
+          params.phase === "review" &&
+          params.action === "complete" &&
+          preparedPull &&
+          typeof params.report === "string" &&
+          params.report.trim()
+        ) {
+          const reviewGithub = new GitHubWorkflowAdapter(
+            transport,
+            binding.repository,
+          );
+          await reviewGithub.postPullArtifact({
+            pullNumber: preparedPull.number,
+            marker: `<!-- FORGE:REVIEW:ROUND:${params.attempt}:${preparedPull.headSha.slice(0, 7)} -->`,
+            body: params.report,
+            ...(signal ? { signal } : {}),
+          });
+        }
         const workflowLabel = workflowLabelForCheckpoint(params);
         if (workflowLabel)
           projectionReceipts.push(
@@ -1789,10 +1879,13 @@ function readBinding(): ForgeChildBinding {
     refresh &&
     (!Number.isSafeInteger(previousReviewRounds) ||
       (previousReviewRounds as number) < 1 ||
-      (previousReviewRounds as number) >= (value.maxReviewRounds as number))
+      (previousReviewRounds as number) > (value.maxReviewRounds as number))
   ) {
+    // A remediated head always receives its verification review: the cap
+    // bounds remediation cycles, so previous == maxReviewRounds is allowed
+    // exactly once more (the verification panel); beyond that, block.
     throw new Error(
-      "Refresh binding previousReviewRounds must allow one additional review round.",
+      "Refresh binding previousReviewRounds must leave room for exactly one verification review round (maxReviewRounds + 1).",
     );
   }
   return {
