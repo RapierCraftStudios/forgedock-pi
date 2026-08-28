@@ -489,6 +489,11 @@ export class SubagentsRpcClient {
       output: resultPath,
       outputMode: "file-only",
       timeoutMs: input.policy.subagents.workOnTimeoutMs,
+      // Work-on children legitimately hold single durable tool calls (nested
+      // review panels, guarded verification) for tens of minutes. The default
+      // attention threshold turns those into supervision storms; only flag
+      // when a call is quiet far beyond any legitimate panel duration.
+      control: { enabled: true, needsAttentionAfterMs: 1_800_000 },
       acceptance: {
         level: "none",
         reason:
@@ -566,6 +571,7 @@ export class SubagentsRpcClient {
       output: resultPath,
       outputMode: "file-only",
       timeoutMs: input.policy.subagents.workOnTimeoutMs,
+      control: { enabled: true, needsAttentionAfterMs: 1_800_000 },
       acceptance: {
         level: "none",
         reason:

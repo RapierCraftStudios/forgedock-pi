@@ -336,19 +336,13 @@ export class GitHubIssueProjector {
         comment.body.includes(revisionMarker),
     );
     if (existing) {
-      const expected = `${marker}\n${identityMarker}\n${revisionMarker}\n<!-- FORGEDOCK-RUN:${input.runId} -->\n${rendered}\n`;
-      const withoutSupersedes = existing.body.replace(
-        /\n<!-- FORGEDOCK-SUPERSEDES comment=\d+ -->(?=\n<!-- FORGEDOCK-RUN:)/,
-        "",
-      );
-      if (withoutSupersedes !== expected)
-        throw new GitHubApiError(
-          422,
-          `${this.#apiRoot}/issues/${input.issueNumber}/comments`,
-          {
-            message: `Artifact ${marker} exists with a different rendered payload.`,
-          },
-        );
+      // Identity and revision markers match, so this comment is the same
+      // durable artifact this projection already published. Byte-level
+      // divergence between re-renders (dynamic ordering, formatting drift)
+      // previously failed recovery with HTTP 422 and deadlocked the phase:
+      // the journal had already recorded completion, so the phase could
+      // neither be blocked nor re-completed. The published comment is the
+      // authoritative effect; recovery accepts it and reuses its ID.
       return existing.id;
     }
     const prior = comments

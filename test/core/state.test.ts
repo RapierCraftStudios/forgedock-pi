@@ -12,6 +12,7 @@ import { createBuilderPathContract } from "../../src/core/builder-contract.ts";
 import { acquireLease, takeoverLease } from "../../src/core/lease.ts";
 import {
   applyRunEvent,
+  replayRunEvents,
   StateTransitionError,
   type RunState,
 } from "../../src/core/state.ts";
@@ -68,6 +69,61 @@ function initializedState(): RunState {
     nextEvent(state, "lease.acquired", { lease }, "lease:1", 1),
   );
   return state;
+}
+
+function runScopedInitializedState(): RunState {
+  let state = applyRunEvent(
+    undefined,
+    createRunEvent({
+      runId,
+      repository,
+      sequence: 1,
+      previousEventHash: null,
+      type: "run.created",
+      actor: { kind: "extension", sessionId, leaseEpoch: 0 },
+      idempotencyKey: "run:create",
+      payload: {
+        issueNumber: 42,
+        integrationBranch: "staging",
+        protectedBranch: "main",
+        authorityMode: "run-scoped",
+      },
+      eventId: "event-1-run:create",
+      occurredAt,
+    }),
+  );
+  const lease = acquireLease(undefined, {
+    repository,
+    owner: { runId, sessionId },
+    now: new Date(occurredAt),
+    ttlSeconds: 3_600,
+  });
+  state = applyRunEvent(
+    state,
+    nextEvent(state, "lease.acquired", { lease }, "lease:1", 1),
+  );
+  return state;
+}
+
+function eventAt(
+  state: RunState,
+  type: RunEventType,
+  payload: RunEventPayload,
+  idempotencyKey: string,
+  at: string,
+): RunEvent {
+  return createRunEvent({
+    runId,
+    repository,
+    sequence: state.sequence + 1,
+    previousEventHash: state.lastEventHash,
+    type,
+    actor: { kind: "extension", sessionId, leaseEpoch: state.lease?.epoch ?? 0 },
+    idempotencyKey,
+    payload,
+    eventId: `event-${state.sequence + 1}-${idempotencyKey}`,
+    occurredAt: at,
+  });
 }
 
 function completeResolve(state: RunState): RunState {
@@ -924,4 +980,119 @@ test("needs-human retry requires a human-authorized newer lease epoch", () => {
   );
   assert.equal(state.phases.resolve?.attempts.at(-1)?.status, "queued");
   assert.equal(state.status, "active");
+});
+
+test("run-scoped lease slides forward on every appended journal event", () => {
+  const base = runScopedInitializedState();
+  assert.equal(base.authorityMode, "run-scoped");
+  // acquireLease used occurredAt (00:00) with a 3600s TTL.
+  assert.equal(base.lease?.expiresAt, "2026-01-01T01:00:00.000Z");
+
+  // An event appended 50 minutes later extends authority by the same TTL.
+  const before = new Date(Date.parse(occurredAt) + 50 * 60_000).toISOString();
+  const slid = applyRunEvent(
+    base,
+    eventAt(base, "phase.queued", { phase: "resolve", attempt: 1, restartAction: "retry" }, "resolve:queue", before),
+  );
+  assert.equal(slid.lease?.lastHeartbeatAt, before);
+  assert.equal(slid.lease?.expiresAt, "2026-01-01T01:50:00.000Z");
+
+  // The window slides again from the renewed lease, never shortening.
+  const later = new Date(Date.parse(occurredAt) + 110 * 60_000).toISOString();
+  const slidAgain = applyRunEvent(
+    slid,
+    eventAt(slid, "phase.started", { phase: "resolve", attempt: 1, logicalNodeId: "resolve-1" }, "resolve:start", later),
+  );
+  assert.equal(slidAgain.lease?.expiresAt, "2026-01-01T02:50:00.000Z");
+});
+
+test("sliding renewal is deterministic under replay and stops at terminal states", () => {
+  const base = runScopedInitializedState();
+  const first = new Date(Date.parse(occurredAt) + 30 * 60_000).toISOString();
+  const eventOne = eventAt(base, "phase.queued", { phase: "resolve", attempt: 1, restartAction: "retry" }, "resolve:queue", first);
+  const direct = applyRunEvent(base, eventOne);
+  const lease = acquireLease(undefined, {
+    repository,
+    owner: { runId, sessionId },
+    now: new Date(occurredAt),
+    ttlSeconds: 3_600,
+  });
+  const genesis = createRunEvent({
+    runId,
+    repository,
+    sequence: 1,
+    previousEventHash: null,
+    type: "run.created",
+    actor: { kind: "extension", sessionId, leaseEpoch: 0 },
+    idempotencyKey: "run:create",
+    payload: {
+      issueNumber: 42,
+      integrationBranch: "staging",
+      protectedBranch: "main",
+      authorityMode: "run-scoped",
+    },
+    eventId: "event-1-run:create",
+    occurredAt,
+  });
+  const afterGenesis = applyRunEvent(undefined, genesis);
+  const acquire = createRunEvent({
+    runId,
+    repository,
+    sequence: 2,
+    previousEventHash: afterGenesis.lastEventHash,
+    type: "lease.acquired",
+    actor: { kind: "extension", sessionId, leaseEpoch: 1 },
+    idempotencyKey: "lease:1",
+    payload: { lease },
+    eventId: "event-2-lease:1",
+    occurredAt,
+  });
+  const replayed = replayRunEvents([genesis, acquire, eventOne]);
+  assert.equal(replayed.lease?.expiresAt, direct.lease?.expiresAt);
+
+  // A cancelled run no longer slides its lease: the cancellation event and
+  // the subsequent release leave the lease untouched by renewal.
+  const before = structuredClone(direct.lease);
+  const cancelled = applyRunEvent(
+    direct,
+    eventAt(direct, "run.cancelled", { reason: "operator stopped" }, "run:cancelled", first),
+  );
+  assert.deepEqual(cancelled.lease, before);
+  const afterCancel = new Date(Date.parse(occurredAt) + 60 * 60_000).toISOString();
+  const terminal = applyRunEvent(
+    cancelled,
+    eventAt(cancelled, "lease.released", { ownerRunId: runId, epoch: cancelled.lease?.epoch ?? 1 }, "lease:release", afterCancel),
+  );
+  assert.equal(terminal.status, "cancelled");
+  assert.equal(terminal.lease, undefined);
+});
+
+test("legacy-lease and lease-bearing events never slide the scoped window", () => {
+  const legacyBase = initializedState();
+  const at = new Date(Date.parse(occurredAt) + 30 * 60_000).toISOString();
+  const slid = applyRunEvent(
+    legacyBase,
+    eventAt(legacyBase, "phase.queued", { phase: "resolve", attempt: 1, restartAction: "retry" }, "resolve:queue", at),
+  );
+  assert.equal(slid.lease?.expiresAt, legacyBase.lease?.expiresAt);
+
+  // Lease mutation events re-state the lease verbatim without sliding.
+  const scoped = runScopedInitializedState();
+  const restated = applyRunEvent(
+    scoped,
+    eventAt(
+      scoped,
+      "lease.heartbeat",
+      {
+        lease: {
+          ...(scoped.lease as NonNullable<RunState["lease"]>),
+          lastHeartbeatAt: at,
+          expiresAt: "2026-01-01T01:30:00.000Z",
+        },
+      },
+      "lease:beat",
+      at,
+    ),
+  );
+  assert.equal(restated.lease?.expiresAt, "2026-01-01T01:30:00.000Z");
 });

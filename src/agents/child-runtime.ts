@@ -196,6 +196,17 @@ const CommitParameters = Type.Object({
   kind: StringEnum(["implementation", "review-fixes"] as const),
 });
 
+/** Shared details shape for forge_commit outcomes (normal commit or no-change). */
+interface ForgeCommitDetails {
+  kind: "implementation" | "review-fixes";
+  noChange: boolean;
+  headSha?: string;
+  message?: string;
+  treeSha?: string;
+  committedPaths?: string[];
+  hooksDisabled?: boolean;
+}
+
 const PrepareReviewParameters = Type.Object({});
 
 const ReviewPanelParameters = Type.Object({
@@ -391,24 +402,30 @@ export function registerForgeRuntime(
         throw new Error(
           `Base refresh requires a clean worktree: ${status.stderr || refreshStatus}`,
         );
-      const fetched = await runProcess(
-        "git",
-        [
-          "-C",
+      const fetched = await (async () => {
+        // Fetching origin requires credentials on private repositories, and
+        // the scrubbed environment strips every ambient GitHub credential
+        // source. Reuse the same installation-token askpass used for pushes
+        // so the guarded refresh never depends on ambient identity.
+        const tokenProvider = createGitHubTokenProvider(pi, binding.worktreeRoot);
+        const token = await tokenProvider.get(signal);
+        return runGitWithGitHubToken(
           root,
-          "fetch",
-          "--no-tags",
-          "origin",
-          binding.baseBranch,
-          binding.branch,
-        ],
-        {
-          cwd: root,
-          timeoutMs: 120_000,
-          env,
-          ...(signal ? { signal } : {}),
-        },
-      );
+          [
+            "-C",
+            root,
+            "fetch",
+            "--no-tags",
+            "origin",
+            binding.baseBranch,
+            binding.branch,
+          ],
+          token,
+          binding.runId,
+          signal,
+          120_000,
+        );
+      })();
       if (fetched.exitCode !== 0)
         throw new Error(`Unable to fetch refresh refs: ${fetched.stderr}`);
       const base = await runProcess(
@@ -670,10 +687,26 @@ export function registerForgeRuntime(
         throw new Error(
           `Refusing to commit Forge runtime paths: ${runtimePaths.join(", ")}.`,
         );
-      if (changedPaths.length === 0)
-        throw new Error(
-          "Cannot create a Forge commit with no worktree changes.",
-        );
+      if (changedPaths.length === 0) {
+        // A zero-diff worktree is a legitimate outcome when the cited finding
+        // is stale or already renders clean on the frozen base. Fail soft
+        // with a typed marker so the run can finalize the node as invalid
+        // with evidence instead of deadlocking or escalating to a human.
+        const details: ForgeCommitDetails = {
+          kind: params.kind,
+          noChange: true,
+        };
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                "FORGE:COMMIT:NO-CHANGE — the worktree has zero tracked changes, so no commit was created. If the assigned finding is stale or already clean on the frozen base, finalize this node with outcome \"invalid\" and concrete evidence (do not retry the commit, expand scope, or escalate to the supervisor). If changes were expected, investigate and produce them first.",
+            },
+          ],
+          details,
+        };
+      }
       if (binding.node === "implement" && !binding.builderContract)
         throw new Error(
           "Implementation commit refused without an accepted builder contract.",
@@ -843,18 +876,20 @@ export function registerForgeRuntime(
           parseChangedGitPaths(contractPaths.stdout),
         );
       }
+      const details: ForgeCommitDetails = {
+        kind: params.kind,
+        noChange: false,
+        headSha,
+        message,
+        treeSha: stagedTree,
+        committedPaths,
+        hooksDisabled: true,
+      };
       return {
         content: [
           { type: "text", text: `Created ${params.kind} commit ${headSha}.` },
         ],
-        details: {
-          kind: params.kind,
-          headSha,
-          message,
-          treeSha: stagedTree,
-          committedPaths,
-          hooksDisabled: true,
-        },
+        details,
       };
     },
   });
@@ -2616,17 +2651,18 @@ async function reviewerPollDelay(signal?: AbortSignal): Promise<void> {
   });
 }
 
-export async function pushWithGitHubToken(
+/** Run a Git command with GitHub credentials injected via a private askpass helper. */
+export async function runGitWithGitHubToken(
   cwd: string,
   args: readonly string[],
   token: string,
   runId: string,
   signal?: AbortSignal,
+  timeoutMs = 120_000,
 ): Promise<ProcessResult> {
   if (!token.trim())
-    throw new Error("Git push requires a non-empty GitHub token.");
+    throw new Error("Git operation requires a non-empty GitHub token.");
   const askPassDir = mkdtempSync(join(tmpdir(), "forgedock-askpass-"));
-  const hooksPath = mkdtempSync(join(tmpdir(), "forgedock-empty-hooks-"));
   const askPassPath = join(askPassDir, "askpass.mjs");
   try {
     await writeFile(
@@ -2634,9 +2670,9 @@ export async function pushWithGitHubToken(
       `#!${process.execPath}\nconst prompt = process.argv.slice(2).join(" ");\nconst value = /username/i.test(prompt) ? "x-access-token" : (process.env.FORGEDOCK_GIT_TOKEN || "");\nprocess.stdout.write(value + "\\n");\n`,
       { encoding: "utf8", mode: 0o700 },
     );
-    return await runProcess("git", forgePushArguments(hooksPath, args), {
+    return await runProcess("git", [...args], {
       cwd,
-      timeoutMs: 120_000,
+      timeoutMs,
       env: {
         ...safeEnvironment(runId),
         GIT_ASKPASS: askPassPath,
@@ -2649,6 +2685,26 @@ export async function pushWithGitHubToken(
     });
   } finally {
     rmSync(askPassDir, { recursive: true, force: true });
+  }
+}
+
+export async function pushWithGitHubToken(
+  cwd: string,
+  args: readonly string[],
+  token: string,
+  runId: string,
+  signal?: AbortSignal,
+): Promise<ProcessResult> {
+  const hooksPath = mkdtempSync(join(tmpdir(), "forgedock-empty-hooks-"));
+  try {
+    return await runGitWithGitHubToken(
+      cwd,
+      forgePushArguments(hooksPath, args),
+      token,
+      runId,
+      signal,
+    );
+  } finally {
     rmSync(hooksPath, { recursive: true, force: true });
   }
 }
