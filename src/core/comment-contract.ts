@@ -385,3 +385,18 @@ function renderChecks(checks: AcceptanceCheck[]): string {
     ? checks.map((check) => `- [${check.status === "passed" ? "x" : " "}] **${check.id}** ${check.description} — ${check.status}${check.evidence.length ? ` (${check.evidence.join("; ")})` : ""}`).join("\n")
     : "- No acceptance checks supplied.";
 }
+
+
+/**
+ * Canonical durable markers that adjudicate a finding as invalid/no-change.
+ * Dispatch consults these before rebuilding an issue so prior verdicts are
+ * consumed instead of re-derived.
+ */
+const INVALID_VERDICT_MARKERS = [
+  "FORGE:INVALID",
+  "FORGE:COMMIT:NO-CHANGE",
+] as const;
+
+export function commentBodySignalsInvalidVerdict(body: string): boolean {
+  return INVALID_VERDICT_MARKERS.some((marker) => body.includes(marker));
+}

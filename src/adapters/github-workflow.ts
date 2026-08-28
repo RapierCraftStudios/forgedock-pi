@@ -5,6 +5,7 @@ import {
   repositoryApiPath,
   requireGitHubSuccess,
 } from "./github-api.ts";
+import { commentBodySignalsInvalidVerdict } from "../core/comment-contract.ts";
 
 export interface GitHubIssueData {
   number: number;
@@ -963,6 +964,56 @@ export class GitHubWorkflowAdapter {
       if (readBack.status === 404) return;
     }
     requireGitHubSuccess(response, path, [204]);
+  }
+
+  /**
+   * True when the issue carries a durable prior invalid/no-change verdict
+   * (FORGE:INVALID or FORGE:COMMIT:NO-CHANGE markers in any comment).
+   */
+  async hasInvalidVerdictMarker(
+    issueNumber: number,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    const comments = await this.#getCommentRecords(issueNumber, signal);
+    return comments.some((comment) =>
+      commentBodySignalsInvalidVerdict(comment.body ?? ""),
+    );
+  }
+
+  /** Post an issue comment (invalid-closure and adoption evidence). */
+  async postIssueComment(
+    issueNumber: number,
+    body: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    assertNumber(issueNumber, "issue number");
+    const path = `${this.#apiRoot}/issues/${issueNumber}/comments`;
+    const response = await this.#transport.request<{ id: number }>({
+      method: "POST",
+      path,
+      body: { body },
+      ...(signal ? { signal } : {}),
+    });
+    requireGitHubSuccess(response, path, [201]);
+  }
+
+  /** Remove issue labels; 404s (already absent) are tolerated. */
+  async removeIssueLabels(
+    issueNumber: number,
+    labels: readonly string[],
+    signal?: AbortSignal,
+  ): Promise<void> {
+    assertNumber(issueNumber, "issue number");
+    for (const label of labels) {
+      const path = `${this.#apiRoot}/issues/${issueNumber}/labels/${encodeURIComponent(label)}`;
+      const response = await this.#transport.request<unknown>({
+        method: "DELETE",
+        path,
+        ...(signal ? { signal } : {}),
+      });
+      if (response.status === 404) continue;
+      requireGitHubSuccess(response, path, [200]);
+    }
   }
 
   async closeIssue(issueNumber: number, signal?: AbortSignal): Promise<void> {
