@@ -75,7 +75,7 @@ test("GitHub budget adaptively bounds lane concurrency below the configured maxi
     remaining: 5_000,
     resetAt: Date.now() + 60_000,
   });
-  assert.equal(effective, 6);
+  assert.equal(effective, 5);
   assert.equal(
     rateLimitedOrchestrationConcurrency(16, {
       limit: 15_000,
@@ -90,11 +90,11 @@ test("GitHub budget adaptively bounds lane concurrency below the configured maxi
       remaining: 15_000,
       resetAt: Date.now() + 60_000,
     }),
-    20,
+    16,
   );
   assert.deepEqual(
     readyOrchestrationLanes(state, effective).map((lane) => lane.issueNumber),
-    [1, 2, 3, 4, 5, 6],
+    [1, 2, 3, 4, 5],
   );
   assert.equal(
     rateLimitedOrchestrationConcurrency(16, {
