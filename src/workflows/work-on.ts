@@ -4360,6 +4360,14 @@ export class ForgeWorkOnController {
    * unactionable 422. Close the issue autonomously and complete the run as
    * a no-change closure.
    */
+  /**
+   * Terminal path for zero-diff lanes: the finding was stale or already
+   * clean on the frozen base (implement recorded FORGE:COMMIT:NO-CHANGE), so
+   * no PR can exist for the empty diff — attempting one fails with an
+   * unactionable 422. Drive the close/cleanup node flow parent-side (the
+   * same event sequence the child's close node produces) and complete the
+   * run as closed.
+   */
   async #finalizeNoChangeClosure(deps: {
     link: ActiveRunLink;
     journal: RunJournal;
@@ -4368,44 +4376,128 @@ export class ForgeWorkOnController {
     ctx: ExtensionContext;
   }): Promise<void> {
     const { link, journal, github, sessionId, ctx } = deps;
-    await appendPhase(
-      journal,
-      link.forgeRunId,
-      "merge",
-      "complete",
-      1,
+    const signal = ctx.signal;
+    const closeCommon = {
+      nodeId: "close-1",
+      node: "close",
+      attempt: 1,
+      round: 1,
+    };
+    const cleanupCommon = {
+      nodeId: "cleanup-1",
+      node: "cleanup",
+      attempt: 1,
+      round: 1,
+    };
+    const baseSha = link.prepared.baseSha;
+
+    await journal.append({
+      runId: link.forgeRunId,
+      type: "node.queued",
+      payload: { ...closeCommon, headSha: baseSha },
+      idempotencyKey: `node:close-1:queued`,
       sessionId,
-      ctx.signal,
-      undefined,
-      [
-        "no-change closure: frozen diff is empty; no PR created",
-        "FORGE:COMMIT:NO-CHANGE",
-      ],
-    );
-    await github.closeIssue(link.issueNumber, ctx.signal);
-    const closed = await github.getIssue(link.issueNumber, ctx.signal);
+      message: `Queue parent node close-1 (no-change closure)`,
+      ...(signal ? { signal } : {}),
+    });
+    await journal.append({
+      runId: link.forgeRunId,
+      type: "node.started",
+      payload: { ...closeCommon, baseSha },
+      idempotencyKey: `node:close-1:started`,
+      sessionId,
+      message: `Start parent node close-1 (no-change closure)`,
+      ...(signal ? { signal } : {}),
+    });
+    await github.closeIssue(link.issueNumber, signal);
+    const closed = await github.getIssue(link.issueNumber, signal);
     if (closed.state !== "closed")
       throw new Error("Issue close read-back failed.");
-    await appendEffect(
-      journal,
-      link.forgeRunId,
-      "issue-close",
-      `issue-close:${link.issueNumber}`,
-      digest(String(link.issueNumber)),
+    await journal.append({
+      runId: link.forgeRunId,
+      type: "effect.recorded",
+      payload: {
+        effectType: "issue-close",
+        effectId: `issue-close:${link.issueNumber}`,
+        digest: digest(String(link.issueNumber)),
+      },
+      idempotencyKey: `effect:issue-close:${link.issueNumber}`,
       sessionId,
-      ctx.signal,
-    );
-    await appendPhase(
-      journal,
-      link.forgeRunId,
-      "cleanup",
-      "complete",
-      1,
+      message: `Record issue close effect ${link.issueNumber} (no-change closure)`,
+      ...(signal ? { signal } : {}),
+    });
+    await journal.append({
+      runId: link.forgeRunId,
+      type: "node.completed",
+      payload: {
+        ...closeCommon,
+        headSha: baseSha,
+        baseSha,
+        outcome: "closed",
+        evidence: [
+          "no-change closure: frozen diff is empty; no PR created",
+          "FORGE:COMMIT:NO-CHANGE",
+        ],
+        verificationResults: [],
+      },
+      idempotencyKey: `node:close-1:complete`,
       sessionId,
-      ctx.signal,
-      undefined,
-      ["no-change closure terminal"],
-    );
+      message: `Complete parent node close-1 (no-change closure)`,
+      ...(signal ? { signal } : {}),
+    });
+
+    await journal.append({
+      runId: link.forgeRunId,
+      type: "node.queued",
+      payload: { ...cleanupCommon, headSha: baseSha },
+      idempotencyKey: `node:cleanup-1:queued`,
+      sessionId,
+      message: `Queue parent node cleanup-1 (no-change closure)`,
+      ...(signal ? { signal } : {}),
+    });
+    await journal.append({
+      runId: link.forgeRunId,
+      type: "node.started",
+      payload: { ...cleanupCommon, baseSha },
+      idempotencyKey: `node:cleanup-1:started`,
+      sessionId,
+      message: `Start parent node cleanup-1 (no-change closure)`,
+      ...(signal ? { signal } : {}),
+    });
+    await this.#git
+      .deleteRemoteBranch(link.prepared, signal)
+      .catch(() => undefined);
+    await this.#git.cleanup(link.prepared, signal).catch(() => undefined);
+    await journal.append({
+      runId: link.forgeRunId,
+      type: "effect.recorded",
+      payload: {
+        effectType: "cleanup",
+        effectId: `cleanup:${link.forgeRunId}`,
+        digest: digest(link.prepared.worktreePath),
+      },
+      idempotencyKey: `effect:cleanup:${link.forgeRunId}`,
+      sessionId,
+      message: `Record cleanup effect ${link.forgeRunId} (no-change closure)`,
+      ...(signal ? { signal } : {}),
+    });
+    await journal.append({
+      runId: link.forgeRunId,
+      type: "node.completed",
+      payload: {
+        ...cleanupCommon,
+        headSha: baseSha,
+        baseSha,
+        outcome: "closed",
+        evidence: ["owned worktree removed", "no-change closure terminal"],
+        verificationResults: [],
+      },
+      idempotencyKey: `node:cleanup-1:complete`,
+      sessionId,
+      message: `Complete parent node cleanup-1 (no-change closure)`,
+      ...(signal ? { signal } : {}),
+    });
+
     await journal.append({
       runId: link.forgeRunId,
       type: "run.completed",
@@ -4413,7 +4505,7 @@ export class ForgeWorkOnController {
       idempotencyKey: "run:complete",
       sessionId,
       message: `Complete ForgeDock run ${link.forgeRunId} as no-change closure`,
-      ...(ctx.signal ? { signal: ctx.signal } : {}),
+      ...(signal ? { signal } : {}),
     });
     link.status = "completed";
     link.terminalOutcome = "closed";
