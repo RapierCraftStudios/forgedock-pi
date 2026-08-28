@@ -321,6 +321,30 @@ test("logical issue artifacts are idempotent by revision and supersede older rev
   );
 });
 
+test("divergent re-renders of the same artifact revision accept the published comment", async () => {
+  const transport = new ProjectionTransport();
+  const projector = new GitHubIssueProjector(transport, "owner/repo");
+  const first = await projector.postArtifact({
+    issueNumber: 42,
+    runId: "run-recovery",
+    eventId: "head-a",
+    artifactKey: "architecture-plan",
+    markdown: "Plan rendered before a formatter reflow\n- step 1",
+  });
+  // A recovery attempt re-renders the payload with different bytes but the
+  // same identity/revision. The published comment is authoritative; the
+  // retry must reuse it instead of deadlocking with a 422 conflict.
+  const recovered = await projector.postArtifact({
+    issueNumber: 42,
+    runId: "run-recovery",
+    eventId: "head-a",
+    artifactKey: "architecture-plan",
+    markdown: "Plan rendered after a formatter reflow\n- step 1\n- step 2",
+  });
+  assert.equal(recovered, first);
+  assert.equal(transport.commentPosts, 1);
+});
+
 test("artifact identity is scoped to the Forge run even when node revisions repeat", async () => {
   const transport = new ProjectionTransport();
   const projector = new GitHubIssueProjector(transport, "owner/repo");

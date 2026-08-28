@@ -24,7 +24,7 @@ export interface GitHubCoreRateLimit {
 }
 
 export const GITHUB_CONTROL_PLANE_MIN_RESERVE = 1_000;
-export const GITHUB_LANE_ESTIMATED_REQUEST_COST = 600;
+export const GITHUB_LANE_ESTIMATED_REQUEST_COST = 750;
 
 export interface GitHubRateLimitReservation {
   readonly repository: string;

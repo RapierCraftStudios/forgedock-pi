@@ -169,7 +169,7 @@ test("repository reservations aggregate across orchestration pumps", async () =>
     resetAt: Date.now() + 60_000,
   });
   const safeBudget = 15_000 - 3_000;
-  const first = Array.from({ length: 20 }, (_, issueNumber) =>
+  const first = Array.from({ length: 16 }, (_, issueNumber) =>
     pool.tryReserve("owner/repo", `orchestration-a:${issueNumber + 1}`),
   );
   assert.ok(first.every(Boolean));
@@ -192,7 +192,7 @@ test("rate-limit headers update shared reservation accounting", async () => {
     "X-RateLimit-Remaining": "4200",
     "X-RateLimit-Reset": "2000000000",
   });
-  assert.equal(pool.availableSlots("owner/repo"), 5);
+  assert.equal(pool.availableSlots("owner/repo"), 4);
 });
 
 test("GitHub transport feeds actual rate headers into repository accounting", async () => {
@@ -211,7 +211,7 @@ test("GitHub transport feeds actual rate headers into repository accounting", as
       })) as typeof fetch,
   });
   await transport.request({ method: "GET", path: "/user" });
-  assert.equal(githubRateLimitReservations.availableSlots(repository), 5);
+  assert.equal(githubRateLimitReservations.availableSlots(repository), 4);
 });
 
 test("GitHub API errors expose bounded safe diagnostics", () => {
