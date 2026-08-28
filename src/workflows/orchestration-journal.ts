@@ -1,6 +1,5 @@
 import {
   type GitHubStateBranchStore,
-  StateBranchConflictError,
 } from "../adapters/github-state.ts";
 import {
   stateCas,
