@@ -248,6 +248,7 @@ export class SubagentsRpcClient {
       maxReviewRounds: input.policy.review.maxRounds,
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
+      verificationGithub: input.policy.verification.github,
       nodeId: input.node.nodeId,
       node: input.node.node,
       nodeAttempt: input.node.attempt,
@@ -326,6 +327,7 @@ export class SubagentsRpcClient {
       maxReviewRounds: input.policy.review.maxRounds,
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
+      verificationGithub: input.policy.verification.github,
       nodeId: input.node.nodeId,
       node: `review-${domain}`,
       nodeAttempt: input.node.attempt,
@@ -414,6 +416,7 @@ export class SubagentsRpcClient {
       maxReviewRounds: input.policy.review.maxRounds,
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
+      verificationGithub: input.policy.verification.github,
       ...(input.builderContract
         ? { builderContract: input.builderContract }
         : {}),
@@ -538,6 +541,7 @@ export class SubagentsRpcClient {
       maxReviewRounds: input.policy.review.maxRounds,
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
+      verificationGithub: input.policy.verification.github,
       refresh: true,
       leaseOwnerRunId: input.leaseOwnerRunId ?? input.runId,
       previousReviewRounds: input.previousResult.review.rounds,

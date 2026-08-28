@@ -27,7 +27,6 @@ import {
   type OrchestrationDependencyEdge,
   type OrchestrationState,
 } from "../core/orchestration.ts";
-import { commentBodySignalsInvalidVerdict } from "../core/comment-contract.ts";
 import { isLeaseExpired } from "../core/lease.ts";
 import { isProtectedBranch, type ForgePolicy } from "../core/policy.ts";
 import { OrchestrationJournal } from "./orchestration-journal.ts";
