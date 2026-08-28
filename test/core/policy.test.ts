@@ -8,6 +8,7 @@ import {
   isHumanAuthorityReason,
   isGitHubCiRequired,
   isProtectedBranch,
+  MAX_ORCHESTRATION_ISSUES,
   parseForgePolicy,
   PolicyValidationError,
   resolveConcreteBranch,
@@ -40,6 +41,43 @@ const rawPolicy = {
   review: { required: ["correctness", "security"], maxRounds: 3 },
   subagents: { maxConcurrent: 4, maxDepth: 2 },
 };
+
+test("orchestration policy accepts large campaigns within the tool capacity", () => {
+  const configured = {
+    ...structuredClone(rawPolicy),
+    orchestration: { maxConcurrent: 200, maxIssues: 300 },
+    subagents: { maxConcurrent: 50, maxDepth: 2 },
+  };
+  assert.equal(parseForgePolicy(configured).orchestration.maxConcurrent, 200);
+  assert.equal(parseForgePolicy(configured).orchestration.maxIssues, 300);
+  assert.equal(parseForgePolicy(configured).subagents.maxConcurrent, 50);
+  assert.equal(MAX_ORCHESTRATION_ISSUES, 500);
+  assert.equal(
+    parseForgePolicy({
+      ...configured,
+      orchestration: { ...configured.orchestration, maxConcurrent: 10_000 },
+    }).orchestration.maxConcurrent,
+    10_000,
+  );
+  assert.equal(
+    parseForgePolicy({
+      ...configured,
+      subagents: { ...configured.subagents, maxConcurrent: 10_000 },
+    }).subagents.maxConcurrent,
+    10_000,
+  );
+  assert.throws(
+    () =>
+      parseForgePolicy({
+        ...configured,
+        orchestration: {
+          ...configured.orchestration,
+          maxIssues: MAX_ORCHESTRATION_ISSUES + 1,
+        },
+      }),
+    /orchestration\.maxIssues/,
+  );
+});
 
 test("wildcard-first branch policies resolve concrete route defaults", () => {
   assert.equal(
@@ -83,7 +121,15 @@ test("verification command cwd is portable, relative, and normalized", () => {
     "web",
   );
 
-  for (const cwd of ["/tmp", "C:/tmp", "\\\\server\\share", "../web", "web/../api", "web\\api", "bad\0path"])
+  for (const cwd of [
+    "/tmp",
+    "C:/tmp",
+    "\\\\server\\share",
+    "../web",
+    "web/../api",
+    "web\\api",
+    "bad\0path",
+  ])
     assert.throws(() => parseForgePolicy(withCwd(cwd)), PolicyValidationError);
 });
 

@@ -1,6 +1,7 @@
 import { posix } from "node:path";
 
 export const FORGEDOCK_CONFIG_SCHEMA = "forgedock.config/v1" as const;
+export const MAX_ORCHESTRATION_ISSUES = 500;
 
 /**
  * The only kinds of authority that an autonomous run may hand to a person.
@@ -29,13 +30,29 @@ export function isHumanAuthorityReason(
 export function humanAuthorityReasonFromText(
   text: string,
 ): HumanAuthorityReason | undefined {
-  if (/\b(?:product|scope|ux)\s+(?:decision|approval|policy)|product decision|release authority/i.test(text))
+  if (
+    /\b(?:product|scope|ux)\s+(?:decision|approval|policy)|product decision|release authority/i.test(
+      text,
+    )
+  )
     return "product-decision";
-  if (/\b(?:legal|regulatory|compliance)\s+(?:approval|review)|legal approval/i.test(text))
+  if (
+    /\b(?:legal|regulatory|compliance)\s+(?:approval|review)|legal approval/i.test(
+      text,
+    )
+  )
     return "legal-approval";
-  if (/\b(?:external|third[- ]party) credential|credential authority|token(?:s)? required/i.test(text))
+  if (
+    /\b(?:external|third[- ]party) credential|credential authority|token(?:s)? required/i.test(
+      text,
+    )
+  )
     return "external-credential";
-  if (/\bphysical(?:[- ]authority)?\b|manual release authority|protected branch/i.test(text))
+  if (
+    /\bphysical(?:[- ]authority)?\b|manual release authority|protected branch/i.test(
+      text,
+    )
+  )
     return "physical-authority";
   return undefined;
 }
@@ -173,11 +190,7 @@ export function normalizeVerificationCommandCwd(
       path,
       "must use portable forward-slash separators",
     );
-  if (
-    cwd.startsWith("/") ||
-    cwd.startsWith("//") ||
-    /^[A-Za-z]:/.test(cwd)
-  ) {
+  if (cwd.startsWith("/") || cwd.startsWith("//") || /^[A-Za-z]:/.test(cwd)) {
     throw new PolicyValidationError(path, "must be repository-relative");
   }
   if (cwd.split("/").includes(".."))
@@ -193,7 +206,9 @@ export function normalizeVerificationCommandCwd(
   return normalized || ".";
 }
 
-function parseGitHubVerification(value: unknown): ForgePolicy["verification"]["github"] {
+function parseGitHubVerification(
+  value: unknown,
+): ForgePolicy["verification"]["github"] {
   if (value === undefined)
     return {
       required: true,
@@ -351,7 +366,7 @@ export function parseForgePolicy(value: unknown): ForgePolicy {
               orchestration.maxConcurrent,
               "orchestration.maxConcurrent",
               1,
-              16,
+              Number.MAX_SAFE_INTEGER,
             ),
       maxIssues:
         orchestration?.maxIssues === undefined
@@ -360,7 +375,7 @@ export function parseForgePolicy(value: unknown): ForgePolicy {
               orchestration.maxIssues,
               "orchestration.maxIssues",
               1,
-              100,
+              MAX_ORCHESTRATION_ISSUES,
             ),
     },
     subagents: {
@@ -368,7 +383,7 @@ export function parseForgePolicy(value: unknown): ForgePolicy {
         subagents.maxConcurrent,
         "subagents.maxConcurrent",
         1,
-        32,
+        Number.MAX_SAFE_INTEGER,
       ),
       maxDepth:
         subagents.maxDepth === undefined
@@ -478,8 +493,7 @@ export function applyLocalOverrides(
   overrides: LocalForgeOverrides,
 ): ForgePolicy {
   const maxConcurrent = overrides.subagents?.maxConcurrent;
-  const orchestrationMaxConcurrent =
-    overrides.orchestration?.maxConcurrent;
+  const orchestrationMaxConcurrent = overrides.orchestration?.maxConcurrent;
   if (
     maxConcurrent !== undefined &&
     (!Number.isSafeInteger(maxConcurrent) || maxConcurrent < 1)

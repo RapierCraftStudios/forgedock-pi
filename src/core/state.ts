@@ -986,7 +986,48 @@ export function applyRunEvent(
   state.lastEventHash = hashRunEvent(event);
   state.idempotencyKeys[event.idempotencyKey] = event.eventId;
   state.eventIds[event.eventId] = true;
+  renewRunScopedLease(state, event);
   return state;
+}
+
+/**
+ * Slide run-scoped authority forward on every appended journal event.
+ *
+ * A work-on run proves liveness each time it appends to its own journal, so
+ * its scoped lease extends deterministically from the event time by the
+ * lease's original TTL. A stalled or crashed run stops appending and expires
+ * exactly as before; replaying the same events reproduces the same expiry,
+ * so snapshots and event replays stay consistent.
+ */
+function renewRunScopedLease(state: RunState, event: RunEvent): void {
+  if (state.status === "completed" || state.status === "cancelled") return;
+  if (state.authorityMode !== "run-scoped" || !state.lease) return;
+  if (
+    event.type === "lease.acquired" ||
+    event.type === "lease.heartbeat" ||
+    event.type === "lease.taken-over" ||
+    event.type === "lease.released"
+  )
+    return;
+  const lease = state.lease;
+  const expiresAtMs = Date.parse(lease.expiresAt);
+  const heartbeatAtMs = Date.parse(lease.lastHeartbeatAt);
+  const occurredAtMs = Date.parse(event.occurredAt);
+  if (
+    !Number.isFinite(expiresAtMs) ||
+    !Number.isFinite(heartbeatAtMs) ||
+    !Number.isFinite(occurredAtMs) ||
+    occurredAtMs < heartbeatAtMs
+  )
+    return;
+  const ttlMs = Math.max(0, expiresAtMs - heartbeatAtMs);
+  const renewedExpiresAt = new Date(occurredAtMs + ttlMs).toISOString();
+  if (Date.parse(renewedExpiresAt) <= expiresAtMs) return;
+  state.lease = {
+    ...lease,
+    lastHeartbeatAt: event.occurredAt,
+    expiresAt: renewedExpiresAt,
+  };
 }
 
 export function replayRunEvents(events: readonly RunEvent[]): RunState {

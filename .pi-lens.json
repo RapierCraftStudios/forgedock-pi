@@ -1,0 +1,6 @@
+{
+  "$schema": "https://raw.githubusercontent.com/earendil-works/pi-lens/main/schema/pi-lens.schema.json",
+  "format": { "enabled": false },
+  "autofix": { "enabled": false },
+  "actionableWarnings": { "autoFix": { "enabled": false } }
+}
