@@ -10,7 +10,8 @@ The visible session is a dispatcher, never a builder.
 ## Required loading
 
 1. Parse the arguments appended to this skill invocation.
-2. Read `../../specs/original/commands/orchestrate/config.md` for filtering defaults.
+2. Read `../../specs/pi-adapter.md` and
+   `../../specs/original/commands/orchestrate/config.md` for runtime rules and defaults.
 3. Use this skill as the compact execution checklist. Consult the original orchestrate
    specification only when a current decision is ambiguous; do not preload the root
    specification, phase files, or generic subagent reference corpus before dispatch.
