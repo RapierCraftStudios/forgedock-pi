@@ -63,6 +63,7 @@ import type {
   ParsedReviewArguments,
   ReviewSelector,
 } from "../ui/forge-command-parser.ts";
+import type { StagingBundleResolution } from "../core/staging-bundle-resolver.ts";
 import { publishReviewFindingIssues } from "./review-findings.ts";
 import { testGateVerification } from "./test-gate.ts";
 
@@ -96,6 +97,8 @@ export interface ReviewPrRequest {
   resume?: boolean;
   authorityValid?: () => boolean | Promise<boolean>;
   reviewerContext?: string;
+  /** Parent-supplied deterministic staging bundle; never derive this from text. */
+  stagingBundle?: StagingBundleResolution;
   signal?: AbortSignal;
 }
 
@@ -110,6 +113,8 @@ export interface ReviewPrResult {
   findingIssues: Readonly<Record<string, number>>;
   merged: boolean;
   mergeSha?: string;
+  /** Machine-readable bundle derivation consumed by open-finding/Phase 6.5 gates. */
+  stagingBundle?: StagingBundleResolution;
 }
 
 export interface ReviewPanelRunInput {
@@ -254,6 +259,10 @@ export class ReviewPrCoordinator {
       return completedResult(snapshot.state, route, merge);
     }
 
+    const stagingBundle =
+      mode === "staging"
+        ? (input.stagingBundle ?? fallbackStagingBundle(input.repository, route))
+        : undefined;
     let prepared: PreparedReviewWorktree | undefined;
     const worktreePath =
       input.execution.kind === "standalone"
@@ -375,6 +384,9 @@ export class ReviewPrCoordinator {
           : {}),
       });
       if (mode === "staging") {
+        const bundlePullNumbers = new Set(
+          stagingBundle?.resolved.map((pull) => pull.pullNumber) ?? [],
+        );
         const unresolved = (
           await this.#github.listIssuesByLabel(
             "review-finding",
@@ -382,12 +394,15 @@ export class ReviewPrCoordinator {
             input.signal,
           )
         ).filter((issue) =>
-          issue.body.includes(`source-pr=${route.pullNumber}`),
+          [...bundlePullNumbers].some((pullNumber) =>
+            hasExactSourcePull(issue.body, pullNumber),
+          ),
         );
         decision = strictStagingDecision(
           decision,
           snapshot.state.findings as readonly ForgeReviewFindingResult[],
           unresolved.map((issue) => issue.number),
+          stagingBundle,
         );
       }
 
@@ -460,6 +475,7 @@ export class ReviewPrCoordinator {
             decision,
             snapshot.state.checks,
             forgeFindings,
+            stagingBundle,
           ),
           ...(input.signal ? { signal: input.signal } : {}),
         });
@@ -512,6 +528,7 @@ export class ReviewPrCoordinator {
         findingIssues,
         merged: Boolean(merge),
         ...(merge ? { mergeSha: merge.sha } : {}),
+        ...(stagingBundle ? { stagingBundle } : {}),
       };
     } finally {
       if (prepared) await this.#git.cleanupReview(prepared, input.signal);
@@ -866,6 +883,15 @@ export class ForgeReviewController {
           ctx.signal,
         );
         const reviewId = `review-${randomUUID()}`;
+        const stagingBundle =
+          effectiveMode === "staging"
+            ? await this.#resolveStagingBundle(
+                environment.github,
+                environment.repositoryRoot,
+                route,
+                ctx.signal,
+              )
+            : undefined;
         const execution: ReviewExecution = parsed.worktree
           ? {
               kind: "work-on",
@@ -918,6 +944,7 @@ export class ForgeReviewController {
           reviewerContext: parsed.thorough
             ? "Thorough mode: inspect the complete patch across every affected domain and report all confidence levels."
             : "Inspect the complete frozen patch and report all confidence levels.",
+          ...(stagingBundle ? { stagingBundle } : {}),
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
         this.#linked.set(reviewId, {
@@ -960,6 +987,22 @@ export class ForgeReviewController {
     if (!current) throw new Error(`Review ${reviewId} does not exist.`);
     const state = current.state;
     const coordinator = this.#coordinator(environment);
+    const resumeRoute: GitHubPullRequestRouteSnapshot = {
+      pullNumber: state.pullNumber,
+      headRef: state.headRef,
+      headSha: state.headSha,
+      baseRef: state.baseRef,
+      baseSha: state.baseSha,
+    };
+    const stagingBundle =
+      state.mode === "staging"
+        ? await this.#resolveStagingBundle(
+            environment.github,
+            environment.repositoryRoot,
+            resumeRoute,
+            ctx.signal,
+          )
+        : undefined;
     const result = await coordinator.review({
       reviewId,
       repository: state.repository,
@@ -968,13 +1011,7 @@ export class ForgeReviewController {
         ? {}
         : { issueNumber: state.issueNumber }),
       mode: state.mode,
-      route: {
-        pullNumber: state.pullNumber,
-        headRef: state.headRef,
-        headSha: state.headSha,
-        baseRef: state.baseRef,
-        baseSha: state.baseSha,
-      },
+      route: resumeRoute,
       roster: state.roster,
       execution: {
         kind: "standalone",
@@ -993,6 +1030,7 @@ export class ForgeReviewController {
       protectedBranches: environment.policy.branches.protected,
       autoMergeAuthorized: canAutoMerge(environment.policy, state.baseRef),
       autoMergeRequested: state.mergeAuthorization?.authorized === true,
+      ...(stagingBundle ? { stagingBundle } : {}),
       resume: true,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
@@ -1004,6 +1042,32 @@ export class ForgeReviewController {
       merged: result.merged,
     });
     return result;
+  }
+
+  async #resolveStagingBundle(
+    github: GitHubWorkflowAdapter,
+    repositoryRoot: string,
+    route: GitHubPullRequestRouteSnapshot,
+    signal?: AbortSignal,
+  ): Promise<StagingBundleResolution> {
+    await this.#git.fetchRefs(repositoryRoot, [route.baseRef, route.headRef], signal);
+    return github.resolveStagingBundle({
+      route: {
+        baseRef: route.baseRef,
+        baseSha: route.baseSha,
+        headRef: route.headRef,
+        headSha: route.headSha,
+        integrationPullNumber: route.pullNumber,
+      },
+      isReachable: (sha, target) =>
+        this.#git.isAncestor(
+          repositoryRoot,
+          sha,
+          target === "base" ? route.baseSha : route.headSha,
+          signal,
+        ),
+      ...(signal ? { signal } : {}),
+    });
   }
 
   #coordinator(
@@ -1207,15 +1271,20 @@ function strictStagingDecision(
   decision: FinalReviewDecision,
   findings: readonly ForgeReviewFindingResult[],
   unresolvedIssueNumbers: readonly number[],
+  bundle?: StagingBundleResolution,
 ): FinalReviewDecision {
   if (
     decision.decision === "approved" &&
     findings.length === 0 &&
-    unresolvedIssueNumbers.length === 0
+    unresolvedIssueNumbers.length === 0 &&
+    (bundle === undefined || bundle.resolved.length > 0)
   )
     return decision;
   const reasons = [
     ...decision.reasons,
+    ...(bundle && bundle.resolved.length === 0
+      ? ["Staging bundle resolved no included pull requests."]
+      : []),
     ...(findings.length > 0
       ? [
           `Staging gate requires zero open findings; received ${findings.length}.`,
@@ -1325,9 +1394,44 @@ function renderStagingGate(
   decision: FinalReviewDecision,
   checks: readonly VerificationResult[],
   findings: readonly ForgeReviewFindingResult[],
+  bundle?: StagingBundleResolution,
 ): string {
   const passed = decision.decision === "approved" && findings.length === 0;
-  return `## ForgeDock Staging Deployment Gate — ${passed ? "PASS" : "FAILURE"}\n\n**Reviewed head**: \`${decision.headSha}\`\n**Reviewed base**: \`${decision.baseSha}\`\n**Decision**: \`${decision.decision}\`\n**Merge/deploy performed**: no\n\n### Checks\n\n${checks.map((check) => `- ${check.required ? "required" : "optional"} \`${check.name}\`: ${check.status}`).join("\n") || "- No checks recorded."}\n\n### Findings\n\n${findings.length ? findings.map((finding) => `- ${finding.id}: ${finding.summary}`).join("\n") : "- None."}\n\n### Reasons\n\n${decision.reasons.length ? decision.reasons.map((reason) => `- ${reason}`).join("\n") : "- All strict staging gates passed."}`;
+  const bundleJson = bundle ? JSON.stringify(bundle) : "null";
+  return `## ForgeDock Staging Deployment Gate — ${passed ? "PASS" : "FAILURE"}\n\n**Reviewed head**: \`${decision.headSha}\`\n**Reviewed base**: \`${decision.baseSha}\`\n**Decision**: \`${decision.decision}\`\n**Merge/deploy performed**: no\n\n### Checks\n\n${checks.map((check) => `- ${check.required ? "required" : "optional"} \`${check.name}\`: ${check.status}`).join("\n") || "- No checks recorded."}\n\n### Findings\n\n${findings.length ? findings.map((finding) => `- ${finding.id}: ${finding.summary}`).join("\n") : "- None."}\n\n### Reasons\n\n${decision.reasons.length ? decision.reasons.map((reason) => `- ${reason}`).join("\n") : "- All strict staging gates passed."}\n\n### Machine-readable bundle resolution\n\n\`\`\`json\n${bundleJson}\n\`\`\``;
+}
+
+function hasExactSourcePull(body: string, pullNumber: number): boolean {
+  return new RegExp(
+    `(?:source-pr=|Source PR\\**:?\\s*#)${String(pullNumber)}(?!\\d)`,
+    "i",
+  ).test(body);
+}
+
+function fallbackStagingBundle(
+  repository: string,
+  route: GitHubPullRequestRouteSnapshot,
+): StagingBundleResolution {
+  const pull = {
+    pullNumber: route.pullNumber,
+    repository: repository.toLowerCase(),
+    evidence: ["head"] as const,
+    identity: `${repository.toLowerCase()}#${route.pullNumber}`,
+  };
+  return Object.freeze({
+    schema: "forgedock.staging-bundle-resolution/v1",
+    route: Object.freeze({
+      repository,
+      baseRef: route.baseRef,
+      baseSha: route.baseSha,
+      headRef: route.headRef,
+      headSha: route.headSha,
+      integrationPullNumber: route.pullNumber,
+    }),
+    resolved: Object.freeze([Object.freeze(pull)]),
+    derivations: Object.freeze([]),
+    exclusions: Object.freeze([]),
+  });
 }
 
 function renderReviewSummary(

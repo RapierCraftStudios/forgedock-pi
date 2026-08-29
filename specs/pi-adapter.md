@@ -27,7 +27,7 @@ terminal conditions, review policy, GitHub artifacts, remediation, merge, and cl
 | `Skill(skill="work-on/investigate", ...)` and other work-on sub-phases | Read the corresponding file under `specs/original/commands/work-on/` and execute it in the current visible coordinator. |
 | `Skill(skill="quality-gate", ...)` | Read `specs/original/commands/quality-gate.md`; run it against the assigned worktree. Fork only when isolation or long execution materially benefits the route. |
 | `Skill(skill="review-pr", ...)` | Load and execute the `forgedock-review-pr` skill in the current work-on coordinator. That coordinator launches the selected fresh reviewer panel directly and retains ownership of closure. Do not add a second review-coordinator hop. |
-| `Skill(skill="review-pr-staging", ...)` | Load `review-pr-staging.md` directly and switch strategy immediately; do not emit another slash command. |
+| `Skill(skill="review-pr-staging", ...)` | Load `review-pr-staging.md` directly and switch strategy immediately; do not emit another slash command. Freeze the route, ask the adapter for paginated all-state PR metadata, and call `resolveStagingBundle` with commit-graph reachability; pass its machine-readable derivations to the open-finding and Phase 6.5 gates. |
 | Mandatory nested `Skill("test-gate", ...)` | Load the packaged `forgedock-test-gate` skill, which executes `specs/original/commands/test-gate.md` in the current coordinator. Require and preserve its `FORGE:TEST_GATE:RESULT=BLOCK|PASS|SKIP` marker; an absent result is a failure, never `SKIP`. |
 | Mandatory nested `Skill(skill="issue", ...)` | Load the packaged `forgedock-issue` skill and execute `specs/original/commands/issue.md`'s programmatic contract. A failed/missing issue hook is a hard failure; do not substitute raw issue creation. |
 | Other nested `Skill(...)` references | Resolve the reference to the corresponding file under `specs/original/commands/` and load it directly in the visible coordinator. This is a packaging/load contract only; it does not dispatch or choose workflow phases. |
@@ -121,6 +121,13 @@ resolved tools, nested depth, and capability ceilings, but must redact credentia
 and must not make routing decisions.
 
 ## Safety leaves
+
+`src/core/staging-bundle-resolver.ts` is a deterministic runtime safety leaf. It
+accepts only same-repository GitHub PR identities and merge/head/patch commits
+reachable from a frozen integration head but not the frozen base. It deliberately
+ignores issue/PR references in commit subjects and fails closed on ambiguous
+metadata. Its `forgedock.staging-bundle-resolution/v1` output is the sole input to
+staging open-finding attribution and Phase 6.5 evidence.
 
 Deterministic code may make a single operation safe (bounded verification, frozen PR
 snapshot, exact-head guarded merge). It must not choose the next workflow phase,

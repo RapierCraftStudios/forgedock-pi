@@ -7,6 +7,22 @@ export {
   FORGEDOCK_LEASE_SCHEMA,
   FORGEDOCK_PI_VERSION,
 } from "./core/version.ts";
+export {
+  resolveStagingBundle,
+  resolveStagingBundleAsync,
+  StagingBundleResolutionError,
+} from "./core/staging-bundle-resolver.ts";
+export type {
+  AsyncStagingBundleReachability,
+  FrozenStagingBundleRoute,
+  ResolvedStagingPullRequest,
+  StagingBundleCandidate,
+  StagingBundleDerivation,
+  StagingBundleEvidence,
+  StagingBundleEvidenceKind,
+  StagingBundleReachability,
+  StagingBundleResolution,
+} from "./core/staging-bundle-resolver.ts";
 
 /**
  * ForgeDock's extension layer is intentionally lexical only.

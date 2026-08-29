@@ -311,6 +311,48 @@ export class GitWorktreeManager {
     );
   }
 
+  /** Fetch refs used by a frozen reachability decision without changing HEAD. */
+  async fetchRefs(
+    repositoryRoot: string,
+    refs: readonly string[],
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (refs.length === 0) throw new TypeError("At least one Git ref is required.");
+    for (const ref of refs) {
+      if (!ref.trim() || ref.startsWith("-"))
+        throw new TypeError("Git ref is invalid.");
+    }
+    await this.#git(
+      repositoryRoot,
+      ["fetch", "--no-tags", "origin", ...refs],
+      120_000,
+      signal,
+    );
+  }
+
+  /** Return Git's exact ancestry answer; provider/command errors fail closed. */
+  async isAncestor(
+    repositoryRoot: string,
+    ancestorSha: string,
+    descendantSha: string,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    if (!ancestorSha.trim() || !descendantSha.trim())
+      throw new TypeError("Commit SHAs are required for reachability.");
+    const result = await this.#executor.exec(
+      "git",
+      ["merge-base", "--is-ancestor", ancestorSha, descendantSha],
+      {
+        cwd: repositoryRoot,
+        timeout: 30_000,
+        ...(signal ? { signal } : {}),
+      },
+    );
+    if (result.code === 0) return true;
+    if (result.code === 1) return false;
+    throw new GitOperationError("commit reachability", result);
+  }
+
   async remoteBaseSha(
     repositoryRoot: string,
     baseBranch: string,
