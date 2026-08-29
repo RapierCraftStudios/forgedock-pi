@@ -25,6 +25,7 @@ test("Pi adapter keeps workflow decisions in visible specifications", async () =
   assert.match(adapter, /yq.*not a hard failure in Pi/s);
   assert.match(adapter, /Review may merge but never closes the issue/);
   assert.match(adapter, /Orchestrate is a dispatcher, never a builder/);
+  assert.match(adapter, /does not create or require a GitHub state branch/);
   assert.match(adapter, /must not choose the next workflow phase/);
 });
 
@@ -51,6 +52,7 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
 
   assert.match(orchestrate, /launch exactly one fresh `forgedock-work-on-coordinator`/);
   assert.match(orchestrate, /managed child worktree is the child's only repository root/);
+  assert.match(orchestrate, /do not\s+create or require a GitHub state branch/s);
   assert.match(orchestrate, /anchor checkout that becomes dirty as a safety-critical batch stop/);
   assert.match(orchestrate, /do not give the coordinator a blanket "never\s+run subagents" instruction/s);
   assert.match(workOn, /same work-on coordinator/);

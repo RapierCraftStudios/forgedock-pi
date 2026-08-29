@@ -12,9 +12,10 @@ terminal conditions, review policy, GitHub artifacts, remediation, merge, and cl
    the resumable state. Reconstruct the next phase from them on every invocation.
 3. A phase result is intermediate unless the original specification names it as a
    terminal state. Continue the route until terminal.
-4. Read referenced specifications completely in bounded chunks before executing them.
-   Resolve every relative path from this packaged specification tree; never search the
-   filesystem for a missing spec.
+4. Read only the specification needed for the current work-on or review phase. The
+   compact orchestrate skill is self-contained for pre-dispatch mechanics; do not
+   preload the original orchestration phase corpus or generic subagent references.
+   Resolve relative paths from this packaged tree; never search for a missing spec.
 5. Preserve the original behavior. Historical performance, telemetry, model-tier,
    OpenCode, engine, claims-board, and prompt-cache sections may be skipped when they
    are not required for the requested route, but never skip investigation, build,
@@ -97,13 +98,13 @@ Orchestrate is a dispatcher, never a builder. It resolves and filters the issue 
 confirms before launch, establishes explicit/file/database ordering, detects cycles,
 and runs one complete work-on skill per ready issue with bounded concurrency. GitHub
 states classify each lane as DONE, GATED, FAILED, or IN_PROGRESS. GATED is not FAILED.
-The GitHub state branch durably records each batch's lease epoch, deterministic
-child-key, predecessor set, ready queue, and deferred queue. On reload, reconcile
-retained children by key and resume only unlaunched nodes within the cap, exactly once.
-Unknown keys, stale authority, missing predecessors, or ambiguous completion produce an
-actionable paused report and launch nothing. Successors launch when predecessors become
-terminal-success; no polling loops or second issue lifecycle are allowed. Cleanup and
-the consolidated report run after the queue drains or reaches a documented paused state.
+One coordination issue durably records each batch's lease epoch, deterministic child
+keys, predecessor set, and ready/deferred queues through machine-readable `FORGE:`
+markers. The prompt-routed adapter does not create or require a GitHub state branch. On
+reload, reconcile the coordination issue and retained children by key, then resume only
+unlaunched ready nodes exactly once within the cap. Ambiguous state pauses visibly.
+Successors launch after predecessor success; cleanup closes the coordination issue and
+publishes the consolidated report.
 
 ## Configuration
 
