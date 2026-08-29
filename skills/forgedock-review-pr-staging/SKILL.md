@@ -15,6 +15,10 @@ description: Run the authoritative non-merging staging-to-protected-target deplo
 
 ## Execution contract
 
+Before route discovery or GitHub access, call `forgedock_preflight` and use
+`forgedock_github` for every repository GitHub read and write. Missing tools or failed
+capabilities stop before deployment-gate artifacts are created.
+
 This is a deployment/bundle strategy, not thorough standard review. Preserve included
 PR discovery, prior open-finding gates across the bundle, automated build and CI gates,
 material-change analysis, service/domain bug hunting, regression assessment, runtime

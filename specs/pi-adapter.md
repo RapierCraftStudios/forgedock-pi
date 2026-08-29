@@ -34,7 +34,8 @@ terminal conditions, review policy, GitHub artifacts, remediation, merge, and cl
 | `Task(...)` or `Agent(...)` | Use Pi's `subagent` tool. Use one synchronous `workflowScript` with `runs.all` for a complete parallel panel. Every reviewer gets fresh context and must be joined before synthesis. |
 | Claude `Read`, `Grep`, `Glob`, `Bash` | Pi `read`, search/navigation tools, and `bash`. |
 | `$FORGE_HOME/commands/...` | `specs/original/commands/...` in this package. |
-| `yq`-based config reads | Read and interpret `forge.yaml` directly with Pi when `yq` is unavailable. Missing `yq` is not a hard failure in Pi; malformed or missing required configuration still is. |
+| `yq`-based config reads | Call `forgedock_preflight`, whose native YAML reader resolves `forge.yaml` without `yq`. Missing `yq` is not a hard failure in Pi; missing/malformed required configuration still fails closed. |
+| `gh auth status`, `gh api user`, and raw `gh api` workflow calls | Do not use aggregate account status or `/user` as hard gates. Call `forgedock_preflight`, then use `forgedock_github` for repository-scoped reads/writes with the same refreshable ForgeDock token provider. A missing runtime tool is a hard failure. |
 | Missing optional helper script | Follow the prose fallback already described by the specification. Never use an unbounded filesystem search. |
 
 ## Subagents
@@ -107,8 +108,14 @@ the consolidated report run after the queue drains or reaches a documented pause
 ## Configuration
 
 The original `forge.yaml` contract is authoritative. Do not silently reinterpret the
-current `.forge/config.json` schema as equivalent. If `forge.yaml` is missing, stop with
-an actionable migration/init message before GitHub writes or implementation.
+current `.forge/config.json` schema as equivalent. At the start of every visible or
+nested work-on/orchestrate route, call `forgedock_preflight` and retain its
+`forgedock.preflight/v1` result as the shared machine-readable configuration snapshot.
+It resolves project, repository, paths, staging/default branches, and subagent model,
+then verifies repository-scoped read/write and installation permissions without `/user`
+or mutation. If configuration, authentication, installation scope, or either runtime
+tool is missing, stop before GitHub writes or implementation. All later repository
+GitHub operations use `forgedock_github`; never fall back silently to another account.
 
 ## Nested reference and launch validation
 

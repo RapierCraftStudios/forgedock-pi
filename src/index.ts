@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import { registerForgePromptRouter } from "./prompt-router.ts";
+import { registerForgeRuntimeTools } from "./runtime-tools.ts";
 
 export {
   FORGEDOCK_EVENT_SCHEMA,
@@ -30,6 +31,7 @@ export type {
  */
 export default function forgedockPiExtension(pi: ExtensionAPI): void {
   registerForgePromptRouter(pi);
+  registerForgeRuntimeTools(pi);
 }
 
 export {
@@ -37,6 +39,13 @@ export {
   FORGE_COORDINATOR_CAPABILITY_PROFILE,
   validateForgeAgentCapabilityProfile,
 } from "./agents/profile.ts";
+export { loadForgeYaml, parseForgeYaml, ForgeYamlError } from "./adapters/forge-yaml.ts";
+export { preflightGitHubCapabilities, GitHubCapabilityError } from "./adapters/github-capabilities.ts";
+export {
+  assertReviewFindingReadbackPaths,
+  normalizeReviewFindingMetadata,
+  trustedAffectedPathsForDag,
+} from "./core/review-integrity.ts";
 export {
   FORGE_NESTED_SKILL_TRANSLATIONS,
   FORGE_PUBLIC_SKILLS,

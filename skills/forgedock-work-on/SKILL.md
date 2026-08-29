@@ -18,6 +18,12 @@ GitHub is its durable memory.
 
 ## Execution contract
 
+Before resolving state or mutating GitHub, call `forgedock_preflight` for the target
+repository and retain its machine-readable configuration/capability result. Use
+`forgedock_github` for every repository GitHub read and write so the refreshable
+ForgeDock App identity remains authoritative. Missing tools or failed capabilities stop
+the route; missing `yq` alone does not.
+
 Reconstruct the current issue state from GitHub and continue the canonical route:
 
 `resolve → investigate → [decompose | build → verify → PR → review → remediation/re-review when required → merge → close → trajectory/cleanup]`

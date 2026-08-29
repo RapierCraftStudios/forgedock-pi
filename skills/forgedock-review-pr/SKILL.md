@@ -16,6 +16,10 @@ description: Run the authoritative context-aware ForgeDock review for an exact P
 
 ## Execution contract
 
+Before route discovery or GitHub access, call `forgedock_preflight` and use
+`forgedock_github` for every repository GitHub read and write. Missing tools or failed
+capabilities stop before review artifacts are created.
+
 Follow the original phase order and hard rules. Freeze the exact PR head/base before
 review. Automatically switch to the staging strategy when the selector or actual route
 targets the protected/default branch as specified; load

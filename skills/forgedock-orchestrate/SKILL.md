@@ -18,6 +18,10 @@ The visible session is a dispatcher, never a builder.
 
 ## Execution contract
 
+Before resolution or GitHub access, call `forgedock_preflight` and retain its shared
+configuration/capability result. Use `forgedock_github` for all repository GitHub reads
+and writes; missing tools or failed capabilities stop before dispatch.
+
 Resolve and filter the requested issue set, show the concrete plan, and obtain the
 original mandatory confirmation before launching any child unless `--auto` or
 `--confirm` was explicitly supplied.
