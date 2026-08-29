@@ -83,7 +83,11 @@ test("GitHub runtime tool refuses calls before repository preflight", async () =
   } as unknown as ExtensionAPI;
   registerForgeRuntimeTools(pi);
   const github = tools.find((tool) => tool.name === "forgedock_github");
+  const laneBase = tools.find((tool) => tool.name === "forge_prepare_lane_base");
+  const laneScope = tools.find((tool) => tool.name === "forge_verify_lane_scope");
   assert.ok(github);
+  assert.ok(laneBase);
+  assert.ok(laneScope);
   await assert.rejects(
     github.execute(
       "call-1",
@@ -93,5 +97,34 @@ test("GitHub runtime tool refuses calls before repository preflight", async () =
       { cwd: process.cwd() },
     ),
     /forgedock_preflight must succeed/,
+  );
+  await assert.rejects(
+    laneBase.execute(
+      "call-2",
+      {
+        targetRef: "staging",
+        targetSha: "0123456789abcdef0123456789abcdef01234567",
+      },
+      undefined,
+      undefined,
+      { cwd: process.cwd() },
+    ),
+    /forgedock_preflight must succeed before lane-base initialization/,
+  );
+  await assert.rejects(
+    laneScope.execute(
+      "call-3",
+      {
+        targetRef: "staging",
+        routeBaseRef: "staging",
+        baseSha: "0123456789abcdef0123456789abcdef01234567",
+        headSha: "89abcdef0123456789abcdef0123456789abcdef",
+        claimedPaths: ["src/**"],
+      },
+      undefined,
+      undefined,
+      { cwd: process.cwd() },
+    ),
+    /forgedock_preflight must succeed before lane-scope verification/,
   );
 });

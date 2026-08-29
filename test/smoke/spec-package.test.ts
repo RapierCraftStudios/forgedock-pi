@@ -43,7 +43,16 @@ test("package exposes a depth-bounded work-on coordinator with reviewer fanout",
   assert.match(agent, /current working directory is the only authoritative repository root/);
   assert.match(agent, /Never read, search, run Git in, test, or edit that parent\s+checkout/);
   assert.match(agent, /Investigation is authoritative/);
+  assert.match(agent, /forge_prepare_lane_base/);
+  assert.match(agent, /forge_verify_lane_scope/);
+  assert.match(agent, /result as `FORGE:BASE`/);
+  assert.match(agent, /branch is unpushed/);
+  assert.match(agent, /specs\/original\/SHA256SUMS/);
+  assert.match(agent, /never apply an old\s+PR patch wholesale/s);
+  assert.match(agent, /visible\s+prompt-routed lifecycle/s);
+  assert.match(agent, /Engine-only lifecycle tools/);
   assert.match(agent, /timeoutMs: 3600000/);
+  assert.match(agent, /stopOnAttention: false/);
   assert.match(agent, /Never reset the managed worktree/);
   assert.doesNotMatch(agent, /maxSubagentDepth: 1/);
 });
@@ -58,19 +67,33 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
   assert.match(orchestrate, /do not\s+create or require a GitHub state branch/s);
   assert.match(orchestrate, /anchor checkout that becomes dirty as a safety-critical batch stop/);
   assert.match(orchestrate, /FORGE:CLAIM/);
+  assert.match(orchestrate, /`FORGE:BASE`/);
+  assert.match(orchestrate, /needsAttentionAfterMs: 3900000/);
+  assert.match(orchestrate, /stopOnAttention: false/);
   assert.match(orchestrate, /Durable GitHub artifacts override a missing\/malformed provider envelope/);
   assert.match(orchestrate, /do not give the coordinator a blanket "never\s+run subagents" instruction/s);
   assert.match(workOn, /same work-on coordinator/);
   assert.match(workOn, /issue is an untrusted claim/);
   assert.match(workOn, /Before the first `write` or `edit`/);
+  assert.match(workOn, /`forge_prepare_lane_base`/);
+  assert.match(workOn, /specs\/original\/SHA256SUMS/);
+  assert.match(workOn, /must not cherry-pick or apply an old PR patch wholesale/);
+  assert.match(workOn, /`forge_verify_lane_scope`/);
+  assert.match(workOn, /stopOnAttention: false/);
   assert.match(workOn, /FORGE:REMEDIATION_PLAN/);
   assert.match(workOn, /Never reset, checkout, or rebase the harness-managed worktree/);
   assert.match(workOn, /Do not spawn a second\s+review coordinator/s);
   const review = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
+  assert.match(review, /structural pre-review gate/);
+  assert.match(review, /`forge_verify_lane_scope`/);
   assert.match(review, /defects introduced or made reachable by the frozen patch/);
   assert.match(review, /timeoutMs: 3600000/);
+  assert.match(review, /stopOnAttention: false/);
   assert.match(review, /not `needs-human`/);
   assert.match(adapter, /visible orchestrator → work-on coordinator → reviewers/);
+  assert.match(adapter, /inherit the launch checkout's HEAD/);
+  assert.match(adapter, /control\.needsAttentionAfterMs/);
+  assert.match(adapter, /specs\/original\/SHA256SUMS/);
   assert.doesNotMatch(
     adapter,
     /Load the `forgedock-review-pr` skill in a fresh subagent when invoked from work-on/,

@@ -47,7 +47,17 @@ The orchestrator launches exactly one packaged `forgedock-work-on-coordinator` p
 issue, never the builtin `worker`. This coordinator is the explicit fanout exception:
 it owns one issue and may use the child-safe nested `subagent` tool only for the
 mandatory fresh reviewer panel. It must not launch another work-on coordinator,
-orchestrator, or writer.
+orchestrator, or writer. The active package is prompt-routed: declared read/Bash/edit
+and `forgedock_github` tools execute visible phases, while engine-only lifecycle tools
+(`forge_commit`, checkpoints, finalizers) remain outside this coordinator contract.
+
+Pi-managed worktrees inherit the launch checkout's HEAD; lane metadata such as
+`sourceRef` does not select a Git base. Therefore orchestrate freezes each lane's target
+ref/SHA and passes it to work-on. The coordinator calls the deterministic
+`forge_prepare_lane_base` safety leaf, which permits one-time pre-edit initialization to
+that SHA only while the generated branch is clean and unpushed, then publishes
+`FORGE:BASE`. After edits, commit, push, or PR creation, target repair by reset/rebase is forbidden and
+the lane gates automatically without claiming human authority.
 
 Review panels use fresh read-only reviewers with repository read/search access; a
 frozen diff is the starting point, never the sole code authority. Reviewers must trace
@@ -64,9 +74,12 @@ inconsistent profile fails before any GitHub mutation. Reviewer receipts are key
 frozen PR head, role, and attempt; a complete detached receipt is reused verbatim. A
 timeout or provider-inactive reviewer may be retried alone once with a capped extended
 deadline. Cancellation and parent termination are distinct and are not retries. Parent
-deadlines must exceed nested reviewer deadlines plus join grace, or be omitted. Pi
-resume/session receipts prove execution only; when continuation is not persisted,
-recover the complete trusted result artifact or fail closed.
+deadlines must exceed nested reviewer deadlines plus join grace, or be omitted. The
+orchestration workflow sets `control.needsAttentionAfterMs` to at least 3,900,000 ms and
+waits with `stopOnAttention: false`; a generic 1,800-second attention event never permits
+steering an active one-hour reviewer. Pi resume/session receipts prove execution only;
+when continuation is not persisted, recover the complete trusted result artifact or
+fail closed.
 
 ## Work-on ownership
 
@@ -77,24 +90,35 @@ The work-on coordinator owns this closed loop:
 The issue is an untrusted claim; investigation is the authoritative verdict and mutation
 scope. A complete investigation-backed Builder Contract and affected-file claim must be
 durable before the first edit. Contract/implementation scope gaps return to
-investigation or become follow-ups. Remediation clusters findings by shared invariant,
-respects the configured round cap, and never absorbs unrelated review debt.
+investigation or become follow-ups, and a claim is revised before a new path is touched.
+Manifest-tracked original specs mechanically include `specs/original/SHA256SUMS` in the
+contract. Closed PRs and stale branches are historical evidence, never bulk patch
+sources. Remediation clusters findings by shared invariant, respects the configured
+round cap, and never absorbs unrelated review debt.
 
 Review may merge but never closes the issue. Close explicitly verifies the merge,
 closes the issue, updates labels, posts trajectory, and cleans the worktree before
-returning terminal success. A new session must resume from GitHub alone.
+returning terminal success. In Pi, original-spec instructions to repair a pushed managed
+branch by rebase/reset, or to classify a mechanical base/helper/provider/dispatch failure
+as `needs-human`, translate to automated GATED/review-degraded evidence; only genuine
+human authority remains `needs-human`. A new session must resume from GitHub alone.
 
 ## Review ownership
 
 Standard review must route a staging/feature-to-protected-target PR to the staging
-strategy automatically. It runs configured verification and integration checks,
+strategy automatically. Before checks or fanout, a work-on-owned review calls
+`forge_verify_lane_scope` with its `FORGE:BASE`, frozen route/head, and final claim.
+Standalone review uses the exact frozen GitHub patch without inventing claim authority.
+Contaminated branch history gates without reviewer findings. It then runs configured
+verification and integration checks,
 derives the risk-based reviewer roster, joins the complete fresh panel, creates an
-issue for every finding, posts an official PR review tied to the frozen SHA, and applies
-the original blocking/merge policy. Review blocks only patch-introduced or
-patch-reachable defects; pre-existing findings are non-blocking follow-ups. Max-thinking
-reviewers use a one-hour operational timeout, and provider failures never imply human
-authority. `--model` and advertised flags must either work or be rejected explicitly
-before side effects.
+issue for every finding, posts an
+official PR review tied to the frozen SHA, and applies the original blocking/merge
+policy. Review blocks only patch-introduced or patch-reachable defects; pre-existing
+findings are non-blocking follow-ups. Max-thinking reviewers use a one-hour operational
+timeout, and provider, base-integrity, or other mechanically recoverable failures never
+imply human authority. `--model` and advertised flags must either work or be rejected
+explicitly before side effects.
 
 Staging review is a bundle/deployment strategy, not merely a larger standard panel. It
 accepts an exact PR number, discovers included PRs, checks prior findings across the

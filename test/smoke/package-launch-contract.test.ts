@@ -21,6 +21,8 @@ const COORDINATOR_TOOLS = [
   "write",
   "contact_supervisor",
   "subagent",
+  "forge_prepare_lane_base",
+  "forge_verify_lane_scope",
   "forgedock_preflight",
   "forgedock_github",
 ] as const;
