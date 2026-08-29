@@ -99,6 +99,15 @@ export function parseVerificationDiagnostics(
         ...(line && Number.isSafeInteger(line) ? { line } : {}),
         blocking: true,
       });
+      if (!localModule && CHANGED_CODE_PATTERN.test(message)) {
+        diagnostics.push({
+          kind: "changed-code",
+          message,
+          ...(file && !file.includes(" ") ? { file } : {}),
+          ...(line && Number.isSafeInteger(line) ? { line } : {}),
+          blocking: true,
+        });
+      }
       continue;
     }
     if (SYNTAX_PATTERN.test(message)) {
@@ -262,6 +271,11 @@ export function isVerificationDiagnosticReport(
       typeof diagnostic.message === "string" && typeof diagnostic.blocking === "boolean";
   });
   if (!diagnosticsValid(report.diagnostics) || !diagnosticsValid(report.blockingDiagnostics)) return false;
+  if (report.outcome === "environment-only") {
+    const fallback = report.selectedFallback;
+    if (!fallback || typeof fallback.name !== "string" || typeof fallback.command !== "string" ||
+        (fallback.kind !== "container" && fallback.kind !== "venv")) return false;
+  }
   const allDiagnostics = report.diagnostics as VerificationDiagnostic[];
   const reportedBlocking = report.blockingDiagnostics as VerificationDiagnostic[];
   const blocking = allDiagnostics.filter((entry) => entry.blocking);

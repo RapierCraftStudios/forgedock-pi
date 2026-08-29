@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type {
@@ -97,6 +97,26 @@ import {
 } from "./remediation.ts";
 
 const RUN_LINK_ENTRY = "forgedock-run-link/v1";
+
+async function recoverVerificationResults(
+  forgeDir: string,
+): Promise<ForgeWorkOnResult["verification"]> {
+  const names = await readdir(forgeDir).catch(() => [] as string[]);
+  for (const name of names) {
+    const parsed = findForgeNodeResult(
+      await readFile(join(forgeDir, name), "utf8").catch(() => ""),
+    );
+    if (!parsed || parsed.node !== "verify" || parsed.status !== "completed")
+      continue;
+    return parsed.verification.map((check) => ({
+      name: `local:${check.name}`,
+      status: check.status,
+      ...(check.exitCode === undefined ? {} : { exitCode: check.exitCode }),
+      ...(check.diagnostics === undefined ? {} : { diagnostics: check.diagnostics }),
+    }));
+  }
+  return [];
+}
 
 export type WorkflowStage = keyof typeof WORKFLOW_LABEL_BY_STAGE;
 export type WorkflowTransition = "started" | "resumed" | "completed";
@@ -4186,6 +4206,7 @@ export class ForgeWorkOnController {
       reviewers.push(parsed);
     }
     const findings = reviewers.flatMap((entry) => entry.findings ?? []);
+    const recoveredVerification = await recoverVerificationResults(forgeDir);
     const reconstructed: ForgeWorkOnResult = {
       schema: "forgedock.work-on-result/v1",
       runId: link.forgeRunId,
@@ -4195,12 +4216,15 @@ export class ForgeWorkOnController {
       baseSha,
       headSha,
       changedFiles,
-      verification: [
-        {
-          name: "local-verification",
-          status: "skipped",
-        },
-      ],
+      verification:
+        recoveredVerification.length > 0
+          ? recoveredVerification
+          : [
+              {
+                name: "local-verification",
+                status: "skipped",
+              },
+            ],
       residualRisks: [],
       review: {
         headSha,
@@ -5855,7 +5879,7 @@ function renderVerificationEvidence(
   return checks
     .map(
       (check) =>
-        `- ${check.name}: ${check.status}${check.required ? " (required)" : ""}`,
+        `- ${check.name}: ${check.diagnostics?.outcome === "environment-only" ? "passed (environment-only; fallback verified)" : check.status}${check.required ? " (required)" : ""}`,
     )
     .join("\n");
 }

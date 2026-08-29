@@ -95,6 +95,17 @@ test("relative module failures are changed-code diagnostics", () => {
   assert.equal(report.selectedFallback, undefined);
 });
 
+test("code diagnostics retain blocking precedence on an import line", () => {
+  const report = classifyVerificationOutput(
+    'Import "fastapi" could not be resolved; TypeError: invalid value',
+    {
+      fallbacks: [{ name: "container", kind: "container", command: "docker test", status: "passed" }],
+    },
+  );
+  assert.equal(report.outcome, "blocked");
+  assert.ok(report.diagnostics.some((entry) => entry.kind === "changed-code"));
+});
+
 test("diagnostic report validation rejects contradictory machine results", () => {
   const report = classifyVerificationOutput("SyntaxError: invalid syntax");
   assert.equal(isVerificationDiagnosticReport(report), true);
