@@ -41,6 +41,7 @@ import { resolveVerificationCommandDirectory } from "../adapters/verification-pr
 import {
   classifyVerificationOutput,
   formatSkippedVerification,
+  type FallbackStatus,
   type ValidationEnvironment,
 } from "../core/verification-diagnostics.ts";
 import {
@@ -313,6 +314,7 @@ export function registerForgeRuntime(
   let reviewDiffCoverage:
     | { headSha: string; sha256: string; bytes: number; coveredBytes: number }
     | undefined;
+  const fallbackStatuses = new Map<string, FallbackStatus>();
 
   pi.on("session_start", async (_event, ctx) => {
     if (options.mainSession) return;
@@ -955,6 +957,7 @@ export function registerForgeRuntime(
         env: safeEnvironment(binding.runId),
         ...(signal ? { signal } : {}),
       });
+      assertCompleteProcessOutput(result, `Verification command ${params.name}`);
       const status =
         result.timedOut || result.exitCode === null
           ? "unknown"
@@ -962,17 +965,21 @@ export function registerForgeRuntime(
             ? "passed"
             : "failed";
       const output = [result.stdout, result.stderr].filter(Boolean).join("\n");
+      const configuredFallback = binding.verificationEnvironment?.fallbacks?.find(
+        (fallback) => fallback.name === params.name,
+      );
+      if (configuredFallback)
+        fallbackStatuses.set(
+          params.name,
+          result.exitCode === 0 && !result.timedOut ? "passed" : "failed",
+        );
       const fallbackResults = binding.verificationEnvironment?.fallbacks?.map(
         (fallback) =>
           fallback.name === params.name
-            ? {
-                ...fallback,
-                status:
-                  result.exitCode === 0 && !result.timedOut
-                    ? ("passed" as const)
-                    : ("failed" as const),
-              }
-            : fallback,
+            ? { ...fallback, status: fallbackStatuses.get(params.name)! }
+            : fallbackStatuses.has(fallback.name)
+              ? { ...fallback, status: fallbackStatuses.get(fallback.name)! }
+              : fallback,
       );
       const diagnosticReport = classifyVerificationOutput(
         result.exitCode === 0 && !result.timedOut ? "" : output,

@@ -261,7 +261,16 @@ export function isVerificationDiagnosticReport(
     return ["missing-host-dependency", "syntax-error", "changed-code", "environment-unavailable", "unknown"].includes(String(diagnostic.kind)) &&
       typeof diagnostic.message === "string" && typeof diagnostic.blocking === "boolean";
   });
-  return diagnosticsValid(report.diagnostics) && diagnosticsValid(report.blockingDiagnostics);
+  if (!diagnosticsValid(report.diagnostics) || !diagnosticsValid(report.blockingDiagnostics)) return false;
+  const allDiagnostics = report.diagnostics as VerificationDiagnostic[];
+  const reportedBlocking = report.blockingDiagnostics as VerificationDiagnostic[];
+  const blocking = allDiagnostics.filter((entry) => entry.blocking);
+  if (blocking.length !== reportedBlocking.length ||
+      blocking.some((entry, index) => entry.message !== reportedBlocking[index]?.message)) return false;
+  if (report.outcome === "blocked") return blocking.length > 0;
+  if (report.outcome === "environment-only")
+    return blocking.length === 0 && report.diagnostics.some((entry) => entry.kind === "missing-host-dependency");
+  return blocking.length === 0 && report.diagnostics.length === 0;
 }
 
 export function classifyVerificationOutput(

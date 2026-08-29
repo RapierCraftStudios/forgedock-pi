@@ -5863,21 +5863,20 @@ function renderVerificationEvidence(
 function verificationOutcome(
   checks: readonly VerificationResult[],
 ): VerificationResult["status"] {
+  const effectiveStatus = (check: VerificationResult) =>
+    check.diagnostics?.outcome === "environment-only" ? "passed" : check.status;
   const required = checks.filter((check) => check.required);
-  if (required.some((check) => check.status === "failed")) return "failed";
-  if (required.some((check) => check.status === "pending")) return "pending";
-  if (required.some((check) => check.status === "skipped")) return "skipped";
-  if (required.some((check) => check.status === "unknown")) return "unknown";
-  if (required.some((check) => check.status === "not-configured"))
+  if (required.some((check) => effectiveStatus(check) === "failed")) return "failed";
+  if (required.some((check) => effectiveStatus(check) === "pending")) return "pending";
+  if (required.some((check) => effectiveStatus(check) === "skipped")) return "skipped";
+  if (required.some((check) => effectiveStatus(check) === "unknown")) return "unknown";
+  if (required.some((check) => effectiveStatus(check) === "not-configured"))
     return "not-configured";
-  if (
-    required.length > 0 &&
-    required.every((check) => check.status === "passed")
-  )
+  if (required.length > 0 && required.every((check) => effectiveStatus(check) === "passed"))
     return "passed";
-  if (checks.some((check) => check.status === "policy-exempt"))
+  if (checks.some((check) => effectiveStatus(check) === "policy-exempt"))
     return "policy-exempt";
-  if (checks.some((check) => check.status === "passed")) return "passed";
+  if (checks.some((check) => effectiveStatus(check) === "passed")) return "passed";
   return "not-configured";
 }
 

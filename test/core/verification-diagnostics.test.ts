@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   classifyVerificationOutput,
   formatSkippedVerification,
+  isVerificationDiagnosticReport,
   parseVerificationDiagnostics,
 } from "../../src/core/verification-diagnostics.ts";
 
@@ -92,6 +93,15 @@ test("relative module failures are changed-code diagnostics", () => {
   assert.equal(report.outcome, "blocked");
   assert.equal(report.diagnostics[0]?.kind, "changed-code");
   assert.equal(report.selectedFallback, undefined);
+});
+
+test("diagnostic report validation rejects contradictory machine results", () => {
+  const report = classifyVerificationOutput("SyntaxError: invalid syntax");
+  assert.equal(isVerificationDiagnosticReport(report), true);
+  assert.equal(
+    isVerificationDiagnosticReport({ ...report, outcome: "environment-only" }),
+    false,
+  );
 });
 
 test("syntax errors are never treated as missing-environment noise", () => {

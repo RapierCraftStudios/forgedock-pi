@@ -51,6 +51,7 @@ export {
   classifyVerificationDiagnostics,
   classifyVerificationOutput,
   formatSkippedVerification,
+  isVerificationDiagnosticReport,
   parseVerificationDiagnostics,
 } from "./core/verification-diagnostics.ts";
 export type {
