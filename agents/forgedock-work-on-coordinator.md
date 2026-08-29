@@ -7,7 +7,7 @@ inheritProjectContext: true
 inheritGlobalContext: false
 inheritSkills: false
 skills: forgedock-work-on, forgedock-review-pr
-tools: read, grep, find, ls, bash, edit, write, contact_supervisor
+tools: read, grep, find, ls, bash, edit, write, contact_supervisor, subagent
 allowNestedSubagents: true
 defaultContext: fresh
 acceptanceRole: writer

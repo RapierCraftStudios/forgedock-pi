@@ -36,6 +36,7 @@ test("package exposes a depth-bounded work-on coordinator with reviewer fanout",
   const agent = await readFile("agents/forgedock-work-on-coordinator.md", "utf8");
   assert.match(agent, /name: forgedock-work-on-coordinator/);
   assert.match(agent, /allowNestedSubagents: true/);
+  assert.match(agent, /tools:.*\bsubagent\b/);
   assert.match(agent, /skills: forgedock-work-on, forgedock-review-pr/);
   assert.match(agent, /visible orchestrator → work-on coordinator → fresh reviewers/);
   assert.doesNotMatch(agent, /maxSubagentDepth: 1/);
