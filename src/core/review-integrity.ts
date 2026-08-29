@@ -77,10 +77,14 @@ export function quarantineReviewFinding(finding: ForgeReviewFindingResult): { fi
 
 /** Read only the signed structured marker; never infer paths from prose/body text. */
 export function trustedAffectedPathsFromReviewFinding(markdown: string): readonly string[] {
-  const match = markdown.match(/<!--\s*FORGE:REVIEW_FINDING_PATHS\s+([^>]+?)\s*-->/);
-  if (!match?.[1]) return [];
+  const prefix = "<!-- FORGE:REVIEW_FINDING_PATHS ";
+  const start = markdown.indexOf(prefix);
+  if (start < 0) return [];
+  const valueStart = start + prefix.length;
+  const end = markdown.indexOf(" -->", valueStart);
+  if (end < 0) return [];
   try {
-    const value: unknown = JSON.parse(match[1]);
+    const value: unknown = JSON.parse(markdown.slice(valueStart, end));
     if (!Array.isArray(value)) return [];
     return Object.freeze(normalizePathList(value, "readback affected paths"));
   } catch {
