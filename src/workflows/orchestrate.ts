@@ -27,6 +27,12 @@ import {
   type OrchestrationDependencyEdge,
   type OrchestrationState,
 } from "../core/orchestration.ts";
+import {
+  orchestrationChildKey,
+  planOrchestrationReload,
+  renderOrchestrationReloadReport,
+  type RetainedOrchestrationChild,
+} from "../core/orchestration-recovery.ts";
 import { isLeaseExpired } from "../core/lease.ts";
 import { isProtectedBranch, type ForgePolicy } from "../core/policy.ts";
 import { OrchestrationJournal } from "./orchestration-journal.ts";
@@ -306,6 +312,20 @@ export class ForgeOrchestrationController {
         this.#persistLink(link);
         await this.#recoverFalseFailures(link, snapshot.state, ctx);
         snapshot = await this.#read(link, ctx.signal);
+        const reloadPlan = planOrchestrationReload({
+          state: snapshot.state,
+          retainedChildren: retainedChildrenForReload(
+            snapshot.state,
+            this.#workOn.listRuns(),
+          ),
+        });
+        if (reloadPlan.paused) {
+          ctx.ui.notify(
+            renderOrchestrationReloadReport(reloadPlan),
+            "warning",
+          );
+          continue;
+        }
         for (const lane of snapshot.state.lanes) {
           if (lane.status !== "running") continue;
           const event = await this.#workOn.reconcileOrchestrationIssue(
@@ -1194,6 +1214,26 @@ function validateIssueNumbers(issueNumbers: readonly number[]): void {
   }
   if (new Set(issueNumbers).size !== issueNumbers.length)
     throw new Error("Orchestration issue numbers must be unique.");
+}
+
+function retainedChildrenForReload(
+  state: OrchestrationState,
+  runs: readonly { orchestrationId?: string; issueNumber: number; status: string; forgeRunId: string }[],
+): RetainedOrchestrationChild[] {
+  return runs
+    .filter((run) => run.orchestrationId === state.orchestrationId)
+    .map((run) => ({
+      childKey:
+        state.batch?.childKeys[String(run.issueNumber)] ??
+        orchestrationChildKey(state.orchestrationId, run.issueNumber),
+      issueNumber: run.issueNumber,
+      status: (run.status === "completed"
+        ? "completed"
+        : run.status === "failed"
+          ? "failed"
+          : "running") as RetainedOrchestrationChild["status"],
+      forgeRunId: run.forgeRunId,
+    }));
 }
 
 function activeReservationIssueNumbers(

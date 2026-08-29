@@ -509,6 +509,41 @@ test("PR collection helpers sort results and resolve route aliases", async () =>
   });
 });
 
+test("staging bundle candidate metadata paginates all PR states and preserves merge identity", async () => {
+  const transport = new MockTransport((request) => {
+    const url = new URL(request.path, "https://api.github.com");
+    assert.equal(url.searchParams.get("state"), "all");
+    assert.equal(url.searchParams.get("base"), "staging");
+    const page = Number(url.searchParams.get("page") ?? "1");
+    const pull = (number: number, mergeCommitSha?: string) => ({
+      number,
+      html_url: `https://example.test/pulls/${number}`,
+      state: "closed",
+      merged: true,
+      ...(mergeCommitSha ? { merge_commit_sha: mergeCommitSha } : {}),
+      head: { sha: `head-${number}`, ref: `feature-${number}` },
+      base: { sha: "staging-base", ref: "staging" },
+      mergeable: true,
+    });
+    if (page === 1)
+      return {
+        status: 200,
+        data: [pull(4, "merge-4")],
+        headers: {
+          link: '<https://api.github.com/repos/owner/repo/pulls?state=all&base=staging&per_page=100&page=2>; rel="next"',
+        },
+      };
+    return response(200, [pull(5)]);
+  });
+  const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
+  const candidates = await adapter.listStagingBundleCandidates();
+  assert.deepEqual(
+    candidates.map((candidate) => [candidate.number, candidate.mergeCommitSha]),
+    [[4, "merge-4"], [5, undefined]],
+  );
+  assert.equal(candidates[0]?.repository, "owner/repo");
+});
+
 test("pull artifacts paginate markers and read back the exact created comment", async () => {
   const comments = Array.from({ length: 100 }, (_, index) => ({
     id: index + 1,

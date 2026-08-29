@@ -1,0 +1,377 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: Copyright (c) RapierCraft Studios
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# check-command-side-effects.sh — Scan commands/**/*.md for two classes of
+#                                  spec-as-code side-effect defects.
+#
+# Command specs are spec-as-code: they drive autonomous side effects (auto-merge,
+# gh gist create, git push, label mutations, issue creation). This script catches
+# two defect classes before they reach staging:
+#
+#   Class A — Unconditionally prohibited patterns (full-corpus, always blocked):
+#     `gh gist create --public` or `gh gist edit --public` anywhere in a code block.
+#     Gists created by the pipeline MUST be secret — --public exposes private repo
+#     titles, root causes, and file paths to the world. (Ref: forge#1587)
+#
+#   Class B — Side-effect verbs in code blocks with no DRY_RUN/governor guard (diff-aware):
+#     When added lines introduce a side-effect verb (gh issue create, gh pr merge,
+#     git push, gh issue edit|comment, --auto-merge, --add/remove-label) inside a
+#     code block that has no guard expression (DRY_RUN, GOVERNOR, --dry-run)
+#     anywhere in THAT SAME code block, the change is flagged. Guard/side-effect
+#     correlation is scoped to the individual fenced code block, not the whole
+#     section — a guard mentioned in an unrelated code block elsewhere in the
+#     same section (before or after the flagged verb) does not silence the
+#     finding. (Ref: forge#2289 — a decoy guard anywhere in the section, in any
+#     code block, previously silenced detection of an actually-unguarded side
+#     effect in a different block of that same section.)
+#     Operates on the diff (GITHUB_BASE_SHA or HEAD^) to avoid flagging legacy corpus.
+#     (Ref: forge#1609 — signal-planner.md DRY_RUN guard placed after the create it guards)
+#
+# Allowlist: add <!-- allowlist:check-command-side-effects --> on the same line as
+# the side-effect verb to suppress that specific hit.
+#
+# Usage:
+#   check-command-side-effects.sh [--full] [<commands_dir>]
+#     --full         Scan entire corpus (not just diff) for Class A violations only.
+#                    Class B is diff-aware by design — --full does not change Class B.
+#     commands_dir   Path to the commands/ directory (default: ./commands)
+#
+# Environment:
+#   GITHUB_BASE_SHA   When set, used as the base commit for Class B diff mode.
+#
+# Exit codes:
+#   0  no violations found
+#   1  one or more violations found (listed to stderr)
+#   2  usage / dependency error
+#
+# <!-- Added: forge#1609 -->
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Argument parsing
+# ---------------------------------------------------------------------------
+
+FULL_MODE=0
+COMMANDS_DIR="./commands"
+
+for arg in "$@"; do
+  case "$arg" in
+    -h|--help)
+      sed -n '2,/^set -/p' "$0" | grep '^#' | sed 's/^# *//'
+      exit 0
+      ;;
+    --full) FULL_MODE=1 ;;
+    -*) echo "ERROR: unknown option: $arg" >&2; exit 2 ;;
+    *) COMMANDS_DIR="$arg" ;;
+  esac
+done
+
+if [ ! -d "$COMMANDS_DIR" ]; then
+  echo "ERROR: commands directory not found: $COMMANDS_DIR" >&2
+  echo "Usage: $0 [--full] [<commands_dir>]" >&2
+  exit 2
+fi
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+# Code fence marker — stored in variable to avoid backtick shell-expansion bugs.
+# Do NOT inline as grep -E '^[[:space:]]*\`\`\`' — escaped backticks in grep
+# patterns undergo shell expansion, turning the pattern into '^[[:space:]]*'
+# which matches every line. (forge#1609)
+FENCE='```'
+
+# Guard expressions: any occurrence in a section's code blocks marks it as guarded
+GUARD_PATTERN='DRY_RUN|GOVERNOR|--dry-run|DRY_RUN_MODE|DryRun'
+
+# Class B side-effect verbs (in code blocks)
+SIDE_EFFECT_PATTERN='gh[[:space:]]+(issue[[:space:]]+(create|edit|comment)|pr[[:space:]]+(merge|create|edit)|gist[[:space:]]+(create|edit))|git[[:space:]]+push|--auto-merge|--add-label|--remove-label'
+
+ALLOWLIST_TOKEN='allowlist:check-command-side-effects'
+
+VIOLATIONS=0
+
+# ---------------------------------------------------------------------------
+# Class A: Scan for gh gist create/edit --public in code blocks (full corpus)
+# This runs regardless of --full or diff mode.
+# ---------------------------------------------------------------------------
+
+class_a_scan() {
+  local file="$1"
+  local IN_CB=0
+  local HAS_GIST=0
+  local BLOCK_LINES=""
+  local BLOCK_START=0
+  local LN=0
+  local line PUBLIC_LN ACTUAL_LINE IS_FENCE IS_BARE
+
+  # flush_a_block — evaluate the currently-accumulated block's HAS_GIST/
+  # BLOCK_LINES state for a 'gh gist create/edit --public' violation, then
+  # reset it. Defined inside class_a_scan (not at file scope) so it shares
+  # this invocation's `local` variables via bash's dynamic scoping — the same
+  # mechanism Class B's flush_block() relies on for its own loop-local state.
+  # Called from two sites: (1) the existing fence-close path below, when a
+  # bare fence brings IN_CB back to 0, and (2) once more, defensively, after
+  # the read loop ends — covering a file that ends with an unterminated
+  # fence (IN_CB still > 0 at EOF), which previously discarded any
+  # accumulated violation silently. (forge#2289 added the equivalent
+  # end-of-file flush for Class B only; this closes the same gap in Class A.)
+  flush_a_block() {
+    if [ "$HAS_GIST" -eq 1 ] && [[ "$BLOCK_LINES" =~ (^|$'\n')[[:space:]]*--public([[:space:]]|$) ]]; then
+      # Find the line number of --public within the block
+      PUBLIC_LN=$(echo "$BLOCK_LINES" | grep -n '^[[:space:]]*--public' | head -1 | cut -d: -f1)
+      ACTUAL_LINE=$((BLOCK_START + PUBLIC_LN))
+      if ! echo "$BLOCK_LINES" | grep -qF "$ALLOWLIST_TOKEN"; then
+        echo "HIGH | $file | line ~$ACTUAL_LINE | Class A: 'gh gist create/edit --public' in code block — gists MUST be secret (omit --public); --public exposes private repo data. (forge#1587)" >&2
+        VIOLATIONS=$((VIOLATIONS + 1))
+      fi
+    fi
+    HAS_GIST=0
+    BLOCK_LINES=""
+  }
+
+  while IFS= read -r line; do
+    LN=$((LN + 1))
+
+    # Fence detection is anchored to line-start (ignoring leading whitespace).
+    # IN_CB is a true nesting-DEPTH counter, not a 0/1 flag: a fence line
+    # carrying an info string (e.g. a nested ```bash) while already inside a
+    # block opens one more nesting level (increment); a bare fence (nothing
+    # after the backticks but optional trailing whitespace) closes exactly
+    # one level (decrement). The accumulated block is only evaluated once
+    # depth returns to 0 — i.e. once the OUTERMOST fence has actually closed,
+    # not merely an inner one. A binary flag cannot distinguish "still inside
+    # the outer fence, past an inner fence's close" from "outside all
+    # fences"; depth tracking can. (forge#2210 fixed anchoring/info-string-is-
+    # content; forge#2288 adds true depth so 2+ nesting levels close correctly.)
+    IS_FENCE=0
+    IS_BARE=0
+    if [[ "$line" =~ ^[[:space:]]*${FENCE} ]]; then
+      IS_FENCE=1
+      if [[ "$line" =~ ^[[:space:]]*${FENCE}[[:space:]]*$ ]]; then
+        IS_BARE=1
+      fi
+    fi
+
+    if [ "$IN_CB" -eq 0 ]; then
+      if [ "$IS_FENCE" -eq 1 ]; then
+        IN_CB=1
+        HAS_GIST=0
+        BLOCK_LINES=""
+        BLOCK_START=$LN
+      fi
+      continue
+    fi
+
+    # IN_CB >= 1 — inside a block, possibly nested.
+    if [ "$IS_FENCE" -eq 1 ]; then
+      if [ "$IS_BARE" -eq 1 ]; then
+        IN_CB=$((IN_CB - 1))
+      else
+        IN_CB=$((IN_CB + 1))
+      fi
+      if [ "$IN_CB" -eq 0 ]; then
+        # Fully closed (outermost fence) — evaluate the accumulated block now.
+        flush_a_block
+        continue
+      fi
+      # Still inside (nested transition) — the fence line itself is block content.
+      BLOCK_LINES="${BLOCK_LINES}${line}
+"
+      continue
+    fi
+
+    # Regular content line while inside (at any depth).
+    BLOCK_LINES="${BLOCK_LINES}${line}
+"
+    # Check if this line has gh gist create/edit (even with line continuation \)
+    if [[ "$line" =~ gh[[:space:]]+gist[[:space:]]+(create|edit) ]]; then
+      HAS_GIST=1
+    fi
+  done < "$file"
+
+  # Defensive final flush — evaluates any block state left accumulated if the
+  # file ended with an unterminated fence (IN_CB never returned to 0). A
+  # no-op if the last block already closed and was flushed above. Mirrors
+  # Class B's identical end-of-file `flush_block` call. (forge#2305)
+  flush_a_block
+}
+
+while IFS= read -r file; do
+  [ -f "$file" ] || continue
+  class_a_scan "$file"
+done < <(find "$COMMANDS_DIR" -name '*.md' | sort)
+
+# ---------------------------------------------------------------------------
+# Class B: Diff-aware scan for unguarded side-effect verbs in added lines
+# ---------------------------------------------------------------------------
+
+# Determine base SHA for diff
+BASE_SHA=""
+if [ -n "${GITHUB_BASE_SHA:-}" ]; then
+  BASE_SHA="$GITHUB_BASE_SHA"
+elif [ -n "${GITHUB_EVENT_PULL_REQUEST_BASE_SHA:-}" ]; then
+  BASE_SHA="$GITHUB_EVENT_PULL_REQUEST_BASE_SHA"
+else
+  BASE_SHA="$(git rev-parse HEAD^ 2>/dev/null || echo '')"
+fi
+
+if [ -z "$BASE_SHA" ]; then
+  echo "INFO: No git base SHA available — Class B (diff-aware) check skipped" >&2
+else
+  # Get list of changed command spec files
+  CHANGED_SPECS=$(git diff --name-only "$BASE_SHA"...HEAD -- "${COMMANDS_DIR}" 2>/dev/null \
+    | grep -E '\.md$' | grep -v '^$' || true)
+
+  if [ -z "$CHANGED_SPECS" ]; then
+    echo "OK (Class B): No commands/*.md files changed — diff check skipped"
+  else
+    echo "Class B: Checking changed spec files for unguarded side-effect verbs:"
+    echo "$CHANGED_SPECS"
+    echo ""
+
+    while IFS= read -r file; do
+      [ -f "$file" ] || continue
+
+      # Get added lines for this file
+      ADDED_CONTENT=$(git diff "$BASE_SHA"...HEAD -- "$file" 2>/dev/null \
+        | grep '^+' | grep -v '^+++' | sed 's/^+//' || true)
+
+      # Skip if no added lines contain side-effect verbs
+      if ! echo "$ADDED_CONTENT" | grep -qE "$SIDE_EFFECT_PATTERN"; then
+        continue
+      fi
+
+      # Parse the full file to map code blocks → (has_guard, has_side_effect_in_added_lines).
+      # SECTION is tracked only as a human-readable label for the violation message —
+      # it plays NO role in guard/side-effect correlation. Correlation is scoped to
+      # the individual fenced code block (BLOCK_* state), reset on every block open
+      # and evaluated on every block close, so a guard mentioned in a different code
+      # block — even one earlier or later in the very same section — cannot silence
+      # an unguarded side effect in another block. (forge#2289)
+      IN_CB=0
+      SECTION="(top)"
+      BLOCK_HAS_GUARD=0
+      BLOCK_HAS_ADDED_SE=0
+      BLOCK_SE_LINE=0
+      BLOCK_SE_VERB=""
+      LN=0
+
+      flush_block() {
+        # Evaluate and reset the current code block's guard/side-effect state.
+        # Called whenever a fenced code block's outermost fence closes (depth
+        # returns to 0), and once more, defensively, at end-of-file to cover a
+        # malformed/unterminated block (mirrors the pre-forge#2289 behavior of
+        # unconditionally evaluating accumulated state before resetting).
+        if [ "$BLOCK_HAS_ADDED_SE" -eq 1 ] && [ "$BLOCK_HAS_GUARD" -eq 0 ]; then
+          echo "HIGH | $file | line $BLOCK_SE_LINE | Class B: side-effect '$BLOCK_SE_VERB' added in section '$SECTION' with no DRY_RUN/governor guard in the same code block — add a guard inside this code block or wrap the effect in a DRY_RUN check" >&2
+          VIOLATIONS=$((VIOLATIONS + 1))
+        fi
+        BLOCK_HAS_GUARD=0
+        BLOCK_HAS_ADDED_SE=0
+        BLOCK_SE_LINE=0
+        BLOCK_SE_VERB=""
+      }
+
+      while IFS= read -r line; do
+        LN=$((LN + 1))
+
+        # Code block fence — checked BEFORE the heading test so IN_CB reflects
+        # this line's actual state. IN_CB is a true nesting-DEPTH counter, not
+        # a 0/1 flag: a fence line carrying an info string (e.g. nested
+        # ```bash) encountered while already inside a block opens one more
+        # nesting level (increment); a bare fence (nothing after the
+        # backticks) closes exactly one level (decrement). Heading detection
+        # below only fires once depth returns to 0 — i.e. once we are outside
+        # ALL fences, not merely an inner one. A binary flag cannot
+        # distinguish "still inside the outer fence, past an inner fence's
+        # close" from "outside all fences"; this is exactly the gap that let
+        # embedded `## Step N` headers inside one continuous outer code block
+        # (e.g. commands/review-pr-agents/spec-cli.md) be misdetected as real
+        # section boundaries. (forge#2210 fixed anchoring/info-string-is-
+        # content for a single nesting level; forge#2288 adds true depth so
+        # 2+ nesting levels close correctly.)
+        IS_FENCE=0
+        IS_BARE=0
+        if [[ "$line" =~ ^[[:space:]]*${FENCE} ]]; then
+          IS_FENCE=1
+          if [[ "$line" =~ ^[[:space:]]*${FENCE}[[:space:]]*$ ]]; then
+            IS_BARE=1
+          fi
+        fi
+
+        if [ "$IN_CB" -eq 0 ]; then
+          if [ "$IS_FENCE" -eq 1 ]; then
+            IN_CB=1
+            continue
+          fi
+
+          # Section heading — label-only update (forge#2210). This no longer
+          # flushes guard/side-effect state: that state is now block-scoped
+          # (forge#2289) and is always already at rest here, since this branch
+          # is only reached when IN_CB is 0 — i.e. any block that was open has
+          # already been closed and flushed at its own fence-close below.
+          if [[ "$line" =~ ^#{1,6}[[:space:]]+(.*)$ ]]; then
+            heading="${BASH_REMATCH[1]}"
+            heading="${heading%"${heading##*[![:space:]]}"}"
+            SECTION="$heading"
+            continue
+          fi
+          continue
+        fi
+
+        # IN_CB >= 1 — inside a block, possibly nested.
+        if [ "$IS_FENCE" -eq 1 ]; then
+          if [ "$IS_BARE" -eq 1 ]; then
+            IN_CB=$((IN_CB - 1))
+          else
+            IN_CB=$((IN_CB + 1))
+          fi
+          if [ "$IN_CB" -eq 0 ]; then
+            # Outermost fence just closed — evaluate this block's guard/SE
+            # correlation now, before starting the next block. (forge#2289)
+            flush_block
+          fi
+          continue
+        fi
+
+        # Content line while inside (at any depth).
+        if [[ "$line" == *"$ALLOWLIST_TOKEN"* ]]; then continue; fi
+
+        # Check for guard — scoped to THIS code block only (forge#2289)
+        [[ "$line" =~ $GUARD_PATTERN ]] && BLOCK_HAS_GUARD=1
+
+        # Check if this line is in the diff's added lines AND has a side-effect verb
+        if [ "$BLOCK_HAS_ADDED_SE" -eq 0 ] && [[ "$line" =~ $SIDE_EFFECT_PATTERN ]]; then
+          # Is this specific line in the added content?
+          if [[ "$ADDED_CONTENT" == *"${line:0:80}"* ]]; then
+            BLOCK_HAS_ADDED_SE=1
+            BLOCK_SE_LINE=$LN
+            BLOCK_SE_VERB="${BASH_REMATCH[0]:-side-effect}"
+          fi
+        fi
+      done < "$file"
+
+      # Defensive final flush — evaluates any block state left accumulated if
+      # the file ended with an unterminated fence (malformed input); a no-op
+      # if the last block already closed and was flushed above.
+      flush_block
+
+    done <<< "$CHANGED_SPECS"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Summary
+# ---------------------------------------------------------------------------
+
+if [ "$VIOLATIONS" -gt 0 ]; then
+  echo "check-command-side-effects: $VIOLATIONS violation(s) found. See stderr for details." >&2
+  exit 1
+fi
+
+echo "OK: No side-effect violations found"
+exit 0

@@ -1155,22 +1155,41 @@ export class ForgeWorkOnController {
       }
       let task: string | undefined;
       if (executionMode === "orchestrated") {
-        const receipt = await this.#rpc.spawnWorkOn({
-          runId,
-          issueNumber,
-          repository: policy.repository.name,
-          worktreeRoot: prepared.worktreePath,
-          branch: prepared.branch,
-          baseBranch: prepared.baseBranch,
-          baseSha: prepared.baseSha,
-          leaseEpoch: link.leaseEpoch,
-          leaseOwnerRunId: link.leaseOwnerRunId,
-          policy,
-          issueContext,
-        });
+        let receipt: { runId: string; resultPath: string } | undefined;
+        let launchFailure: unknown;
+        for (let attempt = 0; attempt <= 3; attempt += 1) {
+          try {
+            receipt = await this.#rpc.spawnWorkOn({
+              runId,
+              issueNumber,
+              repository: policy.repository.name,
+              worktreeRoot: prepared.worktreePath,
+              branch: prepared.branch,
+              baseBranch: prepared.baseBranch,
+              baseSha: prepared.baseSha,
+              leaseEpoch: link.leaseEpoch,
+              leaseOwnerRunId: link.leaseOwnerRunId,
+              policy,
+              issueContext,
+            });
+            break;
+          } catch (error) {
+            launchFailure = error;
+            if (attempt >= 3 || !isTransientProviderFailure(errorMessage(error)))
+              throw error;
+            link.providerRetries = attempt + 1;
+            this.#persistLink(link);
+            ctx.ui.notify(
+              `ForgeDock issue #${issueNumber} retained its durable launch intent after a transient provider failure; retrying (${attempt + 1}/3).`,
+              "warning",
+            );
+          }
+        }
+        if (!receipt) throw launchFailure ?? new Error("Work-on launch produced no receipt.");
         this.#links.delete(link.subagentRunId);
         link.subagentRunId = receipt.runId;
         link.resultPath = receipt.resultPath;
+        link.providerRetries = 0;
         this.#persistLink(link);
       } else {
         this.#directBinding = {

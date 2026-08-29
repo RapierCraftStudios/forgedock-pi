@@ -29,6 +29,19 @@ export interface GitHubTokenResolverOptions {
 export interface GitHubTokenProvider {
   get(signal?: AbortSignal): Promise<string>;
   refresh(signal?: AbortSignal): Promise<string>;
+  /** Credential class is metadata only; token material is never exposed in logs. */
+  readonly source?: "installation" | "bot-token" | "operator";
+}
+
+export interface GhAuthAccount {
+  readonly host: string;
+  readonly login: string;
+  readonly active: boolean;
+}
+
+/** Select active gh identities only; inactive accounts are never candidates. */
+export function selectActiveGhAccount(accounts: readonly GhAuthAccount[], host = "github.com"): GhAuthAccount | undefined {
+  return accounts.find((account) => account.host === host && account.active);
 }
 
 export function createGitHubTokenProvider(
@@ -36,7 +49,14 @@ export function createGitHubTokenProvider(
   cwd: string,
   options: GitHubTokenResolverOptions = {},
 ): GitHubTokenProvider {
+  const env = options.env ?? process.env;
+  const source: GitHubTokenProvider["source"] = env.FORGEDOCK_BOT_TOKEN?.trim()
+    ? "bot-token"
+    : env.FORGEDOCK_APP_PEM?.trim() || (options.env === undefined && existsSync(join(homedir(), ".config", "forgedock", "app.pem")))
+      ? "installation"
+      : "operator";
   return Object.freeze({
+    source,
     get: (signal?: AbortSignal) =>
       resolveGitHubTokenInternal(pi, cwd, signal, options, false),
     refresh: (signal?: AbortSignal) =>

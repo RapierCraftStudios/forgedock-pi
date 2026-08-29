@@ -8,6 +8,10 @@ import {
   type DagEdge,
 } from "./dag.ts";
 import { canonicalJson } from "./events.ts";
+import {
+  createOrchestrationBatchState,
+  type OrchestrationBatchState,
+} from "./orchestration-recovery.ts";
 
 export const ORCHESTRATION_EVENT_SCHEMA =
   "forgedock.orchestration-event/v1" as const;
@@ -73,6 +77,8 @@ export interface OrchestrationState {
   lanes: readonly OrchestrationLane[];
   dependencies: readonly OrchestrationDependencyEdge[];
   graphHash: string;
+  /** Durable batch/child/predecessor state used by reload reconciliation. */
+  batch?: OrchestrationBatchState;
   idempotencyKeys: Readonly<Record<string, string>>;
   /** Added after the initial orchestration snapshot format; replay derives it for legacy states. */
   eventIds?: Readonly<Record<string, true>>;
@@ -556,6 +562,17 @@ function createInitialState(event: OrchestrationEvent): OrchestrationState {
     })),
     dependencies,
     graphHash,
+    batch: createOrchestrationBatchState({
+      orchestrationId: event.orchestrationId,
+      leaseEpoch: positiveInteger(event.payload.leaseEpoch, "leaseEpoch"),
+      lanes: issueNumbers.map((issueNumber, ordinal) => ({
+        issueNumber,
+        ordinal,
+        status: "queued" as const,
+        refreshes: 0,
+      })),
+      dependencies,
+    }),
     idempotencyKeys: { [event.idempotencyKey]: event.eventId },
     eventIds: { [event.eventId]: true },
     createdAt: event.occurredAt,
@@ -630,6 +647,7 @@ function applyLaneEvent(
     next.reason = payloadString(event, "reason");
   }
   (state.lanes as OrchestrationLane[])[index] = next;
+  state.batch = createOrchestrationBatchState(state);
 }
 
 function assertLanePredecessorsComplete(

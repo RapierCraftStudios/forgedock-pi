@@ -8,27 +8,20 @@ test("agent runtime no longer imports workflow-layer authority", async () => {
   assert.match(childRuntime, /from "\.\.\/adapters\/run-journal\.ts"/);
 });
 
-test("session shutdown detaches active runs instead of cancelling durable work", async () => {
+test("entrypoint exposes lexical routing plus deterministic runtime safety tools", async () => {
   const entrypoint = await readFile("src/index.ts", "utf8");
-  assert.match(entrypoint, /pi\.on\("session_shutdown"/);
-  assert.doesNotMatch(entrypoint, /shutdownStandalone/);
-  assert.doesNotMatch(entrypoint, /orchestrator\.shutdown/);
-  assert.match(entrypoint, /controller\.dispose\(\)/);
-  assert.match(entrypoint, /orchestrator\.dispose\(\)/);
-  const workOn = await readFile("src/workflows/work-on.ts", "utf8");
-  assert.match(workOn, /sendUserMessage\(\s*directRunResumeTask/);
-  assert.match(workOn, /#recoverDirectTerminal\(/);
-  assert.match(workOn, /directRunRecoveryAction/);
-  const terminalRecovery = workOn.slice(
-    workOn.indexOf("async #recoverDirectTerminal"),
-    workOn.indexOf("async #finalize"),
-  );
-  assert.ok(
-    terminalRecovery.indexOf('if (action === "release-authority")') <
-      terminalRecovery.indexOf("const evidence = directTerminalEvidence"),
-    "completed authority release must not require PR or merge evidence",
-  );
-  assert.match(workOn, /Do not create another run, worktree, branch, commit, or PR/);
+  assert.match(entrypoint, /registerForgePromptRouter\(pi\)/);
+  assert.match(entrypoint, /registerForgeRuntimeTools\(pi\)/);
+  assert.doesNotMatch(entrypoint, /ForgeWorkOnController/);
+  assert.doesNotMatch(entrypoint, /ForgeOrchestrationController/);
+  assert.doesNotMatch(entrypoint, /ForgeReviewController/);
+  assert.doesNotMatch(entrypoint, /registerForgeCommands/);
+
+  const router = await readFile("src/prompt-router.ts", "utf8");
+  assert.match(router, /pi\.on\("input"/);
+  assert.doesNotMatch(router, /registerCommand/);
+  assert.doesNotMatch(router, /registerTool/);
+  assert.doesNotMatch(router, /pi\.exec/);
 });
 
 test("authority-sensitive seams are source-discoverable modules", async () => {

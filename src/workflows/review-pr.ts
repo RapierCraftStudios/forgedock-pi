@@ -41,6 +41,14 @@ import {
   type ReviewFinding,
   type VerificationResult,
 } from "../core/review.ts";
+import {
+  classifyReviewerFailure,
+  extendedReviewerTimeout,
+  planReviewRecovery,
+  reviewerEvidenceKey,
+  validateReviewDeadlines,
+  validateReviewerPanel,
+} from "../core/recovery.ts";
 import type {
   ReviewMode,
   ReviewRoster,
@@ -49,13 +57,16 @@ import type {
 import {
   canAutoMerge,
   isGitHubCiRequired,
+  isProtectedBranch,
   resolveConcreteBranch,
 } from "../core/policy.ts";
 import type {
   ParsedReviewArguments,
   ReviewSelector,
 } from "../ui/forge-command-parser.ts";
+import type { StagingBundleResolution } from "../core/staging-bundle-resolver.ts";
 import { publishReviewFindingIssues } from "./review-findings.ts";
+import { testGateVerification } from "./test-gate.ts";
 
 export type ReviewExecution =
   | { kind: "standalone"; repositoryRoot: string }
@@ -76,6 +87,8 @@ export interface ReviewPrRequest {
   githubCheckPollIntervalMs: number;
   githubChecksRequired: boolean;
   additionalChecks?: readonly VerificationResult[];
+  /** Raw output from the mandatory nested staging test-gate translation. */
+  testGateOutput?: unknown;
   malformedResults?: readonly string[];
   mergeability?: "mergeable" | "conflicting" | "unknown";
   protectedBranches: readonly string[];
@@ -85,6 +98,8 @@ export interface ReviewPrRequest {
   resume?: boolean;
   authorityValid?: () => boolean | Promise<boolean>;
   reviewerContext?: string;
+  /** Parent-supplied deterministic staging bundle; never derive this from text. */
+  stagingBundle?: StagingBundleResolution;
   signal?: AbortSignal;
 }
 
@@ -99,6 +114,8 @@ export interface ReviewPrResult {
   findingIssues: Readonly<Record<string, number>>;
   merged: boolean;
   mergeSha?: string;
+  /** Machine-readable bundle derivation consumed by open-finding/Phase 6.5 gates. */
+  stagingBundle?: StagingBundleResolution;
 }
 
 export interface ReviewPanelRunInput {
@@ -243,6 +260,11 @@ export class ReviewPrCoordinator {
       return completedResult(snapshot.state, route, merge);
     }
 
+    if (mode === "staging" && !input.stagingBundle)
+      throw new Error(
+        "Staging review requires a frozen commit-reachability bundle resolution.",
+      );
+    const stagingBundle = mode === "staging" ? input.stagingBundle : undefined;
     let prepared: PreparedReviewWorktree | undefined;
     const worktreePath =
       input.execution.kind === "standalone"
@@ -274,6 +296,9 @@ export class ReviewPrCoordinator {
       );
       if (snapshot.state.panel?.status === "running") {
         const additionalChecks: readonly VerificationResult[] = [
+          ...(mode === "staging"
+            ? [testGateVerification(input.testGateOutput)]
+            : []),
           {
             name: "material-change",
             required: true,
@@ -361,6 +386,9 @@ export class ReviewPrCoordinator {
           : {}),
       });
       if (mode === "staging") {
+        const bundlePullNumbers = new Set(
+          stagingBundle?.resolved.map((pull) => pull.pullNumber) ?? [],
+        );
         const unresolved = (
           await this.#github.listIssuesByLabel(
             "review-finding",
@@ -368,12 +396,15 @@ export class ReviewPrCoordinator {
             input.signal,
           )
         ).filter((issue) =>
-          issue.body.includes(`source-pr=${route.pullNumber}`),
+          [...bundlePullNumbers].some((pullNumber) =>
+            hasExactSourcePull(issue.body, pullNumber),
+          ),
         );
         decision = strictStagingDecision(
           decision,
           snapshot.state.findings as readonly ForgeReviewFindingResult[],
           unresolved.map((issue) => issue.number),
+          stagingBundle,
         );
       }
 
@@ -446,6 +477,7 @@ export class ReviewPrCoordinator {
             decision,
             snapshot.state.checks,
             forgeFindings,
+            stagingBundle,
           ),
           ...(input.signal ? { signal: input.signal } : {}),
         });
@@ -498,6 +530,7 @@ export class ReviewPrCoordinator {
         findingIssues,
         merged: Boolean(merge),
         ...(merge ? { mergeSha: merge.sha } : {}),
+        ...(stagingBundle ? { stagingBundle } : {}),
       };
     } finally {
       if (prepared) await this.#git.cleanupReview(prepared, input.signal);
@@ -574,7 +607,7 @@ export class ReviewPrCoordinator {
         route.headSha,
         input.roster.reviewers,
       );
-      for (const [index, result] of normalized.results.entries()) {
+      for (const result of normalized.results) {
         const check: VerificationResult = {
           name: `reviewer:${result.reviewer}`,
           required: true,
@@ -584,7 +617,7 @@ export class ReviewPrCoordinator {
           reviewId: input.reviewId,
           type: "review.check-recorded",
           payload: { round: requestedRound, check },
-          idempotencyKey: `check:reviewer:${index}:${stableKey(result.reviewer)}`,
+          idempotencyKey: `check:reviewer:${requestedRound}:${stableKey(result.reviewer)}`,
           message: `Record reviewer ${result.reviewer} for ${input.reviewId}`,
           ...(input.signal ? { signal: input.signal } : {}),
         });
@@ -603,7 +636,20 @@ export class ReviewPrCoordinator {
       snapshot = await this.#journal.append({
         reviewId: input.reviewId,
         type: "review.findings-recorded",
-        payload: { round: requestedRound, findings: normalized.findings },
+        payload: {
+          round: requestedRound,
+          findings: normalized.findings,
+          reviewerResults: Object.fromEntries(
+            normalized.results.map((result) => [
+              reviewerEvidenceKey({
+                headSha: route.headSha,
+                reviewer: result.reviewer,
+                attempt: requestedRound,
+              }),
+              result,
+            ]),
+          ),
+        },
         idempotencyKey: findingsKey,
         message: `Record review findings for ${input.reviewId}`,
         ...(input.signal ? { signal: input.signal } : {}),
@@ -642,58 +688,134 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
   async run(
     input: ReviewPanelRunInput,
   ): Promise<readonly ForgeReviewerResult[]> {
+    validateReviewDeadlines({ reviewerTimeoutMs: input.reviewerTimeoutMs });
     await this.#rpc.ping();
     const receipts: Array<{
       receipt: SubagentSpawnReceipt;
       expected: ExpectedReviewerResult;
+      reviewer: string;
     }> = [];
     this.#active.set(input.reviewId, []);
+    const spawn = async (reviewer: string, reviewerTimeoutMs = input.reviewerTimeoutMs): Promise<(typeof receipts)[number]> => {
+      const receipt = await this.#rpc.spawnStandaloneReviewNode({
+        reviewId: input.reviewId,
+        repository: input.repository,
+        pullNumber: input.pullNumber,
+        ...(input.issueNumber === undefined ? {} : { issueNumber: input.issueNumber }),
+        worktreeRoot: input.worktreePath,
+        headRef: input.route.headRef,
+        headSha: input.route.headSha,
+        baseRef: input.route.baseRef,
+        baseSha: input.route.baseSha,
+        reviewer,
+        round: input.round,
+        reviewerTimeoutMs,
+        ...(input.context ? { context: input.context } : {}),
+      });
+      const entry = {
+        receipt,
+        expected: { runId: input.reviewId, headSha: input.route.headSha, reviewer },
+        reviewer,
+      };
+      receipts.push(entry);
+      this.#active.get(input.reviewId)?.push(receipt);
+      return entry;
+    };
     try {
-      const launched = await Promise.all(
-        input.reviewers.map(async (reviewer) => {
-          const receipt = await this.#rpc.spawnStandaloneReviewNode({
-            reviewId: input.reviewId,
-            repository: input.repository,
-            pullNumber: input.pullNumber,
-            ...(input.issueNumber === undefined
-              ? {}
-              : { issueNumber: input.issueNumber }),
-            worktreeRoot: input.worktreePath,
-            headRef: input.route.headRef,
-            headSha: input.route.headSha,
-            baseRef: input.route.baseRef,
-            baseSha: input.route.baseSha,
-            reviewer,
-            round: input.round,
-            reviewerTimeoutMs: input.reviewerTimeoutMs,
-            ...(input.context ? { context: input.context } : {}),
-          });
-          const entry = {
-            receipt,
-            expected: {
-              runId: input.reviewId,
-              headSha: input.route.headSha,
-              reviewer,
-            },
-          };
-          receipts.push(entry);
-          this.#active.get(input.reviewId)?.push(receipt);
-          return entry;
-        }),
+      // The first panel is the only fan-out. A completed result is retained
+      // verbatim, so recovery never reruns a sibling that already persisted it.
+      const launchSettled = await Promise.allSettled(
+        input.reviewers.map((reviewer) => spawn(reviewer)),
       );
-      return await Promise.all(
-        launched.map(({ receipt, expected }) =>
+      const launched = launchSettled.flatMap((entry) =>
+        entry.status === "fulfilled" ? [entry.value] : [],
+      );
+      const failures: Record<string, ReturnType<typeof classifyReviewerFailure>> =
+        Object.fromEntries(
+          launchSettled.flatMap((entry, index) =>
+            entry.status === "rejected"
+              ? [[input.reviewers[index]!, classifyReviewerFailure(entry.reason, input.signal)]]
+              : [],
+          ),
+        );
+      const settled = await Promise.allSettled(
+        launched.map((entry) =>
           waitForReviewerResult(
             this.#rpc,
-            receipt,
+            entry.receipt,
             input.reviewerTimeoutMs,
-            expected,
+            entry.expected,
             input.worktreePath,
             input.signal,
           ),
         ),
       );
+      const retained = settled.flatMap((entry) =>
+        entry.status === "fulfilled" ? [entry.value] : [],
+      );
+      Object.assign(
+        failures,
+        Object.fromEntries(
+          settled.flatMap((entry, index) =>
+            entry.status === "rejected"
+              ? [[launched[index]!.reviewer, classifyReviewerFailure(entry.reason, input.signal)]]
+              : [],
+          ),
+        ),
+      );
+      const recoveryPlan = planReviewRecovery({
+        reviewers: input.reviewers,
+        headSha: input.route.headSha,
+        attempt: input.round,
+        completed: retained,
+        failures,
+        reviewerTimeoutMs: input.reviewerTimeoutMs,
+      });
+      const retryable = [...recoveryPlan.retryReviewers];
+      if (retryable.length > 0) {
+        await Promise.allSettled(
+          launched
+            .filter((entry) => retryable.includes(entry.reviewer))
+            .map((entry) => this.#rpc.stop(entry.receipt.runId)),
+        );
+        const retryTimeoutMs = extendedReviewerTimeout(input.reviewerTimeoutMs);
+        const retryLaunchSettled = await Promise.allSettled(
+          retryable.map((reviewer) => spawn(reviewer, retryTimeoutMs)),
+        );
+        const retryEntries = retryLaunchSettled.flatMap((entry) =>
+          entry.status === "fulfilled" ? [entry.value] : [],
+        );
+        for (const [index, entry] of retryLaunchSettled.entries()) {
+          if (entry.status === "rejected")
+            failures[retryable[index]!] = classifyReviewerFailure(entry.reason, input.signal);
+        }
+        const retrySettled = await Promise.allSettled(
+          retryEntries.map((entry) =>
+            waitForReviewerResult(
+              this.#rpc,
+              entry.receipt,
+              extendedReviewerTimeout(input.reviewerTimeoutMs),
+              entry.expected,
+              input.worktreePath,
+              input.signal,
+            ),
+          ),
+        );
+        for (const [index, entry] of retrySettled.entries()) {
+          if (entry.status === "fulfilled") retained.push(entry.value);
+          else failures[retryEntries[index]!.reviewer] = classifyReviewerFailure(entry.reason, input.signal);
+        }
+      }
+      // The coordinator validates the complete keyed panel before any finding
+      // is journaled or synthesized. This also rejects duplicate retry output.
+      return validateReviewerPanel({
+        results: retained,
+        reviewers: input.reviewers,
+        headSha: input.route.headSha,
+        attempt: input.round,
+      });
     } catch (error) {
+      if (input.signal?.aborted) throw input.signal.reason ?? error;
       await Promise.allSettled(
         receipts.map(({ receipt }) => this.#rpc.stop(receipt.runId)),
       );
@@ -762,9 +884,6 @@ export class ForgeReviewController {
         "--gh-flag is not supported by the typed GitHub adapter; no flag was executed.",
       );
     const environment = await this.#environment(ctx);
-    // A route selector chooses the PR, not the execution policy. Only the
-    // staging command explicitly opts into the non-merging staging mode.
-    const effectiveMode: ReviewMode = mode;
     const pulls = await environment.github.resolveReviewSelector(
       selectorValue(parsed.selector),
       ctx.signal,
@@ -777,6 +896,10 @@ export class ForgeReviewController {
       );
     const results = await Promise.all(
       pulls.map(async (pull) => {
+        const effectiveMode: ReviewMode =
+          mode === "staging" || isProtectedBranch(environment.policy, pull.baseRef)
+            ? "staging"
+            : "standard";
         if (parsed.base !== undefined && pull.baseRef !== parsed.base)
           throw new Error(
             `PR #${pull.number} targets ${pull.baseRef}, not requested base ${parsed.base}.`,
@@ -786,6 +909,15 @@ export class ForgeReviewController {
           ctx.signal,
         );
         const reviewId = `review-${randomUUID()}`;
+        const stagingBundle =
+          effectiveMode === "staging"
+            ? await this.#resolveStagingBundle(
+                environment.github,
+                environment.repositoryRoot,
+                route,
+                ctx.signal,
+              )
+            : undefined;
         const execution: ReviewExecution = parsed.worktree
           ? {
               kind: "work-on",
@@ -838,6 +970,7 @@ export class ForgeReviewController {
           reviewerContext: parsed.thorough
             ? "Thorough mode: inspect the complete patch across every affected domain and report all confidence levels."
             : "Inspect the complete frozen patch and report all confidence levels.",
+          ...(stagingBundle ? { stagingBundle } : {}),
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
         this.#linked.set(reviewId, {
@@ -880,6 +1013,22 @@ export class ForgeReviewController {
     if (!current) throw new Error(`Review ${reviewId} does not exist.`);
     const state = current.state;
     const coordinator = this.#coordinator(environment);
+    const resumeRoute: GitHubPullRequestRouteSnapshot = {
+      pullNumber: state.pullNumber,
+      headRef: state.headRef,
+      headSha: state.headSha,
+      baseRef: state.baseRef,
+      baseSha: state.baseSha,
+    };
+    const stagingBundle =
+      state.mode === "staging"
+        ? await this.#resolveStagingBundle(
+            environment.github,
+            environment.repositoryRoot,
+            resumeRoute,
+            ctx.signal,
+          )
+        : undefined;
     const result = await coordinator.review({
       reviewId,
       repository: state.repository,
@@ -888,13 +1037,7 @@ export class ForgeReviewController {
         ? {}
         : { issueNumber: state.issueNumber }),
       mode: state.mode,
-      route: {
-        pullNumber: state.pullNumber,
-        headRef: state.headRef,
-        headSha: state.headSha,
-        baseRef: state.baseRef,
-        baseSha: state.baseSha,
-      },
+      route: resumeRoute,
       roster: state.roster,
       execution: {
         kind: "standalone",
@@ -913,6 +1056,7 @@ export class ForgeReviewController {
       protectedBranches: environment.policy.branches.protected,
       autoMergeAuthorized: canAutoMerge(environment.policy, state.baseRef),
       autoMergeRequested: state.mergeAuthorization?.authorized === true,
+      ...(stagingBundle ? { stagingBundle } : {}),
       resume: true,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
@@ -924,6 +1068,32 @@ export class ForgeReviewController {
       merged: result.merged,
     });
     return result;
+  }
+
+  async #resolveStagingBundle(
+    github: GitHubWorkflowAdapter,
+    repositoryRoot: string,
+    route: GitHubPullRequestRouteSnapshot,
+    signal?: AbortSignal,
+  ): Promise<StagingBundleResolution> {
+    await this.#git.fetchRefs(repositoryRoot, [route.baseRef, route.headRef], signal);
+    return github.resolveStagingBundle({
+      route: {
+        baseRef: route.baseRef,
+        baseSha: route.baseSha,
+        headRef: route.headRef,
+        headSha: route.headSha,
+        integrationPullNumber: route.pullNumber,
+      },
+      isReachable: (sha, target) =>
+        this.#git.isAncestor(
+          repositoryRoot,
+          sha,
+          target === "base" ? route.baseSha : route.headSha,
+          signal,
+        ),
+      ...(signal ? { signal } : {}),
+    });
   }
 
   #coordinator(
@@ -1127,15 +1297,20 @@ function strictStagingDecision(
   decision: FinalReviewDecision,
   findings: readonly ForgeReviewFindingResult[],
   unresolvedIssueNumbers: readonly number[],
+  bundle?: StagingBundleResolution,
 ): FinalReviewDecision {
   if (
     decision.decision === "approved" &&
     findings.length === 0 &&
-    unresolvedIssueNumbers.length === 0
+    unresolvedIssueNumbers.length === 0 &&
+    (bundle === undefined || bundle.resolved.length > 0)
   )
     return decision;
   const reasons = [
     ...decision.reasons,
+    ...(bundle && bundle.resolved.length === 0
+      ? ["Staging bundle resolved no included pull requests."]
+      : []),
     ...(findings.length > 0
       ? [
           `Staging gate requires zero open findings; received ${findings.length}.`,
@@ -1245,9 +1420,18 @@ function renderStagingGate(
   decision: FinalReviewDecision,
   checks: readonly VerificationResult[],
   findings: readonly ForgeReviewFindingResult[],
+  bundle?: StagingBundleResolution,
 ): string {
   const passed = decision.decision === "approved" && findings.length === 0;
-  return `## ForgeDock Staging Deployment Gate — ${passed ? "PASS" : "FAILURE"}\n\n**Reviewed head**: \`${decision.headSha}\`\n**Reviewed base**: \`${decision.baseSha}\`\n**Decision**: \`${decision.decision}\`\n**Merge/deploy performed**: no\n\n### Checks\n\n${checks.map((check) => `- ${check.required ? "required" : "optional"} \`${check.name}\`: ${check.status}`).join("\n") || "- No checks recorded."}\n\n### Findings\n\n${findings.length ? findings.map((finding) => `- ${finding.id}: ${finding.summary}`).join("\n") : "- None."}\n\n### Reasons\n\n${decision.reasons.length ? decision.reasons.map((reason) => `- ${reason}`).join("\n") : "- All strict staging gates passed."}`;
+  const bundleJson = bundle ? JSON.stringify(bundle) : "null";
+  return `## ForgeDock Staging Deployment Gate — ${passed ? "PASS" : "FAILURE"}\n\n**Reviewed head**: \`${decision.headSha}\`\n**Reviewed base**: \`${decision.baseSha}\`\n**Decision**: \`${decision.decision}\`\n**Merge/deploy performed**: no\n\n### Checks\n\n${checks.map((check) => `- ${check.required ? "required" : "optional"} \`${check.name}\`: ${check.status}`).join("\n") || "- No checks recorded."}\n\n### Findings\n\n${findings.length ? findings.map((finding) => `- ${finding.id}: ${finding.summary}`).join("\n") : "- None."}\n\n### Reasons\n\n${decision.reasons.length ? decision.reasons.map((reason) => `- ${reason}`).join("\n") : "- All strict staging gates passed."}\n\n### Machine-readable bundle resolution\n\n\`\`\`json\n${bundleJson}\n\`\`\``;
+}
+
+function hasExactSourcePull(body: string, pullNumber: number): boolean {
+  return new RegExp(
+    `(?:source-pr=|Source PR\\**:?\\s*#)${String(pullNumber)}(?!\\d)`,
+    "i",
+  ).test(body);
 }
 
 function renderReviewSummary(

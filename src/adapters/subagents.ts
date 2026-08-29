@@ -20,6 +20,7 @@ import {
 import type { BuilderPathContract } from "../core/builder-contract.ts";
 import type { ForgePolicy } from "../core/policy.ts";
 import type { WorkflowNode } from "../core/dispatcher.ts";
+import { validateReviewDeadlines } from "../core/recovery.ts";
 
 const RPC_REQUEST = "subagents:rpc:v1:request";
 const RPC_REPLY_PREFIX = "subagents:rpc:v1:reply:";
@@ -117,6 +118,7 @@ export class SubagentsRpcClient {
   async spawnStandaloneReviewNode(
     input: StandaloneReviewerLaunchInput,
   ): Promise<SubagentSpawnReceipt> {
+    validateReviewDeadlines({ reviewerTimeoutMs: input.reviewerTimeoutMs });
     if (!this.#asyncCompleteEvent) await this.ping();
     if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(input.reviewId))
       throw new TypeError("Review ID contains unsafe characters.");
@@ -199,6 +201,9 @@ export class SubagentsRpcClient {
           level: "none",
           reason: "Parent validates reviewer identity, SHA, and projection.",
         },
+        // Detached execution lets the parent retain a completed result file
+        // even when a sibling reviewer or supervisor session disappears.
+        async: true,
       },
       15_000,
     );

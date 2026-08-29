@@ -3,8 +3,10 @@ import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
   registerAgent,
+  type RuntimeAgentDefinition,
   type RuntimeAgentRegistration,
 } from "pi-subagents/agents";
+import { validateForgeAgentCapabilityProfile } from "./profile.ts";
 
 export const FORGE_WORK_ON_AGENT = "forge-work-on";
 export const FORGE_READ_ONLY_NODE_AGENT = "forge-read-only-node";
@@ -100,7 +102,7 @@ export function registerForgeAgents(
   const registrations: RuntimeAgentRegistration[] = [];
 
   registrations.push(
-    registerAgent({
+    registerValidatedAgent({
       pi,
       name: FORGE_REVIEW_CORRECTNESS_AGENT,
       definition: {
@@ -124,7 +126,7 @@ export function registerForgeAgents(
   );
 
   registrations.push(
-    registerAgent({
+    registerValidatedAgent({
       pi,
       name: FORGE_REVIEW_SECURITY_AGENT,
       definition: {
@@ -148,7 +150,7 @@ export function registerForgeAgents(
   );
 
   registrations.push(
-    registerAgent({
+    registerValidatedAgent({
       pi,
       name: FORGE_REVIEW_DOMAIN_AGENT,
       definition: {
@@ -172,7 +174,7 @@ export function registerForgeAgents(
   );
 
   registrations.push(
-    registerAgent({
+    registerValidatedAgent({
       pi,
       name: FORGE_REFRESH_REVIEW_AGENT,
       definition: {
@@ -184,6 +186,7 @@ export function registerForgeAgents(
         inheritSkills: false,
         defaultContext: "fresh",
         tools: [...FORGE_REFRESH_REVIEW_TOOLS],
+        allowNestedSubagents: true,
         extensions: [subagentsExtensionPath, childRuntimePath],
         acceptanceRole: "writer",
         defaultAcceptance: {
@@ -204,7 +207,7 @@ export function registerForgeAgents(
   );
 
   registrations.push(
-    registerAgent({
+    registerValidatedAgent({
       pi,
       name: FORGE_READ_ONLY_NODE_AGENT,
       definition: {
@@ -227,7 +230,7 @@ export function registerForgeAgents(
   );
 
   registrations.push(
-    registerAgent({
+    registerValidatedAgent({
       pi,
       name: FORGE_WORK_ON_AGENT,
       definition: {
@@ -239,6 +242,7 @@ export function registerForgeAgents(
         inheritSkills: false,
         defaultContext: "fresh",
         tools: [...FORGE_WORK_ON_TOOLS],
+        allowNestedSubagents: true,
         extensions: [subagentsExtensionPath, childRuntimePath],
         acceptanceRole: "writer",
         defaultAcceptance: {
@@ -260,4 +264,20 @@ export function registerForgeAgents(
   );
 
   return registrations;
+}
+
+function registerValidatedAgent(input: {
+  pi: ExtensionAPI;
+  name: string;
+  definition: RuntimeAgentDefinition;
+}): RuntimeAgentRegistration {
+  validateForgeAgentCapabilityProfile({
+    name: input.name,
+    tools: input.definition.tools,
+    allowNestedSubagents: input.definition.allowNestedSubagents,
+    maxSubagentDepth: input.definition.maxSubagentDepth,
+    mandatoryNestedReview:
+      input.name === FORGE_WORK_ON_AGENT || input.name === FORGE_REFRESH_REVIEW_AGENT,
+  });
+  return registerAgent(input);
 }
