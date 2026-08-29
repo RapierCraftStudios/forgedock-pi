@@ -18,9 +18,10 @@ The visible session is a dispatcher, never a builder.
 
 ## Execution contract
 
-Before resolution or GitHub access, call `forgedock_preflight` and retain its shared
-configuration/capability result. Use `forgedock_github` for all repository GitHub reads
-and writes; missing tools or failed capabilities stop before dispatch.
+Before resolution, use direct Bash to read `forge.yaml`, verify `gh` authentication and
+repository access, and configure `gh auth setup-git` for noninteractive Git transport.
+Use direct `gh` and `git` commands for all workflow operations; do not use custom runtime
+tools.
 
 Resolve and filter the requested issue set, show the concrete plan, and obtain the
 original mandatory confirmation before launching any child unless `--auto` or
@@ -47,8 +48,8 @@ Before dispatching each issue, resolve its authoritative PR target through the o
 lane rules and freeze the exact remote target SHA. Persist that ref/SHA in the
 coordination issue and child task. A Pi-managed worktree inherits the launch checkout's
 HEAD; its generated branch is not evidence that it is based on the lane target. Require
-the child to call `forge_prepare_lane_base` and publish its `FORGE:BASE` result before
-any implementation mutation. A missing or mismatched base marker gates the
+the child to initialize and verify the clean unpushed branch with direct Git commands
+and publish `FORGE:BASE` before any implementation mutation. A missing or mismatched base marker gates the
 lane before contract/claim acceptance, push, PR creation, or reviewer fanout.
 
 The packaged coordinator is an explicit, depth-bounded fanout child: it may launch only

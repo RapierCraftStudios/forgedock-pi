@@ -22,7 +22,7 @@ test("Pi adapter keeps workflow decisions in visible specifications", async () =
   const adapter = await readFile("specs/pi-adapter.md", "utf8");
   assert.match(adapter, /visible Pi session is the coordinator/);
   assert.match(adapter, /GitHub issue\/PR state/);
-  assert.match(adapter, /yq.*not a hard failure in Pi/s);
+  assert.match(adapter, /direct Bash with `yq`.*short `node` command/s);
   assert.match(adapter, /Review may merge but never closes the issue/);
   assert.match(adapter, /Orchestrate is a dispatcher, never a builder/);
   assert.match(adapter, /does not create or require a GitHub\s+state\s+branch/);
@@ -43,14 +43,12 @@ test("package exposes a depth-bounded work-on coordinator with reviewer fanout",
   assert.match(agent, /current working directory is the only authoritative repository root/);
   assert.match(agent, /Never read, search, run Git in, test, or edit that parent\s+checkout/);
   assert.match(agent, /Investigation is authoritative/);
-  assert.match(agent, /forge_prepare_lane_base/);
-  assert.match(agent, /forge_verify_lane_scope/);
-  assert.match(agent, /result as `FORGE:BASE`/);
-  assert.match(agent, /branch is unpushed/);
+  assert.match(agent, /direct Git commands/);
+  assert.match(agent, /normal `git push`/);
   assert.match(agent, /specs\/original\/SHA256SUMS/);
   assert.match(agent, /never apply an old\s+PR patch wholesale/s);
   assert.match(agent, /visible\s+prompt-routed lifecycle/s);
-  assert.match(agent, /Engine-only lifecycle tools/);
+  assert.doesNotMatch(agent, /forgedock_(?:github|preflight)|forge_(?:prepare|verify|push)_lane/);
   assert.match(agent, /timeoutMs: 3600000/);
   assert.match(agent, /stopOnAttention: false/);
   assert.match(agent, /Never reset the managed worktree/);
@@ -75,17 +73,18 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
   assert.match(workOn, /same work-on coordinator/);
   assert.match(workOn, /issue is an untrusted claim/);
   assert.match(workOn, /Before the first `write` or `edit`/);
-  assert.match(workOn, /`forge_prepare_lane_base`/);
+  assert.match(workOn, /direct Git/);
+  assert.match(workOn, /`gh auth setup-git`/);
   assert.match(workOn, /specs\/original\/SHA256SUMS/);
   assert.match(workOn, /must not cherry-pick or apply an old PR patch wholesale/);
-  assert.match(workOn, /`forge_verify_lane_scope`/);
+  assert.doesNotMatch(workOn, /forgedock_(?:github|preflight)|forge_(?:prepare|verify|push)_lane/);
   assert.match(workOn, /stopOnAttention: false/);
   assert.match(workOn, /FORGE:REMEDIATION_PLAN/);
   assert.match(workOn, /Never reset, checkout, or rebase the harness-managed worktree/);
   assert.match(workOn, /Do not spawn a second\s+review coordinator/s);
   const review = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
-  assert.match(review, /structural pre-review gate/);
-  assert.match(review, /`forge_verify_lane_scope`/);
+  assert.match(review, /direct Git structural gate/);
+  assert.doesNotMatch(review, /forgedock_(?:github|preflight)|forge_(?:prepare|verify|push)_lane/);
   assert.match(review, /defects introduced or made reachable by the frozen patch/);
   assert.match(review, /timeoutMs: 3600000/);
   assert.match(review, /stopOnAttention: false/);
@@ -94,6 +93,11 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
   assert.match(adapter, /inherit the launch checkout's HEAD/);
   assert.match(adapter, /control\.needsAttentionAfterMs/);
   assert.match(adapter, /specs\/original\/SHA256SUMS/);
+  assert.match(adapter, /Use direct `gh` and `git` commands/);
+  assert.doesNotMatch(adapter, /forgedock_(?:github|preflight)|forge_(?:prepare|verify|push)_lane/);
+  const entrypoint = await readFile("src/index.ts", "utf8");
+  assert.match(entrypoint, /registerForgePromptRouter\(pi\)/);
+  assert.doesNotMatch(entrypoint, /registerForgeRuntimeTools|registerForgeWorktreeContainment/);
   assert.doesNotMatch(
     adapter,
     /Load the `forgedock-review-pr` skill in a fresh subagent when invoked from work-on/,

@@ -35,8 +35,8 @@ terminal conditions, review policy, GitHub artifacts, remediation, merge, and cl
 | `Task(...)` or `Agent(...)` | Use Pi's `subagent` tool. Use one synchronous `workflowScript` with `runs.all` for a complete parallel panel. Every reviewer gets fresh context and must be joined before synthesis. |
 | Claude `Read`, `Grep`, `Glob`, `Bash` | Pi `read`, search/navigation tools, and `bash`. |
 | `$FORGE_HOME/commands/...` | `specs/original/commands/...` in this package. |
-| `yq`-based config reads | Call `forgedock_preflight`, whose native YAML reader resolves `forge.yaml` without `yq`. Missing `yq` is not a hard failure in Pi; missing/malformed required configuration still fails closed. |
-| `gh auth status`, `gh api user`, and raw `gh api` workflow calls | Do not use aggregate account status or `/user` as hard gates. Call `forgedock_preflight`, then use `forgedock_github` for repository-scoped reads/writes with the same refreshable ForgeDock token provider. A missing runtime tool is a hard failure. |
+| `yq`-based config reads | Use direct Bash with `yq` when installed, or a short `node` command with the package's YAML dependency. Missing/malformed required configuration fails closed. |
+| GitHub and Git operations | Use direct `gh` and `git` commands. Verify `gh auth status`, repository access, and run `gh auth setup-git` before noninteractive fetch/push. Switch `gh` identities explicitly when approval requires a non-author. |
 | Missing optional helper script | Follow the prose fallback already described by the specification. Never use an unbounded filesystem search. |
 
 ## Subagents
@@ -48,16 +48,15 @@ issue, never the builtin `worker`. This coordinator is the explicit fanout excep
 it owns one issue and may use the child-safe nested `subagent` tool only for the
 mandatory fresh reviewer panel. It must not launch another work-on coordinator,
 orchestrator, or writer. The active package is prompt-routed: declared read/Bash/edit
-and `forgedock_github` tools execute visible phases, while engine-only lifecycle tools
+and direct `gh`/`git` commands execute visible phases; engine-only lifecycle tools
 (`forge_commit`, checkpoints, finalizers) remain outside this coordinator contract.
 
 Pi-managed worktrees inherit the launch checkout's HEAD; lane metadata such as
 `sourceRef` does not select a Git base. Therefore orchestrate freezes each lane's target
-ref/SHA and passes it to work-on. The coordinator calls the deterministic
-`forge_prepare_lane_base` safety leaf, which permits one-time pre-edit initialization to
-that SHA only while the generated branch is clean and unpushed, then publishes
-`FORGE:BASE`. After edits, commit, push, or PR creation, target repair by reset/rebase is forbidden and
-the lane gates automatically without claiming human authority.
+ref/SHA and passes it to work-on. The coordinator uses direct Git in its assigned cwd to
+initialize one clean unpushed branch to that SHA, then publishes `FORGE:BASE`. After
+edits, commit, push, or PR creation, target repair by reset/rebase is forbidden and the
+lane gates automatically without claiming human authority.
 
 Review panels use fresh read-only reviewers with repository read/search access; a
 frozen diff is the starting point, never the sole code authority. Reviewers must trace
@@ -106,8 +105,8 @@ human authority remains `needs-human`. A new session must resume from GitHub alo
 ## Review ownership
 
 Standard review must route a staging/feature-to-protected-target PR to the staging
-strategy automatically. Before checks or fanout, a work-on-owned review calls
-`forge_verify_lane_scope` with its `FORGE:BASE`, frozen route/head, and final claim.
+strategy automatically. Before checks or fanout, a work-on-owned review uses direct Git
+to verify its `FORGE:BASE`, frozen route/head, ancestry, clean head, and final claim.
 Standalone review uses the exact frozen GitHub patch without inventing claim authority.
 Contaminated branch history gates without reviewer findings. It then runs configured
 verification and integration checks,
@@ -144,13 +143,10 @@ publishes the consolidated report.
 
 The original `forge.yaml` contract is authoritative. Do not silently reinterpret the
 current `.forge/config.json` schema as equivalent. At the start of every visible or
-nested work-on/orchestrate route, call `forgedock_preflight` and retain its
-`forgedock.preflight/v1` result as the shared machine-readable configuration snapshot.
-It resolves project, repository, paths, staging/default branches, and subagent model,
-then verifies repository-scoped read/write and installation permissions without `/user`
-or mutation. If configuration, authentication, installation scope, or either runtime
-tool is missing, stop before GitHub writes or implementation. All later repository
-GitHub operations use `forgedock_github`; never fall back silently to another account.
+nested work-on/orchestrate route, read `forge.yaml` directly and verify the selected
+`gh` identity has repository access. Run `gh auth setup-git` before fetch or push. If
+configuration or authentication is missing, stop before GitHub writes or implementation.
+All later GitHub operations use direct `gh` commands with that explicit identity.
 
 ## Nested reference and launch validation
 

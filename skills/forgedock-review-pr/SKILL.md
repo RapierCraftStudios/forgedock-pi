@@ -16,16 +16,16 @@ description: Run the authoritative context-aware ForgeDock review for an exact P
 
 ## Execution contract
 
-Before route discovery or GitHub access, call `forgedock_preflight` and use
-`forgedock_github` for every repository GitHub read and write. Missing tools or failed
-capabilities stop before review artifacts are created.
+Before route discovery, use direct Bash to read `forge.yaml` and verify `gh`
+authentication and repository access. Use direct `gh` and `git` commands for all review
+operations; do not use custom workflow runtime tools.
 
 Follow the original phase order and hard rules. Freeze the exact PR head/base before
-review. Before automated checks or reviewer fanout, run a structural pre-review gate.
-For a work-on-owned PR, call `forge_verify_lane_scope` with its durable `FORGE:BASE`,
-frozen route/head, and final Builder Contract/claim (including declared mechanically
-coupled paths). Standalone reviews without a work-on claim instead require an exact
-frozen GitHub patch and do not invent claim authority. A mismatch or inherited broad
+review. Before automated checks or reviewer fanout, run a direct Git structural gate.
+For a work-on-owned PR, verify its durable `FORGE:BASE`, frozen route/head, ancestry, and
+final Builder Contract/claim paths (including declared mechanically coupled paths).
+Standalone reviews without a work-on claim instead require an exact frozen GitHub patch
+and do not invent claim authority. A mismatch or inherited broad
 branch history is automated GATED evidence. Do not launch reviewers, create patch
 findings, or add `needs-human` until this gate passes.
 Automatically switch to the staging strategy when the selector or actual route targets
