@@ -99,9 +99,9 @@ export function parseVerificationDiagnostics(
         ...(line && Number.isSafeInteger(line) ? { line } : {}),
         blocking: true,
       });
-      if (!localModule && CHANGED_CODE_PATTERN.test(message)) {
+      if (!localModule && (CHANGED_CODE_PATTERN.test(message) || SYNTAX_PATTERN.test(message))) {
         diagnostics.push({
-          kind: "changed-code",
+          kind: SYNTAX_PATTERN.test(message) ? "syntax-error" : "changed-code",
           message,
           ...(file && !file.includes(" ") ? { file } : {}),
           ...(line && Number.isSafeInteger(line) ? { line } : {}),
@@ -153,7 +153,9 @@ function configuredFallbacks(
     (value, index) =>
       value &&
       typeof value.name === "string" &&
+      value.name.trim().length > 0 &&
       typeof value.command === "string" &&
+      value.command.trim().length > 0 &&
       values.findIndex((candidate) => candidate.name === value.name) === index,
   );
 }
@@ -268,7 +270,7 @@ export function isVerificationDiagnosticReport(
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
     const diagnostic = entry as Partial<VerificationDiagnostic>;
     return ["missing-host-dependency", "syntax-error", "changed-code", "environment-unavailable", "unknown"].includes(String(diagnostic.kind)) &&
-      typeof diagnostic.message === "string" && typeof diagnostic.blocking === "boolean";
+      typeof diagnostic.message === "string" && diagnostic.message.trim().length > 0 && typeof diagnostic.blocking === "boolean";
   });
   if (!diagnosticsValid(report.diagnostics) || !diagnosticsValid(report.blockingDiagnostics)) return false;
   const allDiagnostics = report.diagnostics as VerificationDiagnostic[];

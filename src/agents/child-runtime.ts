@@ -1908,6 +1908,7 @@ function readBinding(): ForgeChildBinding {
   }
   const verificationEnvironment = validateVerificationEnvironment(
     value.verificationEnvironment,
+    verificationCommands,
   );
   const node = typeof value.node === "string" ? value.node : undefined;
   if (
@@ -2013,6 +2014,7 @@ export function allowedNodeTools(
 
 function validateVerificationEnvironment(
   value: unknown,
+  commands: Readonly<Record<string, BoundVerificationCommand>>,
 ): ValidationEnvironment | undefined {
   if (value === undefined) return undefined;
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -2035,9 +2037,15 @@ function validateVerificationEnvironment(
     if (!entry || typeof entry !== "object" || Array.isArray(entry))
       throw new Error(`Forge binding verification fallback ${index} must be an object.`);
     const fallback = entry as Record<string, unknown>;
+    const tracked =
+      typeof fallback.name === "string" ? commands[fallback.name] : undefined;
     if (
       typeof fallback.name !== "string" ||
+      !fallback.name.trim() ||
       typeof fallback.command !== "string" ||
+      !fallback.command.trim() ||
+      !tracked ||
+      fallback.command !== tracked.argv.join(" ") ||
       !["container", "venv", "other"].includes(String(fallback.kind)) ||
       !["passed", "failed", "unavailable", "not-run"].includes(String(fallback.status))
     )
