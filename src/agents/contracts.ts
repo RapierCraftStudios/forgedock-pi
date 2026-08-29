@@ -3,6 +3,7 @@ import {
   isPhaseArtifact,
   type PhaseArtifact,
 } from "../core/comment-contract.ts";
+import type { VerificationDiagnosticReport } from "../core/verification-diagnostics.ts";
 
 export type ForgeFindingCategory =
   | "security"
@@ -73,6 +74,7 @@ export interface ForgeNodeResult {
     name: string;
     status: "passed" | "failed" | "skipped" | "unknown";
     exitCode?: number;
+    diagnostics?: VerificationDiagnosticReport;
   }[];
   evidence: readonly string[];
   artifact?: PhaseArtifact;
@@ -93,6 +95,7 @@ export interface ForgeWorkOnResult {
     name: string;
     status: "passed" | "failed" | "skipped" | "unknown";
     exitCode?: number;
+    diagnostics?: VerificationDiagnosticReport;
   }[];
   review: {
     headSha: string;
@@ -245,6 +248,7 @@ export const FORGE_NODE_OUTPUT_SCHEMA = {
             enum: ["passed", "failed", "skipped", "unknown"],
           },
           exitCode: { type: "integer" },
+          diagnostics: { type: "object" },
         },
       },
     },
@@ -383,6 +387,7 @@ export const FORGE_WORK_ON_OUTPUT_SCHEMA = {
             enum: ["passed", "failed", "skipped", "unknown"],
           },
           exitCode: { type: "integer" },
+          diagnostics: { type: "object" },
         },
       },
     },
@@ -518,13 +523,20 @@ function isVerificationResult(value: unknown): boolean {
     name?: unknown;
     status?: unknown;
     exitCode?: unknown;
+    diagnostics?: unknown;
   };
   return (
     typeof result.name === "string" &&
     ["passed", "failed", "skipped", "unknown"].includes(
       String(result.status),
     ) &&
-    (result.exitCode === undefined || Number.isInteger(result.exitCode))
+    (result.exitCode === undefined || Number.isInteger(result.exitCode)) &&
+    (result.diagnostics === undefined ||
+      (typeof result.diagnostics === "object" &&
+        result.diagnostics !== null &&
+        !Array.isArray(result.diagnostics) &&
+        (result.diagnostics as { schema?: unknown }).schema ===
+          "forgedock.verification-diagnostics/v1"))
   );
 }
 

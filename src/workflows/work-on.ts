@@ -493,6 +493,25 @@ export class ForgeWorkOnController {
             maxReviewRounds: policy.review.maxRounds,
             reviewerTimeoutMs: policy.subagents.reviewerTimeoutMs,
             verificationCommands: policy.verification.commands,
+            ...(policy.verification.environment
+              ? {
+                  verificationEnvironment: {
+                    host: { name: policy.verification.environment.hostName },
+                    fallbacks: policy.verification.environment.fallbackCommands.map(
+                      (name) => ({
+                        name,
+                        kind: name.toLowerCase().includes("container") || name.toLowerCase().includes("docker")
+                          ? ("container" as const)
+                          : name.toLowerCase().includes("venv") || name.toLowerCase().includes("virtualenv")
+                            ? ("venv" as const)
+                            : ("other" as const),
+                        command: policy.verification.commands[name]!.argv.join(" "),
+                        status: "not-run" as const,
+                      }),
+                    ),
+                  },
+                }
+              : {}),
             refresh: false,
           };
           process.env.PI_SUBAGENT_EXTENSION_BINDINGS = JSON.stringify({
@@ -1222,6 +1241,25 @@ export class ForgeWorkOnController {
           maxReviewRounds: policy.review.maxRounds,
           reviewerTimeoutMs: policy.subagents.reviewerTimeoutMs,
           verificationCommands: policy.verification.commands,
+          ...(policy.verification.environment
+            ? {
+                verificationEnvironment: {
+                  host: { name: policy.verification.environment.hostName },
+                  fallbacks: policy.verification.environment.fallbackCommands.map(
+                    (name) => ({
+                      name,
+                      kind: name.toLowerCase().includes("container") || name.toLowerCase().includes("docker")
+                        ? ("container" as const)
+                        : name.toLowerCase().includes("venv") || name.toLowerCase().includes("virtualenv")
+                          ? ("venv" as const)
+                          : ("other" as const),
+                      command: policy.verification.commands[name]!.argv.join(" "),
+                      status: "not-run" as const,
+                    }),
+                  ),
+                },
+              }
+            : {}),
           refresh: false,
         };
         process.env.PI_SUBAGENT_EXTENSION_BINDINGS = JSON.stringify({
@@ -1689,6 +1727,9 @@ export class ForgeWorkOnController {
                 ...(reported?.exitCode === undefined
                   ? {}
                   : { exitCode: reported.exitCode }),
+                ...(reported?.diagnostics === undefined
+                  ? {}
+                  : { diagnostics: reported.diagnostics }),
               };
             },
           )
@@ -6092,16 +6133,30 @@ export function workflowLabelForNode(
 export function parseAsyncCompletion(
   value: unknown,
 ): ParsedAsyncCompletion | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    return undefined;
-  const record = value as Record<string, unknown>;
-  const runId =
-    typeof record.runId === "string"
-      ? record.runId
-      : typeof record.id === "string"
-        ? record.id
-        : undefined;
+  const record = completionRecord(value);
+  if (!record) return undefined;
+  const runId = completionRunId(record);
   if (!runId) return undefined;
+  const state = completionState(record);
+  if (!state) return undefined;
+  const error = completionError(record, state);
+  return { runId, state, ...(error ? { error } : {}) };
+}
+
+function completionRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function completionRunId(record: Record<string, unknown>): string | undefined {
+  if (typeof record.runId === "string") return record.runId;
+  return typeof record.id === "string" ? record.id : undefined;
+}
+
+function completionState(
+  record: Record<string, unknown>,
+): ParsedAsyncCompletion["state"] | undefined {
   const rawState =
     typeof record.state === "string"
       ? record.state
@@ -6111,21 +6166,23 @@ export function parseAsyncCompletion(
           ? "failed"
           : undefined;
   const state = rawState === "completed" ? "complete" : rawState;
-  if (
-    state !== "running" &&
-    state !== "complete" &&
-    state !== "failed" &&
-    state !== "paused" &&
-    state !== "stopped"
-  )
-    return undefined;
-  const error =
-    typeof record.error === "string"
-      ? record.error.trim()
-      : typeof record.summary === "string" && state !== "complete"
-        ? record.summary.trim()
-        : undefined;
-  return { runId, state, ...(error ? { error } : {}) };
+  return state === "running" ||
+    state === "complete" ||
+    state === "failed" ||
+    state === "paused" ||
+    state === "stopped"
+    ? state
+    : undefined;
+}
+
+function completionError(
+  record: Record<string, unknown>,
+  state: ParsedAsyncCompletion["state"],
+): string | undefined {
+  if (typeof record.error === "string") return record.error.trim();
+  if (typeof record.summary === "string" && state !== "complete")
+    return record.summary.trim();
+  return undefined;
 }
 
 function normalizeActiveRunLink(value: unknown): ActiveRunLink | undefined {

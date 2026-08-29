@@ -19,6 +19,7 @@ import {
 } from "../agents/register.ts";
 import type { BuilderPathContract } from "../core/builder-contract.ts";
 import type { ForgePolicy } from "../core/policy.ts";
+import type { ValidationEnvironment } from "../core/verification-diagnostics.ts";
 import type { WorkflowNode } from "../core/dispatcher.ts";
 import { validateReviewDeadlines } from "../core/recovery.ts";
 
@@ -26,6 +27,27 @@ const RPC_REQUEST = "subagents:rpc:v1:request";
 const RPC_REPLY_PREFIX = "subagents:rpc:v1:reply:";
 const RPC_READY = "subagents:rpc:v1:ready";
 const BINDING_NAMESPACE = "forgedock.pi/1";
+
+function verificationEnvironmentForPolicy(
+  policy: ForgePolicy,
+): ValidationEnvironment | undefined {
+  const configured = policy.verification.environment;
+  if (!configured) return undefined;
+  return {
+    host: { name: configured.hostName },
+    fallbacks: configured.fallbackCommands.map((name) => {
+      const command = policy.verification.commands[name]!;
+      const text = command.argv.join(" ");
+      const lower = name.toLowerCase();
+      const kind = lower.includes("container") || lower.includes("docker")
+        ? "container"
+        : lower.includes("venv") || lower.includes("virtualenv")
+          ? "venv"
+          : "other";
+      return { name, kind, command: text, status: "not-run" as const };
+    }),
+  };
+}
 
 interface RpcReply {
   version: 1;
@@ -253,6 +275,7 @@ export class SubagentsRpcClient {
       maxReviewRounds: input.policy.review.maxRounds,
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
+      verificationEnvironment: verificationEnvironmentForPolicy(input.policy),
       verificationGithub: input.policy.verification.github,
       nodeId: input.node.nodeId,
       node: input.node.node,
@@ -332,6 +355,7 @@ export class SubagentsRpcClient {
       maxReviewRounds: input.policy.review.maxRounds,
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
+      verificationEnvironment: verificationEnvironmentForPolicy(input.policy),
       verificationGithub: input.policy.verification.github,
       nodeId: input.node.nodeId,
       node: `review-${domain}`,
@@ -421,6 +445,7 @@ export class SubagentsRpcClient {
       maxReviewRounds: input.policy.review.maxRounds,
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
+      verificationEnvironment: verificationEnvironmentForPolicy(input.policy),
       verificationGithub: input.policy.verification.github,
       ...(input.builderContract
         ? { builderContract: input.builderContract }
@@ -546,6 +571,7 @@ export class SubagentsRpcClient {
       maxReviewRounds: input.policy.review.maxRounds,
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
+      verificationEnvironment: verificationEnvironmentForPolicy(input.policy),
       verificationGithub: input.policy.verification.github,
       refresh: true,
       leaseOwnerRunId: input.leaseOwnerRunId ?? input.runId,
@@ -750,6 +776,7 @@ function reviewWorkflowInstruction(
     maxReviewRounds: input.policy.review.maxRounds,
     reviewerTimeoutMs: timeoutMs,
     verificationCommands: input.policy.verification.commands,
+    verificationEnvironment: verificationEnvironmentForPolicy(input.policy),
     refresh: false,
   });
   const correctnessPath = join(

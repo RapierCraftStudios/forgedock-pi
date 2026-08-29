@@ -1592,6 +1592,13 @@ python -m py_compile {PYTHON_FILES}
 ```
 `py_compile` failures are BLOCKING.
 
+**Environment-aware dependency diagnostics** (for Python and other dependency-backed checks):
+
+- Parse unresolved-import/module-resolution diagnostics separately from syntax and changed-code type diagnostics using the deterministic `src/core/verification-diagnostics.ts` classifier.
+- Read the repository's declared validation environment. If `verification.environment.fallbackCommands` names an existing tracked container/venv check, run that named command before treating host import cascades as a code failure; never install dependencies, add suppressions, or edit analysis configuration.
+- A passing declared container/venv fallback makes only the unresolved host-import diagnostics `environment-only`; syntax errors and diagnostics reproduced by the fallback remain blocking.
+- If no fallback is configured or provisioned, preserve the block and report every unavailable check exactly as `SKIPPED — environment not provisioned (environment: {name}; attempted command: {command})`. The machine-readable diagnostic report must retain the environment and attempted command so a resumed work-on run does not ask for the same supervisor decision again.
+
 **TypeScript**:
 ```bash
 cd {WORKTREE_PATH}

@@ -47,6 +47,22 @@ export {
   trustedAffectedPathsForDag,
 } from "./core/review-integrity.ts";
 export {
+  VERIFICATION_DIAGNOSTIC_SCHEMA,
+  classifyVerificationDiagnostics,
+  classifyVerificationOutput,
+  formatSkippedVerification,
+  parseVerificationDiagnostics,
+} from "./core/verification-diagnostics.ts";
+export type {
+  DiagnosticKind,
+  FallbackStatus,
+  SkippedVerification,
+  ValidationFallback,
+  ValidationEnvironment,
+  VerificationDiagnostic,
+  VerificationDiagnosticReport,
+} from "./core/verification-diagnostics.ts";
+export {
   FORGE_NESTED_SKILL_TRANSLATIONS,
   FORGE_PUBLIC_SKILLS,
   resolveForgeSkillReference,

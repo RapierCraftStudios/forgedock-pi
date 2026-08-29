@@ -4,6 +4,7 @@ import {
   isHumanAuthorityReason,
   type HumanAuthorityReason,
 } from "./policy.ts";
+import type { VerificationDiagnosticReport } from "./verification-diagnostics.ts";
 
 export {
   HUMAN_AUTHORITY_REASONS,
@@ -69,6 +70,8 @@ export interface VerificationResult {
   required: boolean;
   status: VerificationStatus;
   exitCode?: number;
+  /** Provenance for dependency/import diagnostics; absent for clean checks. */
+  diagnostics?: VerificationDiagnosticReport;
 }
 
 export interface HumanAuthorityRequest {
