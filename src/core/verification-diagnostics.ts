@@ -90,8 +90,9 @@ export function parseVerificationDiagnostics(
     const line = location?.[2] ? Number(location[2]) : undefined;
     if (dependency) {
       const module = dependency.exec(message)?.[1];
+      const localModule = Boolean(module && (module.startsWith(".") || module.startsWith("/")));
       diagnostics.push({
-        kind: "missing-host-dependency",
+        kind: localModule ? "changed-code" : "missing-host-dependency",
         message,
         ...(module ? { module } : {}),
         ...(file && !file.includes(" ") ? { file } : {}),
@@ -152,7 +153,9 @@ function missingDependencyFallback(
   environment: ValidationEnvironment,
 ): ValidationFallback | undefined {
   return configuredFallbacks(environment).find(
-    (fallback) => fallback.status === "passed",
+    (fallback) =>
+      (fallback.kind === "container" || fallback.kind === "venv") &&
+      fallback.status === "passed",
   );
 }
 
@@ -238,6 +241,27 @@ export function classifyVerificationDiagnostics(
         }
       : {}),
   };
+}
+
+export function isVerificationDiagnosticReport(
+  value: unknown,
+): value is VerificationDiagnosticReport {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const report = value as Partial<VerificationDiagnosticReport>;
+  if (
+    report.schema !== VERIFICATION_DIAGNOSTIC_SCHEMA ||
+    !["passed", "environment-only", "blocked"].includes(String(report.outcome)) ||
+    !Array.isArray(report.diagnostics) ||
+    !Array.isArray(report.blockingDiagnostics) ||
+    !Array.isArray(report.skipped)
+  ) return false;
+  const diagnosticsValid = (entries: unknown[]): boolean => entries.every((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+    const diagnostic = entry as Partial<VerificationDiagnostic>;
+    return ["missing-host-dependency", "syntax-error", "changed-code", "environment-unavailable", "unknown"].includes(String(diagnostic.kind)) &&
+      typeof diagnostic.message === "string" && typeof diagnostic.blocking === "boolean";
+  });
+  return diagnosticsValid(report.diagnostics) && diagnosticsValid(report.blockingDiagnostics);
 }
 
 export function classifyVerificationOutput(

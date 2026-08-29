@@ -75,6 +75,25 @@ test("changed-code errors remain blocking after dependencies resolve", () => {
   assert.equal(report.selectedFallback, undefined);
 });
 
+test("relative module failures are changed-code diagnostics", () => {
+  const report = classifyVerificationOutput(
+    "src/index.ts:4: error TS2307: Cannot find module './missing'",
+    {
+      fallbacks: [
+        {
+          name: "unrelated-check",
+          kind: "other",
+          command: "npm test",
+          status: "passed",
+        },
+      ],
+    },
+  );
+  assert.equal(report.outcome, "blocked");
+  assert.equal(report.diagnostics[0]?.kind, "changed-code");
+  assert.equal(report.selectedFallback, undefined);
+});
+
 test("syntax errors are never treated as missing-environment noise", () => {
   const diagnostics = parseVerificationDiagnostics("app/main.py:7: SyntaxError: invalid syntax");
   assert.equal(diagnostics[0]?.kind, "syntax-error");

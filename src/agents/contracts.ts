@@ -3,7 +3,10 @@ import {
   isPhaseArtifact,
   type PhaseArtifact,
 } from "../core/comment-contract.ts";
-import type { VerificationDiagnosticReport } from "../core/verification-diagnostics.ts";
+import {
+  isVerificationDiagnosticReport,
+  type VerificationDiagnosticReport,
+} from "../core/verification-diagnostics.ts";
 
 export type ForgeFindingCategory =
   | "security"
@@ -532,11 +535,7 @@ function isVerificationResult(value: unknown): boolean {
     ) &&
     (result.exitCode === undefined || Number.isInteger(result.exitCode)) &&
     (result.diagnostics === undefined ||
-      (typeof result.diagnostics === "object" &&
-        result.diagnostics !== null &&
-        !Array.isArray(result.diagnostics) &&
-        (result.diagnostics as { schema?: unknown }).schema ===
-          "forgedock.verification-diagnostics/v1"))
+      isVerificationDiagnosticReport(result.diagnostics))
   );
 }
 

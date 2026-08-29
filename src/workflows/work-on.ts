@@ -3078,6 +3078,7 @@ export class ForgeWorkOnController {
             ? ("unknown" as const)
             : result.status,
         ...(result.exitCode === undefined ? {} : { exitCode: result.exitCode }),
+        ...(result.diagnostics === undefined ? {} : { diagnostics: result.diagnostics }),
       }));
     });
     return {
@@ -4930,6 +4931,9 @@ export class ForgeWorkOnController {
         ...(reported?.exitCode === undefined
           ? {}
           : { exitCode: reported.exitCode }),
+        ...(reported?.diagnostics === undefined
+          ? {}
+          : { diagnostics: reported.diagnostics }),
       };
     });
     if (localChecks.length === 0)
@@ -6186,62 +6190,63 @@ function completionError(
 }
 
 function normalizeActiveRunLink(value: unknown): ActiveRunLink | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    return undefined;
+  if (!isActiveRunLinkRecord(value)) return undefined;
+  const link = value as Partial<ActiveRunLink>;
+  return normalizeActiveRunLinkFields(link);
+}
+
+function isActiveRunLinkRecord(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const link = value as Partial<ActiveRunLink>;
   const statuses: readonly ActiveRunStatus[] = [
-    "running",
-    "ready",
-    "refreshing",
-    "finalizing",
-    "completed",
-    "blocked",
-    "needs-human",
-    "failed",
+    "running", "ready", "refreshing", "finalizing", "completed", "blocked", "needs-human", "failed",
   ];
-  if (
-    typeof link.forgeRunId !== "string" ||
-    typeof link.subagentRunId !== "string" ||
-    !Number.isSafeInteger(link.issueNumber) ||
-    typeof link.repository !== "string" ||
-    typeof link.stateBranch !== "string" ||
-    typeof link.resultPath !== "string" ||
-    !link.status ||
-    !statuses.includes(link.status) ||
-    !link.prepared ||
-    typeof link.prepared !== "object"
-  )
-    return undefined;
+  return typeof link.forgeRunId === "string" &&
+    typeof link.subagentRunId === "string" &&
+    Number.isSafeInteger(link.issueNumber) &&
+    typeof link.repository === "string" &&
+    typeof link.stateBranch === "string" &&
+    typeof link.resultPath === "string" &&
+    typeof link.status === "string" &&
+    statuses.includes(link.status) &&
+    Boolean(link.prepared) &&
+    typeof link.prepared === "object";
+}
+
+function normalizeActiveRunLinkFields(link: Partial<ActiveRunLink>): ActiveRunLink {
+  const activeNodes = activeNodesForLink(link);
   return {
     ...(link as ActiveRunLink),
     executionMode: link.executionMode ?? "bounded-legacy",
-    leaseOwnerRunId: link.leaseOwnerRunId ?? link.forgeRunId,
+    leaseOwnerRunId: link.leaseOwnerRunId ?? link.forgeRunId!,
     leaseEpoch: link.leaseEpoch ?? 1,
     leaseSeconds: link.leaseSeconds ?? 3_600,
     heartbeatSeconds: link.heartbeatSeconds ?? 60,
     lastHeartbeatAt: link.lastHeartbeatAt,
-    reviewBaseSha: link.reviewBaseSha ?? link.prepared.baseSha,
+    reviewBaseSha: link.reviewBaseSha ?? link.prepared!.baseSha!,
     refreshes: link.refreshes ?? 0,
     providerRetries: link.providerRetries ?? 0,
     remediationAttempts: link.remediationAttempts ?? 0,
     findingIssueMap: link.findingIssueMap ?? {},
     issueContext: link.issueContext ?? "",
-    ...(typeof link.planContext === "string"
-      ? { planContext: link.planContext }
-      : {}),
+    ...(link.planContext === undefined ? {} : { planContext: link.planContext }),
     ...(link.builderContract ? { builderContract: link.builderContract } : {}),
-    activeNodes:
-      link.activeNodes && typeof link.activeNodes === "object"
-        ? link.activeNodes
-        : link.currentNodeId
-          ? {
-              [link.subagentRunId]: {
-                nodeId: link.currentNodeId,
-                subagentRunId: link.subagentRunId,
-                resultPath: link.nodeResultPath ?? link.resultPath,
-              },
-            }
-          : {},
+    activeNodes,
+  };
+}
+
+function activeNodesForLink(
+  link: Partial<ActiveRunLink>,
+): ActiveRunLink["activeNodes"] {
+  if (link.activeNodes && typeof link.activeNodes === "object")
+    return link.activeNodes;
+  if (!link.currentNodeId) return {};
+  return {
+    [link.subagentRunId!]: {
+      nodeId: link.currentNodeId,
+      subagentRunId: link.subagentRunId!,
+      resultPath: link.nodeResultPath ?? link.resultPath!,
+    },
   };
 }
 
