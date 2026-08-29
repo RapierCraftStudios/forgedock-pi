@@ -4190,14 +4190,18 @@ export class ForgeWorkOnController {
     ).filter(Boolean);
     const forgeDir = join(worktree, ".pi", "forge");
     const reviewers = [];
+    const artifactNames = await readdir(forgeDir).catch(() => [] as string[]);
     for (const reviewer of [
       "forge-review-correctness",
       "forge-review-security",
     ]) {
-      const text = await readFile(
-        join(forgeDir, `${link.forgeRunId}-${reviewer}.json`),
-        "utf8",
-      ).catch(() => "");
+      const role = reviewer.replace("forge-", "");
+      const artifactName = artifactNames.find(
+        (name) => name.startsWith(`${link.forgeRunId}-${role}`) && name.endsWith(".json"),
+      );
+      const text = artifactName
+        ? await readFile(join(forgeDir, artifactName), "utf8").catch(() => "")
+        : "";
       const parsed = findForgeReviewerResult(text);
       if (!parsed || parsed.headSha !== headSha)
         throw new Error(

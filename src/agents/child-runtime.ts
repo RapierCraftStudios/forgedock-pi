@@ -1590,6 +1590,7 @@ export function registerForgeRuntime(
     async execute(_toolCallId, params) {
       if (!isForgeWorkOnResult(params.value))
         throw new Error("Final work-on result failed schema validation.");
+      assertTrustedVerificationReports(params.value.verification, fallbackStatuses);
       if (
         params.value.runId !== binding.runId ||
         params.value.issueNumber !== binding.issueNumber
@@ -2014,6 +2015,21 @@ export function allowedNodeTools(
   if (node === "prepare-pr")
     return new Set(["forge_prepare_review", "forge_finalize_node"]);
   return new Set(common);
+}
+
+function assertTrustedVerificationReports(
+  checks: readonly { diagnostics?: ValidationEnvironment & { outcome?: string } }[] | readonly unknown[],
+  fallbackStatuses: ReadonlyMap<string, FallbackStatus>,
+): void {
+  for (const check of checks) {
+    const report = (check as { diagnostics?: { outcome?: string; selectedFallback?: { name?: string } } }).diagnostics;
+    if (report?.outcome !== "environment-only") continue;
+    const name = report.selectedFallback?.name;
+    if (!name || fallbackStatuses.get(name) !== "passed")
+      throw new Error(
+        "Environment-only verification requires a passing tracked fallback executed in this run.",
+      );
+  }
 }
 
 function validateVerificationEnvironment(
