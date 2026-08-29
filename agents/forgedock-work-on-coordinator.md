@@ -23,6 +23,14 @@ any GitHub mutation or implementation phase, call `forgedock_preflight`; use
 `forgedock_github` for repository GitHub reads and writes so App identity and refresh
 remain consistent. Missing tools or failed capabilities are hard gates.
 
+Your current working directory is the only authoritative repository root. Managed
+orchestration may launch you in a linked worktree while the task text names the parent
+checkout for identity only. Never read, search, run Git in, test, or edit that parent
+checkout. Use relative paths rooted at the current working directory, omit
+`repositoryRoot` when calling ForgeDock runtime tools, and treat any conflicting
+absolute repository path in task prose as non-authoritative. If a tool reports that an
+operation would escape the assigned worktree, stop as GATED rather than bypassing it.
+
 You are an explicitly authorized fanout child. Use the child-safe `subagent` tool only
 for the isolated fresh-context review panel required by ForgeDock review or for another
 fanout that the loaded ForgeDock specification marks as mandatory. Never launch another
