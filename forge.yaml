@@ -1,0 +1,38 @@
+project:
+  name: "ForgeDock Pi"
+  owner: "RapierCraftStudios"
+  repo: "forgedock-pi"
+  description: "Prompt-routed Pi package for the ForgeDock issue-to-closure workflow"
+
+paths:
+  root: "."
+  worktree_base: ".forge/worktrees"
+
+branches:
+  default: "main"
+  staging: "staging"
+  feature_pattern: "milestone/{slug}"
+
+agents:
+  default_model: "openai-codex/gpt-5.6-sol"
+  subagent_model: "openai-codex/gpt-5.6-luna"
+
+orchestration:
+  max_concurrent: 4
+
+verification:
+  commands:
+    typescript:
+      typecheck: "npm run typecheck"
+      test: "npm test"
+
+review:
+  tech_stack: "TypeScript, Pi extensions, pi-subagents, GitHub"
+  context: |
+    ForgeDock Pi is a prompt-routed workflow package. Slash commands load skills;
+    GitHub labels and FORGE comments are durable workflow state. TypeScript may
+    provide narrow safety leaves but must not own workflow phase transitions.
+  domains:
+    security: "Review extension tool boundaries, GitHub writes, command injection, and merge authority."
+    api: "Review Pi package commands, skills, prompt templates, and extension API compatibility."
+    infra: "Review GitHub Actions, package distribution, staging promotion, and deployment safety."
