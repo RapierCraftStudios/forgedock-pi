@@ -8,6 +8,7 @@ import {
   type ReviewFinding,
   type ReviewGateInput,
 } from "../../src/core/review.ts";
+import { classifyVerificationOutput } from "../../src/core/verification-diagnostics.ts";
 
 const identity = {
   repository: "owner/repo",
@@ -52,6 +53,32 @@ function finding(overrides: Partial<ReviewFinding> = {}): ReviewFinding {
     ...overrides,
   };
 }
+
+test("blocked diagnostics cannot be hidden behind a passed status", () => {
+  const report = classifyVerificationOutput("SyntaxError: invalid syntax");
+  const decision = evaluateReviewGate(
+    input({
+      checks: [{ name: "test", required: true, status: "passed", diagnostics: report }],
+    }),
+  );
+  assert.equal(decision.decision, "changes-requested");
+  assert.match(decision.reasons[0]!, /diagnostics.*blocking/);
+});
+
+test("environment-only diagnostics do not block a fallback-backed check", () => {
+  const report = classifyVerificationOutput(
+    'Import "fastapi" could not be resolved',
+    {
+      fallbacks: [{ name: "container", kind: "container", command: "docker test", status: "passed" }],
+    },
+  );
+  const decision = evaluateReviewGate(
+    input({
+      checks: [{ name: "test", required: true, status: "passed", diagnostics: report }],
+    }),
+  );
+  assert.equal(decision.decision, "approved");
+});
 
 test("clean integration review is approved", () => {
   assert.deepEqual(evaluateReviewGate(input()), {

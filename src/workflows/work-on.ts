@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type {
@@ -97,6 +97,26 @@ import {
 } from "./remediation.ts";
 
 const RUN_LINK_ENTRY = "forgedock-run-link/v1";
+
+async function recoverVerificationResults(
+  forgeDir: string,
+): Promise<ForgeWorkOnResult["verification"]> {
+  const names = await readdir(forgeDir).catch(() => [] as string[]);
+  for (const name of names) {
+    const parsed = findForgeNodeResult(
+      await readFile(join(forgeDir, name), "utf8").catch(() => ""),
+    );
+    if (!parsed || parsed.node !== "verify" || parsed.status !== "completed")
+      continue;
+    return parsed.verification.map((check) => ({
+      name: check.name,
+      status: check.status,
+      ...(check.exitCode === undefined ? {} : { exitCode: check.exitCode }),
+      ...(check.diagnostics === undefined ? {} : { diagnostics: check.diagnostics }),
+    }));
+  }
+  return [];
+}
 
 export type WorkflowStage = keyof typeof WORKFLOW_LABEL_BY_STAGE;
 export type WorkflowTransition = "started" | "resumed" | "completed";
@@ -493,6 +513,25 @@ export class ForgeWorkOnController {
             maxReviewRounds: policy.review.maxRounds,
             reviewerTimeoutMs: policy.subagents.reviewerTimeoutMs,
             verificationCommands: policy.verification.commands,
+            ...(policy.verification.environment
+              ? {
+                  verificationEnvironment: {
+                    host: { name: policy.verification.environment.hostName },
+                    fallbacks: policy.verification.environment.fallbackCommands.map(
+                      (name) => ({
+                        name,
+                        kind: name.toLowerCase().includes("container") || name.toLowerCase().includes("docker")
+                          ? ("container" as const)
+                          : name.toLowerCase().includes("venv") || name.toLowerCase().includes("virtualenv")
+                            ? ("venv" as const)
+                            : ("other" as const),
+                        command: policy.verification.commands[name]!.argv.join(" "),
+                        status: "not-run" as const,
+                      }),
+                    ),
+                  },
+                }
+              : {}),
             refresh: false,
           };
           process.env.PI_SUBAGENT_EXTENSION_BINDINGS = JSON.stringify({
@@ -1222,6 +1261,25 @@ export class ForgeWorkOnController {
           maxReviewRounds: policy.review.maxRounds,
           reviewerTimeoutMs: policy.subagents.reviewerTimeoutMs,
           verificationCommands: policy.verification.commands,
+          ...(policy.verification.environment
+            ? {
+                verificationEnvironment: {
+                  host: { name: policy.verification.environment.hostName },
+                  fallbacks: policy.verification.environment.fallbackCommands.map(
+                    (name) => ({
+                      name,
+                      kind: name.toLowerCase().includes("container") || name.toLowerCase().includes("docker")
+                        ? ("container" as const)
+                        : name.toLowerCase().includes("venv") || name.toLowerCase().includes("virtualenv")
+                          ? ("venv" as const)
+                          : ("other" as const),
+                      command: policy.verification.commands[name]!.argv.join(" "),
+                      status: "not-run" as const,
+                    }),
+                  ),
+                },
+              }
+            : {}),
           refresh: false,
         };
         process.env.PI_SUBAGENT_EXTENSION_BINDINGS = JSON.stringify({
@@ -1689,6 +1747,9 @@ export class ForgeWorkOnController {
                 ...(reported?.exitCode === undefined
                   ? {}
                   : { exitCode: reported.exitCode }),
+                ...(reported?.diagnostics === undefined
+                  ? {}
+                  : { diagnostics: reported.diagnostics }),
               };
             },
           )
@@ -3037,6 +3098,7 @@ export class ForgeWorkOnController {
             ? ("unknown" as const)
             : result.status,
         ...(result.exitCode === undefined ? {} : { exitCode: result.exitCode }),
+        ...(result.diagnostics === undefined ? {} : { diagnostics: result.diagnostics }),
       }));
     });
     return {
@@ -4128,14 +4190,18 @@ export class ForgeWorkOnController {
     ).filter(Boolean);
     const forgeDir = join(worktree, ".pi", "forge");
     const reviewers = [];
+    const artifactNames = await readdir(forgeDir).catch(() => [] as string[]);
     for (const reviewer of [
       "forge-review-correctness",
       "forge-review-security",
     ]) {
-      const text = await readFile(
-        join(forgeDir, `${link.forgeRunId}-${reviewer}.json`),
-        "utf8",
-      ).catch(() => "");
+      const role = reviewer.replace("forge-", "");
+      const artifactName = artifactNames.find(
+        (name) => name.startsWith(`${link.forgeRunId}-${role}`) && name.endsWith(".json"),
+      );
+      const text = artifactName
+        ? await readFile(join(forgeDir, artifactName), "utf8").catch(() => "")
+        : "";
       const parsed = findForgeReviewerResult(text);
       if (!parsed || parsed.headSha !== headSha)
         throw new Error(
@@ -4144,6 +4210,7 @@ export class ForgeWorkOnController {
       reviewers.push(parsed);
     }
     const findings = reviewers.flatMap((entry) => entry.findings ?? []);
+    const recoveredVerification = await recoverVerificationResults(forgeDir);
     const reconstructed: ForgeWorkOnResult = {
       schema: "forgedock.work-on-result/v1",
       runId: link.forgeRunId,
@@ -4153,12 +4220,15 @@ export class ForgeWorkOnController {
       baseSha,
       headSha,
       changedFiles,
-      verification: [
-        {
-          name: "local-verification",
-          status: "skipped",
-        },
-      ],
+      verification:
+        recoveredVerification.length > 0
+          ? recoveredVerification
+          : [
+              {
+                name: "local-verification",
+                status: "skipped",
+              },
+            ],
       residualRisks: [],
       review: {
         headSha,
@@ -4889,6 +4959,9 @@ export class ForgeWorkOnController {
         ...(reported?.exitCode === undefined
           ? {}
           : { exitCode: reported.exitCode }),
+        ...(reported?.diagnostics === undefined
+          ? {}
+          : { diagnostics: reported.diagnostics }),
       };
     });
     if (localChecks.length === 0)
@@ -5587,7 +5660,7 @@ async function postTerminalIssueArtifacts(input: {
     reviewed: input.decision.headSha,
     status: "CLOSED",
     tests: String(
-      input.decision.checkResults.filter((check) => check.status === "passed")
+      input.decision.checkResults.filter((check) => check.status === "passed" || check.diagnostics?.outcome === "environment-only")
         .length,
     ),
     type: "CARD",
@@ -5810,7 +5883,7 @@ function renderVerificationEvidence(
   return checks
     .map(
       (check) =>
-        `- ${check.name}: ${check.status}${check.required ? " (required)" : ""}`,
+        `- ${check.name}: ${check.diagnostics?.outcome === "environment-only" ? "passed (environment-only; fallback verified)" : check.status}${check.required ? " (required)" : ""}`,
     )
     .join("\n");
 }
@@ -5818,21 +5891,20 @@ function renderVerificationEvidence(
 function verificationOutcome(
   checks: readonly VerificationResult[],
 ): VerificationResult["status"] {
+  const effectiveStatus = (check: VerificationResult) =>
+    check.diagnostics?.outcome === "environment-only" ? "passed" : check.status;
   const required = checks.filter((check) => check.required);
-  if (required.some((check) => check.status === "failed")) return "failed";
-  if (required.some((check) => check.status === "pending")) return "pending";
-  if (required.some((check) => check.status === "skipped")) return "skipped";
-  if (required.some((check) => check.status === "unknown")) return "unknown";
-  if (required.some((check) => check.status === "not-configured"))
+  if (required.some((check) => effectiveStatus(check) === "failed")) return "failed";
+  if (required.some((check) => effectiveStatus(check) === "pending")) return "pending";
+  if (required.some((check) => effectiveStatus(check) === "skipped")) return "skipped";
+  if (required.some((check) => effectiveStatus(check) === "unknown")) return "unknown";
+  if (required.some((check) => effectiveStatus(check) === "not-configured"))
     return "not-configured";
-  if (
-    required.length > 0 &&
-    required.every((check) => check.status === "passed")
-  )
+  if (required.length > 0 && required.every((check) => effectiveStatus(check) === "passed"))
     return "passed";
-  if (checks.some((check) => check.status === "policy-exempt"))
+  if (checks.some((check) => effectiveStatus(check) === "policy-exempt"))
     return "policy-exempt";
-  if (checks.some((check) => check.status === "passed")) return "passed";
+  if (checks.some((check) => effectiveStatus(check) === "passed")) return "passed";
   return "not-configured";
 }
 
@@ -5946,10 +6018,11 @@ function chooseIntegrationBranch(policy: ForgePolicy): string {
 
 function buildPullBody(link: ActiveRunLink, result: ForgeWorkOnResult): string {
   const checks = result.verification
-    .map(
-      (check) =>
-        `- ${check.status === "passed" ? "[x]" : "[ ]"} ${check.name}: ${check.status}`,
-    )
+    .map((check) => {
+      const environmentOnly = check.diagnostics?.outcome === "environment-only";
+      const status = environmentOnly ? "passed (environment-only; fallback verified)" : check.status;
+      return `- ${environmentOnly || check.status === "passed" ? "[x]" : "[ ]"} ${check.name}: ${status}`;
+    })
     .join("\n");
   return [
     "## Summary",
@@ -6092,16 +6165,30 @@ export function workflowLabelForNode(
 export function parseAsyncCompletion(
   value: unknown,
 ): ParsedAsyncCompletion | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    return undefined;
-  const record = value as Record<string, unknown>;
-  const runId =
-    typeof record.runId === "string"
-      ? record.runId
-      : typeof record.id === "string"
-        ? record.id
-        : undefined;
+  const record = completionRecord(value);
+  if (!record) return undefined;
+  const runId = completionRunId(record);
   if (!runId) return undefined;
+  const state = completionState(record);
+  if (!state) return undefined;
+  const error = completionError(record, state);
+  return { runId, state, ...(error ? { error } : {}) };
+}
+
+function completionRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function completionRunId(record: Record<string, unknown>): string | undefined {
+  if (typeof record.runId === "string") return record.runId;
+  return typeof record.id === "string" ? record.id : undefined;
+}
+
+function completionState(
+  record: Record<string, unknown>,
+): ParsedAsyncCompletion["state"] | undefined {
   const rawState =
     typeof record.state === "string"
       ? record.state
@@ -6111,80 +6198,83 @@ export function parseAsyncCompletion(
           ? "failed"
           : undefined;
   const state = rawState === "completed" ? "complete" : rawState;
-  if (
-    state !== "running" &&
-    state !== "complete" &&
-    state !== "failed" &&
-    state !== "paused" &&
-    state !== "stopped"
-  )
-    return undefined;
-  const error =
-    typeof record.error === "string"
-      ? record.error.trim()
-      : typeof record.summary === "string" && state !== "complete"
-        ? record.summary.trim()
-        : undefined;
-  return { runId, state, ...(error ? { error } : {}) };
+  return state === "running" ||
+    state === "complete" ||
+    state === "failed" ||
+    state === "paused" ||
+    state === "stopped"
+    ? state
+    : undefined;
+}
+
+function completionError(
+  record: Record<string, unknown>,
+  state: ParsedAsyncCompletion["state"],
+): string | undefined {
+  if (typeof record.error === "string") return record.error.trim();
+  if (typeof record.summary === "string" && state !== "complete")
+    return record.summary.trim();
+  return undefined;
 }
 
 function normalizeActiveRunLink(value: unknown): ActiveRunLink | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    return undefined;
+  if (!isActiveRunLinkRecord(value)) return undefined;
+  const link = value as Partial<ActiveRunLink>;
+  return normalizeActiveRunLinkFields(link);
+}
+
+function isActiveRunLinkRecord(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const link = value as Partial<ActiveRunLink>;
   const statuses: readonly ActiveRunStatus[] = [
-    "running",
-    "ready",
-    "refreshing",
-    "finalizing",
-    "completed",
-    "blocked",
-    "needs-human",
-    "failed",
+    "running", "ready", "refreshing", "finalizing", "completed", "blocked", "needs-human", "failed",
   ];
-  if (
-    typeof link.forgeRunId !== "string" ||
-    typeof link.subagentRunId !== "string" ||
-    !Number.isSafeInteger(link.issueNumber) ||
-    typeof link.repository !== "string" ||
-    typeof link.stateBranch !== "string" ||
-    typeof link.resultPath !== "string" ||
-    !link.status ||
-    !statuses.includes(link.status) ||
-    !link.prepared ||
-    typeof link.prepared !== "object"
-  )
-    return undefined;
+  return typeof link.forgeRunId === "string" &&
+    typeof link.subagentRunId === "string" &&
+    Number.isSafeInteger(link.issueNumber) &&
+    typeof link.repository === "string" &&
+    typeof link.stateBranch === "string" &&
+    typeof link.resultPath === "string" &&
+    typeof link.status === "string" &&
+    statuses.includes(link.status) &&
+    Boolean(link.prepared) &&
+    typeof link.prepared === "object";
+}
+
+function normalizeActiveRunLinkFields(link: Partial<ActiveRunLink>): ActiveRunLink {
+  const activeNodes = activeNodesForLink(link);
   return {
     ...(link as ActiveRunLink),
     executionMode: link.executionMode ?? "bounded-legacy",
-    leaseOwnerRunId: link.leaseOwnerRunId ?? link.forgeRunId,
+    leaseOwnerRunId: link.leaseOwnerRunId ?? link.forgeRunId!,
     leaseEpoch: link.leaseEpoch ?? 1,
     leaseSeconds: link.leaseSeconds ?? 3_600,
     heartbeatSeconds: link.heartbeatSeconds ?? 60,
     lastHeartbeatAt: link.lastHeartbeatAt,
-    reviewBaseSha: link.reviewBaseSha ?? link.prepared.baseSha,
+    reviewBaseSha: link.reviewBaseSha ?? link.prepared!.baseSha!,
     refreshes: link.refreshes ?? 0,
     providerRetries: link.providerRetries ?? 0,
     remediationAttempts: link.remediationAttempts ?? 0,
     findingIssueMap: link.findingIssueMap ?? {},
     issueContext: link.issueContext ?? "",
-    ...(typeof link.planContext === "string"
-      ? { planContext: link.planContext }
-      : {}),
+    ...(link.planContext === undefined ? {} : { planContext: link.planContext }),
     ...(link.builderContract ? { builderContract: link.builderContract } : {}),
-    activeNodes:
-      link.activeNodes && typeof link.activeNodes === "object"
-        ? link.activeNodes
-        : link.currentNodeId
-          ? {
-              [link.subagentRunId]: {
-                nodeId: link.currentNodeId,
-                subagentRunId: link.subagentRunId,
-                resultPath: link.nodeResultPath ?? link.resultPath,
-              },
-            }
-          : {},
+    activeNodes,
+  };
+}
+
+function activeNodesForLink(
+  link: Partial<ActiveRunLink>,
+): ActiveRunLink["activeNodes"] {
+  if (link.activeNodes && typeof link.activeNodes === "object")
+    return link.activeNodes;
+  if (!link.currentNodeId) return {};
+  return {
+    [link.subagentRunId!]: {
+      nodeId: link.currentNodeId,
+      subagentRunId: link.subagentRunId!,
+      resultPath: link.nodeResultPath ?? link.resultPath!,
+    },
   };
 }
 

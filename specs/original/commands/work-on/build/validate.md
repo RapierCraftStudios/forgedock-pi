@@ -177,6 +177,16 @@ python -m py_compile {PYTHON_FILES}
 ```
 Failures in `py_compile` are BLOCKING — fix before continuing.
 
+**Environment-aware dependency diagnostics**:
+
+When a dependency-backed formatter, linter, or type checker reports unresolved third-party imports, parse those diagnostics separately from syntax and changed-code errors using the deterministic `src/core/verification-diagnostics.ts` classifier. Read `verification.environment` from `forge.yaml`; its `fallbackCommands` entries must name commands already present in `verification.commands`. Run configured container/venv fallbacks through the approved named-command path before classifying the host result.
+
+- A passing configured container/venv fallback marks only the unresolved host dependency diagnostics `environment-only`.
+- Syntax errors, changed-code type errors, unknown non-empty failures, and diagnostics reproduced by the fallback remain blocking.
+- Never install dependencies, add suppressions, or edit analysis configuration as part of validation.
+- If no fallback is configured or provisioned, retain the block and emit one machine-readable skipped record for each unavailable check. Render each as exactly `SKIPPED — environment not provisioned (environment: {name}; attempted command: {command})`.
+- Persist the structured report, including diagnostic kind, environment name, attempted command, fallback status, and outcome, in the verification result so review and resumed work-on runs do not ask for the same decision again.
+
 **TypeScript**:
 ```bash
 cd {WORKTREE_PATH}

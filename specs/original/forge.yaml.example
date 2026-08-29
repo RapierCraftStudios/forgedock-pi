@@ -612,6 +612,12 @@ branches:
 #   #     test: "cargo test"
 #   #     build: "cargo build"
 #
+#   # Optional environment provenance for dependency-backed diagnostics. Fallbacks
+#   # reference command names declared above; they are never arbitrary shell input.
+#   # environment:
+#   #   hostName: "host interpreter"
+#   #   fallbackCommands: ["api-test-container", "project-venv"]
+#
 #   # Known-slow / hanging test suites to skip or narrow during automated pipeline
 #   # runs. Some test files make live network/LLM calls or otherwise hang far
 #   # longer than a normal unit-test pass — without this list, /work-on Phase 3H

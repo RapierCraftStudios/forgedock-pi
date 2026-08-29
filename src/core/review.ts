@@ -4,6 +4,7 @@ import {
   isHumanAuthorityReason,
   type HumanAuthorityReason,
 } from "./policy.ts";
+import type { VerificationDiagnosticReport } from "./verification-diagnostics.ts";
 
 export {
   HUMAN_AUTHORITY_REASONS,
@@ -69,6 +70,8 @@ export interface VerificationResult {
   required: boolean;
   status: VerificationStatus;
   exitCode?: number;
+  /** Provenance for dependency/import diagnostics; absent for clean checks. */
+  diagnostics?: VerificationDiagnosticReport;
 }
 
 export interface HumanAuthorityRequest {
@@ -167,6 +170,18 @@ export function evaluateReviewGate(input: ReviewGateInput): ReviewGateResult {
     blocked.push("No verification results were recorded for the reviewed head.");
 
   for (const check of input.checks) {
+    // A dependency cascade cleared by a passing declared fallback is
+    // environment-only, not a failed required check. Conversely, a malformed
+    // or blocked report must never be hidden behind status: passed.
+    if (check.diagnostics?.outcome === "environment-only") {
+      if (check.status === "passed") continue;
+      changes.push(`Environment-only verification ${check.name} was not promoted to passed.`);
+      continue;
+    }
+    if (check.diagnostics?.outcome === "blocked") {
+      changes.push(`Verification diagnostics for ${check.name} remain blocking.`);
+      continue;
+    }
     if (!check.required || check.status === "passed") continue;
     if (check.status === "failed") {
       changes.push(`Required check ${check.name} failed.`);
