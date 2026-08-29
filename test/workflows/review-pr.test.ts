@@ -313,7 +313,7 @@ function finding(reviewer: string = roster.reviewers[0]) {
 }
 
 function request(overrides: Partial<ReviewPrRequest> = {}): ReviewPrRequest {
-  return {
+  const value: ReviewPrRequest = {
     reviewId: "review-1",
     repository: "owner/repo",
     pullNumber: route.pullNumber,
@@ -331,6 +331,30 @@ function request(overrides: Partial<ReviewPrRequest> = {}): ReviewPrRequest {
     authorityValid: () => true,
     ...overrides,
   };
+  if (value.mode === "staging" && value.stagingBundle === undefined) {
+    value.stagingBundle = {
+      schema: "forgedock.staging-bundle-resolution/v1",
+      route: {
+        repository: value.repository,
+        baseRef: route.baseRef,
+        baseSha: route.baseSha,
+        headRef: route.headRef,
+        headSha: route.headSha,
+        integrationPullNumber: route.pullNumber,
+      },
+      resolved: [
+        {
+          pullNumber: 6,
+          repository: value.repository,
+          evidence: ["merge"],
+          identity: `${value.repository}#6`,
+        },
+      ],
+      derivations: [],
+      exclusions: [],
+    };
+  }
+  return value;
 }
 
 function harness(
@@ -568,6 +592,16 @@ test("staging review rejects merge requests and never calls merge", async () => 
   assert.equal(h.journal.events.length, 0);
 });
 
+test("staging review rejects missing commit-reachability bundle evidence", async () => {
+  const h = harness();
+  const input = request({ mode: "standard" });
+  input.mode = "staging";
+  await assert.rejects(
+    h.coordinator.review(input),
+    /requires a frozen commit-reachability bundle resolution/,
+  );
+});
+
 test("Phase 6.5 propagates explicit BLOCK, PASS, and SKIP results", () => {
   assert.deepEqual(
     testGateVerification("<!-- FORGE:TEST_GATE:RESULT=BLOCK -->"),
@@ -660,7 +694,7 @@ test("an unresolved prior finding for the same PR forces staging failure", async
   h.github.issues.push({
     number: 101,
     title: "fix: prior review finding",
-    body: "<!-- FORGE:REVIEW_FINDING source-pr=7 finding=SEC-000 head=old-head -->",
+    body: "<!-- FORGE:REVIEW_FINDING source-pr=6 finding=SEC-000 head=old-head -->",
     state: "open",
     labels: ["review-finding"],
   });

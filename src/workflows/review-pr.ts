@@ -259,10 +259,11 @@ export class ReviewPrCoordinator {
       return completedResult(snapshot.state, route, merge);
     }
 
-    const stagingBundle =
-      mode === "staging"
-        ? (input.stagingBundle ?? fallbackStagingBundle(input.repository, route))
-        : undefined;
+    if (mode === "staging" && !input.stagingBundle)
+      throw new Error(
+        "Staging review requires a frozen commit-reachability bundle resolution.",
+      );
+    const stagingBundle = mode === "staging" ? input.stagingBundle : undefined;
     let prepared: PreparedReviewWorktree | undefined;
     const worktreePath =
       input.execution.kind === "standalone"
@@ -722,7 +723,20 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
     try {
       // The first panel is the only fan-out. A completed result is retained
       // verbatim, so recovery never reruns a sibling that already persisted it.
-      const launched = await Promise.all(input.reviewers.map(spawn));
+      const launchSettled = await Promise.allSettled(
+        input.reviewers.map((reviewer) => spawn(reviewer)),
+      );
+      const launched = launchSettled.flatMap((entry) =>
+        entry.status === "fulfilled" ? [entry.value] : [],
+      );
+      const failures: Record<string, ReturnType<typeof classifyReviewerFailure>> =
+        Object.fromEntries(
+          launchSettled.flatMap((entry, index) =>
+            entry.status === "rejected"
+              ? [[input.reviewers[index]!, classifyReviewerFailure(entry.reason, input.signal)]]
+              : [],
+          ),
+        );
       const settled = await Promise.allSettled(
         launched.map((entry) =>
           waitForReviewerResult(
@@ -738,11 +752,14 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
       const retained = settled.flatMap((entry) =>
         entry.status === "fulfilled" ? [entry.value] : [],
       );
-      const failures = Object.fromEntries(
-        settled.flatMap((entry, index) =>
-          entry.status === "rejected"
-            ? [[launched[index]!.reviewer, classifyReviewerFailure(entry.reason, input.signal)]]
-            : [],
+      Object.assign(
+        failures,
+        Object.fromEntries(
+          settled.flatMap((entry, index) =>
+            entry.status === "rejected"
+              ? [[launched[index]!.reviewer, classifyReviewerFailure(entry.reason, input.signal)]]
+              : [],
+          ),
         ),
       );
       const recoveryPlan = planReviewRecovery({
@@ -761,9 +778,16 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
             .map((entry) => this.#rpc.stop(entry.receipt.runId)),
         );
         const retryTimeoutMs = extendedReviewerTimeout(input.reviewerTimeoutMs);
-        const retryEntries = await Promise.all(
+        const retryLaunchSettled = await Promise.allSettled(
           retryable.map((reviewer) => spawn(reviewer, retryTimeoutMs)),
         );
+        const retryEntries = retryLaunchSettled.flatMap((entry) =>
+          entry.status === "fulfilled" ? [entry.value] : [],
+        );
+        for (const [index, entry] of retryLaunchSettled.entries()) {
+          if (entry.status === "rejected")
+            failures[retryable[index]!] = classifyReviewerFailure(entry.reason, input.signal);
+        }
         const retrySettled = await Promise.allSettled(
           retryEntries.map((entry) =>
             waitForReviewerResult(
@@ -859,9 +883,6 @@ export class ForgeReviewController {
         "--gh-flag is not supported by the typed GitHub adapter; no flag was executed.",
       );
     const environment = await this.#environment(ctx);
-    // A route selector chooses the PR, not the execution policy. Only the
-    // staging command explicitly opts into the non-merging staging mode.
-    const effectiveMode: ReviewMode = mode;
     const pulls = await environment.github.resolveReviewSelector(
       selectorValue(parsed.selector),
       ctx.signal,
@@ -874,6 +895,10 @@ export class ForgeReviewController {
       );
     const results = await Promise.all(
       pulls.map(async (pull) => {
+        const effectiveMode: ReviewMode =
+          mode === "staging" || environment.policy.branches.protected.includes(pull.baseRef)
+            ? "staging"
+            : "standard";
         if (parsed.base !== undefined && pull.baseRef !== parsed.base)
           throw new Error(
             `PR #${pull.number} targets ${pull.baseRef}, not requested base ${parsed.base}.`,
@@ -1406,32 +1431,6 @@ function hasExactSourcePull(body: string, pullNumber: number): boolean {
     `(?:source-pr=|Source PR\\**:?\\s*#)${String(pullNumber)}(?!\\d)`,
     "i",
   ).test(body);
-}
-
-function fallbackStagingBundle(
-  repository: string,
-  route: GitHubPullRequestRouteSnapshot,
-): StagingBundleResolution {
-  const pull = {
-    pullNumber: route.pullNumber,
-    repository: repository.toLowerCase(),
-    evidence: ["head"] as const,
-    identity: `${repository.toLowerCase()}#${route.pullNumber}`,
-  };
-  return Object.freeze({
-    schema: "forgedock.staging-bundle-resolution/v1",
-    route: Object.freeze({
-      repository,
-      baseRef: route.baseRef,
-      baseSha: route.baseSha,
-      headRef: route.headRef,
-      headSha: route.headSha,
-      integrationPullNumber: route.pullNumber,
-    }),
-    resolved: Object.freeze([Object.freeze(pull)]),
-    derivations: Object.freeze([]),
-    exclusions: Object.freeze([]),
-  });
 }
 
 function renderReviewSummary(

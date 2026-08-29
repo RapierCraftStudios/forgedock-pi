@@ -6,7 +6,10 @@ import {
   humanAuthorityReasonFromText,
   type HumanAuthorityReason,
 } from "../core/policy.ts";
-import { normalizeReviewFindingMetadata } from "../core/review-integrity.ts";
+import {
+  assertReviewFindingReadbackPaths,
+  normalizeReviewFindingMetadata,
+} from "../core/review-integrity.ts";
 
 export interface ReviewFindingRunIdentity {
   forgeRunId: string;
@@ -63,6 +66,19 @@ export async function publishReviewFindingIssues(input: {
         issue.body.includes(marker) || issue.body.includes(fingerprintMarker),
     );
     if (exact?.state === "open") {
+      const requiredLabels = ["review-finding", "needs-validation"];
+      const identityValid =
+        exact.body.includes(marker) &&
+        exact.body.includes(fingerprintMarker) &&
+        exact.body.includes(`**Forge run**: \`${input.link.forgeRunId}\``) &&
+        exact.body.includes(`**Reviewed head**: \`${input.result.review.headSha}\``) &&
+        exact.body.includes(`**Finding ID**: \`${finding.id}\``) &&
+        requiredLabels.every((label) => exact.labels.includes(label));
+      if (!identityValid)
+        throw new Error(
+          `Existing review-finding issue #${exact.number} failed strict identity read-back.`,
+        );
+      assertReviewFindingReadbackPaths(exact.body, normalized.affectedPaths);
       issueMap[finding.id] = exact.number;
       continue;
     }

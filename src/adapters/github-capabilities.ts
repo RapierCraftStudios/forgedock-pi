@@ -138,11 +138,12 @@ export async function preflightGitHubCapabilities(input: {
   }
   const contents = installation.permissions.contents;
   const issues = installation.permissions.issues;
-  if (contents !== "write" || issues !== "write") {
+  const pullRequests = installation.permissions.pull_requests;
+  if (contents !== "write" || issues !== "write" || pullRequests !== "write") {
     throw new GitHubCapabilityError(
       "repository-write",
       installationPath,
-      "installation lacks nonmutating contents/issues write permissions.",
+      "installation lacks required contents/issues/pull_requests write permissions.",
     );
   }
   return {

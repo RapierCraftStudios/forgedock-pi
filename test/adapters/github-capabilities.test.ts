@@ -11,7 +11,7 @@ test("capability preflight verifies installation permissions without /user", asy
   const calls: string[] = [];
   const base = transport({
     "/repos/acme/app": { permissions: { pull: true, push: true } },
-    "/installation": { id: 4, repository_selection: "selected", repositories: [{ full_name: "acme/app" }], permissions: { contents: "write", issues: "write" } },
+    "/installation": { id: 4, repository_selection: "selected", repositories: [{ full_name: "acme/app" }], permissions: { contents: "write", issues: "write", pull_requests: "write" } },
   });
   const traced = { request: async (request: Parameters<GitHubTransport["request"]>[0]) => { calls.push(request.path); return base.request(request); } } as GitHubTransport;
   const result = await preflightGitHubCapabilities({ repository: "acme/app", transport: traced, tokenSource: "installation" });

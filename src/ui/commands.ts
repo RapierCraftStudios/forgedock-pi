@@ -519,9 +519,9 @@ export function registerForgeCommands(
 }
 
 function assertStagingReviewArguments(parsed: ParsedReviewArguments): void {
-  if (parsed.selector.kind !== "route")
+  if (parsed.selector.kind === "collection")
     throw new Error(
-      "review-pr-staging requires staging, feature, or staging:feature route selector.",
+      "review-pr-staging requires an exact PR number, PR URL, staging, feature, or staging:feature selector.",
     );
   if (parsed.autoMerge)
     throw new Error("review-pr-staging never accepts --auto-merge.");

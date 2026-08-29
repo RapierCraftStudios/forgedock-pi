@@ -28,14 +28,55 @@ function githubMethod(value: string): GitHubRequest["method"] {
   return normalized as GitHubRequest["method"];
 }
 
-function assertRepositoryApiPath(path: string, repository: string): string {
+export function assertForgeRepositoryApiPath(path: string, repository: string): string {
   const normalized = path.trim();
   const root = repositoryApiPath(repository);
-  if (!normalized.startsWith("/") || normalized.startsWith("//"))
+  if (!normalized.startsWith("/") || normalized.startsWith("//") || normalized.includes("#"))
     throw new TypeError("path must be a GitHub REST path, not a URL");
-  if (normalized !== root && !normalized.startsWith(`${root}/`) && !normalized.startsWith(`${root}?`))
+  const pathname = normalized.split("?", 1)[0]!;
+  for (const rawSegment of pathname.split("/")) {
+    let segment: string;
+    try {
+      segment = decodeURIComponent(rawSegment);
+    } catch {
+      throw new TypeError("path contains invalid percent encoding");
+    }
+    if (segment === "." || segment === ".." || segment.includes("/") || segment.includes("\\"))
+      throw new Error("GitHub path cannot contain dot or encoded path segments.");
+  }
+  const canonical = new URL(normalized, "https://api.github.com");
+  if (canonical.origin !== "https://api.github.com" || canonical.pathname !== pathname)
+    throw new Error("GitHub path normalization changed repository scope.");
+  if (pathname !== root && !pathname.startsWith(`${root}/`))
     throw new Error(`GitHub path must remain scoped to ${repository}.`);
   return normalized;
+}
+
+export function assertForgeGitHubOperationAllowed(
+  method: GitHubRequest["method"],
+  path: string,
+  repository: string,
+): void {
+  if (method === "GET") return;
+  const pathname = path.split("?", 1)[0]!;
+  const root = repositoryApiPath(repository);
+  const relative = pathname.slice(root.length);
+  const allowed =
+    (method === "POST" && [
+      /^\/issues$/,
+      /^\/issues\/[1-9]\d*\/comments$/,
+      /^\/issues\/[1-9]\d*\/labels$/,
+      /^\/pulls$/,
+      /^\/pulls\/[1-9]\d*\/reviews$/,
+    ].some((pattern) => pattern.test(relative))) ||
+    (method === "PATCH" && /^\/(?:issues|pulls)\/[1-9]\d*$/.test(relative)) ||
+    (method === "PUT" && [
+      /^\/issues\/[1-9]\d*\/labels$/,
+      /^\/pulls\/[1-9]\d*\/merge$/,
+    ].some((pattern) => pattern.test(relative))) ||
+    (method === "DELETE" && /^\/issues\/[1-9]\d*\/labels\/[^/]+$/.test(relative));
+  if (!allowed)
+    throw new Error(`GitHub ${method} ${relative || "/"} is outside the ForgeDock operation allowlist.`);
 }
 
 function boundedJson(value: unknown): { text: string; truncated: boolean } {
@@ -49,6 +90,7 @@ function boundedJson(value: unknown): { text: string; truncated: boolean } {
 
 /** Register deterministic config/auth leaves used by visible and nested coordinators. */
 export function registerForgeRuntimeTools(pi: ExtensionAPI): void {
+  const preflightedRoots = new Set<string>();
   pi.registerTool({
     name: "forgedock_preflight",
     label: "ForgeDock Preflight",
@@ -77,6 +119,7 @@ export function registerForgeRuntimeTools(pi: ExtensionAPI): void {
         tokenProvider,
         signal,
       });
+      preflightedRoots.add(root);
       const result = { schema: "forgedock.preflight/v1", config, capabilities };
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -105,9 +148,12 @@ export function registerForgeRuntimeTools(pi: ExtensionAPI): void {
     }),
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const root = repositoryRoot(ctx.cwd, params.repositoryRoot);
+      if (!preflightedRoots.has(root))
+        throw new Error("forgedock_preflight must succeed for this repository before GitHub operations.");
       const config = await loadForgeYaml(root);
       const method = githubMethod(params.method);
-      const path = assertRepositoryApiPath(params.path, config.repository);
+      const path = assertForgeRepositoryApiPath(params.path, config.repository);
+      assertForgeGitHubOperationAllowed(method, path, config.repository);
       const tokenProvider = createGitHubTokenProvider(pi, root);
       const transport = new FetchGitHubTransport({
         tokenProvider,
