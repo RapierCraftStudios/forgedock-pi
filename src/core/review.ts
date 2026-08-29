@@ -173,7 +173,11 @@ export function evaluateReviewGate(input: ReviewGateInput): ReviewGateResult {
     // A dependency cascade cleared by a passing declared fallback is
     // environment-only, not a failed required check. Conversely, a malformed
     // or blocked report must never be hidden behind status: passed.
-    if (check.diagnostics?.outcome === "environment-only") continue;
+    if (check.diagnostics?.outcome === "environment-only") {
+      if (check.status === "passed") continue;
+      changes.push(`Environment-only verification ${check.name} was not promoted to passed.`);
+      continue;
+    }
     if (check.diagnostics?.outcome === "blocked") {
       changes.push(`Verification diagnostics for ${check.name} remain blocking.`);
       continue;

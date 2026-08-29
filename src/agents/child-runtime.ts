@@ -958,7 +958,10 @@ export function registerForgeRuntime(
         ...(signal ? { signal } : {}),
       });
       assertCompleteProcessOutput(result, `Verification command ${params.name}`);
-      const status =
+      let status:
+        | "unknown"
+        | "passed"
+        | "failed" =
         result.timedOut || result.exitCode === null
           ? "unknown"
           : result.exitCode === 0
@@ -1000,6 +1003,7 @@ export function registerForgeRuntime(
         },
         { failed: result.exitCode !== 0 || result.timedOut },
       );
+      if (diagnosticReport.outcome === "environment-only") status = "passed";
       const diagnosticSummary = diagnosticReport.skipped
         .map(formatSkippedVerification)
         .join("\\n");
