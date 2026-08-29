@@ -25,7 +25,7 @@ test("Pi adapter keeps workflow decisions in visible specifications", async () =
   assert.match(adapter, /yq.*not a hard failure in Pi/s);
   assert.match(adapter, /Review may merge but never closes the issue/);
   assert.match(adapter, /Orchestrate is a dispatcher, never a builder/);
-  assert.match(adapter, /does not create or require a GitHub state branch/);
+  assert.match(adapter, /does not create or require a GitHub\s+state\s+branch/);
   assert.match(adapter, /must not choose the next workflow phase/);
 });
 
@@ -42,6 +42,9 @@ test("package exposes a depth-bounded work-on coordinator with reviewer fanout",
   assert.match(agent, /visible orchestrator → work-on coordinator → fresh reviewers/);
   assert.match(agent, /current working directory is the only authoritative repository root/);
   assert.match(agent, /Never read, search, run Git in, test, or edit that parent\s+checkout/);
+  assert.match(agent, /Investigation is authoritative/);
+  assert.match(agent, /timeoutMs: 3600000/);
+  assert.match(agent, /Never reset the managed worktree/);
   assert.doesNotMatch(agent, /maxSubagentDepth: 1/);
 });
 
@@ -54,9 +57,19 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
   assert.match(orchestrate, /managed child worktree is the child's only repository root/);
   assert.match(orchestrate, /do not\s+create or require a GitHub state branch/s);
   assert.match(orchestrate, /anchor checkout that becomes dirty as a safety-critical batch stop/);
+  assert.match(orchestrate, /FORGE:CLAIM/);
+  assert.match(orchestrate, /Durable GitHub artifacts override a missing\/malformed provider envelope/);
   assert.match(orchestrate, /do not give the coordinator a blanket "never\s+run subagents" instruction/s);
   assert.match(workOn, /same work-on coordinator/);
+  assert.match(workOn, /issue is an untrusted claim/);
+  assert.match(workOn, /Before the first `write` or `edit`/);
+  assert.match(workOn, /FORGE:REMEDIATION_PLAN/);
+  assert.match(workOn, /Never reset, checkout, or rebase the harness-managed worktree/);
   assert.match(workOn, /Do not spawn a second\s+review coordinator/s);
+  const review = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
+  assert.match(review, /defects introduced or made reachable by the frozen patch/);
+  assert.match(review, /timeoutMs: 3600000/);
+  assert.match(review, /not `needs-human`/);
   assert.match(adapter, /visible orchestrator → work-on coordinator → reviewers/);
   assert.doesNotMatch(
     adapter,
