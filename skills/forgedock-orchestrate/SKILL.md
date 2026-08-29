@@ -9,12 +9,12 @@ The visible session is a dispatcher, never a builder.
 
 ## Required loading
 
-1. Read `../../specs/pi-adapter.md` completely.
-2. Read `../../specs/original/commands/orchestrate/config.md` first.
-3. Read `../../specs/original/commands/orchestrate.md` completely.
-4. Parse the arguments appended to this skill invocation.
-5. Load the phase files under `../../specs/original/commands/orchestrate/` only as each
-   phase becomes current.
+1. Parse the arguments appended to this skill invocation.
+2. Read `../../specs/pi-adapter.md` and
+   `../../specs/original/commands/orchestrate/config.md` for runtime rules and defaults.
+3. Use this skill as the compact execution checklist. Consult the original orchestrate
+   specification only when a current decision is ambiguous; do not preload the root
+   specification, phase files, or generic subagent reference corpus before dispatch.
 
 ## Execution contract
 
@@ -56,11 +56,11 @@ and publish the consolidated report.
 
 ## Reload and recovery contract
 
-Persist the batch ID, lease epoch, deterministic child key, predecessor set, and
-ready/deferred queues in the GitHub state branch. On reload, reconcile retained child
-receipts by child key and classify every lane exactly as `DONE`, `GATED`, `FAILED`, or
-`IN_PROGRESS`. Resume only unlaunched ready nodes, exactly once, within the concurrency
-cap; never treat a provider receipt as workflow authority. Unknown or duplicate child
-keys, stale leases, missing predecessors, or ambiguous completion produce a paused,
-actionable report and launch nothing. Complete saved evidence is reused; partial
-panels and unsupported Pi continuation are fail-closed.
+Before dispatch, create one coordination issue and record the batch ID, lease epoch,
+deterministic child keys, predecessor set, and ready/deferred queues in machine-readable
+`FORGE:` markers in its body or comments. This issue is the durable batch state; do not
+create or require a GitHub state branch. On reload, read the coordination issue and
+reconcile retained child receipts by key. Resume only unlaunched ready nodes exactly
+once within the concurrency cap. Unknown or duplicate keys, stale leases, missing
+predecessors, or ambiguous completion produce a paused report and launch nothing. Close
+the coordination issue after terminal cleanup.
