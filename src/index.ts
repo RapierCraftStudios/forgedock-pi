@@ -1,33 +1,11 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-import { registerForgeAgents } from "./agents/register.ts";
-import { registerForgeRuntime } from "./agents/child-runtime.ts";
-import { registerForgeCommands } from "./ui/commands.ts";
-import { ForgeOrchestrationController } from "./workflows/orchestrate.ts";
-import { ForgeReviewController } from "./workflows/review-pr.ts";
-import { ForgeWorkOnController } from "./workflows/work-on.ts";
+import { registerForgePromptRouter } from "./prompt-router.ts";
 
+/**
+ * ForgeDock's extension layer is intentionally lexical only.
+ * Skills and their visible coordinator own every workflow decision.
+ */
 export default function forgedockPiExtension(pi: ExtensionAPI): void {
-  const agentRegistrations = registerForgeAgents(pi);
-  const controller = new ForgeWorkOnController(pi);
-  registerForgeRuntime(pi, {
-    bindingProvider: () => controller.getDirectBinding(),
-    mainSession: true,
-    registerAgents: false,
-  });
-  const orchestrator = new ForgeOrchestrationController(pi, controller);
-  const reviewController = new ForgeReviewController(pi);
-  registerForgeCommands(pi, controller, orchestrator, reviewController);
-
-  pi.on("session_start", async (_event, ctx) => {
-    await orchestrator.attach(ctx);
-    await controller.attach(ctx);
-    await orchestrator.resume(ctx);
-  });
-
-  pi.on("session_shutdown", () => {
-    orchestrator.dispose();
-    controller.dispose();
-    for (const registration of agentRegistrations) registration.dispose();
-  });
+  registerForgePromptRouter(pi);
 }

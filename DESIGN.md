@@ -1,387 +1,209 @@
-# ForgeDock for Pi — architecture and delivery contract
+# ForgeDock Pi — prompt-routed architecture
 
-## Objective
+## Product objective
 
-Rebuild the `work-on`, `orchestrate`, and `review-pr` workflows as a portable, production-oriented Pi package. This is not a prompt-level port of the retained command specs. The specs are evidence for workflow intent; tested TypeScript code owns control flow, state, safety, and side effects.
+Restore ForgeDock's original command behavior in Pi without rebuilding the workflow as
+a hidden TypeScript state machine.
 
-The first milestone supports one issue through:
-
-```text
-resolve → investigate → plan → isolated implementation → verification
-        → fresh review → integration-branch merge → close → cleanup
-```
-
-Multi-issue orchestration is added only after the single-issue lifecycle survives crash, restart, and machine handoff.
-
-## Approved product decisions
-
-- `pi-subagents` is the execution substrate and is consumed through its public APIs first.
-- A fork of `pi-subagents` is allowed only after a failing integration test proves a missing load-bearing seam.
-- Repository policy is tracked in `.forge/config.json`.
-- Machine-local overrides may live in `.pi/forge.local.json`; they cannot weaken tracked safety policy.
-- Runs must resume on another machine.
-- GitHub-native typed state is authoritative; local state is a cache.
-- Independent runs use run-scoped authority, unique worktrees/branches, state CAS, and idempotent effect receipts; no renewable repository-wide lease exists.
-- Staging integration is guarded only at merge time by current base/head/review/CI validation and recoverable CAS state.
-- Automatic merge is allowed only for configured integration branches after all typed gates pass.
-- The protected/default production branch remains human-only.
-
-## Boundaries
-
-### Deterministic core owns
-
-- run and phase state machines;
-- legal transitions and terminal-state rules;
-- event schemas, validation, hashes, sequence numbers, and idempotency keys;
-- run-scoped authority, optimistic state CAS, integration receipts, and idempotent effects;
-- review blocking policy and merge authorization;
-- dependency graph and ready-queue computation;
-- worktree, branch, commit, PR, merge, close, and cleanup policy;
-- safe verification command execution;
-- GitHub state persistence and audit projections.
-
-The core must be testable without Pi, an LLM, a checkout, or network access.
-
-### `pi-subagents` owns
-
-- child process/session execution;
-- fresh or forked context construction;
-- runtime agent discovery and registration;
-- structured child output collection;
-- async lifecycle, status, stop, steer, resume, and artifacts;
-- model selection and usage accounting.
-
-`pi-subagents` is never the ForgeDock state machine. A child result is evidence submitted to the core. A child may request a checkpoint through a narrow Forge tool, but the deterministic core validates and persists the transition; the model never gains direct transition, push, merge, label, comment, or close authority.
-
-### Required delegation hierarchy
-
-Work-on is the single-issue coordinator. Standalone work-on uses the visible Pi session as coordinator; orchestration launches one coordinator child per issue. Each coordinator launches sibling contexts so nesting remains bounded:
+The authoritative product loop is:
 
 ```text
-work-on coordinator (root standalone, depth 1 when orchestrated)
-├── investigator/architect (fresh, read-only)
-├── retained builder        (writer, resumed for verify/remediation, no recursion)
-├── correctness reviewer    (fresh every round, read-only)
-└── security reviewer       (fresh every round, read-only)
+/orchestrate
+  → one /work-on coordinator per issue
+      → investigate
+      → [decompose | contract → implement → verify → PR]
+      → /review-pr
+          → [remediate → fresh re-review]
+          → merge
+      → close issue → trajectory → cleanup
 ```
 
-The coordinator owns typed context capsules, durable transitions, finding disposition, integration requests, and escalation. Review authority is not embedded in work-on: work-on Phase 5 calls the same typed `ReviewPrCoordinator` used by `/forge:review-pr`. That shared coordinator freezes the PR route, persists a review-specific journal, joins the frozen reviewer roster, records checks/findings/verdict, and projects GitHub artifacts. The retained builder owns implementation, verification, PR preparation, and in-contract remediation on the same PR. Reviewers are always fresh siblings bound to the exact head SHA and never receive the builder transcript or `subagent` tool.
+A single ordinary issue must complete this entire route reliably before additional
+execution machinery is considered valuable.
 
-`/forge:review-pr-staging` applies a stricter deployment strategy to the configured staging→protected-target route. It carries unresolved review findings into the decision, permits no open finding, emits exactly one read-back-verified `FORGE:GATE_PASS` or `FORGE:GATE_FAILURE`, and never approves, merges, deploys, closes an issue, or cleans a work-on-owned tree.
+## Behavioral authority
 
-Later, `/forge:orchestrate` launches multiple independent work-on coordinators. Orchestration schedules lanes and integration order; it does not replace or bypass each lane’s work-on, review, or remediation workflow.
+The original ForgeDock command specifications are packaged unchanged under
+`specs/original/commands/`. Their hashes are recorded in
+`specs/original/SHA256SUMS`.
 
-The runtime definition for `forge-work-on` must therefore load the `pi-subagents` extension/tool in the child, set an explicit nesting/spawn budget, and restrict nested launches to registered Forge reviewer roles. This hierarchy is a tested contract, not a prompt convention.
+`specs/pi-adapter.md` translates Claude/OpenCode runtime mechanics to Pi. It may map
+tool names, skill loading, and subagent fan-out, but it may not alter:
 
-### Subagents may
+- phase ordering or terminal conditions;
+- command routing;
+- GitHub labels and required `FORGE:*` artifacts;
+- verification requirements;
+- review selection, evidence, or blocking policy;
+- remediation and re-review behavior;
+- merge, closure, or cleanup ownership;
+- staging deployment-gate semantics.
 
-- investigate repository code and history with read-only tools;
-- produce a schema-valid plan;
-- modify only their assigned isolated worktree when acting as the single writer;
-- run approved verification through controlled tools;
-- have the `forge-work-on` role spawn the registered fresh reviewer panel;
-- request typed phase checkpoints through the constrained `forge_checkpoint` tool;
-- review a frozen diff from fresh context;
-- return structured evidence and findings.
+## Pi command architecture
 
-### Subagents may not
-
-- write arbitrary GitHub issues, comments, labels, projects, or PR metadata;
-- push branches or merge PRs;
-- close issues;
-- mutate another worktree or paths outside the assigned root;
-- invent verification commands;
-- bypass core validation when requesting a workflow transition;
-- receive general GitHub credentials or raw `gh` write capability.
-
-The parent extension performs authority-sensitive GitHub operations. A child-side Forge checkpoint extension may hold only the narrowly scoped ability to submit schema-valid events for its run and lease epoch; it exposes no general GitHub or merge primitive to the model.
-
-## Package shape
+Pi skills hold workflow specifications and references. A packaged, depth-bounded
+work-on coordinator agent gives orchestrated issue lanes the one nested capability they
+need for fresh review fanout:
 
 ```text
-src/
-  index.ts                    Pi extension entrypoint
-  core/
-    events.ts                 versioned event schemas
-    state.ts                  reducer and legal transitions
-    lease.ts                  lease/epoch rules
-    policy.ts                 config and authority evaluation
-    review.ts                 finding and blocking matrix
-    dag.ts                    dependency graph and ready queue
-  adapters/
-    github-state.ts           state branch, CAS append/replay/snapshot
-    review-journal.ts         durable issue-less PR review journal
-    github.ts                 issues, PRs, labels, projections
-    git.ts                    worktrees, ancestry, commits, cleanup
-    subagents.ts              public pi-subagents integration
-    verification.ts           safe argv execution
-  agents/
-    register.ts               runtime role registration
-    child-guard.ts            worktree and side-effect containment
-    prompts/                  compact role contracts
-  workflows/
-    work-on.ts                single-issue implementation/lifecycle controller
-    review-pr.ts              shared frozen-SHA PR review coordinator
-    review-pr-staging.ts      strict non-merging deployment gate strategy
-    orchestrate.ts            multi-issue scheduler
-  ui/
-    commands.ts               /forge:* commands
-    tools.ts                  model-callable Forge tools
-    status.ts                 widgets and run rendering
-test/
-  core/
-  adapters/
-  integration/
+agents/
+  forgedock-work-on-coordinator.md
+skills/
+  forgedock-orchestrate/
+  forgedock-work-on/
+  forgedock-review-pr/
+  forgedock-review-pr-staging/
+  forgedock-quality-gate/
 ```
 
-## GitHub-native state authority
-
-### State branch
-
-Use a dedicated branch, defaulting to `forgedock/state/v1`. It contains only workflow state, never source code.
+Prompt templates expose discoverable `/orchestrate`, `/work-on`, `/review-pr`, and
+`/review-pr-staging` entries. The extension performs one lexical transformation:
 
 ```text
-.forgedock/
-  repository.json
-  locks/repository.json
-  runs/<run-id>/events.ndjson
-  runs/<run-id>/snapshot.json
-  reviews/<review-id>/events.ndjson
-  reviews/<review-id>/snapshot.json
+/work-on 42  →  /skill:forgedock-work-on 42
 ```
 
-Create commits through the GitHub Git Data API. Every update:
+The transform performs no GitHub access, parsing, confirmation, state recovery,
+dispatch, or side effect. The expanded skill and visible Pi coordinator own the route.
 
-1. reads the current state-branch ref;
-2. creates blobs/tree/commit whose parent is that exact ref;
-3. updates the ref without force;
-4. treats a non-fast-forward response as a compare-and-set conflict;
-5. refetches, reduces current state, and either retries an idempotent append or stops on competing ownership.
+`/forge:*` compatibility aliases map to the same skills.
 
-### Event envelope
+## State and recovery
 
-Every event contains at least:
+GitHub is the durable state layer:
 
-```json
-{
-  "schema": "forgedock.run-event/v1",
-  "eventId": "uuid",
-  "runId": "uuid",
-  "repository": "owner/name",
-  "sequence": 42,
-  "previousEventHash": "sha256:...",
-  "type": "phase.completed",
-  "actor": {
-    "kind": "extension",
-    "sessionId": "...",
-    "authorityRevision": 1
-  },
-  "occurredAt": "RFC3339 timestamp",
-  "idempotencyKey": "...",
-  "payload": {}
-}
-```
+- issue and PR state;
+- `workflow:*`, `needs-human`, and review labels;
+- completed `FORGE:*` comments;
+- PR reviews, checks, commits, and merge state.
 
-The reducer rejects sequence gaps, hash-chain breaks, stale lease epochs, illegal transitions, duplicate non-idempotent effects, and unknown required fields.
+A new session must reconstruct the next phase from GitHub. Private journals, leases,
+state branches, reducers, and controller-owned phase records are not workflow authority.
+A completed phase artifact is idempotently skipped; a partial artifact is repaired or
+restarted according to its specification.
 
-### Lease
+## Coordinator ownership
 
-The repository lease contains:
+### Work-on
 
-```json
-{
-  "schema": "forgedock.repository-lease/v1",
-  "repository": "owner/name",
-  "ownerRunId": "uuid",
-  "ownerSessionId": "uuid",
-  "epoch": 3,
-  "acquiredAt": "...",
-  "lastHeartbeatAt": "...",
-  "expiresAt": "...",
-  "takeoverRequired": false
-}
-```
+The visible work-on coordinator owns one issue through terminal closure. It loads the
+next phase specification progressively and continues until invalid, decomposed,
+human-gated/awaiting-merge, or fully merged and closed.
 
-Expiry never transfers ownership automatically. A different machine may inspect and resume only after a user confirms takeover. Takeover appends an audit event, increments `epoch`, and marks the old active attempt `abandoned` before a fresh idempotent attempt begins.
+Review may merge the PR but never closes the issue. Work-on close verifies the merge,
+closes the issue explicitly, updates labels and parents, cleans the worktree, posts the
+trajectory, and only then reports terminal success.
 
-### GitHub projections
+### Review
 
-Issue comments and labels are human-readable projections. Every projection includes `runId`, `eventId`, schema version, and phase. Projection failure never converts a failed state transition into success. Projection retry is idempotent.
+Standard review freezes the PR route, runs configured and integration verification,
+derives a risk-based reviewer roster, and joins one complete fresh-context panel.
+Reviewers start from the diff but may read/search the repository to trace callers,
+imports, registration points, and cross-service behavior.
 
-## Typed phase model
+Every finding becomes a deduplicated issue before summary publication. Merge requires
+an explicit request, a current reviewed SHA, the original blocking policy, and an
+authorized non-production base.
 
-A phase attempt has one of:
+A PR targeting the protected/default branch routes automatically to the staging review
+strategy.
+
+### Staging review
+
+Staging review is a deployment/bundle gate, not a larger standard panel. It accepts an
+exact PR, discovers included PRs, checks prior findings across the bundle, runs build,
+CI, runtime and regression gates, and emits one terminal gate result. It never merges,
+deploys, closes source issues, or cleans work-on trees.
+
+### Orchestrate
+
+Orchestrate is a dispatcher, never a builder. It resolves a confirmed issue set, filters
+active/terminal work, establishes explicit/file/database ordering, detects cycles, and
+launches exactly one work-on skill per ready issue with bounded concurrency.
+
+It observes each lane as DONE, GATED, FAILED, or IN_PROGRESS. GATED is not FAILED.
+It does not implement a second issue lifecycle.
+
+## Subagents
+
+Fork only for:
+
+- independent parallel issue lanes;
+- fresh-context load-bearing reviews;
+- genuinely long isolated quality-gate work.
+
+Orchestrate launches the packaged `forgedock-work-on-coordinator`, not the generic
+builtin worker. That coordinator owns one issue and is explicitly authorized to launch
+only its mandatory fresh read-only reviewer panel. Review coordination stays in the
+work-on child, producing the bounded nesting shape:
 
 ```text
-queued | running | completed | failed | blocked | needs-human | abandoned
+visible orchestrator → work-on coordinator → fresh reviewers
 ```
 
-Each attempt records:
+It never recursively launches another work-on lifecycle or writer. Every writer owns
+one isolated worktree. Required reviewer panels are complete or fail closed; inline
+self-review never substitutes for a missing reviewer.
 
-- phase and attempt number;
-- input artifact hash;
-- `pi-subagents` run ID and logical node ID;
-- assigned worktree, branch, base SHA, and current commit;
-- output artifact hash;
-- verification evidence;
-- restart action;
-- timestamps and lease epoch.
+Pi-subagents supplies execution and isolation. It is not the workflow state machine.
 
-Machine handoff never blindly resumes an old local child. The old attempt is reconciled from durable evidence. If its terminal result cannot be proven, takeover abandons it and starts a new idempotent attempt from the last completed checkpoint.
+## Deterministic code boundary
 
-## Work-on lifecycle
+TypeScript may make one leaf operation safe and deterministic, for example:
 
-1. **Resolve** — validate `.forge/config.json`, repository identity, issue, policy, GitHub auth, base branch, clean control checkout, and lease.
-2. **Investigate** — launch a read-only structured investigator; independently verify cited files and evidence before accepting its result.
-3. **Plan** — produce a bounded file/symbol contract, acceptance criteria, risk, and allowed paths. A material product or architecture choice becomes `needs-human`.
-4. **Prepare worktree** — the parent creates an explicit worktree from the policy-selected base SHA. The child does not create or select branches.
-5. **Implement** — one writer child edits only the assigned worktree and returns a structured handoff. The parent verifies the actual diff rather than trusting the handoff.
-6. **Verify** — run operator-approved named checks as argv arrays in a scrubbed environment with timeout and preserved exit status. Unknown or malformed results fail closed.
-7. **Review** — freeze repository, PR/diff, run ID, head SHA, base SHA, and roster; launch fresh read-only reviewers in parallel; validate all findings and panel completion.
-8. **Merge** — immediately recheck head SHA, base policy, required checks, reviewer roster, blocking matrix, and lease. Auto-merge only to a configured integration branch.
-9. **Close** — verify merge first, then update issue state and projections exactly once.
-10. **Cleanup** — remove only owned clean worktrees/temporary branches. Residue is reported, not concealed.
+- resolving trusted configuration;
+- running a named bounded verification command;
+- taking a frozen PR snapshot;
+- exact-head guarded merge.
 
-## Review contract
+It must not decide the next phase, synthesize a review verdict, dispatch a workflow,
+close an issue, or reconcile a private run.
 
-Review identity is the tuple:
+The active extension currently contains only the lexical command router. The previous
+controllers remain temporarily as dormant migration code and must not be registered.
+They should be deleted after the prompt-routed acceptance path is proven.
 
-```text
-(repository, PR number, run ID, head SHA, base SHA, roster version)
-```
+## Configuration
 
-A reviewer result is invalid if any identity field differs. Stale comments cannot satisfy a current panel.
+`forge.yaml` is the authoritative project configuration, matching original ForgeDock.
+`.forge/config.json` belongs to the retired controller architecture and is not silently
+interpreted as equivalent.
 
-Confidence and severity are orthogonal. One versioned matrix decides whether a finding blocks. Required verification failure, incomplete required panel, malformed gate result, stale head, merge conflict, or missing merge authority always blocks.
+Pi may read YAML directly when `yq` is unavailable. Missing or malformed required
+configuration still fails before workflow side effects.
 
-Before merge the core requires:
+## Acceptance gates
 
-1. current head SHA equals reviewed SHA;
-2. base SHA and branch policy are still valid;
-3. every required reviewer completed for this run;
-4. every required verification check passed;
-5. no blocking finding remains;
-6. the current lease epoch still owns the run;
-7. integration-branch auto-merge is enabled by tracked policy.
+### Single issue
 
-The production/default branch is never auto-merged.
+1. `/work-on N` resolves an ordinary open issue.
+2. Investigation writes evidence and acceptance checks.
+3. Implementation occurs in an isolated worktree.
+4. Quality and configured verification pass.
+5. A PR targets the correct non-production base.
+6. Context-aware fresh review runs at the frozen head.
+7. Blocking findings route through bounded remediation and fresh re-review.
+8. The clean PR merges.
+9. Work-on explicitly closes the issue, posts trajectory, and cleans the worktree.
+10. Re-running the command is an idempotent no-op.
+11. Interrupting at a phase boundary resumes from GitHub alone.
 
-## Verification trust boundary
+### Full command surface
 
-`.forge/config.json` stores commands as argv arrays, for example:
+- standalone standard review routes and completes correctly;
+- exact-PR staging review emits a non-merging gate;
+- orchestrate dispatches two independent issues concurrently;
+- a dependent issue launches immediately after its predecessor succeeds;
+- a human-gated predecessor pauses rather than failing its dependents.
 
-```json
-{
-  "verification": {
-    "commands": {
-      "test": { "argv": ["npm", "test"], "required": true, "timeoutMs": 600000 },
-      "typecheck": { "argv": ["npm", "run", "typecheck"], "required": true, "timeoutMs": 300000 }
-    }
-  }
-}
-```
+## Deferred complexity
 
-The run snapshots policy from the trusted base commit. A PR/worktree modification to policy cannot change the active run. Models request checks by name and cannot supply shell source. The runner uses argv spawning, scrubs secrets, preserves the child exit code separately from truncated output, records hashes/artifacts, and fails closed for required checks.
+Until these acceptance gates pass repeatedly, do not reintroduce:
 
-Executing repository code is still a security boundary. Production writer/verification runs require a containment mode. The first implementation must at minimum provide child environment scrubbing, worktree-root enforcement, no GitHub credentials, and a child-side guard against GitHub writes/push/merge. A stronger container/sandbox backend remains an explicit production-hardening option.
-
-## Pi and plugin integration
-
-### `pi-subagents`
-
-Use its public surfaces:
-
-- in-process RPC for async `spawn`, `status`, `steer`, `resume`, and `stop`;
-- exact async completion event advertised by `ping`;
-- `pi-subagents/agents` for runtime `forge-work-on` and reviewer registration;
-- a `forge-work-on` runtime definition that includes the `subagent` tool, loads the child runtime, permits depth-2 reviewer fanout, and restricts nested launches to Forge reviewer roles;
-- reviewer runtime definitions that are fresh, read-only, schema-bound, and have no `subagent` tool;
-- structured delegation/output schemas for both the work-on handoff and every nested review result;
-- preflight to prove effective tools, nesting depth, model, context, skills, extensions, and artifacts;
-- capability ceilings and child-only guard/checkpoint extensions;
-- mission/artifact receipts as local execution evidence.
-
-Fork only if an integration test proves that a required logical node identity, structured completion, stop/reconcile operation, child-only extension, or capability boundary cannot be expressed through these APIs.
-
-### Other installed capabilities
-
-- `pi-lens`: optional code navigation, diagnostics, and structural review evidence.
-- `rpiv-ask-user-question`: authority and takeover decisions.
-- `rpiv-todo`: local implementation progress only, never workflow authority.
-- `pi-background-tasks`: test/build execution where background process lifecycle is useful; not the agent scheduler.
-- `pi-hermes-memory`: durable user/project lessons; not run state.
-
-## Initial command surface
-
-```text
-/forge:init
-/forge:work-on <issue>
-/forge:review <pr>
-/forge:status [run]
-/forge:resume <run>
-/forge:takeover <run>
-/forge:cancel <run>
-```
-
-`/forge:orchestrate` remains disabled until the single-issue milestone passes its recovery contract.
-
-A model-callable `forge` tool exposes typed actions for inspect, plan, launch, status, and request-approval. It does not expose raw merge/close primitives without policy and authority checks.
-
-## First-milestone validation contract
-
-### Functional
-
-- Resolve one configured GitHub issue.
-- Produce a schema-valid investigation and plan.
-- Create an isolated branch/worktree from the configured integration base.
-- Run one top-level `forge-work-on` writer/orchestrator through `pi-subagents`.
-- Run required verification by trusted command name.
-- Have that work-on child spawn at least correctness and security reviewers in fresh nested contexts, wait for them, and return the complete panel result.
-- Create or update one PR against an allowed integration branch.
-- Auto-merge only after every typed gate passes.
-- Verify merge, close the issue once, and clean owned worktree state.
-
-### Recovery
-
-At every phase boundary and during each active child:
-
-- terminate Pi;
-- start Pi on the same machine and reconcile;
-- start Pi on another machine with no local run cache;
-- reconstruct the run from the GitHub state branch;
-- require takeover when the prior lease has expired;
-- never duplicate a completed external effect.
-
-### Safety
-
-- A child cannot push, merge, close, label, comment, or access GitHub credentials.
-- A child cannot mutate outside its assigned worktree.
-- Policy modified by the worktree cannot alter the active run.
-- Unknown event, gate, reviewer result, or state transition fails closed.
-- A stale reviewed SHA cannot merge.
-- A changed base or conflicting branch cannot merge silently.
-- The default/production branch cannot auto-merge.
-- CAS conflict or competing lease ownership stops the run.
-- Cleanup never deletes uncommitted or unowned work.
-
-### Evidence
-
-The milestone is complete only with:
-
-- unit tests for reducer, lease, review matrix, and DAG primitives;
-- adapter tests for CAS conflict, replay, idempotency, and projection retry;
-- integration tests against a disposable GitHub repository or deterministic fake;
-- `pi-subagents` preflight and structured-completion integration tests;
-- crash-point recovery tests;
-- a final diff review and documented residual risks.
-
-## Explicit non-goals for v1
-
-- multi-runner high availability or automatic failover;
-- multi-issue orchestration;
-- decomposition and review-finding cascades;
-- staging-to-production bundle review;
-- autonomous production/default-branch merge;
-- autonomous post-merge ADR, memory, dossier, or documentation commits;
-- compatibility with Claude/OpenCode `Skill`, `Task`, or `Agent` syntax;
-- parsing the retained Markdown specs at runtime.
+- TypeScript workflow controllers or phase reducers;
+- private GitHub state branches and CAS journals;
+- leases, takeover protocols, claims boards, or hidden run adoption;
+- engine/OpenCode-specific execution paths;
+- cost/value scheduling, telemetry, knowledge indexes, or cascade economics;
+- automatic multi-machine recovery;
+- additional command surfaces unrelated to the closed loop.

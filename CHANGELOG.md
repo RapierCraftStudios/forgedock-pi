@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — Prompt-routed reset
+
+- Replaced controller-backed workflow command registration with a lexical Pi skill router.
+- Added prompt and skill entrypoints for orchestrate, work-on, review-pr, staging review, and quality gate.
+- Added a packaged, depth-bounded work-on coordinator agent that can launch the mandatory fresh reviewer panel without enabling recursive issue orchestration.
+- Packaged the original ForgeDock command/helper corpus with a SHA-256 integrity manifest.
+- Restored `forge.yaml` as workflow configuration authority.
+- Documented the visible-coordinator, GitHub-state closed-loop architecture.
+
 ## 0.1.0 — Experimental
 
 - Initial standalone Pi extension package.

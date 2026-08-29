@@ -1,70 +1,55 @@
-<div align="center">
-
 # ForgeDock Pi
 
-**Pi-native GitHub issue orchestration with durable state, nested subagent review, and an auditable knowledge graph.**
+**Prompt-routed GitHub issue orchestration for Pi, from issue to reviewed merge and closure.**
 
 [![CI](https://github.com/RapierCraftStudios/forgedock-pi/actions/workflows/ci.yml/badge.svg)](https://github.com/RapierCraftStudios/forgedock-pi/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
-[![Pi Package](https://img.shields.io/badge/Pi-package-7c3aed)](https://github.com/badlogic/pi-mono)
-
-</div>
+[![Pi Package](https://img.shields.io/badge/Pi-package-7c3aed)](https://github.com/earendil-works/pi-mono)
 
 > [!WARNING]
-> **Experimental development release.** The single-issue pipeline has completed a live synthetic E2E run, but production hardening remains in progress. Start with auto-merge disabled and a non-production integration branch.
-
-ForgeDock Pi is a from-scratch rewrite of ForgeDock's core issue lifecycle for the [Pi coding agent](https://github.com/badlogic/pi-mono). Execution is native to Pi and [`pi-subagents`](https://github.com/nicobailon/pi-subagents); GitHub comments preserve ForgeDock's durable phase-result protocol so every run becomes inspectable institutional memory.
+> The prompt-routed architecture is being restored from the original ForgeDock
+> specifications. Keep automatic merge disabled in production until the live closed-loop
+> acceptance path has passed repeatedly.
 
 ## What it does
 
 ```text
-Issue
-  → investigate
-  → contract + context + architecture
-  → isolated implementation
-  → controlled verification
-  → push + PR
-  → nested fresh correctness/security review
-  → audit-gated integration merge
-  → close + cleanup + trajectory
+/orchestrate
+  → one /work-on lane per issue
+      → investigate
+      → contract + implement + verify
+      → PR
+      → context-aware /review-pr
+      → bounded remediation + fresh re-review when required
+      → merge
+      → explicit issue closure + trajectory + cleanup
 ```
 
-- **Typed execution authority:** hash-chained events and snapshots on a dedicated GitHub state branch.
-- **Machine-visible memory:** canonical `FORGE:*` comments on issues and PRs.
-- **Nested review hierarchy:** one work-on writer launches fresh, read-only reviewer subagents.
-- **Fail-closed merge policy:** stale SHAs, failed checks, incomplete reviewers, missing audit artifacts, conflicts, protected branches, and invalid run/integration authority block merge.
-- **Isolated Git worktrees:** one issue, one branch, one writer.
-- **Exact workflow labels:** `investigating → ready-to-build → building → in-review → merged`.
-- **Idempotent side effects:** event IDs, idempotency keys, read-back verification, and optimistic non-force state updates.
+The original ForgeDock specifications are packaged under
+[`specs/original/commands`](specs/original/commands). Pi-specific adaptation is limited
+to runtime mechanics in [`specs/pi-adapter.md`](specs/pi-adapter.md).
 
-## Status
+## Architecture
 
-### Implemented
+- **Skills own behavior.** Slash commands expand native Pi skills and progressively load
+  the relevant phase specification.
+- **The visible coordinator owns routing.** TypeScript does not choose phases or maintain
+  hidden workflow state.
+- **GitHub is durable memory.** Labels, issue/PR state, and completed `FORGE:*` artifacts
+  determine resume position.
+- **Subagents provide isolation and fan-out.** One writer owns one issue worktree; review
+  panels use fresh repository-capable contexts.
+- **Review is load-bearing.** It runs configured checks, derives domain reviewers, files
+  every finding, and never approves from a partial panel.
+- **Closure remains explicit.** Review may merge; work-on verifies the merge and closes the
+  issue, posts trajectory, and cleans up.
 
-- `/forge:init`
-- `/forge:work-on <issue intent>`
-- `/forge:status`
-- Durable GitHub state journal, run-scoped authority, and CAS-backed integration gating
-- Canonical issue phase reports
-- PR-before-review ordering
-- Nested correctness and security reviewers
-- Verification and audit merge gates
-- Integration-branch merge, issue closure, branch/worktree cleanup
-- Trajectory, card, review summary, and decision record
-
-### Not production-complete
-
-- Multi-issue `/forge:orchestrate`
-- Full legacy Forge history recall and relevance ranking
-- Live cross-machine run reconciliation validation
-- Container/OS sandboxing for repository test execution
-- Staging-to-production deployment review
-
-See [`DESIGN.md`](DESIGN.md) for architecture, trust boundaries, validation contracts, and known limitations.
+See the repository design document (`DESIGN.md`) for the complete contract.
 
 ## Installation
 
-ForgeDock Pi requires Node.js 22+, Pi, Git, GitHub CLI, and `pi-subagents`.
+ForgeDock Pi requires Node.js 22+, Pi, Git, GitHub CLI, and `pi-subagents` 0.59+
+for child-safe, depth-bounded reviewer fanout.
 
 ```bash
 pi install npm:pi-subagents
@@ -79,102 +64,86 @@ pi install /absolute/path/to/forgedock-pi
 
 Restart Pi or run `/reload` after installation.
 
-## Quick start
+## Configuration
 
-From a trusted GitHub repository:
+The prompt-routed workflow uses the original `forge.yaml` contract. Start from the
+packaged minimal template:
 
-```text
-/forge:init
+```bash
+cp specs/original/templates/forge.yaml.minimal forge.yaml
 ```
 
-This creates `.forge/config.json` and reconciles canonical workflow labels. Review and commit that policy before running work.
+At minimum configure:
 
-For an initial production pilot, set:
+```yaml
+project:
+  name: "My Project"
+  owner: "my-org"
+  repo: "my-repo"
 
-```json
-{
-  "branches": {
-    "integration": ["staging"],
-    "protected": ["main"],
-    "autoMergeIntegration": false
-  }
-}
+paths:
+  root: "/absolute/path/to/my-repo"
+  worktree_base: "/absolute/path/to/my-repo/.forge/worktrees"
+
+branches:
+  default: "main"
+  staging: "staging"
+  feature_pattern: "milestone/{slug}"
 ```
 
-For monorepo-local checks, bind each tracked command to the package that owns its script:
+Add project checks under `verification.commands`. Missing checks must be reported as
+skipped; they are never silently represented as passing.
 
-```json
-{
-  "verification": {
-    "commands": {
-      "web-test": {
-        "argv": ["npm", "test"],
-        "cwd": "web",
-        "required": true,
-        "timeoutMs": 600000
-      }
-    }
-  }
-}
-```
-
-`cwd` is optional and defaults to the repository root. It must be a safe repository-relative directory. ForgeDock statically preflights required executables and package scripts against the frozen integration worktree before launching a writer; absolute paths, traversal, missing scripts, and symlink escapes fail closed with the exact policy path to fix. Use `commands: {}` for CI-only verification.
-
-Then run:
-
-```text
-/forge:work-on "the oldest eligible workflow bug"
-/forge:status
-```
+`.forge/config.json` belongs to the retired controller implementation and is not treated
+as equivalent to `forge.yaml`.
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
-| `/forge:about` | Show extension, schema, and `pi-subagents` availability |
-| `/forge:init` | Create tracked policy and canonical labels |
-| `/forge:work-on <issue intent>` | Resolve exactly one issue, implement it, and call the shared typed review-pr workflow before work-on-owned merge/close/cleanup |
-| `/forge:orchestrate <issue set>` | Run one complete work-on coordinator per issue with bounded parallelism and serialized integration |
-| `/forge:review-pr <PR selector> [flags]` | Review one PR, URL, `open`, `all`, or the configured route; `--auto-merge` remains explicit and policy-gated |
-| `/review-pr ...` | Compatibility alias for `/forge:review-pr` |
-| `/forge:review-pr-staging [staging | feature | staging:feature]` | Strict staging deployment review; emits `FORGE:GATE_PASS` or `FORGE:GATE_FAILURE` and never merges or deploys |
-| `/review-pr-staging ...` | Compatibility alias for `/forge:review-pr-staging` |
-| `/forge:status` | Show linked orchestrations, work-on runs, and standalone reviews |
-| `/forge:resume [review-id]` | Resume one durable review or reconcile linked orchestrations |
-| `/forge:cancel <workflow-id>` | Cancel an orchestration or review while preserving its durable audit history |
+| `/work-on <issue or next>` | Run or resume one complete issue lifecycle |
+| `/work-on <PR> --remediate --issue <N>` | Run the bounded remediation/re-review route |
+| `/review-pr <PR selector> [flags]` | Context-aware standard review and optional guarded merge |
+| `/review-pr-staging <PR or route>` | Strict non-merging deployment/bundle review |
+| `/orchestrate <issue set> [--auto or --confirm]` | Dispatch one complete work-on lane per issue |
 
-## GitHub audit trail
+`/forge:work-on`, `/forge:review-pr`, `/forge:review-pr-staging`, and
+`/forge:orchestrate` are lexical compatibility aliases for the same skills.
 
-Issue artifacts include:
+The underlying native Pi skills remain directly available as:
 
-- `FORGE:INVESTIGATOR`
-- `FORGE:FAST_PATH`
-- `FORGE:CONTRACT`
-- `FORGE:CONTEXT`
-- `FORGE:ARCHITECT`
-- `FORGE:BUILDER`
-- `FORGE:ACCEPTANCE_GATE`
-- `FORGE:REVIEW_STARTED`
-- `FORGE:CHECKPOINT`
-- `FORGE:TRAJECTORY`
-- `FORGE:CARD`
+```text
+/skill:forgedock-work-on
+/skill:forgedock-review-pr
+/skill:forgedock-review-pr-staging
+/skill:forgedock-orchestrate
+/skill:forgedock-quality-gate
+```
 
-PR artifacts include:
+## Packaged behavioral authority
 
-- `FORGE:REVIEW_ROUTE`
-- `FORGE:REVIEW-AGENT:<domain>`
-- `REVIEW-FINDINGS`
-- `FORGE:REVIEW_SUMMARY`
-- `FORGE:DECISION_RECORD`
+The package includes:
 
-Missing required current-run artifacts block merge.
+- a `forgedock-work-on-coordinator` agent authorized only for mandatory nested review fanout;
+- 83 original command/phase/persona specifications;
+- 47 original helper scripts;
+- original configuration documentation and templates;
+- a SHA-256 manifest checked by the test suite;
+- a Pi runtime adapter that maps skill/subagent mechanics without changing behavior.
 
-## Live E2E receipt
+## Current migration status
 
-The synthetic acceptance run completed implementation, verification, nested review, integration merge, issue closure, audit projection, and worktree cleanup:
+The active extension entrypoint now registers only the lexical prompt router. The prior
+controller, journal, lease, and child-runtime implementation remains temporarily in the
+source tree for migration comparison but is not registered or authoritative.
 
-- [Issue #9](https://github.com/RapierCraft/fdpi/issues/9)
-- [PR #10](https://github.com/RapierCraft/fdpi/pull/10)
+Required proof before declaring the migration complete:
+
+1. one live ordinary issue completes from investigation through closure;
+2. standalone standard and staging review routes complete correctly;
+3. two independent orchestrated issues run concurrently;
+4. one dependency unblocks and dispatches immediately after predecessor success;
+5. interruption resumes from GitHub without private journal recovery.
 
 ## Development
 
@@ -183,19 +152,14 @@ npm install
 npm run check
 ```
 
-The check suite runs strict TypeScript validation and unit/integration tests.
-
-To run the disposable GitHub E2E harness:
-
-```bash
-node scripts/e2e-rpc.mjs /path/to/sandbox-repo <issue-number>
-```
-
-Do not target a production repository with the E2E harness.
+The suite validates TypeScript, lexical routing, skill/prompt packaging, the original
+specification hash manifest, and existing lower-level safety modules.
 
 ## Security
 
-Extensions execute with the user's operating-system permissions. Review [`SECURITY.md`](SECURITY.md) and the repository policy before enabling writes or auto-merge.
+Pi extensions and prompt skills execute with the user's operating-system permissions.
+Review `SECURITY.md`, `forge.yaml`, and repository protections before
+enabling writes or automatic merge.
 
 ## License
 
