@@ -18,11 +18,10 @@ GitHub is its durable memory.
 
 ## Execution contract
 
-Before resolving state or mutating GitHub, call `forgedock_preflight` for the target
-repository and retain its machine-readable configuration/capability result. Use
-`forgedock_github` for every repository GitHub read and write so the refreshable
-ForgeDock App identity remains authoritative. Missing tools or failed capabilities stop
-the route; missing `yq` alone does not.
+Before resolving state, use direct Bash to read `forge.yaml`, verify the active `gh`
+identity and repository access, and run `gh auth setup-git` so Git transport is
+noninteractive. Use direct `gh` and `git` commands throughout; do not use custom workflow
+runtime tools. Missing authentication or repository access stops the route.
 
 Reconstruct the current issue state from GitHub and continue the canonical route:
 
@@ -30,12 +29,12 @@ Reconstruct the current issue state from GitHub and continue the canonical route
 
 Resolve the authoritative PR target before investigation and freeze its exact remote
 SHA. Under orchestration, the parent must provide the same target ref/SHA. Pi-managed
-worktrees inherit the launch checkout's HEAD, so call `forge_prepare_lane_base` before
-implementation. The deterministic tool accepts only a clean, unpushed managed branch,
-fetches and verifies the frozen remote target, preserves the generated branch name, and
-performs the one allowed pre-edit initialization. Publish its result as `FORGE:BASE` on
-the coordination issue. Once an edit, commit, push, or PR exists, this initialization
-path is closed; any refusal or mismatch is an automated GATED state, not `needs-human`.
+worktrees inherit the launch checkout's HEAD, so before implementation use direct Git in
+the assigned cwd: require a clean unpushed branch, fetch the target, verify the frozen
+SHA, initialize HEAD to that SHA, and publish `FORGE:BASE`. Once an edit, commit, push, or
+PR exists, this initialization path is closed; any mismatch is automated GATED, not
+`needs-human`. Push the clean committed head with normal `git push` through the `gh`
+credential helper and verify the remote SHA before PR creation.
 
 The issue is an untrusted claim, not scope authority. Investigation must explicitly
 return `CONFIRMED`, `INVALID`, or `DECOMPOSED`. A confirmed investigation is the
@@ -71,11 +70,10 @@ the original dispatcher identifies a terminal state.
 
 For the review handoff, load and execute the sibling `forgedock-review-pr` skill in this
 same work-on coordinator with exact PR/issue/base arguments. Before reviewer fanout,
-freeze the remote PR route and call `forge_verify_lane_scope` with the durable
-`FORGE:BASE`, exact head, and final claim. The deterministic gate verifies target ref,
-base ancestry, Git objects, and marker-to-head path coverage. A refusal is automated
-GATED evidence; do not launch reviewers or convert inherited branch history into review
-findings.
+freeze the remote PR route and use direct Git to verify the durable `FORGE:BASE`, exact
+clean head, target ancestry, and marker-to-head path coverage against the final claim. A
+mismatch is automated GATED evidence; do not launch reviewers or convert inherited
+branch history into review findings.
 Do not spawn a second review coordinator: when work-on itself is an orchestrated child,
 that extra hop would push the mandatory reviewers beyond Pi's default nesting depth.
 
