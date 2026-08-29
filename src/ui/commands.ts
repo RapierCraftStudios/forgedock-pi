@@ -29,6 +29,7 @@ import {
   FORGEDOCK_LEASE_SCHEMA,
   FORGEDOCK_PI_VERSION,
 } from "../core/version.ts";
+import { forgeCapabilityDiagnostics } from "../agents/profile.ts";
 
 export interface OrchestrationConfirmationInput {
   issueNumbers: readonly number[];
@@ -341,6 +342,9 @@ export function registerForgeCommands(
         `event schema: ${FORGEDOCK_EVENT_SCHEMA}`,
         `lease schema: ${FORGEDOCK_LEASE_SCHEMA}`,
         `pi-subagents tool: ${hasSubagents ? "available" : "unavailable"}`,
+        ...forgeCapabilityDiagnostics(
+          pi.getAllTools().map((tool) => tool.name),
+        ),
       ];
       ctx.ui.notify(lines.join("\n"), hasSubagents ? "info" : "warning");
       return Promise.resolve();
@@ -515,9 +519,9 @@ export function registerForgeCommands(
 }
 
 function assertStagingReviewArguments(parsed: ParsedReviewArguments): void {
-  if (parsed.selector.kind !== "route")
+  if (parsed.selector.kind === "collection")
     throw new Error(
-      "review-pr-staging requires staging, feature, or staging:feature route selector.",
+      "review-pr-staging requires an exact PR number, PR URL, staging, feature, or staging:feature selector.",
     );
   if (parsed.autoMerge)
     throw new Error("review-pr-staging never accepts --auto-merge.");

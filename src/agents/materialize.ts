@@ -66,6 +66,7 @@ export async function materializeForgeAgents(
               tools: FORGE_WORK_ON_TOOLS,
               prompt: FORGE_WORK_ON_PROMPT,
               maxDepth: FORGE_WORK_ON_MAX_DEPTH,
+              allowNestedSubagents: true,
               acceptanceRole: "writer",
               completionGuard: false,
               async: true,
@@ -82,6 +83,7 @@ export async function materializeForgeAgents(
               tools: FORGE_REFRESH_REVIEW_TOOLS,
               prompt: FORGE_REFRESH_REVIEW_PROMPT,
               maxDepth: FORGE_WORK_ON_MAX_DEPTH,
+              allowNestedSubagents: true,
               acceptanceRole: "writer",
               completionGuard: false,
               async: true,
@@ -350,6 +352,7 @@ function agentFile(input: {
   tools: readonly string[];
   prompt: string;
   maxDepth: number;
+  allowNestedSubagents?: boolean;
   acceptanceRole: "read-only" | "writer";
   completionGuard: boolean;
   async: boolean;
@@ -371,7 +374,7 @@ async: ${input.async}
 ${input.thinking ? `thinking: ${input.thinking}\n` : ""}tools: ${input.tools.join(", ")}
 acceptanceRole: ${input.acceptanceRole}
 maxSubagentDepth: ${input.maxDepth}
-completionGuard: ${input.completionGuard}
+${input.allowNestedSubagents === undefined ? "" : `allowNestedSubagents: ${input.allowNestedSubagents}\n`}completionGuard: ${input.completionGuard}
 ${input.timeoutMs ? `timeoutMs: ${input.timeoutMs}\n` : ""}${extensionBlock}---
 
 ${input.prompt}

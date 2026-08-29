@@ -122,6 +122,8 @@ export interface ReviewState {
   panel?: ReviewPanel;
   checks: readonly VerificationResult[];
   findings: readonly ReviewFinding[];
+  /** Exact reviewer receipts keyed by frozen head, role, and panel attempt. */
+  reviewerResults?: Readonly<Record<string, Record<string, unknown>>>;
   verdict?: ReviewVerdict;
   gate?: ReviewGate;
   mergeAuthorization?: MergeAuthorization;
@@ -191,6 +193,7 @@ export interface ReviewCheckRecordedPayload {
 export interface ReviewFindingsRecordedPayload {
   round: number;
   findings: readonly ReviewFinding[];
+  reviewerResults?: Readonly<Record<string, Record<string, unknown>>>;
 }
 
 export interface ReviewVerdictRecordedPayload extends ReviewVerdict {
@@ -441,6 +444,19 @@ export function validateReviewState(value: unknown): asserts value is ReviewStat
       throw new ReviewTransitionError("invalid-snapshot", "Finding IDs must be unique.");
     findingIds.add(checked.id);
   }
+  if (state.reviewerResults !== undefined) {
+    if (!state.panel)
+      throw new ReviewTransitionError("invalid-snapshot", "Reviewer receipts require a panel attempt.");
+    for (const [key, value] of Object.entries(state.reviewerResults)) {
+      if (!value || typeof value !== "object" || Array.isArray(value))
+        throw new ReviewTransitionError("invalid-snapshot", `Reviewer receipt ${key} is malformed.`);
+      const reviewer = value.reviewer;
+      if (value.headSha !== state.headSha || typeof reviewer !== "string" || !roster.reviewers.includes(reviewer))
+        throw new ReviewTransitionError("invalid-snapshot", `Reviewer receipt ${key} has stale identity.`);
+      if (key !== `${state.headSha}:${reviewer}:${state.panel.round}`)
+        throw new ReviewTransitionError("invalid-snapshot", `Reviewer receipt ${key} is not keyed by head, role, and attempt.`);
+    }
+  }
   if (state.verdict !== undefined) {
     // SAFETY: validateVerdict only reads Record<string, unknown> fields defensively;
     // the double cast bypasses the partial ReviewState type, not runtime validation.
@@ -612,6 +628,9 @@ function cloneState(state: ReviewState): ReviewState {
       : {}),
     checks: state.checks.map((check) => ({ ...check })),
     findings: state.findings.map((finding) => ({ ...finding, evidence: [...finding.evidence] })),
+    ...(state.reviewerResults
+      ? { reviewerResults: Object.fromEntries(Object.entries(state.reviewerResults).map(([key, result]) => [key, { ...result }])) }
+      : {}),
     ...(state.verdict
       ? {
           verdict: {
@@ -685,7 +704,8 @@ function applyCheck(state: ReviewState, event: ReviewEvent): void {
 function applyFindings(state: ReviewState, event: ReviewEvent): void {
   const panel = requireRunningPanel(state);
   assertEventRound(event, panel.round);
-  const values = payload(event).findings;
+  const data = payload(event);
+  const values = data.findings;
   if (!Array.isArray(values))
     throw new ReviewTransitionError("invalid-findings", "findings must be an array.");
   const findings = values.map(validateFinding);
@@ -706,6 +726,24 @@ function applyFindings(state: ReviewState, event: ReviewEvent): void {
   // A findings event is a complete projection for the current panel; this avoids
   // duplicate journal retries while retaining duplicate findings from different reviewers.
   state.findings = findings;
+  if (data.reviewerResults !== undefined) {
+    if (!data.reviewerResults || typeof data.reviewerResults !== "object" || Array.isArray(data.reviewerResults))
+      throw new ReviewTransitionError("invalid-reviewer-results", "reviewerResults must be a keyed object.");
+    const results: Record<string, Record<string, unknown>> = {};
+    for (const [key, value] of Object.entries(data.reviewerResults)) {
+      if (!value || typeof value !== "object" || Array.isArray(value))
+        throw new ReviewTransitionError("invalid-reviewer-results", `Reviewer result ${key} must be an object.`);
+      const result = value as Record<string, unknown>;
+      if (result.schema !== "forgedock.reviewer-result/v1" || result.runId !== state.reviewId || !Array.isArray(result.findings))
+        throw new ReviewTransitionError("invalid-reviewer-results", `Reviewer result ${key} is not schema-valid evidence.`);
+      if (result.headSha !== state.headSha || typeof result.reviewer !== "string" || !state.roster.reviewers.includes(result.reviewer))
+        throw new ReviewTransitionError("invalid-reviewer-results", `Reviewer result ${key} does not match the frozen panel identity.`);
+      if (key !== `${state.headSha}:${result.reviewer}:${panel.round}`)
+        throw new ReviewTransitionError("invalid-reviewer-results", `Reviewer result ${key} is not keyed by head, role, and attempt.`);
+      results[key] = { ...result };
+    }
+    state.reviewerResults = results;
+  }
   clearTerminalDecisions(state);
 }
 
@@ -798,6 +836,7 @@ function clearTerminalDecisions(state: ReviewState): void {
   delete state.gate;
   delete state.mergeAuthorization;
   delete state.completion;
+  delete state.reviewerResults;
 }
 
 function requirePanel(state: ReviewState): ReviewPanel {

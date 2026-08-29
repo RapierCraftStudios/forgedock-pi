@@ -1,0 +1,40 @@
+---
+name: forgedock-review-pr-staging
+description: Run the authoritative non-merging staging-to-protected-target deployment review, including bundle findings, builds, CI/runtime gates, fresh reviewers, and one terminal gate marker.
+---
+
+# ForgeDock Staging Review
+
+## Required loading
+
+1. Read `../../specs/pi-adapter.md` completely.
+2. Read `../../specs/original/commands/review-pr-staging.md` completely in bounded chunks.
+3. Read the shared reviewer protocols and only the persona files selected by the
+   staging specification.
+4. Parse the arguments appended to this skill invocation. Exact PR numbers are valid.
+
+## Execution contract
+
+Before route discovery or GitHub access, call `forgedock_preflight` and use
+`forgedock_github` for every repository GitHub read and write. Missing tools or failed
+capabilities stop before deployment-gate artifacts are created.
+
+This is a deployment/bundle strategy, not thorough standard review. Preserve included
+PR discovery, prior open-finding gates across the bundle, automated build and CI gates,
+material-change analysis, service/domain bug hunting, regression assessment, runtime
+test gate, finding triage, and deployment checklist.
+
+Use complete fresh-context reviewer panels and fail closed on any missing reviewer.
+Before the open-finding gate, freeze the staging PR base/head SHAs and call the
+exported `resolveStagingBundle` safety leaf with paginated, all-state GitHub PR
+metadata plus commit-graph reachability evidence. Never derive membership from commit
+subjects or lexical `#N` references. The resolver accepts only same-repository PRs with
+merge/head/patch commits reachable from frozen head and not frozen base, and returns
+`forgedock.staging-bundle-resolution/v1` evidence for the open-finding gate and Phase
+6.5; ambiguous metadata fails closed. At Phase 6.5, translate the original nested
+`Skill("test-gate", ...)` call to `forgedock-test-gate` and require its
+`FORGE:TEST_GATE:RESULT=BLOCK|PASS|SKIP` marker. Translate mandatory finding creation
+calls to `forgedock-issue`; a missing marker or failed issue read-back is a hard
+failure, never a skipped gate. Emit exactly one authoritative terminal gate pass or
+failure for the reviewed SHA.
+Never merge, approve, deploy, close the source issue, or clean a work-on-owned tree.

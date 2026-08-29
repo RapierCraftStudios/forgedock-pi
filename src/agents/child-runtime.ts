@@ -2632,6 +2632,20 @@ export interface ExpectedReviewerResult {
   reviewer: string;
 }
 
+/** Typed boundary errors keep timeout, provider loss, and cancellation distinct. */
+export class ReviewerWaitError extends Error {
+  readonly kind: "timeout" | "provider-inactivity" | "cancelled" | "parent-termination";
+
+  constructor(
+    kind: ReviewerWaitError["kind"],
+    message: string,
+  ) {
+    super(message);
+    this.name = "ReviewerWaitError";
+    this.kind = kind;
+  }
+}
+
 export function parseBoundReviewerResult(
   text: string,
   expected: ExpectedReviewerResult,
@@ -2694,8 +2708,15 @@ export async function waitForReviewerResult(
     }
   };
   while (Date.now() < deadline) {
-    if (signal?.aborted)
-      throw signal.reason ?? new Error("Reviewer panel was aborted.");
+    if (signal?.aborted) {
+      const reason = String(signal.reason ?? "").toLowerCase();
+      throw new ReviewerWaitError(
+        /parent|terminated|shutdown|session/.test(reason)
+          ? "parent-termination"
+          : "cancelled",
+        String(signal.reason ?? "Reviewer panel was cancelled."),
+      );
+    }
     const fileResult = await loadBoundResult();
     if (fileResult) return fileResult;
 
@@ -2703,13 +2724,21 @@ export async function waitForReviewerResult(
     if (reviewerStatusIsTerminal(payload)) {
       const terminalFileResult = await loadBoundResult();
       if (terminalFileResult) return terminalFileResult;
-      throw new Error(
+      const terminalText = JSON.stringify(payload).toLowerCase();
+      const kind = /cancel|canceled/.test(terminalText)
+        ? "cancelled"
+        : /parent|shutdown|session terminated/.test(terminalText)
+          ? "parent-termination"
+          : "provider-inactivity";
+      throw new ReviewerWaitError(
+        kind,
         `Reviewer ${receipt.runId} terminated without a valid bound result${fileError ? `: ${fileError.message}` : "."}`,
       );
     }
     await reviewerPollDelay(signal);
   }
-  throw new Error(
+  throw new ReviewerWaitError(
+    "timeout",
     `Reviewer ${receipt.runId} exceeded its configured timeout${fileError ? `: ${fileError.message}` : "."}`,
   );
 }
