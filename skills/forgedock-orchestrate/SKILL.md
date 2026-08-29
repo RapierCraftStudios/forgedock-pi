@@ -36,6 +36,13 @@ with the `forgedock-work-on` skill and `<issue> --under-orchestration`. Use boun
 concurrency and isolated issue worktrees. Each child owns the complete issue lifecycle;
 orchestrate must not invent a second implementation/review path.
 
+The managed child worktree is the child's only repository root. In every child task,
+state that its current working directory is authoritative and that any parent checkout
+path is identity-only. Do not instruct a child to use the visible session's absolute
+repository path, and do not pass that path as `repositoryRoot`; the child must use
+relative paths and default ForgeDock runtime-tool roots from its assigned cwd. Treat an
+anchor checkout that becomes dirty as a safety-critical batch stop.
+
 The packaged coordinator is an explicit, depth-bounded fanout child: it may launch only
 the fresh read-only reviewers required by its review phase. Do not use the builtin
 `worker` for a complete work-on lane, and do not give the coordinator a blanket "never

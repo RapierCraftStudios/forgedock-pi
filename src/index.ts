@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import { registerForgePromptRouter } from "./prompt-router.ts";
 import { registerForgeRuntimeTools } from "./runtime-tools.ts";
+import { registerForgeWorktreeContainment } from "./worktree-containment.ts";
 
 export {
   FORGEDOCK_EVENT_SCHEMA,
@@ -32,6 +33,7 @@ export type {
 export default function forgedockPiExtension(pi: ExtensionAPI): void {
   registerForgePromptRouter(pi);
   registerForgeRuntimeTools(pi);
+  registerForgeWorktreeContainment(pi);
 }
 
 export {

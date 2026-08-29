@@ -39,6 +39,8 @@ test("package exposes a depth-bounded work-on coordinator with reviewer fanout",
   assert.match(agent, /tools:.*\bsubagent\b/);
   assert.match(agent, /skills: forgedock-work-on, forgedock-review-pr/);
   assert.match(agent, /visible orchestrator → work-on coordinator → fresh reviewers/);
+  assert.match(agent, /current working directory is the only authoritative repository root/);
+  assert.match(agent, /Never read, search, run Git in, test, or edit that parent\s+checkout/);
   assert.doesNotMatch(agent, /maxSubagentDepth: 1/);
 });
 
@@ -48,6 +50,8 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
   const adapter = await readFile("specs/pi-adapter.md", "utf8");
 
   assert.match(orchestrate, /launch exactly one fresh `forgedock-work-on-coordinator`/);
+  assert.match(orchestrate, /managed child worktree is the child's only repository root/);
+  assert.match(orchestrate, /anchor checkout that becomes dirty as a safety-critical batch stop/);
   assert.match(orchestrate, /do not give the coordinator a blanket "never\s+run subagents" instruction/s);
   assert.match(workOn, /same work-on coordinator/);
   assert.match(workOn, /Do not spawn a second\s+review coordinator/s);
