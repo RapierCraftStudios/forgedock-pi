@@ -41,6 +41,14 @@ import {
   type ReviewFinding,
   type VerificationResult,
 } from "../core/review.ts";
+import {
+  classifyReviewerFailure,
+  extendedReviewerTimeout,
+  planReviewRecovery,
+  reviewerEvidenceKey,
+  validateReviewDeadlines,
+  validateReviewerPanel,
+} from "../core/recovery.ts";
 import type {
   ReviewMode,
   ReviewRoster,
@@ -580,7 +588,7 @@ export class ReviewPrCoordinator {
         route.headSha,
         input.roster.reviewers,
       );
-      for (const [index, result] of normalized.results.entries()) {
+      for (const result of normalized.results) {
         const check: VerificationResult = {
           name: `reviewer:${result.reviewer}`,
           required: true,
@@ -590,7 +598,7 @@ export class ReviewPrCoordinator {
           reviewId: input.reviewId,
           type: "review.check-recorded",
           payload: { round: requestedRound, check },
-          idempotencyKey: `check:reviewer:${index}:${stableKey(result.reviewer)}`,
+          idempotencyKey: `check:reviewer:${requestedRound}:${stableKey(result.reviewer)}`,
           message: `Record reviewer ${result.reviewer} for ${input.reviewId}`,
           ...(input.signal ? { signal: input.signal } : {}),
         });
@@ -609,7 +617,20 @@ export class ReviewPrCoordinator {
       snapshot = await this.#journal.append({
         reviewId: input.reviewId,
         type: "review.findings-recorded",
-        payload: { round: requestedRound, findings: normalized.findings },
+        payload: {
+          round: requestedRound,
+          findings: normalized.findings,
+          reviewerResults: Object.fromEntries(
+            normalized.results.map((result) => [
+              reviewerEvidenceKey({
+                headSha: route.headSha,
+                reviewer: result.reviewer,
+                attempt: requestedRound,
+              }),
+              result,
+            ]),
+          ),
+        },
         idempotencyKey: findingsKey,
         message: `Record review findings for ${input.reviewId}`,
         ...(input.signal ? { signal: input.signal } : {}),
@@ -648,58 +669,111 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
   async run(
     input: ReviewPanelRunInput,
   ): Promise<readonly ForgeReviewerResult[]> {
+    validateReviewDeadlines({ reviewerTimeoutMs: input.reviewerTimeoutMs });
     await this.#rpc.ping();
     const receipts: Array<{
       receipt: SubagentSpawnReceipt;
       expected: ExpectedReviewerResult;
+      reviewer: string;
     }> = [];
     this.#active.set(input.reviewId, []);
+    const spawn = async (reviewer: string, reviewerTimeoutMs = input.reviewerTimeoutMs): Promise<(typeof receipts)[number]> => {
+      const receipt = await this.#rpc.spawnStandaloneReviewNode({
+        reviewId: input.reviewId,
+        repository: input.repository,
+        pullNumber: input.pullNumber,
+        ...(input.issueNumber === undefined ? {} : { issueNumber: input.issueNumber }),
+        worktreeRoot: input.worktreePath,
+        headRef: input.route.headRef,
+        headSha: input.route.headSha,
+        baseRef: input.route.baseRef,
+        baseSha: input.route.baseSha,
+        reviewer,
+        round: input.round,
+        reviewerTimeoutMs,
+        ...(input.context ? { context: input.context } : {}),
+      });
+      const entry = {
+        receipt,
+        expected: { runId: input.reviewId, headSha: input.route.headSha, reviewer },
+        reviewer,
+      };
+      receipts.push(entry);
+      this.#active.get(input.reviewId)?.push(receipt);
+      return entry;
+    };
     try {
-      const launched = await Promise.all(
-        input.reviewers.map(async (reviewer) => {
-          const receipt = await this.#rpc.spawnStandaloneReviewNode({
-            reviewId: input.reviewId,
-            repository: input.repository,
-            pullNumber: input.pullNumber,
-            ...(input.issueNumber === undefined
-              ? {}
-              : { issueNumber: input.issueNumber }),
-            worktreeRoot: input.worktreePath,
-            headRef: input.route.headRef,
-            headSha: input.route.headSha,
-            baseRef: input.route.baseRef,
-            baseSha: input.route.baseSha,
-            reviewer,
-            round: input.round,
-            reviewerTimeoutMs: input.reviewerTimeoutMs,
-            ...(input.context ? { context: input.context } : {}),
-          });
-          const entry = {
-            receipt,
-            expected: {
-              runId: input.reviewId,
-              headSha: input.route.headSha,
-              reviewer,
-            },
-          };
-          receipts.push(entry);
-          this.#active.get(input.reviewId)?.push(receipt);
-          return entry;
-        }),
-      );
-      return await Promise.all(
-        launched.map(({ receipt, expected }) =>
+      // The first panel is the only fan-out. A completed result is retained
+      // verbatim, so recovery never reruns a sibling that already persisted it.
+      const launched = await Promise.all(input.reviewers.map(spawn));
+      const settled = await Promise.allSettled(
+        launched.map((entry) =>
           waitForReviewerResult(
             this.#rpc,
-            receipt,
+            entry.receipt,
             input.reviewerTimeoutMs,
-            expected,
+            entry.expected,
             input.worktreePath,
             input.signal,
           ),
         ),
       );
+      const retained = settled.flatMap((entry) =>
+        entry.status === "fulfilled" ? [entry.value] : [],
+      );
+      const failures = Object.fromEntries(
+        settled.flatMap((entry, index) =>
+          entry.status === "rejected"
+            ? [[launched[index]!.reviewer, classifyReviewerFailure(entry.reason, input.signal)]]
+            : [],
+        ),
+      );
+      const recoveryPlan = planReviewRecovery({
+        reviewers: input.reviewers,
+        headSha: input.route.headSha,
+        attempt: input.round,
+        completed: retained,
+        failures,
+        reviewerTimeoutMs: input.reviewerTimeoutMs,
+      });
+      const retryable = [...recoveryPlan.retryReviewers];
+      if (retryable.length > 0) {
+        await Promise.allSettled(
+          launched
+            .filter((entry) => retryable.includes(entry.reviewer))
+            .map((entry) => this.#rpc.stop(entry.receipt.runId)),
+        );
+        const retryTimeoutMs = extendedReviewerTimeout(input.reviewerTimeoutMs);
+        const retryEntries = await Promise.all(
+          retryable.map((reviewer) => spawn(reviewer, retryTimeoutMs)),
+        );
+        const retrySettled = await Promise.allSettled(
+          retryEntries.map((entry) =>
+            waitForReviewerResult(
+              this.#rpc,
+              entry.receipt,
+              extendedReviewerTimeout(input.reviewerTimeoutMs),
+              entry.expected,
+              input.worktreePath,
+              input.signal,
+            ),
+          ),
+        );
+        for (const [index, entry] of retrySettled.entries()) {
+          if (entry.status === "fulfilled") retained.push(entry.value);
+          else failures[retryEntries[index]!.reviewer] = classifyReviewerFailure(entry.reason, input.signal);
+        }
+      }
+      // The coordinator validates the complete keyed panel before any finding
+      // is journaled or synthesized. This also rejects duplicate retry output.
+      return validateReviewerPanel({
+        results: retained,
+        reviewers: input.reviewers,
+        headSha: input.route.headSha,
+        attempt: input.round,
+      });
     } catch (error) {
+      if (input.signal?.aborted) throw input.signal.reason ?? error;
       await Promise.allSettled(
         receipts.map(({ receipt }) => this.#rpc.stop(receipt.runId)),
       );

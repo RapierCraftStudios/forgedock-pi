@@ -58,7 +58,13 @@ Never substitute inline self-review for a required reviewer. An incomplete panel
 closed and must leave an actionable `review-degraded`/gate-failure artifact. Before
 launching a nested panel, Pi's resolved launch contract must include the native
 `subagent` tool, the declared depth ceiling, and the explicit tool filter; an
-inconsistent profile fails before any GitHub mutation.
+inconsistent profile fails before any GitHub mutation. Reviewer receipts are keyed by
+frozen PR head, role, and attempt; a complete detached receipt is reused verbatim. A
+timeout or provider-inactive reviewer may be retried alone once with a capped extended
+deadline. Cancellation and parent termination are distinct and are not retries. Parent
+deadlines must exceed nested reviewer deadlines plus join grace, or be omitted. Pi
+resume/session receipts prove execution only; when continuation is not persisted,
+recover the complete trusted result artifact or fail closed.
 
 ## Work-on ownership
 
@@ -90,9 +96,13 @@ Orchestrate is a dispatcher, never a builder. It resolves and filters the issue 
 confirms before launch, establishes explicit/file/database ordering, detects cycles,
 and runs one complete work-on skill per ready issue with bounded concurrency. GitHub
 states classify each lane as DONE, GATED, FAILED, or IN_PROGRESS. GATED is not FAILED.
-Successors launch when predecessors become terminal-success; no polling loops or second
-issue lifecycle are allowed. Cleanup and the consolidated report run after the queue
-drains or reaches a documented paused state.
+The GitHub state branch durably records each batch's lease epoch, deterministic
+child-key, predecessor set, ready queue, and deferred queue. On reload, reconcile
+retained children by key and resume only unlaunched nodes within the cap, exactly once.
+Unknown keys, stale authority, missing predecessors, or ambiguous completion produce an
+actionable paused report and launch nothing. Successors launch when predecessors become
+terminal-success; no polling loops or second issue lifecycle are allowed. Cleanup and
+the consolidated report run after the queue drains or reaches a documented paused state.
 
 ## Configuration
 

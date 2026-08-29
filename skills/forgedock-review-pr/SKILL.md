@@ -31,3 +31,15 @@ Create or deduplicate a GitHub issue for every finding before summary publicatio
 Post an official PR review tied to the frozen SHA. Merge only when `--auto-merge` was
 explicit, the original blocking policy passes, route identity is unchanged, and the
 base is authorized. Review never closes the linked issue or cleans the work-on tree.
+
+## Recovery contract
+
+Persist each reviewer result as an exact `head + role + attempt` receipt before joining.
+A completed detached reviewer receipt is reusable verbatim; never rerun its siblings.
+If one reviewer times out or becomes provider-inactive, retain completed receipts and
+retry only the missing role once with the capped extended timeout. Cancellation and
+parent termination are not retryable. Mixed-head, malformed, or partial panels remain
+actionable gate failures and can never synthesize or merge. Parent deadlines must
+exceed nested reviewer timeout plus join grace, or be omitted. Pi subagent resume
+receipts are execution evidence only: if JavaScript continuation is unavailable,
+recover the complete saved result or fail closed rather than claiming continuation.

@@ -42,3 +42,14 @@ Classify GitHub state as DONE, GATED, FAILED, or IN_PROGRESS. GATED is not FAILE
 Dispatch successors immediately after successful predecessors complete. Do not poll.
 After the queue drains or reaches a documented paused state, execute mandatory cleanup
 and publish the consolidated report.
+
+## Reload and recovery contract
+
+Persist the batch ID, lease epoch, deterministic child key, predecessor set, and
+ready/deferred queues in the GitHub state branch. On reload, reconcile retained child
+receipts by child key and classify every lane exactly as `DONE`, `GATED`, `FAILED`, or
+`IN_PROGRESS`. Resume only unlaunched ready nodes, exactly once, within the concurrency
+cap; never treat a provider receipt as workflow authority. Unknown or duplicate child
+keys, stale leases, missing predecessors, or ambiguous completion produce a paused,
+actionable report and launch nothing. Complete saved evidence is reused; partial
+panels and unsupported Pi continuation are fail-closed.
