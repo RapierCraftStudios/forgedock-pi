@@ -30,6 +30,8 @@
     "src/index.ts",
     "src/prompt-router.ts",
     "src/agents/profile.ts",
+    "src/core/orchestration-recovery.ts",
+    "src/core/recovery.ts",
     "src/core/staging-bundle-resolver.ts",
     "src/package-contract.ts",
     "agents/",
