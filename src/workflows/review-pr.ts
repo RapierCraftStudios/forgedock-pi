@@ -57,6 +57,7 @@ import type {
 import {
   canAutoMerge,
   isGitHubCiRequired,
+  isProtectedBranch,
   resolveConcreteBranch,
 } from "../core/policy.ts";
 import type {
@@ -896,7 +897,7 @@ export class ForgeReviewController {
     const results = await Promise.all(
       pulls.map(async (pull) => {
         const effectiveMode: ReviewMode =
-          mode === "staging" || environment.policy.branches.protected.includes(pull.baseRef)
+          mode === "staging" || isProtectedBranch(environment.policy, pull.baseRef)
             ? "staging"
             : "standard";
         if (parsed.base !== undefined && pull.baseRef !== parsed.base)

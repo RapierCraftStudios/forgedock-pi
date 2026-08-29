@@ -1,3 +1,4 @@
+import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import {
@@ -11,7 +12,7 @@ import { Type } from "typebox";
 import { FetchGitHubTransport, repositoryApiPath, type GitHubRequest } from "./adapters/github-api.ts";
 import { createGitHubTokenProvider } from "./adapters/github-auth.ts";
 import { preflightGitHubCapabilities } from "./adapters/github-capabilities.ts";
-import { loadForgeYaml } from "./adapters/forge-yaml.ts";
+import { loadForgeYaml, type ForgeYamlConfig } from "./adapters/forge-yaml.ts";
 
 const githubMethodSchema = Type.String({
   description: "GitHub REST method: GET, POST, PATCH, PUT, or DELETE",
@@ -19,6 +20,16 @@ const githubMethodSchema = Type.String({
 
 function repositoryRoot(cwd: string, configured?: string): string {
   return resolve(cwd, configured?.trim() || ".");
+}
+
+function forgeConfigIdentity(config: ForgeYamlConfig): string {
+  return JSON.stringify({
+    repository: config.repository,
+    project: config.project,
+    paths: config.paths,
+    branches: config.branches,
+    agents: config.agents,
+  });
 }
 
 function githubMethod(value: string): GitHubRequest["method"] {
@@ -90,7 +101,7 @@ function boundedJson(value: unknown): { text: string; truncated: boolean } {
 
 /** Register deterministic config/auth leaves used by visible and nested coordinators. */
 export function registerForgeRuntimeTools(pi: ExtensionAPI): void {
-  const preflightedRoots = new Set<string>();
+  const preflightedRoots = new Map<string, string>();
   pi.registerTool({
     name: "forgedock_preflight",
     label: "ForgeDock Preflight",
@@ -106,7 +117,7 @@ export function registerForgeRuntimeTools(pi: ExtensionAPI): void {
       ),
     }),
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-      const root = repositoryRoot(ctx.cwd, params.repositoryRoot);
+      const root = await realpath(repositoryRoot(ctx.cwd, params.repositoryRoot));
       const config = await loadForgeYaml(root);
       const tokenProvider = createGitHubTokenProvider(pi, root);
       const transport = new FetchGitHubTransport({
@@ -119,7 +130,7 @@ export function registerForgeRuntimeTools(pi: ExtensionAPI): void {
         tokenProvider,
         signal,
       });
-      preflightedRoots.add(root);
+      preflightedRoots.set(root, forgeConfigIdentity(config));
       const result = { schema: "forgedock.preflight/v1", config, capabilities };
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
@@ -147,10 +158,13 @@ export function registerForgeRuntimeTools(pi: ExtensionAPI): void {
       body: Type.Optional(Type.Unknown()),
     }),
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-      const root = repositoryRoot(ctx.cwd, params.repositoryRoot);
-      if (!preflightedRoots.has(root))
+      const root = await realpath(repositoryRoot(ctx.cwd, params.repositoryRoot));
+      const expectedIdentity = preflightedRoots.get(root);
+      if (!expectedIdentity)
         throw new Error("forgedock_preflight must succeed for this repository before GitHub operations.");
       const config = await loadForgeYaml(root);
+      if (forgeConfigIdentity(config) !== expectedIdentity)
+        throw new Error("forge.yaml changed after preflight; run forgedock_preflight again.");
       const method = githubMethod(params.method);
       const path = assertForgeRepositoryApiPath(params.path, config.repository);
       assertForgeGitHubOperationAllowed(method, path, config.repository);
