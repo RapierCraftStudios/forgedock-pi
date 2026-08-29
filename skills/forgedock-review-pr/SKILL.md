@@ -21,8 +21,15 @@ Before route discovery or GitHub access, call `forgedock_preflight` and use
 capabilities stop before review artifacts are created.
 
 Follow the original phase order and hard rules. Freeze the exact PR head/base before
-review. Automatically switch to the staging strategy when the selector or actual route
-targets the protected/default branch as specified; load
+review. Before automated checks or reviewer fanout, run a structural pre-review gate.
+For a work-on-owned PR, call `forge_verify_lane_scope` with its durable `FORGE:BASE`,
+frozen route/head, and final Builder Contract/claim (including declared mechanically
+coupled paths). Standalone reviews without a work-on claim instead require an exact
+frozen GitHub patch and do not invent claim authority. A mismatch or inherited broad
+branch history is automated GATED evidence. Do not launch reviewers, create patch
+findings, or add `needs-human` until this gate passes.
+Automatically switch to the staging strategy when the selector or actual route targets
+the protected/default branch as specified; load
 `../../specs/original/commands/review-pr-staging.md` directly rather than emitting a
 nested slash command.
 
@@ -36,7 +43,9 @@ unrelated redesign are non-blocking follow-up issues.
 
 Use `timeoutMs: 3600000` for every max-thinking reviewer and omit the parent deadline or
 set it to at least `3900000`. Never use 120000/180000 ms reviewer deadlines. Active
-reasoning is not provider inactivity.
+reasoning is not provider inactivity. Pi's generic 1,800-second attention event is not
+a timeout; callers must continue waiting with `stopOnAttention: false` and must not
+steer, resume, replace, or duplicate an active reviewer before its real deadline.
 
 Create or deduplicate a GitHub issue for every finding before summary publication.
 Post an official PR review tied to the frozen SHA. Merge only when `--auto-merge` was

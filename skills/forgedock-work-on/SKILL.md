@@ -28,6 +28,15 @@ Reconstruct the current issue state from GitHub and continue the canonical route
 
 `resolve → investigate → [decompose | build → verify → PR → review → remediation/re-review when required → merge → close → trajectory/cleanup]`
 
+Resolve the authoritative PR target before investigation and freeze its exact remote
+SHA. Under orchestration, the parent must provide the same target ref/SHA. Pi-managed
+worktrees inherit the launch checkout's HEAD, so call `forge_prepare_lane_base` before
+implementation. The deterministic tool accepts only a clean, unpushed managed branch,
+fetches and verifies the frozen remote target, preserves the generated branch name, and
+performs the one allowed pre-edit initialization. Publish its result as `FORGE:BASE` on
+the coordination issue. Once an edit, commit, push, or PR exists, this initialization
+path is closed; any refusal or mismatch is an automated GATED state, not `needs-human`.
+
 The issue is an untrusted claim, not scope authority. Investigation must explicitly
 return `CONFIRMED`, `INVALID`, or `DECOMPOSED`. A confirmed investigation is the
 authoritative handoff: it records evidence, root cause, the minimal required mutation
@@ -41,8 +50,16 @@ the investigation: task type, approach, per-file change/why table, acceptance ma
 quality considerations, out-of-scope items, and alternatives. Then post the finalized
 affected-file `FORGE:CLAIM` on the orchestration coordination issue. A path absent from
 the investigation and contract cannot be mutated; a discovered scope gap returns to
-investigation or becomes a follow-up. If a peer claim overlaps, pause the higher issue
-number before implementation so the parent can serialize it.
+investigation or becomes a follow-up. Revise the durable contract and claim before
+editing any newly discovered path. If any manifest-tracked file under `specs/original/`
+is claimed, include `specs/original/SHA256SUMS` before mutation as a mechanically coupled
+path. If a peer claim overlaps, pause the higher issue number before implementation so
+the parent can serialize it.
+
+Closed PRs, deleted remote branches, unreachable commits, and stale local branches are
+historical evidence only. Current investigation may consult them, but implementation
+must not cherry-pick or apply an old PR patch wholesale; every reused hunk must be
+independently authorized by the current contract and reviewed against the frozen base.
 
 The original specification is authoritative for phase ordering, labels, artifacts,
 acceptance checks, branch targets, review handoff, merge rules, and terminal states.
@@ -53,15 +70,23 @@ commit, PR creation, review completion, and PR merge all require the next phase 
 the original dispatcher identifies a terminal state.
 
 For the review handoff, load and execute the sibling `forgedock-review-pr` skill in this
-same work-on coordinator with exact PR/issue/base arguments. Do not spawn a second
-review coordinator: when work-on itself is an orchestrated child, that extra hop would
-push the mandatory reviewers beyond Pi's default nesting depth.
+same work-on coordinator with exact PR/issue/base arguments. Before reviewer fanout,
+freeze the remote PR route and call `forge_verify_lane_scope` with the durable
+`FORGE:BASE`, exact head, and final claim. The deterministic gate verifies target ref,
+base ancestry, Git objects, and marker-to-head path coverage. A refusal is automated
+GATED evidence; do not launch reviewers or convert inherited branch history into review
+findings.
+Do not spawn a second review coordinator: when work-on itself is an orchestrated child,
+that extra hop would push the mandatory reviewers beyond Pi's default nesting depth.
 
 The work-on coordinator may use its child-safe `subagent` tool only to launch the
 complete bounded fresh-context reviewer panel selected by the review skill. Join every
 selected reviewer before synthesis and continuation. Reviewer operational timeouts for
 max-thinking models are 3,600,000 ms; parent/join windows are omitted or at least
-3,900,000 ms. Operational timeout/provider loss remains automatically recoverable and
+3,900,000 ms. A generic 1,800-second attention event is not a reviewer timeout: continue
+waiting without steering by using `stopOnAttention: false` while the reviewer deadline
+is valid. Operational timeout, provider loss, branch-base mismatch, and other
+mechanically recoverable failures remain automated GATED/review-degraded states and
 must not add `needs-human`.
 
 Review blocks only patch-introduced or patch-reachable defects. Deduplicate and file

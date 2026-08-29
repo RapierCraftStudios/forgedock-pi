@@ -13,6 +13,10 @@ import { FetchGitHubTransport, repositoryApiPath, type GitHubRequest } from "./a
 import { createGitHubTokenProvider } from "./adapters/github-auth.ts";
 import { preflightGitHubCapabilities } from "./adapters/github-capabilities.ts";
 import { loadForgeYaml, type ForgeYamlConfig } from "./adapters/forge-yaml.ts";
+import {
+  prepareManagedLaneBase,
+  verifyManagedLaneScope,
+} from "./lane-base.ts";
 
 const githubMethodSchema = Type.String({
   description: "GitHub REST method: GET, POST, PATCH, PUT, or DELETE",
@@ -163,6 +167,84 @@ export function registerForgeRuntimeTools(pi: ExtensionAPI): void {
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         details: { schema: result.schema, repository: config.repository, tokenSource: capabilities.tokenSource },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "forge_prepare_lane_base",
+    label: "Forge Prepare Lane Base",
+    description:
+      "Initialize one clean, unpushed managed writer branch to an exact frozen PR target SHA before implementation.",
+    promptSnippet: "Bind the managed writer worktree to the authoritative lane target before any edit",
+    promptGuidelines: [
+      "Call only after forgedock_preflight and before investigation-backed implementation; publish the returned identity as FORGE:BASE.",
+      "Never call after an edit, commit, push, or PR exists; a refusal is automated GATED evidence, not needs-human.",
+    ],
+    parameters: Type.Object({
+      targetRef: Type.String({ description: "Authoritative PR target branch name" }),
+      targetSha: Type.String({ description: "Frozen full 40-character target commit SHA" }),
+    }),
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+      const root = await realpath(ctx.cwd);
+      const expectedIdentity = preflightedRoots.get(root);
+      if (!expectedIdentity)
+        throw new Error("forgedock_preflight must succeed before lane-base initialization.");
+      const config = await loadForgeYaml(root);
+      if (forgeConfigIdentity(config) !== expectedIdentity)
+        throw new Error("forge.yaml changed after preflight; run forgedock_preflight again.");
+      const result = await prepareManagedLaneBase({
+        repositoryRoot: root,
+        targetRef: params.targetRef,
+        targetSha: params.targetSha,
+        ...(signal ? { signal } : {}),
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        details: result,
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "forge_verify_lane_scope",
+    label: "Forge Verify Lane Scope",
+    description:
+      "Verify a frozen work-on PR is based on its durable lane base and changes only paths covered by the final claim.",
+    promptSnippet: "Gate contaminated or unclaimed lane diffs before reviewer fanout",
+    promptGuidelines: [
+      "Call for every work-on-owned PR before automated review checks or reviewer fanout.",
+      "A refusal is automated GATED evidence; do not launch reviewers or add needs-human.",
+    ],
+    parameters: Type.Object({
+      targetRef: Type.String({ description: "Authoritative target ref from FORGE:BASE" }),
+      routeBaseRef: Type.String({ description: "Frozen PR route base ref" }),
+      baseSha: Type.String({ description: "Full target SHA from FORGE:BASE" }),
+      headSha: Type.String({ description: "Full frozen PR head SHA" }),
+      claimedPaths: Type.Array(Type.String(), {
+        description: "Final Builder Contract/claim path rules",
+      }),
+    }),
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
+      const root = await realpath(ctx.cwd);
+      const expectedIdentity = preflightedRoots.get(root);
+      if (!expectedIdentity)
+        throw new Error("forgedock_preflight must succeed before lane-scope verification.");
+      const config = await loadForgeYaml(root);
+      if (forgeConfigIdentity(config) !== expectedIdentity)
+        throw new Error("forge.yaml changed after preflight; run forgedock_preflight again.");
+      const result = await verifyManagedLaneScope({
+        repositoryRoot: root,
+        targetRef: params.targetRef,
+        routeBaseRef: params.routeBaseRef,
+        baseSha: params.baseSha,
+        headSha: params.headSha,
+        claimedPaths: params.claimedPaths,
+        ...(signal ? { signal } : {}),
+      });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        details: result,
       };
     },
   });

@@ -43,11 +43,26 @@ repository path, and do not pass that path as `repositoryRoot`; the child must u
 relative paths and default ForgeDock runtime-tool roots from its assigned cwd. Treat an
 anchor checkout that becomes dirty as a safety-critical batch stop.
 
+Before dispatching each issue, resolve its authoritative PR target through the original
+lane rules and freeze the exact remote target SHA. Persist that ref/SHA in the
+coordination issue and child task. A Pi-managed worktree inherits the launch checkout's
+HEAD; its generated branch is not evidence that it is based on the lane target. Require
+the child to call `forge_prepare_lane_base` and publish its `FORGE:BASE` result before
+any implementation mutation. A missing or mismatched base marker gates the
+lane before contract/claim acceptance, push, PR creation, or reviewer fanout.
+
 The packaged coordinator is an explicit, depth-bounded fanout child: it may launch only
 the fresh read-only reviewers required by its review phase. Do not use the builtin
 `worker` for a complete work-on lane, and do not give the coordinator a blanket "never
 run subagents" instruction; forbid nested issue/work-on orchestration while preserving
 its mandatory reviewer fanout.
+
+Launch the async orchestration workflow with
+`control.needsAttentionAfterMs: 3900000` or greater. While a valid one-hour reviewer is
+active, join with `stopOnAttention: false`; Pi's generic 1,800-second attention signal is
+observational, not a timeout or permission to steer, resume, replace, or relaunch the
+coordinator. Only the configured reviewer deadline or an explicit supervisor request
+may interrupt that wait.
 
 After each investigation and before implementation, read finalized `FORGE:CLAIM`
 markers from the coordination issue. If active claims overlap, serialize before either
