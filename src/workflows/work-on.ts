@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type {
@@ -75,6 +75,7 @@ import type {
   FinalReviewDecision,
   VerificationResult,
 } from "../core/review.ts";
+import type { ValidationEnvironment } from "../core/verification-diagnostics.ts";
 import type { RunState } from "../core/state.ts";
 import { RunJournal } from "./journal.ts";
 import { ReviewJournal } from "../adapters/review-journal.ts";
@@ -97,6 +98,39 @@ import {
 } from "./remediation.ts";
 
 const RUN_LINK_ENTRY = "forgedock-run-link/v1";
+
+function verificationEnvironmentForPolicy(policy: ForgePolicy): ValidationEnvironment | undefined {
+  const configured = policy.verification.environment;
+  if (!configured) return undefined;
+  return {
+    host: { name: configured.hostName },
+    fallbacks: configured.fallbackCommands.map((name) => {
+      const command = policy.verification.commands[name]!;
+      const lower = name.toLowerCase();
+      const kind = lower.includes("container") || lower.includes("docker")
+        ? "container"
+        : lower.includes("venv") || lower.includes("virtualenv")
+          ? "venv"
+          : "other";
+      return { name, kind, command: command.argv.join(" "), status: "not-run" as const };
+    }),
+  };
+}
+
+async function recoverVerificationResults(forgeDir: string): Promise<ForgeWorkOnResult["verification"]> {
+  const names = await readdir(forgeDir).catch(() => [] as string[]);
+  for (const name of names) {
+    const parsed = findForgeNodeResult(await readFile(join(forgeDir, name), "utf8").catch(() => ""));
+    if (!parsed || parsed.node !== "verify" || parsed.status !== "completed") continue;
+    return parsed.verification.map((check) => ({
+      name: check.name,
+      status: check.status,
+      ...(check.exitCode === undefined ? {} : { exitCode: check.exitCode }),
+      ...(check.diagnostics === undefined ? {} : { diagnostics: check.diagnostics }),
+    }));
+  }
+  return [];
+}
 
 export type WorkflowStage = keyof typeof WORKFLOW_LABEL_BY_STAGE;
 export type WorkflowTransition = "started" | "resumed" | "completed";
@@ -493,6 +527,7 @@ export class ForgeWorkOnController {
             maxReviewRounds: policy.review.maxRounds,
             reviewerTimeoutMs: policy.subagents.reviewerTimeoutMs,
             verificationCommands: policy.verification.commands,
+            verificationEnvironment: verificationEnvironmentForPolicy(policy),
             refresh: false,
           };
           process.env.PI_SUBAGENT_EXTENSION_BINDINGS = JSON.stringify({
@@ -1222,6 +1257,7 @@ export class ForgeWorkOnController {
           maxReviewRounds: policy.review.maxRounds,
           reviewerTimeoutMs: policy.subagents.reviewerTimeoutMs,
           verificationCommands: policy.verification.commands,
+          verificationEnvironment: verificationEnvironmentForPolicy(policy),
           refresh: false,
         };
         process.env.PI_SUBAGENT_EXTENSION_BINDINGS = JSON.stringify({
@@ -1689,6 +1725,9 @@ export class ForgeWorkOnController {
                 ...(reported?.exitCode === undefined
                   ? {}
                   : { exitCode: reported.exitCode }),
+                ...(reported?.diagnostics === undefined
+                  ? {}
+                  : { diagnostics: reported.diagnostics }),
               };
             },
           )
@@ -3037,6 +3076,7 @@ export class ForgeWorkOnController {
             ? ("unknown" as const)
             : result.status,
         ...(result.exitCode === undefined ? {} : { exitCode: result.exitCode }),
+        ...(result.diagnostics === undefined ? {} : { diagnostics: result.diagnostics }),
       }));
     });
     return {
@@ -4144,6 +4184,7 @@ export class ForgeWorkOnController {
       reviewers.push(parsed);
     }
     const findings = reviewers.flatMap((entry) => entry.findings ?? []);
+    const recoveredVerification = await recoverVerificationResults(forgeDir);
     const reconstructed: ForgeWorkOnResult = {
       schema: "forgedock.work-on-result/v1",
       runId: link.forgeRunId,
@@ -4153,12 +4194,9 @@ export class ForgeWorkOnController {
       baseSha,
       headSha,
       changedFiles,
-      verification: [
-        {
-          name: "local-verification",
-          status: "skipped",
-        },
-      ],
+      verification: recoveredVerification.length > 0
+        ? recoveredVerification
+        : [{ name: "local-verification", status: "skipped" }],
       residualRisks: [],
       review: {
         headSha,
@@ -4889,6 +4927,9 @@ export class ForgeWorkOnController {
         ...(reported?.exitCode === undefined
           ? {}
           : { exitCode: reported.exitCode }),
+        ...(reported?.diagnostics === undefined
+          ? {}
+          : { diagnostics: reported.diagnostics }),
       };
     });
     if (localChecks.length === 0)
@@ -5810,7 +5851,7 @@ function renderVerificationEvidence(
   return checks
     .map(
       (check) =>
-        `- ${check.name}: ${check.status}${check.required ? " (required)" : ""}`,
+        `- ${check.name}: ${check.diagnostics?.outcome === "environment-only" ? "passed (environment-only; fallback verified)" : check.status}${check.required ? " (required)" : ""}`,
     )
     .join("\n");
 }
@@ -5818,21 +5859,20 @@ function renderVerificationEvidence(
 function verificationOutcome(
   checks: readonly VerificationResult[],
 ): VerificationResult["status"] {
+  const effectiveStatus = (check: VerificationResult) =>
+    check.diagnostics?.outcome === "environment-only" ? "passed" : check.status;
   const required = checks.filter((check) => check.required);
-  if (required.some((check) => check.status === "failed")) return "failed";
-  if (required.some((check) => check.status === "pending")) return "pending";
-  if (required.some((check) => check.status === "skipped")) return "skipped";
-  if (required.some((check) => check.status === "unknown")) return "unknown";
-  if (required.some((check) => check.status === "not-configured"))
+  if (required.some((check) => effectiveStatus(check) === "failed")) return "failed";
+  if (required.some((check) => effectiveStatus(check) === "pending")) return "pending";
+  if (required.some((check) => effectiveStatus(check) === "skipped")) return "skipped";
+  if (required.some((check) => effectiveStatus(check) === "unknown")) return "unknown";
+  if (required.some((check) => effectiveStatus(check) === "not-configured"))
     return "not-configured";
-  if (
-    required.length > 0 &&
-    required.every((check) => check.status === "passed")
-  )
+  if (required.length > 0 && required.every((check) => effectiveStatus(check) === "passed"))
     return "passed";
-  if (checks.some((check) => check.status === "policy-exempt"))
+  if (checks.some((check) => effectiveStatus(check) === "policy-exempt"))
     return "policy-exempt";
-  if (checks.some((check) => check.status === "passed")) return "passed";
+  if (checks.some((check) => effectiveStatus(check) === "passed")) return "passed";
   return "not-configured";
 }
 
@@ -6092,40 +6132,45 @@ export function workflowLabelForNode(
 export function parseAsyncCompletion(
   value: unknown,
 ): ParsedAsyncCompletion | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    return undefined;
-  const record = value as Record<string, unknown>;
-  const runId =
-    typeof record.runId === "string"
-      ? record.runId
-      : typeof record.id === "string"
-        ? record.id
-        : undefined;
+  const record = completionRecord(value);
+  if (!record) return undefined;
+  const runId = completionRunId(record);
   if (!runId) return undefined;
-  const rawState =
-    typeof record.state === "string"
-      ? record.state
-      : record.success === true
-        ? "complete"
-        : record.success === false
-          ? "failed"
-          : undefined;
-  const state = rawState === "completed" ? "complete" : rawState;
-  if (
-    state !== "running" &&
-    state !== "complete" &&
-    state !== "failed" &&
-    state !== "paused" &&
-    state !== "stopped"
-  )
-    return undefined;
-  const error =
-    typeof record.error === "string"
-      ? record.error.trim()
-      : typeof record.summary === "string" && state !== "complete"
-        ? record.summary.trim()
-        : undefined;
+  const state = completionState(record);
+  if (!state) return undefined;
+  const error = completionError(record, state);
   return { runId, state, ...(error ? { error } : {}) };
+}
+
+function completionRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function completionRunId(record: Record<string, unknown>): string | undefined {
+  if (typeof record.runId === "string") return record.runId;
+  return typeof record.id === "string" ? record.id : undefined;
+}
+
+function completionState(record: Record<string, unknown>): ParsedAsyncCompletion["state"] | undefined {
+  const rawState = typeof record.state === "string"
+    ? record.state
+    : record.success === true
+      ? "complete"
+      : record.success === false
+        ? "failed"
+        : undefined;
+  const state = rawState === "completed" ? "complete" : rawState;
+  return state === "running" || state === "complete" || state === "failed" || state === "paused" || state === "stopped"
+    ? state
+    : undefined;
+}
+
+function completionError(record: Record<string, unknown>, state: ParsedAsyncCompletion["state"]): string | undefined {
+  if (typeof record.error === "string") return record.error.trim();
+  if (typeof record.summary === "string" && state !== "complete") return record.summary.trim();
+  return undefined;
 }
 
 function normalizeActiveRunLink(value: unknown): ActiveRunLink | undefined {

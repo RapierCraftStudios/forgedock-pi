@@ -1,6 +1,11 @@
-import { createHash, randomUUID } from "node:crypto";
+// State hashes use Node's built-in crypto implementation.
+import { createHash, randomUUID } from "crypto";
 
 import { canonicalJson } from "./events.ts";
+import {
+  isVerificationDiagnosticReport,
+  type VerificationDiagnosticReport,
+} from "./verification-diagnostics.ts";
 import type {
   FindingCategory,
   FindingConfidence,
@@ -1009,7 +1014,15 @@ function validateCheck(value: unknown): VerificationResult {
     throw new ReviewTransitionError("invalid-check", `Unsupported check status: ${String(check.status)}.`);
   if (typeof check.required !== "boolean")
     throw new ReviewTransitionError("invalid-check", "check.required must be boolean.");
-  return { name, required: check.required, status: check.status as VerificationResult["status"], ...(check.exitCode === undefined ? {} : { exitCode: check.exitCode }) };
+  if (check.diagnostics !== undefined && !isVerificationDiagnosticReport(check.diagnostics))
+    throw new ReviewTransitionError("invalid-check", "check.diagnostics must be a valid verification diagnostic report.");
+  return {
+    name,
+    required: check.required,
+    status: check.status as VerificationResult["status"],
+    ...(check.exitCode === undefined ? {} : { exitCode: check.exitCode }),
+    ...(check.diagnostics === undefined ? {} : { diagnostics: check.diagnostics as VerificationDiagnosticReport }),
+  };
 }
 
 function validateFinding(value: unknown): ReviewFinding {

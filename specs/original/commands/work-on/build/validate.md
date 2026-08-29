@@ -177,6 +177,16 @@ python -m py_compile {PYTHON_FILES}
 ```
 Failures in `py_compile` are BLOCKING — fix before continuing.
 
+### Dependency-backed diagnostic classification
+
+When a configured type checker reports unresolved third-party imports, do not install dependencies, add suppressions, or treat the cascade as a changed-code defect automatically. Emit a machine-readable diagnostic report and classify each line as `missing-host-dependency`, `syntax-error`, `changed-code`, or `unknown`. A missing-host dependency is environment-only **only after** a repository-declared tracked container or virtualenv command has been run and passed in this same validation attempt. Local/relative missing modules, syntax errors, type errors, and any diagnostics reproduced by the fallback remain blocking.
+
+If no configured fallback is available or it is unavailable/failed, preserve the failure and report the exact environment and attempted command using:
+
+`SKIPPED — environment not provisioned (environment: <name>; attempted command: <command>)`
+
+The report must include `schema: forgedock.verification-diagnostics/v1`, `outcome`, all diagnostics, `blockingDiagnostics`, skipped-check evidence, and (only for `environment-only`) the selected passing fallback. Fallback commands must be named entries under `verification.commands`; arbitrary shell text is not accepted.
+
 **TypeScript**:
 ```bash
 cd {WORKTREE_PATH}

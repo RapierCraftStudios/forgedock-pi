@@ -39,6 +39,12 @@ import {
 } from "../adapters/subagents.ts";
 import { resolveVerificationCommandDirectory } from "../adapters/verification-preflight.ts";
 import {
+  classifyVerificationOutput,
+  formatSkippedVerification,
+  type FallbackStatus,
+  type ValidationEnvironment,
+} from "../core/verification-diagnostics.ts";
+import {
   assertBuilderContractPaths,
   type BuilderPathContract,
   validateBuilderPathContract,
@@ -117,6 +123,7 @@ export interface ForgeChildBinding {
   maxReviewRounds: number;
   reviewerTimeoutMs: number;
   verificationCommands: Readonly<Record<string, BoundVerificationCommand>>;
+  verificationEnvironment?: ValidationEnvironment;
   verificationGithub?: ForgePolicy["verification"]["github"];
   builderContract?: BuilderPathContract;
   nodeId?: string;
@@ -307,6 +314,7 @@ export function registerForgeRuntime(
   let reviewDiffCoverage:
     | { headSha: string; sha256: string; bytes: number; coveredBytes: number }
     | undefined;
+  const fallbackStatuses = new Map<string, FallbackStatus>();
 
   pi.on("session_start", async (_event, ctx) => {
     if (options.mainSession) return;
@@ -949,13 +957,51 @@ export function registerForgeRuntime(
         env: safeEnvironment(binding.runId),
         ...(signal ? { signal } : {}),
       });
-      const status =
+      let status:
+        | "unknown"
+        | "passed"
+        | "failed" =
         result.timedOut || result.exitCode === null
           ? "unknown"
           : result.exitCode === 0
             ? "passed"
             : "failed";
       const output = [result.stdout, result.stderr].filter(Boolean).join("\n");
+      const configuredFallback = binding.verificationEnvironment?.fallbacks?.find(
+        (fallback) => fallback.name === params.name,
+      );
+      if (configuredFallback)
+        fallbackStatuses.set(
+          params.name,
+          result.exitCode === 0 && !result.timedOut ? "passed" : "failed",
+        );
+      const fallbackResults = binding.verificationEnvironment?.fallbacks?.map(
+        (fallback) =>
+          fallback.name === params.name
+            ? { ...fallback, status: fallbackStatuses.get(params.name)! }
+            : fallbackStatuses.has(fallback.name)
+              ? { ...fallback, status: fallbackStatuses.get(fallback.name)! }
+              : fallback,
+      );
+      const diagnostics = classifyVerificationOutput(
+        result.exitCode === 0 && !result.timedOut ? "" : output,
+        {
+          ...(binding.verificationEnvironment ?? {}),
+          ...(fallbackResults ? { fallbacks: fallbackResults } : {}),
+          host: {
+            name:
+              binding.verificationEnvironment?.host?.name ??
+              `host environment (${command.cwd || "."})`,
+            attemptedCommand: [program, ...args].join(" "),
+            ...(binding.verificationEnvironment?.host?.available === undefined
+              ? {}
+              : { available: binding.verificationEnvironment.host.available }),
+          },
+        },
+        { failed: result.exitCode !== 0 || result.timedOut },
+      );
+      if (diagnostics.outcome === "environment-only") status = "passed";
+      const diagnosticSummary = diagnostics.skipped.map(formatSkippedVerification).join("\\n");
       return {
         content: [
           {
@@ -973,6 +1019,8 @@ export function registerForgeRuntime(
           exitCode: result.exitCode,
           signal: result.signal,
           timedOut: result.timedOut,
+          diagnostics,
+          ...(diagnosticSummary ? { diagnosticSummary } : {}),
         },
       };
     },
@@ -1537,6 +1585,7 @@ export function registerForgeRuntime(
     async execute(_toolCallId, params) {
       if (!isForgeWorkOnResult(params.value))
         throw new Error("Final work-on result failed schema validation.");
+      assertTrustedVerificationReports(params.value.verification, fallbackStatuses);
       if (
         params.value.runId !== binding.runId ||
         params.value.issueNumber !== binding.issueNumber
@@ -1857,6 +1906,10 @@ function readBinding(): ForgeChildBinding {
     validateBoundCommand(name, commandValue);
     verificationCommands[name] = commandValue;
   }
+  const verificationEnvironment = validateVerificationEnvironment(
+    value.verificationEnvironment,
+    verificationCommands,
+  );
   const node = typeof value.node === "string" ? value.node : undefined;
   if (
     node &&
@@ -1915,6 +1968,7 @@ function readBinding(): ForgeChildBinding {
     maxReviewRounds: value.maxReviewRounds as number,
     reviewerTimeoutMs: value.reviewerTimeoutMs as number,
     verificationCommands,
+    ...(verificationEnvironment ? { verificationEnvironment } : {}),
     ...(builderContract ? { builderContract } : {}),
     ...(node
       ? {
@@ -1956,6 +2010,55 @@ export function allowedNodeTools(
   if (node === "prepare-pr")
     return new Set(["forge_prepare_review", "forge_finalize_node"]);
   return new Set(common);
+}
+
+function assertTrustedVerificationReports(
+  checks: readonly { diagnostics?: { outcome?: string; selectedFallback?: { name?: string } } }[],
+  fallbackStatuses: ReadonlyMap<string, FallbackStatus>,
+): void {
+  for (const check of checks) {
+    const report = check.diagnostics;
+    if (report?.outcome !== "environment-only") continue;
+    const name = report.selectedFallback?.name;
+    if (!name || fallbackStatuses.get(name) !== "passed")
+      throw new Error("Environment-only verification requires a passing tracked fallback executed in this run.");
+  }
+}
+
+function validateVerificationEnvironment(
+  value: unknown,
+  commands: Readonly<Record<string, BoundVerificationCommand>>,
+): ValidationEnvironment | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Forge binding verificationEnvironment must be an object.");
+  const environment = value as Record<string, unknown>;
+  const host = environment.host;
+  if (host !== undefined && (!host || typeof host !== "object" || Array.isArray(host)))
+    throw new Error("Forge binding verificationEnvironment.host must be an object.");
+  const entries = [
+    ...(environment.fallbacks === undefined ? [] : Array.isArray(environment.fallbacks) ? environment.fallbacks : (() => { throw new Error("Forge binding verificationEnvironment.fallbacks must be an array."); })()),
+    ...(environment.fallback === undefined ? [] : [environment.fallback]),
+  ];
+  const fallbacks = entries.map((entry, index) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error(`Forge binding verification fallback ${index} must be an object.`);
+    const fallback = entry as Record<string, unknown>;
+    const tracked = typeof fallback.name === "string" ? commands[fallback.name] : undefined;
+    if (typeof fallback.name !== "string" || !fallback.name.trim() || typeof fallback.command !== "string" || !fallback.command.trim() || !tracked || fallback.command !== tracked.argv.join(" ") || !["container", "venv", "other"].includes(String(fallback.kind)) || !["passed", "failed", "unavailable", "not-run"].includes(String(fallback.status)))
+      throw new Error(`Forge binding verification fallback ${index} is invalid.`);
+    return { name: fallback.name, kind: fallback.kind as "container" | "venv" | "other", command: fallback.command, status: fallback.status as FallbackStatus, ...(typeof fallback.detail === "string" ? { detail: fallback.detail } : {}) };
+  });
+  const normalizedHost = host && typeof host === "object"
+    ? (() => {
+        const hostRecord = host as Record<string, unknown>;
+        return {
+          ...(typeof hostRecord.name === "string" ? { name: hostRecord.name } : {}),
+          ...(typeof hostRecord.available === "boolean" ? { available: hostRecord.available } : {}),
+          ...(typeof hostRecord.attemptedCommand === "string" ? { attemptedCommand: hostRecord.attemptedCommand } : {}),
+        };
+      })()
+    : undefined;
+  return { ...(normalizedHost ? { host: normalizedHost } : {}), ...(fallbacks.length ? { fallbacks } : {}) };
 }
 
 function validateBoundCommand(

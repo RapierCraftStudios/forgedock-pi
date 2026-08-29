@@ -579,6 +579,18 @@ branches:
 #   # Language keys are arbitrary identifiers — name them after your stack.
 #   # Common keys: python, typescript, go, rust, java, node
 #   #
+#   # Dependency-backed analyzers can run on a deliberately unprovisioned host.
+#   # Declare the host description and ordered fallback command *names* below;
+#   # each fallback must also exist under commands. ForgeDock never installs
+#   # dependencies or executes an untracked command to clear an import diagnostic.
+#   # A passing container/venv fallback is required before host import noise can
+#   # be classified as environment-only. Otherwise the check is reported as:
+#   # SKIPPED — environment not provisioned (environment: ...; attempted command: ...)
+#   #
+#   # environment:
+#   #   hostName: "host Python 3.12 (project dependencies unavailable)"
+#   #   fallbackCommands: ["api-container-typecheck"]
+#   #
 #   # commands:
 #   #   # Python project using ruff + pytest
 #   #   python:

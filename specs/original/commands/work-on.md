@@ -1592,6 +1592,8 @@ python -m py_compile {PYTHON_FILES}
 ```
 `py_compile` failures are BLOCKING.
 
+**Dependency-backed diagnostics**: A type checker that reports unresolved third-party imports on the host must produce provenance-aware machine-readable diagnostics instead of an automatic changed-code blocker. Consult `verification.environment` for the repository's host description and ordered fallback command names. Run only those names already declared under `verification.commands`; a passing container/venv fallback in the same attempt may classify the import cascade as `environment-only`. No configured or failed fallback is reported as `SKIPPED — environment not provisioned` with the exact environment and attempted command, and remains blocking. Syntax errors, relative/local missing modules, changed-code type errors, unknown output, and diagnostics reproduced in the fallback remain blocking. This classification is accepted by review only when the report is valid and the execution runtime attests the same-run passing fallback.
+
 **TypeScript**:
 ```bash
 cd {WORKTREE_PATH}

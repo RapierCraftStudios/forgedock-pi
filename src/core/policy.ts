@@ -1,4 +1,4 @@
-import { posix } from "node:path";
+import { posix } from "path";
 
 export const FORGEDOCK_CONFIG_SCHEMA = "forgedock.config/v1" as const;
 export const MAX_ORCHESTRATION_ISSUES = 500;
@@ -64,6 +64,12 @@ export interface VerificationCommandPolicy {
   timeoutMs: number;
 }
 
+/** Repository-declared execution environments for dependency-backed checks. */
+export interface VerificationEnvironmentPolicy {
+  hostName: string;
+  fallbackCommands: readonly string[];
+}
+
 export interface ForgePolicy {
   schema: typeof FORGEDOCK_CONFIG_SCHEMA;
   repository: {
@@ -88,6 +94,7 @@ export interface ForgePolicy {
       pollIntervalMs: number;
     };
     commands: Readonly<Record<string, VerificationCommandPolicy>>;
+    environment?: VerificationEnvironmentPolicy;
   };
   review: {
     required: readonly string[];
@@ -258,6 +265,28 @@ function parseGitHubVerification(
   };
 }
 
+function parseVerificationEnvironment(
+  value: unknown,
+  commandNames: ReadonlySet<string>,
+): VerificationEnvironmentPolicy | undefined {
+  if (value === undefined) return undefined;
+  const environment = record(value, "verification.environment");
+  const hostName = environment.hostName === undefined
+    ? "host interpreter"
+    : string(environment.hostName, "verification.environment.hostName");
+  const rawFallbacks = environment.fallbackCommands;
+  if (rawFallbacks === undefined) return { hostName, fallbackCommands: [] };
+  const fallbackCommands = stringArray(rawFallbacks, "verification.environment.fallbackCommands");
+  for (const commandName of fallbackCommands) {
+    if (!commandNames.has(commandName))
+      throw new PolicyValidationError(
+        "verification.environment.fallbackCommands",
+        `must reference tracked verification command '${commandName}'`,
+      );
+  }
+  return { hostName, fallbackCommands };
+}
+
 function parseVerificationCommands(
   value: unknown,
 ): Record<string, VerificationCommandPolicy> {
@@ -355,10 +384,18 @@ export function parseForgePolicy(value: unknown): ForgePolicy {
         "branches.autoMergeIntegration",
       ),
     },
-    verification: {
-      github: parseGitHubVerification(verification.github),
-      commands: parseVerificationCommands(verification.commands),
-    },
+    verification: (() => {
+      const commands = parseVerificationCommands(verification.commands);
+      const environment = parseVerificationEnvironment(
+        verification.environment,
+        new Set(Object.keys(commands)),
+      );
+      return {
+        github: parseGitHubVerification(verification.github),
+        commands,
+        ...(environment ? { environment } : {}),
+      };
+    })(),
     review: {
       required: stringArray(review.required, "review.required"),
       maxRounds:

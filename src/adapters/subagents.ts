@@ -19,6 +19,7 @@ import {
 } from "../agents/register.ts";
 import type { BuilderPathContract } from "../core/builder-contract.ts";
 import type { ForgePolicy } from "../core/policy.ts";
+import type { ValidationEnvironment } from "../core/verification-diagnostics.ts";
 import type { WorkflowNode } from "../core/dispatcher.ts";
 import { validateReviewDeadlines } from "../core/recovery.ts";
 
@@ -26,6 +27,24 @@ const RPC_REQUEST = "subagents:rpc:v1:request";
 const RPC_REPLY_PREFIX = "subagents:rpc:v1:reply:";
 const RPC_READY = "subagents:rpc:v1:ready";
 const BINDING_NAMESPACE = "forgedock.pi/1";
+
+function verificationEnvironmentForPolicy(policy: ForgePolicy): ValidationEnvironment | undefined {
+  const configured = policy.verification.environment;
+  if (!configured) return undefined;
+  return {
+    host: { name: configured.hostName },
+    fallbacks: configured.fallbackCommands.map((name) => {
+      const command = policy.verification.commands[name]!;
+      const lower = name.toLowerCase();
+      const kind = lower.includes("container") || lower.includes("docker")
+        ? "container"
+        : lower.includes("venv") || lower.includes("virtualenv")
+          ? "venv"
+          : "other";
+      return { name, kind, command: command.argv.join(" "), status: "not-run" as const };
+    }),
+  };
+}
 
 interface RpcReply {
   version: 1;
@@ -258,6 +277,7 @@ export class SubagentsRpcClient {
       node: input.node.node,
       nodeAttempt: input.node.attempt,
       reviewHeadSha,
+      verificationEnvironment: verificationEnvironmentForPolicy(input.policy),
     };
     const task = [
       `Review ForgeDock issue #${input.issueNumber} as the ${input.node.node === "review-correctness" ? "correctness" : "security"} reviewer.`,
@@ -337,6 +357,7 @@ export class SubagentsRpcClient {
       node: `review-${domain}`,
       nodeAttempt: input.node.attempt,
       reviewHeadSha,
+      verificationEnvironment: verificationEnvironmentForPolicy(input.policy),
     };
     const data = await this.#request(
       "spawn",
@@ -422,6 +443,7 @@ export class SubagentsRpcClient {
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
       verificationGithub: input.policy.verification.github,
+      verificationEnvironment: verificationEnvironmentForPolicy(input.policy),
       ...(input.builderContract
         ? { builderContract: input.builderContract }
         : {}),
@@ -438,9 +460,12 @@ export class SubagentsRpcClient {
     )
       .filter(([, command]) => command.required)
       .map(([name]) => name);
+    const fallbackTask = input.policy.verification.environment?.fallbackCommands.length
+      ? `If a check reports unresolved third-party imports, run the declared fallback command names (${input.policy.verification.environment.fallbackCommands.join(", ")}) through forge_verify before classifying the result; never install dependencies or use an untracked command.`
+      : "If a check reports unresolved third-party imports, preserve them as blocking environment-unavailable diagnostics; no fallback is configured and dependencies must not be installed.";
     const verificationTask = requiredLocalChecks.length
-      ? `During verify, run these required bound checks through forge_verify: ${requiredLocalChecks.join(", ")}. After they pass, create the implementation commit through forge_commit.`
-      : "No local verification commands are configured. This is valid: do not call forge_verify and do not block or ask the supervisor. Create the implementation commit through forge_commit, prepare the PR, and let the parent enforce GitHub-configured CI on the exact reviewed SHA before merge.";
+      ? `During verify, run these required bound checks through forge_verify: ${requiredLocalChecks.join(", ")}. ${fallbackTask} After they pass, create the implementation commit through forge_commit.`
+      : `No local verification commands are configured. This is valid: do not call forge_verify and do not block or ask the supervisor. ${fallbackTask} Create the implementation commit through forge_commit, prepare the PR, and let the parent enforce GitHub-configured CI on the exact reviewed SHA before merge.`;
     const task = [
       `Run ForgeDock work-on for issue #${input.issueNumber} in ${input.repository}.`,
       `Run ID: ${input.runId}`,
@@ -547,6 +572,7 @@ export class SubagentsRpcClient {
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
       verificationGithub: input.policy.verification.github,
+      verificationEnvironment: verificationEnvironmentForPolicy(input.policy),
       refresh: true,
       leaseOwnerRunId: input.leaseOwnerRunId ?? input.runId,
       previousReviewRounds: input.previousResult.review.rounds,
@@ -750,6 +776,7 @@ function reviewWorkflowInstruction(
     maxReviewRounds: input.policy.review.maxRounds,
     reviewerTimeoutMs: timeoutMs,
     verificationCommands: input.policy.verification.commands,
+    verificationEnvironment: verificationEnvironmentForPolicy(input.policy),
     refresh: false,
   });
   const correctnessPath = join(

@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+import { strict as assert } from "assert";
 import test from "node:test";
 
 import {
@@ -104,6 +104,30 @@ test("tracked policy enables only non-protected integration auto-merge", () => {
   assert.equal(policy.verification.commands.test?.cwd, ".");
   assert.equal(policy.subagents.reviewerTimeoutMs, 900_000);
   assert.ok(policy.orchestration.maxIssues >= 25);
+});
+
+test("verification environments reference only tracked fallback commands", () => {
+  const configured = parseForgePolicy({
+    ...structuredClone(rawPolicy),
+    verification: {
+      ...structuredClone(rawPolicy.verification),
+      environment: { hostName: "system Python", fallbackCommands: ["test"] },
+    },
+  });
+  assert.deepEqual(configured.verification.environment, {
+    hostName: "system Python",
+    fallbackCommands: ["test"],
+  });
+  assert.throws(
+    () => parseForgePolicy({
+      ...structuredClone(rawPolicy),
+      verification: {
+        ...structuredClone(rawPolicy.verification),
+        environment: { fallbackCommands: ["untracked-container"] },
+      },
+    }),
+    /must reference tracked verification command/,
+  );
 });
 
 test("verification command cwd is portable, relative, and normalized", () => {
