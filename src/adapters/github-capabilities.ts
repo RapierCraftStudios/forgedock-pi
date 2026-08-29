@@ -1,7 +1,6 @@
 import {
   repositoryApiPath,
   type GitHubTransport,
-  type GitHubResponse,
 } from "./github-api.ts";
 import type { GitHubTokenProvider } from "./github-auth.ts";
 
@@ -69,28 +68,32 @@ export async function preflightGitHubCapabilities(input: {
       "repository read response is malformed.",
     );
   }
-  const permissions = repo.permissions;
-  if (!permissions || permissions.pull !== true) {
-    throw new GitHubCapabilityError(
-      "repository-read",
-      repoPath,
-      "repository read permission is unavailable.",
-    );
-  }
-  if (
-    permissions.push !== true &&
-    permissions.maintain !== true &&
-    permissions.admin !== true
-  ) {
-    throw new GitHubCapabilityError(
-      "repository-write",
-      repoPath,
-      "nonmutating repository write permission is unavailable.",
-    );
-  }
-
   const source = input.tokenSource ?? input.tokenProvider?.source ?? "operator";
-  if (source === "operator") {
+  const collaboratorPermissions = repo.permissions;
+  const collaboratorCanRead = collaboratorPermissions?.pull === true;
+  const collaboratorCanWrite =
+    collaboratorPermissions?.push === true ||
+    collaboratorPermissions?.maintain === true ||
+    collaboratorPermissions?.admin === true;
+
+  if (
+    source === "operator" ||
+    (source === "bot-token" && collaboratorCanRead && collaboratorCanWrite)
+  ) {
+    if (!collaboratorCanRead) {
+      throw new GitHubCapabilityError(
+        "repository-read",
+        repoPath,
+        "repository read permission is unavailable.",
+      );
+    }
+    if (!collaboratorCanWrite) {
+      throw new GitHubCapabilityError(
+        "repository-write",
+        repoPath,
+        "nonmutating repository write permission is unavailable.",
+      );
+    }
     return {
       repository: input.repository,
       tokenSource: source,
@@ -98,32 +101,48 @@ export async function preflightGitHubCapabilities(input: {
       repositoryWrite: true,
     };
   }
-  const installationPath = "/installation";
-  const installationResponse = await input.transport.request<GitHubInstallationResponse>({
-    method: "GET",
-    path: installationPath,
-    ...(input.signal ? { signal: input.signal } : {}),
-  });
-  if (installationResponse.status !== 200) {
+
+  const installationPath = "/installation/repositories";
+  const metadata = await input.tokenProvider?.getInstallationMetadata?.(
+    input.signal,
+  );
+  if (!metadata) {
     throw new GitHubCapabilityError(
       "installation-metadata",
       installationPath,
-      "installation metadata is unavailable.",
+      "installation permission metadata is unavailable for this token source.",
     );
   }
-  let installation = parseInstallation(installationResponse, installationPath);
-  if (installation.repositorySelection === "selected" && !installation.repositories) {
-    const repositoriesPath = "/installation/repositories?per_page=100";
-    const repositoriesResponse = await input.transport.request<{ repositories?: unknown }>({
+  let installation: GitHubInstallationMetadata = {
+    repositorySelection: metadata.repositorySelection,
+    permissions: metadata.permissions,
+  };
+  if (installation.repositorySelection === "selected") {
+    const repositoriesPath = `${installationPath}?per_page=100`;
+    const repositoriesResponse = await input.transport.request<{
+      repositories?: unknown;
+    }>({
       method: "GET",
       path: repositoriesPath,
       ...(input.signal ? { signal: input.signal } : {}),
     });
-    if (repositoriesResponse.status !== 200 || !repositoriesResponse.data || typeof repositoriesResponse.data !== "object")
-      throw new GitHubCapabilityError("installation-metadata", repositoriesPath, "installation repository metadata is unavailable.");
+    if (
+      repositoriesResponse.status !== 200 ||
+      !repositoriesResponse.data ||
+      typeof repositoriesResponse.data !== "object"
+    )
+      throw new GitHubCapabilityError(
+        "installation-metadata",
+        repositoriesPath,
+        "installation repository metadata is unavailable.",
+      );
     installation = {
       ...installation,
-      repositories: parseRepositories((repositoriesResponse.data as { repositories?: unknown }).repositories, repositoriesPath),
+      repositories: parseRepositories(
+        (repositoriesResponse.data as { repositories?: unknown })
+          .repositories,
+        repositoriesPath,
+      ),
     };
   }
   if (
@@ -166,40 +185,6 @@ interface GitHubRepositoryResponse {
     admin?: unknown;
   };
 }
-interface GitHubInstallationResponse {
-  id?: unknown;
-  repository_selection?: unknown;
-  permissions?: unknown;
-  repositories?: unknown;
-}
-
-function parseInstallation(
-  response: GitHubResponse<GitHubInstallationResponse>,
-  path: string,
-): GitHubInstallationMetadata {
-  const value = response.data;
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new GitHubCapabilityError("installation-metadata", path, "installation metadata is malformed.");
-  const selection = value.repository_selection;
-  if (selection !== "all" && selection !== "selected")
-    throw new GitHubCapabilityError("installation-metadata", path, "installation repository selection is malformed.");
-  if (!value.permissions || typeof value.permissions !== "object" || Array.isArray(value.permissions))
-    throw new GitHubCapabilityError("installation-metadata", path, "installation permissions are malformed.");
-  const permissions: Record<string, string> = {};
-  for (const [key, permission] of Object.entries(value.permissions as Record<string, unknown>)) {
-    if (permission !== "read" && permission !== "write")
-      throw new GitHubCapabilityError("installation-metadata", path, `installation permission '${key}' is malformed.`);
-    permissions[key] = permission;
-  }
-  const repositories = value.repositories === undefined ? undefined : parseRepositories(value.repositories, path);
-  return {
-    ...(typeof value.id === "number" && Number.isSafeInteger(value.id) ? { id: value.id } : {}),
-    repositorySelection: selection,
-    permissions: Object.freeze(permissions),
-    ...(repositories ? { repositories } : {}),
-  };
-}
-
 function parseRepositories(value: unknown, path: string): readonly string[] {
   if (!Array.isArray(value)) throw new GitHubCapabilityError("installation-metadata", path, "installation repositories are malformed.");
   const names = value.map((entry) => {

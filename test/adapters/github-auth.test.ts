@@ -55,6 +55,12 @@ test("GitHub App credentials mint and cache an installation token", async () => 
       JSON.stringify({
         token: "minted-installation-token",
         expires_at: "2026-08-25T01:00:00.000Z",
+        repository_selection: "all",
+        permissions: {
+          contents: "write",
+          issues: "write",
+          pull_requests: "write",
+        },
       }),
       { status: 201, headers: { "content-type": "application/json" } },
     );
@@ -93,6 +99,12 @@ test("GitHub App token provider force-refreshes and deduplicates exchanges", asy
       JSON.stringify({
         token: `minted-token-${exchanges}`,
         expires_at: "2026-08-25T03:00:00.000Z",
+        repository_selection: "selected",
+        permissions: {
+          contents: "write",
+          issues: "write",
+          pull_requests: "write",
+        },
       }),
       { status: 201, headers: { "content-type": "application/json" } },
     );
@@ -112,6 +124,14 @@ test("GitHub App token provider force-refreshes and deduplicates exchanges", asy
   assert.deepEqual(initial, ["minted-token-1", "minted-token-1"]);
   assert.equal(exchanges, 1);
   assert.equal(await provider.refresh(), "minted-token-2");
+  assert.deepEqual(await provider.getInstallationMetadata?.(), {
+    repositorySelection: "selected",
+    permissions: {
+      contents: "write",
+      issues: "write",
+      pull_requests: "write",
+    },
+  });
   assert.equal(exchanges, 2);
 });
 

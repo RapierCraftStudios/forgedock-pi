@@ -10,14 +10,23 @@ const DEFAULT_APP_ID = "4051319";
 const DEFAULT_INSTALLATION_ID = "144998831";
 const REFRESH_SKEW_MS = 5 * 60_000;
 
+export interface GitHubInstallationTokenMetadata {
+  readonly repositorySelection: "all" | "selected";
+  readonly permissions: Readonly<Record<string, string>>;
+}
+
 interface CachedInstallationToken {
   key: string;
   token: string;
   expiresAt: number;
+  metadata: GitHubInstallationTokenMetadata;
 }
 
-let cachedInstallationToken: CachedInstallationToken | undefined;
-const installationTokenExchanges = new Map<string, Promise<string>>();
+const cachedInstallationTokens = new Map<string, CachedInstallationToken>();
+const installationTokenExchanges = new Map<
+  string,
+  Promise<CachedInstallationToken>
+>();
 
 export interface GitHubTokenResolverOptions {
   env?: NodeJS.ProcessEnv;
@@ -29,6 +38,9 @@ export interface GitHubTokenResolverOptions {
 export interface GitHubTokenProvider {
   get(signal?: AbortSignal): Promise<string>;
   refresh(signal?: AbortSignal): Promise<string>;
+  getInstallationMetadata?(
+    signal?: AbortSignal,
+  ): Promise<GitHubInstallationTokenMetadata>;
   /** Credential class is metadata only; token material is never exposed in logs. */
   readonly source?: "installation" | "bot-token" | "operator";
 }
@@ -61,6 +73,12 @@ export function createGitHubTokenProvider(
       resolveGitHubTokenInternal(pi, cwd, signal, options, false),
     refresh: (signal?: AbortSignal) =>
       resolveGitHubTokenInternal(pi, cwd, signal, options, true),
+    ...(source === "installation"
+      ? {
+          getInstallationMetadata: (signal?: AbortSignal) =>
+            resolveGitHubInstallationMetadata(pi, cwd, signal, options),
+        }
+      : {}),
   });
 }
 
@@ -71,6 +89,24 @@ export async function resolveGitHubToken(
   options: GitHubTokenResolverOptions = {},
 ): Promise<string> {
   return resolveGitHubTokenInternal(pi, cwd, signal, options, false);
+}
+
+async function resolveGitHubInstallationMetadata(
+  pi: ExtensionAPI,
+  cwd: string,
+  signal: AbortSignal | undefined,
+  options: GitHubTokenResolverOptions,
+): Promise<GitHubInstallationTokenMetadata> {
+  await resolveGitHubTokenInternal(pi, cwd, signal, options, false);
+  const credentials = installationCredentials(options);
+  if (!credentials)
+    throw new Error("ForgeDock GitHub App installation metadata is unavailable.");
+  const cached = cachedInstallationTokens.get(
+    installationTokenKey(credentials),
+  );
+  if (!cached)
+    throw new Error("ForgeDock GitHub App installation metadata is unavailable.");
+  return cached.metadata;
 }
 
 async function resolveGitHubTokenInternal(
@@ -84,24 +120,17 @@ async function resolveGitHubTokenInternal(
   const configuredToken = env.FORGEDOCK_BOT_TOKEN?.trim();
   if (configuredToken) return configuredToken;
 
-  const defaultPemPath = join(homedir(), ".config", "forgedock", "app.pem");
-  const pemPath =
-    env.FORGEDOCK_APP_PEM?.trim() ||
-    (options.env === undefined && existsSync(defaultPemPath)
-      ? defaultPemPath
-      : undefined);
-  if (pemPath) {
-    return resolveInstallationToken({
-      pemPath,
-      appId: env.FORGEDOCK_GITHUB_APP_ID?.trim() || DEFAULT_APP_ID,
-      installationId:
-        env.FORGEDOCK_GITHUB_INSTALLATION_ID?.trim() || DEFAULT_INSTALLATION_ID,
+  const credentials = installationCredentials(options);
+  if (credentials) {
+    const installation = await resolveInstallationToken({
+      ...credentials,
       signal,
       fetchImpl: options.fetchImpl ?? fetch,
       now: options.now ?? Date.now,
       readPem: options.readPem ?? ((path) => readFile(path, "utf8")),
       forceRefresh,
     });
+    return installation.token;
   }
 
   if (env.FORGEDOCK_ALLOW_OPERATOR_GH !== "1")
@@ -119,6 +148,33 @@ async function resolveGitHubTokenInternal(
       "ForgeDock GitHub authentication is unavailable. Configure FORGEDOCK_APP_PEM for the ForgeDock App, FORGEDOCK_BOT_TOKEN for a managed installation token, or repair gh authentication.",
     );
   return result.stdout.trim();
+}
+
+function installationCredentials(
+  options: GitHubTokenResolverOptions,
+): { pemPath: string; appId: string; installationId: string } | undefined {
+  const env = options.env ?? process.env;
+  const defaultPemPath = join(homedir(), ".config", "forgedock", "app.pem");
+  const pemPath =
+    env.FORGEDOCK_APP_PEM?.trim() ||
+    (options.env === undefined && existsSync(defaultPemPath)
+      ? defaultPemPath
+      : undefined);
+  if (!pemPath) return undefined;
+  return {
+    pemPath,
+    appId: env.FORGEDOCK_GITHUB_APP_ID?.trim() || DEFAULT_APP_ID,
+    installationId:
+      env.FORGEDOCK_GITHUB_INSTALLATION_ID?.trim() || DEFAULT_INSTALLATION_ID,
+  };
+}
+
+function installationTokenKey(input: {
+  pemPath: string;
+  appId: string;
+  installationId: string;
+}): string {
+  return `${input.pemPath}\0${input.appId}\0${input.installationId}`;
 }
 
 export function createGitHubAppJwt(
@@ -147,15 +203,16 @@ async function resolveInstallationToken(input: {
   now: () => number;
   readPem: (path: string) => Promise<string>;
   forceRefresh?: boolean;
-}): Promise<string> {
-  const key = `${input.pemPath}\0${input.appId}\0${input.installationId}`;
+}): Promise<CachedInstallationToken> {
+  const key = installationTokenKey(input);
   const now = input.now();
+  const cached = cachedInstallationTokens.get(key);
   if (
     !input.forceRefresh &&
-    cachedInstallationToken?.key === key &&
-    cachedInstallationToken.expiresAt - REFRESH_SKEW_MS > now
+    cached &&
+    cached.expiresAt - REFRESH_SKEW_MS > now
   )
-    return cachedInstallationToken.token;
+    return cached;
 
   const inFlight = installationTokenExchanges.get(key);
   if (inFlight) return inFlight;
@@ -180,7 +237,7 @@ async function mintInstallationToken(
   },
   key: string,
   now: number,
-): Promise<string> {
+): Promise<CachedInstallationToken> {
   const pem = await input.readPem(input.pemPath).catch((error) => {
     throw new Error(
       `Unable to read FORGEDOCK_APP_PEM: ${error instanceof Error ? error.message : String(error)}`,
@@ -203,6 +260,8 @@ async function mintInstallationToken(
   const body = (await response.json().catch(() => ({}))) as {
     token?: unknown;
     expires_at?: unknown;
+    permissions?: unknown;
+    repository_selection?: unknown;
     message?: unknown;
   };
   if (!response.ok || typeof body.token !== "string" || !body.token.trim()) {
@@ -216,11 +275,45 @@ async function mintInstallationToken(
     typeof body.expires_at === "string" ? Date.parse(body.expires_at) : NaN;
   if (!Number.isFinite(expiresAt) || expiresAt <= now)
     throw new Error("ForgeDock GitHub App returned an invalid token expiry.");
+  if (
+    body.repository_selection !== "all" &&
+    body.repository_selection !== "selected"
+  )
+    throw new Error(
+      "ForgeDock GitHub App returned invalid installation repository metadata.",
+    );
+  if (
+    !body.permissions ||
+    typeof body.permissions !== "object" ||
+    Array.isArray(body.permissions)
+  )
+    throw new Error(
+      "ForgeDock GitHub App returned invalid installation permission metadata.",
+    );
+  const permissions: Record<string, string> = {};
+  for (const [name, permission] of Object.entries(
+    body.permissions as Record<string, unknown>,
+  )) {
+    if (
+      permission !== "read" &&
+      permission !== "write" &&
+      permission !== "admin"
+    )
+      throw new Error(
+        `ForgeDock GitHub App returned invalid '${name}' installation permission metadata.`,
+      );
+    permissions[name] = permission;
+  }
 
-  cachedInstallationToken = {
+  const installation: CachedInstallationToken = {
     key,
     token: body.token.trim(),
     expiresAt,
+    metadata: {
+      repositorySelection: body.repository_selection,
+      permissions: Object.freeze(permissions),
+    },
   };
-  return cachedInstallationToken.token;
+  cachedInstallationTokens.set(key, installation);
+  return installation;
 }
