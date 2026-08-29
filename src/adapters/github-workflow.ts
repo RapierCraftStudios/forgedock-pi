@@ -6,6 +6,7 @@ import {
   requireGitHubSuccess,
 } from "./github-api.ts";
 import { commentBodySignalsInvalidVerdict } from "../core/comment-contract.ts";
+import { assertReviewFindingReadbackPaths } from "../core/review-integrity.ts";
 import {
   resolveStagingBundleAsync,
   type FrozenStagingBundleRoute,
@@ -336,6 +337,8 @@ export class GitHubWorkflowAdapter {
     title: string;
     body: string;
     labels: readonly string[];
+    /** Structured path authority checked after GitHub readback. */
+    expectedAffectedPaths?: readonly string[];
     signal?: AbortSignal;
   }): Promise<GitHubIssueData> {
     const path = `${this.#apiRoot}/issues`;
@@ -359,6 +362,8 @@ export class GitHubWorkflowAdapter {
       throw new GitHubApiError(422, path, {
         message: "Review-finding issue read-back did not match the requested payload.",
       });
+    if (input.expectedAffectedPaths)
+      assertReviewFindingReadbackPaths(readBack.body, input.expectedAffectedPaths);
     return readBack;
   }
 

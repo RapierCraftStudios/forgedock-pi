@@ -14,6 +14,12 @@ export type ForgeFindingCategory =
   | "performance"
   | "maintainability";
 
+export interface ForgeReviewFindingFileRange {
+  path: string;
+  startLine: number;
+  endLine: number;
+}
+
 export interface ForgeReviewFindingResult {
   id: string;
   reviewer: string;
@@ -22,8 +28,12 @@ export interface ForgeReviewFindingResult {
   confidence: "confirmed" | "likely" | "possible";
   severity: "critical" | "high" | "medium" | "low";
   category: ForgeFindingCategory;
+  /** Legacy primary location retained for wire compatibility. */
   file: string;
   line: number;
+  /** Structured, trusted locations used for projection and DAG construction. */
+  affectedFiles?: readonly ForgeReviewFindingFileRange[];
+  patternMetadataFiles?: readonly string[];
   summary: string;
   evidence: readonly string[];
 }
@@ -133,6 +143,21 @@ const findingSchema = {
     },
     file: { type: "string", minLength: 1 },
     line: { type: "integer", minimum: 1 },
+    affectedFiles: {
+      type: "array",
+      minItems: 1,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["path", "startLine", "endLine"],
+        properties: {
+          path: { type: "string", minLength: 1 },
+          startLine: { type: "integer", minimum: 1 },
+          endLine: { type: "integer", minimum: 1 },
+        },
+      },
+    },
+    patternMetadataFiles: { type: "array", minItems: 1, items: { type: "string", minLength: 1 } },
     summary: { type: "string", minLength: 1 },
     evidence: { type: "array", items: { type: "string", minLength: 1 } },
   },
@@ -525,6 +550,8 @@ function isFindingResult(value: unknown): value is ForgeReviewFindingResult {
     ].includes(String(finding.category)) &&
     typeof finding.file === "string" &&
     Number.isSafeInteger(finding.line) &&
+    (finding.affectedFiles === undefined || isFindingFileRanges(finding.affectedFiles)) &&
+    (finding.patternMetadataFiles === undefined || isNonEmptyStringArray(finding.patternMetadataFiles)) &&
     typeof finding.summary === "string" &&
     isStringArray(finding.evidence)
   );
@@ -534,4 +561,16 @@ function isStringArray(value: unknown): value is string[] {
   return (
     Array.isArray(value) && value.every((entry) => typeof entry === "string")
   );
+}
+
+function isNonEmptyStringArray(value: unknown): value is string[] {
+  return isStringArray(value) && value.length > 0 && value.every((entry) => entry.trim() === entry && entry.length > 0);
+}
+
+function isFindingFileRanges(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0 && value.every((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+    const range = entry as { path?: unknown; startLine?: unknown; endLine?: unknown };
+    return typeof range.path === "string" && range.path.trim().length > 0 && Number.isSafeInteger(range.startLine) && Number.isSafeInteger(range.endLine) && (range.startLine as number) >= 1 && (range.endLine as number) >= (range.startLine as number);
+  });
 }

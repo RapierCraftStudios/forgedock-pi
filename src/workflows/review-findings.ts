@@ -6,6 +6,7 @@ import {
   humanAuthorityReasonFromText,
   type HumanAuthorityReason,
 } from "../core/policy.ts";
+import { normalizeReviewFindingMetadata } from "../core/review-integrity.ts";
 
 export interface ReviewFindingRunIdentity {
   forgeRunId: string;
@@ -42,7 +43,9 @@ export async function publishReviewFindingIssues(input: {
     input.signal,
   );
   const issueMap: Record<string, number> = {};
-  for (const finding of input.result.review.findings) {
+  for (const rawFinding of input.result.review.findings) {
+    const normalized = normalizeReviewFindingMetadata(rawFinding);
+    const finding = normalized.finding;
     const marker = reviewFindingMarker(
       input.pullNumber,
       finding.id,
@@ -83,6 +86,7 @@ export async function publishReviewFindingIssues(input: {
       title,
       body,
       labels: ["review-finding", "needs-validation", priority],
+      expectedAffectedPaths: normalized.affectedPaths,
       ...(input.signal ? { signal: input.signal } : {}),
     });
     issueMap[finding.id] = created.number;
@@ -152,7 +156,11 @@ function renderFindingIssueBody(input: {
   const evidence = input.finding.evidence
     .map((entry) => `- ${entry}`)
     .join("\n");
-  return `${input.marker}\n## Review Finding\n\n**Source PR**: #${input.pullNumber}\n**Source issue**: ${input.link.issueNumber === undefined ? "unlinked" : `#${input.link.issueNumber}`}\n**Forge run**: \`${input.link.forgeRunId}\`\n**Reviewed head**: \`${input.headSha}\`\n**Reviewer**: \`${input.finding.reviewer}\`\n**Finding ID**: \`${input.finding.id}\`\n**Confidence**: ${input.finding.confidence.toUpperCase()}\n**Severity**: ${input.finding.severity.toUpperCase()}\n**Category**: ${input.finding.category}\n**File**: \`${input.finding.file}\`\n**Line**: ${input.finding.line}\n${input.regressionIssue ? `**Regression of**: #${input.regressionIssue}\n` : ""}\n### Problem\n\n${input.finding.summary}\n\n### Evidence\n\n${evidence || "- Reviewer supplied no additional evidence."}\n\n### Acceptance Criteria\n\n- [ ] Reproduce or validate the finding against the current integration branch.\n- [ ] Fix the root cause without expanding unrelated scope.\n- [ ] Add focused regression coverage.\n- [ ] Re-review the exact remediation head.\n\n<!-- FORGE:PATTERN: ${findingPattern(input.finding)} -->\n<!-- FORGE:CLASS: ${findingPattern(input.finding)} -->`;
+  const metadata = normalizeReviewFindingMetadata(input.finding);
+  const metadataFiles = metadata.patternMetadataFiles.map((path) => `- \`${path}\``).join("\n");
+  const affectedFiles = metadata.affectedFiles.map((range) => `- \`${range.path}\` (lines ${range.startLine}-${range.endLine})`).join("\n");
+  const pathMarker = JSON.stringify(metadata.affectedPaths);
+  return `${input.marker}\n<!-- FORGE:REVIEW_FINDING_PATHS ${pathMarker} -->\n## Review Finding\n\n**Source PR**: #${input.pullNumber}\n**Source issue**: ${input.link.issueNumber === undefined ? "unlinked" : `#${input.link.issueNumber}`}\n**Forge run**: \`${input.link.forgeRunId}\`\n**Reviewed head**: \`${input.headSha}\`\n**Reviewer**: \`${input.finding.reviewer}\`\n**Finding ID**: \`${input.finding.id}\`\n**Confidence**: ${input.finding.confidence.toUpperCase()}\n**Severity**: ${input.finding.severity.toUpperCase()}\n**Category**: ${input.finding.category}\n**File**: \`${input.finding.file}\`\n**Line**: ${input.finding.line}\n${input.regressionIssue ? `**Regression of**: #${input.regressionIssue}\n` : ""}\n### Pattern Metadata Files\n\n${metadataFiles}\n\n### Affected Files\n\n${affectedFiles}\n\n### Problem\n\n${input.finding.summary}\n\n### Evidence\n\n${evidence || "- Reviewer supplied no additional evidence."}\n\n### Acceptance Criteria\n\n- [ ] Reproduce or validate the finding against the current integration branch.\n- [ ] Fix the root cause without expanding unrelated scope.\n- [ ] Add focused regression coverage.\n- [ ] Re-review the exact remediation head.\n\n<!-- FORGE:PATTERN: ${findingPattern(input.finding)} -->\n<!-- FORGE:CLASS: ${findingPattern(input.finding)} -->`;
 }
 
 function findingPattern(finding: ForgeReviewFindingResult): string {
