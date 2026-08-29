@@ -74,6 +74,12 @@ The work-on coordinator owns this closed loop:
 
 `resolve → investigate → [decompose | build → verify → PR → review → remediation/re-review when required → merge → close → trajectory/cleanup]`
 
+The issue is an untrusted claim; investigation is the authoritative verdict and mutation
+scope. A complete investigation-backed Builder Contract and affected-file claim must be
+durable before the first edit. Contract/implementation scope gaps return to
+investigation or become follow-ups. Remediation clusters findings by shared invariant,
+respects the configured round cap, and never absorbs unrelated review debt.
+
 Review may merge but never closes the issue. Close explicitly verifies the merge,
 closes the issue, updates labels, posts trajectory, and cleans the worktree before
 returning terminal success. A new session must resume from GitHub alone.
@@ -84,8 +90,11 @@ Standard review must route a staging/feature-to-protected-target PR to the stagi
 strategy automatically. It runs configured verification and integration checks,
 derives the risk-based reviewer roster, joins the complete fresh panel, creates an
 issue for every finding, posts an official PR review tied to the frozen SHA, and applies
-the original blocking/merge policy. `--model` and advertised flags must either work or
-be rejected explicitly before side effects.
+the original blocking/merge policy. Review blocks only patch-introduced or
+patch-reachable defects; pre-existing findings are non-blocking follow-ups. Max-thinking
+reviewers use a one-hour operational timeout, and provider failures never imply human
+authority. `--model` and advertised flags must either work or be rejected explicitly
+before side effects.
 
 Staging review is a bundle/deployment strategy, not merely a larger standard panel. It
 accepts an exact PR number, discovers included PRs, checks prior findings across the
@@ -99,10 +108,11 @@ confirms before launch, establishes explicit/file/database ordering, detects cyc
 and runs one complete work-on skill per ready issue with bounded concurrency. GitHub
 states classify each lane as DONE, GATED, FAILED, or IN_PROGRESS. GATED is not FAILED.
 One coordination issue durably records each batch's lease epoch, deterministic child
-keys, predecessor set, and ready/deferred queues through machine-readable `FORGE:`
-markers. The prompt-routed adapter does not create or require a GitHub state branch. On
-reload, reconcile the coordination issue and retained children by key, then resume only
-unlaunched ready nodes exactly once within the cap. Ambiguous state pauses visibly.
+keys, predecessor set, claims, and ready/deferred queues through machine-readable
+`FORGE:` markers. The prompt-routed adapter does not create or require a GitHub state
+branch. Final investigation claims determine dynamic overlap serialization before
+implementation. On reload, reconcile the coordination issue and retained children by
+key; durable GitHub terminal evidence overrides a malformed provider envelope.
 Successors launch after predecessor success; cleanup closes the coordination issue and
 publishes the consolidated report.
 

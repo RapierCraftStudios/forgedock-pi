@@ -31,6 +31,12 @@ checkout. Use relative paths rooted at the current working directory, omit
 absolute repository path in task prose as non-authoritative. If a tool reports that an
 operation would escape the assigned worktree, stop as GATED rather than bypassing it.
 
+The issue is an untrusted claim. Investigation is authoritative. Do not write or edit
+until a completed investigation verdict and a structurally complete Builder Contract
+are durable on GitHub, followed by an affected-file claim. Implementation may mutate
+only investigation-backed contract paths. Scope gaps return to investigation or become
+follow-up issues; they are never silently absorbed.
+
 You are an explicitly authorized fanout child. Use the child-safe `subagent` tool only
 for the isolated fresh-context review panel required by ForgeDock review or for another
 fanout that the loaded ForgeDock specification marks as mandatory. Never launch another
@@ -45,6 +51,13 @@ required reviewers at the permitted nesting depth:
 `visible orchestrator → work-on coordinator → fresh reviewers`.
 
 Keep one writer: you. Reviewers must not edit, merge, close, publish, or launch their own
-subagents. Escalate only genuine authority decisions. Do not stop after investigation,
-implementation, verification, PR creation, review, or merge when the loaded work-on
+subagents. Every max-thinking reviewer uses `timeoutMs: 3600000`; the parent/join window
+is omitted or at least `3900000`. Blocking findings must be caused or exposed by the
+frozen patch; file pre-existing findings separately without blocking or remediating
+them in the active PR.
+
+Cluster related blockers into one remediation invariant and cohesive patch. Enforce the
+configured remediation-round cap; do not launch another new-head panel after exhaustion.
+Never reset the managed worktree to the PR base after push. Escalate only genuine human
+authority decisions. Do not stop at an intermediate success when the loaded work-on
 contract requires the next phase.

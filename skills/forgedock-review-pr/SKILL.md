@@ -28,8 +28,15 @@ nested slash command.
 
 Run configured automated and integration checks. Derive the reviewer roster from the
 actual risk surface. Launch one complete fresh-context reviewer panel with Pi subagents
-and join every selected reviewer. Reviewers start from the frozen diff but retain
-repository read/search access for evidence tracing.
+and join every selected reviewer. Every reviewer task must say that blocking findings
+are limited to defects introduced or made reachable by the frozen patch, cite the
+changed hunk or changed-path call chain, and may return a clean approval. Reviewers may
+trace callers for evidence, but pre-existing debt, style, speculative hardening, and
+unrelated redesign are non-blocking follow-up issues.
+
+Use `timeoutMs: 3600000` for every max-thinking reviewer and omit the parent deadline or
+set it to at least `3900000`. Never use 120000/180000 ms reviewer deadlines. Active
+reasoning is not provider inactivity.
 
 Create or deduplicate a GitHub issue for every finding before summary publication.
 Post an official PR review tied to the frozen SHA. Merge only when `--auto-merge` was
@@ -40,10 +47,12 @@ base is authorized. Review never closes the linked issue or cleans the work-on t
 
 Persist each reviewer result as an exact `head + role + attempt` receipt before joining.
 A completed detached reviewer receipt is reusable verbatim; never rerun its siblings.
-If one reviewer times out or becomes provider-inactive, retain completed receipts and
-retry only the missing role once with the capped extended timeout. Cancellation and
-parent termination are not retryable. Mixed-head, malformed, or partial panels remain
-actionable gate failures and can never synthesize or merge. Parent deadlines must
-exceed nested reviewer timeout plus join grace, or be omitted. Pi subagent resume
-receipts are execution evidence only: if JavaScript continuation is unavailable,
-recover the complete saved result or fail closed rather than claiming continuation.
+On recoverable transport interruption, resume the retained reviewer when supported;
+launch a fresh same-head reviewer only when the prior run is definitively unrecoverable.
+Mixed-head, malformed, or partial panels remain actionable gate failures and can never
+synthesize or merge.
+
+Operational timeout/provider failure leaves the issue in an automated review-degraded
+or `workflow:in-review` state, not `needs-human`. Reserve `needs-human` for a genuine
+human authority decision or unavoidable external action. Pi receipts prove execution
+only; recover the complete saved result or fail closed rather than claiming completion.

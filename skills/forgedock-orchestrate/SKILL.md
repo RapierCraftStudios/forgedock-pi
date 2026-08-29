@@ -49,10 +49,16 @@ the fresh read-only reviewers required by its review phase. Do not use the built
 run subagents" instruction; forbid nested issue/work-on orchestration while preserving
 its mandatory reviewer fanout.
 
+After each investigation and before implementation, read finalized `FORGE:CLAIM`
+markers from the coordination issue. If active claims overlap, serialize before either
+writer mutates shared paths: the lower issue number proceeds and the other remains
+deferred until the predecessor reaches terminal success and refreshes its base.
+
 Classify GitHub state as DONE, GATED, FAILED, or IN_PROGRESS. GATED is not FAILED.
-Dispatch successors immediately after successful predecessors complete. Do not poll.
-After the queue drains or reaches a documented paused state, execute mandatory cleanup
-and publish the consolidated report.
+Durable GitHub artifacts override a missing/malformed provider envelope. Dispatch
+successors immediately after successful predecessors complete. Do not poll. After the
+queue drains or reaches a documented paused state, execute mandatory cleanup and
+publish the consolidated report.
 
 ## Reload and recovery contract
 
