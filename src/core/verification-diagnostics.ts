@@ -271,13 +271,17 @@ export function isVerificationDiagnosticReport(
       typeof diagnostic.message === "string" && typeof diagnostic.blocking === "boolean";
   });
   if (!diagnosticsValid(report.diagnostics) || !diagnosticsValid(report.blockingDiagnostics)) return false;
-  if (report.outcome === "environment-only") {
-    const fallback = report.selectedFallback;
-    if (!fallback || typeof fallback.name !== "string" || typeof fallback.command !== "string" ||
-        (fallback.kind !== "container" && fallback.kind !== "venv")) return false;
-  }
   const allDiagnostics = report.diagnostics as VerificationDiagnostic[];
   const reportedBlocking = report.blockingDiagnostics as VerificationDiagnostic[];
+  if (report.outcome === "environment-only") {
+    const fallback = report.selectedFallback;
+    if (!fallback || typeof fallback.name !== "string" || !fallback.name.trim() ||
+        typeof fallback.command !== "string" || !fallback.command.trim() ||
+        (fallback.kind !== "container" && fallback.kind !== "venv")) return false;
+    if (allDiagnostics.some(
+      (entry) => entry.kind !== "missing-host-dependency" || entry.blocking,
+    )) return false;
+  }
   const blocking = allDiagnostics.filter((entry) => entry.blocking);
   if (blocking.length !== reportedBlocking.length ||
       blocking.some((entry, index) => entry.message !== reportedBlocking[index]?.message)) return false;

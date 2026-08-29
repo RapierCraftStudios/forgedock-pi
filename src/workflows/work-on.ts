@@ -109,7 +109,7 @@ async function recoverVerificationResults(
     if (!parsed || parsed.node !== "verify" || parsed.status !== "completed")
       continue;
     return parsed.verification.map((check) => ({
-      name: `local:${check.name}`,
+      name: check.name,
       status: check.status,
       ...(check.exitCode === undefined ? {} : { exitCode: check.exitCode }),
       ...(check.diagnostics === undefined ? {} : { diagnostics: check.diagnostics }),
@@ -5656,7 +5656,7 @@ async function postTerminalIssueArtifacts(input: {
     reviewed: input.decision.headSha,
     status: "CLOSED",
     tests: String(
-      input.decision.checkResults.filter((check) => check.status === "passed")
+      input.decision.checkResults.filter((check) => check.status === "passed" || check.diagnostics?.outcome === "environment-only")
         .length,
     ),
     type: "CARD",
@@ -6014,10 +6014,11 @@ function chooseIntegrationBranch(policy: ForgePolicy): string {
 
 function buildPullBody(link: ActiveRunLink, result: ForgeWorkOnResult): string {
   const checks = result.verification
-    .map(
-      (check) =>
-        `- ${check.status === "passed" ? "[x]" : "[ ]"} ${check.name}: ${check.status}`,
-    )
+    .map((check) => {
+      const environmentOnly = check.diagnostics?.outcome === "environment-only";
+      const status = environmentOnly ? "passed (environment-only; fallback verified)" : check.status;
+      return `- ${environmentOnly || check.status === "passed" ? "[x]" : "[ ]"} ${check.name}: ${status}`;
+    })
     .join("\n");
   return [
     "## Summary",

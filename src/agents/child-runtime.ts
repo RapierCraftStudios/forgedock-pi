@@ -2027,7 +2027,11 @@ function validateVerificationEnvironment(
   const fallbacks = environment.fallbacks;
   if (fallbacks !== undefined && !Array.isArray(fallbacks))
     throw new Error("Forge binding verificationEnvironment.fallbacks must be an array.");
-  const normalizedFallbacks = (fallbacks ?? []).map((entry, index) => {
+  const fallbackEntries = [
+    ...(fallbacks ?? []),
+    ...(environment.fallback === undefined ? [] : [environment.fallback]),
+  ];
+  const normalizedFallbacks = fallbackEntries.map((entry, index) => {
     if (!entry || typeof entry !== "object" || Array.isArray(entry))
       throw new Error(`Forge binding verification fallback ${index} must be an object.`);
     const fallback = entry as Record<string, unknown>;
