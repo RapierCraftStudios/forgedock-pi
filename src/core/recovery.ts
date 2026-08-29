@@ -36,6 +36,127 @@ export interface ReviewRecoveryPlan {
   reason?: string;
 }
 
+/**
+ * Durable accounting for every launch that may be needed before a review can
+ * legally stop.  `maxReviewRounds` includes the initial panel; transient
+ * retries are complete-panel retries, not partial role retries.
+ */
+export interface ReviewLaunchReservation {
+  schema: "forgedock.review-launch-reservation/v1";
+  rosterSize: number;
+  maxReviewRounds: number;
+  maxTransientRetriesPerRound: number;
+  planned: number;
+  observed: number;
+  reserved: number;
+  remaining: number;
+}
+
+export interface ReviewLaunchReservationInput {
+  reviewers: readonly string[];
+  maxReviewRounds: number;
+  /** Defaults to two retries (three complete attempts per round). */
+  maxTransientRetriesPerRound?: number;
+  /** Existing launches when resuming a durable panel. */
+  observed?: number;
+}
+
+/** Compute the worst-case launch reservation without mutating workflow state. */
+export function computeReviewLaunchReservation(
+  input: ReviewLaunchReservationInput,
+): ReviewLaunchReservation {
+  const rosterSize = input.reviewers.length;
+  if (rosterSize < 1 || new Set(input.reviewers).size !== rosterSize)
+    throw new TypeError("Review reservation requires a unique, non-empty roster.");
+  if (!Number.isSafeInteger(input.maxReviewRounds) || input.maxReviewRounds < 1 || input.maxReviewRounds > 5)
+    throw new TypeError("Review reservation rounds must be an integer from 1 through 5.");
+  const retries = input.maxTransientRetriesPerRound ?? 2;
+  if (!Number.isSafeInteger(retries) || retries < 0 || retries > 3)
+    throw new TypeError("Review reservation retries must be an integer from 0 through 3.");
+  const observed = input.observed ?? 0;
+  if (!Number.isSafeInteger(observed) || observed < 0)
+    throw new TypeError("Observed review launches must be a non-negative integer.");
+  const planned = rosterSize * input.maxReviewRounds * (retries + 1);
+  if (observed > planned)
+    throw new Error("Observed review launches exceed the worst-case reservation.");
+  return {
+    schema: "forgedock.review-launch-reservation/v1",
+    rosterSize,
+    maxReviewRounds: input.maxReviewRounds,
+    maxTransientRetriesPerRound: retries,
+    planned,
+    observed,
+    reserved: planned - observed,
+    remaining: planned - observed,
+  };
+}
+
+/** Record one admitted reviewer launch, preserving idempotent accounting. */
+export function recordReviewLaunch(
+  reservation: ReviewLaunchReservation,
+  count = 1,
+): ReviewLaunchReservation {
+  if (reservation.schema !== "forgedock.review-launch-reservation/v1")
+    throw new TypeError("Unsupported review launch reservation schema.");
+  if (!Number.isSafeInteger(count) || count < 1)
+    throw new TypeError("Review launch count must be a positive integer.");
+  if (count > reservation.remaining)
+    throw new Error(`Review launch reservation exhausted: ${count} requested, ${reservation.remaining} remaining.`);
+  const observed = reservation.observed + count;
+  const remaining = reservation.planned - observed;
+  return { ...reservation, observed, reserved: remaining, remaining };
+}
+
+/**
+ * Guard the first launch of a lifecycle.  This is intentionally separate from
+ * the accounting update so callers can fail closed before starting any child.
+ */
+export interface ReviewContinuationHandoff {
+  schema: "forgedock.review-continuation/v1";
+  continuationId: string;
+  previousRunIds: readonly string[];
+  previousHeadSha: string;
+  headSha: string;
+  remediationCommitSha?: string;
+  oldChildrenSettled: boolean;
+  claimed: boolean;
+}
+
+/**
+ * Atomically claim a fresh-session continuation.  A continuation is only
+ * launchable after every old child has settled, and its id/head are retained
+ * so a retry cannot double-launch or silently review a different head.
+ */
+export function claimReviewContinuation(
+  handoff: ReviewContinuationHandoff,
+): ReviewContinuationHandoff {
+  if (handoff.schema !== "forgedock.review-continuation/v1")
+    throw new TypeError("Unsupported review continuation schema.");
+  if (!handoff.continuationId.trim() || !handoff.previousHeadSha.trim() || !handoff.headSha.trim())
+    throw new TypeError("Review continuation requires stable run and head identities.");
+  if (handoff.previousRunIds.length === 0 || new Set(handoff.previousRunIds).size !== handoff.previousRunIds.length)
+    throw new TypeError("Review continuation must retain unique previous child run IDs.");
+  if (!handoff.oldChildrenSettled)
+    throw new Error("Review continuation cannot start while previous reviewer children are active.");
+  if (handoff.claimed)
+    throw new Error(`Review continuation ${handoff.continuationId} was already claimed.`);
+  return { ...handoff, claimed: true };
+}
+
+export function assertReviewLaunchReservation(
+  reservation: ReviewLaunchReservation,
+  available: number,
+): void {
+  if (reservation.schema !== "forgedock.review-launch-reservation/v1")
+    throw new TypeError("Unsupported review launch reservation schema.");
+  if (!Number.isSafeInteger(available) || available < 0)
+    throw new TypeError("Available review launches must be a non-negative integer.");
+  if (available < reservation.remaining)
+    throw new Error(
+      `Review launch reservation cannot be satisfied: remaining ${reservation.remaining}, available ${available}.`,
+    );
+}
+
 export interface ReviewDeadlineInput {
   reviewerTimeoutMs: number;
   /** The parent deadline includes the nested reviewer deadline and its join grace. */

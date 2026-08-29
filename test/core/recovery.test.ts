@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  assertReviewLaunchReservation,
+  claimReviewContinuation,
   classifyReviewerFailure,
+  computeReviewLaunchReservation,
   extendedReviewerTimeout,
   planReviewRecovery,
+  recordReviewLaunch,
   reviewerEvidenceKey,
   validateReviewDeadlines,
   validateReviewerPanel,
@@ -23,6 +27,42 @@ function result(reviewer: string, headSha = "head-1234567"): ForgeReviewerResult
     limitations: [],
   };
 }
+
+test("review reservation covers all rounds and transient retries before launch", () => {
+  const reservation = computeReviewLaunchReservation({
+    reviewers: ["correctness", "security"],
+    maxReviewRounds: 3,
+  });
+  assert.equal(reservation.planned, 18);
+  assert.equal(reservation.observed, 0);
+  assert.equal(reservation.remaining, 18);
+  assert.doesNotThrow(() => assertReviewLaunchReservation(reservation, 18));
+  assert.throws(() => assertReviewLaunchReservation(reservation, 17), /cannot be satisfied/);
+  const afterPanel = recordReviewLaunch(reservation, 2);
+  assert.equal(afterPanel.observed, 2);
+  assert.equal(afterPanel.reserved, 16);
+  assert.equal(afterPanel.remaining, 16);
+  assert.throws(() => recordReviewLaunch(afterPanel, 17), /exhausted/);
+});
+
+test("review continuation is single-claim and waits for old children", () => {
+  const handoff = {
+    schema: "forgedock.review-continuation/v1" as const,
+    continuationId: "review-continuation-1",
+    previousRunIds: ["child-a", "child-b"],
+    previousHeadSha: "old-head-1234567",
+    headSha: "new-head-1234567",
+    remediationCommitSha: "remediation-1234567",
+    oldChildrenSettled: true,
+    claimed: false,
+  };
+  assert.equal(claimReviewContinuation(handoff).claimed, true);
+  assert.throws(
+    () => claimReviewContinuation({ ...handoff, oldChildrenSettled: false }),
+    /active/,
+  );
+  assert.throws(() => claimReviewContinuation({ ...handoff, claimed: true }), /already claimed/);
+});
 
 test("review evidence key binds PR head, role, and attempt", () => {
   assert.equal(reviewerEvidenceKey({ headSha: "head", reviewer: "security", attempt: 2 }), "head:security:2");

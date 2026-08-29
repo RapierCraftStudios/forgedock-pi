@@ -407,6 +407,8 @@ test("clean standalone review posts route, reviewer, and summary and completes r
   assert.equal(result.state.completion?.outcome, "reviewed");
   assert.equal(result.decision.decision, "approved-with-follow-ups");
   assert.deepEqual(result.findingIssues, { "SEC-001": 100 });
+  assert.equal(h.panel.inputs[0]?.launchReservation?.planned, 9);
+  assert.equal(result.launchReservation?.planned, 9);
   assert.deepEqual(
     h.journal.events.map((event) => event.type),
     [

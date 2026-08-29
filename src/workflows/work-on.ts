@@ -76,6 +76,7 @@ import type {
   VerificationResult,
 } from "../core/review.ts";
 import type { RunState } from "../core/state.ts";
+import { computeReviewLaunchReservation } from "../core/recovery.ts";
 import { RunJournal } from "./journal.ts";
 import { ReviewJournal } from "../adapters/review-journal.ts";
 import { ReviewPrCoordinator, type ReviewPanelRunner } from "./review-pr.ts";
@@ -3052,6 +3053,11 @@ export class ForgeWorkOnController {
       review: {
         headSha,
         rounds: reviewRound,
+        launchReservation: computeReviewLaunchReservation({
+          reviewers: ["forge-review-correctness", "forge-review-security"],
+          maxReviewRounds: Math.max(3, reviewRound),
+          observed: completedReviewerNodes.length,
+        }),
         completedReviewers: reviewers.map((reviewer) =>
           canonicalReviewerName(reviewer.reviewer),
         ),

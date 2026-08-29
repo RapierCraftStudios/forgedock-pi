@@ -43,11 +43,15 @@ import {
 } from "../core/review.ts";
 import {
   classifyReviewerFailure,
+  assertReviewLaunchReservation,
+  computeReviewLaunchReservation,
   extendedReviewerTimeout,
   planReviewRecovery,
+  recordReviewLaunch,
   reviewerEvidenceKey,
   validateReviewDeadlines,
   validateReviewerPanel,
+  type ReviewLaunchReservation,
 } from "../core/recovery.ts";
 import type {
   ReviewMode,
@@ -98,6 +102,8 @@ export interface ReviewPrRequest {
   resume?: boolean;
   authorityValid?: () => boolean | Promise<boolean>;
   reviewerContext?: string;
+  /** Complete lifecycle reservation, computed before the first reviewer launch. */
+  launchReservation?: ReviewLaunchReservation;
   /** Parent-supplied deterministic staging bundle; never derive this from text. */
   stagingBundle?: StagingBundleResolution;
   signal?: AbortSignal;
@@ -114,6 +120,7 @@ export interface ReviewPrResult {
   findingIssues: Readonly<Record<string, number>>;
   merged: boolean;
   mergeSha?: string;
+  launchReservation?: ReviewLaunchReservation;
   /** Machine-readable bundle derivation consumed by open-finding/Phase 6.5 gates. */
   stagingBundle?: StagingBundleResolution;
 }
@@ -129,11 +136,17 @@ export interface ReviewPanelRunInput {
   round: number;
   reviewerTimeoutMs: number;
   context?: string;
+  /** Frozen accounting is copied into every child binding and prompt. */
+  launchReservation?: ReviewLaunchReservation;
+  /** Optional runtime-reported remaining capacity; fail closed when present. */
+  availableLaunches?: number;
   signal?: AbortSignal;
 }
 
 export interface ReviewPanelRunner {
   run(input: ReviewPanelRunInput): Promise<readonly ForgeReviewerResult[]>;
+  /** Exposes launch accounting after a panel for the parent artifact. */
+  getLaunchReservation?(reviewId: string): ReviewLaunchReservation | undefined;
   cancel?(reviewId: string): Promise<void>;
 }
 
@@ -173,6 +186,10 @@ export class ReviewPrCoordinator {
     const mode = input.mode ?? "standard";
     if (mode === "staging" && input.autoMergeRequested)
       throw new Error("Staging review cannot merge or deploy.");
+    input.launchReservation ??= computeReviewLaunchReservation({
+      reviewers: input.roster.reviewers,
+      maxReviewRounds: 3,
+    });
 
     const route =
       input.route ??
@@ -463,7 +480,13 @@ export class ReviewPrCoordinator {
       await this.#github.postPullArtifact({
         pullNumber: route.pullNumber,
         marker: reviewSummaryMarker(input.reviewId, route.headSha),
-        body: renderReviewSummary(decision, forgeFindings, findingIssues),
+        body: renderReviewSummary(
+          decision,
+          forgeFindings,
+          findingIssues,
+          this.#panel.getLaunchReservation?.(input.reviewId) ??
+            input.launchReservation,
+        ),
         ...(input.signal ? { signal: input.signal } : {}),
       });
       if (mode === "staging") {
@@ -478,6 +501,8 @@ export class ReviewPrCoordinator {
             snapshot.state.checks,
             forgeFindings,
             stagingBundle,
+            this.#panel.getLaunchReservation?.(input.reviewId) ??
+              input.launchReservation,
           ),
           ...(input.signal ? { signal: input.signal } : {}),
         });
@@ -530,6 +555,14 @@ export class ReviewPrCoordinator {
         findingIssues,
         merged: Boolean(merge),
         ...(merge ? { mergeSha: merge.sha } : {}),
+        ...(this.#panel.getLaunchReservation?.(input.reviewId) ??
+        input.launchReservation
+          ? {
+              launchReservation:
+                this.#panel.getLaunchReservation?.(input.reviewId) ??
+                input.launchReservation,
+            }
+          : {}),
         ...(stagingBundle ? { stagingBundle } : {}),
       };
     } finally {
@@ -599,6 +632,12 @@ export class ReviewPrCoordinator {
         round: requestedRound,
         reviewerTimeoutMs: input.reviewerTimeoutMs,
         ...(input.reviewerContext ? { context: input.reviewerContext } : {}),
+        launchReservation:
+          input.launchReservation ??
+          computeReviewLaunchReservation({
+            reviewers: input.roster.reviewers,
+            maxReviewRounds: 3,
+          }),
         ...(input.signal ? { signal: input.signal } : {}),
       });
       const normalized = normalizePanelResults(
@@ -680,6 +719,15 @@ export class ReviewPrCoordinator {
 export class SubagentReviewPanelRunner implements ReviewPanelRunner {
   readonly #rpc: SubagentsRpcClient;
   readonly #active = new Map<string, SubagentSpawnReceipt[]>();
+  readonly #reservations = new Map<string, ReviewLaunchReservation>();
+  readonly #running = new Map<
+    string,
+    Promise<readonly ForgeReviewerResult[]>
+  >();
+
+  getLaunchReservation(reviewId: string): ReviewLaunchReservation | undefined {
+    return this.#reservations.get(reviewId);
+  }
 
   constructor(rpc: SubagentsRpcClient) {
     this.#rpc = rpc;
@@ -688,8 +736,48 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
   async run(
     input: ReviewPanelRunInput,
   ): Promise<readonly ForgeReviewerResult[]> {
+    const existing = this.#running.get(input.reviewId);
+    if (existing) return existing;
+    const current = this.#run(input);
+    this.#running.set(input.reviewId, current);
+    void current.then(
+      () => {
+        if (this.#running.get(input.reviewId) === current)
+          this.#running.delete(input.reviewId);
+      },
+      () => {
+        if (this.#running.get(input.reviewId) === current)
+          this.#running.delete(input.reviewId);
+      },
+    );
+    return current;
+  }
+
+  async #run(
+    input: ReviewPanelRunInput,
+  ): Promise<readonly ForgeReviewerResult[]> {
     validateReviewDeadlines({ reviewerTimeoutMs: input.reviewerTimeoutMs });
-    await this.#rpc.ping();
+    // Compute the full lifecycle reservation before pinging or launching a
+    // child.  The ambient pi-subagents counter is session-wide, so keeping this
+    // plan with the review is what lets a continuation prove that it owns the
+    // remaining exact-head panel capacity instead of guessing.
+    let launchReservation =
+      input.launchReservation ??
+      computeReviewLaunchReservation({
+        reviewers: input.reviewers,
+        maxReviewRounds: 3,
+      });
+    if (launchReservation.remaining < input.reviewers.length)
+      throw new Error(
+        `Review launch reservation exhausted before panel start: planned ${launchReservation.planned}, observed ${launchReservation.observed}.`,
+      );
+    const ping = await this.#rpc.ping();
+    const advertisedRemaining =
+      input.availableLaunches ??
+      readAdvertisedRemainingLaunches(ping.capabilities);
+    if (advertisedRemaining !== undefined)
+      assertReviewLaunchReservation(launchReservation, advertisedRemaining);
+    this.#reservations.set(input.reviewId, launchReservation);
     const receipts: Array<{
       receipt: SubagentSpawnReceipt;
       expected: ExpectedReviewerResult;
@@ -711,6 +799,7 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
         round: input.round,
         reviewerTimeoutMs,
         ...(input.context ? { context: input.context } : {}),
+        launchReservation,
       });
       const entry = {
         receipt,
@@ -718,6 +807,8 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
         reviewer,
       };
       receipts.push(entry);
+      launchReservation = recordReviewLaunch(launchReservation);
+      this.#reservations.set(input.reviewId, launchReservation);
       this.#active.get(input.reviewId)?.push(receipt);
       return entry;
     };
@@ -771,8 +862,13 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
         failures,
         reviewerTimeoutMs: input.reviewerTimeoutMs,
       });
-      const retryable = [...recoveryPlan.retryReviewers];
-      if (retryable.length > 0) {
+      let retryable = [...recoveryPlan.retryReviewers];
+      for (
+        let retryAttempt = 0;
+        retryable.length > 0 &&
+        retryAttempt < launchReservation.maxTransientRetriesPerRound;
+        retryAttempt += 1
+      ) {
         await Promise.allSettled(
           launched
             .filter((entry) => retryable.includes(entry.reviewer))
@@ -794,7 +890,7 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
             waitForReviewerResult(
               this.#rpc,
               entry.receipt,
-              extendedReviewerTimeout(input.reviewerTimeoutMs),
+              retryTimeoutMs,
               entry.expected,
               input.worktreePath,
               input.signal,
@@ -802,9 +898,16 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
           ),
         );
         for (const [index, entry] of retrySettled.entries()) {
-          if (entry.status === "fulfilled") retained.push(entry.value);
-          else failures[retryEntries[index]!.reviewer] = classifyReviewerFailure(entry.reason, input.signal);
+          if (entry.status === "fulfilled") {
+            retained.push(entry.value);
+            delete failures[retryEntries[index]!.reviewer];
+          } else {
+            failures[retryEntries[index]!.reviewer] = classifyReviewerFailure(entry.reason, input.signal);
+          }
         }
+        retryable = input.reviewers.filter((reviewer) =>
+          !retained.some((result) => result.reviewer === reviewer),
+        );
       }
       // The coordinator validates the complete keyed panel before any finding
       // is journaled or synthesized. This also rejects duplicate retry output.
@@ -831,6 +934,7 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
       receipts.map((receipt) => this.#rpc.stop(receipt.runId)),
     );
     this.#active.delete(reviewId);
+    this.#reservations.delete(reviewId);
   }
 }
 
@@ -1227,6 +1331,18 @@ function normalizeGitHubChecks(
   }));
 }
 
+function readAdvertisedRemainingLaunches(
+  capabilities: Readonly<Record<string, unknown>>,
+): number | undefined {
+  const budget = capabilities.spawnBudget;
+  if (!budget || typeof budget !== "object" || Array.isArray(budget))
+    return undefined;
+  const remaining = (budget as { remaining?: unknown }).remaining;
+  return typeof remaining === "number" && Number.isSafeInteger(remaining) && remaining >= 0
+    ? remaining
+    : undefined;
+}
+
 function completedResult(
   state: ReviewState,
   route: GitHubPullRequestRouteSnapshot,
@@ -1421,10 +1537,14 @@ function renderStagingGate(
   checks: readonly VerificationResult[],
   findings: readonly ForgeReviewFindingResult[],
   bundle?: StagingBundleResolution,
+  launchReservation?: ReviewLaunchReservation,
 ): string {
   const passed = decision.decision === "approved" && findings.length === 0;
   const bundleJson = bundle ? JSON.stringify(bundle) : "null";
-  return `## ForgeDock Staging Deployment Gate — ${passed ? "PASS" : "FAILURE"}\n\n**Reviewed head**: \`${decision.headSha}\`\n**Reviewed base**: \`${decision.baseSha}\`\n**Decision**: \`${decision.decision}\`\n**Merge/deploy performed**: no\n\n### Checks\n\n${checks.map((check) => `- ${check.required ? "required" : "optional"} \`${check.name}\`: ${check.status}`).join("\n") || "- No checks recorded."}\n\n### Findings\n\n${findings.length ? findings.map((finding) => `- ${finding.id}: ${finding.summary}`).join("\n") : "- None."}\n\n### Reasons\n\n${decision.reasons.length ? decision.reasons.map((reason) => `- ${reason}`).join("\n") : "- All strict staging gates passed."}\n\n### Machine-readable bundle resolution\n\n\`\`\`json\n${bundleJson}\n\`\`\``;
+  const reservationJson = launchReservation
+    ? JSON.stringify(launchReservation)
+    : "null";
+  return `## ForgeDock Staging Deployment Gate — ${passed ? "PASS" : "FAILURE"}\n\n**Reviewed head**: \`${decision.headSha}\`\n**Reviewed base**: \`${decision.baseSha}\`\n**Decision**: \`${decision.decision}\`\n**Merge/deploy performed**: no\n\n### Checks\n\n${checks.map((check) => `- ${check.required ? "required" : "optional"} \`${check.name}\`: ${check.status}`).join("\n") || "- No checks recorded."}\n\n### Findings\n\n${findings.length ? findings.map((finding) => `- ${finding.id}: ${finding.summary}`).join("\n") : "- None."}\n\n### Reasons\n\n${decision.reasons.length ? decision.reasons.map((reason) => `- ${reason}`).join("\n") : "- All strict staging gates passed."}\n\n### Launch reservation\n\n\`\`\`json\n${reservationJson}\n\`\`\`\n\n### Machine-readable bundle resolution\n\n\`\`\`json\n${bundleJson}\n\`\`\``;
 }
 
 function hasExactSourcePull(body: string, pullNumber: number): boolean {
@@ -1438,6 +1558,7 @@ function renderReviewSummary(
   decision: FinalReviewDecision,
   findings: readonly ForgeReviewFindingResult[],
   issueMap: Readonly<Record<string, number>>,
+  launchReservation?: ReviewLaunchReservation,
 ): string {
   const renderedFindings = findings.length
     ? findings
@@ -1447,5 +1568,8 @@ function renderReviewSummary(
         )
         .join("\n")
     : "No findings reported.";
-  return `# PR Review Summary\n\n**Decision**: \`${decision.decision}\`\n**Reviewed head**: \`${decision.headSha}\`\n**Reviewed base**: \`${decision.baseSha}\`\n\n## Findings\n\n${renderedFindings}\n\n## Gate Reasons\n\n${decision.reasons.length ? decision.reasons.map((reason) => `- ${reason}`).join("\n") : "- None."}\n\n<!-- REVIEW-FINDINGS-START -->\n${findings.map((finding) => `<!-- FINDING:${finding.id}|${finding.confidence.toUpperCase()}|${finding.severity.toUpperCase()}|${finding.file}:${finding.line}|${finding.summary.replaceAll("|", "/")} -->`).join("\n")}\n<!-- REVIEW-FINDINGS-END -->`;
+  const reservation = launchReservation
+    ? `\n\n## Launch Reservation\n\n\`\`\`json\n${JSON.stringify(launchReservation)}\n\`\`\``
+    : "";
+  return `# PR Review Summary\n\n**Decision**: \`${decision.decision}\`\n**Reviewed head**: \`${decision.headSha}\`\n**Reviewed base**: \`${decision.baseSha}\`${reservation}\n\n## Findings\n\n${renderedFindings}\n\n## Gate Reasons\n\n${decision.reasons.length ? decision.reasons.map((reason) => `- ${reason}`).join("\n") : "- None."}\n\n<!-- REVIEW-FINDINGS-START -->\n${findings.map((finding) => `<!-- FINDING:${finding.id}|${finding.confidence.toUpperCase()}|${finding.severity.toUpperCase()}|${finding.file}:${finding.line}|${finding.summary.replaceAll("|", "/")} -->`).join("\n")}\n<!-- REVIEW-FINDINGS-END -->`;
 }

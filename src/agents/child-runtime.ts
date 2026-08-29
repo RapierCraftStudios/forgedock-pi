@@ -59,6 +59,10 @@ import {
 } from "../core/events.ts";
 import { RunJournal } from "../adapters/run-journal.ts";
 import {
+  computeReviewLaunchReservation,
+  type ReviewLaunchReservation,
+} from "../core/recovery.ts";
+import {
   FORGE_PHASE_ARTIFACT_SCHEMA,
   isPhaseArtifact,
   phaseArtifactValidationError,
@@ -123,6 +127,7 @@ export interface ForgeChildBinding {
   node?: string;
   nodeAttempt?: number;
   reviewHeadSha?: string;
+  launchReservation?: ReviewLaunchReservation;
   refresh: boolean;
   previousReviewRounds?: number;
 }
@@ -1277,12 +1282,24 @@ export function registerForgeRuntime(
       };
       const profiles = params.profiles ?? [];
       assertUniqueReviewerProfileIds(profiles);
+      const reservation =
+        binding.launchReservation ??
+        computeReviewLaunchReservation({
+          reviewers: [FORGE_REVIEW_CORRECTNESS_AGENT, FORGE_REVIEW_SECURITY_AGENT],
+          maxReviewRounds: binding.maxReviewRounds,
+        });
+      const panelLaunches = 2 + profiles.length;
+      if (reservation.remaining < panelLaunches)
+        throw new Error(
+          `Review launch reservation exhausted before panel start: remaining ${reservation.remaining}, requested ${panelLaunches}.`,
+        );
       const panelAttemptId = randomUUID();
       const launchedReceipts: SubagentSpawnReceipt[] = [];
       try {
         const baselineSettled = await Promise.allSettled([
           rpc.spawnReviewNode({
             ...common,
+            launchReservation: reservation,
             node: {
               nodeId: `review-correctness-${params.round}-${panelAttemptId}`,
               node: "review-correctness",
@@ -1291,6 +1308,7 @@ export function registerForgeRuntime(
           }),
           rpc.spawnReviewNode({
             ...common,
+            launchReservation: reservation,
             node: {
               nodeId: `review-security-${params.round}-${panelAttemptId}`,
               node: "review-security",
@@ -1323,6 +1341,7 @@ export function registerForgeRuntime(
             rpc.spawnDomainReviewNode(
               {
                 ...common,
+                launchReservation: reservation,
                 issueContext: `Reviewer profile: ${JSON.stringify(profile)}\nReview only this profile scope against the frozen patch.`,
                 node: {
                   nodeId: `review-${profile.id}-${params.round}-${panelAttemptId}`,

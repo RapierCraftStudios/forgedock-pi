@@ -3,6 +3,10 @@ import {
   isPhaseArtifact,
   type PhaseArtifact,
 } from "../core/comment-contract.ts";
+import type {
+  ReviewContinuationHandoff,
+  ReviewLaunchReservation,
+} from "../core/recovery.ts";
 
 export type ForgeFindingCategory =
   | "security"
@@ -97,6 +101,8 @@ export interface ForgeWorkOnResult {
   review: {
     headSha: string;
     rounds: number;
+    launchReservation?: ReviewLaunchReservation;
+    continuation?: ReviewContinuationHandoff;
     completedReviewers: readonly string[];
     reviewerResults: readonly ForgeReviewerResult[];
     findings: readonly ForgeReviewFindingResult[];
@@ -399,6 +405,53 @@ export const FORGE_WORK_ON_OUTPUT_SCHEMA = {
       properties: {
         headSha: { type: "string", minLength: 7 },
         rounds: { type: "integer", minimum: 1, maximum: 5 },
+        launchReservation: {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "schema",
+            "rosterSize",
+            "maxReviewRounds",
+            "maxTransientRetriesPerRound",
+            "planned",
+            "observed",
+            "reserved",
+            "remaining",
+          ],
+          properties: {
+            schema: { type: "string", const: "forgedock.review-launch-reservation/v1" },
+            rosterSize: { type: "integer", minimum: 1 },
+            maxReviewRounds: { type: "integer", minimum: 1, maximum: 5 },
+            maxTransientRetriesPerRound: { type: "integer", minimum: 0, maximum: 3 },
+            planned: { type: "integer", minimum: 1 },
+            observed: { type: "integer", minimum: 0 },
+            reserved: { type: "integer", minimum: 0 },
+            remaining: { type: "integer", minimum: 0 },
+          },
+        },
+        continuation: {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "schema",
+            "continuationId",
+            "previousRunIds",
+            "previousHeadSha",
+            "headSha",
+            "oldChildrenSettled",
+            "claimed",
+          ],
+          properties: {
+            schema: { type: "string", const: "forgedock.review-continuation/v1" },
+            continuationId: { type: "string", minLength: 1 },
+            previousRunIds: { type: "array", minItems: 1, items: { type: "string", minLength: 1 } },
+            previousHeadSha: { type: "string", minLength: 7 },
+            headSha: { type: "string", minLength: 7 },
+            remediationCommitSha: { type: "string", minLength: 7 },
+            oldChildrenSettled: { type: "boolean" },
+            claimed: { type: "boolean" },
+          },
+        },
         completedReviewers: {
           type: "array",
           items: { type: "string", minLength: 1 },
