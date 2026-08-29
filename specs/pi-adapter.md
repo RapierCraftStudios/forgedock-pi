@@ -27,11 +27,15 @@ terminal conditions, review policy, GitHub artifacts, remediation, merge, and cl
 | `Skill(skill="work-on/investigate", ...)` and other work-on sub-phases | Read the corresponding file under `specs/original/commands/work-on/` and execute it in the current visible coordinator. |
 | `Skill(skill="quality-gate", ...)` | Read `specs/original/commands/quality-gate.md`; run it against the assigned worktree. Fork only when isolation or long execution materially benefits the route. |
 | `Skill(skill="review-pr", ...)` | Load and execute the `forgedock-review-pr` skill in the current work-on coordinator. That coordinator launches the selected fresh reviewer panel directly and retains ownership of closure. Do not add a second review-coordinator hop. |
-| `Skill(skill="review-pr-staging", ...)` | Load `review-pr-staging.md` directly and switch strategy immediately; do not emit another slash command. |
+| `Skill(skill="review-pr-staging", ...)` | Load `review-pr-staging.md` directly and switch strategy immediately; do not emit another slash command. Freeze the route, ask the adapter for paginated all-state PR metadata, and call `resolveStagingBundle` with commit-graph reachability; pass its machine-readable derivations to the open-finding and Phase 6.5 gates. |
+| Mandatory nested `Skill("test-gate", ...)` | Load the packaged `forgedock-test-gate` skill, which executes `specs/original/commands/test-gate.md` in the current coordinator. Require and preserve its `FORGE:TEST_GATE:RESULT=BLOCK|PASS|SKIP` marker; an absent result is a failure, never `SKIP`. |
+| Mandatory nested `Skill(skill="issue", ...)` | Load the packaged `forgedock-issue` skill and execute `specs/original/commands/issue.md`'s programmatic contract. A failed/missing issue hook is a hard failure; do not substitute raw issue creation. |
+| Other nested `Skill(...)` references | Resolve the reference to the corresponding file under `specs/original/commands/` and load it directly in the visible coordinator. This is a packaging/load contract only; it does not dispatch or choose workflow phases. |
 | `Task(...)` or `Agent(...)` | Use Pi's `subagent` tool. Use one synchronous `workflowScript` with `runs.all` for a complete parallel panel. Every reviewer gets fresh context and must be joined before synthesis. |
 | Claude `Read`, `Grep`, `Glob`, `Bash` | Pi `read`, search/navigation tools, and `bash`. |
 | `$FORGE_HOME/commands/...` | `specs/original/commands/...` in this package. |
-| `yq`-based config reads | Read and interpret `forge.yaml` directly with Pi when `yq` is unavailable. Missing `yq` is not a hard failure in Pi; malformed or missing required configuration still is. |
+| `yq`-based config reads | Call `forgedock_preflight`, whose native YAML reader resolves `forge.yaml` without `yq`. Missing `yq` is not a hard failure in Pi; missing/malformed required configuration still fails closed. |
+| `gh auth status`, `gh api user`, and raw `gh api` workflow calls | Do not use aggregate account status or `/user` as hard gates. Call `forgedock_preflight`, then use `forgedock_github` for repository-scoped reads/writes with the same refreshable ForgeDock token provider. A missing runtime tool is a hard failure. |
 | Missing optional helper script | Follow the prose fallback already described by the specification. Never use an unbounded filesystem search. |
 
 ## Subagents
@@ -52,7 +56,16 @@ shape `visible orchestrator → work-on coordinator → reviewers`, within Pi's 
 nesting depth.
 
 Never substitute inline self-review for a required reviewer. An incomplete panel fails
-closed and must leave an actionable `review-degraded`/gate-failure artifact.
+closed and must leave an actionable `review-degraded`/gate-failure artifact. Before
+launching a nested panel, Pi's resolved launch contract must include the native
+`subagent` tool, the declared depth ceiling, and the explicit tool filter; an
+inconsistent profile fails before any GitHub mutation. Reviewer receipts are keyed by
+frozen PR head, role, and attempt; a complete detached receipt is reused verbatim. A
+timeout or provider-inactive reviewer may be retried alone once with a capped extended
+deadline. Cancellation and parent termination are distinct and are not retries. Parent
+deadlines must exceed nested reviewer deadlines plus join grace, or be omitted. Pi
+resume/session receipts prove execution only; when continuation is not persisted,
+recover the complete trusted result artifact or fail closed.
 
 ## Work-on ownership
 
@@ -84,17 +97,44 @@ Orchestrate is a dispatcher, never a builder. It resolves and filters the issue 
 confirms before launch, establishes explicit/file/database ordering, detects cycles,
 and runs one complete work-on skill per ready issue with bounded concurrency. GitHub
 states classify each lane as DONE, GATED, FAILED, or IN_PROGRESS. GATED is not FAILED.
-Successors launch when predecessors become terminal-success; no polling loops or second
-issue lifecycle are allowed. Cleanup and the consolidated report run after the queue
-drains or reaches a documented paused state.
+The GitHub state branch durably records each batch's lease epoch, deterministic
+child-key, predecessor set, ready queue, and deferred queue. On reload, reconcile
+retained children by key and resume only unlaunched nodes within the cap, exactly once.
+Unknown keys, stale authority, missing predecessors, or ambiguous completion produce an
+actionable paused report and launch nothing. Successors launch when predecessors become
+terminal-success; no polling loops or second issue lifecycle are allowed. Cleanup and
+the consolidated report run after the queue drains or reaches a documented paused state.
 
 ## Configuration
 
 The original `forge.yaml` contract is authoritative. Do not silently reinterpret the
-current `.forge/config.json` schema as equivalent. If `forge.yaml` is missing, stop with
-an actionable migration/init message before GitHub writes or implementation.
+current `.forge/config.json` schema as equivalent. At the start of every visible or
+nested work-on/orchestrate route, call `forgedock_preflight` and retain its
+`forgedock.preflight/v1` result as the shared machine-readable configuration snapshot.
+It resolves project, repository, paths, staging/default branches, and subagent model,
+then verifies repository-scoped read/write and installation permissions without `/user`
+or mutation. If configuration, authentication, installation scope, or either runtime
+tool is missing, stop before GitHub writes or implementation. All later repository
+GitHub operations use `forgedock_github`; never fall back silently to another account.
+
+## Nested reference and launch validation
+
+The package exposes `forgedock-test-gate` and `forgedock-issue` as executable
+translations for the two mandatory nested calls used by staging review. A package
+load/preflight check must resolve every nested reference reachable from the public
+skills against this packaged skill set or the original specification tree. The
+resolved child contract is diagnostic data only: it may report package version,
+resolved tools, nested depth, and capability ceilings, but must redact credentials
+and must not make routing decisions.
 
 ## Safety leaves
+
+`src/core/staging-bundle-resolver.ts` is a deterministic runtime safety leaf. It
+accepts only same-repository GitHub PR identities and merge/head/patch commits
+reachable from a frozen integration head but not the frozen base. It deliberately
+ignores issue/PR references in commit subjects and fails closed on ambiguous
+metadata. Its `forgedock.staging-bundle-resolution/v1` output is the sole input to
+staging open-finding attribution and Phase 6.5 evidence.
 
 Deterministic code may make a single operation safe (bounded verification, frozen PR
 snapshot, exact-head guarded merge). It must not choose the next workflow phase,

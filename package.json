@@ -27,8 +27,7 @@
     ".": "./src/index.ts"
   },
   "files": [
-    "src/index.ts",
-    "src/prompt-router.ts",
+    "src/",
     "agents/",
     "prompts/",
     "skills/",
@@ -89,5 +88,8 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0"
   }
 }

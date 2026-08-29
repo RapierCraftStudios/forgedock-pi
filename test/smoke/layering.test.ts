@@ -8,13 +8,13 @@ test("agent runtime no longer imports workflow-layer authority", async () => {
   assert.match(childRuntime, /from "\.\.\/adapters\/run-journal\.ts"/);
 });
 
-test("entrypoint exposes only the lexical prompt router", async () => {
+test("entrypoint exposes lexical routing plus deterministic runtime safety tools", async () => {
   const entrypoint = await readFile("src/index.ts", "utf8");
   assert.match(entrypoint, /registerForgePromptRouter\(pi\)/);
+  assert.match(entrypoint, /registerForgeRuntimeTools\(pi\)/);
   assert.doesNotMatch(entrypoint, /ForgeWorkOnController/);
   assert.doesNotMatch(entrypoint, /ForgeOrchestrationController/);
   assert.doesNotMatch(entrypoint, /ForgeReviewController/);
-  assert.doesNotMatch(entrypoint, /registerForgeRuntime/);
   assert.doesNotMatch(entrypoint, /registerForgeCommands/);
 
   const router = await readFile("src/prompt-router.ts", "utf8");

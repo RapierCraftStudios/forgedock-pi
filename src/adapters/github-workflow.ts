@@ -6,6 +6,14 @@ import {
   requireGitHubSuccess,
 } from "./github-api.ts";
 import { commentBodySignalsInvalidVerdict } from "../core/comment-contract.ts";
+import { assertReviewFindingReadbackPaths } from "../core/review-integrity.ts";
+import {
+  resolveStagingBundleAsync,
+  type FrozenStagingBundleRoute,
+  type StagingBundleCandidate,
+  type AsyncStagingBundleReachability,
+  type StagingBundleResolution,
+} from "../core/staging-bundle-resolver.ts";
 
 export interface GitHubIssueData {
   number: number;
@@ -21,6 +29,8 @@ export interface GitHubPullRequestData {
   htmlUrl: string;
   state: "open" | "closed";
   merged: boolean;
+  /** Present when GitHub supplied the merge_commit_sha field. */
+  mergeCommitSha?: string;
   headSha: string;
   baseSha: string;
   headRef: string;
@@ -125,6 +135,7 @@ interface PullApiResponse {
   html_url: string;
   state: "open" | "closed";
   merged: boolean;
+  merge_commit_sha?: string | null;
   head: { sha: string; ref: string };
   base: { sha: string; ref: string };
   mergeable: boolean | null;
@@ -326,6 +337,8 @@ export class GitHubWorkflowAdapter {
     title: string;
     body: string;
     labels: readonly string[];
+    /** Structured path authority checked after GitHub readback. */
+    expectedAffectedPaths?: readonly string[];
     signal?: AbortSignal;
   }): Promise<GitHubIssueData> {
     const path = `${this.#apiRoot}/issues`;
@@ -349,6 +362,8 @@ export class GitHubWorkflowAdapter {
       throw new GitHubApiError(422, path, {
         message: "Review-finding issue read-back did not match the requested payload.",
       });
+    if (input.expectedAffectedPaths)
+      assertReviewFindingReadbackPaths(readBack.body, input.expectedAffectedPaths);
     return readBack;
   }
 
@@ -461,6 +476,54 @@ export class GitHubWorkflowAdapter {
       nextPath = nextGitHubPagePath(response.headers);
     }
     return pulls.sort(comparePullRequests);
+  }
+
+  /**
+   * Return all PR metadata that could have contributed to the frozen
+   * integration branch. This intentionally requests all states and paginates
+   * through the adapter rather than deriving PR numbers from commit subjects.
+   */
+  async listStagingBundleCandidates(
+    signal?: AbortSignal,
+  ): Promise<StagingBundleCandidate[]> {
+    const pulls = await this.listPullRequests(
+      { state: "all", baseRef: this.#stagingBranch, signal },
+      signal,
+    );
+    return pulls.map((pull) => ({
+      repository: this.#repository,
+      number: pull.number,
+      state: pull.state,
+      merged: pull.merged,
+      baseRef: pull.baseRef,
+      headSha: pull.headSha,
+      ...(pull.mergeCommitSha
+        ? { mergeCommitSha: pull.mergeCommitSha }
+        : {}),
+    }));
+  }
+
+  /**
+   * Resolve a frozen staging bundle from GitHub PR identity plus a caller's
+   * commit graph probe (normally `git merge-base --is-ancestor`). No refs are
+   * read here, so callers cannot accidentally mix moving base/head values.
+   */
+  async resolveStagingBundle(input: {
+    route: Omit<FrozenStagingBundleRoute, "repository"> & {
+      repository?: string;
+    };
+    isReachable: AsyncStagingBundleReachability;
+    signal?: AbortSignal;
+  }): Promise<StagingBundleResolution> {
+    const route: FrozenStagingBundleRoute = {
+      ...input.route,
+      repository: input.route.repository ?? this.#repository,
+    };
+    return resolveStagingBundleAsync({
+      route,
+      candidates: await this.listStagingBundleCandidates(input.signal),
+      isReachable: input.isReachable,
+    });
   }
 
   /** Resolve one exact PR number or canonical GitHub PR URL. */
@@ -1294,6 +1357,9 @@ function normalizePull(pull: PullApiResponse): GitHubPullRequestData {
     htmlUrl: pull.html_url,
     state: pull.state,
     merged: pull.merged,
+    ...(pull.merge_commit_sha
+      ? { mergeCommitSha: pull.merge_commit_sha }
+      : {}),
     headSha: pull.head.sha,
     baseSha: pull.base.sha,
     headRef: pull.head.ref,

@@ -1,6 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
+export {
+  loadForgeYaml,
+  parseForgeYaml,
+  ForgeYamlError,
+  type ForgeYamlConfig,
+  type ForgeYamlValue,
+} from "./forge-yaml.ts";
+
 import {
   applyLocalOverrides,
   parseForgePolicy,

@@ -562,8 +562,15 @@ export class ForgeWorkOnController {
           continue;
         }
         if (isLaunchSentinel(link.subagentRunId)) {
+          const recovered = link.orchestrationId
+            ? await this.reactivateOrchestrationIssue(
+                link.orchestrationId,
+                link.issueNumber,
+              )
+            : undefined;
+          if (recovered?.state === "running") continue;
           const reason =
-            "A provider continuation receipt was not persisted; refusing to launch a duplicate continuation.";
+            "Initial provider launch intent remains durable but could not be safely rebound; retry budget is exhausted.";
           link.status = "failed";
           this.#persistLink(link);
           this.#emitLifecycle(link, { reason });
@@ -1089,7 +1096,7 @@ export class ForgeWorkOnController {
       const link: ActiveRunLink = {
         forgeRunId: runId,
         subagentRunId: options.orchestrationId
-          ? `pending:${runId}`
+          ? createNodeLaunchIntent("work-on-initial", resultPath).sentinelRunId
           : directRunId,
         issueNumber,
         repository: policy.repository.name,
@@ -1155,23 +1162,50 @@ export class ForgeWorkOnController {
       }
       let task: string | undefined;
       if (executionMode === "orchestrated") {
-        const receipt = await this.#rpc.spawnWorkOn({
-          runId,
-          issueNumber,
-          repository: policy.repository.name,
-          worktreeRoot: prepared.worktreePath,
-          branch: prepared.branch,
-          baseBranch: prepared.baseBranch,
-          baseSha: prepared.baseSha,
-          leaseEpoch: link.leaseEpoch,
-          leaseOwnerRunId: link.leaseOwnerRunId,
-          policy,
-          issueContext,
-        });
-        this.#links.delete(link.subagentRunId);
-        link.subagentRunId = receipt.runId;
-        link.resultPath = receipt.resultPath;
-        this.#persistLink(link);
+        let receipt: { runId: string; resultPath: string } | undefined;
+        let launchFailure: unknown;
+        for (let attempt = 0; attempt <= 3; attempt += 1) {
+          try {
+            receipt = await this.#rpc.spawnWorkOn({
+              runId,
+              issueNumber,
+              repository: policy.repository.name,
+              worktreeRoot: prepared.worktreePath,
+              branch: prepared.branch,
+              baseBranch: prepared.baseBranch,
+              baseSha: prepared.baseSha,
+              leaseEpoch: link.leaseEpoch,
+              leaseOwnerRunId: link.leaseOwnerRunId,
+              policy,
+              issueContext,
+            });
+            break;
+          } catch (error) {
+            launchFailure = error;
+            if (!isTransientProviderFailure(errorMessage(error))) throw error;
+            if (attempt >= 3) break;
+            link.providerRetries = attempt + 1;
+            this.#persistLink(link);
+            ctx.ui.notify(
+              `ForgeDock issue #${issueNumber} retained its durable launch intent after a transient provider failure; retrying (${attempt + 1}/3).`,
+              "warning",
+            );
+          }
+        }
+        if (receipt) {
+          this.#links.delete(link.subagentRunId);
+          link.subagentRunId = receipt.runId;
+          link.resultPath = receipt.resultPath;
+          link.providerRetries = 0;
+          this.#persistLink(link);
+        } else {
+          link.status = "failed";
+          this.#persistLink(link);
+          ctx.ui.notify(
+            `ForgeDock issue #${issueNumber} retained launch intent ${link.subagentRunId} after retry exhaustion: ${errorMessage(launchFailure)}`,
+            "warning",
+          );
+        }
       } else {
         this.#directBinding = {
           runId,
@@ -3381,9 +3415,53 @@ export class ForgeWorkOnController {
     );
     if (!link) return undefined;
     if (isLaunchSentinel(link.subagentRunId)) {
-      link.status = "failed";
+      if (link.providerRetries >= 3) {
+        link.status = "failed";
+        this.#persistLink(link);
+        return {
+          forgeRunId: link.forgeRunId,
+          subagentRunId: link.subagentRunId,
+          state: "paused",
+        };
+      }
+      const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
+      const sentinelRunId = link.subagentRunId;
+      link.providerRetries += 1;
+      link.status = "running";
       this.#persistLink(link);
-      return undefined;
+      try {
+        const receipt = await this.#rpc.spawnWorkOn({
+          runId: link.forgeRunId,
+          issueNumber: link.issueNumber,
+          repository: link.repository,
+          worktreeRoot: link.prepared.worktreePath,
+          branch: link.prepared.branch,
+          baseBranch: link.prepared.baseBranch,
+          baseSha: link.prepared.baseSha,
+          leaseEpoch: link.leaseEpoch,
+          leaseOwnerRunId: link.leaseOwnerRunId,
+          policy,
+          issueContext: link.issueContext,
+        });
+        this.#links.delete(sentinelRunId);
+        link.subagentRunId = receipt.runId;
+        link.resultPath = receipt.resultPath;
+        link.status = "running";
+        this.#persistLink(link);
+        return {
+          forgeRunId: link.forgeRunId,
+          subagentRunId: link.subagentRunId,
+          state: "running",
+        };
+      } catch {
+        link.status = "failed";
+        this.#persistLink(link);
+        return {
+          forgeRunId: link.forgeRunId,
+          subagentRunId: link.subagentRunId,
+          state: "paused",
+        };
+      }
     }
     const payload = await this.#rpc.status(link.subagentRunId);
     const completion = findAsyncCompletionForRun(payload, link.subagentRunId);
