@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import test from "node:test";
 
@@ -11,6 +11,27 @@ import {
 } from "pi-subagents/capability-ceiling";
 
 const execFileAsync = promisify(execFile);
+const COORDINATOR_TOOLS = [
+  "read",
+  "grep",
+  "find",
+  "ls",
+  "bash",
+  "edit",
+  "write",
+  "contact_supervisor",
+  "subagent",
+  "forgedock_preflight",
+  "forgedock_github",
+] as const;
+
+async function registerPackedProjectPackage(project: string): Promise<void> {
+  await mkdir(`${project}/.pi`, { recursive: true });
+  await writeFile(
+    `${project}/.pi/settings.json`,
+    `${JSON.stringify({ packages: [`${project}/node_modules/forgedock-pi`] }, null, 2)}\n`,
+  );
+}
 
 /**
  * Exercise the tarball that an operator installs, rather than the checkout's
@@ -54,10 +75,12 @@ test("packed coordinator resolves nested reviewer capability and explicit tools"
       { cwd: root, env: { ...process.env, PI_OFFLINE: "1" } },
     );
 
+    await registerPackedProjectPackage(project);
+
     const ceiling: ResolvedSubagentCapabilityCeiling = {
       version: SUBAGENT_CAPABILITY_CEILING_VERSION,
       allowedAgents: ["forgedock-work-on-coordinator"],
-      allowedTools: ["subagent"],
+      allowedTools: [...COORDINATOR_TOOLS],
       denyExtensions: false,
       sources: ["package-canary"],
     };
@@ -73,14 +96,20 @@ test("packed coordinator resolves nested reviewer capability and explicit tools"
     assert.equal(result.ok, true, result.ok ? "" : result.message);
     if (!result.ok) return;
     assert.equal(result.contract.agent.source, "package");
+    assert.ok(
+      result.contract.agent.filePath.startsWith(`${project}/node_modules/forgedock-pi/`),
+      result.contract.agent.filePath,
+    );
     assert.equal(result.contract.tools.explicitAllowlist, true);
     assert.equal(result.contract.tools.fanoutAuthorized, true);
     assert.ok(result.contract.tools.effectiveAllowlist.includes("subagent"));
     assert.deepEqual(result.contract.tools.capabilityCeiling?.allowedAgents, [
       "forgedock-work-on-coordinator",
     ]);
-    assert.equal(result.contract.tools.capabilityCeiling?.allowedTools?.length, 1);
-    assert.equal(result.contract.tools.capabilityCeiling?.allowedTools?.[0], "subagent");
+    assert.deepEqual(
+      new Set(result.contract.tools.capabilityCeiling?.allowedTools),
+      new Set(COORDINATOR_TOOLS),
+    );
     assert.equal(result.contract.tools.configuredExtensions.length, 0);
   } finally {
     await rm(temp, { recursive: true, force: true });
@@ -105,6 +134,7 @@ test("packed coordinator is rejected by preflight when its capability ceiling ex
       ["install", "--prefix", project, "--no-save", "--package-lock=false", "--ignore-scripts", "--legacy-peer-deps", archivePath],
       { cwd: root, env: { ...process.env, PI_OFFLINE: "1" } },
     );
+    await registerPackedProjectPackage(project);
     const result = await resolveSubagentLaunchContract({
       agent: "forgedock-work-on-coordinator",
       cwd: project,
@@ -115,7 +145,7 @@ test("packed coordinator is rejected by preflight when its capability ceiling ex
       capabilityCeiling: {
         version: SUBAGENT_CAPABILITY_CEILING_VERSION,
         allowedAgents: ["forge-review-security"],
-        allowedTools: ["subagent"],
+        allowedTools: [...COORDINATOR_TOOLS],
         denyExtensions: false,
         sources: ["package-canary"],
       },
