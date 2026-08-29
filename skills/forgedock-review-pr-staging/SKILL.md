@@ -21,5 +21,9 @@ material-change analysis, service/domain bug hunting, regression assessment, run
 test gate, finding triage, and deployment checklist.
 
 Use complete fresh-context reviewer panels and fail closed on any missing reviewer.
-Emit exactly one authoritative terminal gate pass or failure for the reviewed SHA.
+At Phase 6.5, translate the original nested `Skill("test-gate", ...)` call to
+`forgedock-test-gate` and require its `FORGE:TEST_GATE:RESULT=BLOCK|PASS|SKIP`
+marker. Translate mandatory finding creation calls to `forgedock-issue`; a missing
+marker or failed issue read-back is a hard failure, never a skipped gate. Emit exactly
+one authoritative terminal gate pass or failure for the reviewed SHA.
 Never merge, approve, deploy, close the source issue, or clean a work-on-owned tree.

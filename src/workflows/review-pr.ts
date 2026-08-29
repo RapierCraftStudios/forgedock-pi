@@ -56,6 +56,7 @@ import type {
   ReviewSelector,
 } from "../ui/forge-command-parser.ts";
 import { publishReviewFindingIssues } from "./review-findings.ts";
+import { testGateVerification } from "./test-gate.ts";
 
 export type ReviewExecution =
   | { kind: "standalone"; repositoryRoot: string }
@@ -76,6 +77,8 @@ export interface ReviewPrRequest {
   githubCheckPollIntervalMs: number;
   githubChecksRequired: boolean;
   additionalChecks?: readonly VerificationResult[];
+  /** Raw output from the mandatory nested staging test-gate translation. */
+  testGateOutput?: unknown;
   malformedResults?: readonly string[];
   mergeability?: "mergeable" | "conflicting" | "unknown";
   protectedBranches: readonly string[];
@@ -274,6 +277,9 @@ export class ReviewPrCoordinator {
       );
       if (snapshot.state.panel?.status === "running") {
         const additionalChecks: readonly VerificationResult[] = [
+          ...(mode === "staging"
+            ? [testGateVerification(input.testGateOutput)]
+            : []),
           {
             name: "material-change",
             required: true,

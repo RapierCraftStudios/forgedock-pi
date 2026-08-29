@@ -29,6 +29,7 @@ import {
   type ReviewPanelRunner,
   type ReviewPrRequest,
 } from "../../src/workflows/review-pr.ts";
+import { testGateVerification } from "../../src/workflows/test-gate.ts";
 
 const route: GitHubPullRequestRouteSnapshot = {
   pullNumber: 7,
@@ -326,6 +327,7 @@ function request(overrides: Partial<ReviewPrRequest> = {}): ReviewPrRequest {
     protectedBranches: [],
     autoMergeAuthorized: true,
     autoMergeRequested: false,
+    testGateOutput: "<!-- FORGE:TEST_GATE:RESULT=PASS -->",
     authorityValid: () => true,
     ...overrides,
   };
@@ -564,6 +566,61 @@ test("staging review rejects merge requests and never calls merge", async () => 
   );
   assert.equal(h.github.mergeInputs.length, 0);
   assert.equal(h.journal.events.length, 0);
+});
+
+test("Phase 6.5 propagates explicit BLOCK, PASS, and SKIP results", () => {
+  assert.deepEqual(
+    testGateVerification("<!-- FORGE:TEST_GATE:RESULT=BLOCK -->"),
+    { name: "test-gate", required: true, status: "failed", exitCode: 1 },
+  );
+  assert.deepEqual(
+    testGateVerification("<!-- FORGE:TEST_GATE:RESULT=PASS -->"),
+    { name: "test-gate", required: true, status: "passed" },
+  );
+  assert.deepEqual(
+    testGateVerification("<!-- FORGE:TEST_GATE:RESULT=SKIP -->"),
+    { name: "test-gate", required: false, status: "skipped" },
+  );
+});
+
+test("missing Phase 6.5 execution is a required failed check", () => {
+  assert.deepEqual(testGateVerification(undefined), {
+    name: "test-gate",
+    required: true,
+    status: "failed",
+    exitCode: 1,
+  });
+});
+
+test("staging review carries every Phase 6.5 verdict into its gate", async () => {
+  for (const [output, expectedStatus, expectedDecision] of [
+    ["<!-- FORGE:TEST_GATE:RESULT=BLOCK -->", "failed", "changes-requested"],
+    ["<!-- FORGE:TEST_GATE:RESULT=PASS -->", "passed", "approved"],
+    ["<!-- FORGE:TEST_GATE:RESULT=SKIP -->", "skipped", "approved"],
+  ] as const) {
+    const h = harness();
+    const result = await h.coordinator.review(
+      request({ mode: "staging", testGateOutput: output }),
+    );
+    assert.equal(result.decision.decision, expectedDecision);
+    assert.equal(
+      result.checks.find((check) => check.name === "test-gate")?.status,
+      expectedStatus,
+    );
+  }
+});
+
+test("staging review blocks when Phase 6.5 did not execute", async () => {
+  const h = harness();
+  const result = await h.coordinator.review(
+    request({ mode: "staging", testGateOutput: undefined }),
+  );
+  assert.equal(result.decision.decision, "changes-requested");
+  assert.match(result.decision.reasons.join("\n"), /test-gate failed/i);
+  assert.deepEqual(
+    gateArtifacts(h).map((artifact) => artifact.marker),
+    [`<!-- FORGE:GATE_FAILURE id=review-1 head=${route.headSha} -->`],
+  );
 });
 
 test("clean staging review posts exactly one gate pass and never merges", async () => {

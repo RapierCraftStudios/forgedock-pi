@@ -28,6 +28,9 @@ terminal conditions, review policy, GitHub artifacts, remediation, merge, and cl
 | `Skill(skill="quality-gate", ...)` | Read `specs/original/commands/quality-gate.md`; run it against the assigned worktree. Fork only when isolation or long execution materially benefits the route. |
 | `Skill(skill="review-pr", ...)` | Load and execute the `forgedock-review-pr` skill in the current work-on coordinator. That coordinator launches the selected fresh reviewer panel directly and retains ownership of closure. Do not add a second review-coordinator hop. |
 | `Skill(skill="review-pr-staging", ...)` | Load `review-pr-staging.md` directly and switch strategy immediately; do not emit another slash command. |
+| Mandatory nested `Skill("test-gate", ...)` | Load the packaged `forgedock-test-gate` skill, which executes `specs/original/commands/test-gate.md` in the current coordinator. Require and preserve its `FORGE:TEST_GATE:RESULT=BLOCK|PASS|SKIP` marker; an absent result is a failure, never `SKIP`. |
+| Mandatory nested `Skill(skill="issue", ...)` | Load the packaged `forgedock-issue` skill and execute `specs/original/commands/issue.md`'s programmatic contract. A failed/missing issue hook is a hard failure; do not substitute raw issue creation. |
+| Other nested `Skill(...)` references | Resolve the reference to the corresponding file under `specs/original/commands/` and load it directly in the visible coordinator. This is a packaging/load contract only; it does not dispatch or choose workflow phases. |
 | `Task(...)` or `Agent(...)` | Use Pi's `subagent` tool. Use one synchronous `workflowScript` with `runs.all` for a complete parallel panel. Every reviewer gets fresh context and must be joined before synthesis. |
 | Claude `Read`, `Grep`, `Glob`, `Bash` | Pi `read`, search/navigation tools, and `bash`. |
 | `$FORGE_HOME/commands/...` | `specs/original/commands/...` in this package. |
@@ -52,7 +55,10 @@ shape `visible orchestrator → work-on coordinator → reviewers`, within Pi's 
 nesting depth.
 
 Never substitute inline self-review for a required reviewer. An incomplete panel fails
-closed and must leave an actionable `review-degraded`/gate-failure artifact.
+closed and must leave an actionable `review-degraded`/gate-failure artifact. Before
+launching a nested panel, Pi's resolved launch contract must include the native
+`subagent` tool, the declared depth ceiling, and the explicit tool filter; an
+inconsistent profile fails before any GitHub mutation.
 
 ## Work-on ownership
 
@@ -93,6 +99,16 @@ drains or reaches a documented paused state.
 The original `forge.yaml` contract is authoritative. Do not silently reinterpret the
 current `.forge/config.json` schema as equivalent. If `forge.yaml` is missing, stop with
 an actionable migration/init message before GitHub writes or implementation.
+
+## Nested reference and launch validation
+
+The package exposes `forgedock-test-gate` and `forgedock-issue` as executable
+translations for the two mandatory nested calls used by staging review. A package
+load/preflight check must resolve every nested reference reachable from the public
+skills against this packaged skill set or the original specification tree. The
+resolved child contract is diagnostic data only: it may report package version,
+resolved tools, nested depth, and capability ceilings, but must redact credentials
+and must not make routing decisions.
 
 ## Safety leaves
 

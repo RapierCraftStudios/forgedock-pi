@@ -10,7 +10,7 @@ export const FORGE_PROMPT_ALIASES = Object.freeze({
 const ALIAS_PATTERN =
   /^\/(?:forge:)?(orchestrate|work-on|review-pr|review-pr-staging)(?=$|\s)([\s\S]*)$/;
 
-/** Rewrite only the four friendly ForgeDock commands into native Pi skill calls. */
+/** Rewrite friendly ForgeDock commands into native Pi skill calls. */
 export function rewriteForgePromptAlias(input: string): string | undefined {
   const match = input.match(ALIAS_PATTERN);
   if (!match) return undefined;

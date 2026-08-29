@@ -29,6 +29,8 @@
   "files": [
     "src/index.ts",
     "src/prompt-router.ts",
+    "src/agents/profile.ts",
+    "src/package-contract.ts",
     "agents/",
     "prompts/",
     "skills/",

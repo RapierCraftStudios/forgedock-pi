@@ -29,6 +29,7 @@ import {
   FORGEDOCK_LEASE_SCHEMA,
   FORGEDOCK_PI_VERSION,
 } from "../core/version.ts";
+import { forgeCapabilityDiagnostics } from "../agents/profile.ts";
 
 export interface OrchestrationConfirmationInput {
   issueNumbers: readonly number[];
@@ -341,6 +342,9 @@ export function registerForgeCommands(
         `event schema: ${FORGEDOCK_EVENT_SCHEMA}`,
         `lease schema: ${FORGEDOCK_LEASE_SCHEMA}`,
         `pi-subagents tool: ${hasSubagents ? "available" : "unavailable"}`,
+        ...forgeCapabilityDiagnostics(
+          pi.getAllTools().map((tool) => tool.name),
+        ),
       ];
       ctx.ui.notify(lines.join("\n"), hasSubagents ? "info" : "warning");
       return Promise.resolve();
