@@ -30,6 +30,39 @@ test("GitHub mutations use a narrow workflow operation allowlist", () => {
       "acme/app",
     ),
   );
+  assert.doesNotThrow(() =>
+    assertForgeGitHubOperationAllowed(
+      "POST",
+      "/repos/acme/app/git/refs",
+      "acme/app",
+      {
+        ref: "refs/heads/staging-1",
+        sha: "0123456789abcdef0123456789abcdef01234567",
+      },
+    ),
+  );
+  for (const body of [
+    {
+      ref: "refs/tags/staging-1",
+      sha: "0123456789abcdef0123456789abcdef01234567",
+    },
+    {
+      ref: "refs/heads/../main",
+      sha: "0123456789abcdef0123456789abcdef01234567",
+    },
+    { ref: "refs/heads/staging-1", sha: "not-a-commit" },
+  ]) {
+    assert.throws(
+      () =>
+        assertForgeGitHubOperationAllowed(
+          "POST",
+          "/repos/acme/app/git/refs",
+          "acme/app",
+          body,
+        ),
+      /outside the ForgeDock operation allowlist/,
+    );
+  }
   assert.throws(
     () =>
       assertForgeGitHubOperationAllowed(

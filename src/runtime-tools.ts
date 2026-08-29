@@ -67,19 +67,22 @@ export function assertForgeGitHubOperationAllowed(
   method: GitHubRequest["method"],
   path: string,
   repository: string,
+  body?: unknown,
 ): void {
   if (method === "GET") return;
   const pathname = path.split("?", 1)[0]!;
   const root = repositoryApiPath(repository);
   const relative = pathname.slice(root.length);
   const allowed =
-    (method === "POST" && [
-      /^\/issues$/,
-      /^\/issues\/[1-9]\d*\/comments$/,
-      /^\/issues\/[1-9]\d*\/labels$/,
-      /^\/pulls$/,
-      /^\/pulls\/[1-9]\d*\/reviews$/,
-    ].some((pattern) => pattern.test(relative))) ||
+    (method === "POST" &&
+      ([
+        /^\/issues$/,
+        /^\/issues\/[1-9]\d*\/comments$/,
+        /^\/issues\/[1-9]\d*\/labels$/,
+        /^\/pulls$/,
+        /^\/pulls\/[1-9]\d*\/reviews$/,
+      ].some((pattern) => pattern.test(relative)) ||
+        (relative === "/git/refs" && isSafeBranchRefCreation(body)))) ||
     (method === "PATCH" && /^\/(?:issues|pulls)\/[1-9]\d*$/.test(relative)) ||
     (method === "PUT" && [
       /^\/issues\/[1-9]\d*\/labels$/,
@@ -88,6 +91,31 @@ export function assertForgeGitHubOperationAllowed(
     (method === "DELETE" && /^\/issues\/[1-9]\d*\/labels\/[^/]+$/.test(relative));
   if (!allowed)
     throw new Error(`GitHub ${method} ${relative || "/"} is outside the ForgeDock operation allowlist.`);
+}
+
+function isSafeBranchRefCreation(body: unknown): boolean {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return false;
+  const entries = Object.entries(body);
+  if (entries.some(([key]) => key !== "ref" && key !== "sha")) return false;
+  const { ref, sha } = body as { ref?: unknown; sha?: unknown };
+  if (typeof ref !== "string" || typeof sha !== "string") return false;
+  if (!/^[0-9a-f]{40}$/i.test(sha)) return false;
+  if (!ref.startsWith("refs/heads/")) return false;
+  const branch = ref.slice("refs/heads/".length);
+  return (
+    branch.length > 0 &&
+    branch.length <= 240 &&
+    /^[A-Za-z0-9._/-]+$/.test(branch) &&
+    !branch.startsWith("/") &&
+    !branch.endsWith("/") &&
+    !branch.endsWith(".") &&
+    !branch.includes("..") &&
+    !branch.includes("//") &&
+    !branch.includes("@{") &&
+    !branch.split("/").some((segment) =>
+      segment.length === 0 || segment.startsWith(".") || segment.endsWith(".lock")
+    )
+  );
 }
 
 function boundedJson(value: unknown): { text: string; truncated: boolean } {
@@ -167,7 +195,12 @@ export function registerForgeRuntimeTools(pi: ExtensionAPI): void {
         throw new Error("forge.yaml changed after preflight; run forgedock_preflight again.");
       const method = githubMethod(params.method);
       const path = assertForgeRepositoryApiPath(params.path, config.repository);
-      assertForgeGitHubOperationAllowed(method, path, config.repository);
+      assertForgeGitHubOperationAllowed(
+        method,
+        path,
+        config.repository,
+        params.body,
+      );
       const tokenProvider = createGitHubTokenProvider(pi, root);
       const transport = new FetchGitHubTransport({
         tokenProvider,
