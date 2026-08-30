@@ -683,7 +683,7 @@ function applyLaneEvent(
     started: ["queued"],
     recovered: ["failed", "blocked", "needs-human"],
     ready: ["running", "refreshing"],
-    integrated: ["running"],
+    integrated: ["running", "integrating"],
     refreshing: ["ready", "integrating"],
     integrating: ["ready"],
     merged: ["integrating"],

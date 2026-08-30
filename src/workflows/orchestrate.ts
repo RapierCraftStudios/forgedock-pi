@@ -587,6 +587,24 @@ export class ForgeOrchestrationController {
    * Callers supply freshly verified provider evidence; this method persists
    * every gate before closing members or deleting the lane branch.
    */
+  async #nextPromotionQueuePosition(
+    store: GitHubStateBranchStore,
+    orchestrationId: string,
+    current: OrchestrationState,
+    signal?: AbortSignal,
+  ): Promise<number> {
+    const records = await store.listOrchestrations(signal);
+    let highest = -1;
+    for (const record of records) {
+      const state = record.orchestrationId === orchestrationId
+        ? current
+        : (await store.readOrchestration(record.orchestrationId, signal)).state;
+      const position = state?.integrationLane?.promotion.queuePosition;
+      if (position !== undefined) highest = Math.max(highest, position);
+    }
+    return highest + 1;
+  }
+
   async #promotionQueueHead(
     store: GitHubStateBranchStore,
     orchestrationId: string,
@@ -611,10 +629,32 @@ export class ForgeOrchestrationController {
     ctx: ExtensionContext,
   ): Promise<boolean> {
     const lane = state.integrationLane;
-    if (!lane || lane.kind !== "work-order" || lane.legacy || lane.status === "closed") return false;
+    if (!lane || lane.kind !== "work-order" || lane.legacy) return false;
     if (!state.lanes.every((member) => ["integrated", "merged", "closed"].includes(member.status))) return false;
     const github = this.#githubFor(link);
     const stagingBranch = github.configuredStagingToMainRoute().headRef;
+    if (lane.status === "closed") {
+      const receipt = lane.promotion.receipt;
+      const staging = lane.promotion.stagingEvidence;
+      if (!receipt || !staging) return false;
+      await this.promoteWorkOrder({
+        orchestrationId: link.orchestrationId,
+        ownerId: receipt.sourceHeadSha,
+        queuePosition: lane.promotion.queuePosition ?? 0,
+        staging,
+        sourceHeadSha: receipt.sourceHeadSha,
+        mergeBaseSha: receipt.mergeBaseSha,
+        shippingPullNumber: receipt.shippingPullNumber,
+        mergeCommitSha: receipt.mergeCommitSha,
+        reviewedAt: receipt.reviewedAt,
+        reviewPassed: true,
+        verificationPassed: true,
+        mergeable: true,
+        authorityValid: true,
+        ctx,
+      });
+      return true;
+    }
     const shippingPull = await github.findPullRequest(lane.branch, ctx.signal);
     if (!shippingPull?.merged || !shippingPull.mergeCommitSha) return false;
     await this.promoteWorkOrder({
@@ -684,7 +724,8 @@ export class ForgeOrchestrationController {
           shippingPull.mergeCommitSha !== input.mergeCommitSha)
         throw new Error("Shipping PR route, exact head/base, or merge read-back does not match promotion evidence.");
       if (state.integrationLane?.promotion.queuePosition === undefined) {
-        state = await journal.queueLane({ orchestrationId: input.orchestrationId, laneId: initialLane.stableId, queuePosition: input.queuePosition, signal: input.ctx.signal });
+        const queuePosition = await this.#nextPromotionQueuePosition(current.store, input.orchestrationId, state, input.ctx.signal);
+        state = await journal.queueLane({ orchestrationId: input.orchestrationId, laneId: initialLane.stableId, queuePosition: Math.max(input.queuePosition, queuePosition), signal: input.ctx.signal });
       }
       const currentLane = state.integrationLane;
       if (!currentLane) throw new Error("Durable integration lane disappeared during queueing.");
@@ -708,6 +749,9 @@ export class ForgeOrchestrationController {
       const receipt = workOrderPromotionReceipt({ shippingPullNumber: input.shippingPullNumber, sourceHeadSha: input.sourceHeadSha, stagingBaseSha: input.staging.sha, mergeBaseSha: input.mergeBaseSha, mergeCommitSha: input.mergeCommitSha, reviewedAt: input.reviewedAt });
       const gate = evaluateWorkOrderPromotion({ lane: state.integrationLane!, ownerId: input.ownerId, now: input.reviewedAt, sourceHeadSha: input.sourceHeadSha, mergeBaseSha: input.mergeBaseSha, staging: input.staging, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: true, queueHeadLaneId: queueHead.stableId });
       if (!gate.allowed) throw new Error(`Work-order promotion gated: ${gate.reason}`);
+      const finalStagingSha = await github.getBranchHeadSha(stagingBranch, input.ctx.signal);
+      if (finalStagingSha !== input.staging.sha)
+        throw new Error("Protected staging advanced at the promotion boundary; no promotion or cleanup is authorized.");
       state = await journal.promoteLane({ orchestrationId: input.orchestrationId, laneId: initialLane.stableId, ownerId: input.ownerId, queueHeadLaneId: queueHead.stableId, leaseEpoch: state.integrationLane!.promotion.queueLease!.epoch, staging: input.staging, receipt, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: true, signal: input.ctx.signal });
     }
     const lane = state.integrationLane!;
