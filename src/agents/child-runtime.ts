@@ -92,6 +92,7 @@ export const DIRECT_WORK_ON_FINALIZED_EVENT =
 const MAX_OUTPUT_BYTES = 50 * 1024;
 const MAX_DIFF_CHUNK_BYTES = 32 * 1024;
 const MAX_REVIEW_DIFF_BYTES = 4 * 1024 * 1024;
+const PROCESS_TERMINATION_GRACE_MS = 1_000;
 
 interface BoundVerificationCommand {
   argv: readonly string[];
@@ -1102,6 +1103,11 @@ export function registerForgeRuntime(
           ...(signal ? { signal } : {}),
         },
       );
+      assertCompleteProcessOutput(stat, "Review changed-file metadata");
+      if (stat.exitCode !== 0 || stat.signal !== null || stat.timedOut)
+        throw new Error(
+          "Review changed-file metadata command did not complete successfully.",
+        );
       const fileNotes = stat.stdout
         .trim()
         .split("\n")
@@ -2965,7 +2971,26 @@ async function gitHead(
   return result.stdout.trim();
 }
 
-async function runProcess(
+function signalProcess(
+  child: ReturnType<typeof spawn>,
+  signal: NodeJS.Signals,
+): void {
+  // A detached POSIX child is the leader of its own process group. Signalling
+  // the group also reaches descendants that inherited the piped stdio handles.
+  if (process.platform !== "win32" && child.pid !== undefined) {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch (error) {
+      // If the group disappeared between checks, the close event will settle
+      // the process. Other errors still get a best-effort direct-child signal.
+      if ((error as NodeJS.ErrnoException).code === "ESRCH") return;
+    }
+  }
+  child.kill(signal);
+}
+
+export async function runProcess(
   program: string,
   args: readonly string[],
   options: {
@@ -2982,6 +3007,9 @@ async function runProcess(
       cwd: options.cwd,
       env: options.env,
       shell: false,
+      // On POSIX this gives the child a private process group for timeout
+      // escalation. Windows uses the direct-child fallback in signalProcess.
+      detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
       ...(options.signal ? { signal: options.signal } : {}),
     });
@@ -2990,6 +3018,7 @@ async function runProcess(
     let stdoutTruncated = false;
     let stderrTruncated = false;
     let timedOut = false;
+    let forceTimer: NodeJS.Timeout | undefined;
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     const outputLimitBytes = options.outputLimitBytes ?? MAX_OUTPUT_BYTES * 2;
@@ -3005,15 +3034,19 @@ async function runProcess(
     });
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
+      signalProcess(child, "SIGTERM");
+      forceTimer = setTimeout(() => signalProcess(child, "SIGKILL"), PROCESS_TERMINATION_GRACE_MS);
+      forceTimer.unref();
     }, options.timeoutMs);
     timer.unref();
     child.once("error", (error) => {
       clearTimeout(timer);
+      if (forceTimer) clearTimeout(forceTimer);
       reject(error);
     });
     child.once("close", (exitCode, signal) => {
       clearTimeout(timer);
+      if (forceTimer) clearTimeout(forceTimer);
       resolvePromise({
         exitCode,
         signal,

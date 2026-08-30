@@ -1,5 +1,7 @@
+import { execFile } from "node:child_process";
 import { constants } from "node:fs";
 import { access, readFile, realpath, stat } from "node:fs/promises";
+import { promisify } from "node:util";
 import {
   basename,
   delimiter,
@@ -13,6 +15,8 @@ import {
   normalizeVerificationCommandCwd,
   type VerificationCommandPolicy,
 } from "../core/policy.ts";
+
+const execFileAsync = promisify(execFile);
 
 export class VerificationPreflightError extends Error {
   readonly path: string;
@@ -70,8 +74,8 @@ export async function resolveVerificationCommandDirectory(
   const lexical = resolve(canonicalRoot, normalized);
   if (!pathWithin(canonicalRoot, lexical))
     throw new VerificationPreflightError(path, "escapes the repository");
-  const firstSegment = relative(canonicalRoot, lexical).split(/[\\/]/, 1)[0];
-  if (firstSegment === ".git" || firstSegment === ".pi")
+  const ignoreCase = await checkoutIgnoresCase(canonicalRoot);
+  if (isReservedControlDirectory(canonicalRoot, lexical, ignoreCase))
     throw new VerificationPreflightError(
       path,
       "must not target Git or Forge runtime control directories",
@@ -87,6 +91,11 @@ export async function resolveVerificationCommandDirectory(
   }
   if (!pathWithin(canonicalRoot, canonical))
     throw new VerificationPreflightError(path, "resolves outside the repository");
+  if (isReservedControlDirectory(canonicalRoot, canonical, ignoreCase))
+    throw new VerificationPreflightError(
+      path,
+      "must not target Git or Forge runtime control directories",
+    );
   if (!(await stat(canonical)).isDirectory())
     throw new VerificationPreflightError(path, "must resolve to a directory");
   return canonical;
@@ -215,4 +224,39 @@ async function assertPackageScript(
 function pathWithin(root: string, target: string): boolean {
   const child = relative(resolve(root), resolve(target));
   return child === "" || (!child.startsWith("..") && !isAbsolute(child));
+}
+
+function isReservedControlDirectory(
+  root: string,
+  target: string,
+  ignoreCase: boolean,
+): boolean {
+  const firstSegment = relative(root, target).split(/[\\/]/, 1)[0] ?? "";
+  const comparable = ignoreCase ? firstSegment.toLocaleLowerCase("en-US") : firstSegment;
+  return comparable === ".git" || comparable === ".pi";
+}
+
+async function checkoutIgnoresCase(repositoryRoot: string): Promise<boolean> {
+  let result: { stdout: string; stderr: string; status?: number };
+  try {
+    result = await execFileAsync(
+      "git",
+      ["-C", repositoryRoot, "config", "--bool", "core.ignorecase"],
+      { encoding: "utf8", maxBuffer: 1024 },
+    );
+  } catch (error) {
+    const failure = error as { code?: number | string; stdout?: string; stderr?: string };
+    if (failure.code === 1 && !failure.stdout?.trim()) return false;
+    throw new VerificationPreflightError(
+      "verification command cwd",
+      `unable to read Git case-sensitivity contract: ${failure.stderr ?? String(error)}`,
+    );
+  }
+  const value = result.stdout.trim();
+  if (value !== "true" && value !== "false")
+    throw new VerificationPreflightError(
+      "verification command cwd",
+      `invalid core.ignorecase value: ${value || "empty"}`,
+    );
+  return value === "true";
 }

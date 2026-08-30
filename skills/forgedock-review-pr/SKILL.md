@@ -52,6 +52,25 @@ Post an official PR review tied to the frozen SHA. Merge only when `--auto-merge
 explicit, the original blocking policy passes, route identity is unchanged, and the
 base is authorized. Review never closes the linked issue or cleans the work-on tree.
 
+## Refreshed integration bases
+
+For a work-on-owned PR targeting `staging`, the launch `FORGE:BASE` SHA remains
+immutable attribution, but the review base may advance after a verified sibling merge.
+Before automated checks and reviewer fan-out, re-fetch `refs/heads/staging` and prove
+any movement from the recorded base is an authorized reachable sibling merge. Require a
+`FORGE:BASE_REFRESH` record with the old/new base, launch SHA, sibling merge SHA, and
+refresh attempt. Preserve the existing PR and owned branch through a guarded,
+non-destructive synchronization with the expected remote lease; conflicts, ambiguous
+movement, or lease mismatch are automated `GATED` evidence.
+
+Then recompute and freeze the exact refreshed base SHA, PR head SHA, and
+`git merge-base` SHA. Rerun all affected verification and acceptance checks before
+review. Invalidate every prior reviewer receipt and approval for merge authorization
+and launch a fresh complete panel whose receipts bind to the refreshed tuple. A mixed,
+partial, stale, or missing panel cannot produce a verdict or merge. Recheck the tuple,
+clean tree, remote head, mergeability, and protected-branch policy immediately before
+merge. See `specs/qualitative-review-protocol.md` for the shared protocol.
+
 ## Recovery contract
 
 Persist each reviewer result as an exact `head + role + attempt` receipt before joining.

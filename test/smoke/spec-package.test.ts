@@ -29,6 +29,37 @@ test("Pi adapter keeps workflow decisions in visible specifications", async () =
   assert.match(adapter, /must not choose the next workflow phase/);
 });
 
+test("heartbeat reconciliation uses GitHub creation time, not body clocks", async () => {
+  const workOn = await readFile("specs/original/commands/work-on.md", "utf8");
+  const execution = await readFile(
+    "specs/original/commands/orchestrate/phase-4-execution.md",
+    "utf8",
+  );
+
+  const heartbeatBodies = [...workOn.matchAll(/<!-- FORGE:HEARTBEAT -->[\s\S]*?```/g)].map(
+    ([body]) => body,
+  );
+  assert.equal(heartbeatBodies.length, 4);
+  for (const body of heartbeatBodies) {
+    assert.doesNotMatch(body, /\*\*Timestamp\*\*|PHASE_START_TIMESTAMP/);
+  }
+  assert.match(workOn, /GitHub's immutable `created_at` is authoritative/);
+  assert.match(execution, /\.\[-1\]\.created_at/);
+  assert.match(execution, /updated_at changes when a comment is edited/);
+  assert.doesNotMatch(execution, /Date\.parse\([^)]*Timestamp/);
+
+  const events = [
+    { kind: "release", created_at: "2026-08-30T00:03:00Z", body: "Timestamp: 2099-01-01T00:00:00Z" },
+    { kind: "claim", created_at: "2026-08-30T00:01:00Z", body: "Timestamp: 2026-08-30T00:00:00Z" },
+    { kind: "heartbeat", created_at: "2026-08-30T00:02:00Z", body: "Timestamp: 2026-08-29T23:00:00Z" },
+  ];
+  assert.deepEqual(
+    events.toSorted((left, right) => left.created_at.localeCompare(right.created_at)).map((event) => event.kind),
+    ["claim", "heartbeat", "release"],
+  );
+  assert.equal(events[0]?.body.includes("2099"), true);
+});
+
 test("package exposes a depth-bounded work-on coordinator with reviewer fanout", async () => {
   const packageJson = JSON.parse(await readFile("package.json", "utf8"));
   assert.deepEqual(packageJson.pi.subagents.agents, ["./agents"]);
@@ -102,4 +133,25 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
     adapter,
     /Load the `forgedock-review-pr` skill in a fresh subagent when invoked from work-on/,
   );
+});
+
+test("moving staging targets use a guarded refresh and fresh review identity", async () => {
+  const orchestrate = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
+  const workOn = await readFile("skills/forgedock-work-on/SKILL.md", "utf8");
+  const review = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
+  const adapter = await readFile("specs/pi-adapter.md", "utf8");
+  const build = await readFile("specs/original/commands/work-on/build.md", "utf8");
+  const workOnReview = await readFile("specs/original/commands/work-on/review.md", "utf8");
+  const remediate = await readFile("specs/original/commands/work-on/remediate.md", "utf8");
+  const protocol = await readFile("specs/qualitative-review-protocol.md", "utf8");
+
+  for (const document of [orchestrate, workOn, review, adapter, build, workOnReview, remediate, protocol]) {
+    assert.match(document, /FORGE:BASE_REFRESH/);
+    assert.match(document, /fresh\s+complete/);
+    assert.match(document, /GATED/);
+  }
+  assert.match(protocol, /immutable launch attribution/);
+  assert.match(protocol, /remote-head lease/);
+  assert.match(protocol, /merge-base/);
+  assert.match(protocol, /pre-refresh output/);
 });
