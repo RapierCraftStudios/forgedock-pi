@@ -23,6 +23,23 @@ repository access, and configure `gh auth setup-git` for noninteractive Git tran
 Use direct `gh` and `git` commands for all workflow operations; do not use custom runtime
 tools.
 
+## Authoritative work-order route
+
+When the original expression contains explicit `--work-order <slug>`, preserve that
+slug separately from the resolved issue set. Before dispatch, freeze the exact deployed
+`main` SHA (never `staging`), derive the normalized `wo-<slug>` identity and
+`work-order/wo-<slug>-<slug>` branch, and create/reuse that remote ref with a guarded
+no-force exact-SHA operation. A matching descendant may be reused; an unrelated or
+ambiguous ref is an automated GATED stop. Persist one complete `FORGE:WORK_ORDER_LANE`
+record on the coordination issue containing repository, stable ID, normalized slug,
+branch, frozen base branch/SHA, and every member issue before launching any child.
+The record is the authoritative binding; issue text and provider output are not.
+
+For a work-order dispatch, each child receives the coordination issue and stable lane
+identity in its task context. The child must read back the complete binding and refuse
+to fall back to staging, milestone routing, or a different repository/branch/base.
+Direct fast-lane and milestone expressions continue through their existing route.
+
 Resolve and filter the requested issue set, show the concrete plan, and obtain the
 original mandatory confirmation before launching any child unless `--auto` or
 `--confirm` was explicitly supplied.
@@ -33,8 +50,10 @@ and gate them visibly. Do not inspect or implement product code and never adjudi
 issue validity or duplicates.
 
 For every ready issue, launch exactly one fresh `forgedock-work-on-coordinator` agent
-with the `forgedock-work-on` skill and `<issue> --under-orchestration`. Use bounded
-concurrency and isolated issue worktrees. Each child owns the complete issue lifecycle;
+with the `forgedock-work-on` skill and `<issue> --under-orchestration`. For a
+work-order lane, include the coordination issue, stable lane ID, branch, repository,
+and frozen base in the task context; the child must read back `FORGE:WORK_ORDER_LANE`
+before implementation. Use bounded concurrency and isolated issue worktrees. Each child owns the complete issue lifecycle;
 orchestrate must not invent a second implementation/review path.
 
 The managed child worktree is the child's only repository root. In every child task,
