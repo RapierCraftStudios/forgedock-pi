@@ -23,6 +23,19 @@ identity and repository access, and run `gh auth setup-git` so Git transport is
 noninteractive. Use direct `gh` and `git` commands throughout; do not use custom workflow
 runtime tools. Missing authentication or repository access stops the route.
 
+## Under-orchestration work-order binding
+
+When invoked with `--under-orchestration`, read the parent coordination issue's
+complete `FORGE:WORK_ORDER_LANE` record before any implementation or worktree
+mutation. Validate repository, member issue number, stable ID, normalized slug,
+`work-order/<stable-id>-<slug>` branch, frozen base branch `main`, exact 40-character
+frozen base SHA, and branch ancestry. A missing, stale, malformed, ambiguous, or
+cross-repository binding is automated GATED evidence. Never fall back to the global
+`staging` or milestone route for an under-orchestration work-order child. Carry the
+validated lane identity, branch, and frozen base into the child context, PR, and any
+review-finding metadata. Direct runs and ordinary milestone runs retain their existing
+routing.
+
 Reconstruct the current issue state from GitHub and continue the canonical route:
 
 `resolve → investigate → [decompose | build → verify → PR → review → remediation/re-review when required → merge → close → trajectory/cleanup]`

@@ -15,6 +15,12 @@ export interface ReviewFindingRunIdentity {
   forgeRunId: string;
   issueNumber?: number;
   repository?: string;
+  integrationLane?: {
+    stableId: string;
+    branch: string;
+    repository: string;
+    frozenBase: { branch: string; sha: string };
+  };
 }
 
 export interface ReviewFindingProjectionResult {
@@ -176,7 +182,7 @@ function renderFindingIssueBody(input: {
   const metadataFiles = metadata.patternMetadataFiles.map((path) => `- \`${path}\``).join("\n");
   const affectedFiles = metadata.affectedFiles.map((range) => `- \`${range.path}\` (lines ${range.startLine}-${range.endLine})`).join("\n");
   const pathMarker = JSON.stringify(metadata.affectedPaths);
-  return `${input.marker}\n<!-- FORGE:REVIEW_FINDING_PATHS ${pathMarker} -->\n## Review Finding\n\n**Source PR**: #${input.pullNumber}\n**Source issue**: ${input.link.issueNumber === undefined ? "unlinked" : `#${input.link.issueNumber}`}\n**Forge run**: \`${input.link.forgeRunId}\`\n**Reviewed head**: \`${input.headSha}\`\n**Reviewer**: \`${input.finding.reviewer}\`\n**Finding ID**: \`${input.finding.id}\`\n**Confidence**: ${input.finding.confidence.toUpperCase()}\n**Severity**: ${input.finding.severity.toUpperCase()}\n**Category**: ${input.finding.category}\n**File**: \`${input.finding.file}\`\n**Line**: ${input.finding.line}\n${input.regressionIssue ? `**Regression of**: #${input.regressionIssue}\n` : ""}\n### Pattern Metadata Files\n\n${metadataFiles}\n\n### Affected Files\n\n${affectedFiles}\n\n### Problem\n\n${input.finding.summary}\n\n### Evidence\n\n${evidence || "- Reviewer supplied no additional evidence."}\n\n### Acceptance Criteria\n\n- [ ] Reproduce or validate the finding against the current integration branch.\n- [ ] Fix the root cause without expanding unrelated scope.\n- [ ] Add focused regression coverage.\n- [ ] Re-review the exact remediation head.\n\n<!-- FORGE:PATTERN: ${findingPattern(input.finding)} -->\n<!-- FORGE:CLASS: ${findingPattern(input.finding)} -->`;
+  return `${input.marker}\n<!-- FORGE:REVIEW_FINDING_PATHS ${pathMarker} -->\n## Review Finding\n\n**Source PR**: #${input.pullNumber}\n**Source issue**: ${input.link.issueNumber === undefined ? "unlinked" : `#${input.link.issueNumber}`}\n**Forge run**: \`${input.link.forgeRunId}\`\n**Reviewed head**: \`${input.headSha}\`\n${input.link.integrationLane ? `**Integration lane**: \`${input.link.integrationLane.stableId}\`\n**Lane branch**: \`${input.link.integrationLane.branch}\`\n**Frozen base**: \`${input.link.integrationLane.frozenBase.branch}@${input.link.integrationLane.frozenBase.sha}\`\n` : ""}**Reviewer**: \`${input.finding.reviewer}\`\n**Finding ID**: \`${input.finding.id}\`\n**Confidence**: ${input.finding.confidence.toUpperCase()}\n**Severity**: ${input.finding.severity.toUpperCase()}\n**Category**: ${input.finding.category}\n**File**: \`${input.finding.file}\`\n**Line**: ${input.finding.line}\n${input.regressionIssue ? `**Regression of**: #${input.regressionIssue}\n` : ""}\n### Pattern Metadata Files\n\n${metadataFiles}\n\n### Affected Files\n\n${affectedFiles}\n\n### Problem\n\n${input.finding.summary}\n\n### Evidence\n\n${evidence || "- Reviewer supplied no additional evidence."}\n\n### Acceptance Criteria\n\n- [ ] Reproduce or validate the finding against the current integration branch.\n- [ ] Fix the root cause without expanding unrelated scope.\n- [ ] Add focused regression coverage.\n- [ ] Re-review the exact remediation head.\n\n<!-- FORGE:PATTERN: ${findingPattern(input.finding)} -->\n<!-- FORGE:CLASS: ${findingPattern(input.finding)} -->`;
 }
 
 function findingPattern(finding: ForgeReviewFindingResult): string {

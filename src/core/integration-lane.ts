@@ -158,7 +158,12 @@ export function validateIntegrationLane(lane: IntegrationLane): void {
   if (lane.kind === "work-order" && lane.branch !== workOrderBranchName(lane.stableId, lane.slug)) fail("invalid-branch", "Work-order branch does not match its stable identity.");
   validateGitRef(lane.branch);
   if (typeof lane.repository !== "string" || !/^[^/\s]+\/[^/\s]+$/.test(lane.repository)) fail("invalid-repository", "Lane repository must be owner/name.");
-  if (!lane.frozenBase || typeof lane.frozenBase.branch !== "string" || !lane.frozenBase.branch.trim() || !/^[0-9a-f]{7,64}$/i.test(lane.frozenBase.sha)) fail("invalid-base", "Lane frozen base must contain a branch and commit SHA.");
+  const validFrozenSha = lane.legacy
+    ? lane.frozenBase?.sha === "0000000"
+    : /^[0-9a-f]{40}$/i.test(lane.frozenBase?.sha ?? "");
+  if (!lane.frozenBase || typeof lane.frozenBase.branch !== "string" || !lane.frozenBase.branch.trim() || !validFrozenSha) fail("invalid-base", "Lane frozen base must contain a branch and exact commit SHA.");
+  if (!lane.legacy && lane.kind === "work-order" && lane.frozenBase.branch !== "main")
+    fail("invalid-base", "Work-order lane frozen base must be main.");
   if (!Array.isArray(lane.membership)) fail("invalid-membership", "Lane membership must be an array.");
   const members = new Set<number>();
   const ordinals = new Set<number>();
