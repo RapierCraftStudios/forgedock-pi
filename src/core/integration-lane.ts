@@ -338,19 +338,21 @@ export function transitionIntegrationLane(
       next.promotion.queuePosition = input.queuePosition;
       break;
     case "acquire-queue-lease": {
-      if (lane.status !== "ready") throw new IntegrationLaneValidationError("invalid-transition", `Cannot acquire a queue lease for a ${lane.status} lane.`);
+      const reclaimable = lane.status === "syncing" || lane.status === "promoting";
+      if (lane.status !== "ready" && !reclaimable) throw new IntegrationLaneValidationError("invalid-transition", `Cannot acquire a queue lease for a ${lane.status} lane.`);
       const ownerId = input.ownerId?.trim();
       const leaseSeconds = input.leaseSeconds;
       if (!ownerId) throw new IntegrationLaneValidationError("invalid-lease", "Queue lease owner is required.");
       if (!Number.isSafeInteger(leaseSeconds) || (leaseSeconds ?? 0) < 1) throw new IntegrationLaneValidationError("invalid-lease", "Queue lease duration must be positive.");
       const prior = lane.promotion.queueLease;
       if (prior && Date.parse(prior.expiresAt) > Date.parse(input.now) && prior.ownerId !== ownerId) throw new IntegrationLaneValidationError("queue-lease-held", "Queue lease is held by another owner.");
+      if (reclaimable && prior && Date.parse(prior.expiresAt) > Date.parse(input.now)) throw new IntegrationLaneValidationError("queue-lease-held", "A live queue lease must be renewed by its owner through the existing transition.");
       next.promotion.queueLease = { ownerId, epoch: (prior?.epoch ?? 0) + 1, acquiredAt: input.now, expiresAt: new Date(Date.parse(input.now) + (leaseSeconds as number) * 1000).toISOString() };
       next.status = "syncing";
       break;
     }
     case "release-queue-lease":
-      if (!input.ownerId || !hasLiveQueueLease(lane, input.ownerId, input.now)) throw new IntegrationLaneValidationError("queue-lease-owner", "Only the live queue-lease owner may release it.");
+      if (!input.ownerId || lane.promotion.queueLease?.ownerId !== input.ownerId) throw new IntegrationLaneValidationError("queue-lease-owner", "Only the queue-lease owner may release it.");
       delete next.promotion.queueLease;
       if (lane.status === "syncing" || lane.status === "promoting") next.status = "ready";
       break;

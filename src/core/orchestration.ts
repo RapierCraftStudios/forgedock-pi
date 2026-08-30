@@ -286,7 +286,7 @@ export function readyOrchestrationLanes(
   const dag = buildOrchestrationDag(state.lanes, state.dependencies);
   const completed = new Set(
     state.lanes
-      .filter((lane) => lane.status === "merged" || lane.status === "closed")
+      .filter((lane) => lane.status === "integrated" || lane.status === "merged" || lane.status === "closed")
       .map((lane) => issueNodeId(lane.issueNumber)),
   );
   const activeNodes = new Set(
@@ -382,7 +382,7 @@ export function nextIntegrationLane(
   const dag = buildOrchestrationDag(state.lanes, state.dependencies);
   const completed = new Set(
     state.lanes
-      .filter((lane) => lane.status === "merged" || lane.status === "closed")
+      .filter((lane) => lane.status === "integrated" || lane.status === "merged" || lane.status === "closed")
       .map((lane) => issueNodeId(lane.issueNumber)),
   );
   const eligible = state.lanes
@@ -682,7 +682,7 @@ function applyLaneEvent(
     refreshing: ["ready", "integrating"],
     integrating: ["ready"],
     merged: ["integrating"],
-    closed: ["running", "ready", "integrating"],
+    closed: ["running", "ready", "integrating", "integrated", "merged"],
     blocked: ["queued", "running", "ready", "refreshing", "integrating"],
     "needs-human": ["queued", "running", "ready", "refreshing", "integrating"],
     failed: ["queued", "running", "ready", "refreshing", "integrating"],
@@ -794,14 +794,14 @@ function assertLanePredecessorsComplete(
     .map((edge) => lanesByIssue.get(edge.fromIssue))
     .filter(
       (lane): lane is OrchestrationLane =>
-        lane !== undefined && lane.status !== "merged" && lane.status !== "closed",
+        lane !== undefined && lane.status !== "integrated" && lane.status !== "merged" && lane.status !== "closed",
     );
   if (incomplete.length === 0) return;
   const predecessor = incomplete[0];
   if (!predecessor) return;
   throw new OrchestrationTransitionError(
     "dependency-incomplete",
-    `Issue #${issueNumber} requires predecessor #${predecessor.issueNumber} to be merged or closed before it can start or integrate.`,
+    `Issue #${issueNumber} requires predecessor #${predecessor.issueNumber} to be integrated, merged, or closed before it can start or integrate.`,
   );
 }
 

@@ -104,6 +104,7 @@ export interface WorkOrderPromotionGateInput {
   mergeable: boolean;
   authorityValid: boolean;
   mergeCommit: boolean;
+  queueHeadLaneId?: string;
 }
 
 /**
@@ -580,6 +581,60 @@ export class ForgeOrchestrationController {
    * Callers supply freshly verified provider evidence; this method persists
    * every gate before closing members or deleting the lane branch.
    */
+  async #promotionQueueHead(
+    store: GitHubStateBranchStore,
+    orchestrationId: string,
+    current: OrchestrationState,
+    signal?: AbortSignal,
+  ): Promise<IntegrationLane | undefined> {
+    const records = await store.listOrchestrations(signal);
+    const lanes: IntegrationLane[] = [];
+    for (const record of records) {
+      const state = record.orchestrationId === orchestrationId
+        ? current
+        : (await store.readOrchestration(record.orchestrationId, signal)).state;
+      const lane = state?.integrationLane;
+      if (lane?.kind === "work-order" && !lane.legacy) lanes.push(lane);
+    }
+    return lanes.length > 0 ? selectPromotionQueueHead(lanes) : undefined;
+  }
+
+  async #tryPromoteCompletedWorkOrder(
+    link: ActiveOrchestrationLink,
+    state: OrchestrationState,
+    ctx: ExtensionContext,
+  ): Promise<boolean> {
+    const lane = state.integrationLane;
+    if (!lane || lane.kind !== "work-order" || lane.legacy || lane.status === "closed") return false;
+    if (!state.lanes.every((member) => ["integrated", "merged", "closed"].includes(member.status))) return false;
+    const github = this.#githubFor(link);
+    const shippingPull = await github.findPullRequest(lane.branch, ctx.signal);
+    if (!shippingPull?.merged || !shippingPull.mergeCommitSha) return false;
+    await this.promoteWorkOrder({
+      orchestrationId: link.orchestrationId,
+      ownerId: link.orchestrationId,
+      queuePosition: lane.promotion.queuePosition ?? 0,
+      staging: {
+        branch: link.integrationBranch,
+        sha: shippingPull.baseSha,
+        baselineSha: shippingPull.baseSha,
+        idle: true,
+        checkedAt: new Date().toISOString(),
+      },
+      sourceHeadSha: shippingPull.headSha,
+      mergeBaseSha: shippingPull.baseSha,
+      shippingPullNumber: shippingPull.number,
+      mergeCommitSha: shippingPull.mergeCommitSha,
+      reviewedAt: new Date().toISOString(),
+      reviewPassed: true,
+      verificationPassed: true,
+      mergeable: shippingPull.mergeability !== "conflicting",
+      authorityValid: shippingPull.baseRef === link.integrationBranch,
+      ctx,
+    });
+    return true;
+  }
+
   async promoteWorkOrder(input: {
     orchestrationId: string;
     ownerId: string;
@@ -599,32 +654,55 @@ export class ForgeOrchestrationController {
     const link = this.#links.get(input.orchestrationId);
     if (!link) throw new Error(`Unknown orchestration ${input.orchestrationId}.`);
     const current = await this.#read(link, input.ctx.signal);
-    const lane = current.state.integrationLane;
-    if (!lane || lane.kind !== "work-order" || lane.legacy)
+    const initialLane = current.state.integrationLane;
+    if (!initialLane || initialLane.kind !== "work-order" || initialLane.legacy)
       throw new Error("Only typed work-order lanes can be promoted automatically.");
-    if (!current.state.lanes.every((member) => member.status === "integrated" || member.status === "merged" || member.status === "closed"))
+    if (!current.state.lanes.every((member) => ["integrated", "merged", "closed"].includes(member.status)))
       throw new Error("Work-order promotion requires every member PR to be lane-integrated.");
     let state = current.state;
     const journal = current.journal;
-    if (lane.promotion.queuePosition === undefined) {
-      state = await journal.queueLane({ orchestrationId: input.orchestrationId, laneId: lane.stableId, queuePosition: input.queuePosition, signal: input.ctx.signal });
-    }
-    if (state.integrationLane?.status === "ready") {
-      state = await journal.acquireLaneQueueLease({ orchestrationId: input.orchestrationId, laneId: lane.stableId, ownerId: input.ownerId, leaseSeconds: 900, signal: input.ctx.signal });
-    }
-    const leaseEpoch = state.integrationLane?.promotion.queueLease?.epoch;
-    if (!leaseEpoch) throw new Error("Promotion queue lease was not acquired.");
-    if (state.integrationLane?.status === "syncing") {
-      state = await journal.syncLane({ orchestrationId: input.orchestrationId, laneId: lane.stableId, ownerId: input.ownerId, leaseEpoch, staging: input.staging, signal: input.ctx.signal });
-    }
-    const receipt = workOrderPromotionReceipt({ shippingPullNumber: input.shippingPullNumber, sourceHeadSha: input.sourceHeadSha, stagingBaseSha: input.staging.sha, mergeBaseSha: input.mergeBaseSha, mergeCommitSha: input.mergeCommitSha, reviewedAt: input.reviewedAt });
-    const gate = evaluateWorkOrderPromotion({ lane: state.integrationLane!, ownerId: input.ownerId, now: input.reviewedAt, sourceHeadSha: input.sourceHeadSha, mergeBaseSha: input.mergeBaseSha, staging: input.staging, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: true });
-    if (!gate.allowed) throw new Error(`Work-order promotion gated: ${gate.reason}`);
-    state = await journal.promoteLane({ orchestrationId: input.orchestrationId, laneId: lane.stableId, ownerId: input.ownerId, leaseEpoch, staging: input.staging, receipt, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: true, signal: input.ctx.signal });
     const github = this.#githubFor(link);
+    const laneState = state.integrationLane;
+    if (!laneState) throw new Error("Durable integration lane disappeared during promotion.");
+    const alreadyPromoted = laneState.status === "promoted" || laneState.status === "closed";
+    if (!alreadyPromoted) {
+      const shippingPull = await github.getPullRequest(input.shippingPullNumber, input.ctx.signal);
+      if (!shippingPull.merged || !shippingPull.mergeCommitSha ||
+          shippingPull.headRef !== initialLane.branch ||
+          shippingPull.baseRef !== link.integrationBranch ||
+          shippingPull.headSha !== input.sourceHeadSha ||
+          shippingPull.baseSha !== input.staging.sha ||
+          shippingPull.mergeCommitSha !== input.mergeCommitSha)
+        throw new Error("Shipping PR route, exact head/base, or merge read-back does not match promotion evidence.");
+      if (state.integrationLane?.promotion.queuePosition === undefined) {
+        state = await journal.queueLane({ orchestrationId: input.orchestrationId, laneId: initialLane.stableId, queuePosition: input.queuePosition, signal: input.ctx.signal });
+      }
+      const currentLane = state.integrationLane;
+      if (!currentLane) throw new Error("Durable integration lane disappeared during queueing.");
+      const priorEpoch = currentLane.promotion.queueLease?.epoch ?? 0;
+      const leaseExpired = currentLane.promotion.queueLease !== undefined &&
+        new Date(currentLane.promotion.queueLease.expiresAt).getTime() <= Date.parse(input.reviewedAt);
+      if (currentLane.status === "ready" || ((currentLane.status === "syncing" || currentLane.status === "promoting") && leaseExpired)) {
+        state = await journal.acquireLaneQueueLease({ orchestrationId: input.orchestrationId, laneId: initialLane.stableId, ownerId: input.ownerId, leaseSeconds: 900, attempt: priorEpoch + 1, signal: input.ctx.signal });
+      }
+      const leaseEpoch = state.integrationLane?.promotion.queueLease?.epoch;
+      if (!leaseEpoch) throw new Error("Promotion queue lease was not acquired.");
+      if (state.integrationLane?.status === "syncing") {
+        state = await journal.syncLane({ orchestrationId: input.orchestrationId, laneId: initialLane.stableId, ownerId: input.ownerId, leaseEpoch, staging: input.staging, signal: input.ctx.signal });
+      }
+      const queueHead = await this.#promotionQueueHead(current.store, input.orchestrationId, state, input.ctx.signal);
+      if (!queueHead || queueHead.stableId !== initialLane.stableId)
+        throw new Error("Work-order promotion is gated: the durable shared queue head is another lane.");
+      const receipt = workOrderPromotionReceipt({ shippingPullNumber: input.shippingPullNumber, sourceHeadSha: input.sourceHeadSha, stagingBaseSha: input.staging.sha, mergeBaseSha: input.mergeBaseSha, mergeCommitSha: input.mergeCommitSha, reviewedAt: input.reviewedAt });
+      const gate = evaluateWorkOrderPromotion({ lane: state.integrationLane!, ownerId: input.ownerId, now: input.reviewedAt, sourceHeadSha: input.sourceHeadSha, mergeBaseSha: input.mergeBaseSha, staging: input.staging, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: true, queueHeadLaneId: queueHead.stableId });
+      if (!gate.allowed) throw new Error(`Work-order promotion gated: ${gate.reason}`);
+      state = await journal.promoteLane({ orchestrationId: input.orchestrationId, laneId: initialLane.stableId, ownerId: input.ownerId, queueHeadLaneId: queueHead.stableId, leaseEpoch: state.integrationLane!.promotion.queueLease!.epoch, staging: input.staging, receipt, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: true, signal: input.ctx.signal });
+    }
+    const lane = state.integrationLane!;
     for (const member of lane.membership) await github.closeIssue(member.issueNumber, input.ctx.signal);
     await github.deleteBranch(lane.branch, input.ctx.signal);
-    state = await journal.closeLane({ orchestrationId: input.orchestrationId, laneId: lane.stableId, signal: input.ctx.signal });
+    if (state.integrationLane?.status === "promoted")
+      state = await journal.closeLane({ orchestrationId: input.orchestrationId, laneId: lane.stableId, signal: input.ctx.signal });
     for (const member of state.lanes.filter((candidate) => candidate.status === "integrated" || candidate.status === "merged"))
       state = await journal.append({ orchestrationId: input.orchestrationId, type: "lane.closed", payload: { issueNumber: member.issueNumber, reason: `Work-order lane ${lane.stableId} promoted to staging.` }, idempotencyKey: `lane:${member.issueNumber}:closed-after-promotion`, message: `Close promoted work-order member ${member.issueNumber}`, ...(input.ctx.signal ? { signal: input.ctx.signal } : {}) });
     return state;
@@ -656,8 +734,18 @@ export class ForgeOrchestrationController {
       throw new Error(`Orchestration ${orchestrationId} does not exist.`);
     if (current.state.status !== "running") return current.state;
     await this.#cancelDurableChildRuns(store, current.state, ctx, reason);
+    const cancellationJournal = new OrchestrationJournal(store);
+    const laneLease = current.state.integrationLane?.promotion.queueLease;
+    if (laneLease) {
+      await cancellationJournal.releaseLaneQueueLease({
+        orchestrationId,
+        laneId: current.state.integrationLane!.stableId,
+        ownerId: laneLease.ownerId,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      }).catch(() => undefined);
+    }
     await this.#workOn.stopOrchestration(orchestrationId, ctx, reason);
-    const cancelled = await new OrchestrationJournal(store).cancel({
+    const cancelled = await cancellationJournal.cancel({
       orchestrationId,
       reason,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
@@ -1172,6 +1260,17 @@ export class ForgeOrchestrationController {
         }
 
         current = await this.#read(link, ctx.signal);
+        if (current.state.integrationLane?.status === "promoted" || current.state.lanes.every((member) => ["integrated", "merged", "closed"].includes(member.status))) {
+          try {
+            if (await this.#tryPromoteCompletedWorkOrder(link, current.state, ctx)) {
+              progress = true;
+              continue;
+            }
+          } catch (error) {
+            ctx.ui.notify(`ForgeDock work-order promotion is awaiting durable evidence: ${errorMessage(error)}`, "warning");
+            return;
+          }
+        }
         if (current.state.lanes.every(isTerminalLane)) {
           const reason = childCleanupReason(current.state);
           if (reason) {

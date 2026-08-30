@@ -105,8 +105,10 @@ export class OrchestrationJournal {
     return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.queued", payload: { laneId: input.laneId, queuePosition: input.queuePosition }, idempotencyKey: `integration-lane:${input.laneId}:queue:${input.queuePosition}`, message: `Queue integration lane ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
   }
 
-  async acquireLaneQueueLease(input: { orchestrationId: string; laneId: string; ownerId: string; leaseSeconds: number; signal?: AbortSignal }): Promise<OrchestrationState> {
-    return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.lease-acquired", payload: { laneId: input.laneId, ownerId: input.ownerId, leaseSeconds: input.leaseSeconds }, idempotencyKey: `integration-lane:${input.laneId}:lease:${input.ownerId}`, message: `Acquire integration lane queue lease ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
+  async acquireLaneQueueLease(input: { orchestrationId: string; laneId: string; ownerId: string; leaseSeconds: number; attempt?: number; signal?: AbortSignal }): Promise<OrchestrationState> {
+    const attempt = input.attempt ?? 1;
+    if (!Number.isSafeInteger(attempt) || attempt < 1) throw new Error("Lease acquisition attempt must be a positive integer.");
+    return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.lease-acquired", payload: { laneId: input.laneId, ownerId: input.ownerId, leaseSeconds: input.leaseSeconds, attempt }, idempotencyKey: `integration-lane:${input.laneId}:lease:${input.ownerId}:${attempt}`, message: `Acquire integration lane queue lease ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
   }
 
   async releaseLaneQueueLease(input: { orchestrationId: string; laneId: string; ownerId: string; signal?: AbortSignal }): Promise<OrchestrationState> {
@@ -117,8 +119,8 @@ export class OrchestrationJournal {
     return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.sync", payload: { laneId: input.laneId, ownerId: input.ownerId, leaseEpoch: input.leaseEpoch, staging: input.staging }, idempotencyKey: `integration-lane:${input.laneId}:sync:${input.staging.sha}`, message: `Record integration lane sync ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
   }
 
-  async promoteLane(input: { orchestrationId: string; laneId: string; ownerId: string; leaseEpoch: number; staging: IntegrationLaneStagingEvidence; receipt: IntegrationLanePromotionReceipt; reviewPassed: boolean; verificationPassed: boolean; mergeable: boolean; authorityValid: boolean; mergeCommit: boolean; signal?: AbortSignal }): Promise<OrchestrationState> {
-    return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.promoted", payload: { laneId: input.laneId, ownerId: input.ownerId, queueHeadLaneId: input.laneId, leaseEpoch: input.leaseEpoch, staging: input.staging, receipt: input.receipt, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: input.mergeCommit }, idempotencyKey: `integration-lane:${input.laneId}:promoted:${input.receipt.mergeCommitSha}`, message: `Promote integration lane ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
+  async promoteLane(input: { orchestrationId: string; laneId: string; ownerId: string; queueHeadLaneId: string; leaseEpoch: number; staging: IntegrationLaneStagingEvidence; receipt: IntegrationLanePromotionReceipt; reviewPassed: boolean; verificationPassed: boolean; mergeable: boolean; authorityValid: boolean; mergeCommit: boolean; signal?: AbortSignal }): Promise<OrchestrationState> {
+    return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.promoted", payload: { laneId: input.laneId, ownerId: input.ownerId, queueHeadLaneId: input.queueHeadLaneId, leaseEpoch: input.leaseEpoch, staging: input.staging, receipt: input.receipt, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: input.mergeCommit }, idempotencyKey: `integration-lane:${input.laneId}:promoted:${input.receipt.mergeCommitSha}`, message: `Promote integration lane ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
   }
 
   async closeLane(input: { orchestrationId: string; laneId: string; signal?: AbortSignal }): Promise<OrchestrationState> {

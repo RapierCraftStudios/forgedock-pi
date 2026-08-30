@@ -4598,6 +4598,7 @@ export class ForgeWorkOnController {
       round: 1,
     };
     const baseSha = link.prepared.baseSha;
+    const deferLaneClosure = shouldDeferWorkOrderClosure(link.integrationLane);
 
     await journal.append({
       runId: link.forgeRunId,
@@ -4617,23 +4618,25 @@ export class ForgeWorkOnController {
       message: `Start parent node close-1 (no-change closure)`,
       ...(signal ? { signal } : {}),
     });
-    await github.closeIssue(link.issueNumber, signal);
-    const closed = await github.getIssue(link.issueNumber, signal);
-    if (closed.state !== "closed")
-      throw new Error("Issue close read-back failed.");
-    await journal.append({
-      runId: link.forgeRunId,
-      type: "effect.recorded",
-      payload: {
-        effectType: "issue-close",
-        effectId: `issue-close:${link.issueNumber}`,
-        digest: digest(String(link.issueNumber)),
-      },
-      idempotencyKey: `effect:issue-close:${link.issueNumber}`,
-      sessionId,
-      message: `Record issue close effect ${link.issueNumber} (no-change closure)`,
-      ...(signal ? { signal } : {}),
-    });
+    if (!deferLaneClosure) {
+      await github.closeIssue(link.issueNumber, signal);
+      const closed = await github.getIssue(link.issueNumber, signal);
+      if (closed.state !== "closed")
+        throw new Error("Issue close read-back failed.");
+      await journal.append({
+        runId: link.forgeRunId,
+        type: "effect.recorded",
+        payload: {
+          effectType: "issue-close",
+          effectId: `issue-close:${link.issueNumber}`,
+          digest: digest(String(link.issueNumber)),
+        },
+        idempotencyKey: `effect:issue-close:${link.issueNumber}`,
+        sessionId,
+        message: `Record issue close effect ${link.issueNumber} (no-change closure)`,
+        ...(signal ? { signal } : {}),
+      });
+    }
     await journal.append({
       runId: link.forgeRunId,
       type: "node.completed",
@@ -4643,7 +4646,9 @@ export class ForgeWorkOnController {
         baseSha,
         outcome: "closed",
         evidence: [
-          "no-change closure: frozen diff is empty; no PR created",
+          deferLaneClosure
+            ? "no-change work-order member retained until lane promotion"
+            : "no-change closure: frozen diff is empty; no PR created",
           "FORGE:COMMIT:NO-CHANGE",
         ],
         verificationResults: [],
@@ -4697,7 +4702,12 @@ export class ForgeWorkOnController {
         headSha: baseSha,
         baseSha,
         outcome: "closed",
-        evidence: ["owned worktree removed", "no-change closure terminal"],
+        evidence: [
+          "owned worktree removed",
+          deferLaneClosure
+            ? "lane-integrated work-order member retained for promotion"
+            : "no-change closure terminal",
+        ],
         verificationResults: [],
       },
       idempotencyKey: `node:cleanup-1:complete`,
@@ -4891,6 +4901,12 @@ export class ForgeWorkOnController {
         sessionId,
         ctx,
       });
+      if (shouldDeferWorkOrderClosure(link.integrationLane))
+        this.#emitLifecycle(link, {
+          headSha: result.baseSha,
+          baseSha: result.baseSha,
+          laneIntegrated: true,
+        });
       return;
     }
 
