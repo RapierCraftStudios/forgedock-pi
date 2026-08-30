@@ -26,8 +26,12 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "bin": {
+    "forgedock-project-config": "./scripts/project-forge-config.mjs"
+  },
   "files": [
     "src/",
+    "scripts/",
     "agents/",
     "prompts/",
     "skills/",
@@ -41,7 +45,7 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test \"test/**/*.test.ts\"",
+    "test": "tsx --test \"test/**/*.test.ts\" \"test/**/*.test.mjs\"",
     "check": "npm run typecheck && npm test"
   },
   "pi": {

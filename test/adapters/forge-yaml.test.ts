@@ -75,6 +75,22 @@ verification:
   assert.doesNotMatch(JSON.stringify(projected), /parent\/(?:checkout|worktrees)/);
 });
 
+test("managed projection detaches aliased paths before rebinding", () => {
+  const projected = parseForgeYaml(projectForgeYaml(`project: { name: demo, owner: acme, repo: app }
+paths: &local { root: /parent, worktree_base: /parent/worktrees }
+branches: { staging: staging, default: main }
+agents: { default_model: a, subagent_model: b }
+review:
+  original_paths: *local
+`, "/managed/child")) as {
+    paths: { root: string; worktree_base: string };
+    review: { original_paths: { root: string; worktree_base: string } };
+  };
+  assert.equal(projected.paths.root, "/managed/child");
+  assert.equal(projected.review.original_paths.root, "/parent");
+  assert.equal(projected.review.original_paths.worktree_base, "/parent/worktrees");
+});
+
 test("managed projection validates before rewriting and rejects unsafe child roots", () => {
   const invalid = `project: { name: demo, owner: acme, repo: app }
 paths: { root: /parent, worktree_base: /parent/worktrees }

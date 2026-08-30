@@ -72,7 +72,14 @@ export function projectForgeYaml(text: string, childRoot: string): string {
   if (escaped.startsWith("..") || isAbsolute(escaped))
     throw new ForgeYamlError("projection", "runtime worktree base escapes child root");
 
-  const projected = canonical as { paths: { root: ForgeYamlValue; worktree_base: ForgeYamlValue } };
+  const source = canonical as { paths: { root: ForgeYamlValue; worktree_base: ForgeYamlValue } };
+  // Detach the paths mapping before rebinding it. YAML anchors can make this
+  // object shared by another field; mutating it in place would rewrite more
+  // than the two explicitly local fields.
+  const projected = {
+    ...(canonical as { [key: string]: ForgeYamlValue }),
+    paths: { ...source.paths },
+  };
   projected.paths.root = root;
   projected.paths.worktree_base = worktreeBase;
   return YAML.stringify(projected);

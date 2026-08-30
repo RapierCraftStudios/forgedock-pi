@@ -31,13 +31,15 @@ must never be copied verbatim into a child: absolute `paths.root` or
 `paths.worktree_base` values can point back to the anchor checkout. For each allocated
 child worktree, run the installed ForgeDock projection helper at the pinned package
 revision to parse/validate the canonical YAML and write only a runtime config at
-`<child-cwd>/.forge/runtime/forge.yaml`. The helper must rewrite only
-`paths.root=<child-cwd>` and `paths.worktree_base=<child-cwd>/.forge/runtime/worktrees`,
-preserving project identity, branches, review, verification, and agent policy fields.
-Create the runtime directory with `mkdir -p`, set `FORGE_CONFIG` to that child-local
-file, and pass that exact environment value with the child task. Verify with `realpath`
-that both projected paths are within the child cwd, verify the projection is ignored by
-Git, and assert the child has no tracked or staged changes before launch. A failed parse,
+`<child-cwd>/.forge/runtime/forge.yaml`. Invoke the packaged command explicitly:
+`forgedock-project-config --input "$CANONICAL_FORGE_CONFIG" --output "$CHILD_ROOT/.forge/runtime/forge.yaml" --child-root "$CHILD_ROOT"`.
+The helper must rewrite only `paths.root=<child-cwd>` and
+`paths.worktree_base=<child-cwd>/.forge/runtime/worktrees`, preserving project identity,
+branches, review, verification, and agent policy fields. Create both directories before
+validation (`mkdir -p "$CHILD_ROOT/.forge/runtime/worktrees"`), set `FORGE_CONFIG` to that
+child-local file, and pass that exact environment value with the child task. Verify with
+`realpath` that both projected paths are within the child cwd, verify the projection is
+ignored by Git, and assert the child has no tracked or staged changes before launch. A failed parse,
 missing config, parent-path residue, containment check, or ignored-path check is an
 automated GATED stop before the child starts. Never project arbitrary untracked files;
 never use the orchestrator's absolute checkout path as a child's repository root.
