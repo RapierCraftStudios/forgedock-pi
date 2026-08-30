@@ -98,6 +98,39 @@ test("typed lane reload rejects stale receipts and retains queue identity", () =
   assert.deepEqual(batch.queue?.map((entry) => entry.position), [0, 1, 2]);
 });
 
+test("independent child and orchestration lease epochs remain reloadable", () => {
+  const lane = createIntegrationLane({
+    kind: "work-order",
+    stableId: "wo-1",
+    slug: "queue",
+    repository: "owner/repo",
+    frozenBase: { branch: "main", sha: "0123456789abcdef0123456789abcdef01234567" },
+    membership: [
+      { issueNumber: 1, ordinal: 0 },
+      { issueNumber: 2, ordinal: 1 },
+      { issueNumber: 3, ordinal: 2 },
+    ],
+    sourceQuery: "issues",
+    createdAt: "2026-08-24T00:00:00.000Z",
+    updatedAt: "2026-08-24T00:00:00.000Z",
+    status: "active",
+  });
+  const plan = planOrchestrationReload({
+    state: { ...state(), integrationLane: lane },
+    retainedChildren: [{
+      childKey: orchestrationChildKey("batch-1", 1),
+      issueNumber: 1,
+      status: "running",
+      laneId: "wo-1",
+      baseSha: lane.frozenBase.sha,
+      // A renewed/adopted child lease belongs to a separate domain.
+      leaseEpoch: 4,
+    }],
+  });
+  assert.equal(plan.paused, false);
+  assert.deepEqual(plan.reconcile, [1]);
+});
+
 test("filtered typed queues renumber positions after a leading lane closes", () => {
   const lane = createIntegrationLane({
     kind: "work-order",
