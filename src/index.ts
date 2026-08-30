@@ -40,6 +40,26 @@ export {
 export { loadForgeYaml, parseForgeYaml, ForgeYamlError } from "./adapters/forge-yaml.ts";
 export { preflightGitHubCapabilities, GitHubCapabilityError } from "./adapters/github-capabilities.ts";
 export {
+  createIntegrationLane,
+  legacyFastLane,
+  normalizeIntegrationSlug,
+  normalizeStableId,
+  validateGitRef,
+  validateIntegrationLane,
+  workOrderBranchName,
+  INTEGRATION_LANE_SCHEMA,
+  IntegrationLaneValidationError,
+} from "./core/integration-lane.ts";
+export type {
+  IntegrationLane,
+  IntegrationLaneBase,
+  IntegrationLaneInput,
+  IntegrationLaneKind,
+  IntegrationLaneMember,
+  IntegrationLanePromotion,
+  IntegrationLaneStatus,
+} from "./core/integration-lane.ts";
+export {
   assertReviewFindingReadbackPaths,
   normalizeReviewFindingMetadata,
   trustedAffectedPathsForDag,

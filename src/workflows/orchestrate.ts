@@ -38,6 +38,7 @@ import { isProtectedBranch, type ForgePolicy } from "../core/policy.ts";
 import { OrchestrationJournal } from "./orchestration-journal.ts";
 import {
   isTransientProviderFailure,
+  type ActiveRunLink,
   type ForgeWorkOnController,
   type WorkOnLifecycleEvent,
 } from "./work-on.ts";
@@ -1190,7 +1191,8 @@ async function orchestrationDelay(
       resolve();
     }, milliseconds);
     signal?.addEventListener("abort", onAbort, { once: true });
-    timer.unref();
+    if (typeof timer === "object" && timer !== null && "unref" in timer)
+      (timer as { unref: () => void }).unref();
   });
 }
 
@@ -1218,7 +1220,10 @@ function validateIssueNumbers(issueNumbers: readonly number[]): void {
 
 function retainedChildrenForReload(
   state: OrchestrationState,
-  runs: readonly { orchestrationId?: string; issueNumber: number; status: string; forgeRunId: string }[],
+  runs: readonly Pick<
+    ActiveRunLink,
+    "orchestrationId" | "issueNumber" | "status" | "forgeRunId" | "prepared" | "leaseEpoch"
+  >[],
 ): RetainedOrchestrationChild[] {
   return runs
     .filter((run) => run.orchestrationId === state.orchestrationId)
@@ -1233,6 +1238,13 @@ function retainedChildrenForReload(
           ? "failed"
           : "running") as RetainedOrchestrationChild["status"],
       forgeRunId: run.forgeRunId,
+      ...(state.integrationLane
+        ? {
+            laneId: state.integrationLane.stableId,
+            baseSha: run.prepared.baseSha,
+            leaseEpoch: run.leaseEpoch,
+          }
+        : {}),
     }));
 }
 

@@ -1,3 +1,5 @@
+import type { IntegrationLane } from "./integration-lane.ts";
+import { validateIntegrationLane } from "./integration-lane.ts";
 import type { OrchestrationLane, OrchestrationState } from "./orchestration.ts";
 
 export const ORCHESTRATION_RECOVERY_SCHEMA =
@@ -18,6 +20,15 @@ export interface OrchestrationBatchState {
   predecessors: Readonly<Record<string, readonly number[]>>;
   ready: readonly number[];
   deferred: readonly number[];
+  /** Present for new typed lane records; omitted for legacy fast-lane snapshots. */
+  laneId?: string;
+  queue?: readonly OrchestrationQueueEntry[];
+}
+
+export interface OrchestrationQueueEntry {
+  issueNumber: number;
+  laneId: string;
+  position: number;
 }
 
 export interface RetainedOrchestrationChild {
@@ -25,6 +36,18 @@ export interface RetainedOrchestrationChild {
   issueNumber: number;
   status: "running" | "completed" | "failed" | "cancelled" | "missing";
   forgeRunId?: string;
+  laneId?: string;
+  baseSha?: string;
+  leaseEpoch?: number;
+}
+
+function isCanonicalLegacyFastLane(lane: IntegrationLane): boolean {
+  return lane.legacy === true &&
+    lane.kind === "milestone" &&
+    /^legacy-[0-9a-f]{8}$/.test(lane.stableId) &&
+    lane.slug === "fast-lane" &&
+    lane.sourceQuery === "legacy-fast-lane" &&
+    lane.frozenBase.sha === "0000000";
 }
 
 export interface OrchestrationReloadPlan {
@@ -77,7 +100,7 @@ export function classifyOrchestrationLane(
 }
 
 export function createOrchestrationBatchState(
-  state: Pick<OrchestrationState, "orchestrationId" | "leaseEpoch" | "lanes" | "dependencies">,
+  state: Pick<OrchestrationState, "orchestrationId" | "leaseEpoch" | "lanes" | "dependencies"> & { integrationLane?: IntegrationLane },
 ): OrchestrationBatchState {
   const childKeys: Record<string, string> = {};
   const predecessors: Record<string, readonly number[]> = {};
@@ -98,7 +121,7 @@ export function createOrchestrationBatchState(
     if (lane.status === "queued" && predecessorsComplete) ready.push(lane.issueNumber);
     else if (lane.status === "queued") deferred.push(lane.issueNumber);
   }
-  return {
+  const result: OrchestrationBatchState = {
     schema: ORCHESTRATION_RECOVERY_SCHEMA,
     batchId: state.orchestrationId,
     leaseEpoch: state.leaseEpoch,
@@ -107,6 +130,17 @@ export function createOrchestrationBatchState(
     ready,
     deferred,
   };
+  if (state.integrationLane) {
+    result.laneId = state.integrationLane.stableId;
+    result.queue = state.lanes
+      .filter((lane) => lane.status !== "closed")
+      .map((lane, position) => ({
+        issueNumber: lane.issueNumber,
+        laneId: state.integrationLane!.stableId,
+        position,
+      }));
+  }
+  return result;
 }
 
 /**
@@ -115,13 +149,55 @@ export function createOrchestrationBatchState(
  * duplicate child identity pauses the drain and launches nothing.
  */
 export function planOrchestrationReload(input: {
-  state: Pick<OrchestrationState, "orchestrationId" | "leaseEpoch" | "lanes" | "dependencies" | "maxConcurrent">;
+  state: Pick<OrchestrationState, "orchestrationId" | "leaseEpoch" | "lanes" | "dependencies" | "maxConcurrent"> & { integrationLane?: IntegrationLane };
   retainedChildren: readonly RetainedOrchestrationChild[];
+  /** Optional persisted queue supplied by reload callers; derived when omitted. */
+  queue?: readonly OrchestrationQueueEntry[];
 }): OrchestrationReloadPlan {
   const batch = createOrchestrationBatchState(input.state);
+  let unsafeReason: string | undefined;
+  if (input.state.integrationLane) {
+    try {
+      validateIntegrationLane(input.state.integrationLane);
+    } catch (error) {
+      unsafeReason = error instanceof Error ? error.message : String(error);
+    }
+    if (!unsafeReason && Array.isArray(input.state.integrationLane.membership)) {
+      const expectedMembers = new Set(input.state.lanes.map((lane) => lane.issueNumber));
+      const actualMembers = new Set(input.state.integrationLane.membership.map((member) => member.issueNumber));
+      if (expectedMembers.size !== actualMembers.size || [...expectedMembers].some((issue) => !actualMembers.has(issue)))
+        unsafeReason ??= "Durable lane membership does not match orchestration lanes.";
+    }
+  }
+  const queue = input.queue ?? batch.queue;
+  if (queue && input.state.integrationLane) {
+    const seenIssues = new Set<number>();
+    const seenPositions = new Set<number>();
+    for (const entry of queue) {
+      if (entry.laneId !== input.state.integrationLane.stableId)
+        unsafeReason ??= `Queue entry for issue #${entry.issueNumber} has unknown lane identity.`;
+      if (!input.state.lanes.some((lane) => lane.issueNumber === entry.issueNumber))
+        unsafeReason ??= `Queue entry references unknown issue #${entry.issueNumber}.`;
+      if (seenIssues.has(entry.issueNumber) || seenPositions.has(entry.position))
+        unsafeReason ??= "Duplicate or ambiguous integration queue entry.";
+      if (!Number.isSafeInteger(entry.position) || entry.position < 0)
+        unsafeReason ??= "Integration queue position is invalid.";
+      seenIssues.add(entry.issueNumber);
+      seenPositions.add(entry.position);
+    }
+    const expectedQueueIssues = new Set(
+      input.state.lanes
+        .filter((lane) => lane.status !== "closed")
+        .map((lane) => lane.issueNumber),
+    );
+    if (seenIssues.size !== expectedQueueIssues.size || [...expectedQueueIssues].some((issue) => !seenIssues.has(issue)))
+      unsafeReason ??= "Integration queue is stale or incomplete.";
+    const orderedPositions = [...seenPositions].sort((left, right) => left - right);
+    if (orderedPositions.some((position, index) => position !== index))
+      unsafeReason ??= "Integration queue positions are stale or ambiguous.";
+  }
   const knownKeys = new Set(Object.values(batch.childKeys));
   const byKey = new Map<string, RetainedOrchestrationChild>();
-  let unsafeReason: string | undefined;
   for (const child of input.retainedChildren) {
     if (!knownKeys.has(child.childKey)) {
       unsafeReason ??= `Unknown retained child key ${child.childKey}.`;
@@ -135,6 +211,14 @@ export function planOrchestrationReload(input: {
     if (byKey.has(child.childKey)) {
       unsafeReason ??= `Duplicate retained child key ${child.childKey}.`;
       continue;
+    }
+    if (input.state.integrationLane && !isCanonicalLegacyFastLane(input.state.integrationLane)) {
+      if (child.laneId !== input.state.integrationLane.stableId)
+        unsafeReason ??= `Retained child ${child.childKey} has stale or ambiguous lane identity.`;
+      if (child.baseSha !== undefined && child.baseSha !== input.state.integrationLane.frozenBase.sha)
+        unsafeReason ??= `Retained child ${child.childKey} has a stale frozen base.`;
+      if (child.leaseEpoch !== undefined && child.leaseEpoch !== input.state.leaseEpoch)
+        unsafeReason ??= `Retained child ${child.childKey} has a stale lease epoch.`;
     }
     byKey.set(child.childKey, child);
   }

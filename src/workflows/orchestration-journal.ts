@@ -11,6 +11,11 @@ import {
   type OrchestrationEventType,
   type OrchestrationState,
 } from "../core/orchestration.ts";
+import {
+  createIntegrationLane,
+  type IntegrationLane,
+  type IntegrationLaneInput,
+} from "../core/integration-lane.ts";
 
 export class OrchestrationJournal {
   readonly #store: GitHubStateBranchStore;
@@ -26,6 +31,9 @@ export class OrchestrationJournal {
     integrationBranch: string;
     maxConcurrent: number;
     dependencies?: readonly OrchestrationDependencyEdge[];
+    /** New typed lane binding. `integrationLane` is retained as an alias for callers. */
+    lane?: IntegrationLane | IntegrationLaneInput;
+    integrationLane?: IntegrationLane | IntegrationLaneInput;
     now?: Date;
     signal?: AbortSignal;
   }): Promise<OrchestrationState> {
@@ -40,6 +48,16 @@ export class OrchestrationJournal {
           `Orchestration ${input.orchestrationId} already exists.`,
         );
       const now = input.now ?? new Date();
+      const laneInput = input.lane ?? input.integrationLane;
+      const lane = laneInput ? createIntegrationLane(laneInput as IntegrationLaneInput) : undefined;
+      if (lane && lane.repository !== input.repository)
+        throw new Error(
+          "Integration lane repository must match orchestration repository.",
+        );
+      if (lane && !lane.legacy && lane.kind === "milestone" && lane.branch !== input.integrationBranch)
+        throw new Error(
+          "Milestone lane branch must match orchestration integration branch.",
+        );
       const event = createOrchestrationEvent({
         orchestrationId: input.orchestrationId,
         repository: input.repository,
@@ -52,6 +70,7 @@ export class OrchestrationJournal {
           integrationBranch: input.integrationBranch,
           maxConcurrent: input.maxConcurrent,
           dependencies: [...(input.dependencies ?? [])],
+          ...(lane ? { integrationLane: lane } : {}),
           leaseEpoch: 1,
         },
         occurredAt: now.toISOString(),

@@ -12,6 +12,11 @@ import {
   createOrchestrationBatchState,
   type OrchestrationBatchState,
 } from "./orchestration-recovery.ts";
+import {
+  legacyFastLane,
+  type IntegrationLane,
+  validateIntegrationLane,
+} from "./integration-lane.ts";
 
 export const ORCHESTRATION_EVENT_SCHEMA =
   "forgedock.orchestration-event/v1" as const;
@@ -79,6 +84,8 @@ export interface OrchestrationState {
   graphHash: string;
   /** Durable batch/child/predecessor state used by reload reconciliation. */
   batch?: OrchestrationBatchState;
+  /** Shared integration-lane binding. Absent only on legacy snapshots. */
+  integrationLane?: IntegrationLane;
   idempotencyKeys: Readonly<Record<string, string>>;
   /** Added after the initial orchestration snapshot format; replay derives it for legacy states. */
   eventIds?: Readonly<Record<string, true>>;
@@ -511,6 +518,53 @@ function parseDependencies(
   return dependencies;
 }
 
+function parseIntegrationLane(
+  event: OrchestrationEvent,
+  issueNumbers: readonly number[],
+): IntegrationLane {
+  const raw = event.payload.integrationLane ?? event.payload.lane;
+  if (raw === undefined) {
+    return legacyFastLane({
+      repository: event.repository,
+      integrationBranch: payloadString(event, "integrationBranch"),
+      orchestrationId: event.orchestrationId,
+      issueNumbers,
+      occurredAt: event.occurredAt,
+    });
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw))
+    throw new OrchestrationTransitionError(
+      "invalid-integration-lane",
+      "integrationLane must be an object.",
+    );
+  try {
+    validateIntegrationLane(raw as IntegrationLane);
+  } catch (error) {
+    throw new OrchestrationTransitionError(
+      "invalid-integration-lane",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+  const lane = raw as IntegrationLane;
+  if (lane.repository !== event.repository)
+    throw new OrchestrationTransitionError(
+      "lane-repository-mismatch",
+      "Integration lane repository must match orchestration repository.",
+    );
+  if (!lane.legacy && lane.kind === "milestone" && lane.branch !== payloadString(event, "integrationBranch"))
+    throw new OrchestrationTransitionError(
+      "lane-branch-mismatch",
+      "Milestone lane branch must match orchestration integration branch.",
+    );
+  const members = new Set(lane.membership.map((member) => member.issueNumber));
+  if (members.size !== issueNumbers.length || issueNumbers.some((issue) => !members.has(issue)))
+    throw new OrchestrationTransitionError(
+      "lane-membership-mismatch",
+      "Integration lane membership must match the orchestration issue set.",
+    );
+  return lane;
+}
+
 function createInitialState(event: OrchestrationEvent): OrchestrationState {
   if (
     event.type !== "orchestration.created" ||
@@ -541,6 +595,7 @@ function createInitialState(event: OrchestrationEvent): OrchestrationState {
     issueNumbers,
   );
   const graphHash = hashOrchestrationGraph(issueNumbers, dependencies);
+  const integrationLane = parseIntegrationLane(event, issueNumbers);
   const state: OrchestrationState = {
     schema: ORCHESTRATION_STATE_SCHEMA,
     orchestrationId: event.orchestrationId,
@@ -562,6 +617,7 @@ function createInitialState(event: OrchestrationEvent): OrchestrationState {
     })),
     dependencies,
     graphHash,
+    ...(integrationLane ? { integrationLane } : {}),
     batch: createOrchestrationBatchState({
       orchestrationId: event.orchestrationId,
       leaseEpoch: positiveInteger(event.payload.leaseEpoch, "leaseEpoch"),
@@ -572,6 +628,7 @@ function createInitialState(event: OrchestrationEvent): OrchestrationState {
         refreshes: 0,
       })),
       dependencies,
+      ...(integrationLane ? { integrationLane } : {}),
     }),
     idempotencyKeys: { [event.idempotencyKey]: event.eventId },
     eventIds: { [event.eventId]: true },
