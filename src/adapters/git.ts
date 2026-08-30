@@ -374,6 +374,64 @@ export class GitWorktreeManager {
     ).stdout.trim();
   }
 
+  /**
+   * Create a remote branch from an exact commit without overwriting an
+   * existing ref. A matching or descendant ref is safe to reuse; an
+   * unrelated ref is a collision and fails closed.
+   */
+  async ensureRemoteBranchAt(
+    repositoryRoot: string,
+    branch: string,
+    baseSha: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    assertSafeBranchRef(branch, "branch");
+    assertCommitSha(baseSha, "baseSha");
+    const readRemote = async (): Promise<string | undefined> => {
+      const result = await this.#executor.exec(
+        "git",
+        ["ls-remote", "--heads", "origin", `refs/heads/${branch}`],
+        { cwd: repositoryRoot, timeout: 30_000, ...(signal ? { signal } : {}) },
+      );
+      if (result.code !== 0) throw new GitOperationError("read remote branch", result);
+      const sha = result.stdout.trim().split(/\s+/)[0];
+      return /^[0-9a-f]{40}$/i.test(sha ?? "") ? sha : undefined;
+    };
+    const existing = await readRemote();
+    if (existing) {
+      await this.#git(
+        repositoryRoot,
+        ["fetch", "--no-tags", "origin", branch],
+        120_000,
+        signal,
+      );
+      const safe = await this.isAncestor(repositoryRoot, baseSha, existing, signal);
+      if (!safe)
+        throw new Error(`Remote branch ${branch} does not descend from frozen base ${baseSha}.`);
+      return existing;
+    }
+    const created = await this.#executor.exec(
+      "git",
+      ["push", "origin", `${baseSha}:refs/heads/${branch}`],
+      { cwd: repositoryRoot, timeout: 120_000, ...(signal ? { signal } : {}) },
+    );
+    if (created.code === 0) return baseSha;
+    // Another writer may have won creation. Re-read and apply the same
+    // ancestry check; never force-push or replace its ref.
+    const raced = await readRemote();
+    if (raced) {
+      await this.#git(
+        repositoryRoot,
+        ["fetch", "--no-tags", "origin", branch],
+        120_000,
+        signal,
+      );
+      const safe = await this.isAncestor(repositoryRoot, baseSha, raced, signal);
+      if (safe) return raced;
+    }
+    throw new GitOperationError(`create remote branch ${branch}`, created);
+  }
+
   async head(worktreePath: string, signal?: AbortSignal): Promise<string> {
     return (
       await this.#git(worktreePath, ["rev-parse", "HEAD"], 30_000, signal)

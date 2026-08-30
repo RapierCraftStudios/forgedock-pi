@@ -75,6 +75,11 @@ import type {
   FinalReviewDecision,
   VerificationResult,
 } from "../core/review.ts";
+import {
+  validateIntegrationLane,
+  type IntegrationLane,
+} from "../core/integration-lane.ts";
+import type { OrchestrationState } from "../core/orchestration.ts";
 import type { RunState } from "../core/state.ts";
 import { RunJournal } from "./journal.ts";
 import { ReviewJournal } from "../adapters/review-journal.ts";
@@ -135,6 +140,8 @@ export interface ActiveRunLink {
   heartbeatSeconds?: number;
   lastHeartbeatAt?: string;
   reviewBaseSha: string;
+  /** Durable work-order identity carried into child/review artifacts. */
+  integrationLane?: Pick<IntegrationLane, "stableId" | "branch" | "repository" | "frozenBase">;
   refreshes: number;
   providerRetries: number;
   remediationAttempts: number;
@@ -175,6 +182,35 @@ export interface StartIssueResult {
 
 export interface StartIssueOptions {
   orchestrationId?: string;
+}
+
+/** Resolve the only acceptable lane binding for an orchestrated child. */
+export function resolveAuthoritativeIntegrationLane(
+  state: Pick<OrchestrationState, "repository" | "integrationBranch" | "lanes"> & {
+    integrationLane?: IntegrationLane;
+  },
+  repository: string,
+  issueNumber: number,
+): IntegrationLane {
+  const lane = state.integrationLane;
+  if (!lane)
+    throw new Error(
+      "Orchestrated work-on requires a durable integrationLane; refusing staging fallback.",
+    );
+  try {
+    validateIntegrationLane(lane);
+  } catch (error) {
+    throw new Error(
+      `Orchestrated work-on has invalid durable integration lane: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (state.repository !== repository || lane.repository !== repository)
+    throw new Error("Orchestrated work-on lane repository does not match the repository.");
+  if (state.integrationBranch !== lane.branch)
+    throw new Error("Orchestrated work-on lane branch does not match orchestration state.");
+  if (!lane.membership.some((member) => member.issueNumber === issueNumber))
+    throw new Error(`Issue #${issueNumber} is not a member of the authoritative integration lane.`);
+  return lane;
 }
 
 export interface ParsedAsyncCompletion {
@@ -1028,9 +1064,6 @@ export class ForgeWorkOnController {
     );
     await this.#git.ensureRuntimeIgnored(repositoryRoot, ctx.signal);
     const { policy } = await loadForgePolicy(repositoryRoot);
-    const integrationBranch = chooseIntegrationBranch(policy);
-    if (isProtectedBranch(policy, integrationBranch))
-      throw new Error(`Integration branch ${integrationBranch} is protected.`);
     const tokenProvider = createGitHubTokenProvider(this.#pi, repositoryRoot);
     const transport = new FetchGitHubTransport({ tokenProvider });
     const github = new GitHubWorkflowAdapter(transport, policy.repository.name);
@@ -1045,6 +1078,56 @@ export class ForgeWorkOnController {
       policy.state.branch,
     );
     await store.ensureBranch(new Date(), ctx.signal);
+
+    let integrationLane: IntegrationLane | undefined;
+    let integrationBranch: string;
+    if (options.orchestrationId) {
+      const orchestration = await store.readOrchestration(
+        options.orchestrationId,
+        ctx.signal,
+      );
+      if (!orchestration.state)
+        throw new Error(`Orchestration ${options.orchestrationId} has no durable state.`);
+      integrationLane = resolveAuthoritativeIntegrationLane(
+        orchestration.state,
+        policy.repository.name,
+        issueNumber,
+      );
+      if (integrationLane.frozenBase.branch !== "main")
+        throw new Error("Work-order lane frozen base must be deployed main.");
+      const currentMain = await this.#git.remoteBaseSha(
+        repositoryRoot,
+        integrationLane.frozenBase.branch,
+        ctx.signal,
+      );
+      if (!(await this.#git.isAncestor(
+        repositoryRoot,
+        integrationLane.frozenBase.sha,
+        currentMain,
+        ctx.signal,
+      )))
+        throw new Error("Work-order lane frozen base is not reachable from deployed main.");
+      const laneHead = await this.#git.remoteBaseSha(
+        repositoryRoot,
+        integrationLane.branch,
+        ctx.signal,
+      );
+      if (!(await this.#git.isAncestor(
+        repositoryRoot,
+        integrationLane.frozenBase.sha,
+        laneHead,
+        ctx.signal,
+      )))
+        throw new Error("Work-order lane branch is stale or unrelated to its frozen base.");
+      integrationBranch = integrationLane.branch;
+    } else {
+      integrationBranch = chooseIntegrationBranch(policy);
+    }
+    if (isProtectedBranch(policy, integrationBranch))
+      throw new Error(`Integration branch ${integrationBranch} is protected.`);
+    // Fetching the authoritative lane branch also fails closed when it was
+    // deleted or was never created by orchestrate.
+    await this.#git.remoteBaseSha(repositoryRoot, integrationBranch, ctx.signal);
 
     const prepared = await this.#git.prepare(repositoryRoot, {
       runId,
@@ -1081,6 +1164,16 @@ export class ForgeWorkOnController {
         {
           issue: { title: issue.title, body: issue.body, labels: issue.labels },
           repositoryContext,
+          ...(integrationLane
+            ? {
+                integrationLane: {
+                  stableId: integrationLane.stableId,
+                  branch: integrationLane.branch,
+                  repository: integrationLane.repository,
+                  frozenBase: integrationLane.frozenBase,
+                },
+              }
+            : {}),
         },
         null,
         2,
@@ -1114,6 +1207,16 @@ export class ForgeWorkOnController {
         heartbeatSeconds: policy.state.heartbeatSeconds,
         lastHeartbeatAt: initialized.lease?.lastHeartbeatAt,
         reviewBaseSha: prepared.baseSha,
+        ...(integrationLane
+          ? {
+              integrationLane: {
+                stableId: integrationLane.stableId,
+                branch: integrationLane.branch,
+                repository: integrationLane.repository,
+                frozenBase: integrationLane.frozenBase,
+              },
+            }
+          : {}),
         refreshes: 0,
         providerRetries: 0,
         remediationAttempts: 0,
@@ -5954,6 +6057,13 @@ function buildPullBody(link: ActiveRunLink, result: ForgeWorkOnResult): string {
   return [
     "## Summary",
     `Implements #${link.issueNumber} through ForgeDock Pi run \`${link.forgeRunId}\`.`,
+    ...(link.integrationLane
+      ? [
+          `Authoritative integration lane: \`${link.integrationLane.stableId}\``,
+          `Lane branch: \`${link.integrationLane.branch}\``,
+          `Frozen deployed-main base: \`${link.integrationLane.frozenBase.branch}@${link.integrationLane.frozenBase.sha}\``,
+        ]
+      : []),
     "",
     "## Changed files",
     ...result.changedFiles.map((file) => `- \`${file}\``),

@@ -2,9 +2,16 @@
 # classify-lane.sh — Deterministic lane routing from issue milestone
 #
 # Usage: classify-lane.sh <issue_number> [-R <owner/repo>] [--json]
+#        [--work-order <slug> --work-order-binding <file>]
 #   issue_number: GitHub issue number (required)
 #   -R <owner/repo>: GitHub repository (optional, defaults to current repo)
 #   --json: emit structured JSON object instead of plain lane string (optional)
+#   --work-order <slug>: require an authoritative durable work-order binding
+#   --work-order-binding <file>: JSON binding emitted by orchestration state
+#
+# Work-order mode fails closed unless the binding identifies the normalized slug,
+# deterministic branch, repository and frozen main SHA, and that branch exists and
+# descends from the frozen SHA. It never falls back to staging or milestone routing.
 #
 # Output: lane string written to stdout (default)
 #   staging              — issue has no milestone (fast lane)
@@ -29,6 +36,8 @@ set -euo pipefail
 ISSUE_NUMBER="${1:-}"
 GH_REPO_ARGS=()
 JSON_OUTPUT=false
+WORK_ORDER_SLUG=""
+WORK_ORDER_BINDING_FILE=""
 
 # Parse arguments: issue number + optional -R flag + optional --json flag
 if [ -z "$ISSUE_NUMBER" ]; then
@@ -57,6 +66,22 @@ while [ $# -gt 0 ]; do
       JSON_OUTPUT=true
       shift
       ;;
+    --work-order)
+      if [ $# -lt 2 ] || [ -z "$2" ]; then
+        echo "ERROR: --work-order requires a non-empty slug" >&2
+        exit 1
+      fi
+      WORK_ORDER_SLUG="$2"
+      shift 2
+      ;;
+    --work-order-binding)
+      if [ $# -lt 2 ] || [ -z "$2" ]; then
+        echo "ERROR: --work-order-binding requires a JSON file" >&2
+        exit 1
+      fi
+      WORK_ORDER_BINDING_FILE="$2"
+      shift 2
+      ;;
     *)
       echo "ERROR: unknown argument: $1" >&2
       exit 1
@@ -68,6 +93,62 @@ done
 if ! [[ "$ISSUE_NUMBER" =~ ^[0-9]+$ ]]; then
   echo "ERROR: issue number must be numeric, got: $ISSUE_NUMBER" >&2
   exit 1
+fi
+
+# Explicit work-order routing is authoritative and must be resolved before the
+# legacy milestone/fast-lane classifier. The binding is durable state output,
+# not issue text; incomplete or conflicting metadata must never fall through.
+if [ -n "$WORK_ORDER_SLUG" ]; then
+  if [ -z "$WORK_ORDER_BINDING_FILE" ] || [ ! -f "$WORK_ORDER_BINDING_FILE" ]; then
+    echo "ERROR: work-order '$WORK_ORDER_SLUG' requires an authoritative binding file; refusing staging fallback." >&2
+    exit 1
+  fi
+  if ! jq -e . "$WORK_ORDER_BINDING_FILE" >/dev/null 2>&1; then
+    echo "ERROR: work-order binding is not valid JSON; refusing fallback." >&2
+    exit 1
+  fi
+  NORMALIZED_WORK_ORDER_SLUG=$(printf '%s' "$WORK_ORDER_SLUG" \
+    | tr '[:upper:]' '[:lower:]' \
+    | tr -cs 'a-z0-9' '-' \
+    | sed 's/^-//;s/-$//' \
+    | cut -c1-48 \
+    | sed 's/-$//')
+  if [ -z "$NORMALIZED_WORK_ORDER_SLUG" ]; then
+    echo "ERROR: work-order slug produced an empty normalized slug." >&2
+    exit 1
+  fi
+  BINDING_KIND=$(jq -r '.kind // empty' "$WORK_ORDER_BINDING_FILE")
+  BINDING_ID=$(jq -r '.stableId // empty' "$WORK_ORDER_BINDING_FILE")
+  BINDING_SLUG=$(jq -r '.slug // empty' "$WORK_ORDER_BINDING_FILE")
+  BINDING_BRANCH=$(jq -r '.branch // empty' "$WORK_ORDER_BINDING_FILE")
+  BINDING_REPOSITORY=$(jq -r '.repository // empty' "$WORK_ORDER_BINDING_FILE")
+  BINDING_BASE_BRANCH=$(jq -r '.frozenBase.branch // empty' "$WORK_ORDER_BINDING_FILE")
+  BINDING_BASE_SHA=$(jq -r '.frozenBase.sha // empty' "$WORK_ORDER_BINDING_FILE")
+  EXPECTED_BRANCH="work-order/wo-${NORMALIZED_WORK_ORDER_SLUG}-${NORMALIZED_WORK_ORDER_SLUG}"
+  if [ "$BINDING_KIND" != "work-order" ] ||
+     [ "$BINDING_ID" != "wo-${NORMALIZED_WORK_ORDER_SLUG}" ] ||
+     [ "$BINDING_SLUG" != "$NORMALIZED_WORK_ORDER_SLUG" ] ||
+     [ "$BINDING_BRANCH" != "$EXPECTED_BRANCH" ] ||
+     [ -n "$BINDING_REPOSITORY" ] && [ -n "${GH_REPO_ARGS[1]:-}" ] && [ "$BINDING_REPOSITORY" != "${GH_REPO_ARGS[1]}" ] ||
+     [ "$BINDING_BASE_BRANCH" != "main" ] ||
+     ! [[ "$BINDING_BASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+    echo "ERROR: work-order binding identity, branch, repository, or frozen main base is stale/ambiguous; refusing fallback." >&2
+    exit 1
+  fi
+  if ! git fetch --no-tags origin "$BINDING_BRANCH:refs/remotes/origin/$BINDING_BRANCH" >/dev/null 2>&1 ||
+     ! git merge-base --is-ancestor "$BINDING_BASE_SHA" "origin/$BINDING_BRANCH" >/dev/null 2>&1; then
+    echo "ERROR: work-order branch '$BINDING_BRANCH' is missing or does not descend from frozen main SHA '$BINDING_BASE_SHA'; refusing fallback." >&2
+    exit 1
+  fi
+  if [ "$JSON_OUTPUT" = "true" ]; then
+    jq -cn --arg lane "$BINDING_BRANCH" --arg branch "$BINDING_BRANCH" \
+      --arg repo "$BINDING_REPOSITORY" --arg slug "$BINDING_SLUG" \
+      --arg baseSha "$BINDING_BASE_SHA" \
+      '{lane:$lane,branch:$branch,source:"work-order",workOrder:$slug,repository:$repo,frozenBase:{branch:"main",sha:$baseSha}}'
+  else
+    printf '%s\\n' "$BINDING_BRANCH"
+  fi
+  exit 0
 fi
 
 # Fetch milestone title (and labels, for the review-finding staging-default

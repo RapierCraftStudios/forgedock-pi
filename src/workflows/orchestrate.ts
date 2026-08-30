@@ -28,6 +28,11 @@ import {
   type OrchestrationState,
 } from "../core/orchestration.ts";
 import {
+  createIntegrationLane,
+  normalizeIntegrationSlug,
+  type IntegrationLane,
+} from "../core/integration-lane.ts";
+import {
   orchestrationChildKey,
   planOrchestrationReload,
   renderOrchestrationReloadReport,
@@ -44,6 +49,31 @@ import {
 } from "./work-on.ts";
 
 const ORCHESTRATION_LINK_ENTRY = "forgedock-orchestration-link/v1";
+
+/** Build the durable work-order binding from one frozen deployed-main SHA. */
+export function createWorkOrderLane(input: {
+  slug: string;
+  repository: string;
+  issueNumbers: readonly number[];
+  frozenBaseSha: string;
+  now?: string;
+}): IntegrationLane {
+  const slug = normalizeIntegrationSlug(input.slug);
+  const now = input.now ?? new Date().toISOString();
+  return createIntegrationLane({
+    kind: "work-order",
+    stableId: `wo-${slug}`,
+    slug,
+    repository: input.repository,
+    frozenBase: { branch: "main", sha: input.frozenBaseSha },
+    membership: input.issueNumbers.map((issueNumber, ordinal) => ({ issueNumber, ordinal })),
+    sourceQuery: `work-order:${slug}`,
+    createdAt: now,
+    updatedAt: now,
+    status: "active",
+    promotion: {},
+  });
+}
 
 function laneReservationKey(
   orchestrationId: string,
@@ -75,11 +105,17 @@ export interface ActiveOrchestrationLink {
     | "cancelled";
 }
 
+export interface StartOrchestrationOptions {
+  /** Explicitly scope this orchestration to a durable work-order lane. */
+  workOrderSlug?: string;
+}
+
 export interface StartOrchestrationResult {
   orchestrationId: string;
   issueNumbers: readonly number[];
   maxConcurrent: number;
   integrationBranch: string;
+  integrationLane?: IntegrationLane;
 }
 
 export interface OrchestrationStatusSnapshot {
@@ -359,6 +395,7 @@ export class ForgeOrchestrationController {
   async start(
     issueNumbers: readonly number[],
     ctx: ExtensionContext,
+    options: StartOrchestrationOptions = {},
   ): Promise<StartOrchestrationResult> {
     validateIssueNumbers(issueNumbers);
     const repositoryRoot = await this.#git.resolveRepositoryRoot(
@@ -370,14 +407,51 @@ export class ForgeOrchestrationController {
       throw new Error(
         `Orchestration accepts at most ${policy.orchestration.maxIssues} issues by policy.`,
       );
-    const integrationBranch = chooseIntegrationBranch(policy);
-    if (isProtectedBranch(policy, integrationBranch))
-      throw new Error(`Integration branch ${integrationBranch} is protected.`);
-    await this.#git.remoteBaseSha(
-      repositoryRoot,
-      integrationBranch,
-      ctx.signal,
-    );
+    const workOrderSlug = options.workOrderSlug?.trim();
+    if (options.workOrderSlug !== undefined && !workOrderSlug)
+      throw new Error("Work-order slug must be non-empty.");
+    let integrationLane: IntegrationLane | undefined;
+    let integrationBranch: string;
+    if (workOrderSlug) {
+      const slug = normalizeIntegrationSlug(workOrderSlug);
+      // A work-order is based on deployed production, never the active
+      // staging integration branch. The protected ref is policy-bound and
+      // must include the configured production name `main`.
+      const deployedMain = policy.branches.protected.find(
+        (branch) => branch === "main",
+      );
+      if (!deployedMain)
+        throw new Error("Work-order routing requires protected branch main.");
+      const frozenBaseSha = await this.#git.remoteBaseSha(
+        repositoryRoot,
+        deployedMain,
+        ctx.signal,
+      );
+      integrationLane = createWorkOrderLane({
+        slug,
+        repository: policy.repository.name,
+        issueNumbers,
+        frozenBaseSha,
+      });
+      integrationBranch = integrationLane.branch;
+      if (isProtectedBranch(policy, integrationBranch))
+        throw new Error(`Work-order branch ${integrationBranch} is protected.`);
+      await this.#git.ensureRemoteBranchAt(
+        repositoryRoot,
+        integrationBranch,
+        frozenBaseSha,
+        ctx.signal,
+      );
+    } else {
+      integrationBranch = chooseIntegrationBranch(policy);
+      if (isProtectedBranch(policy, integrationBranch))
+        throw new Error(`Integration branch ${integrationBranch} is protected.`);
+      await this.#git.remoteBaseSha(
+        repositoryRoot,
+        integrationBranch,
+        ctx.signal,
+      );
+    }
     const tokenProvider = createGitHubTokenProvider(this.#pi, repositoryRoot);
     const transport = new FetchGitHubTransport({
         tokenProvider,
@@ -403,6 +477,7 @@ export class ForgeOrchestrationController {
       integrationBranch,
       maxConcurrent: policy.orchestration.maxConcurrent,
       dependencies,
+      ...(integrationLane ? { lane: integrationLane } : {}),
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
     const link: ActiveOrchestrationLink = {
@@ -427,6 +502,7 @@ export class ForgeOrchestrationController {
       issueNumbers: [...issueNumbers],
       maxConcurrent: policy.orchestration.maxConcurrent,
       integrationBranch,
+      ...(integrationLane ? { integrationLane } : {}),
     };
   }
 

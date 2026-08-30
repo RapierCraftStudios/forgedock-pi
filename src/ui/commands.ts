@@ -35,6 +35,7 @@ export interface OrchestrationConfirmationInput {
   issueNumbers: readonly number[];
   sourceExpression: string;
   resolutionSummary: string;
+  workOrderSlug?: string;
 }
 
 /** Require an operator gesture before a model-callable orchestration can write. */
@@ -50,6 +51,7 @@ export async function confirmOrchestrationDispatch(
     "Launch ForgeDock orchestration?",
     [
       `Issues: ${input.issueNumbers.map((issue) => `#${issue}`).join(", ")}`,
+      ...(input.workOrderSlug ? [`Work-order lane: ${input.workOrderSlug}`] : []),
       "This starts repository writers and may merge changes under tracked policy.",
       "Confirm only if this exact issue set matches your request.",
     ].join("\n"),
@@ -179,10 +181,19 @@ export function registerForgeCommands(
         description:
           "Concise explanation of the resolved repository, filters, and exclusions",
       }),
+      workOrderSlug: Type.Optional(
+        Type.String({
+          minLength: 1,
+          description:
+            "Optional explicit --work-order slug; required to route through a durable work-order lane",
+        }),
+      ),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       await confirmOrchestrationDispatch(ctx, params);
-      const result = await orchestrator.start(params.issueNumbers, ctx);
+      const result = await orchestrator.start(params.issueNumbers, ctx, {
+        ...(params.workOrderSlug ? { workOrderSlug: params.workOrderSlug } : {}),
+      });
       return {
         content: [
           {
@@ -576,7 +587,7 @@ export function issueResolverPrompt(
     : "Resolve the complete eligible issue set in deterministic priority/order and explain exclusions.";
   const callInstruction = workOn
     ? "After resolution, call forge_work_on exactly once with the one positive issueNumber, the original sourceExpression, and a concise resolutionSummary."
-    : "After resolution, call forge_orchestrate exactly once with the resolved positive issueNumbers, the original sourceExpression, and a concise resolutionSummary.";
+    : "After resolution, call forge_orchestrate exactly once with the resolved positive issueNumbers, the original sourceExpression, a concise resolutionSummary, and workOrderSlug when the original expression explicitly contains --work-order <slug>.";
   const resolutionBoundary = workOn
     ? "Resolve only against the current repository configuration, the requested current issue candidates, and current active ownership."
     : "If the expression explicitly enumerates issue numbers, the set and order are already fully specified. Read only .forge/config.json, the integration branch, and each named issue's current state, labels, and assignees. Preserve the supplied order. An open issue is eligible unless a current workflow:* label or assignee shows active ownership; review-finding and needs-validation labels are eligible. Do not inspect comments, PRs, label definitions, source/docs, session/history, or infer other selectors. For milestone, query, next-N, fast-lane, or priority expressions, inspect only the current candidates needed to resolve that selector.";
@@ -589,7 +600,7 @@ export function issueResolverPrompt(
     "Use the smallest current-state inspection necessary. Do not search conversation/session history, memory, git history, file history, prior implementations, or unrelated closed issues; none of them is issue-resolution authority.",
     workOn
       ? "Interpret explicit issue numbers, #N, GitHub issue/repository URLs, and natural-language single-issue selectors."
-      : "Interpret the retained original /orchestrate contract, including explicit issue numbers, GitHub issue/repository URLs, milestone selectors, next N, fast-lane, and priority filters.",
+      : "Interpret the retained original /orchestrate contract, including explicit issue numbers, GitHub issue/repository URLs, milestone selectors, next N, fast-lane, priority filters, and explicit --work-order <slug> selectors; preserve the work-order slug separately from the issue set.",
     `Before resolution or confirmation, verify that .forge/config.json exists, is valid, names an existing integration branch, and keeps that branch distinct from tracked production/protected targets. GitHub branch protection and rulesets on the integration branch are supported and must be honored through PR gates; they do not make setup invalid. If setup is missing or invalid, stop and tell the user to run /forge:init; do not call ${tool}.`,
     "Use read-only GitHub/repository inspection. Exclude closed, terminal, actively owned, duplicate, and otherwise ineligible issues.",
     cardinality,
