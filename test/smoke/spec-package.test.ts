@@ -134,3 +134,24 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
     /Load the `forgedock-review-pr` skill in a fresh subagent when invoked from work-on/,
   );
 });
+
+test("moving staging targets use a guarded refresh and fresh review identity", async () => {
+  const orchestrate = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
+  const workOn = await readFile("skills/forgedock-work-on/SKILL.md", "utf8");
+  const review = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
+  const adapter = await readFile("specs/pi-adapter.md", "utf8");
+  const build = await readFile("specs/original/commands/work-on/build.md", "utf8");
+  const workOnReview = await readFile("specs/original/commands/work-on/review.md", "utf8");
+  const remediate = await readFile("specs/original/commands/work-on/remediate.md", "utf8");
+  const protocol = await readFile("specs/qualitative-review-protocol.md", "utf8");
+
+  for (const document of [orchestrate, workOn, review, adapter, build, workOnReview, remediate, protocol]) {
+    assert.match(document, /FORGE:BASE_REFRESH/);
+    assert.match(document, /fresh\s+complete/);
+    assert.match(document, /GATED/);
+  }
+  assert.match(protocol, /immutable launch attribution/);
+  assert.match(protocol, /remote-head lease/);
+  assert.match(protocol, /merge-base/);
+  assert.match(protocol, /pre-refresh output/);
+});
