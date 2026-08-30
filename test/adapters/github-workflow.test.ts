@@ -202,11 +202,11 @@ test("merge rejects a PR retargeted from the reviewed base", async () => {
   assert.equal(transport.requests.length, 2);
 });
 
-test("already-merged PR replay bypasses stale base route validation", async () => {
+test("already-merged replay uses the exact returned merge SHA, not the pre-merge base", async () => {
   const transport = new MockTransport((request) => {
     if (request.method === "GET" && request.path.includes("/git/ref/heads/"))
       return response(200, { object: { sha: "new-base-sha" } });
-    return response(200, { ...pullData(), merged: true, base: { sha: "old-base-sha", ref: "staging" } });
+    return response(200, { ...pullData(), merged: true, merge_commit_sha: "merge-commit-sha", base: { sha: "old-base-sha", ref: "staging" } });
   });
   const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
   const result = await adapter.mergePullRequest({
@@ -219,8 +219,25 @@ test("already-merged PR replay bypasses stale base route validation", async () =
       baseSha: "old-base-sha",
     },
   });
-  assert.deepEqual(result, { merged: true, sha: "head-sha", message: "Already merged" });
+  assert.deepEqual(result, { merged: true, sha: "merge-commit-sha", message: "Already merged" });
   assert.equal(transport.requests.some((request) => request.method === "PUT"), false);
+});
+
+test("already-merged replay fails closed when GitHub omits the exact merge SHA", async () => {
+  const transport = new MockTransport((request) => {
+    if (request.method === "GET" && request.path.includes("/git/ref/heads/"))
+      return response(200, { object: { sha: "new-base-sha" } });
+    return response(200, { ...pullData(), merged: true, base: { sha: "old-base-sha", ref: "staging" } });
+  });
+  const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
+  await assert.rejects(
+    adapter.mergePullRequest({
+      pullNumber: 6,
+      expectedHeadSha: "head-sha",
+      expectedBaseRef: "staging",
+    }),
+    /no exact merge commit SHA/i,
+  );
 });
 
 test("merge binds both the reviewed head and base", async () => {

@@ -239,10 +239,17 @@ export function applyOrchestrationEvent(
     state.status = aggregateOrchestrationStatus(state.lanes);
     state.completedAt = event.occurredAt;
   } else if (event.type === "orchestration.cancelled") {
-    if (state.integrationLane?.status === "promoted" || state.integrationLane?.status === "closed")
+    const laneStatus = state.integrationLane?.status;
+    if (laneStatus === "promoted" || laneStatus === "closed")
       throw new OrchestrationTransitionError(
         "promotion-in-progress",
         "Cannot cancel an orchestration after lane promotion or terminal cleanup; resume post-promotion cleanup.",
+      );
+    if (state.integrationLane && !state.integrationLane.legacy &&
+        ["queued", "active", "ready", "syncing", "promoting"].includes(laneStatus ?? ""))
+      throw new OrchestrationTransitionError(
+        "lane-not-removed",
+        "Cannot cancel an orchestration before its durable integration lane is removed from the promotion queue.",
       );
     state.status = "cancelled";
     state.reason = payloadString(event, "reason");

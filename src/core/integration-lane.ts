@@ -374,9 +374,10 @@ export function transitionIntegrationLane(
       break;
     case "promote":
       if (lane.status !== "ready") throw new IntegrationLaneValidationError("invalid-transition", `Cannot promote a ${lane.status} lane.`);
-      if (!input.ownerId || !input.staging || !input.receipt || input.queueHeadLaneId !== lane.stableId || input.leaseEpoch !== lane.promotion.queueLease?.epoch || input.stagingReadbackSha !== input.staging.sha) throw new IntegrationLaneValidationError("missing-promotion-evidence", "Queue owner, queue head, lease epoch, staging evidence, exact final staging readback, and receipt are required.");
+      if (!input.ownerId || !input.staging || !input.receipt || input.queueHeadLaneId !== lane.stableId || input.leaseEpoch !== lane.promotion.queueLease?.epoch || input.stagingReadbackSha !== input.receipt.mergeCommitSha) throw new IntegrationLaneValidationError("missing-promotion-evidence", "Queue owner, queue head, lease epoch, staging evidence, exact shipping merge readback, and receipt are required.");
       if (lane.promotion.stagingEvidence && (lane.promotion.stagingEvidence.sha !== input.staging.sha || lane.promotion.stagingEvidence.branch !== input.staging.branch)) throw new IntegrationLaneValidationError("staging-evidence-mismatch", "Promotion staging evidence does not match the persisted sync evidence.");
       if (input.receipt.stagingBaseSha !== input.staging.sha) throw new IntegrationLaneValidationError("staging-receipt-mismatch", "Promotion receipt staging base does not match staging evidence.");
+      if (input.stagingReadbackSha !== input.receipt.mergeCommitSha) throw new IntegrationLaneValidationError("merge-readback-mismatch", "Protected staging readback must equal the exact shipping merge commit SHA.");
       const gate = canPromoteIntegrationLane(lane, { ownerId: input.ownerId, now: input.now, sourceHeadSha: input.receipt.sourceHeadSha, mergeBaseSha: input.receipt.mergeBaseSha, staging: input.staging, reviewPassed: input.reviewPassed === true, verificationPassed: input.verificationPassed === true, mergeable: input.mergeable === true, authorityValid: input.authorityValid === true, mergeCommit: input.mergeCommit === true && input.receipt.mergeMethod === "merge", queueHeadLaneId: input.queueHeadLaneId });
       if (!gate.ok) throw new IntegrationLaneValidationError("promotion-gated", gate.reason);
       next.status = "promoted";
@@ -405,11 +406,15 @@ export function transitionIntegrationLane(
 }
 
 export function validatePromotionQueue(
-  lanes: readonly Pick<IntegrationLane, "stableId" | "status" | "promotion">[],
+  lanes: readonly (Pick<IntegrationLane, "stableId" | "status" | "promotion"> & { repository?: string })[],
 ): void {
   const positions = new Set<number>();
+  const identities = new Set<string>();
   lanes.forEach((lane) => {
     if (!["ready", "syncing", "promoting"].includes(lane.status)) return;
+    const identity = `${lane.repository ?? ""}/${lane.stableId}`;
+    if (identities.has(identity)) throw new IntegrationLaneValidationError("duplicate-lane-identity", "Active repository/lane stable identities must be unique before queue-head authorization.");
+    identities.add(identity);
     const position = lane.promotion.queuePosition;
     if (position === undefined) return;
     if (positions.has(position)) throw new IntegrationLaneValidationError("duplicate-queue-position", "Promotion queue positions must be unique.");

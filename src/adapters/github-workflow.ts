@@ -870,8 +870,17 @@ export class GitHubWorkflowAdapter {
     // A replay may observe a PR merged after the original route snapshot. Its
     // base SHA is expected to have moved, so reconcile this terminal side
     // effect before rejecting the stale pre-merge route.
-    if (current.merged)
-      return { merged: true, sha: current.headSha, message: "Already merged" };
+    if (current.merged) {
+      if (!current.mergeCommitSha)
+        throw new GitHubApiError(409, path, {
+          message: "Already merged pull request has no exact merge commit SHA",
+        });
+      return {
+        merged: true,
+        sha: current.mergeCommitSha,
+        message: "Already merged",
+      };
+    }
     if (input.expectedRoute) {
       assertPullRequestRouteSnapshot(
         input.expectedRoute,

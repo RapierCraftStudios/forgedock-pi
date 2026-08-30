@@ -159,8 +159,76 @@ export class OrchestrationJournal {
     return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.sync", payload: { laneId: input.laneId, ownerId: input.ownerId, leaseEpoch: input.leaseEpoch, staging: input.staging }, idempotencyKey: `integration-lane:${input.laneId}:sync:${input.staging.sha}`, message: `Record integration lane sync ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
   }
 
-  async promoteLane(input: { orchestrationId: string; laneId: string; ownerId: string; queueHeadLaneId: string; leaseEpoch: number; staging: IntegrationLaneStagingEvidence; stagingReadbackSha: string; receipt: IntegrationLanePromotionReceipt; reviewPassed: boolean; verificationPassed: boolean; mergeable: boolean; authorityValid: boolean; mergeCommit: boolean; signal?: AbortSignal }): Promise<OrchestrationState> {
-    return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.promoted", payload: { laneId: input.laneId, ownerId: input.ownerId, queueHeadLaneId: input.queueHeadLaneId, leaseEpoch: input.leaseEpoch, staging: input.staging, stagingReadbackSha: input.stagingReadbackSha, receipt: input.receipt, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: input.mergeCommit }, idempotencyKey: `integration-lane:${input.laneId}:promoted:${input.receipt.mergeCommitSha}:${input.stagingReadbackSha}`, message: `Promote integration lane ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
+  async promoteLane(input: {
+    orchestrationId: string;
+    laneId: string;
+    ownerId: string;
+    queueHeadLaneId: string;
+    leaseEpoch: number;
+    staging: IntegrationLaneStagingEvidence;
+    stagingReadbackSha: string;
+    receipt: IntegrationLanePromotionReceipt;
+    reviewPassed: boolean;
+    verificationPassed: boolean;
+    mergeable: boolean;
+    authorityValid: boolean;
+    mergeCommit: boolean;
+    /** Re-read provider staging/ownership evidence for every state-CAS attempt. */
+    readPromotionEvidence: (state: OrchestrationState) => Promise<{
+      ownerId: string;
+      queueHeadLaneId: string;
+      leaseEpoch: number;
+      staging: IntegrationLaneStagingEvidence;
+      stagingReadbackSha: string;
+    }>;
+    signal?: AbortSignal;
+  }): Promise<OrchestrationState> {
+    return stateCas(async () => {
+      const current = await this.#store.readOrchestration(
+        input.orchestrationId,
+        input.signal,
+      );
+      if (!current.state)
+        throw new Error(`Orchestration ${input.orchestrationId} is not initialized.`);
+      const evidence = await input.readPromotionEvidence(current.state);
+      const priorReceipt = current.state.integrationLane?.promotion.receipt;
+      if (priorReceipt && priorReceipt.mergeCommitSha === input.receipt.mergeCommitSha)
+        return current.state;
+      const idempotencyKey = `integration-lane:${input.laneId}:promoted:${input.receipt.mergeCommitSha}:${evidence.stagingReadbackSha}`;
+      const prior = current.state.idempotencyKeys[idempotencyKey];
+      if (prior) return current.state;
+      const event = createOrchestrationEvent({
+        orchestrationId: input.orchestrationId,
+        repository: current.state.repository,
+        sequence: current.state.sequence + 1,
+        previousEventHash: current.state.lastEventHash,
+        type: "integration-lane.promoted",
+        idempotencyKey,
+        payload: {
+          laneId: input.laneId,
+          ownerId: evidence.ownerId,
+          queueHeadLaneId: evidence.queueHeadLaneId,
+          leaseEpoch: evidence.leaseEpoch,
+          staging: evidence.staging,
+          stagingReadbackSha: evidence.stagingReadbackSha,
+          receipt: input.receipt,
+          reviewPassed: input.reviewPassed,
+          verificationPassed: input.verificationPassed,
+          mergeable: input.mergeable,
+          authorityValid: input.authorityValid,
+          mergeCommit: input.mergeCommit,
+        },
+      });
+      const state = applyOrchestrationEvent(current.state, event);
+      await this.#store.commitOrchestrationState({
+        expectedTip: current.tip,
+        events: [...current.events, event],
+        state,
+        message: `Promote integration lane ${input.laneId}`,
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+      return state;
+    }, input.signal);
   }
 
   async closeLane(input: { orchestrationId: string; laneId: string; signal?: AbortSignal }): Promise<OrchestrationState> {

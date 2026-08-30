@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type {
-  CommitOrchestrationStateInput,
-  GitHubStateBranchStore,
-  ReadOrchestrationStateResult,
+import {
+  StateBranchConflictError,
+  type CommitOrchestrationStateInput,
+  type GitHubStateBranchStore,
+  type ReadOrchestrationStateResult,
 } from "../../src/adapters/github-state.ts";
+import { type OrchestrationState } from "../../src/core/orchestration.ts";
 import { OrchestrationJournal } from "../../src/workflows/orchestration-journal.ts";
 
 class MemoryOrchestrationStore {
@@ -14,6 +16,11 @@ class MemoryOrchestrationStore {
     events: [],
     snapshotMatchesJournal: true,
   };
+  #conflictNextCommit = false;
+
+  armConflict(): void {
+    this.#conflictNextCommit = true;
+  }
 
   async ensureBranch(): Promise<void> {}
 
@@ -21,7 +28,19 @@ class MemoryOrchestrationStore {
     return this.#snapshot;
   }
 
+  async listOrchestrations(): Promise<Array<{ orchestrationId: string; state?: OrchestrationState }>> {
+    return this.#snapshot.state ? [{ orchestrationId: this.#snapshot.state.orchestrationId, state: this.#snapshot.state }] : [];
+  }
+
+  async getTip(): Promise<string> {
+    return this.#snapshot.tip;
+  }
+
   async commitOrchestrationState(input: CommitOrchestrationStateInput): Promise<string> {
+    if (this.#conflictNextCommit) {
+      this.#conflictNextCommit = false;
+      throw new StateBranchConflictError(input.expectedTip);
+    }
     this.#snapshot = {
       tip: `tip-${input.events.length}`,
       events: input.events,
@@ -48,6 +67,14 @@ function laneInput() {
   };
 }
 
+function promotionLaneInput() {
+  return {
+    ...laneInput(),
+    branch: "work-order/wo-325-branch-binding",
+    status: "active" as const,
+  };
+}
+
 test("journal rejects a typed work-order lane whose branch differs from integrationBranch", async () => {
   const store = new MemoryOrchestrationStore();
   const journal = new OrchestrationJournal(store as unknown as GitHubStateBranchStore);
@@ -65,4 +92,45 @@ test("journal rejects a typed work-order lane whose branch differs from integrat
     /branch/i,
   );
   assert.equal((await store.readOrchestration()).events.length, 0);
+});
+
+test("promotion CAS retries reacquire provider evidence instead of replaying stale state", async () => {
+  const store = new MemoryOrchestrationStore();
+  const journal = new OrchestrationJournal(store as unknown as GitHubStateBranchStore);
+  await journal.initialize({
+    orchestrationId: "orchestration-promotion",
+    repository: "owner/repo",
+    issueNumbers: [2],
+    integrationBranch: "work-order/wo-325-branch-binding",
+    maxConcurrent: 1,
+    lane: promotionLaneInput(),
+    now: new Date("2026-08-24T00:00:00.000Z"),
+  });
+  await journal.queueLane({ orchestrationId: "orchestration-promotion", laneId: "wo-325" });
+  await journal.acquireLaneQueueLease({ orchestrationId: "orchestration-promotion", laneId: "wo-325", ownerId: "owner", leaseSeconds: 60 });
+  const staging = { branch: "staging", sha: "a".repeat(40), baselineSha: "a".repeat(40), idle: true, checkedAt: "2026-08-24T00:00:03.000Z" };
+  await journal.syncLane({ orchestrationId: "orchestration-promotion", laneId: "wo-325", ownerId: "owner", leaseEpoch: 1, staging });
+  store.armConflict();
+  let evidenceReads = 0;
+  const promoted = await journal.promoteLane({
+    orchestrationId: "orchestration-promotion",
+    laneId: "wo-325",
+    ownerId: "owner",
+    queueHeadLaneId: "wo-325",
+    leaseEpoch: 1,
+    staging,
+    stagingReadbackSha: "c".repeat(40),
+    receipt: { shippingPullNumber: 44, sourceHeadSha: "b".repeat(40), stagingBaseSha: staging.sha, mergeBaseSha: staging.sha, mergeCommitSha: "c".repeat(40), mergeMethod: "merge", reviewedAt: staging.checkedAt },
+    reviewPassed: true,
+    verificationPassed: true,
+    mergeable: true,
+    authorityValid: true,
+    mergeCommit: true,
+    readPromotionEvidence: async () => {
+      evidenceReads += 1;
+      return { ownerId: "owner", queueHeadLaneId: "wo-325", leaseEpoch: 1, staging, stagingReadbackSha: "c".repeat(40) };
+    },
+  });
+  assert.equal(promoted.integrationLane?.status, "promoted");
+  assert.equal(evidenceReads, 2);
 });

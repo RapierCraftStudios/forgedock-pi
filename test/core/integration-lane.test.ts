@@ -99,12 +99,14 @@ test("queue lease and promotion lifecycle is guarded and requires a merge commit
   validatePromotionQueue([ready]);
   assert.deepEqual(canPromoteIntegrationLane(ready, { ownerId: "wrong-owner", now: staging.checkedAt, sourceHeadSha: "b".repeat(40), mergeBaseSha: staging.sha, staging, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true }), { ok: false, reason: "Queue-head lease is missing, stale, or owned by another lane." });
   const receipt = { shippingPullNumber: 44, sourceHeadSha: "b".repeat(40), stagingBaseSha: staging.sha, mergeBaseSha: staging.sha, mergeCommitSha: "c".repeat(40), mergeMethod: "merge" as const, reviewedAt: staging.checkedAt };
-  const promoted = transitionIntegrationLane(ready, "promote", { now: staging.checkedAt, ownerId: "orchestrator-1", leaseEpoch: 1, queueHeadLaneId: "wo-1", staging, stagingReadbackSha: staging.sha, receipt, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true });
+  const promoted = transitionIntegrationLane(ready, "promote", { now: staging.checkedAt, ownerId: "orchestrator-1", leaseEpoch: 1, queueHeadLaneId: "wo-1", staging, stagingReadbackSha: receipt.mergeCommitSha, receipt, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true });
   assert.equal(promoted.status, "promoted");
   assert.equal(promoted.promotion.receipt?.mergeMethod, "merge");
-  assert.equal(promoted.promotion.stagingReadbackSha, staging.sha);
-  assert.throws(() => transitionIntegrationLane(ready, "promote", { now: staging.checkedAt, ownerId: "orchestrator-1", leaseEpoch: 1, queueHeadLaneId: "wo-1", staging, receipt, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true }), /final staging readback/i);
+  assert.equal(promoted.promotion.stagingReadbackSha, receipt.mergeCommitSha);
+  assert.throws(() => transitionIntegrationLane(ready, "promote", { now: staging.checkedAt, ownerId: "orchestrator-1", leaseEpoch: 1, queueHeadLaneId: "wo-1", staging, stagingReadbackSha: staging.sha, receipt, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true }), /exact shipping merge readback/i);
   assert.equal(transitionIntegrationLane(promoted, "close", { now: "2026-08-30T00:00:04.000Z" }).status, "closed");
-  assert.throws(() => transitionIntegrationLane(ready, "promote", { now: staging.checkedAt, ownerId: "orchestrator-1", leaseEpoch: 1, queueHeadLaneId: "wo-1", staging: { ...staging, sha: "d".repeat(40) }, stagingReadbackSha: "d".repeat(40), receipt, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true }), /staging.*match/i);
+  assert.throws(() => transitionIntegrationLane(ready, "promote", { now: staging.checkedAt, ownerId: "orchestrator-1", leaseEpoch: 1, queueHeadLaneId: "wo-1", staging: { ...staging, sha: "d".repeat(40) }, stagingReadbackSha: receipt.mergeCommitSha, receipt, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true }), /staging.*match/i);
+  const duplicate = { ...ready, promotion: { ...ready.promotion, queuePosition: 1 } };
+  assert.throws(() => validatePromotionQueue([ready, duplicate]), /repository\/lane stable identities must be unique/i);
   assert.throws(() => validateIntegrationLane({ ...ready, promotion: [] } as unknown as IntegrationLane), /promotion/i);
 });

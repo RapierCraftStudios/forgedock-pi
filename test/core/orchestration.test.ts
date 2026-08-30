@@ -18,6 +18,7 @@ import {
   childCleanupReason,
   lifecycleMatchesForgeRun,
   rateLimitedOrchestrationConcurrency,
+  selectPromotionQueueHead,
 } from "../../src/workflows/orchestrate.ts";
 
 const orchestrationId = "orchestration-1";
@@ -109,7 +110,7 @@ test("lane promotion events persist queue, lease, and merge receipt state", () =
   state = applyOrchestrationEvent(state, next(state, "integration-lane.lease-acquired", { laneId: typed.stableId, ownerId: "owner", leaseSeconds: 60 }, "lease"));
   const staging = { branch: "staging", sha: "a".repeat(40), baselineSha: "a".repeat(40), idle: true, checkedAt: "2026-08-24T00:00:03.000Z" };
   state = applyOrchestrationEvent(state, next(state, "integration-lane.sync", { laneId: typed.stableId, ownerId: "owner", leaseEpoch: 1, staging }, "sync"));
-  state = applyOrchestrationEvent(state, next(state, "integration-lane.promoted", { laneId: typed.stableId, ownerId: "owner", queueHeadLaneId: typed.stableId, leaseEpoch: 1, staging, stagingReadbackSha: staging.sha, receipt: { shippingPullNumber: 9, sourceHeadSha: "b".repeat(40), stagingBaseSha: staging.sha, mergeBaseSha: staging.sha, mergeCommitSha: "c".repeat(40), mergeMethod: "merge", reviewedAt: staging.checkedAt }, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true }, "promoted"));
+  state = applyOrchestrationEvent(state, next(state, "integration-lane.promoted", { laneId: typed.stableId, ownerId: "owner", queueHeadLaneId: typed.stableId, leaseEpoch: 1, staging, stagingReadbackSha: "c".repeat(40), receipt: { shippingPullNumber: 9, sourceHeadSha: "b".repeat(40), stagingBaseSha: staging.sha, mergeBaseSha: staging.sha, mergeCommitSha: "c".repeat(40), mergeMethod: "merge", reviewedAt: staging.checkedAt }, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true }, "promoted"));
   assert.equal(state.integrationLane?.status, "promoted");
   assert.equal(state.integrationLane?.promotion.receipt?.shippingPullNumber, 9);
   assert.throws(
@@ -120,6 +121,53 @@ test("lane promotion events persist queue, lease, and merge receipt state", () =
   state = applyOrchestrationEvent(state, next(state, "lane.integrated", { issueNumber: 2, headSha: "b".repeat(40), baseSha: "a".repeat(40) }, "member-integrated"));
   assert.equal(state.lanes[0]?.status, "integrated");
   assert.equal(state.status, "running");
+});
+
+test("duplicate active repository/lane identities fail before queue-head authorization", () => {
+  const first = createIntegrationLane({
+    kind: "work-order",
+    stableId: "wo-duplicate",
+    slug: "duplicate",
+    repository,
+    frozenBase: { branch: "main", sha: "0".repeat(40) },
+    membership: [{ issueNumber: 2, ordinal: 0 }],
+    sourceQuery: "first",
+    createdAt: "2026-08-24T00:00:00.000Z",
+    updatedAt: "2026-08-24T00:00:00.000Z",
+    status: "ready",
+    promotion: { queuePosition: 0 },
+  });
+  const second = { ...first, membership: [{ issueNumber: 3, ordinal: 0 }], promotion: { queuePosition: 1 } };
+  assert.throws(
+    () => selectPromotionQueueHead([first, second]),
+    /repository\/lane stable identities must be unique/i,
+  );
+});
+
+test("shared promotion invariant end-to-end requires lane removal before terminal cancellation", () => {
+  const typed = createIntegrationLane({
+    kind: "work-order",
+    stableId: "wo-cancel-order",
+    slug: "cancel order",
+    repository,
+    frozenBase: { branch: "main", sha: "0".repeat(40) },
+    membership: [{ issueNumber: 2, ordinal: 0 }],
+    sourceQuery: "cancel-order",
+    createdAt: "2026-08-24T00:00:00.000Z",
+    updatedAt: "2026-08-24T00:00:00.000Z",
+    status: "ready",
+    promotion: { queuePosition: 0 },
+  });
+  let state = applyOrchestrationEvent(undefined, next(undefined, "orchestration.created", {
+    issueNumbers: [2], integrationBranch: typed.branch, integrationLane: typed, maxConcurrent: 1, leaseEpoch: 1,
+  }, "shared-create"));
+  assert.throws(
+    () => applyOrchestrationEvent(state, next(state, "orchestration.cancelled", { reason: "before queue removal" }, "cancel-too-early")),
+    (error) => error instanceof Error && "code" in error && error.code === "lane-not-removed",
+  );
+  state = applyOrchestrationEvent(state, next(state, "integration-lane.blocked", { laneId: typed.stableId, reason: "cancelled" }, "remove-lane"));
+  state = applyOrchestrationEvent(state, next(state, "orchestration.cancelled", { reason: "after queue removal" }, "cancel-after-removal"));
+  assert.equal(state.status, "cancelled");
 });
 
 test("typed lane membership preserves orchestration order", () => {
