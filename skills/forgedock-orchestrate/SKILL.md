@@ -32,10 +32,77 @@ overlap, database/migration serialization, and configured global files. Detect c
 and gate them visibly. Do not inspect or implement product code and never adjudicate
 issue validity or duplicates.
 
-For every ready issue, launch exactly one fresh `forgedock-work-on-coordinator` agent
-with the `forgedock-work-on` skill and `<issue> --under-orchestration`. Use bounded
-concurrency and isolated issue worktrees. Each child owns the complete issue lifecycle;
-orchestrate must not invent a second implementation/review path.
+## Ready-wave concurrency contract
+
+At every dispatch boundary, read and validate `forge.yaml` directly. `MAX_CONCURRENT`
+must be the positive integer at `orchestration.max_concurrent`; malformed or missing
+configuration is a loud preflight failure, never a fallback or silent clamp. The DAG is
+the sole source of eligibility: `READY_DAG_NODES` contains only queued nodes whose
+predecessors are complete and which are not blocked or already active. Do not apply a
+second issue-lane, budget, rate-limit, or fixed-four filter to this set.
+
+Select exactly one wave before launching:
+
+```text
+READY_COORDINATORS = READY_DAG_NODES.slice(0, Math.min(MAX_CONCURRENT, READY_DAG_NODES.length))
+READY_COORDINATOR_COUNT = READY_COORDINATORS.length
+```
+
+For a non-empty wave, first run a non-launching pi-subagents preflight with the exact
+workflow request fields below. If preflight rejects either
+`globalConcurrencyLimit` or `maxSubagentSpawnsPerRun` (including an unknown-field
+error), stop loudly before any child launch. Never omit, rename, clamp, or move these
+fields to configuration. This is an API capability requirement, not an optional
+optimization.
+
+```text
+subagent({
+  action: "validate",
+  workflowScript: READY_WAVE_SCRIPT,
+  globalConcurrencyLimit: MAX_CONCURRENT,
+  maxSubagentSpawnsPerRun: READY_COORDINATOR_COUNT * 64
+})
+```
+
+After that preflight succeeds, make exactly one top-level `subagent` call for the wave:
+
+```text
+subagent({
+  async: true,
+  workflowScript: READY_WAVE_SCRIPT, // one `await runs.all([...])`, one item per coordinator
+  globalConcurrencyLimit: MAX_CONCURRENT,
+  maxSubagentSpawnsPerRun: READY_COORDINATOR_COUNT * 64,
+  control: { needsAttentionAfterMs: 3900000 }
+})
+```
+
+`READY_WAVE_SCRIPT` serializes the already-derived wave and must call
+`await runs.all([...])` exactly once with exactly `READY_COORDINATORS.length` items:
+
+```javascript
+const results = await runs.all(READY_COORDINATORS.map((issue) => ({
+  key: `work-on-${issue.number}`,
+  agent: "forgedock-work-on-coordinator",
+  task: `${issue.number} --under-orchestration`,
+  context: "fresh",
+  worktree: true,
+})));
+return results;
+```
+
+Every item uses the packaged `forgedock-work-on-coordinator` agent, a fresh context,
+and the issue's isolated worktree; each coordinator owns its complete lifecycle.
+`runs.all` returns an ordered array; join all results before advancing the DAG. The
+top-level explicit fields have precedence over any host defaults.
+`--budget` controls admission (which eligible issues enter a wave) only; it does not
+control or reduce concurrency. A four-worker cap is nested-review-only and must never
+be applied to root ready-wave dispatch.
+
+For every selected ready issue, launch exactly one fresh `forgedock-work-on-coordinator`
+agent with the `forgedock-work-on` skill and `<issue> --under-orchestration`. Use the
+single bounded workflow wave above and isolated issue worktrees. Each child owns the
+complete issue lifecycle; orchestrate must not invent a second implementation/review
+path.
 
 The managed child worktree is the child's only repository root. In every child task,
 state that its current working directory is authoritative and that any parent checkout

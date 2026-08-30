@@ -151,6 +151,32 @@ key; durable GitHub terminal evidence overrides a malformed provider envelope.
 Successors launch after predecessor success; cleanup closes the coordination issue and
 publishes the consolidated report.
 
+### Ready-wave launch contract
+
+At each ready wave, read `forge.yaml` and validate the positive integer
+`orchestration.max_concurrent`. Eligibility comes solely from the confirmed DAG:
+queued nodes with complete predecessors are ready, while active, blocked, and
+ineligible nodes are not. `--budget` is an admission control only; it must not become a
+concurrency clamp. Select exactly
+`READY_COORDINATORS = READY_DAG_NODES.slice(0, Math.min(MAX_CONCURRENT, READY_DAG_NODES.length))`
+and launch no other issue lanes.
+
+Before launching a non-empty wave, perform a non-launching `subagent` preflight with
+`action: "validate"`, the wave `workflowScript`, and both explicit top-level fields:
+`globalConcurrencyLimit: MAX_CONCURRENT` and
+`maxSubagentSpawnsPerRun: READY_COORDINATORS.length * 64`. An unsupported or rejected
+field is a loud preflight failure and stops the wave before any child starts; never
+silently clamp, omit, rename, or move either field to host configuration. Once it
+passes, issue exactly one `subagent({ async: true, workflowScript, globalConcurrencyLimit:
+MAX_CONCURRENT, maxSubagentSpawnsPerRun: READY_COORDINATORS.length * 64 })` call. Its
+script serializes the selected wave and uses exactly one
+`await runs.all(READY_COORDINATORS.map((issue) => ({ agent:
+"forgedock-work-on-coordinator", ... })))`, containing exactly one fresh packaged
+coordinator item per selected issue, then joins the ordered results.
+Explicit call fields take precedence over host defaults. The four-worker cap is
+nested-review-only and never applies to root ready-wave dispatch. No dormant
+controller or new workflow engine is introduced by this adapter.
+
 ## Configuration
 
 The original `forge.yaml` contract is authoritative. Do not silently reinterpret the

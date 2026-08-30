@@ -415,7 +415,7 @@ Build a **directed acyclic graph (DAG)** of per-issue dependencies. Each issue g
 - **Conservative fallback edges**: Low-confidence issues (Layer 4) get edges to same-domain issues as per Step 3C rules.
 - **Co-change coupling edges** <!-- Added: forge#1196 -->: High co-change file pairs (Layer 5, 3+ shared commits in the bounded window) that span two different issues get a directed edge using the same lower-issue-number-is-predecessor convention as Layer 1. Verified-independent pairs (Layer 5, zero shared commits) may instead REMOVE an edge that Layer 2 or Layer 4 would otherwise have added for that pair — Layer 1 and Layer 3 edges are never removed by a Layer 5 downgrade.
 - **Claims-board downgrade (Layer 2/4 edges only)** <!-- Added: forge#1736 -->: After dispatch begins (Phase 4A), when both issues in a Layer-2 or Layer-4 serialized pair post `FORGE:CLAIM` annotations on the coordination issue and their claimed file sets are **disjoint** (no path appears in both claims), the serialization edge for that pair MAY be relaxed — the blocked issue becomes ready. This downgrade is **never** applied to Layer-1 (same-file) or Layer-3 (high-fan-in) edges. See Step 4B: Claims-board relaxation sweep for the runtime check.
-- **Concurrency is capped by default** <!-- Updated: forge#1912 --> — issues with empty predecessor sets are still all *eligible* to dispatch simultaneously (file overlap, explicit dependencies, and co-change coupling remain the only DAG-ordering constraints), but Phase 4's dispatch loop holds at most `MAX_CONCURRENT` in flight at once (default 12; `forge.yaml → orchestration.max_concurrent` overrides). Ready issues beyond the cap queue and dispatch as running workers complete (see Engine mode § Concurrency model, and `phase-4-execution.md` Step 4A-pre.0.2).
+- **Concurrency is user-configured and required** <!-- Updated: forge#1912 --> — issues with empty predecessor sets are all *eligible* to dispatch simultaneously (file overlap, explicit dependencies, and co-change coupling remain the only DAG-ordering constraints), while Phase 4 holds at most the target `forge.yaml → orchestration.max_concurrent` in flight. Missing or malformed configuration stops before launch; ready issues beyond the configured cap queue and dispatch as running workers complete (see Engine mode § Concurrency model, and `phase-4-execution.md` Step 4A-pre.0.2).
 
 **Materialize the DAG** <!-- Added: forge#1913 -->: The rules above describe how edges are derived, but they must be applied into real, checkable data structures — not carried in prose or reconstructed from memory later. Step 3D.1 (coordination issue), Step 3D.5 (cycle detection), Step 3E.5 (scoring), and Step 3E (plan presentation) all read `ISSUES[]` and `PREDECESSORS[]` as if this already happened; this is the one place they're actually built:
 
@@ -1166,10 +1166,11 @@ scripts/worktree-lifecycle.sh cleanup <issue-number>
 ```
 
 **Concurrency cap** (`forge.yaml → orchestration.max_concurrent`): <!-- Updated: forge#1912 -->
-- Default: **12** — the dispatch loop holds at most 12 in-flight workers unless overridden. This is an enforced default, not opt-in: earlier revisions defaulted to uncapped, which let a large ready set (e.g. 40+ issues) dispatch in one burst and saturate the Anthropic API rate limit.
-- When `max_concurrent: N` is set, the dispatch loop holds at most N in-flight workers instead of the default 12. Newly ready issues queue and start as running workers complete. It is a top-level worker cap only: each worker normally consumes roughly **8 total subagent spawns** across `/work-on`, build, quality-gate, and review. Set `N <= session_subagent_budget / 8`; for a 200-spawn session budget, use 25 or fewer.
-- Prevents wave-triggered rate-limit storms on large batches (e.g., 40-issue milestone dispatches).
-- See `phase-4-execution.md` Step 4A-pre.0.2 for the concrete initialization and headroom-gated dispatch logic that enforces this cap on both the engine-first and Agent-spawn-fallback dispatch paths.
+- The target repository must provide a positive integer. Missing or malformed configuration fails closed before any launch; there is no built-in fallback.
+- The dispatch loop holds at most that configured number of top-level `/work-on` coordinators. Newly ready issues queue and start as running coordinators complete.
+- DAG readiness remains the only eligibility constraint. Generic session limits, dollar budget, and nested review fanout must not silently lower the configured issue-lane count; provider/host capacity failures are reported explicitly.
+- The Pi adapter provisions `maxSubagentSpawnsPerRun` separately at 64 logical child admissions per selected coordinator.
+- See `phase-4-execution.md` Step 4A-pre.0.2 for the concrete initialization and headroom-gated dispatch logic.
 
 **Rate-limit backpressure** (pre-dispatch gate):
 
@@ -1194,7 +1195,7 @@ fi
 **Configuration reference** (`forge.yaml`):
 ```yaml
 orchestration:
-  max_concurrent: 8          # optional; default: 12
+  max_concurrent: 8          # required positive integer; no fallback
   rate_limit_floor: 200      # optional; default: 200
 ```
 

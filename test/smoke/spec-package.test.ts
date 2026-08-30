@@ -223,6 +223,36 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
   );
 });
 
+test("ready waves above four carry explicit concurrency and fanout overrides", async () => {
+  const orchestrate = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
+  const adapter = await readFile("specs/pi-adapter.md", "utf8");
+  const originalExecution = await readFile("specs/original/commands/orchestrate/phase-4-execution.md", "utf8");
+  const configuredMax = 8;
+  const readyDagCount = 6;
+  const launchedCount = Math.min(configuredMax, readyDagCount);
+
+  assert.ok(readyDagCount > 4);
+  assert.equal(launchedCount, 6);
+  assert.equal(launchedCount * 64, 384);
+  assert.match(orchestrate, /READY_COORDINATORS = READY_DAG_NODES\.slice\(0, Math\.min\(MAX_CONCURRENT, READY_DAG_NODES\.length\)\)/);
+  assert.match(orchestrate, /globalConcurrencyLimit: MAX_CONCURRENT/);
+  assert.match(orchestrate, /maxSubagentSpawnsPerRun: READY_COORDINATOR_COUNT \* 64/);
+  assert.match(orchestrate, /exactly one top-level `subagent` call/);
+  assert.match(orchestrate, /exactly\s+`READY_COORDINATORS\.length` items/);
+  assert.match(orchestrate, /await runs\.all\(READY_COORDINATORS\.map/);
+  assert.match(orchestrate, /--budget` controls admission.*only; it does not\ncontrol or reduce concurrency/s);
+  assert.match(orchestrate, /four-worker cap is nested-review-only/);
+  assert.match(adapter, /globalConcurrencyLimit: MAX_CONCURRENT/);
+  assert.match(adapter, /maxSubagentSpawnsPerRun: READY_COORDINATORS\.length \* 64/);
+  assert.match(adapter, /runs\.all\(READY_COORDINATORS\.map/);
+  assert.match(adapter, /unsupported or rejected\nfield is a loud preflight failure/);
+  assert.match(adapter, /four-worker cap is\nnested-review-only/);
+  assert.match(originalExecution, /yq -er '\.orchestration\.max_concurrent' forge\.yaml/);
+  assert.match(originalExecution, /refusing to dispatch without the user-owned limit/);
+  assert.doesNotMatch(originalExecution, /max_concurrent \/\/ 12|falling back to default 12/);
+  assert.doesNotMatch(orchestrate, /Math\.min\([^)]*,\s*4\)/);
+});
+
 test("moving staging targets use a guarded refresh and fresh review identity", async () => {
   const orchestrate = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
   const workOn = await readFile("skills/forgedock-work-on/SKILL.md", "utf8");
