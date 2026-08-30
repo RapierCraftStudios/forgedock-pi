@@ -1095,6 +1095,8 @@ export class ForgeWorkOnController {
       );
       if (integrationLane.frozenBase.branch !== "main")
         throw new Error("Work-order lane frozen base must be deployed main.");
+      if (!/^[0-9a-f]{40}$/i.test(integrationLane.frozenBase.sha))
+        throw new Error("Work-order lane frozen base must be an exact commit SHA.");
       const currentMain = await this.#git.remoteBaseSha(
         repositoryRoot,
         integrationLane.frozenBase.branch,

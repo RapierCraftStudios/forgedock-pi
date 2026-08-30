@@ -20,7 +20,7 @@ git -C "$ROOT/clone" fetch origin main:refs/remotes/origin/main >/dev/null
 BRANCH="work-order/wo-demo-demo"
 git -C "$ROOT/clone" push origin "$BASE:refs/heads/$BRANCH" >/dev/null
 cat >"$ROOT/binding.json" <<JSON
-{"kind":"work-order","stableId":"wo-demo","slug":"demo","branch":"$BRANCH","repository":"owner/repo","frozenBase":{"branch":"main","sha":"$BASE"}}
+{"kind":"work-order","stableId":"wo-demo","slug":"demo","branch":"$BRANCH","repository":"owner/repo","membership":[{"issueNumber":1,"ordinal":0}],"frozenBase":{"branch":"main","sha":"$BASE"}}
 JSON
 cat >"$ROOT/bin/gh" <<'GH'
 #!/usr/bin/env bash

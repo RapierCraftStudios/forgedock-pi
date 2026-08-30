@@ -99,6 +99,10 @@ fi
 # legacy milestone/fast-lane classifier. The binding is durable state output,
 # not issue text; incomplete or conflicting metadata must never fall through.
 if [ -n "$WORK_ORDER_SLUG" ]; then
+  if [ -z "${GH_REPO_ARGS[1]:-}" ]; then
+    echo "ERROR: work-order routing requires an explicit -R owner/repo binding; refusing fallback." >&2
+    exit 1
+  fi
   if [ -z "$WORK_ORDER_BINDING_FILE" ] || [ ! -f "$WORK_ORDER_BINDING_FILE" ]; then
     echo "ERROR: work-order '$WORK_ORDER_SLUG' requires an authoritative binding file; refusing staging fallback." >&2
     exit 1
@@ -124,13 +128,15 @@ if [ -n "$WORK_ORDER_SLUG" ]; then
   BINDING_REPOSITORY=$(jq -r '.repository // empty' "$WORK_ORDER_BINDING_FILE")
   BINDING_BASE_BRANCH=$(jq -r '.frozenBase.branch // empty' "$WORK_ORDER_BINDING_FILE")
   BINDING_BASE_SHA=$(jq -r '.frozenBase.sha // empty' "$WORK_ORDER_BINDING_FILE")
+  BINDING_MEMBER=$(jq --argjson issue "$ISSUE_NUMBER" '[.membership[]?.issueNumber] | any(. == $issue)' "$WORK_ORDER_BINDING_FILE")
   EXPECTED_BRANCH="work-order/wo-${NORMALIZED_WORK_ORDER_SLUG}-${NORMALIZED_WORK_ORDER_SLUG}"
   if [ "$BINDING_KIND" != "work-order" ] ||
      [ "$BINDING_ID" != "wo-${NORMALIZED_WORK_ORDER_SLUG}" ] ||
      [ "$BINDING_SLUG" != "$NORMALIZED_WORK_ORDER_SLUG" ] ||
      [ "$BINDING_BRANCH" != "$EXPECTED_BRANCH" ] ||
      [ -z "$BINDING_REPOSITORY" ] ||
-     { [ -n "${GH_REPO_ARGS[1]:-}" ] && [ "$BINDING_REPOSITORY" != "${GH_REPO_ARGS[1]}" ]; } ||
+     [ "$BINDING_REPOSITORY" != "${GH_REPO_ARGS[1]}" ] ||
+     [ "$BINDING_MEMBER" != "true" ] ||
      [ "$BINDING_BASE_BRANCH" != "main" ] ||
      ! [[ "$BINDING_BASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
     echo "ERROR: work-order binding identity, branch, repository, or frozen main base is stale/ambiguous; refusing fallback." >&2
@@ -147,7 +153,7 @@ if [ -n "$WORK_ORDER_SLUG" ]; then
       --arg baseSha "$BINDING_BASE_SHA" \
       '{lane:$lane,branch:$branch,source:"work-order",workOrder:$slug,repository:$repo,frozenBase:{branch:"main",sha:$baseSha}}'
   else
-    printf '%s\\n' "$BINDING_BRANCH"
+    printf '%s\n' "$BINDING_BRANCH"
   fi
   exit 0
 fi
