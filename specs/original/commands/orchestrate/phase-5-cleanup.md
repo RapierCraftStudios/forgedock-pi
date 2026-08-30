@@ -81,4 +81,8 @@ fi
 
 Include the cleanup summary in the final report (Phase 6), including whether the coordination issue was closed this run (see Step 5C). If cleanup found problems, call them out — they indicate agent pipeline failures that may need investigation.
 
+### Typed lane cleanup gate
+
+For a work-order lane, cleanup is prohibited until the lane promotion receipt names the exact merge commit and staging read-back confirms that commit. Before that point, release only the child run lease; retain the lane branch, shipping PR, member issues, queue position, and remediation findings. After successful promotion, close every member with the lane-integrated receipt, delete the lane branch idempotently, release the queue lease, and leave the next queue head eligible. A failed/conflicting promotion preserves all of these records for resume.
+
 ---

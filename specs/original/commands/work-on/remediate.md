@@ -440,3 +440,7 @@ REMEDIATE_RESULT:
 ```
 
 **Caller behavior**: this Skill already drives its own close phase when `re_gate_outcome: AUTO-LANDED` (see Phase M8) — the caller does not need to invoke close itself. For every other `re_gate_outcome`, this result is terminal for the current invocation: the issue is left at `needs-human` or `workflow:awaiting-merge`, both already recognized as terminal states in the Universal Phase Dispatcher (see `work-on.md`). Whether invoked standalone (`/work-on <pr> --remediate`) or via the orchestrator's item 6.4 dispatch, no further action is required from the caller.
+
+### Work-order lane remediation
+
+For a typed work-order member, every blocking finding remains on the source lane and updates the existing lane/shipping PR in place. Never retarget remediation to staging or another lane. A successful child merge records `lane-integrated` while retaining the member issue and lane branch for the later queue-head promotion review.

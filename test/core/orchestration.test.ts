@@ -89,6 +89,35 @@ test("typed lane bindings are validated and legacy genesis receives an explicit 
   assert.equal(legacy.integrationLane?.sourceQuery, "legacy-fast-lane");
 });
 
+test("lane promotion events persist queue, lease, and merge receipt state", () => {
+  const typed = createIntegrationLane({
+    kind: "work-order",
+    stableId: "wo-promote",
+    slug: "promote",
+    repository,
+    frozenBase: { branch: "main", sha: "0".repeat(40) },
+    membership: [{ issueNumber: 2, ordinal: 0 }],
+    sourceQuery: "work-order:promote",
+    createdAt: "2026-08-24T00:00:00.000Z",
+    updatedAt: "2026-08-24T00:00:00.000Z",
+    status: "active",
+  });
+  let state = applyOrchestrationEvent(undefined, next(undefined, "orchestration.created", {
+    issueNumbers: [2], integrationBranch: typed.branch, integrationLane: typed, maxConcurrent: 1, leaseEpoch: 1,
+  }, "promote-create"));
+  state = applyOrchestrationEvent(state, next(state, "integration-lane.queued", { laneId: typed.stableId, queuePosition: 0 }, "queue"));
+  state = applyOrchestrationEvent(state, next(state, "integration-lane.lease-acquired", { laneId: typed.stableId, ownerId: "owner", leaseSeconds: 60 }, "lease"));
+  const staging = { branch: "staging", sha: "a".repeat(40), baselineSha: "a".repeat(40), idle: true, checkedAt: "2026-08-24T00:00:03.000Z" };
+  state = applyOrchestrationEvent(state, next(state, "integration-lane.sync", { laneId: typed.stableId, staging }, "sync"));
+  state = applyOrchestrationEvent(state, next(state, "integration-lane.promoted", { laneId: typed.stableId, ownerId: "owner", staging, receipt: { shippingPullNumber: 9, sourceHeadSha: "b".repeat(40), stagingBaseSha: staging.sha, mergeBaseSha: staging.sha, mergeCommitSha: "c".repeat(40), mergeMethod: "merge", reviewedAt: staging.checkedAt } }, "promoted"));
+  assert.equal(state.integrationLane?.status, "promoted");
+  assert.equal(state.integrationLane?.promotion.receipt?.shippingPullNumber, 9);
+  state = applyOrchestrationEvent(state, next(state, "lane.started", { issueNumber: 2, forgeRunId: "run-2", subagentRunId: "child-2" }, "member-start"));
+  state = applyOrchestrationEvent(state, next(state, "lane.integrated", { issueNumber: 2, headSha: "b".repeat(40), baseSha: "a".repeat(40) }, "member-integrated"));
+  assert.equal(state.lanes[0]?.status, "integrated");
+  assert.equal(state.status, "running");
+});
+
 test("typed lane membership preserves orchestration order", () => {
   const typed = createIntegrationLane({
     kind: "work-order",

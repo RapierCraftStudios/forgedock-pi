@@ -762,3 +762,9 @@ This automatically makes the issue a feature-lane issue — next time `/work-on`
 - **Branch already exists**: Reuse it, don't recreate
 - **Merge conflicts on sync/ship**: Report to user, do NOT auto-resolve. List conflicting files.
 - **No issues in milestone**: Warn user — empty milestones are valid but unusual
+
+## Shared integration-lane lifecycle (work-orders and milestones)
+
+The milestone shipping mechanics above are the canonical implementation of the reusable integration-lane lifecycle. A work-order lane calls the same sync, pre-merge hunk-loss audit, update-in-place shipping PR, bundle review, and merge-commit gates; only the authorization policy differs. Work-order lanes may auto-promote only when they hold the durable queue-head lease and staging is idle at the expected deployed-main baseline. Milestones retain explicit operator shipping authorization.
+
+Every lane promotion records exact source head, staging base, merge-base, shipping PR, review/check evidence, and merge commit. Promotion uses `--merge`/a merge commit, never squash. Findings and remediation update the same shipping PR on the same lane. Member issues remain open and the lane branch is retained until promotion merge read-back; cleanup then closes members and deletes the lane branch. Conflicts, stale identity, missing evidence, or ambiguous ownership fail closed without choosing a side.

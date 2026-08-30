@@ -459,4 +459,8 @@ The batch card's `Findings:` line is filled from the review-finding counts alrea
 the Summary section above. `BATCH_ELAPSED` is the wall-clock duration of the orchestration run
 (Step 6B `Duration`), not the sum of per-issue elapsed times.
 
+### Integration-lane report requirements
+
+Report each typed lane's stable ID, kind, branch, frozen origin, member progress, accumulated head, changed files, active findings, queue position, lease owner/epoch, staging baseline/idle evidence, shipping PR number, reviewed tuple, and promotion receipt. Distinguish `lane-integrated` members (open until promotion) from promoted/closed members. Report overlap as an advisory and never imply that lanes were auto-combined. Missing or ambiguous receipts are `GATED`, not successful promotion.
+
 ---

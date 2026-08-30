@@ -3328,4 +3328,8 @@ if [ "$BUDGET_LIMIT" != "Infinity" ] && [ "${#DEFERRED_BUDGET_ISSUES[@]}" -gt 0 
 fi
 ```
 
+## Integration-lane accumulation and promotion
+
+Child PRs for a typed lane accumulate on that lane branch and may run concurrently. A completed child is lane-integrated, not member-closed. The queue-head coordinator alone may acquire a lane lease and begin promotion. Before creating or updating the one shipping PR, prove staging is idle and exactly at the deployed-main baseline, synchronize the lane through a guarded merge, rerun verification and hunk-loss audit, and freeze the exact `(base, head, merge-base)` review identity. Review blockers stay on the same lane and update the same shipping PR in place. Promotion requires complete bundle review, mergeability, authority revalidation, and a merge commit; only then are member issues closed and the lane branch deleted after read-back. Conflicts or ambiguous ownership preserve all lane state and fail closed.
+
 ---

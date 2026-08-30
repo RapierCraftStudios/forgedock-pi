@@ -1362,3 +1362,7 @@ This module runs at **Phases 6–7** — after review.md returns `REVIEW_RESULT:
 ```
 
 This is the terminal phase — after CLOSE_RESULT returns, the pipeline is complete.
+
+### Work-order member closure gate
+
+A work-order child that merged its issue PR into the lane branch returns `lane-integrated`, not a terminal member closure. The issue remains open with its lane-integrated marker, and the lane branch/shipping PR remains durable. Close the member and delete the lane branch only after the queue-head promotion PR's merge commit is read back from staging with exact base/head/merge-base, verification, bundle review, and authority evidence. Any conflict or missing receipt leaves the member and lane resumable.

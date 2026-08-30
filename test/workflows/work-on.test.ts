@@ -1,5 +1,3 @@
-/// <reference types="node" />
-
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -31,6 +29,7 @@ import {
   restoreWorkflowLabelAfterMergeFailure,
   rollbackAwaitingMergeLabel,
   shouldBufferLaunchCompletion,
+  shouldDeferWorkOrderClosure,
   shouldTrustDurableWorkOnResult,
   workflowLabelForNode,
   workflowStageForNodeTransition,
@@ -67,6 +66,13 @@ test("orchestrated work-on requires a matching durable integration lane", () => 
     () => resolveAuthoritativeIntegrationLane(state, "owner/repo", 8),
     /not a member/,
   );
+});
+
+test("work-order members defer closure while legacy and direct lanes retain terminal closure", () => {
+  assert.equal(shouldDeferWorkOrderClosure({ kind: "work-order" }), true);
+  assert.equal(shouldDeferWorkOrderClosure({ kind: "milestone" }), false);
+  assert.equal(shouldDeferWorkOrderClosure({ kind: "milestone", legacy: true }), false);
+  assert.equal(shouldDeferWorkOrderClosure(undefined), false);
 });
 
 test("work-on reviewer results are rebound to the shared frozen review identity", () => {

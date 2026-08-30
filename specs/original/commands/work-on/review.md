@@ -390,3 +390,7 @@ This module runs at **Phases 4–5** — after validate returns `GATE_PASSED: tr
 ```
 
 /review-pr is invoked within this module (not by the router). The router waits for REVIEW_RESULT before invoking close.md.
+
+### Integration-lane review binding
+
+When the issue is a member of a typed work-order lane, the review base and branch must come from the durable lane binding. Findings inherit the lane ID, branch, and frozen origin; remediation updates the same lane PR. A lane-integrated member is not eligible for issue closure until the lane's separate promotion PR has passed exact-head bundle review and mergeability gates.

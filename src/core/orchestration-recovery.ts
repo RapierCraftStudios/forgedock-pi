@@ -1,5 +1,5 @@
 import type { IntegrationLane } from "./integration-lane.ts";
-import { validateIntegrationLane } from "./integration-lane.ts";
+import { validateIntegrationLane, validatePromotionQueue } from "./integration-lane.ts";
 import type { OrchestrationLane, OrchestrationState } from "./orchestration.ts";
 
 export const ORCHESTRATION_RECOVERY_SCHEMA =
@@ -161,6 +161,21 @@ export function planOrchestrationReload(input: {
       validateIntegrationLane(input.state.integrationLane);
     } catch (error) {
       unsafeReason = error instanceof Error ? error.message : String(error);
+    }
+    if (!unsafeReason) {
+      try {
+        validatePromotionQueue([input.state.integrationLane]);
+        const promotion = input.state.integrationLane.promotion;
+        if (promotion.receipt) {
+          const receipt = promotion.receipt;
+          if (receipt.mergeMethod !== "merge" || !/^[0-9a-f]{40}$/i.test(receipt.mergeCommitSha))
+            unsafeReason ??= "Promotion receipt is missing a merge commit identity.";
+          if (promotion.shippingPullNumber !== receipt.shippingPullNumber)
+            unsafeReason ??= "Promotion receipt and shipping PR identity disagree.";
+        }
+      } catch (error) {
+        unsafeReason ??= error instanceof Error ? error.message : String(error);
+      }
     }
     if (!unsafeReason && Array.isArray(input.state.integrationLane.membership)) {
       const expectedMembers = new Set(input.state.lanes.map((lane) => lane.issueNumber));

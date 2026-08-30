@@ -28,9 +28,13 @@ import {
   type OrchestrationState,
 } from "../core/orchestration.ts";
 import {
+  canPromoteIntegrationLane,
   createIntegrationLane,
   normalizeIntegrationSlug,
   type IntegrationLane,
+  type IntegrationLanePromotionReceipt,
+  type IntegrationLaneStagingEvidence,
+  validatePromotionQueue,
 } from "../core/integration-lane.ts";
 import {
   orchestrationChildKey,
@@ -73,6 +77,57 @@ export function createWorkOrderLane(input: {
     status: "active",
     promotion: {},
   });
+}
+
+/** Select the only lane allowed to promote from a durable queue snapshot. */
+export function selectPromotionQueueHead(
+  lanes: readonly IntegrationLane[],
+): IntegrationLane | undefined {
+  validatePromotionQueue(lanes);
+  return [...lanes]
+    .filter((lane) => ["ready", "syncing", "promoting"].includes(lane.status))
+    .sort((left, right) =>
+      (left.promotion.queuePosition ?? Number.MAX_SAFE_INTEGER) -
+        (right.promotion.queuePosition ?? Number.MAX_SAFE_INTEGER),
+    )[0];
+}
+
+export interface WorkOrderPromotionGateInput {
+  lane: IntegrationLane;
+  ownerId: string;
+  now: string;
+  sourceHeadSha: string;
+  mergeBaseSha: string;
+  staging: IntegrationLaneStagingEvidence;
+  reviewPassed: boolean;
+  verificationPassed: boolean;
+  mergeable: boolean;
+  authorityValid: boolean;
+  mergeCommit: boolean;
+}
+
+/**
+ * Controller-facing pure gate. It intentionally returns evidence rather than
+ * throwing so callers can persist a durable blocked reason and resume safely.
+ */
+export function evaluateWorkOrderPromotion(
+  input: WorkOrderPromotionGateInput,
+): { allowed: true; laneId: string } | { allowed: false; reason: string } {
+  const result = canPromoteIntegrationLane(input.lane, input);
+  return result.ok
+    ? { allowed: true, laneId: input.lane.stableId }
+    : { allowed: false, reason: result.reason };
+}
+
+export function workOrderPromotionReceipt(input: {
+  shippingPullNumber: number;
+  sourceHeadSha: string;
+  stagingBaseSha: string;
+  mergeBaseSha: string;
+  mergeCommitSha: string;
+  reviewedAt: string;
+}): IntegrationLanePromotionReceipt {
+  return { ...input, mergeMethod: "merge" };
 }
 
 function laneReservationKey(
@@ -762,7 +817,20 @@ export class ForgeOrchestrationController {
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
     } else if (event.status === "completed") {
-      if (event.outcome === "closed") {
+      if (event.laneIntegrated) {
+        await journal.append({
+          orchestrationId,
+          type: "lane.integrated",
+          payload: {
+            issueNumber: event.issueNumber,
+            headSha: required(event.headSha, "headSha"),
+            baseSha: required(event.baseSha, "baseSha"),
+          },
+          idempotencyKey: `lane:${event.issueNumber}:integrated`,
+          message: `Record issue ${event.issueNumber} integrated into its work-order lane`,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+      } else if (event.outcome === "closed") {
         await journal.append({
           orchestrationId,
           type: "lane.closed",

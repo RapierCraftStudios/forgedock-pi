@@ -1522,6 +1522,10 @@ done
 #    predecessor's edge dropped (forge#1904); that case is legitimately ready, not a re-add.
 ```
 
-**Why this keeps context small**: Each `Agent()` call returns an agent ID stored only in `AGENT_ISSUE_MAP`, and engine/OpenCode dispatches use equivalent ephemeral `ENGINE_DISPATCH_MAP` and `OPENCODE_DISPATCH_MAP` caches. After compaction, those maps are gone — but the DAG state, including `blocked-on-human-merge` tracking (a durable `FORGE:BLOCKED_ON_HUMAN_MERGE` comment plus label, not an in-context variable) and OpenCode child correlation (`FORGE:DISPATCH`), is fully on GitHub. The reconstruction above re-derives the ready set, the gated set, and the blocked-on-human-merge set from labels and comments alone, so the orchestrator context never needs to hold cumulative dispatch history.
+**Why this keeps context small**: Each `Agent()` call returns an agent ID stored only in `AGENT_ISSUE_MAP`, and engine/OpenCode dispatches use equivalent ephemeral `ENGINE_DISPATCH_MAP` and `OPENCODE_DISPATCH_MAP` caches. After compaction, those maps are gone - but the DAG state, including `blocked-on-human-merge` tracking (a durable `FORGE:BLOCKED_ON_HUMAN_MERGE` comment plus label, not an in-context variable) and OpenCode child correlation (`FORGE:DISPATCH`), is fully on GitHub. The reconstruction above re-derives the ready set, the gated set, and the blocked-on-human-merge set from labels and comments alone, so the orchestrator context never needs to hold cumulative dispatch history.
+
+## Integration-lane promotion queue
+
+When a batch owns a typed integration lane, persist one queue entry with the stable lane ID, dense position, and a lease epoch on the state branch. Queue order is durable and shared across work-order lanes; only the position-zero eligible lane may acquire promotion authority. Queue leases are distinct from child run leases and include owner, epoch, acquisition, and expiry timestamps. Duplicate IDs/positions, stale leases, missing members, and ambiguous receipts pause reload rather than launching or combining lanes. Cross-lane file overlap is reported and resolved by serial promotion; implementation remains concurrent.
 
 ---

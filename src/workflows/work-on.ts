@@ -142,7 +142,7 @@ export interface ActiveRunLink {
   lastHeartbeatAt?: string;
   reviewBaseSha: string;
   /** Durable work-order identity carried into child/review artifacts. */
-  integrationLane?: Pick<IntegrationLane, "stableId" | "branch" | "repository" | "frozenBase">;
+  integrationLane?: Pick<IntegrationLane, "stableId" | "branch" | "repository" | "frozenBase"> & Partial<Pick<IntegrationLane, "kind" | "legacy">>;
   refreshes: number;
   providerRetries: number;
   remediationAttempts: number;
@@ -169,6 +169,8 @@ export interface WorkOnLifecycleEvent {
   pullNumber?: number;
   nodeId?: string;
   outcome?: "merged" | "closed";
+  /** Issue PR merged into a work-order lane; member closure is deferred. */
+  laneIntegrated?: boolean;
 }
 
 export interface StartIssueResult {
@@ -186,6 +188,12 @@ export interface StartIssueOptions {
 }
 
 /** Resolve the only acceptable lane binding for an orchestrated child. */
+export function shouldDeferWorkOrderClosure(
+  lane: Partial<Pick<IntegrationLane, "kind" | "legacy">> | undefined,
+): boolean {
+  return lane?.kind === "work-order" && !lane.legacy;
+}
+
 export function resolveAuthoritativeIntegrationLane(
   state: Pick<OrchestrationState, "repository" | "integrationBranch" | "lanes"> & {
     integrationLane?: IntegrationLane;
@@ -1178,6 +1186,8 @@ export class ForgeWorkOnController {
                   branch: integrationLane.branch,
                   repository: integrationLane.repository,
                   frozenBase: integrationLane.frozenBase,
+                  kind: integrationLane.kind,
+                  ...(integrationLane.legacy ? { legacy: true } : {}),
                 },
               }
             : {}),
@@ -1221,6 +1231,8 @@ export class ForgeWorkOnController {
                 branch: integrationLane.branch,
                 repository: integrationLane.repository,
                 frozenBase: integrationLane.frozenBase,
+                kind: integrationLane.kind,
+                ...(integrationLane.legacy ? { legacy: true } : {}),
               },
             }
           : {}),
@@ -4839,6 +4851,7 @@ export class ForgeWorkOnController {
     );
     const journal = new RunJournal(store);
     const sessionId = ctx.sessionManager.getSessionId();
+    const deferLaneClosure = shouldDeferWorkOrderClosure(link.integrationLane);
 
     await this.#git.assertClean(link.prepared.worktreePath, ctx.signal);
     const actualHead = await this.#git.head(
@@ -5221,7 +5234,7 @@ export class ForgeWorkOnController {
       undefined,
       [merged.sha],
     );
-    await this.#projectWorkflowStage(link, "merged", ctx, projector);
+    await this.#projectWorkflowStage(link, deferLaneClosure ? "laneIntegrated" : "merged", ctx, projector);
     if (!currentPull.merged)
       await postReviewCompletionArtifacts({
         github,
@@ -5234,45 +5247,56 @@ export class ForgeWorkOnController {
         signal: ctx.signal,
       });
 
-    await appendPhase(
-      journal,
-      link.forgeRunId,
-      "close",
-      "queue",
-      1,
-      sessionId,
-      ctx.signal,
-    );
-    await appendPhase(
-      journal,
-      link.forgeRunId,
-      "close",
-      "start",
-      1,
-      sessionId,
-      ctx.signal,
-    );
-    await github.closeIssue(link.issueNumber, ctx.signal);
-    await appendEffect(
-      journal,
-      link.forgeRunId,
-      "issue-close",
-      `issue:${link.issueNumber}:close`,
-      digest(merged.sha),
-      sessionId,
-      ctx.signal,
-    );
-    await appendPhase(
-      journal,
-      link.forgeRunId,
-      "close",
-      "complete",
-      1,
-      sessionId,
-      ctx.signal,
-      undefined,
-      ["issue close read-back passed"],
-    );
+    if (!deferLaneClosure) {
+      await appendPhase(
+        journal,
+        link.forgeRunId,
+        "close",
+        "queue",
+        1,
+        sessionId,
+        ctx.signal,
+      );
+      await appendPhase(
+        journal,
+        link.forgeRunId,
+        "close",
+        "start",
+        1,
+        sessionId,
+        ctx.signal,
+      );
+      await github.closeIssue(link.issueNumber, ctx.signal);
+      await appendEffect(
+        journal,
+        link.forgeRunId,
+        "issue-close",
+        `issue:${link.issueNumber}:close`,
+        digest(merged.sha),
+        sessionId,
+        ctx.signal,
+      );
+      await appendPhase(
+        journal,
+        link.forgeRunId,
+        "close",
+        "complete",
+        1,
+        sessionId,
+        ctx.signal,
+        undefined,
+        ["issue close read-back passed"],
+      );
+    } else {
+      await projector.postArtifact({
+        issueNumber: link.issueNumber,
+        runId: link.forgeRunId,
+        eventId: `lane-integrated-${merged.sha}`,
+        artifactKey: "lane-integrated",
+        markdown: `Integrated into work-order lane \`${link.integrationLane?.stableId}\` at lane commit \`${merged.sha}\`. Member issue remains open until the lane promotion merge is read back from staging.`,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+    }
 
     await appendPhase(
       journal,
@@ -5315,7 +5339,7 @@ export class ForgeWorkOnController {
       ["owned worktree removed", "remote feature branch deleted"],
     );
 
-    try {
+    if (!deferLaneClosure) try {
       await postTerminalIssueArtifacts({
         projector,
         link,
@@ -5358,7 +5382,9 @@ export class ForgeWorkOnController {
         });
         const labelReceipt = await projector.setWorkflowLabelWithReceipt(
           link.issueNumber,
-          WORKFLOW_LABEL_BY_STAGE.merged,
+          deferLaneClosure
+            ? WORKFLOW_LABEL_BY_STAGE.laneIntegrated
+            : WORKFLOW_LABEL_BY_STAGE.merged,
           ctx.signal,
           `${terminalEvent.eventId}:workflow`,
         );
@@ -5398,6 +5424,7 @@ export class ForgeWorkOnController {
       headSha: result.headSha,
       baseSha: result.baseSha,
       pullNumber: pull.number,
+      ...(deferLaneClosure ? { laneIntegrated: true } : {}),
     });
     ctx.ui.setStatus("forgedock", undefined);
     ctx.ui.notify(

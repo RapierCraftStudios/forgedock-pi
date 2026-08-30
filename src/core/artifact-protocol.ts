@@ -5,6 +5,7 @@ export const WORKFLOW_LABEL_BY_STAGE = {
   review: "workflow:in-review",
   awaitingMerge: "workflow:awaiting-merge",
   merged: "workflow:merged",
+  laneIntegrated: "workflow:lane-merged",
   invalid: "workflow:invalid",
   decomposed: "workflow:decomposed",
 } as const;

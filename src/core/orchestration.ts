@@ -14,7 +14,10 @@ import {
 } from "./orchestration-recovery.ts";
 import {
   legacyFastLane,
+  transitionIntegrationLane,
   type IntegrationLane,
+  type IntegrationLanePromotionReceipt,
+  type IntegrationLaneStagingEvidence,
   validateIntegrationLane,
 } from "./integration-lane.ts";
 
@@ -29,6 +32,7 @@ export type OrchestrationLaneStatus =
   | "ready"
   | "refreshing"
   | "integrating"
+  | "integrated"
   | "merged"
   | "closed"
   | "blocked"
@@ -101,11 +105,19 @@ export type OrchestrationEventType =
   | "lane.ready"
   | "lane.refreshing"
   | "lane.integrating"
+  | "lane.integrated"
   | "lane.merged"
   | "lane.closed"
   | "lane.blocked"
   | "lane.needs-human"
   | "lane.failed"
+  | "integration-lane.queued"
+  | "integration-lane.lease-acquired"
+  | "integration-lane.lease-released"
+  | "integration-lane.sync"
+  | "integration-lane.promoted"
+  | "integration-lane.closed"
+  | "integration-lane.blocked"
   | "lease.heartbeat"
   | "orchestration.completed"
   | "orchestration.cancelled";
@@ -210,6 +222,7 @@ export function applyOrchestrationEvent(
   };
 
   if (event.type.startsWith("lane.")) applyLaneEvent(state, event);
+  else if (event.type.startsWith("integration-lane.")) applyIntegrationLaneEvent(state, event);
   else if (event.type === "lease.heartbeat") {
     const epoch = positiveInteger(event.payload.epoch, "epoch");
     if (epoch !== state.leaseEpoch)
@@ -665,6 +678,7 @@ function applyLaneEvent(
     started: ["queued"],
     recovered: ["failed", "blocked", "needs-human"],
     ready: ["running", "refreshing"],
+    integrated: ["running"],
     refreshing: ["ready", "integrating"],
     integrating: ["ready"],
     merged: ["integrating"],
@@ -699,7 +713,11 @@ function applyLaneEvent(
     next.subagentRunId = payloadString(event, "subagentRunId");
     next.baseSha = payloadString(event, "baseSha");
   } else if (transition === "integrating") next.status = "integrating";
-  else if (transition === "merged") {
+  else if (transition === "integrated") {
+    next.status = "integrated";
+    next.headSha = payloadString(event, "headSha");
+    next.baseSha = payloadString(event, "baseSha");
+  } else if (transition === "merged") {
     next.status = "merged";
     next.pullNumber = positiveInteger(event.payload.pullNumber, "pullNumber");
     next.headSha = payloadString(event, "headSha");
@@ -712,6 +730,49 @@ function applyLaneEvent(
   }
   (state.lanes as OrchestrationLane[])[index] = next;
   state.batch = createOrchestrationBatchState(state);
+}
+
+function applyIntegrationLaneEvent(
+  state: OrchestrationState,
+  event: OrchestrationEvent,
+): void {
+  if (!state.integrationLane)
+    throw new OrchestrationTransitionError(
+      "missing-integration-lane",
+      "Cannot mutate a missing integration lane.",
+    );
+  const payload = event.payload;
+  const transitionByType: Record<string, Parameters<typeof transitionIntegrationLane>[1]> = {
+    "integration-lane.queued": "queue",
+    "integration-lane.lease-acquired": "acquire-queue-lease",
+    "integration-lane.lease-released": "release-queue-lease",
+    "integration-lane.sync": "sync",
+    "integration-lane.promoted": "promote",
+    "integration-lane.closed": "close",
+    "integration-lane.blocked": "block",
+  };
+  const transition = transitionByType[event.type];
+  if (!transition) throw new OrchestrationTransitionError("invalid-lane-event", `Unsupported integration lane event ${event.type}.`);
+  if (payload.laneId !== state.integrationLane.stableId)
+    throw new OrchestrationTransitionError("lane-identity-mismatch", "Integration lane event identity does not match durable state.");
+  try {
+    const next = transitionIntegrationLane(state.integrationLane, transition, {
+      now: event.occurredAt,
+      ...(typeof payload.ownerId === "string" ? { ownerId: payload.ownerId } : {}),
+      ...(Number.isSafeInteger(payload.leaseSeconds) ? { leaseSeconds: payload.leaseSeconds as number } : {}),
+      ...(Number.isSafeInteger(payload.queuePosition) ? { queuePosition: payload.queuePosition as number } : {}),
+      ...(payload.staging && typeof payload.staging === "object" ? { staging: payload.staging as IntegrationLaneStagingEvidence } : {}),
+      ...(payload.receipt && typeof payload.receipt === "object" ? { receipt: payload.receipt as IntegrationLanePromotionReceipt } : {}),
+      ...(typeof payload.reason === "string" ? { reason: payload.reason } : {}),
+    });
+    state.integrationLane = next;
+    state.batch = createOrchestrationBatchState(state);
+  } catch (error) {
+    throw new OrchestrationTransitionError(
+      "invalid-integration-lane-transition",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 }
 
 function assertLanePredecessorsComplete(
