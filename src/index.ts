@@ -1,4 +1,3 @@
-// The coding-agent package is a dev dependency for the lexical Pi extension contract.
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import { registerForgePromptRouter } from "./prompt-router.ts";
@@ -38,12 +37,7 @@ export {
   FORGE_COORDINATOR_CAPABILITY_PROFILE,
   validateForgeAgentCapabilityProfile,
 } from "./agents/profile.ts";
-export {
-  loadForgeYaml,
-  parseForgeYaml,
-  projectForgeYaml,
-  ForgeYamlError,
-} from "./adapters/forge-yaml.ts";
+export { loadForgeYaml, parseForgeYaml, ForgeYamlError } from "./adapters/forge-yaml.ts";
 export { preflightGitHubCapabilities, GitHubCapabilityError } from "./adapters/github-capabilities.ts";
 export {
   createIntegrationLane,
