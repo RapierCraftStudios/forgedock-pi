@@ -98,3 +98,25 @@ Never reset, checkout, or rebase the harness-managed worktree to `main` or `stag
 after pushing. Review the frozen remote PR head without rewriting the child workspace.
 After confirmed merge, load `work-on/close.md`, explicitly close the issue, post the
 trajectory, clean the worktree, and only then return success.
+
+## Controlled staging refresh
+
+`FORGE:BASE` records immutable launch attribution. It does not make `staging` immutable
+for the remainder of a concurrent lane. At the boundary before validation, before
+review fan-out, and before merge, re-fetch `refs/heads/staging` and compare its exact
+SHA with the lane's current review base. A changed target may continue only when its
+movement is proven to be an authorized, reachable sibling merge in the active batch.
+Publish `FORGE:BASE_REFRESH` containing launch SHA, old/new base SHAs, target ref,
+sibling merge SHA, merge-base SHA, and attempt before mutation; otherwise remain
+automated `GATED`.
+
+For a verified movement, preserve the issue commits, owned branch, and existing PR.
+Before push/PR, synchronize onto the new target with a guarded operation. After push,
+integrate the verified target non-destructively and push with the expected remote lease;
+never reset, overwrite, or force-push an unverified remote head. Conflicts, non-fast-
+forward movement, ambiguous provenance, or lease mismatch are GATED. Re-run every
+affected verification and acceptance check, freeze the refreshed exact
+`(base, head, merge-base)` identity, invalidate pre-refresh reviewer receipts and
+approvals, and launch a fresh complete qualitative review. Do not repeat investigation,
+expand the Builder Contract, weaken protected-branch rules, or classify mechanical
+refresh failures as `needs-human`. See `specs/qualitative-review-protocol.md`.
