@@ -569,10 +569,10 @@ function parseIntegrationLane(
       "lane-repository-mismatch",
       "Integration lane repository must match orchestration repository.",
     );
-  if (!lane.legacy && lane.kind === "milestone" && lane.branch !== payloadString(event, "integrationBranch"))
+  if (!lane.legacy && lane.branch !== payloadString(event, "integrationBranch"))
     throw new OrchestrationTransitionError(
       "lane-branch-mismatch",
-      "Milestone lane branch must match orchestration integration branch.",
+      "Integration lane branch must match orchestration integration branch.",
     );
   const members = new Set(lane.membership.map((member) => member.issueNumber));
   const orderedMembership = [...lane.membership].sort((left, right) => left.ordinal - right.ordinal);

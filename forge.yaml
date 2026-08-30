@@ -27,6 +27,7 @@ verification:
       test: "npm test"
 
 review:
+  remediation_max_rounds: 4
   tech_stack: "TypeScript, Pi extensions, pi-subagents, GitHub"
   context: |
     ForgeDock Pi is a prompt-routed workflow package. Slash commands load skills;

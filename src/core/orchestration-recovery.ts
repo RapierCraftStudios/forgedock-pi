@@ -232,8 +232,8 @@ export function planOrchestrationReload(input: {
         unsafeReason ??= `Retained child ${child.childKey} has stale or ambiguous lane identity.`;
       if (child.baseSha !== undefined && child.baseSha !== input.state.integrationLane.frozenBase.sha)
         unsafeReason ??= `Retained child ${child.childKey} has a stale frozen base.`;
-      if (child.leaseEpoch !== undefined && child.leaseEpoch !== input.state.leaseEpoch)
-        unsafeReason ??= `Retained child ${child.childKey} has a stale lease epoch.`;
+      // Child-run and orchestration leases are independent domains. The child epoch
+      // cannot be compared with the orchestration epoch at this reload boundary.
     }
     byKey.set(child.childKey, child);
   }
