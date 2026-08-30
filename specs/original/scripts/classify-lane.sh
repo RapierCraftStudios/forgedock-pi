@@ -129,7 +129,8 @@ if [ -n "$WORK_ORDER_SLUG" ]; then
      [ "$BINDING_ID" != "wo-${NORMALIZED_WORK_ORDER_SLUG}" ] ||
      [ "$BINDING_SLUG" != "$NORMALIZED_WORK_ORDER_SLUG" ] ||
      [ "$BINDING_BRANCH" != "$EXPECTED_BRANCH" ] ||
-     [ -n "$BINDING_REPOSITORY" ] && [ -n "${GH_REPO_ARGS[1]:-}" ] && [ "$BINDING_REPOSITORY" != "${GH_REPO_ARGS[1]}" ] ||
+     [ -z "$BINDING_REPOSITORY" ] ||
+     { [ -n "${GH_REPO_ARGS[1]:-}" ] && [ "$BINDING_REPOSITORY" != "${GH_REPO_ARGS[1]}" ]; } ||
      [ "$BINDING_BASE_BRANCH" != "main" ] ||
      ! [[ "$BINDING_BASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
     echo "ERROR: work-order binding identity, branch, repository, or frozen main base is stale/ambiguous; refusing fallback." >&2
