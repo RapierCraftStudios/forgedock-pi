@@ -162,6 +162,8 @@ export function validateIntegrationLane(lane: IntegrationLane): void {
     ? lane.frozenBase?.sha === "0000000"
     : /^[0-9a-f]{40}$/i.test(lane.frozenBase?.sha ?? "");
   if (!lane.frozenBase || typeof lane.frozenBase.branch !== "string" || !lane.frozenBase.branch.trim() || !validFrozenSha) fail("invalid-base", "Lane frozen base must contain a branch and exact commit SHA.");
+  if (!lane.legacy && lane.kind === "work-order" && lane.frozenBase.branch !== "main")
+    fail("invalid-base", "Work-order lane frozen base must be main.");
   if (!Array.isArray(lane.membership)) fail("invalid-membership", "Lane membership must be an array.");
   const members = new Set<number>();
   const ordinals = new Set<number>();

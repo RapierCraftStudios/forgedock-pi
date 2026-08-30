@@ -4753,9 +4753,14 @@ export class ForgeWorkOnController {
     const findingIssueMap = existingPull
       ? await publishReviewFindingIssues({
           github,
-          pullNumber: existingPull.number,
-          link,
-          result: followUpResult,
+           pullNumber: existingPull.number,
+           link: {
+             ...link,
+             ...(link.integrationLane
+               ? { integrationLane: link.integrationLane }
+               : {}),
+           },
+           result: followUpResult,
           signal: ctx.signal,
         })
       : {};

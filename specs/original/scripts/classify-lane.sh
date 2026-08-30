@@ -148,7 +148,9 @@ if [ -n "$WORK_ORDER_SLUG" ]; then
     echo "ERROR: work-order binding identity, branch, repository, or frozen main base is stale/ambiguous; refusing fallback." >&2
     exit 1
   fi
-  if ! git fetch --no-tags origin "$BINDING_BRANCH:refs/remotes/origin/$BINDING_BRANCH" >/dev/null 2>&1 ||
+  if ! git fetch --no-tags origin "main:refs/remotes/origin/main" >/dev/null 2>&1 ||
+     ! git merge-base --is-ancestor "$BINDING_BASE_SHA" "origin/main" >/dev/null 2>&1 ||
+     ! git fetch --no-tags origin "$BINDING_BRANCH:refs/remotes/origin/$BINDING_BRANCH" >/dev/null 2>&1 ||
      ! git merge-base --is-ancestor "$BINDING_BASE_SHA" "origin/$BINDING_BRANCH" >/dev/null 2>&1; then
     echo "ERROR: work-order branch '$BINDING_BRANCH' is missing or does not descend from frozen main SHA '$BINDING_BASE_SHA'; refusing fallback." >&2
     exit 1

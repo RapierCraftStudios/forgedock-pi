@@ -68,6 +68,12 @@ const link: ActiveRunLink = {
   leaseOwnerRunId: "run-1",
   leaseEpoch: 1,
   reviewBaseSha: "base-sha",
+  integrationLane: {
+    stableId: "wo-demo",
+    branch: "work-order/wo-demo-demo",
+    repository: "owner/repo",
+    frozenBase: { branch: "main", sha: "a".repeat(40) },
+  },
   refreshes: 0,
   providerRetries: 0,
   remediationAttempts: 0,
@@ -178,6 +184,8 @@ test("every structured finding creates one deduplicated standalone issue", async
   ]);
   assert.match(fake.issues[0]?.body ?? "", /Source PR\*\*: #7/);
   assert.match(fake.issues[0]?.body ?? "", /Finding ID\*\*: `SEC-001`/);
+  assert.match(fake.issues[0]?.body ?? "", /Integration lane\*\*: `wo-demo`/);
+  assert.match(fake.issues[0]?.body ?? "", /Frozen base\*\*: `main@/);
   assert.equal(fake.pullArtifacts.length, 2);
   assert.match(fake.pullArtifacts[0]?.body ?? "", /#100/);
 });
