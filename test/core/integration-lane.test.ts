@@ -89,12 +89,17 @@ test("slug and branch helpers expose stable boundary behavior", () => {
   assert.equal(workOrderBranchName("wo-1", "A lane"), "work-order/wo-1-a-lane");
 });
 
-test("queue lease and promotion lifecycle is guarded and requires a merge commit", async () => {
+test("queue lease release epoch and promotion lifecycle are guarded", async () => {
   const { canPromoteIntegrationLane, transitionIntegrationLane, validatePromotionQueue } = await import("../../src/core/integration-lane.ts");
   const lane = createIntegrationLane({ ...base, kind: "work-order", stableId: "wo-1", slug: "one" });
   const queued = transitionIntegrationLane(lane, "queue", { now: "2026-08-30T00:00:01.000Z", queuePosition: 0 });
   const leased = transitionIntegrationLane(queued, "acquire-queue-lease", { now: "2026-08-30T00:00:02.000Z", ownerId: "orchestrator-1", leaseSeconds: 60 });
   const staging = { branch: "staging", sha: "a".repeat(40), baselineSha: "a".repeat(40), idle: true, checkedAt: "2026-08-30T00:00:03.000Z" };
+  const reacquired = transitionIntegrationLane(leased, "acquire-queue-lease", { now: "2026-08-30T00:02:00.000Z", ownerId: "orchestrator-1", leaseSeconds: 60 });
+  assert.throws(
+    () => transitionIntegrationLane(reacquired, "release-queue-lease", { now: "2026-08-30T00:01:01.000Z", ownerId: "orchestrator-1", leaseEpoch: 1 }),
+    /current queue-lease owner and epoch/i,
+  );
   const ready = transitionIntegrationLane(leased, "sync", { now: staging.checkedAt, ownerId: "orchestrator-1", leaseEpoch: 1, staging });
   validatePromotionQueue([ready]);
   assert.deepEqual(canPromoteIntegrationLane(ready, { ownerId: "wrong-owner", now: staging.checkedAt, sourceHeadSha: "b".repeat(40), mergeBaseSha: staging.sha, staging, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true }), { ok: false, reason: "Queue-head lease is missing, stale, or owned by another lane." });

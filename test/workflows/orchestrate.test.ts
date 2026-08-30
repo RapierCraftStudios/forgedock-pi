@@ -44,6 +44,14 @@ test("work-order lane rejects malformed frozen bases through the shared validato
   );
 });
 
+test("queue-authorized shipping merge requires the durable queue head", () => {
+  const first = createWorkOrderLane({ slug: "first", repository: "owner/repo", issueNumbers: [1], frozenBaseSha: "a".repeat(40) });
+  const second = createWorkOrderLane({ slug: "second", repository: "owner/repo", issueNumbers: [2], frozenBaseSha: "a".repeat(40) });
+  const staging = { branch: "staging", sha: "b".repeat(40), baselineSha: "b".repeat(40), idle: true, checkedAt: "2026-08-30T00:00:01.000Z" };
+  const queuedSecond = { ...second, status: "ready" as const, promotion: { queuePosition: 1, queueLease: { ownerId: "owner", epoch: 1, acquiredAt: "2026-08-30T00:00:00.000Z", expiresAt: "2026-08-30T00:01:00.000Z" } } };
+  assert.equal(evaluateWorkOrderPromotion({ lane: queuedSecond, ownerId: "owner", now: staging.checkedAt, sourceHeadSha: "c".repeat(40), mergeBaseSha: staging.sha, staging, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true, queueHeadLaneId: first.stableId }).allowed, false);
+});
+
 test("promotion queue selects one head and returns a durable gate result", () => {
   const first = createWorkOrderLane({ slug: "first", repository: "owner/repo", issueNumbers: [1], frozenBaseSha: "a".repeat(40) });
   const second = createWorkOrderLane({ slug: "second", repository: "owner/repo", issueNumbers: [2], frozenBaseSha: "a".repeat(40) });

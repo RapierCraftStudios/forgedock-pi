@@ -359,7 +359,7 @@ export function transitionIntegrationLane(
       break;
     }
     case "release-queue-lease":
-      if (!input.ownerId || lane.promotion.queueLease?.ownerId !== input.ownerId) throw new IntegrationLaneValidationError("queue-lease-owner", "Only the queue-lease owner may release it.");
+      if (!input.ownerId || lane.promotion.queueLease?.ownerId !== input.ownerId || input.leaseEpoch !== lane.promotion.queueLease?.epoch) throw new IntegrationLaneValidationError("queue-lease-epoch", "Only the current queue-lease owner and epoch may release it.");
       delete next.promotion.queueLease;
       if (lane.status === "syncing" || lane.status === "promoting") next.status = "ready";
       break;

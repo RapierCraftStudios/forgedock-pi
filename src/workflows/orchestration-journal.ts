@@ -151,8 +151,8 @@ export class OrchestrationJournal {
     return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.lease-acquired", payload: { laneId: input.laneId, ownerId: input.ownerId, leaseSeconds: input.leaseSeconds, attempt }, idempotencyKey: `integration-lane:${input.laneId}:lease:${input.ownerId}:${attempt}`, message: `Acquire integration lane queue lease ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
   }
 
-  async releaseLaneQueueLease(input: { orchestrationId: string; laneId: string; ownerId: string; signal?: AbortSignal }): Promise<OrchestrationState> {
-    return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.lease-released", payload: { laneId: input.laneId, ownerId: input.ownerId }, idempotencyKey: `integration-lane:${input.laneId}:lease-release:${input.ownerId}`, message: `Release integration lane queue lease ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
+  async releaseLaneQueueLease(input: { orchestrationId: string; laneId: string; ownerId: string; leaseEpoch: number; signal?: AbortSignal }): Promise<OrchestrationState> {
+    return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.lease-released", payload: { laneId: input.laneId, ownerId: input.ownerId, leaseEpoch: input.leaseEpoch }, idempotencyKey: `integration-lane:${input.laneId}:lease-release:${input.ownerId}:${input.leaseEpoch}`, message: `Release integration lane queue lease ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
   }
 
   async syncLane(input: { orchestrationId: string; laneId: string; ownerId: string; leaseEpoch: number; staging: IntegrationLaneStagingEvidence; signal?: AbortSignal }): Promise<OrchestrationState> {
@@ -190,10 +190,14 @@ export class OrchestrationJournal {
       );
       if (!current.state)
         throw new Error(`Orchestration ${input.orchestrationId} is not initialized.`);
-      const evidence = await input.readPromotionEvidence(current.state);
       const priorReceipt = current.state.integrationLane?.promotion.receipt;
       if (priorReceipt && priorReceipt.mergeCommitSha === input.receipt.mergeCommitSha)
         return current.state;
+      const evidence = await input.readPromotionEvidence(current.state);
+      if (evidence.ownerId !== input.ownerId ||
+          evidence.queueHeadLaneId !== input.queueHeadLaneId ||
+          evidence.leaseEpoch !== input.leaseEpoch)
+        throw new Error("Promotion evidence no longer matches the original queue owner, head, or lease epoch.");
       const idempotencyKey = `integration-lane:${input.laneId}:promoted:${input.receipt.mergeCommitSha}:${evidence.stagingReadbackSha}`;
       const prior = current.state.idempotencyKeys[idempotencyKey];
       if (prior) return current.state;

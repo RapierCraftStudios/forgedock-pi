@@ -223,6 +223,28 @@ test("already-merged replay uses the exact returned merge SHA, not the pre-merge
   assert.equal(transport.requests.some((request) => request.method === "PUT"), false);
 });
 
+test("already-merged replay rejects a changed expected route before returning success", async () => {
+  const transport = new MockTransport((request) => {
+    if (request.method === "GET" && request.path.includes("/git/ref/heads/"))
+      return response(200, { object: { sha: "new-base-sha" } });
+    return response(200, { ...pullData(), merged: true, merge_commit_sha: "merge-commit-sha", base: { sha: "old-base-sha", ref: "main" } });
+  });
+  const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
+  await assert.rejects(
+    adapter.mergePullRequest({
+      pullNumber: 6,
+      expectedRoute: {
+        pullNumber: 6,
+        headRef: "forge/issue-2",
+        headSha: "head-sha",
+        baseRef: "staging",
+        baseSha: "old-base-sha",
+      },
+    }),
+    /route changed.*base ref/i,
+  );
+});
+
 test("already-merged replay fails closed when GitHub omits the exact merge SHA", async () => {
   const transport = new MockTransport((request) => {
     if (request.method === "GET" && request.path.includes("/git/ref/heads/"))

@@ -867,24 +867,16 @@ export class GitHubWorkflowAdapter {
       input.signal,
     );
     const path = `${this.#apiRoot}/pulls/${input.pullNumber}/merge`;
-    // A replay may observe a PR merged after the original route snapshot. Its
-    // base SHA is expected to have moved, so reconcile this terminal side
-    // effect before rejecting the stale pre-merge route.
-    if (current.merged) {
-      if (!current.mergeCommitSha)
-        throw new GitHubApiError(409, path, {
-          message: "Already merged pull request has no exact merge commit SHA",
-        });
-      return {
-        merged: true,
-        sha: current.mergeCommitSha,
-        message: "Already merged",
-      };
-    }
     if (input.expectedRoute) {
+      // A merged PR may legitimately move the target ref after the merge.
+      // Keep the reviewed route authoritative for refs and head identity while
+      // allowing that post-merge base SHA to advance.
+      const routeForValidation = current.merged
+        ? { ...current, baseSha: input.expectedRoute.baseSha }
+        : current;
       assertPullRequestRouteSnapshot(
         input.expectedRoute,
-        current,
+        routeForValidation,
         this.#apiRoot,
       );
     } else {
@@ -896,6 +888,19 @@ export class GitHubWorkflowAdapter {
         throw new GitHubApiError(409, path, {
           message: `Pull request targets ${current.baseRef}; expected ${input.expectedBaseRef}`,
         });
+    }
+    // A replay may observe a PR merged after the original route snapshot. The
+    // route was validated above; only the exact provider merge SHA is accepted.
+    if (current.merged) {
+      if (!current.mergeCommitSha)
+        throw new GitHubApiError(409, path, {
+          message: "Already merged pull request has no exact merge commit SHA",
+        });
+      return {
+        merged: true,
+        sha: current.mergeCommitSha,
+        message: "Already merged",
+      };
     }
     const expectedHeadSha =
       input.expectedRoute?.headSha ?? input.expectedHeadSha;
