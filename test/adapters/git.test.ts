@@ -62,6 +62,60 @@ test("NUL-delimited changed paths retain rename sources, destinations, and delet
   assert.throws(() => parseChangedGitPaths("R100\0src/old.ts\0"));
 });
 
+test("exact remote branch creation is idempotent and rejects unrelated collisions", async () => {
+  const baseSha = "a".repeat(40);
+  const matchingSha = "b".repeat(40);
+  const calls: string[][] = [];
+  const manager = new GitWorktreeManager({
+    async exec(command, args) {
+      calls.push([command, ...args]);
+      if (args[0] === "ls-remote")
+        return { stdout: "", stderr: "", code: 0 };
+      if (args[0] === "push") return { stdout: "", stderr: "", code: 0 };
+      throw new Error(`unexpected command ${args.join(" ")}`);
+    },
+  });
+  assert.equal(
+    await manager.ensureRemoteBranchAt("/repo", "work-order/wo-demo-demo", baseSha),
+    baseSha,
+  );
+  assert.deepEqual(calls[0], [
+    "git",
+    "ls-remote",
+    "--heads",
+    "origin",
+    "refs/heads/work-order/wo-demo-demo",
+  ]);
+
+  const reused = new GitWorktreeManager({
+    async exec(_command, args) {
+      if (args[0] === "ls-remote")
+        return { stdout: `${matchingSha}\trefs/heads/work-order/wo-demo-demo\n`, stderr: "", code: 0 };
+      if (args[0] === "fetch") return { stdout: "", stderr: "", code: 0 };
+      if (args[0] === "merge-base") return { stdout: "", stderr: "", code: 0 };
+      throw new Error(`unexpected command ${args.join(" ")}`);
+    },
+  });
+  assert.equal(
+    await reused.ensureRemoteBranchAt("/repo", "work-order/wo-demo-demo", baseSha),
+    matchingSha,
+  );
+
+  const conflicting = new GitWorktreeManager({
+    async exec(_command, args) {
+      if (args[0] === "ls-remote")
+        return { stdout: `${matchingSha}\trefs/heads/work-order/wo-demo-demo\n`, stderr: "", code: 0 };
+      if (args[0] === "fetch") return { stdout: "", stderr: "", code: 0 };
+      if (args[0] === "merge-base") return { stdout: "", stderr: "unrelated", code: 1 };
+      throw new Error(`unexpected command ${args.join(" ")}`);
+    },
+  });
+  await assert.rejects(
+    () => conflicting.ensureRemoteBranchAt("/repo", "work-order/wo-demo-demo", baseSha),
+    /does not descend from frozen base/,
+  );
+});
+
 test("worktree manager creates an issue branch from integration and cleans it safely", async () => {
   const root = await mkdtemp(join(tmpdir(), "forgedock-git-test-"));
   const origin = join(root, "origin.git");

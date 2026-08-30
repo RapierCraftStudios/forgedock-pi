@@ -557,10 +557,17 @@ function parseIntegrationLane(
       "Milestone lane branch must match orchestration integration branch.",
     );
   const members = new Set(lane.membership.map((member) => member.issueNumber));
-  if (members.size !== issueNumbers.length || issueNumbers.some((issue) => !members.has(issue)))
+  const orderedMembership = [...lane.membership].sort((left, right) => left.ordinal - right.ordinal);
+  if (
+    members.size !== issueNumbers.length ||
+    orderedMembership.length !== issueNumbers.length ||
+    orderedMembership.some(
+      (member, ordinal) => member.issueNumber !== issueNumbers[ordinal] || member.ordinal !== ordinal,
+    )
+  )
     throw new OrchestrationTransitionError(
       "lane-membership-mismatch",
-      "Integration lane membership must match the orchestration issue set.",
+      "Integration lane membership must match the orchestration issue set and order.",
     );
   return lane;
 }

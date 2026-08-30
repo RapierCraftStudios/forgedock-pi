@@ -1,10 +1,7 @@
+/// <reference types="node" />
+
 import assert from "node:assert/strict";
 import test from "node:test";
-
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "@earendil-works/pi-coding-agent";
 
 import type { OrchestrationState } from "../../src/core/orchestration.ts";
 import {
@@ -15,6 +12,14 @@ import {
   registerForgeCommands,
   renderOrchestrationStatus,
 } from "../../src/ui/commands.ts";
+
+type ExtensionAPI = Parameters<typeof registerForgeCommands>[0];
+type ExtensionContext = {
+  hasUI?: boolean;
+  // Test doubles are intentionally partial; production command registration
+  // supplies the complete Pi ExtensionContext.
+  ui: any;
+};
 
 const input = {
   issueNumbers: [2, 16, 41],
@@ -77,6 +82,30 @@ test("orchestration confirmation names only the trusted exact issue set", async 
   assert.match(prompt, /may merge changes/);
   assert.doesNotMatch(prompt, /github\.com/);
   assert.doesNotMatch(prompt, /eligible open issues/);
+});
+
+test("work-order confirmation requires explicit source intent", async () => {
+  const ui = {
+    confirm: async () => true,
+  } as unknown as ExtensionContext["ui"];
+  await assert.rejects(
+    confirmOrchestrationDispatch(
+      { hasUI: true, ui },
+      { ...input, workOrderSlug: "demo" },
+    ),
+    /must match explicit --work-order intent/,
+  );
+  await assert.rejects(
+    confirmOrchestrationDispatch(
+      { hasUI: true, ui },
+      { ...input, sourceExpression: "#2 --work-order demo" },
+    ),
+    /requires workOrderSlug/,
+  );
+  await confirmOrchestrationDispatch(
+    { hasUI: true, ui },
+    { ...input, sourceExpression: "#2 --work-order demo", workOrderSlug: "demo" },
+  );
 });
 
 test("orchestration status renders authoritative lane details", () => {
@@ -210,6 +239,13 @@ test("orchestration resolver keeps an explicit set narrow and ordered", () => {
   assert.doesNotMatch(prompt, /obtain conversational confirmation/);
 });
 
+test("orchestration resolver preserves explicit work-order intent", () => {
+  const prompt = issueResolverPrompt("orchestrate", "--work-order release-lane #299 #300");
+  assert.match(prompt, /--work-order <slug>/);
+  assert.match(prompt, /workOrderSlug/);
+  assert.match(prompt, /explicitly contains --work-order/);
+});
+
 test("work-on slash command sends free-form intent to the resolver", async () => {
   type CommandDefinition = {
     handler: (args: string, ctx: ExtensionContext) => unknown;
@@ -233,7 +269,7 @@ test("work-on slash command sends free-form intent to the resolver", async () =>
 
   const handler = commands.get("forge:work-on")?.handler;
   assert.ok(handler);
-  await handler(
+  await handler!(
     "the oldest eligible workflow bug --auto",
     {} as ExtensionContext,
   );
@@ -302,7 +338,7 @@ test("resume command reconciles linked orchestration state", async () => {
   const notifications: string[] = [];
   const handler = commands.get("forge:resume")?.handler;
   assert.ok(handler);
-  await handler("", {
+  await handler!("", {
     ui: { notify: (message: string) => notifications.push(message) },
   } as unknown as ExtensionContext);
   assert.equal(resumes, 1);
