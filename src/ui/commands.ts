@@ -30,6 +30,7 @@ import {
   FORGEDOCK_PI_VERSION,
 } from "../core/version.ts";
 import { forgeCapabilityDiagnostics } from "../agents/profile.ts";
+import { normalizeIntegrationSlug } from "../core/integration-lane.ts";
 
 export interface OrchestrationConfirmationInput {
   issueNumbers: readonly number[];
@@ -43,8 +44,13 @@ export async function confirmOrchestrationDispatch(
   ctx: Pick<ExtensionContext, "hasUI" | "ui">,
   input: OrchestrationConfirmationInput,
 ): Promise<void> {
-  if (input.workOrderSlug && !/(^|\s)--work-order(?:=|\s)/.test(input.sourceExpression))
-    throw new Error("workOrderSlug requires explicit --work-order intent in sourceExpression.");
+  if (input.workOrderSlug) {
+    const selector = input.sourceExpression.match(
+      /(?:^|\s)--work-order(?:=|\s+)([^\s,]+)/,
+    )?.[1];
+    if (!selector || normalizeIntegrationSlug(selector) !== normalizeIntegrationSlug(input.workOrderSlug))
+      throw new Error("workOrderSlug must match explicit --work-order intent in sourceExpression.");
+  }
   if (!ctx.hasUI)
     throw new Error(
       "forge_orchestrate requires interactive operator confirmation.",

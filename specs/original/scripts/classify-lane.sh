@@ -129,6 +129,12 @@ if [ -n "$WORK_ORDER_SLUG" ]; then
   BINDING_BASE_BRANCH=$(jq -r '.frozenBase.branch // empty' "$WORK_ORDER_BINDING_FILE")
   BINDING_BASE_SHA=$(jq -r '.frozenBase.sha // empty' "$WORK_ORDER_BINDING_FILE")
   BINDING_MEMBER=$(jq --argjson issue "$ISSUE_NUMBER" '[.membership[]?.issueNumber] | any(. == $issue)' "$WORK_ORDER_BINDING_FILE")
+  for BINDING_FIELD in "$BINDING_KIND" "$BINDING_ID" "$BINDING_SLUG" "$BINDING_BRANCH" "$BINDING_REPOSITORY" "$BINDING_BASE_BRANCH" "$BINDING_BASE_SHA"; do
+    if [[ "$BINDING_FIELD" == *$'\n'* || "$BINDING_FIELD" == *$'\r'* ]]; then
+      echo "ERROR: work-order binding contains a control character; refusing fallback." >&2
+      exit 1
+    fi
+  done
   EXPECTED_BRANCH="work-order/wo-${NORMALIZED_WORK_ORDER_SLUG}-${NORMALIZED_WORK_ORDER_SLUG}"
   if [ "$BINDING_KIND" != "work-order" ] ||
      [ "$BINDING_ID" != "wo-${NORMALIZED_WORK_ORDER_SLUG}" ] ||

@@ -147,8 +147,7 @@ export class GitWorktreeManager {
     assertSafeIdentifier(input.runId, "runId");
     if (!Number.isSafeInteger(input.issueNumber) || input.issueNumber < 1)
       throw new TypeError("Issue number must be positive.");
-    if (!input.baseBranch.trim() || input.baseBranch.startsWith("-"))
-      throw new TypeError("Base branch is invalid.");
+    assertSafeBranchRef(input.baseBranch, "baseBranch");
     const root = await realpath(repositoryRoot);
     await this.#git(
       root,
@@ -358,6 +357,7 @@ export class GitWorktreeManager {
     baseBranch: string,
     signal?: AbortSignal,
   ): Promise<string> {
+    assertSafeBranchRef(baseBranch, "baseBranch");
     await this.#git(
       repositoryRoot,
       ["fetch", "--no-tags", "origin", baseBranch],
