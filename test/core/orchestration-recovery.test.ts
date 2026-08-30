@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  createIntegrationLane,
+} from "../../src/core/integration-lane.ts";
+import {
   classifyOrchestrationLane,
   createOrchestrationBatchState,
   orchestrationChildKey,
@@ -58,6 +61,41 @@ test("unsafe retained child identity pauses reload instead of launching", () => 
   assert.equal(plan.paused, true);
   assert.deepEqual(plan.resume, []);
   assert.match(plan.reason ?? "", /Paused orchestration reload/);
+});
+
+test("typed lane reload rejects stale receipts and retains queue identity", () => {
+  const lane = createIntegrationLane({
+    kind: "work-order",
+    stableId: "wo-1",
+    slug: "queue",
+    repository: "owner/repo",
+    frozenBase: { branch: "main", sha: "0123456789abcdef0123456789abcdef01234567" },
+    membership: [
+      { issueNumber: 1, ordinal: 0 },
+      { issueNumber: 2, ordinal: 1 },
+      { issueNumber: 3, ordinal: 2 },
+    ],
+    sourceQuery: "issues",
+    createdAt: "2026-08-24T00:00:00.000Z",
+    updatedAt: "2026-08-24T00:00:00.000Z",
+    status: "active",
+  });
+  const plan = planOrchestrationReload({
+    state: { ...state(), integrationLane: lane },
+    retainedChildren: [{
+      childKey: orchestrationChildKey("batch-1", 1),
+      issueNumber: 1,
+      status: "running",
+      laneId: "wo-1",
+      baseSha: "stale-base",
+      leaseEpoch: 2,
+    }],
+  });
+  assert.equal(plan.paused, true);
+  assert.match(plan.reason ?? "", /stale frozen base|stale lease epoch/);
+  const batch = createOrchestrationBatchState({ ...state(), integrationLane: lane });
+  assert.equal(batch.laneId, "wo-1");
+  assert.deepEqual(batch.queue?.map((entry) => entry.position), [0, 1, 2]);
 });
 
 test("orchestration classifications are exact and stable", () => {
