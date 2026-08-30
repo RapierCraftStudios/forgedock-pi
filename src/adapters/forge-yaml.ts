@@ -17,6 +17,7 @@ export interface ForgeYamlConfig {
   readonly paths: { readonly root: string; readonly worktreeBase: string };
   readonly branches: { readonly staging: string; readonly default: string };
   readonly agents: { readonly defaultModel: string; readonly subagentModel: string };
+  readonly orchestration: { readonly maxConcurrent: number };
   readonly sourcePath: string;
 }
 
@@ -75,6 +76,7 @@ function validateForgeYaml(value: unknown, sourcePath: string): ForgeYamlConfig 
   const paths = object(root.paths, "paths");
   const branches = object(root.branches, "branches");
   const agents = object(root.agents, "agents");
+  const orchestration = object(root.orchestration, "orchestration");
   const name = requiredString(project.name, "project.name");
   const owner = requiredString(project.owner, "project.owner");
   const repo = requiredString(project.repo, "project.repo");
@@ -88,6 +90,7 @@ function validateForgeYaml(value: unknown, sourcePath: string): ForgeYamlConfig 
     paths: Object.freeze({ root: rootPath, worktreeBase }),
     branches: Object.freeze({ staging: requiredBranch(branches.staging, "branches.staging"), default: requiredBranch(branches.default, "branches.default") }),
     agents: Object.freeze({ defaultModel: requiredString(agents.default_model, "agents.default_model"), subagentModel: requiredString(agents.subagent_model, "agents.subagent_model") }),
+    orchestration: Object.freeze({ maxConcurrent: positiveInteger(orchestration.max_concurrent, "orchestration.max_concurrent") }),
     sourcePath,
   });
 }
@@ -95,6 +98,10 @@ function validateForgeYaml(value: unknown, sourcePath: string): ForgeYamlConfig 
 function object(value: unknown, path: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new ForgeYamlError(path, "is required and must be a mapping");
   return value as Record<string, unknown>;
+}
+function positiveInteger(value: unknown, path: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 1) throw new ForgeYamlError(path, "is required and must be a positive safe integer");
+  return value as number;
 }
 function requiredString(value: unknown, path: string): string {
   if (typeof value !== "string" || !value.trim() || value !== value.trim()) throw new ForgeYamlError(path, "is required and must be a non-empty trimmed string");

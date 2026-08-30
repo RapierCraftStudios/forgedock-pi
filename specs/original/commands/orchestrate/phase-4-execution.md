@@ -189,34 +189,33 @@ should_dispatch() {
 
 **WHY THIS EXISTS** <!-- Added: forge#1912 -->: Phase 4's dispatch loops previously launched every DAG-ready issue in one shot — the engine-first bash loop backgrounded every `should_dispatch()`-passing issue with no count limit, and the Agent-spawn-fallback path was explicitly instructed to "launch all ready agents simultaneously." On a large ready set this saturates the Anthropic API rate limit in one burst, causing cascading failures across most of the batch. This is a distinct, count-denominated gate from the dollar-denominated `--budget` gate above (Step 4A-pre.0) — an issue can be deferred for budget reasons, concurrency reasons, or both; each gate accumulates its own deferred list independently.
 
-`MAX_CONCURRENT` caps top-level `/work-on` dispatches, not the total number of harness subagents. A normal worker can spawn context, architect, implement, validate, quality-gate, and review children. Budget **8 total subagent spawns per worker** when choosing this value: `max_concurrent <= session_subagent_budget / 8`. This is a conservative planning multiplier, not a second runtime semaphore; the harness does not expose a reliable cross-agent spawn counter to this shell-level dispatcher.
+`MAX_CONCURRENT` caps top-level `/work-on` dispatches, not nested review workers. It comes only from the target repository's required `forge.yaml`; do not lower it from a generic harness/session default. The Pi adapter provisions the root run-fanout budget separately at **64 logical child admissions per selected coordinator**, so that cumulative harness accounting cannot become a second issue-lane semaphore.
 
 Initialize the concurrency cap and its batch-scope tracking state before the first dispatch:
 
 ```bash
 # --- Concurrency gate initialization ---
-MAX_CONCURRENT=$(yq '.orchestration.max_concurrent // 12' forge.yaml 2>/dev/null || echo 12)
+MAX_CONCURRENT=$(yq -er '.orchestration.max_concurrent' forge.yaml 2>/dev/null) || {
+  echo "ERROR: forge.yaml → orchestration.max_concurrent is required; refusing to dispatch without the user-owned limit" >&2
+  exit 1
+}
 
-# Validate MAX_CONCURRENT is a bare positive integer before it is ever used in arithmetic
-# expansion or array-slice-length position below. Bash's `$(( ))` and `${arr[@]:off:len}`
-# both re-evaluate an unquoted variable's contents as an expression — an unvalidated value
-# (e.g. a malicious or malformed forge.yaml, or a stray non-numeric string) can inject
-# arbitrary command substitution into the arithmetic context, and 0/negative values make
-# the chunked dispatch loop below (Step 4A) never advance its index, spinning forever.
-# Same validation convention as BUDGET_LIMIT in Step 4A-pre.0 above. <!-- Added: forge#1912 -->
-if [ "$MAX_CONCURRENT" = "null" ] || ! echo "$MAX_CONCURRENT" | grep -qP '^[1-9][0-9]*$'; then
-  echo "WARNING: forge.yaml → orchestration.max_concurrent is not a positive integer (\"${MAX_CONCURRENT}\") — falling back to default 12"
-  MAX_CONCURRENT=12
+# Validate MAX_CONCURRENT before arithmetic expansion or array slicing. Bash re-evaluates
+# unquoted arithmetic operands, while zero/negative values make the chunked dispatch loop
+# non-progressing. Malformed configuration stops before launch; it never selects a fallback.
+if ! echo "$MAX_CONCURRENT" | grep -qP '^[1-9][0-9]*$'; then
+  echo "ERROR: forge.yaml → orchestration.max_concurrent must be a positive integer (got \"${MAX_CONCURRENT}\")" >&2
+  exit 1
 fi
 
 ACTIVE_DISPATCH_COUNT=0             # in-flight dispatched-but-not-yet-completed agents, this batch
 DEFERRED_CONCURRENCY_ISSUES=()      # ready issues held back because no headroom was available
-SUBAGENT_SPAWN_BUDGET_PER_WORKER=8  # /work-on + build/review fan-out planning estimate
+RUN_FANOUT_BUDGET_PER_COORDINATOR=64
 TOP_LEVEL_DISPATCH_TOTAL=0
 PLANNED_SUBAGENT_SPAWNS=0
 OBSERVED_SUBAGENT_SPAWNS="unavailable" # replace only with harness telemetry; never infer
 
-echo "Concurrency gate initialized: MAX_CONCURRENT=${MAX_CONCURRENT}; plan for up to $((MAX_CONCURRENT * SUBAGENT_SPAWN_BUDGET_PER_WORKER)) subagent spawns in flight (8 per worker)"
+echo "Concurrency gate initialized: MAX_CONCURRENT=${MAX_CONCURRENT}; root run-fanout budget=$((MAX_CONCURRENT * RUN_FANOUT_BUDGET_PER_COORDINATOR)) (64 per selected coordinator)"
 # --- End concurrency gate initialization ---
 ```
 
@@ -232,7 +231,7 @@ dispatch_headroom() {
 
 **This is a hard cap, not a suggestion.** No dispatch site in Phase 4 may background/spawn more than `dispatch_headroom` new agents without first waiting for in-flight agents to complete. Issues that cannot be dispatched due to the cap go into `DEFERRED_CONCURRENCY_ISSUES[]` and are released — in the order they were deferred — as running agents complete (Step 4B), the same event-driven model (no sleep/poll loops) the file already uses for DAG-readiness and budget gating.
 
-**Dispatch accounting**: Immediately after each successful top-level dispatch, increment `TOP_LEVEL_DISPATCH_TOTAL` and add `SUBAGENT_SPAWN_BUDGET_PER_WORKER` to `PLANNED_SUBAGENT_SPAWNS`. When the runtime reports child-spawn telemetry, replace `OBSERVED_SUBAGENT_SPAWNS` with that measured total; otherwise leave it `unavailable` rather than fabricating a measured value.
+**Dispatch accounting**: Immediately after each successful top-level dispatch, increment `TOP_LEVEL_DISPATCH_TOTAL` and add `RUN_FANOUT_BUDGET_PER_COORDINATOR` to `PLANNED_SUBAGENT_SPAWNS`. When the runtime reports child-spawn telemetry, replace `OBSERVED_SUBAGENT_SPAWNS` with that measured total; otherwise leave it `unavailable` rather than fabricating a measured value.
 
 ### Step 4A-pre.0.3: Secondary content-creation backpressure (MANDATORY)
 
