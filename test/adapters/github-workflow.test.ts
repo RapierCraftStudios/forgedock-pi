@@ -245,6 +245,23 @@ test("already-merged replay rejects a changed expected route before returning su
   );
 });
 
+test("legacy already-merged replay rejects a changed expected head", async () => {
+  const transport = new MockTransport((request) => {
+    if (request.method === "GET" && request.path.includes("/git/ref/heads/"))
+      return response(200, { object: { sha: "new-base-sha" } });
+    return response(200, { ...pullData(), merged: true, merge_commit_sha: "merge-commit-sha", head: { sha: "different-head", ref: "forge/issue-2" }, base: { sha: "old-base-sha", ref: "staging" } });
+  });
+  const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
+  await assert.rejects(
+    adapter.mergePullRequest({
+      pullNumber: 6,
+      expectedHeadSha: "head-sha",
+      expectedBaseRef: "staging",
+    }),
+    /stale reviewed SHA/i,
+  );
+});
+
 test("already-merged replay fails closed when GitHub omits the exact merge SHA", async () => {
   const transport = new MockTransport((request) => {
     if (request.method === "GET" && request.path.includes("/git/ref/heads/"))

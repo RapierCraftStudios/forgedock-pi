@@ -700,21 +700,45 @@ export class ForgeOrchestrationController {
       if (!leaseEpoch) throw new Error("Promotion queue lease was not acquired.");
       if (!input.readPromotionEvidence)
         throw new Error("Promotion requires a provider evidence reader for every durable CAS attempt.");
-      const queueHead = await this.#promotionQueueHead(current.store, input.orchestrationId, state, input.ctx.signal);
-      if (!queueHead || queueHead.stableId !== initialLane.stableId)
-        throw new Error("Work-order promotion is gated: the durable shared queue head is another lane.");
       if (state.integrationLane?.status === "syncing") {
         state = await journal.syncLane({ orchestrationId: input.orchestrationId, laneId: initialLane.stableId, ownerId: input.ownerId, leaseEpoch, staging: input.staging, signal: input.ctx.signal });
       }
-      // Queue authority is established before the shipping merge operation.
       const shippingPull = await github.getPullRequest(input.shippingPullNumber, input.ctx.signal);
-      if (shippingPull.merged ||
-          shippingPull.headRef !== initialLane.branch ||
+      if (shippingPull.headRef !== initialLane.branch ||
           shippingPull.baseRef !== stagingBranch ||
-          input.staging.branch !== stagingBranch ||
           shippingPull.headSha !== input.sourceHeadSha ||
-          shippingPull.baseSha !== input.staging.sha)
-        throw new Error("Shipping PR route, exact unmerged head/base, or staging evidence does not match promotion authority.");
+          (!shippingPull.merged && shippingPull.baseSha !== input.staging.sha) ||
+          (shippingPull.merged && (!shippingPull.mergeCommitSha ||
+            (input.mergeCommitSha && shippingPull.mergeCommitSha !== input.mergeCommitSha))))
+        throw new Error("Shipping PR route, exact head/base, or staging evidence does not match promotion authority.");
+
+      // Re-read provider evidence, then durable queue authority, immediately
+      // before the irreversible merge. A changed owner, epoch, queue head, or
+      // staging baseline must abort without touching the shipping PR.
+      const preMergeEvidence = await input.readPromotionEvidence(state);
+      const preMergeStagingSha = await github.getBranchHeadSha(stagingBranch, input.ctx.signal);
+      const durableBeforeMerge = await this.#read(link, input.ctx.signal);
+      const durableLane = durableBeforeMerge.state.integrationLane;
+      const durableQueueHead = await this.#promotionQueueHead(durableBeforeMerge.store, input.orchestrationId, durableBeforeMerge.state, input.ctx.signal);
+      const persistedStaging = durableLane?.promotion.stagingEvidence;
+      const durableLease = durableLane?.promotion.queueLease;
+      if (!durableLane || durableLane.status !== "ready" ||
+          !durableLease || durableLease.ownerId !== input.ownerId ||
+          durableLease.epoch !== leaseEpoch ||
+          !durableQueueHead || durableQueueHead.stableId !== initialLane.stableId ||
+          preMergeEvidence.ownerId !== input.ownerId ||
+          preMergeEvidence.queueHeadLaneId !== durableQueueHead.stableId ||
+          preMergeEvidence.leaseEpoch !== leaseEpoch ||
+          preMergeEvidence.staging.branch !== stagingBranch ||
+          preMergeEvidence.staging.sha !== input.staging.sha ||
+          preMergeStagingSha !== preMergeEvidence.staging.sha ||
+          !persistedStaging ||
+          persistedStaging.branch !== preMergeEvidence.staging.branch ||
+          persistedStaging.sha !== preMergeEvidence.staging.sha)
+        throw new Error("Promotion authority or provider staging evidence changed before the shipping merge.");
+      state = durableBeforeMerge.state;
+      const gate = evaluateWorkOrderPromotion({ lane: durableLane, ownerId: input.ownerId, now: input.reviewedAt, sourceHeadSha: input.sourceHeadSha, mergeBaseSha: input.mergeBaseSha, staging: preMergeEvidence.staging, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: true, queueHeadLaneId: durableQueueHead.stableId });
+      if (!gate.allowed) throw new Error(`Work-order promotion gated: ${gate.reason}`);
       const shippingMerge = await github.mergePullRequest({
         pullNumber: input.shippingPullNumber,
         expectedRoute: {
@@ -722,7 +746,7 @@ export class ForgeOrchestrationController {
           headRef: shippingPull.headRef,
           headSha: shippingPull.headSha,
           baseRef: shippingPull.baseRef,
-          baseSha: shippingPull.baseSha,
+          baseSha: preMergeEvidence.staging.sha,
         },
         method: "merge",
         ...(input.ctx.signal ? { signal: input.ctx.signal } : {}),
@@ -730,19 +754,17 @@ export class ForgeOrchestrationController {
       if (!shippingMerge.merged || !/^[0-9a-f]{40}$/i.test(shippingMerge.sha) ||
           (input.mergeCommitSha && input.mergeCommitSha !== shippingMerge.sha))
         throw new Error("Shipping merge did not return the exact merge commit SHA.");
-      const receipt = workOrderPromotionReceipt({ shippingPullNumber: input.shippingPullNumber, sourceHeadSha: input.sourceHeadSha, stagingBaseSha: input.staging.sha, mergeBaseSha: input.mergeBaseSha, mergeCommitSha: shippingMerge.sha, reviewedAt: input.reviewedAt });
+      const receipt = workOrderPromotionReceipt({ shippingPullNumber: input.shippingPullNumber, sourceHeadSha: input.sourceHeadSha, stagingBaseSha: preMergeEvidence.staging.sha, mergeBaseSha: input.mergeBaseSha, mergeCommitSha: shippingMerge.sha, reviewedAt: input.reviewedAt });
       const finalStagingSha = await github.getBranchHeadSha(stagingBranch, input.ctx.signal);
       if (finalStagingSha !== shippingMerge.sha)
         throw new Error("Protected staging must read back the exact SHA returned by the shipping merge operation.");
-      const gate = evaluateWorkOrderPromotion({ lane: state.integrationLane!, ownerId: input.ownerId, now: input.reviewedAt, sourceHeadSha: input.sourceHeadSha, mergeBaseSha: input.mergeBaseSha, staging: input.staging, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: true, queueHeadLaneId: queueHead.stableId });
-      if (!gate.allowed) throw new Error(`Work-order promotion gated: ${gate.reason}`);
       state = await journal.promoteLane({
         orchestrationId: input.orchestrationId,
         laneId: initialLane.stableId,
         ownerId: input.ownerId,
-        queueHeadLaneId: queueHead.stableId,
-        leaseEpoch: state.integrationLane!.promotion.queueLease!.epoch,
-        staging: input.staging,
+        queueHeadLaneId: durableQueueHead.stableId,
+        leaseEpoch,
+        staging: preMergeEvidence.staging,
         stagingReadbackSha: finalStagingSha,
         receipt,
         reviewPassed: input.reviewPassed,
@@ -753,8 +775,10 @@ export class ForgeOrchestrationController {
         readPromotionEvidence: async (latestState) => {
           const evidence = await input.readPromotionEvidence!(latestState);
           if (evidence.ownerId !== input.ownerId ||
-              evidence.queueHeadLaneId !== queueHead.stableId ||
+              evidence.queueHeadLaneId !== durableQueueHead.stableId ||
               evidence.leaseEpoch !== leaseEpoch ||
+              evidence.staging.branch !== preMergeEvidence.staging.branch ||
+              evidence.staging.sha !== preMergeEvidence.staging.sha ||
               evidence.stagingReadbackSha !== receipt.mergeCommitSha)
             throw new Error("Protected staging moved during promotion CAS; fresh review and queue evidence are required.");
           return evidence;

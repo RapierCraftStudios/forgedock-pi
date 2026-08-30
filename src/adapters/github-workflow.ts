@@ -889,8 +889,18 @@ export class GitHubWorkflowAdapter {
           message: `Pull request targets ${current.baseRef}; expected ${input.expectedBaseRef}`,
         });
     }
+    const expectedHeadSha =
+      input.expectedRoute?.headSha ?? input.expectedHeadSha;
+    if (!expectedHeadSha)
+      throw new TypeError("merge requires an expected head SHA.");
+    if (current.headSha !== expectedHeadSha) {
+      throw new GitHubApiError(409, path, {
+        message: `Stale reviewed SHA ${expectedHeadSha}; current head is ${current.headSha}`,
+      });
+    }
     // A replay may observe a PR merged after the original route snapshot. The
-    // route was validated above; only the exact provider merge SHA is accepted.
+    // complete expected route was validated above; only the exact provider merge
+    // SHA is accepted.
     if (current.merged) {
       if (!current.mergeCommitSha)
         throw new GitHubApiError(409, path, {
@@ -901,15 +911,6 @@ export class GitHubWorkflowAdapter {
         sha: current.mergeCommitSha,
         message: "Already merged",
       };
-    }
-    const expectedHeadSha =
-      input.expectedRoute?.headSha ?? input.expectedHeadSha;
-    if (!expectedHeadSha)
-      throw new TypeError("merge requires an expected head SHA.");
-    if (current.headSha !== expectedHeadSha) {
-      throw new GitHubApiError(409, path, {
-        message: `Stale reviewed SHA ${expectedHeadSha}; current head is ${current.headSha}`,
-      });
     }
     const response = await this.#transport.request<MergeApiResponse>({
       method: "PUT",
