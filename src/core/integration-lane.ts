@@ -173,6 +173,13 @@ export function validateIntegrationLane(lane: IntegrationLane): void {
   if (!statuses.includes(lane.status)) fail("invalid-status", "Unsupported lane status.");
   if (!lane.promotion || typeof lane.promotion !== "object") fail("invalid-promotion", "Promotion metadata must be an object.");
   if (lane.promotion.queuePosition !== undefined && (!Number.isSafeInteger(lane.promotion.queuePosition) || lane.promotion.queuePosition < 0)) fail("invalid-promotion", "Queue position must be a non-negative integer.");
+  if (lane.legacy && (
+    lane.kind !== "milestone" ||
+    !/^legacy-[0-9a-f]{8}$/.test(lane.stableId) ||
+    lane.slug !== "fast-lane" ||
+    lane.sourceQuery !== "legacy-fast-lane" ||
+    lane.frozenBase.sha !== "0000000"
+  )) fail("invalid-legacy-lane", "Only the canonical legacy fast-lane interpretation may set legacy.");
 }
 
 export function legacyFastLane(input: { repository: string; integrationBranch: string; orchestrationId: string; issueNumbers: readonly number[]; occurredAt: string }): IntegrationLane {

@@ -54,6 +54,10 @@ export class OrchestrationJournal {
         throw new Error(
           "Integration lane repository must match orchestration repository.",
         );
+      if (lane && !lane.legacy && lane.kind === "milestone" && lane.branch !== input.integrationBranch)
+        throw new Error(
+          "Milestone lane branch must match orchestration integration branch.",
+        );
       const event = createOrchestrationEvent({
         orchestrationId: input.orchestrationId,
         repository: input.repository,

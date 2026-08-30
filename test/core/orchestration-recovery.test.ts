@@ -143,7 +143,7 @@ test("filtered typed queues renumber positions after a leading lane closes", () 
 test("legacy retained children without typed receipt metadata remain reloadable", () => {
   const lane = createIntegrationLane({
     kind: "milestone",
-    stableId: "legacy-1",
+    stableId: "legacy-1234abcd",
     slug: "fast-lane",
     branch: "staging",
     repository: "owner/repo",

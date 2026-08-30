@@ -41,6 +41,15 @@ export interface RetainedOrchestrationChild {
   leaseEpoch?: number;
 }
 
+function isCanonicalLegacyFastLane(lane: IntegrationLane): boolean {
+  return lane.legacy === true &&
+    lane.kind === "milestone" &&
+    /^legacy-[0-9a-f]{8}$/.test(lane.stableId) &&
+    lane.slug === "fast-lane" &&
+    lane.sourceQuery === "legacy-fast-lane" &&
+    lane.frozenBase.sha === "0000000";
+}
+
 export interface OrchestrationReloadPlan {
   schema: typeof ORCHESTRATION_RECOVERY_SCHEMA;
   classifications: Readonly<Record<number, OrchestrationClassification>>;
@@ -203,7 +212,7 @@ export function planOrchestrationReload(input: {
       unsafeReason ??= `Duplicate retained child key ${child.childKey}.`;
       continue;
     }
-    if (input.state.integrationLane && !input.state.integrationLane.legacy) {
+    if (input.state.integrationLane && !isCanonicalLegacyFastLane(input.state.integrationLane)) {
       if (child.laneId !== input.state.integrationLane.stableId)
         unsafeReason ??= `Retained child ${child.childKey} has stale or ambiguous lane identity.`;
       if (child.baseSha !== undefined && child.baseSha !== input.state.integrationLane.frozenBase.sha)
