@@ -73,8 +73,25 @@ not steer while the reviewer deadline is valid. Blocking findings must be caused
 exposed by the frozen patch; file pre-existing findings separately without blocking or
 remediating them in the active PR.
 
-Cluster related blockers into one remediation invariant and cohesive patch. Enforce the
-configured remediation-round cap; do not launch another new-head panel after exhaustion.
-Never reset the managed worktree to the PR base after push. Escalate only genuine human
-authority decisions. Do not stop at an intermediate success when the loaded work-on
-contract requires the next phase.
+On `CHANGES REQUESTED`, load `work-on/remediate.md` with the explicit
+`--inline-review-blockers --reviewed-head <SHA> --round <N>` handoff and exact PR/issue/base
+arguments. Read `review.remediation_max_rounds` from `forge.yaml` (default `3` only when
+absent), derive the next round from distinct substantive reviewed-head markers, and fail
+closed before publishing or launching above the cap.
+
+Reload blockers bound to the exact current head. Revalidate a legacy unbound finding and
+publish a head-binding marker before using it; otherwise keep it open and out of automatic
+closure. Cluster related occurrences into one remediation invariant and cohesive patch.
+Before editing, post one `FORGE:REMEDIATION_PLAN` containing a blocker closure matrix that
+maps each occurrence's reviewer scenario/evidence to the affected boundary and a
+failing-before/passing-after regression command (or an equivalent machine-checkable proof
+when a safe deterministic test is unavailable). Add an end-to-end test for the shared
+invariant. Do not publish a new head or launch its fresh panel until every matrix row
+passes locally, and do not close a finding until the fresh current-head review no longer
+returns that occurrence.
+
+Same-head edit/test/replan iterations remain within one remediation round; a substantive
+new head submitted to a fresh complete panel consumes the round. Never launch another
+new-head panel after exhaustion. Never reset the managed worktree to the PR base after
+push. Escalate only genuine human authority decisions. Do not stop at an intermediate
+success when the loaded work-on contract requires the next phase.

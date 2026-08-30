@@ -92,8 +92,20 @@ durable before the first edit. Contract/implementation scope gaps return to
 investigation or become follow-ups, and a claim is revised before a new path is touched.
 Manifest-tracked original specs mechanically include `specs/original/SHA256SUMS` in the
 contract. Closed PRs and stale branches are historical evidence, never bulk patch
-sources. Remediation clusters findings by shared invariant, respects the configured
-round cap, and never absorbs unrelated review debt.
+sources. A current-head `CHANGES REQUESTED` handoff enters remediation only through
+explicit `--inline-review-blockers --reviewed-head <SHA> --round <N>` arguments. Read the
+cap from `forge.yaml` key `review.remediation_max_rounds` (default `3` only when absent),
+derive rounds from distinct durable reviewed-head markers, and fail closed before a new
+head or panel above the cap. Reload only blockers bound to the exact reviewed head;
+legacy unbound findings require current-head revalidation and a durable binding marker,
+while unidentifiable findings remain open and outside automatic closure.
+
+Remediation clusters bound blockers by shared invariant and records one blocker closure
+matrix mapping each reviewer scenario to a failing-before/passing-after regression
+command or equivalent machine-checkable proof. No new remediation head or fresh panel
+may launch until every row passes locally. Local same-head edit/test/replan iterations do
+not consume another round; a substantive new reviewed head does. Only fresh current-head
+review can close findings. Never absorb unrelated review debt.
 
 Review may merge but never closes the issue. Close explicitly verifies the merge,
 closes the issue, updates labels, posts trajectory, and cleans the worktree before
