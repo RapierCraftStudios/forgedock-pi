@@ -101,11 +101,30 @@ mechanically recoverable failures remain automated GATED/review-degraded states 
 must not add `needs-human`.
 
 Review blocks only patch-introduced or patch-reachable defects. Deduplicate and file
-pre-existing findings as non-blocking follow-ups. Before remediation, cluster blockers
-by shared invariant and post one `FORGE:REMEDIATION_PLAN` updating the contract; make one
-cohesive patch and end-to-end test rather than patching findings one at a time. Enforce
-the configured remediation-round cap; same-head provider continuation is not a new
-round, but no new-head panel may launch after the cap.
+pre-existing findings as non-blocking follow-ups. On `CHANGES REQUESTED`, load
+`work-on/remediate.md` explicitly with `--inline-review-blockers --reviewed-head <SHA>
+--round <N>` plus the exact PR/issue/base arguments; never enter inline remediation by
+inference. Read the authoritative cap from `forge.yaml` key
+`review.remediation_max_rounds` (default `3` only when absent), count distinct substantive
+reviewed remediation heads in the durable PR markers, and fail closed before a new head
+or panel when the next round exceeds that cap.
+
+Reload only blockers bound to the exact current reviewed head. Revalidate any legacy
+unbound finding against that head and publish a head-binding marker before it can enter
+remediation; unidentifiable findings remain open and cannot be auto-closed. Cluster the
+bound blockers by shared invariant and post exactly one `FORGE:REMEDIATION_PLAN` updating
+the contract. That plan must contain a blocker closure matrix with one row per blocker
+occurrence: reviewer scenario/evidence, shared invariant, affected code boundary, and a
+failing-before/passing-after regression command. When a safe deterministic test cannot
+reproduce a row, record an equivalent machine-checkable proof and why a test is
+unavailable. Apply one cohesive patch and at least one end-to-end test for the shared
+invariant rather than patching findings one at a time.
+
+Do not publish a new remediation head or launch its fresh panel until every closure row
+passes locally. Same-head edit/test/replan iterations do not consume another round; one
+substantive new head submitted to a fresh complete panel does. Close a finding only when
+the fresh current-head review no longer returns its occurrence. Never launch another
+new-head panel after cap exhaustion.
 
 Never reset, checkout, or rebase the harness-managed worktree to `main` or `staging`
 after pushing. Review the frozen remote PR head without rewriting the child workspace.
