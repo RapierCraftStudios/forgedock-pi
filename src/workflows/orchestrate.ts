@@ -587,24 +587,6 @@ export class ForgeOrchestrationController {
    * Callers supply freshly verified provider evidence; this method persists
    * every gate before closing members or deleting the lane branch.
    */
-  async #nextPromotionQueuePosition(
-    store: GitHubStateBranchStore,
-    orchestrationId: string,
-    current: OrchestrationState,
-    signal?: AbortSignal,
-  ): Promise<number> {
-    const records = await store.listOrchestrations(signal);
-    let highest = -1;
-    for (const record of records) {
-      const state = record.orchestrationId === orchestrationId
-        ? current
-        : (await store.readOrchestration(record.orchestrationId, signal)).state;
-      const position = state?.integrationLane?.promotion.queuePosition;
-      if (position !== undefined) highest = Math.max(highest, position);
-    }
-    return highest + 1;
-  }
-
   async #promotionQueueHead(
     store: GitHubStateBranchStore,
     orchestrationId: string,
@@ -631,17 +613,18 @@ export class ForgeOrchestrationController {
     const lane = state.integrationLane;
     if (!lane || lane.kind !== "work-order" || lane.legacy) return false;
     if (!state.lanes.every((member) => ["integrated", "merged", "closed"].includes(member.status))) return false;
-    const github = this.#githubFor(link);
-    const stagingBranch = github.configuredStagingToMainRoute().headRef;
-    if (lane.status === "closed") {
+    if (lane.status === "promoted" || lane.status === "closed") {
+      if (lane.status === "closed" && state.lanes.every((member) => member.status === "closed")) return false;
       const receipt = lane.promotion.receipt;
       const staging = lane.promotion.stagingEvidence;
-      if (!receipt || !staging) return false;
+      const stagingReadbackSha = lane.promotion.stagingReadbackSha;
+      if (!receipt || !staging || !stagingReadbackSha) return false;
       await this.promoteWorkOrder({
         orchestrationId: link.orchestrationId,
         ownerId: receipt.sourceHeadSha,
         queuePosition: lane.promotion.queuePosition ?? 0,
         staging,
+        stagingReadbackSha,
         sourceHeadSha: receipt.sourceHeadSha,
         mergeBaseSha: receipt.mergeBaseSha,
         shippingPullNumber: receipt.shippingPullNumber,
@@ -655,31 +638,10 @@ export class ForgeOrchestrationController {
       });
       return true;
     }
-    const shippingPull = await github.findPullRequest(lane.branch, ctx.signal);
-    if (!shippingPull?.merged || !shippingPull.mergeCommitSha) return false;
-    await this.promoteWorkOrder({
-      orchestrationId: link.orchestrationId,
-      ownerId: link.orchestrationId,
-      queuePosition: lane.promotion.queuePosition ?? 0,
-      staging: {
-        branch: stagingBranch,
-        sha: shippingPull.baseSha,
-        baselineSha: shippingPull.baseSha,
-        idle: true,
-        checkedAt: new Date().toISOString(),
-      },
-      sourceHeadSha: shippingPull.headSha,
-      mergeBaseSha: shippingPull.baseSha,
-      shippingPullNumber: shippingPull.number,
-      mergeCommitSha: shippingPull.mergeCommitSha,
-      reviewedAt: new Date().toISOString(),
-      reviewPassed: true,
-      verificationPassed: true,
-      mergeable: shippingPull.mergeability !== "conflicting",
-      authorityValid: shippingPull.baseRef === stagingBranch,
-      ctx,
-    });
-    return true;
+    // Automatic pump recovery cannot manufacture independent review,
+    // verification, authority, or idle evidence from a merged PR. An
+    // explicit promotion caller must supply and persist those gates.
+    return false;
   }
 
   async promoteWorkOrder(input: {
@@ -687,6 +649,7 @@ export class ForgeOrchestrationController {
     ownerId: string;
     queuePosition: number;
     staging: IntegrationLaneStagingEvidence;
+    stagingReadbackSha: string;
     sourceHeadSha: string;
     mergeBaseSha: string;
     shippingPullNumber: number;
@@ -724,8 +687,7 @@ export class ForgeOrchestrationController {
           shippingPull.mergeCommitSha !== input.mergeCommitSha)
         throw new Error("Shipping PR route, exact head/base, or merge read-back does not match promotion evidence.");
       if (state.integrationLane?.promotion.queuePosition === undefined) {
-        const queuePosition = await this.#nextPromotionQueuePosition(current.store, input.orchestrationId, state, input.ctx.signal);
-        state = await journal.queueLane({ orchestrationId: input.orchestrationId, laneId: initialLane.stableId, queuePosition: Math.max(input.queuePosition, queuePosition), signal: input.ctx.signal });
+        state = await journal.queueLane({ orchestrationId: input.orchestrationId, laneId: initialLane.stableId, queuePosition: input.queuePosition, signal: input.ctx.signal });
       }
       const currentLane = state.integrationLane;
       if (!currentLane) throw new Error("Durable integration lane disappeared during queueing.");
@@ -747,12 +709,12 @@ export class ForgeOrchestrationController {
       if (!queueHead || queueHead.stableId !== initialLane.stableId)
         throw new Error("Work-order promotion is gated: the durable shared queue head is another lane.");
       const receipt = workOrderPromotionReceipt({ shippingPullNumber: input.shippingPullNumber, sourceHeadSha: input.sourceHeadSha, stagingBaseSha: input.staging.sha, mergeBaseSha: input.mergeBaseSha, mergeCommitSha: input.mergeCommitSha, reviewedAt: input.reviewedAt });
-      const gate = evaluateWorkOrderPromotion({ lane: state.integrationLane!, ownerId: input.ownerId, now: input.reviewedAt, sourceHeadSha: input.sourceHeadSha, mergeBaseSha: input.mergeBaseSha, staging: input.staging, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: true, queueHeadLaneId: queueHead.stableId });
-      if (!gate.allowed) throw new Error(`Work-order promotion gated: ${gate.reason}`);
       const finalStagingSha = await github.getBranchHeadSha(stagingBranch, input.ctx.signal);
       if (finalStagingSha !== input.staging.sha)
         throw new Error("Protected staging advanced at the promotion boundary; no promotion or cleanup is authorized.");
-      state = await journal.promoteLane({ orchestrationId: input.orchestrationId, laneId: initialLane.stableId, ownerId: input.ownerId, queueHeadLaneId: queueHead.stableId, leaseEpoch: state.integrationLane!.promotion.queueLease!.epoch, staging: input.staging, receipt, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: true, signal: input.ctx.signal });
+      const gate = evaluateWorkOrderPromotion({ lane: state.integrationLane!, ownerId: input.ownerId, now: input.reviewedAt, sourceHeadSha: input.sourceHeadSha, mergeBaseSha: input.mergeBaseSha, staging: input.staging, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: true, queueHeadLaneId: queueHead.stableId });
+      if (!gate.allowed) throw new Error(`Work-order promotion gated: ${gate.reason}`);
+      state = await journal.promoteLane({ orchestrationId: input.orchestrationId, laneId: initialLane.stableId, ownerId: input.ownerId, queueHeadLaneId: queueHead.stableId, leaseEpoch: state.integrationLane!.promotion.queueLease!.epoch, staging: input.staging, stagingReadbackSha: finalStagingSha, receipt, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: true, signal: input.ctx.signal });
     }
     const lane = state.integrationLane!;
     for (const member of lane.membership) await github.closeIssue(member.issueNumber, input.ctx.signal);
@@ -1335,6 +1297,14 @@ export class ForgeOrchestrationController {
             }
           } catch (error) {
             ctx.ui.notify(`ForgeDock work-order promotion is awaiting durable evidence: ${errorMessage(error)}`, "warning");
+            return;
+          }
+          if (
+            current.state.integrationLane?.kind === "work-order" &&
+            current.state.integrationLane.status !== "promoted" &&
+            current.state.integrationLane.status !== "closed"
+          ) {
+            ctx.ui.notify("ForgeDock work-order promotion is gated: independent review, verification, authority, and staging-idle evidence are required.", "warning");
             return;
           }
         }

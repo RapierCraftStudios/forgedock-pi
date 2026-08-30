@@ -1,9 +1,8 @@
 import {
   type GitHubStateBranchStore,
 } from "../adapters/github-state.ts";
-import {
-  stateCas,
-} from "../adapters/state-cas.ts";
+import { StateBranchConflictError } from "../adapters/github-state.ts";
+import { stateCas } from "../adapters/state-cas.ts";
 import { canonicalJson } from "../core/events.ts";
 import {
   applyOrchestrationEvent,
@@ -101,8 +100,49 @@ export class OrchestrationJournal {
     return this.#mutate(input);
   }
 
-  async queueLane(input: { orchestrationId: string; laneId: string; queuePosition: number; signal?: AbortSignal }): Promise<OrchestrationState> {
-    return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.queued", payload: { laneId: input.laneId, queuePosition: input.queuePosition }, idempotencyKey: `integration-lane:${input.laneId}:queue:${input.queuePosition}`, message: `Queue integration lane ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
+  /**
+   * Allocate a queue position in the same state-branch CAS attempt as the
+   * queue event.  Computing the maximum outside that attempt lets concurrent
+   * promoters choose the same position; a CAS retry must re-read all lanes and
+   * allocate a new token instead of replaying stale event data.
+   */
+  async queueLane(input: { orchestrationId: string; laneId: string; queuePosition?: number; signal?: AbortSignal }): Promise<OrchestrationState> {
+    return stateCas(async () => {
+      const current = await this.#store.readOrchestration(input.orchestrationId, input.signal);
+      if (!current.state) throw new Error(`Orchestration ${input.orchestrationId} is not initialized.`);
+      const idempotencyKey = `integration-lane:${input.laneId}:queue`;
+      const prior = current.events.find((event) => event.type === "integration-lane.queued" && event.payload.laneId === input.laneId);
+      if (prior) return current.state;
+      const records = await this.#store.listOrchestrations(input.signal);
+      const latestTip = await this.#store.getTip(input.signal);
+      if (latestTip !== current.tip) throw new StateBranchConflictError(current.tip);
+      let highest = -1;
+      for (const record of records) {
+        const position = record.orchestrationId === input.orchestrationId
+          ? current.state.integrationLane?.promotion.queuePosition
+          : record.state?.integrationLane?.promotion.queuePosition;
+        if (position !== undefined) highest = Math.max(highest, position);
+      }
+      const queuePosition = highest + 1;
+      const event = createOrchestrationEvent({
+        orchestrationId: input.orchestrationId,
+        repository: current.state.repository,
+        sequence: current.state.sequence + 1,
+        previousEventHash: current.state.lastEventHash,
+        type: "integration-lane.queued",
+        idempotencyKey,
+        payload: { laneId: input.laneId, queuePosition },
+      });
+      const state = applyOrchestrationEvent(current.state, event);
+      await this.#store.commitOrchestrationState({
+        expectedTip: current.tip,
+        events: [...current.events, event],
+        state,
+        message: `Queue integration lane ${input.laneId} at position ${queuePosition}`,
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+      return state;
+    }, input.signal);
   }
 
   async acquireLaneQueueLease(input: { orchestrationId: string; laneId: string; ownerId: string; leaseSeconds: number; attempt?: number; signal?: AbortSignal }): Promise<OrchestrationState> {
@@ -119,8 +159,8 @@ export class OrchestrationJournal {
     return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.sync", payload: { laneId: input.laneId, ownerId: input.ownerId, leaseEpoch: input.leaseEpoch, staging: input.staging }, idempotencyKey: `integration-lane:${input.laneId}:sync:${input.staging.sha}`, message: `Record integration lane sync ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
   }
 
-  async promoteLane(input: { orchestrationId: string; laneId: string; ownerId: string; queueHeadLaneId: string; leaseEpoch: number; staging: IntegrationLaneStagingEvidence; receipt: IntegrationLanePromotionReceipt; reviewPassed: boolean; verificationPassed: boolean; mergeable: boolean; authorityValid: boolean; mergeCommit: boolean; signal?: AbortSignal }): Promise<OrchestrationState> {
-    return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.promoted", payload: { laneId: input.laneId, ownerId: input.ownerId, queueHeadLaneId: input.queueHeadLaneId, leaseEpoch: input.leaseEpoch, staging: input.staging, receipt: input.receipt, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: input.mergeCommit }, idempotencyKey: `integration-lane:${input.laneId}:promoted:${input.receipt.mergeCommitSha}`, message: `Promote integration lane ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
+  async promoteLane(input: { orchestrationId: string; laneId: string; ownerId: string; queueHeadLaneId: string; leaseEpoch: number; staging: IntegrationLaneStagingEvidence; stagingReadbackSha: string; receipt: IntegrationLanePromotionReceipt; reviewPassed: boolean; verificationPassed: boolean; mergeable: boolean; authorityValid: boolean; mergeCommit: boolean; signal?: AbortSignal }): Promise<OrchestrationState> {
+    return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.promoted", payload: { laneId: input.laneId, ownerId: input.ownerId, queueHeadLaneId: input.queueHeadLaneId, leaseEpoch: input.leaseEpoch, staging: input.staging, stagingReadbackSha: input.stagingReadbackSha, receipt: input.receipt, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: input.mergeCommit }, idempotencyKey: `integration-lane:${input.laneId}:promoted:${input.receipt.mergeCommitSha}:${input.stagingReadbackSha}`, message: `Promote integration lane ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
   }
 
   async closeLane(input: { orchestrationId: string; laneId: string; signal?: AbortSignal }): Promise<OrchestrationState> {

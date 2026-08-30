@@ -62,6 +62,8 @@ export interface IntegrationLanePromotion {
   queueLease?: IntegrationLaneQueueLease;
   stagingEvidence?: IntegrationLaneStagingEvidence;
   receipt?: IntegrationLanePromotionReceipt;
+  /** Exact protected staging readback captured at the promotion boundary. */
+  stagingReadbackSha?: string;
   /** Overlap is informational; lanes are never auto-combined. */
   overlappingLaneIds?: readonly string[];
   blockReason?: string;
@@ -225,6 +227,8 @@ export function validateIntegrationLane(lane: IntegrationLane): void {
   const receipt = lane.promotion.receipt;
   if (receipt !== undefined && (!Number.isSafeInteger(receipt.shippingPullNumber) || receipt.shippingPullNumber < 1 || !/^[0-9a-f]{40}$/i.test(receipt.sourceHeadSha) || !/^[0-9a-f]{40}$/i.test(receipt.stagingBaseSha) || !/^[0-9a-f]{40}$/i.test(receipt.mergeBaseSha) || !/^[0-9a-f]{40}$/i.test(receipt.mergeCommitSha) || receipt.mergeMethod !== "merge" || Number.isNaN(Date.parse(receipt.reviewedAt))))
     fail("invalid-promotion-receipt", "Promotion receipt must bind exact heads and a merge commit.");
+  if (lane.promotion.stagingReadbackSha !== undefined && !/^[0-9a-f]{40}$/i.test(lane.promotion.stagingReadbackSha))
+    fail("invalid-staging-readback", "Promotion staging readback must be an exact commit SHA.");
   if (lane.legacy && (
     lane.kind !== "milestone" ||
     !/^legacy-[0-9a-f]{8}$/.test(lane.stableId) ||
@@ -257,6 +261,8 @@ export interface IntegrationLaneTransitionInput {
   mergeable?: boolean;
   authorityValid?: boolean;
   mergeCommit?: boolean;
+  /** Current protected staging ref read immediately before durable promotion. */
+  stagingReadbackSha?: string;
   reason?: string;
 }
 
@@ -367,7 +373,7 @@ export function transitionIntegrationLane(
       break;
     case "promote":
       if (lane.status !== "ready") throw new IntegrationLaneValidationError("invalid-transition", `Cannot promote a ${lane.status} lane.`);
-      if (!input.ownerId || !input.staging || !input.receipt || input.queueHeadLaneId !== lane.stableId || input.leaseEpoch !== lane.promotion.queueLease?.epoch) throw new IntegrationLaneValidationError("missing-promotion-evidence", "Queue owner, queue head, lease epoch, staging evidence, and receipt are required.");
+      if (!input.ownerId || !input.staging || !input.receipt || input.queueHeadLaneId !== lane.stableId || input.leaseEpoch !== lane.promotion.queueLease?.epoch || input.stagingReadbackSha !== input.staging.sha) throw new IntegrationLaneValidationError("missing-promotion-evidence", "Queue owner, queue head, lease epoch, staging evidence, exact final staging readback, and receipt are required.");
       if (lane.promotion.stagingEvidence && (lane.promotion.stagingEvidence.sha !== input.staging.sha || lane.promotion.stagingEvidence.branch !== input.staging.branch)) throw new IntegrationLaneValidationError("staging-evidence-mismatch", "Promotion staging evidence does not match the persisted sync evidence.");
       if (input.receipt.stagingBaseSha !== input.staging.sha) throw new IntegrationLaneValidationError("staging-receipt-mismatch", "Promotion receipt staging base does not match staging evidence.");
       const gate = canPromoteIntegrationLane(lane, { ownerId: input.ownerId, now: input.now, sourceHeadSha: input.receipt.sourceHeadSha, mergeBaseSha: input.receipt.mergeBaseSha, staging: input.staging, reviewPassed: input.reviewPassed === true, verificationPassed: input.verificationPassed === true, mergeable: input.mergeable === true, authorityValid: input.authorityValid === true, mergeCommit: input.mergeCommit === true && input.receipt.mergeMethod === "merge", queueHeadLaneId: input.queueHeadLaneId });
@@ -376,6 +382,7 @@ export function transitionIntegrationLane(
       next.promotion.stagingEvidence = input.staging;
       next.promotion.stagingBranch = input.staging.branch;
       next.promotion.stagingSha = input.staging.sha;
+      next.promotion.stagingReadbackSha = input.stagingReadbackSha;
       next.promotion.shippingPullNumber = input.receipt.shippingPullNumber;
       next.promotion.receipt = input.receipt;
       next.promotion.promotedAt = input.now;

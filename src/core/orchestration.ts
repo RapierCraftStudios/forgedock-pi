@@ -239,10 +239,10 @@ export function applyOrchestrationEvent(
     state.status = aggregateOrchestrationStatus(state.lanes);
     state.completedAt = event.occurredAt;
   } else if (event.type === "orchestration.cancelled") {
-    if (state.integrationLane?.status === "promoted")
+    if (state.integrationLane?.status === "promoted" || state.integrationLane?.status === "closed")
       throw new OrchestrationTransitionError(
         "promotion-in-progress",
-        "Cannot cancel an orchestration after lane promotion; resume post-promotion cleanup.",
+        "Cannot cancel an orchestration after lane promotion or terminal cleanup; resume post-promotion cleanup.",
       );
     state.status = "cancelled";
     state.reason = payloadString(event, "reason");
@@ -775,6 +775,7 @@ function applyIntegrationLaneEvent(
       ...(typeof payload.mergeable === "boolean" ? { mergeable: payload.mergeable } : {}),
       ...(typeof payload.authorityValid === "boolean" ? { authorityValid: payload.authorityValid } : {}),
       ...(typeof payload.mergeCommit === "boolean" ? { mergeCommit: payload.mergeCommit } : {}),
+      ...(typeof payload.stagingReadbackSha === "string" ? { stagingReadbackSha: payload.stagingReadbackSha } : {}),
       ...(typeof payload.reason === "string" ? { reason: payload.reason } : {}),
     });
     state.integrationLane = next;
