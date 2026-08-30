@@ -29,6 +29,89 @@ test("Pi adapter keeps workflow decisions in visible specifications", async () =
   assert.match(adapter, /must not choose the next workflow phase/);
 });
 
+test("one canonical issue schema governs every ForgeDock creator", async () => {
+  const issue = await readFile("specs/original/commands/issue.md", "utf8");
+  const review = await readFile("specs/original/commands/review-pr.md", "utf8");
+  const staging = await readFile("specs/original/commands/review-pr-staging.md", "utf8");
+  const signalPlanner = await readFile("specs/original/commands/signal-planner.md", "utf8");
+  const upgradeDeps = await readFile("specs/original/commands/upgrade-deps.md", "utf8");
+  const resolutionPhase = await readFile(
+    "specs/original/commands/orchestrate/phase-1-resolve.md",
+    "utf8",
+  );
+  const dependencyPhase = await readFile(
+    "specs/original/commands/orchestrate/phase-3-dependency.md",
+    "utf8",
+  );
+  const workOnSpec = await readFile("specs/original/commands/work-on.md", "utf8");
+  const issueSkill = await readFile("skills/forgedock-issue/SKILL.md", "utf8");
+  const reviewSkill = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
+  const stagingSkill = await readFile("skills/forgedock-review-pr-staging/SKILL.md", "utf8");
+  const coordinator = await readFile("agents/forgedock-work-on-coordinator.md", "utf8");
+  const adapter = await readFile("specs/pi-adapter.md", "utf8");
+
+  const headings = ["## Problem", "## Root Cause", "## Affected Files", "## Expected Behavior", "## Acceptance Criteria"];
+  for (const heading of headings) assert.ok(issue.includes(heading), heading);
+  assert.match(issue, /Each exact heading line appears once/);
+  assert.match(issue, /Heading line numbers are strictly ordered/);
+  assert.match(issue, /at least one actionable unchecked `- \[ \]` item/);
+  assert.match(issue, /User\/legacy issues remain valid work-on inputs/);
+  assert.doesNotMatch(issue, /MISSING_SECTIONS=/);
+  assert.doesNotMatch(issue, /adding placeholders/);
+  assert.doesNotMatch(issue, /silently repair/);
+  assert.doesNotMatch(issue, /already section-repaired/);
+  assert.doesNotMatch(issue, /3F repairs/);
+  assert.doesNotMatch(issue, /Files that need changes \(ordered by dependency/);
+  assert.doesNotMatch(issue, /will need to touch/);
+  assert.ok(
+    issue.indexOf("### 4C.5: Canonical Body Read-Back") <
+      issue.lastIndexOf("ISSUE_CREATE_RESULT:CREATED"),
+  );
+
+  for (const findingSpec of [review, staging]) {
+    assert.match(findingSpec, /## Problem/);
+    assert.match(findingSpec, /## Root Cause/);
+    assert.match(findingSpec, /## Affected Files/);
+    assert.match(findingSpec, /## Expected Behavior/);
+    assert.match(findingSpec, /## Acceptance Criteria/);
+    assert.match(findingSpec, /Candidate investigation starting points \(not mutation authority\)/);
+    assert.match(findingSpec, /Skill\(skill="issue"/);
+  }
+  assert.doesNotMatch(staging, /STAGING_FINDING_TITLE="chore:/);
+  assert.doesNotMatch(staging, /Title: `Staging Review:/);
+  assert.match(staging, /STAGING_FINDING_TITLE="fix:/);
+  for (const creator of [signalPlanner, upgradeDeps, resolutionPhase, dependencyPhase]) {
+    for (const heading of headings) assert.ok(creator.includes(heading), heading);
+    assert.match(creator, /Skill\(skill="issue"/);
+    assert.match(creator, /FORGE:BODY-INTEGRITY/);
+  }
+  assert.doesNotMatch(upgradeDeps, /^gh issue create/m);
+  assert.doesNotMatch(dependencyPhase, /\$\(gh issue create/);
+  assert.match(dependencyPhase, /refusing to orchestrate without the overlap-safety claims board/);
+  assert.match(dependencyPhase, /exit 1/);
+  assert.match(signalPlanner, /FORGE:BODY-INTEGRITY:signal-work-unit_/);
+  assert.doesNotMatch(signalPlanner, /Phase 3F will non-blockingly/);
+  assert.match(workOnSpec, /Preserve Intake and Normalize Through Investigation/);
+  assert.match(workOnSpec, /body quality is never an admission gate/);
+  assert.doesNotMatch(workOnSpec, /APPEND_TEXT=/);
+  assert.doesNotMatch(workOnSpec, /Issue body normalized/);
+  assert.match(reviewSkill, /preserve it unchanged/);
+  assert.match(stagingSkill, /Preserve a deduplicated legacy issue unchanged/);
+  assert.doesNotMatch(reviewSkill, /must be repaired/);
+  assert.doesNotMatch(stagingSkill, /malformed reused issue/);
+  for (const contract of [issueSkill, reviewSkill, stagingSkill, coordinator, adapter]) {
+    const normalized = contract.replace(/\s+/g, " ");
+    assert.match(normalized, /forgedock-issue/);
+    assert.match(normalized, /Problem/);
+    assert.match(normalized, /Root Cause/);
+    assert.match(normalized, /Affected Files/);
+    assert.match(normalized, /Expected Behavior/);
+    assert.match(normalized, /Acceptance Criteria/);
+  }
+  assert.match(issueSkill, /not an admission gate/);
+  assert.match(coordinator, /Imperfect user or\s+legacy issues remain valid intake/);
+});
+
 test("heartbeat reconciliation uses GitHub creation time, not body clocks", async () => {
   const workOn = await readFile("specs/original/commands/work-on.md", "utf8");
   const execution = await readFile(

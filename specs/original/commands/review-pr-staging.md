@@ -797,11 +797,11 @@ Plain staging→main reviews resolve `CODE_BRANCH` to `staging` dynamically (sam
 Check for open review-finding issues at same file:line → skip. Closed issues at same location → potential regression (elevate priority).
 
 ### 7F: Create Issues
-Sequential creation. Title: `Staging Review: {summary} (staging → main)`. Labels: review-finding, needs-validation, staging-review, priority:P0-P3 (derived from Severity — see below). Body includes: source branch context (`${CODE_BRANCH}`, derived in Phase 7D — not a hardcoded `staging` literal), code context, evidence, validation checklist.
+Sequential creation. Title: `fix: {summary} (staging review — PR #{PR_NUMBER})`. Labels: review-finding, needs-validation, staging-review, priority:P0-P3 (derived from Severity — see below). Body includes: source branch context (`${CODE_BRANCH}`, derived in Phase 7D — not a hardcoded `staging` literal), code context, evidence, validation checklist.
 
 **For each finding** (that passes dedup), create issue through the `/issue` create-hook's programmatic invocation contract (see `commands/issue.md` § "Programmatic Invocation Contract") instead of calling the raw issue-creation command directly:
 ```bash
-STAGING_FINDING_TITLE="chore: [summary] (staging review — PR #${PR_NUMBER})"
+STAGING_FINDING_TITLE="fix: [summary] (staging review — PR #${PR_NUMBER})"
 # Defense-in-depth: /issue's arg tokenizer (commands/issue.md, forge#2094) uses
 # an xargs-based tokenizer that never expands backtick/$(...) substitution, so
 # this is no longer required for safety — but strip it anyway so the raw title
@@ -822,10 +822,14 @@ cat <<'ISSUE_EOF' > "$STAGING_FINDING_BODY_FILE"
 **Severity**: [CRITICAL/HIGH/MEDIUM/LOW]
 **Review comment**: [permalink to agent comment]
 
+## Root Cause
+
+[Verified mechanical cause, or: "Unverified review hypothesis: ...". Never present reviewer inference as established fact.]
+
 ## Affected Files
 
-Files that need changes:
-1. `[file:line]` — [what needs to change to fix this finding]
+Candidate investigation starting points (not mutation authority):
+1. `[file:line]` — [why investigation should begin here]
 
 ## Source Branch Context
 
@@ -839,6 +843,10 @@ Files that need changes:
 
 ## Evidence
 [From agent comment]
+
+## Expected Behavior
+
+[Observable invariant or behavior that must hold if investigation validates the finding.]
 
 ## Acceptance Criteria
 

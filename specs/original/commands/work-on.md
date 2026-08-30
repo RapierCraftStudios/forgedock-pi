@@ -567,57 +567,19 @@ gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:HEARTBEAT -->
 **Issue**: #{NUMBER}"
 ```
 
-### 1A.5: Normalize Issue Body (MANDATORY)
+### 1A.5: Preserve Intake and Normalize Through Investigation
 
-Before investigation begins, verify the issue body contains the four mandatory pipeline sections. If any are missing, add placeholder content so the investigator has the correct scaffolding.
+Do not edit, reject, score, or append placeholder sections to a user-created, legacy, or
+deduplicated issue before investigation. Reuse `ISSUE_BODY` from Phase 0B (re-fetch only
+after compaction) as untrusted intake.
 
-**Skip if**: All four sections (`## Problem`, `## Affected Files`, `## Expected Behavior`, `## Acceptance Criteria`) are already present.
+If canonical sections are missing, record that fact in the investigator's evidence and
+produce the normalized Problem, Root Cause/hypotheses, actual affected paths, Expected
+Behavior, acceptance checks, and non-goals inside the durable investigation report and
+Builder Contract. Investigation may narrow, expand, decompose, invalidate, or create
+follow-ups. The original issue body and provenance remain unchanged.
 
-**Reuse `ISSUE_BODY` from Phase 0B** — it was already read in full there. Only re-fetch with the command below if `ISSUE_BODY` is not actually present in this session's context (compaction or a fresh resume).
-
-```bash
-ISSUE_BODY=$(gh issue view {NUMBER} {GH_FLAG} --json body --jq '.body')
-
-MISSING_SECTIONS=""
-echo "$ISSUE_BODY" | grep -q "^## Problem" || MISSING_SECTIONS="$MISSING_SECTIONS PROBLEM"
-echo "$ISSUE_BODY" | grep -q "^## Affected Files" || MISSING_SECTIONS="$MISSING_SECTIONS AFFECTED_FILES"
-echo "$ISSUE_BODY" | grep -q "^## Expected Behavior" || MISSING_SECTIONS="$MISSING_SECTIONS EXPECTED_BEHAVIOR"
-echo "$ISSUE_BODY" | grep -q "^## Acceptance Criteria" || MISSING_SECTIONS="$MISSING_SECTIONS ACCEPTANCE_CRITERIA"
-
-if [ -n "$MISSING_SECTIONS" ]; then
-  echo "Missing sections:$MISSING_SECTIONS — normalizing issue body before investigation"
-
-  APPEND_TEXT=""
-  echo "$MISSING_SECTIONS" | grep -q "PROBLEM" && APPEND_TEXT="$APPEND_TEXT
-## Problem
-
-Root cause unknown — investigation needed."
-
-  echo "$MISSING_SECTIONS" | grep -q "AFFECTED_FILES" && APPEND_TEXT="$APPEND_TEXT
-## Affected Files
-
-Files to be identified during investigation."
-
-  echo "$MISSING_SECTIONS" | grep -q "EXPECTED_BEHAVIOR" && APPEND_TEXT="$APPEND_TEXT
-## Expected Behavior
-
-Expected behavior to be determined during investigation."
-
-  echo "$MISSING_SECTIONS" | grep -q "ACCEPTANCE_CRITERIA" && APPEND_TEXT="$APPEND_TEXT
-## Acceptance Criteria
-
-- [ ] Fix confirmed during investigation."
-
-  # Append missing sections to the existing body (never replace — only extend)
-  NORMALIZED_BODY="${ISSUE_BODY}${APPEND_TEXT}"
-  gh issue edit {NUMBER} {GH_FLAG} --body "$NORMALIZED_BODY"
-  echo "Issue body normalized — added:$MISSING_SECTIONS"
-else
-  echo "Issue body already contains all mandatory sections — skipping normalization"
-fi
-```
-
-**Continue to Phase 1B unconditionally.** Normalization is a compensation step — it never blocks investigation.
+Continue to Phase 1B unconditionally; body quality is never an admission gate.
 
 ### 1B: Investigate the issue
 
