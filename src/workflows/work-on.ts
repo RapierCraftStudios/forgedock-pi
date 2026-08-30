@@ -208,6 +208,8 @@ export function resolveAuthoritativeIntegrationLane(
     throw new Error("Orchestrated work-on lane repository does not match the repository.");
   if (state.integrationBranch !== lane.branch)
     throw new Error("Orchestrated work-on lane branch does not match orchestration state.");
+  if (lane.branch.startsWith("-"))
+    throw new Error("Orchestrated work-on lane branch cannot begin with a Git option.");
   if (!lane.membership.some((member) => member.issueNumber === issueNumber))
     throw new Error(`Issue #${issueNumber} is not a member of the authoritative integration lane.`);
   return lane;
@@ -1093,6 +1095,8 @@ export class ForgeWorkOnController {
         policy.repository.name,
         issueNumber,
       );
+      if (integrationLane.kind !== "work-order" || integrationLane.legacy)
+        throw new Error("Only a typed work-order lane may use deployed-main routing.");
       if (integrationLane.frozenBase.branch !== "main")
         throw new Error("Work-order lane frozen base must be deployed main.");
       if (!/^[0-9a-f]{40}$/i.test(integrationLane.frozenBase.sha))
