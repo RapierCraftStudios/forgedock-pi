@@ -89,6 +89,34 @@ test("typed lane bindings are validated and legacy genesis receives an explicit 
   assert.equal(legacy.integrationLane?.sourceQuery, "legacy-fast-lane");
 });
 
+test("typed lanes cannot cross repository boundaries", () => {
+  const typed = createIntegrationLane({
+    kind: "work-order",
+    stableId: "wo-297",
+    slug: "durable model",
+    repository: "other-owner/other-repo",
+    frozenBase: { branch: "main", sha: "0123456789abcdef0123456789abcdef01234567" },
+    membership: [{ issueNumber: 2, ordinal: 0 }],
+    sourceQuery: "#297",
+    createdAt: "2026-08-24T00:00:00.000Z",
+    updatedAt: "2026-08-24T00:00:00.000Z",
+    status: "queued",
+  });
+  assert.throws(
+    () => applyOrchestrationEvent(
+      undefined,
+      next(undefined, "orchestration.created", {
+        issueNumbers: [2],
+        integrationBranch: typed.branch,
+        integrationLane: typed,
+        maxConcurrent: 1,
+        leaseEpoch: 1,
+      }, "cross-repository-create"),
+    ),
+    /repository/i,
+  );
+});
+
 test("GitHub budget adaptively bounds lane concurrency below the configured maximum", () => {
   const state = applyOrchestrationEvent(
     undefined,

@@ -546,6 +546,11 @@ function parseIntegrationLane(
     );
   }
   const lane = raw as IntegrationLane;
+  if (lane.repository !== event.repository)
+    throw new OrchestrationTransitionError(
+      "lane-repository-mismatch",
+      "Integration lane repository must match orchestration repository.",
+    );
   const members = new Set(lane.membership.map((member) => member.issueNumber));
   if (members.size !== issueNumbers.length || issueNumbers.some((issue) => !members.has(issue)))
     throw new OrchestrationTransitionError(

@@ -1233,6 +1233,13 @@ function retainedChildrenForReload(
           ? "failed"
           : "running") as RetainedOrchestrationChild["status"],
       forgeRunId: run.forgeRunId,
+      ...(state.integrationLane
+        ? {
+            laneId: state.integrationLane.stableId,
+            baseSha: state.integrationLane.frozenBase.sha,
+            leaseEpoch: state.leaseEpoch,
+          }
+        : {}),
     }));
 }
 

@@ -125,10 +125,10 @@ export function createOrchestrationBatchState(
     result.laneId = state.integrationLane.stableId;
     result.queue = state.lanes
       .filter((lane) => lane.status !== "closed")
-      .map((lane) => ({
+      .map((lane, position) => ({
         issueNumber: lane.issueNumber,
         laneId: state.integrationLane!.stableId,
-        position: lane.ordinal,
+        position,
       }));
   }
   return result;
@@ -153,10 +153,12 @@ export function planOrchestrationReload(input: {
     } catch (error) {
       unsafeReason = error instanceof Error ? error.message : String(error);
     }
-    const expectedMembers = new Set(input.state.lanes.map((lane) => lane.issueNumber));
-    const actualMembers = new Set(input.state.integrationLane.membership.map((member) => member.issueNumber));
-    if (expectedMembers.size !== actualMembers.size || [...expectedMembers].some((issue) => !actualMembers.has(issue)))
-      unsafeReason ??= "Durable lane membership does not match orchestration lanes.";
+    if (!unsafeReason && Array.isArray(input.state.integrationLane.membership)) {
+      const expectedMembers = new Set(input.state.lanes.map((lane) => lane.issueNumber));
+      const actualMembers = new Set(input.state.integrationLane.membership.map((member) => member.issueNumber));
+      if (expectedMembers.size !== actualMembers.size || [...expectedMembers].some((issue) => !actualMembers.has(issue)))
+        unsafeReason ??= "Durable lane membership does not match orchestration lanes.";
+    }
   }
   const queue = input.queue ?? batch.queue;
   if (queue && input.state.integrationLane) {
@@ -201,7 +203,7 @@ export function planOrchestrationReload(input: {
       unsafeReason ??= `Duplicate retained child key ${child.childKey}.`;
       continue;
     }
-    if (input.state.integrationLane) {
+    if (input.state.integrationLane && !input.state.integrationLane.legacy) {
       if (child.laneId !== input.state.integrationLane.stableId)
         unsafeReason ??= `Retained child ${child.childKey} has stale or ambiguous lane identity.`;
       if (child.baseSha !== undefined && child.baseSha !== input.state.integrationLane.frozenBase.sha)

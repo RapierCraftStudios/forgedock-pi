@@ -48,6 +48,12 @@ export class OrchestrationJournal {
           `Orchestration ${input.orchestrationId} already exists.`,
         );
       const now = input.now ?? new Date();
+      const laneInput = input.lane ?? input.integrationLane;
+      const lane = laneInput ? createIntegrationLane(laneInput as IntegrationLaneInput) : undefined;
+      if (lane && lane.repository !== input.repository)
+        throw new Error(
+          "Integration lane repository must match orchestration repository.",
+        );
       const event = createOrchestrationEvent({
         orchestrationId: input.orchestrationId,
         repository: input.repository,
@@ -60,13 +66,7 @@ export class OrchestrationJournal {
           integrationBranch: input.integrationBranch,
           maxConcurrent: input.maxConcurrent,
           dependencies: [...(input.dependencies ?? [])],
-          ...((input.lane ?? input.integrationLane)
-            ? {
-                integrationLane: createIntegrationLane(
-                  (input.lane ?? input.integrationLane) as IntegrationLaneInput,
-                ),
-              }
-            : {}),
+          ...(lane ? { integrationLane: lane } : {}),
           leaseEpoch: 1,
         },
         occurredAt: now.toISOString(),
