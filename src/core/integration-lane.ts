@@ -113,12 +113,12 @@ export function validateGitRef(value: string): void {
     typeof value !== "string" ||
     value.length === 0 ||
     value.length > MAX_INTEGRATION_LANE_BRANCH_LENGTH ||
-    value.startsWith("/") || value.endsWith("/") || value.includes("..") ||
+    value.startsWith("/") || value.endsWith("/") || value === "@" || value.includes("..") ||
     value.includes("//") || value.includes("@{") || /[\x00-\x20~^:?*\\[\\]]/.test(value)
   )
     throw new IntegrationLaneValidationError("invalid-ref", `Invalid Git ref: ${String(value)}.`);
   for (const component of value.split("/"))
-    if (!component || component.startsWith(".") || component.endsWith("."))
+    if (!component || component.startsWith(".") || component.endsWith(".") || component.endsWith(".lock"))
       throw new IntegrationLaneValidationError("invalid-ref", `Invalid Git ref: ${value}.`);
 }
 
@@ -164,6 +164,7 @@ export function validateIntegrationLane(lane: IntegrationLane): void {
   if (!lane.frozenBase || typeof lane.frozenBase.branch !== "string" || !lane.frozenBase.branch.trim() || !validFrozenSha) fail("invalid-base", "Lane frozen base must contain a branch and exact commit SHA.");
   if (!lane.legacy && lane.kind === "work-order" && lane.frozenBase.branch !== "main")
     fail("invalid-base", "Work-order lane frozen base must be main.");
+  validateGitRef(lane.frozenBase.branch);
   if (!Array.isArray(lane.membership)) fail("invalid-membership", "Lane membership must be an array.");
   const members = new Set<number>();
   const ordinals = new Set<number>();
