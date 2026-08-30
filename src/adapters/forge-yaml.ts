@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import YAML from "yaml";
 
 /** The small, prompt-facing portion of forge.yaml shared by every coordinator. */
@@ -46,6 +46,36 @@ export async function loadForgeYaml(repositoryRoot: string): Promise<ForgeYamlCo
     throw new ForgeYamlError(sourcePath, error instanceof Error ? error.message : String(error));
   }
   return validateForgeYaml(value, sourcePath);
+}
+
+/**
+ * Project a validated canonical configuration into a managed child worktree.
+ *
+ * `forge.yaml` is often intentionally untracked by a target project.  A managed
+ * coordinator must therefore receive a runtime-only copy, but copying the
+ * document verbatim would retain absolute paths into the parent checkout.  The
+ * project/branch/review/verification/agent policy is kept intact; only the two
+ * filesystem-local path fields are rebound to the child.
+ */
+export function projectForgeYaml(text: string, childRoot: string): string {
+  if (typeof childRoot !== "string" || !isAbsolute(childRoot) || childRoot.includes("\0"))
+    throw new ForgeYamlError("projection.childRoot", "must be an absolute path without NUL bytes");
+
+  const canonical = parseForgeYaml(text);
+  // Validate before changing any values. This prevents an invalid canonical
+  // document from being made to appear valid by the projection.
+  validateForgeYaml(canonical, "document");
+
+  const root = resolve(childRoot);
+  const worktreeBase = join(root, ".forge", "runtime", "worktrees");
+  const escaped = relative(root, worktreeBase);
+  if (escaped.startsWith("..") || isAbsolute(escaped))
+    throw new ForgeYamlError("projection", "runtime worktree base escapes child root");
+
+  const projected = canonical as { paths: { root: ForgeYamlValue; worktree_base: ForgeYamlValue } };
+  projected.paths.root = root;
+  projected.paths.worktree_base = worktreeBase;
+  return YAML.stringify(projected);
 }
 
 /** Synchronous parser is exported for prompt and test adapters that already have text. */

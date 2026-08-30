@@ -326,6 +326,29 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
   );
 });
 
+test("managed worktrees receive a validated child-local forge config projection", async () => {
+  const orchestrate = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
+  const workOn = await readFile("skills/forgedock-work-on/SKILL.md", "utf8");
+  const adapter = await readFile("specs/pi-adapter.md", "utf8");
+  const forgeYaml = await readFile("src/adapters/forge-yaml.ts", "utf8");
+  const ignore = await readFile(".gitignore", "utf8");
+
+  assert.match(orchestrate, /canonical project `forge\.yaml`/);
+  assert.match(orchestrate, /runtime config at/);
+  assert.match(orchestrate, /FORGE_CONFIG/);
+  assert.match(orchestrate, /five children/);
+  assert.match(workOn, /`FORGE_CONFIG`/);
+  assert.match(workOn, /paths\.root.*assigned cwd/s);
+  assert.match(workOn, /Standalone runs retain literal/);
+  assert.match(adapter, /untracked `forge\.yaml`/);
+  assert.match(adapter, /rewriting only filesystem-local/s);
+  assert.match(adapter, /FORGE_CONFIG/);
+  assert.match(forgeYaml, /export function projectForgeYaml/);
+  assert.match(forgeYaml, /validateForgeYaml\(canonical/);
+  assert.match(forgeYaml, /runtime.*worktrees/);
+  assert.match(ignore, /^\.forge\/runtime\/$/m);
+});
+
 test("moving staging targets use a guarded refresh and fresh review identity", async () => {
   const orchestrate = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
   const workOn = await readFile("skills/forgedock-work-on/SKILL.md", "utf8");

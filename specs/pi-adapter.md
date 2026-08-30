@@ -80,6 +80,29 @@ steering an active one-hour reviewer. Pi resume/session receipts prove execution
 when continuation is not persisted, recover the complete trusted result artifact or
 fail closed.
 
+## Managed Forge configuration projection
+
+A managed Pi worktree contains tracked Git content only, so a target project's valid
+untracked `forge.yaml` is not available to a child by inheritance. The orchestrator must
+validate the canonical config in its own authoritative cwd before dispatch, then create a
+runtime-only projection at `<child-cwd>/.forge/runtime/forge.yaml` for each child. The
+projection is the output of the installed ForgeDock package's validated YAML parser, not a
+raw file copy. It preserves project identity, repository, branch, review, verification,
+and agent policy fields byte-for-byte in meaning, while rewriting only filesystem-local
+`paths.root` to the canonical child cwd and `paths.worktree_base` to
+`<child-cwd>/.forge/runtime/worktrees`.
+
+The orchestrator passes the exact projection path through `FORGE_CONFIG`. The child must
+require that variable under `--under-orchestration`, resolve it and the assigned cwd with
+`realpath`, and fail closed unless `paths.root` equals the assigned cwd and
+`paths.worktree_base` is contained by the child-owned runtime directory. Parent-checkout
+absolute paths, traversal, symlink escapes, invalid YAML, missing projections, and
+unignored runtime files are automated GATED evidence. The runtime directory is ignored
+and removed during terminal cleanup; it is never added to the implementation commit.
+Only the validated Forge config is projected—never arbitrary untracked project files.
+Standalone workflows keep their existing literal `forge.yaml` resolution and do not
+project or rewrite configuration.
+
 ## Work-on ownership
 
 The work-on coordinator owns this closed loop:

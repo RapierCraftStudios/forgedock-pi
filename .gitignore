@@ -8,4 +8,5 @@ dist/
 .pi/forge.local.json
 .pi/forge/
 .forge/cache/
+.forge/runtime/
 .forge/worktrees/

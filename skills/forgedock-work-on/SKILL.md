@@ -18,10 +18,23 @@ GitHub is its durable memory.
 
 ## Execution contract
 
-Before resolving state, use direct Bash to read `forge.yaml`, verify the active `gh`
-identity and repository access, and run `gh auth setup-git` so Git transport is
-noninteractive. Use direct `gh` and `git` commands throughout; do not use custom workflow
-runtime tools. Missing authentication or repository access stops the route.
+Before resolving state, resolve the config path as `FORGE_CONFIG` (defaulting to the
+literal `forge.yaml` only for standalone/non-managed runs). Under `--under-orchestration`,
+`FORGE_CONFIG` is mandatory and must point to the orchestrator's validated runtime-only
+projection at `.forge/runtime/forge.yaml`; never recreate or copy the parent config in the
+child. Read it with direct Bash, verify the active `gh` identity and repository access, and
+run `gh auth setup-git` so Git transport is noninteractive. Use direct `gh` and `git`
+commands throughout; do not use custom workflow runtime tools. Missing authentication,
+repository access, or projected config stops the route.
+
+Before resolving state in managed mode, run `realpath` on the assigned cwd and
+`FORGE_CONFIG`, require the config's parsed `paths.root` to equal the assigned cwd, and
+require `paths.worktree_base` to be within `<assigned-cwd>/.forge/runtime`. All loaded
+phase snippets that say `forge.yaml` must read `$FORGE_CONFIG` instead. Reject absolute
+parent-checkout paths, symlink escapes, traversal, and any fallback to a config outside
+the assigned cwd. The projected file is runtime-only and ignored; `git status` must remain
+clean and implementation commits must never add it. Standalone runs retain literal
+`forge.yaml` and existing behavior.
 
 ## Under-orchestration work-order binding
 

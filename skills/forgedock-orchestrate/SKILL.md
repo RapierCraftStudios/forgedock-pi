@@ -23,6 +23,30 @@ repository access, and configure `gh auth setup-git` for noninteractive Git tran
 Use direct `gh` and `git` commands for all workflow operations; do not use custom runtime
 tools.
 
+## Managed child Forge configuration projection
+
+Before dispatching any managed child, validate the canonical project `forge.yaml` from the
+current orchestrator cwd (the only authoritative source). The file may be untracked and
+must never be copied verbatim into a child: absolute `paths.root` or
+`paths.worktree_base` values can point back to the anchor checkout. For each allocated
+child worktree, run the installed ForgeDock projection helper at the pinned package
+revision to parse/validate the canonical YAML and write only a runtime config at
+`<child-cwd>/.forge/runtime/forge.yaml`. The helper must rewrite only
+`paths.root=<child-cwd>` and `paths.worktree_base=<child-cwd>/.forge/runtime/worktrees`,
+preserving project identity, branches, review, verification, and agent policy fields.
+Create the runtime directory with `mkdir -p`, set `FORGE_CONFIG` to that child-local
+file, and pass that exact environment value with the child task. Verify with `realpath`
+that both projected paths are within the child cwd, verify the projection is ignored by
+Git, and assert the child has no tracked or staged changes before launch. A failed parse,
+missing config, parent-path residue, containment check, or ignored-path check is an
+automated GATED stop before the child starts. Never project arbitrary untracked files;
+never use the orchestrator's absolute checkout path as a child's repository root.
+
+For five-child batches, perform the same independent projection and pre-launch checks for
+all five children; projection is per-child runtime state, not shared state. Remove each
+runtime projection during terminal cleanup. Standalone/non-managed runs do not project or
+change their existing config behavior.
+
 ## Authoritative work-order route
 
 When the original expression contains explicit `--work-order <slug>`, preserve that
@@ -50,7 +74,8 @@ and gate them visibly. Do not inspect or implement product code and never adjudi
 issue validity or duplicates.
 
 For every ready issue, launch exactly one fresh `forgedock-work-on-coordinator` agent
-with the `forgedock-work-on` skill and `<issue> --under-orchestration`. For a
+with the `forgedock-work-on` skill and `<issue> --under-orchestration`. Include the
+validated child-local `FORGE_CONFIG` handoff in the task context. For a
 work-order lane, include the coordination issue, stable lane ID, branch, repository,
 and frozen base in the task context; the child must read back `FORGE:WORK_ORDER_LANE`
 before implementation. Use bounded concurrency and isolated issue worktrees. Each child owns the complete issue lifecycle;
