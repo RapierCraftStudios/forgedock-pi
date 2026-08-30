@@ -113,12 +113,12 @@ export function validateGitRef(value: string): void {
     typeof value !== "string" ||
     value.length === 0 ||
     value.length > MAX_INTEGRATION_LANE_BRANCH_LENGTH ||
-    value.startsWith("/") || value.endsWith("/") || value.includes("..") ||
+    value.startsWith("/") || value.endsWith("/") || value === "@" || value.includes("..") ||
     value.includes("//") || value.includes("@{") || /[\x00-\x20~^:?*\\[\\]]/.test(value)
   )
     throw new IntegrationLaneValidationError("invalid-ref", `Invalid Git ref: ${String(value)}.`);
   for (const component of value.split("/"))
-    if (!component || component.startsWith(".") || component.endsWith("."))
+    if (!component || component.startsWith(".") || component.endsWith(".") || component.endsWith(".lock"))
       throw new IntegrationLaneValidationError("invalid-ref", `Invalid Git ref: ${value}.`);
 }
 
@@ -159,6 +159,7 @@ export function validateIntegrationLane(lane: IntegrationLane): void {
   validateGitRef(lane.branch);
   if (typeof lane.repository !== "string" || !/^[^/\s]+\/[^/\s]+$/.test(lane.repository)) fail("invalid-repository", "Lane repository must be owner/name.");
   if (!lane.frozenBase || typeof lane.frozenBase.branch !== "string" || !lane.frozenBase.branch.trim() || !/^[0-9a-f]{7,64}$/i.test(lane.frozenBase.sha)) fail("invalid-base", "Lane frozen base must contain a branch and commit SHA.");
+  validateGitRef(lane.frozenBase.branch);
   if (!Array.isArray(lane.membership)) fail("invalid-membership", "Lane membership must be an array.");
   const members = new Set<number>();
   const ordinals = new Set<number>();
