@@ -575,6 +575,61 @@ export class ForgeOrchestrationController {
     );
   }
 
+  /**
+   * Complete the lane-level promotion after all member PRs are integrated.
+   * Callers supply freshly verified provider evidence; this method persists
+   * every gate before closing members or deleting the lane branch.
+   */
+  async promoteWorkOrder(input: {
+    orchestrationId: string;
+    ownerId: string;
+    queuePosition: number;
+    staging: IntegrationLaneStagingEvidence;
+    sourceHeadSha: string;
+    mergeBaseSha: string;
+    shippingPullNumber: number;
+    mergeCommitSha: string;
+    reviewedAt: string;
+    reviewPassed: boolean;
+    verificationPassed: boolean;
+    mergeable: boolean;
+    authorityValid: boolean;
+    ctx: ExtensionContext;
+  }): Promise<OrchestrationState> {
+    const link = this.#links.get(input.orchestrationId);
+    if (!link) throw new Error(`Unknown orchestration ${input.orchestrationId}.`);
+    const current = await this.#read(link, input.ctx.signal);
+    const lane = current.state.integrationLane;
+    if (!lane || lane.kind !== "work-order" || lane.legacy)
+      throw new Error("Only typed work-order lanes can be promoted automatically.");
+    if (!current.state.lanes.every((member) => member.status === "integrated" || member.status === "merged" || member.status === "closed"))
+      throw new Error("Work-order promotion requires every member PR to be lane-integrated.");
+    let state = current.state;
+    const journal = current.journal;
+    if (lane.promotion.queuePosition === undefined) {
+      state = await journal.queueLane({ orchestrationId: input.orchestrationId, laneId: lane.stableId, queuePosition: input.queuePosition, signal: input.ctx.signal });
+    }
+    if (state.integrationLane?.status === "ready") {
+      state = await journal.acquireLaneQueueLease({ orchestrationId: input.orchestrationId, laneId: lane.stableId, ownerId: input.ownerId, leaseSeconds: 900, signal: input.ctx.signal });
+    }
+    const leaseEpoch = state.integrationLane?.promotion.queueLease?.epoch;
+    if (!leaseEpoch) throw new Error("Promotion queue lease was not acquired.");
+    if (state.integrationLane?.status === "syncing") {
+      state = await journal.syncLane({ orchestrationId: input.orchestrationId, laneId: lane.stableId, ownerId: input.ownerId, leaseEpoch, staging: input.staging, signal: input.ctx.signal });
+    }
+    const receipt = workOrderPromotionReceipt({ shippingPullNumber: input.shippingPullNumber, sourceHeadSha: input.sourceHeadSha, stagingBaseSha: input.staging.sha, mergeBaseSha: input.mergeBaseSha, mergeCommitSha: input.mergeCommitSha, reviewedAt: input.reviewedAt });
+    const gate = evaluateWorkOrderPromotion({ lane: state.integrationLane!, ownerId: input.ownerId, now: input.reviewedAt, sourceHeadSha: input.sourceHeadSha, mergeBaseSha: input.mergeBaseSha, staging: input.staging, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: true });
+    if (!gate.allowed) throw new Error(`Work-order promotion gated: ${gate.reason}`);
+    state = await journal.promoteLane({ orchestrationId: input.orchestrationId, laneId: lane.stableId, ownerId: input.ownerId, leaseEpoch, staging: input.staging, receipt, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: true, signal: input.ctx.signal });
+    const github = this.#githubFor(link);
+    for (const member of lane.membership) await github.closeIssue(member.issueNumber, input.ctx.signal);
+    await github.deleteBranch(lane.branch, input.ctx.signal);
+    state = await journal.closeLane({ orchestrationId: input.orchestrationId, laneId: lane.stableId, signal: input.ctx.signal });
+    for (const member of state.lanes.filter((candidate) => candidate.status === "integrated" || candidate.status === "merged"))
+      state = await journal.append({ orchestrationId: input.orchestrationId, type: "lane.closed", payload: { issueNumber: member.issueNumber, reason: `Work-order lane ${lane.stableId} promoted to staging.` }, idempotencyKey: `lane:${member.issueNumber}:closed-after-promotion`, message: `Close promoted work-order member ${member.issueNumber}`, ...(input.ctx.signal ? { signal: input.ctx.signal } : {}) });
+    return state;
+  }
+
   async cancel(
     orchestrationId: string,
     ctx: ExtensionContext,

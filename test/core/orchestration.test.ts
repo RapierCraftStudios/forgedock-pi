@@ -108,8 +108,8 @@ test("lane promotion events persist queue, lease, and merge receipt state", () =
   state = applyOrchestrationEvent(state, next(state, "integration-lane.queued", { laneId: typed.stableId, queuePosition: 0 }, "queue"));
   state = applyOrchestrationEvent(state, next(state, "integration-lane.lease-acquired", { laneId: typed.stableId, ownerId: "owner", leaseSeconds: 60 }, "lease"));
   const staging = { branch: "staging", sha: "a".repeat(40), baselineSha: "a".repeat(40), idle: true, checkedAt: "2026-08-24T00:00:03.000Z" };
-  state = applyOrchestrationEvent(state, next(state, "integration-lane.sync", { laneId: typed.stableId, staging }, "sync"));
-  state = applyOrchestrationEvent(state, next(state, "integration-lane.promoted", { laneId: typed.stableId, ownerId: "owner", staging, receipt: { shippingPullNumber: 9, sourceHeadSha: "b".repeat(40), stagingBaseSha: staging.sha, mergeBaseSha: staging.sha, mergeCommitSha: "c".repeat(40), mergeMethod: "merge", reviewedAt: staging.checkedAt }, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true }, "promoted"));
+  state = applyOrchestrationEvent(state, next(state, "integration-lane.sync", { laneId: typed.stableId, ownerId: "owner", leaseEpoch: 1, staging }, "sync"));
+  state = applyOrchestrationEvent(state, next(state, "integration-lane.promoted", { laneId: typed.stableId, ownerId: "owner", queueHeadLaneId: typed.stableId, leaseEpoch: 1, staging, receipt: { shippingPullNumber: 9, sourceHeadSha: "b".repeat(40), stagingBaseSha: staging.sha, mergeBaseSha: staging.sha, mergeCommitSha: "c".repeat(40), mergeMethod: "merge", reviewedAt: staging.checkedAt }, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true }, "promoted"));
   assert.equal(state.integrationLane?.status, "promoted");
   assert.equal(state.integrationLane?.promotion.receipt?.shippingPullNumber, 9);
   state = applyOrchestrationEvent(state, next(state, "lane.started", { issueNumber: 2, forgeRunId: "run-2", subagentRunId: "child-2" }, "member-start"));

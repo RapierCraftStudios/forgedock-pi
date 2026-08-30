@@ -82,12 +82,14 @@ test("queue lease and promotion lifecycle is guarded and requires a merge commit
   const queued = transitionIntegrationLane(lane, "queue", { now: "2026-08-30T00:00:01.000Z", queuePosition: 0 });
   const leased = transitionIntegrationLane(queued, "acquire-queue-lease", { now: "2026-08-30T00:00:02.000Z", ownerId: "orchestrator-1", leaseSeconds: 60 });
   const staging = { branch: "staging", sha: "a".repeat(40), baselineSha: "a".repeat(40), idle: true, checkedAt: "2026-08-30T00:00:03.000Z" };
-  const ready = transitionIntegrationLane(leased, "sync", { now: staging.checkedAt, staging });
+  const ready = transitionIntegrationLane(leased, "sync", { now: staging.checkedAt, ownerId: "orchestrator-1", leaseEpoch: 1, staging });
   validatePromotionQueue([ready]);
   assert.deepEqual(canPromoteIntegrationLane(ready, { ownerId: "wrong-owner", now: staging.checkedAt, sourceHeadSha: "b".repeat(40), mergeBaseSha: staging.sha, staging, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true }), { ok: false, reason: "Queue-head lease is missing, stale, or owned by another lane." });
   const receipt = { shippingPullNumber: 44, sourceHeadSha: "b".repeat(40), stagingBaseSha: staging.sha, mergeBaseSha: staging.sha, mergeCommitSha: "c".repeat(40), mergeMethod: "merge" as const, reviewedAt: staging.checkedAt };
-  const promoted = transitionIntegrationLane(ready, "promote", { now: staging.checkedAt, ownerId: "orchestrator-1", staging, receipt, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true });
+  const promoted = transitionIntegrationLane(ready, "promote", { now: staging.checkedAt, ownerId: "orchestrator-1", leaseEpoch: 1, queueHeadLaneId: "wo-1", staging, receipt, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true });
   assert.equal(promoted.status, "promoted");
   assert.equal(promoted.promotion.receipt?.mergeMethod, "merge");
   assert.equal(transitionIntegrationLane(promoted, "close", { now: "2026-08-30T00:00:04.000Z" }).status, "closed");
+  assert.throws(() => transitionIntegrationLane(ready, "promote", { now: staging.checkedAt, ownerId: "orchestrator-1", leaseEpoch: 1, queueHeadLaneId: "wo-1", staging: { ...staging, sha: "d".repeat(40) }, receipt, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true }), /staging.*match/i);
+  assert.throws(() => validateIntegrationLane({ ...ready, promotion: [] } as unknown as IntegrationLane), /promotion/i);
 });

@@ -761,6 +761,8 @@ function applyIntegrationLaneEvent(
       ...(typeof payload.ownerId === "string" ? { ownerId: payload.ownerId } : {}),
       ...(Number.isSafeInteger(payload.leaseSeconds) ? { leaseSeconds: payload.leaseSeconds as number } : {}),
       ...(Number.isSafeInteger(payload.queuePosition) ? { queuePosition: payload.queuePosition as number } : {}),
+      ...(Number.isSafeInteger(payload.leaseEpoch) ? { leaseEpoch: payload.leaseEpoch as number } : {}),
+      ...(typeof payload.queueHeadLaneId === "string" ? { queueHeadLaneId: payload.queueHeadLaneId } : {}),
       ...(payload.staging && typeof payload.staging === "object" ? { staging: payload.staging as IntegrationLaneStagingEvidence } : {}),
       ...(payload.receipt && typeof payload.receipt === "object" ? { receipt: payload.receipt as IntegrationLanePromotionReceipt } : {}),
       ...(typeof payload.reviewPassed === "boolean" ? { reviewPassed: payload.reviewPassed } : {}),

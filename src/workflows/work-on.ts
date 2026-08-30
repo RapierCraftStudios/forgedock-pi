@@ -771,7 +771,9 @@ export class ForgeWorkOnController {
       receipts.push(
         await projector.setWorkflowLabelWithReceipt(
           link.issueNumber,
-          WORKFLOW_LABEL_BY_STAGE.merged,
+          shouldDeferWorkOrderClosure(link.integrationLane)
+            ? WORKFLOW_LABEL_BY_STAGE.laneIntegrated
+            : WORKFLOW_LABEL_BY_STAGE.merged,
           ctx.signal,
           `${completed.eventId}:workflow`,
         ),
@@ -798,7 +800,13 @@ export class ForgeWorkOnController {
       (snapshot.state.status === "completed" &&
         snapshot.state.outcome === "merged")
     ) {
-      await this.#projectWorkflowStage(link, "merged", ctx);
+      await this.#projectWorkflowStage(
+        link,
+        shouldDeferWorkOrderClosure(link.integrationLane)
+          ? "laneIntegrated"
+          : "merged",
+        ctx,
+      );
       return;
     }
     const nodes = Object.values(snapshot.state.nodes);

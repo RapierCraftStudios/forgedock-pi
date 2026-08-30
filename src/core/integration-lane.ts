@@ -209,7 +209,7 @@ export function validateIntegrationLane(lane: IntegrationLane): void {
   if (Number.isNaN(Date.parse(lane.createdAt)) || Number.isNaN(Date.parse(lane.updatedAt))) fail("invalid-timestamp", "Lane timestamps must be RFC3339-compatible.");
   const statuses: IntegrationLaneStatus[] = ["queued", "active", "ready", "syncing", "promoting", "promoted", "closed", "blocked", "needs-human", "failed"];
   if (!statuses.includes(lane.status)) fail("invalid-status", "Unsupported lane status.");
-  if (!lane.promotion || typeof lane.promotion !== "object") fail("invalid-promotion", "Promotion metadata must be an object.");
+  if (!lane.promotion || typeof lane.promotion !== "object" || Array.isArray(lane.promotion)) fail("invalid-promotion", "Promotion metadata must be a plain object.");
   if (lane.promotion.queuePosition !== undefined && (!Number.isSafeInteger(lane.promotion.queuePosition) || lane.promotion.queuePosition < 0)) fail("invalid-promotion", "Queue position must be a non-negative integer.");
   const queueLease = lane.promotion.queueLease;
   if (queueLease !== undefined) {
@@ -248,6 +248,8 @@ export interface IntegrationLaneTransitionInput {
   ownerId?: string;
   leaseSeconds?: number;
   queuePosition?: number;
+  queueHeadLaneId?: string;
+  leaseEpoch?: number;
   staging?: IntegrationLaneStagingEvidence;
   receipt?: IntegrationLanePromotionReceipt;
   reviewPassed?: boolean;
@@ -277,7 +279,7 @@ export function hasLiveQueueLease(
 
 /** Check the complete set of gates required before a lane can promote. */
 export function canPromoteIntegrationLane(
-  lane: Pick<IntegrationLane, "kind" | "status" | "promotion">,
+  lane: Pick<IntegrationLane, "kind" | "status" | "promotion" | "stableId">,
   input: {
     ownerId: string;
     now: string;
@@ -289,10 +291,13 @@ export function canPromoteIntegrationLane(
     mergeable: boolean;
     authorityValid: boolean;
     mergeCommit: boolean;
+    queueHeadLaneId?: string;
   },
 ): { ok: true } | { ok: false; reason: string } {
   if (lane.kind !== "work-order")
     return { ok: false, reason: "Only work-order lanes auto-promote." };
+  if (input.queueHeadLaneId !== undefined && input.queueHeadLaneId !== lane.stableId)
+    return { ok: false, reason: "Only the durable promotion queue head may promote." };
   if (lane.status !== "syncing" && lane.status !== "ready")
     return { ok: false, reason: `Lane is ${lane.status}, not ready for promotion.` };
   if (!hasLiveQueueLease(lane, input.ownerId, input.now))
@@ -339,7 +344,7 @@ export function transitionIntegrationLane(
       if (!ownerId) throw new IntegrationLaneValidationError("invalid-lease", "Queue lease owner is required.");
       if (!Number.isSafeInteger(leaseSeconds) || (leaseSeconds ?? 0) < 1) throw new IntegrationLaneValidationError("invalid-lease", "Queue lease duration must be positive.");
       const prior = lane.promotion.queueLease;
-      if (prior && prior.expiresAt > input.now && prior.ownerId !== ownerId) throw new IntegrationLaneValidationError("queue-lease-held", "Queue lease is held by another owner.");
+      if (prior && Date.parse(prior.expiresAt) > Date.parse(input.now) && prior.ownerId !== ownerId) throw new IntegrationLaneValidationError("queue-lease-held", "Queue lease is held by another owner.");
       next.promotion.queueLease = { ownerId, epoch: (prior?.epoch ?? 0) + 1, acquiredAt: input.now, expiresAt: new Date(Date.parse(input.now) + (leaseSeconds as number) * 1000).toISOString() };
       next.status = "syncing";
       break;
@@ -351,6 +356,7 @@ export function transitionIntegrationLane(
       break;
     case "sync":
       if (lane.status !== "syncing") throw new IntegrationLaneValidationError("invalid-transition", `Cannot sync a ${lane.status} lane.`);
+      if (!input.ownerId || !hasLiveQueueLease(lane, input.ownerId, input.now) || input.leaseEpoch !== lane.promotion.queueLease?.epoch) throw new IntegrationLaneValidationError("queue-lease-owner", "Sync requires the live queue-lease owner and epoch.");
       if (!input.staging) throw new IntegrationLaneValidationError("missing-staging-evidence", "Staging evidence is required for sync.");
       next.promotion.stagingEvidence = input.staging;
       next.promotion.stagingBranch = input.staging.branch;
@@ -359,8 +365,10 @@ export function transitionIntegrationLane(
       break;
     case "promote":
       if (lane.status !== "ready") throw new IntegrationLaneValidationError("invalid-transition", `Cannot promote a ${lane.status} lane.`);
-      if (!input.ownerId || !input.staging || !input.receipt) throw new IntegrationLaneValidationError("missing-promotion-evidence", "Queue owner, staging evidence, and receipt are required.");
-      const gate = canPromoteIntegrationLane(lane, { ownerId: input.ownerId, now: input.now, sourceHeadSha: input.receipt.sourceHeadSha, mergeBaseSha: input.receipt.mergeBaseSha, staging: input.staging, reviewPassed: input.reviewPassed === true, verificationPassed: input.verificationPassed === true, mergeable: input.mergeable === true, authorityValid: input.authorityValid === true, mergeCommit: input.mergeCommit === true && input.receipt.mergeMethod === "merge" });
+      if (!input.ownerId || !input.staging || !input.receipt || input.queueHeadLaneId !== lane.stableId || input.leaseEpoch !== lane.promotion.queueLease?.epoch) throw new IntegrationLaneValidationError("missing-promotion-evidence", "Queue owner, queue head, lease epoch, staging evidence, and receipt are required.");
+      if (lane.promotion.stagingEvidence && (lane.promotion.stagingEvidence.sha !== input.staging.sha || lane.promotion.stagingEvidence.branch !== input.staging.branch)) throw new IntegrationLaneValidationError("staging-evidence-mismatch", "Promotion staging evidence does not match the persisted sync evidence.");
+      if (input.receipt.stagingBaseSha !== input.staging.sha) throw new IntegrationLaneValidationError("staging-receipt-mismatch", "Promotion receipt staging base does not match staging evidence.");
+      const gate = canPromoteIntegrationLane(lane, { ownerId: input.ownerId, now: input.now, sourceHeadSha: input.receipt.sourceHeadSha, mergeBaseSha: input.receipt.mergeBaseSha, staging: input.staging, reviewPassed: input.reviewPassed === true, verificationPassed: input.verificationPassed === true, mergeable: input.mergeable === true, authorityValid: input.authorityValid === true, mergeCommit: input.mergeCommit === true && input.receipt.mergeMethod === "merge", queueHeadLaneId: input.queueHeadLaneId });
       if (!gate.ok) throw new IntegrationLaneValidationError("promotion-gated", gate.reason);
       next.status = "promoted";
       next.promotion.stagingEvidence = input.staging;

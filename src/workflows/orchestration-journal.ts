@@ -4,6 +4,7 @@ import {
 import {
   stateCas,
 } from "../adapters/state-cas.ts";
+import { canonicalJson } from "../core/events.ts";
 import {
   applyOrchestrationEvent,
   createOrchestrationEvent,
@@ -112,12 +113,12 @@ export class OrchestrationJournal {
     return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.lease-released", payload: { laneId: input.laneId, ownerId: input.ownerId }, idempotencyKey: `integration-lane:${input.laneId}:lease-release:${input.ownerId}`, message: `Release integration lane queue lease ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
   }
 
-  async syncLane(input: { orchestrationId: string; laneId: string; staging: IntegrationLaneStagingEvidence; signal?: AbortSignal }): Promise<OrchestrationState> {
-    return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.sync", payload: { laneId: input.laneId, staging: input.staging }, idempotencyKey: `integration-lane:${input.laneId}:sync:${input.staging.sha}`, message: `Record integration lane sync ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
+  async syncLane(input: { orchestrationId: string; laneId: string; ownerId: string; leaseEpoch: number; staging: IntegrationLaneStagingEvidence; signal?: AbortSignal }): Promise<OrchestrationState> {
+    return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.sync", payload: { laneId: input.laneId, ownerId: input.ownerId, leaseEpoch: input.leaseEpoch, staging: input.staging }, idempotencyKey: `integration-lane:${input.laneId}:sync:${input.staging.sha}`, message: `Record integration lane sync ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
   }
 
-  async promoteLane(input: { orchestrationId: string; laneId: string; ownerId: string; staging: IntegrationLaneStagingEvidence; receipt: IntegrationLanePromotionReceipt; reviewPassed: boolean; verificationPassed: boolean; mergeable: boolean; authorityValid: boolean; mergeCommit: boolean; signal?: AbortSignal }): Promise<OrchestrationState> {
-    return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.promoted", payload: { laneId: input.laneId, ownerId: input.ownerId, staging: input.staging, receipt: input.receipt, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: input.mergeCommit }, idempotencyKey: `integration-lane:${input.laneId}:promoted:${input.receipt.mergeCommitSha}`, message: `Promote integration lane ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
+  async promoteLane(input: { orchestrationId: string; laneId: string; ownerId: string; leaseEpoch: number; staging: IntegrationLaneStagingEvidence; receipt: IntegrationLanePromotionReceipt; reviewPassed: boolean; verificationPassed: boolean; mergeable: boolean; authorityValid: boolean; mergeCommit: boolean; signal?: AbortSignal }): Promise<OrchestrationState> {
+    return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.promoted", payload: { laneId: input.laneId, ownerId: input.ownerId, queueHeadLaneId: input.laneId, leaseEpoch: input.leaseEpoch, staging: input.staging, receipt: input.receipt, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: input.mergeCommit }, idempotencyKey: `integration-lane:${input.laneId}:promoted:${input.receipt.mergeCommitSha}`, message: `Promote integration lane ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
   }
 
   async closeLane(input: { orchestrationId: string; laneId: string; signal?: AbortSignal }): Promise<OrchestrationState> {
@@ -173,7 +174,12 @@ export class OrchestrationJournal {
           `Orchestration ${input.orchestrationId} is not initialized.`,
         );
       const prior = current.state.idempotencyKeys[input.idempotencyKey];
-      if (prior) return current.state;
+      if (prior) {
+        const priorEvent = current.events.find((event) => event.idempotencyKey === input.idempotencyKey);
+        if (!priorEvent || priorEvent.type !== input.type || canonicalJson(priorEvent.payload) !== canonicalJson(input.payload))
+          throw new Error(`Idempotency key ${input.idempotencyKey} was reused with different event data.`);
+        return current.state;
+      }
       const event = createOrchestrationEvent({
         orchestrationId: input.orchestrationId,
         repository: current.state.repository,
