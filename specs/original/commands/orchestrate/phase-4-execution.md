@@ -2044,10 +2044,12 @@ for NUM in {active_issue_numbers}; do
     --jq '[.labels[].name | select(. == "workflow:merged" or . == "workflow:invalid" or . == "needs-human" or . == "workflow:awaiting-merge")] | length')
   [ "$TERMINAL" -gt 0 ] && continue
 
-  # Get last activity timestamp — prefer last comment (catches FORGE:HEARTBEAT updates)
+  # Get last activity from GitHub's immutable creation time. Never parse a
+  # coordinator-authored body Timestamp: legacy values may be rounded, skewed,
+  # or in the future, and updated_at changes when a comment is edited.
   LAST_ACTIVITY=$(gh api repos/{GH_REPO}/issues/${NUM}/comments \
-    --jq '.[-1].updated_at // empty' 2>/dev/null)
-  # Fall back to issue updated_at if no comments
+    --jq '.[-1].created_at // empty' 2>/dev/null)
+  # Fall back to issue updated_at only when the issue has no comments.
   if [ -z "$LAST_ACTIVITY" ]; then
     LAST_ACTIVITY=$(gh issue view $NUM -R {GH_REPO} --json updatedAt --jq '.updatedAt')
   fi
