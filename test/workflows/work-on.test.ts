@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -25,6 +27,7 @@ import {
   reviewInstanceMarker,
   reviewSummaryInstanceMarker,
   reviewSupersessionMarker,
+  resolveAuthoritativeIntegrationLane,
   restoreWorkflowLabelAfterMergeFailure,
   rollbackAwaitingMergeLabel,
   shouldBufferLaunchCompletion,
@@ -33,6 +36,38 @@ import {
   workflowStageForNodeTransition,
   workflowStageForRecoveredNodeTransition,
 } from "../../src/workflows/work-on.ts";
+
+test("orchestrated work-on requires a matching durable integration lane", () => {
+  const lane = {
+    schema: "forgedock.integration-lane/v1" as const,
+    kind: "work-order" as const,
+    stableId: "wo-demo",
+    slug: "demo",
+    branch: "work-order/wo-demo-demo",
+    repository: "owner/repo",
+    frozenBase: { branch: "main", sha: "a".repeat(40) },
+    membership: [{ issueNumber: 7, ordinal: 0 }],
+    sourceQuery: "work-order:demo",
+    createdAt: "2026-08-30T00:00:00.000Z",
+    updatedAt: "2026-08-30T00:00:00.000Z",
+    status: "active" as const,
+    promotion: {},
+  };
+  const state = { repository: "owner/repo", integrationBranch: lane.branch, lanes: [], integrationLane: lane };
+  assert.equal(resolveAuthoritativeIntegrationLane(state, "owner/repo", 7), lane);
+  assert.throws(
+    () => resolveAuthoritativeIntegrationLane({ ...state, integrationLane: undefined }, "owner/repo", 7),
+    /refusing staging fallback/,
+  );
+  assert.throws(
+    () => resolveAuthoritativeIntegrationLane(state, "other/repo", 7),
+    /does not match the repository/,
+  );
+  assert.throws(
+    () => resolveAuthoritativeIntegrationLane(state, "owner/repo", 8),
+    /not a member/,
+  );
+});
 
 test("work-on reviewer results are rebound to the shared frozen review identity", () => {
   const result: ForgeReviewerResult = {
@@ -93,7 +128,7 @@ test("dependency discovery fails dispatch with explicit external blocker evidenc
   };
   await assert.rejects(
     () => discoverIssueDependencies(github, [42]),
-    (error) =>
+    (error: unknown) =>
       error instanceof ExternalIssueDependencyError &&
       error.code === "external-dependency" &&
       error.issueNumber === 42 &&

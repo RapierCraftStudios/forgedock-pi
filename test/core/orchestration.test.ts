@@ -89,6 +89,31 @@ test("typed lane bindings are validated and legacy genesis receives an explicit 
   assert.equal(legacy.integrationLane?.sourceQuery, "legacy-fast-lane");
 });
 
+test("typed lane membership preserves orchestration order", () => {
+  const typed = createIntegrationLane({
+    kind: "work-order",
+    stableId: "wo-order",
+    slug: "order",
+    repository,
+    frozenBase: { branch: "main", sha: "0123456789abcdef0123456789abcdef01234567" },
+    membership: [{ issueNumber: 2, ordinal: 1 }, { issueNumber: 3, ordinal: 0 }],
+    sourceQuery: "#299 #300",
+    createdAt: "2026-08-24T00:00:00.000Z",
+    updatedAt: "2026-08-24T00:00:00.000Z",
+    status: "queued",
+  });
+  assert.throws(
+    () => applyOrchestrationEvent(undefined, next(undefined, "orchestration.created", {
+      issueNumbers: [2, 3],
+      integrationBranch: typed.branch,
+      integrationLane: typed,
+      maxConcurrent: 1,
+      leaseEpoch: 1,
+    }, "ordered-membership")),
+    /membership.*order/i,
+  );
+});
+
 test("typed lanes cannot cross repository boundaries", () => {
   const typed = createIntegrationLane({
     kind: "work-order",

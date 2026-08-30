@@ -60,6 +60,45 @@ export type {
   IntegrationLaneStatus,
 } from "./core/integration-lane.ts";
 export {
+  ORCHESTRATION_EVENT_SCHEMA,
+  ORCHESTRATION_STATE_SCHEMA,
+  aggregateOrchestrationStatus,
+  applyOrchestrationEvent,
+  blockedOrchestrationLanes,
+  createOrchestrationEvent,
+  hashOrchestrationGraph,
+  isTerminalLane,
+  nextIntegrationLane,
+  readyOrchestrationLanes,
+  replayOrchestrationEvents,
+  OrchestrationTransitionError,
+} from "./core/orchestration.ts";
+export type {
+  BlockedOrchestrationLane,
+  OrchestrationDependencyEdge,
+  OrchestrationEvent,
+  OrchestrationEventType,
+  OrchestrationLane,
+  OrchestrationLaneStatus,
+  OrchestrationState,
+  OrchestrationStatus,
+} from "./core/orchestration.ts";
+export {
+  ORCHESTRATION_RECOVERY_SCHEMA,
+  classifyOrchestrationLane,
+  createOrchestrationBatchState,
+  orchestrationChildKey,
+  planOrchestrationReload,
+  renderOrchestrationReloadReport,
+} from "./core/orchestration-recovery.ts";
+export type {
+  OrchestrationBatchState,
+  OrchestrationClassification,
+  OrchestrationQueueEntry,
+  OrchestrationReloadPlan,
+  RetainedOrchestrationChild,
+} from "./core/orchestration-recovery.ts";
+export {
   assertReviewFindingReadbackPaths,
   normalizeReviewFindingMetadata,
   trustedAffectedPathsForDag,

@@ -22,6 +22,7 @@ const COORDINATOR_TOOLS = [
   "contact_supervisor",
   "subagent",
 ] as const;
+const REVIEWER_TOOLS = ["read", "grep", "find", "ls"] as const;
 
 async function registerPackedProjectPackage(project: string): Promise<void> {
   await mkdir(`${project}/.pi`, { recursive: true });
@@ -36,7 +37,7 @@ async function registerPackedProjectPackage(project: string): Promise<void> {
  * source discovery paths. Preflight is the public pi-subagents launch contract
  * and does not require a model or spawn a child process.
  */
-test("packed coordinator resolves nested reviewer capability and explicit tools", async () => {
+test("packed coordinator and qualitative reviewer resolve with bounded tools", async () => {
   const root = process.cwd();
   const temp = await mkdtemp("/tmp/forgedock-package-canary-");
   try {
@@ -50,6 +51,7 @@ test("packed coordinator resolves nested reviewer capability and explicit tools"
     const packagedFiles = packedManifest(stdout).files.map((file) => file.path);
     for (const required of [
       "agents/forgedock-work-on-coordinator.md",
+      "agents/forgedock-reviewer.md",
       "skills/forgedock-test-gate/SKILL.md",
       "skills/forgedock-issue/SKILL.md",
       "specs/original/commands/test-gate.md",
@@ -109,6 +111,43 @@ test("packed coordinator resolves nested reviewer capability and explicit tools"
       new Set(COORDINATOR_TOOLS),
     );
     assert.equal(result.contract.tools.configuredExtensions.length, 0);
+
+    const reviewerResult = await resolveSubagentLaunchContract({
+      agent: "forgedock-reviewer",
+      cwd: project,
+      context: "fresh",
+      skill: false,
+      output: false,
+      artifacts: false,
+      capabilityCeiling: {
+        version: SUBAGENT_CAPABILITY_CEILING_VERSION,
+        allowedAgents: ["forgedock-reviewer"],
+        allowedTools: [...REVIEWER_TOOLS],
+        denyExtensions: false,
+        sources: ["package-canary"],
+      },
+    });
+    assert.equal(
+      reviewerResult.ok,
+      true,
+      reviewerResult.ok ? "" : reviewerResult.message,
+    );
+    if (!reviewerResult.ok) return;
+    assert.equal(reviewerResult.contract.agent.source, "package");
+    assert.equal(reviewerResult.contract.tools.explicitAllowlist, true);
+    assert.equal(reviewerResult.contract.tools.fanoutAuthorized, false);
+    for (const actual of [
+      reviewerResult.contract.tools.requestedBuiltin,
+      reviewerResult.contract.tools.declaredBuiltin,
+      reviewerResult.contract.tools.effectiveAllowlist,
+    ])
+      assert.deepEqual(new Set(actual), new Set(REVIEWER_TOOLS));
+    assert.equal(reviewerResult.contract.tools.configuredExtensions.length, 0);
+    for (const forbidden of ["bash", "edit", "write", "subagent"])
+      assert.equal(
+        reviewerResult.contract.tools.effectiveAllowlist.includes(forbidden),
+        false,
+      );
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
