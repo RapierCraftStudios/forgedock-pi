@@ -121,10 +121,24 @@ unavailable. Apply one cohesive patch and at least one end-to-end test for the s
 invariant rather than patching findings one at a time.
 
 Do not publish a new remediation head or launch its fresh panel until every closure row
-passes locally. Same-head edit/test/replan iterations do not consume another round; one
-substantive new head submitted to a fresh complete panel does. Close a finding only when
-the fresh current-head review no longer returns its occurrence. Never launch another
-new-head panel after cap exhaustion.
+passes locally. In non-interactive/headless execution, run verification directly in the
+coordinator unless a background mechanism durably persists the same-lifecycle continuation
+and automatically wakes it on completed, failed, killed, or cancelled terminal state.
+Resource-sensitive packed-package checks must run separately and serially and remain mandatory evidence;
+a progress-only response is never terminal verification.
+
+For every irreversible provider action, the closure matrix also proves authority and all
+preconditions before the action, exact provider-result binding, idempotent replay after
+provider success, and recovery from failure between side effect and durable receipt.
+If fresh review proves no active caller, a new authority boundary, a dormant/legacy
+implementation approach, or repeated HIGH blockers in the same invariant, stop local
+remediation and publish `FORGE:REINVESTIGATE_REQUIRED`; investigation/decomposition alone
+may replace the approach.
+
+Same-head edit/test/replan iterations do not consume another round; one substantive new
+head submitted to a fresh complete panel does. Close a finding only when the fresh
+current-head review no longer returns its occurrence. Never launch another new-head panel
+after cap exhaustion.
 
 Never reset, checkout, or rebase the harness-managed worktree to `main` or `staging`
 after pushing. Review the frozen remote PR head without rewriting the child workspace.

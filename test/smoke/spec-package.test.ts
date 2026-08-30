@@ -169,6 +169,9 @@ test("package exposes a depth-bounded work-on coordinator with reviewer fanout",
   assert.match(agent, /failing-before\/passing-after regression command/);
   assert.match(agent, /Same-head edit\/test\/replan iterations remain within one remediation round/);
   assert.match(agent, /fresh current-head\s+review no longer\s+returns that occurrence/);
+  assert.match(agent, /persisted same-lifecycle continuation/);
+  assert.match(agent, /packed-package\s+checks serial but mandatory/);
+  assert.match(agent, /FORGE:REINVESTIGATE_REQUIRED/);
   assert.match(agent, /Never reset the managed worktree/);
   assert.doesNotMatch(agent, /maxSubagentDepth: 1/);
 });
@@ -210,7 +213,11 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
   assert.match(workOn, /blocker closure\s+matrix/);
   assert.match(workOn, /failing-before\/passing-after regression command/);
   assert.match(workOn, /Do not publish a new remediation head.*every closure row\s+passes locally/s);
-  assert.match(workOn, /Only fresh current-head review can close findings|fresh current-head review no longer returns its occurrence/);
+  assert.match(workOn, /Only fresh current-head review can close findings|fresh\s+current-head\s+review no longer returns its occurrence/);
+  assert.match(workOn, /background mechanism durably persists the same-lifecycle continuation/);
+  assert.match(workOn, /packed-package checks must run separately and serially and remain mandatory/);
+  assert.match(workOn, /authority and all\s+preconditions before the action/);
+  assert.match(workOn, /FORGE:REINVESTIGATE_REQUIRED/);
   assert.match(workOn, /Never reset, checkout, or rebase the harness-managed worktree/);
   assert.match(workOn, /Do not spawn a second\s+review coordinator/s);
   const review = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
@@ -225,13 +232,27 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
   assert.match(adapter, /control\.needsAttentionAfterMs/);
   assert.match(adapter, /specs\/original\/SHA256SUMS/);
   assert.match(adapter, /blocker closure\s+matrix/);
-  assert.match(adapter, /Local\s+same-head edit\/test\/replan iterations do\s+not consume another round/);
+  assert.match(adapter, /Local\s+same-head(?: edit\/test\/replan)? iterations do\s+not consume another\s+round/);
+  assert.match(adapter, /persisted\s+same-lifecycle continuation/);
+  assert.match(adapter, /Packed-package smoke checks must run separately and serially and stay mandatory/);
+  assert.match(adapter, /FORGE:REINVESTIGATE_REQUIRED/);
   assert.match(adapter, /Use direct `gh` and `git` commands/);
   assert.match(remediate, /Inline current-head blocker remediation \(authoritative override\)/);
   assert.match(remediate, /blocker closure matrix/);
   assert.match(remediate, /Failing-before proof/);
   assert.match(remediate, /Do not close review-finding issues in this phase/);
   assert.match(remediate, /Only publishing one substantive new head.*consumes the round/s);
+  assert.match(remediate, /automatically wakes that coordinator on every terminal state/);
+  assert.match(remediate, /must run in a separate bounded serial\s+step/);
+  assert.match(remediate, /all authority and preconditions before the side effect/);
+  assert.match(remediate, /idempotent replay\/reconciliation after provider success/);
+  assert.match(remediate, /FORGE:REINVESTIGATE_REQUIRED pr=/);
+  assert.match(remediate, /FORGE:REMEDIATION:COMPLETE pr=.*REMEDIATION_ROUND/s);
+  assert.match(remediate, /Skill\(skill="work-on\/investigate"/);
+  assert.match(remediate, /--match-head-commit "\$POST_REVIEW_HEAD"/);
+  assert.match(remediate, /FORGE:REMEDIATION_MERGE_RECEIPT/);
+  assert.match(remediate, /PR_ALREADY_MERGED/);
+  assert.match(remediate, /Require issue-close, trajectory, and cleanup read-back/);
   assert.match(forgeYaml, /remediation_max_rounds:\s*4/);
   for (const contract of [workOn, coordinator, adapter, remediate]) {
     assert.match(contract, /--inline-review-blockers/);
@@ -290,12 +311,11 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
     "Before Phase M4",
     "## Phase M4: Commit, Push",
     "## Phase M6: Re-Invoke /review-pr",
-    "After Phase M6",
-    "POST_REVIEW_HEAD=$(gh pr view",
-    "COMPLETE_MARKER=\"<!-- FORGE:REMEDIATION:COMPLETE pr=",
   ].map((needle) => remediate.indexOf(needle));
   assert.ok(remediationOrder.every((index) => index >= 0));
   assert.deepEqual(remediationOrder, remediationOrder.toSorted((a, b) => a - b));
+  assert.ok(remediate.indexOf("## Phase M6: Re-Invoke /review-pr") < remediate.indexOf("POST_REVIEW_HEAD=$(gh pr view"));
+  assert.ok(remediate.indexOf("## Phase M6: Re-Invoke /review-pr") < remediate.indexOf("After Phase M6"));
   assert.doesNotMatch(adapter, /forgedock_(?:github|preflight)|forge_(?:prepare|verify|push)_lane/);
   const entrypoint = await readFile("src/index.ts", "utf8");
   assert.match(entrypoint, /registerForgePromptRouter\(pi\)/);
