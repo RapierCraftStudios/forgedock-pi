@@ -96,6 +96,18 @@ invariant. Do not publish a new head or launch its fresh panel until every matri
 passes locally, and do not close a finding until the fresh current-head review no longer
 returns that occurrence.
 
+For headless/non-interactive remediation, run verification directly unless its background
+runner has a persisted same-lifecycle continuation and guaranteed terminal wake for
+completed, failed, killed, and cancelled outcomes. Keep resource-sensitive packed-package
+checks serial but mandatory. Never return progress text while verification is detached.
+
+For irreversible provider actions, require pre-action authority/preconditions, exact
+result binding, idempotent post-success replay, and recovery between provider success and
+durable receipt. If review proves the approach has no active caller, needs a new authority
+boundary, targets dormant/legacy machinery, or repeatedly returns HIGH blockers in one
+invariant, publish `FORGE:REINVESTIGATE_REQUIRED` and stop remediation; only investigation
+or decomposition may replace the approach.
+
 Same-head edit/test/replan iterations remain within one remediation round; a substantive
 new head submitted to a fresh complete panel consumes the round. Never launch another
 new-head panel after exhaustion. Never reset the managed worktree to the PR base after
