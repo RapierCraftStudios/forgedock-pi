@@ -358,7 +358,7 @@ export class ForgeWorkOnController {
     this.#directFinalizeUnsubscribe?.();
     this.#directFinalizeUnsubscribe = this.#pi.events.on(
       DIRECT_WORK_ON_FINALIZED_EVENT,
-      (payload) => {
+      (payload: unknown) => {
         const runId =
           payload && typeof payload === "object" && "runId" in payload
             ? String((payload as { runId: unknown }).runId)

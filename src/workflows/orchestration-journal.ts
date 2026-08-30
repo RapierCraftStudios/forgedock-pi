@@ -116,8 +116,8 @@ export class OrchestrationJournal {
     return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.sync", payload: { laneId: input.laneId, staging: input.staging }, idempotencyKey: `integration-lane:${input.laneId}:sync:${input.staging.sha}`, message: `Record integration lane sync ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
   }
 
-  async promoteLane(input: { orchestrationId: string; laneId: string; ownerId: string; staging: IntegrationLaneStagingEvidence; receipt: IntegrationLanePromotionReceipt; signal?: AbortSignal }): Promise<OrchestrationState> {
-    return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.promoted", payload: { laneId: input.laneId, ownerId: input.ownerId, staging: input.staging, receipt: input.receipt }, idempotencyKey: `integration-lane:${input.laneId}:promoted:${input.receipt.mergeCommitSha}`, message: `Promote integration lane ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
+  async promoteLane(input: { orchestrationId: string; laneId: string; ownerId: string; staging: IntegrationLaneStagingEvidence; receipt: IntegrationLanePromotionReceipt; reviewPassed: boolean; verificationPassed: boolean; mergeable: boolean; authorityValid: boolean; mergeCommit: boolean; signal?: AbortSignal }): Promise<OrchestrationState> {
+    return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.promoted", payload: { laneId: input.laneId, ownerId: input.ownerId, staging: input.staging, receipt: input.receipt, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: input.mergeCommit }, idempotencyKey: `integration-lane:${input.laneId}:promoted:${input.receipt.mergeCommitSha}`, message: `Promote integration lane ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
   }
 
   async closeLane(input: { orchestrationId: string; laneId: string; signal?: AbortSignal }): Promise<OrchestrationState> {

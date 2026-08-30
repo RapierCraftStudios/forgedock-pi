@@ -250,6 +250,11 @@ export interface IntegrationLaneTransitionInput {
   queuePosition?: number;
   staging?: IntegrationLaneStagingEvidence;
   receipt?: IntegrationLanePromotionReceipt;
+  reviewPassed?: boolean;
+  verificationPassed?: boolean;
+  mergeable?: boolean;
+  authorityValid?: boolean;
+  mergeCommit?: boolean;
   reason?: string;
 }
 
@@ -355,7 +360,7 @@ export function transitionIntegrationLane(
     case "promote":
       if (lane.status !== "ready") throw new IntegrationLaneValidationError("invalid-transition", `Cannot promote a ${lane.status} lane.`);
       if (!input.ownerId || !input.staging || !input.receipt) throw new IntegrationLaneValidationError("missing-promotion-evidence", "Queue owner, staging evidence, and receipt are required.");
-      const gate = canPromoteIntegrationLane(lane, { ownerId: input.ownerId, now: input.now, sourceHeadSha: input.receipt.sourceHeadSha, mergeBaseSha: input.receipt.mergeBaseSha, staging: input.staging, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: input.receipt.mergeMethod === "merge" });
+      const gate = canPromoteIntegrationLane(lane, { ownerId: input.ownerId, now: input.now, sourceHeadSha: input.receipt.sourceHeadSha, mergeBaseSha: input.receipt.mergeBaseSha, staging: input.staging, reviewPassed: input.reviewPassed === true, verificationPassed: input.verificationPassed === true, mergeable: input.mergeable === true, authorityValid: input.authorityValid === true, mergeCommit: input.mergeCommit === true && input.receipt.mergeMethod === "merge" });
       if (!gate.ok) throw new IntegrationLaneValidationError("promotion-gated", gate.reason);
       next.status = "promoted";
       next.promotion.stagingEvidence = input.staging;

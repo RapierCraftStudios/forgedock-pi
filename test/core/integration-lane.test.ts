@@ -86,7 +86,7 @@ test("queue lease and promotion lifecycle is guarded and requires a merge commit
   validatePromotionQueue([ready]);
   assert.deepEqual(canPromoteIntegrationLane(ready, { ownerId: "wrong-owner", now: staging.checkedAt, sourceHeadSha: "b".repeat(40), mergeBaseSha: staging.sha, staging, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true }), { ok: false, reason: "Queue-head lease is missing, stale, or owned by another lane." });
   const receipt = { shippingPullNumber: 44, sourceHeadSha: "b".repeat(40), stagingBaseSha: staging.sha, mergeBaseSha: staging.sha, mergeCommitSha: "c".repeat(40), mergeMethod: "merge" as const, reviewedAt: staging.checkedAt };
-  const promoted = transitionIntegrationLane(ready, "promote", { now: staging.checkedAt, ownerId: "orchestrator-1", staging, receipt });
+  const promoted = transitionIntegrationLane(ready, "promote", { now: staging.checkedAt, ownerId: "orchestrator-1", staging, receipt, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true });
   assert.equal(promoted.status, "promoted");
   assert.equal(promoted.promotion.receipt?.mergeMethod, "merge");
   assert.equal(transitionIntegrationLane(promoted, "close", { now: "2026-08-30T00:00:04.000Z" }).status, "closed");

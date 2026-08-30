@@ -763,6 +763,11 @@ function applyIntegrationLaneEvent(
       ...(Number.isSafeInteger(payload.queuePosition) ? { queuePosition: payload.queuePosition as number } : {}),
       ...(payload.staging && typeof payload.staging === "object" ? { staging: payload.staging as IntegrationLaneStagingEvidence } : {}),
       ...(payload.receipt && typeof payload.receipt === "object" ? { receipt: payload.receipt as IntegrationLanePromotionReceipt } : {}),
+      ...(typeof payload.reviewPassed === "boolean" ? { reviewPassed: payload.reviewPassed } : {}),
+      ...(typeof payload.verificationPassed === "boolean" ? { verificationPassed: payload.verificationPassed } : {}),
+      ...(typeof payload.mergeable === "boolean" ? { mergeable: payload.mergeable } : {}),
+      ...(typeof payload.authorityValid === "boolean" ? { authorityValid: payload.authorityValid } : {}),
+      ...(typeof payload.mergeCommit === "boolean" ? { mergeCommit: payload.mergeCommit } : {}),
       ...(typeof payload.reason === "string" ? { reason: payload.reason } : {}),
     });
     state.integrationLane = next;
