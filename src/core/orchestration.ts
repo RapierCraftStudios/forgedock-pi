@@ -239,6 +239,11 @@ export function applyOrchestrationEvent(
     state.status = aggregateOrchestrationStatus(state.lanes);
     state.completedAt = event.occurredAt;
   } else if (event.type === "orchestration.cancelled") {
+    if (state.integrationLane?.status === "promoted")
+      throw new OrchestrationTransitionError(
+        "promotion-in-progress",
+        "Cannot cancel an orchestration after lane promotion; resume post-promotion cleanup.",
+      );
     state.status = "cancelled";
     state.reason = payloadString(event, "reason");
     state.completedAt = event.occurredAt;

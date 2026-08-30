@@ -219,8 +219,8 @@ export function validateIntegrationLane(lane: IntegrationLane): void {
   const stagingEvidence = lane.promotion.stagingEvidence;
   if (stagingEvidence !== undefined) {
     try { validateGitRef(stagingEvidence.branch); } catch { fail("invalid-staging-evidence", "Staging evidence branch is invalid."); }
-    if (!/^[0-9a-f]{40}$/i.test(stagingEvidence.sha) || !/^[0-9a-f]{40}$/i.test(stagingEvidence.baselineSha) || typeof stagingEvidence.idle !== "boolean" || Number.isNaN(Date.parse(stagingEvidence.checkedAt)))
-      fail("invalid-staging-evidence", "Staging evidence must contain exact SHAs, idle state, and timestamp.");
+    if (!/^[0-9a-f]{40}$/i.test(stagingEvidence.sha) || !/^[0-9a-f]{40}$/i.test(stagingEvidence.baselineSha) || typeof stagingEvidence.idle !== "boolean" || (stagingEvidence.ownedByAnotherLane !== undefined && typeof stagingEvidence.ownedByAnotherLane !== "boolean") || Number.isNaN(Date.parse(stagingEvidence.checkedAt)))
+      fail("invalid-staging-evidence", "Staging evidence must contain exact SHAs, idle state, ownership flag, and timestamp.");
   }
   const receipt = lane.promotion.receipt;
   if (receipt !== undefined && (!Number.isSafeInteger(receipt.shippingPullNumber) || receipt.shippingPullNumber < 1 || !/^[0-9a-f]{40}$/i.test(receipt.sourceHeadSha) || !/^[0-9a-f]{40}$/i.test(receipt.stagingBaseSha) || !/^[0-9a-f]{40}$/i.test(receipt.mergeBaseSha) || !/^[0-9a-f]{40}$/i.test(receipt.mergeCommitSha) || receipt.mergeMethod !== "merge" || Number.isNaN(Date.parse(receipt.reviewedAt))))
@@ -401,13 +401,15 @@ export function validatePromotionQueue(
 ): void {
   const positions = new Set<number>();
   lanes.forEach((lane) => {
+    if (!["ready", "syncing", "promoting"].includes(lane.status)) return;
     const position = lane.promotion.queuePosition;
     if (position === undefined) return;
     if (positions.has(position)) throw new IntegrationLaneValidationError("duplicate-queue-position", "Promotion queue positions must be unique.");
     positions.add(position);
   });
-  const ordered = [...positions].sort((a, b) => a - b);
-  if (ordered.some((position, index) => position !== index)) throw new IntegrationLaneValidationError("ambiguous-queue", "Promotion queue positions must be dense from zero.");
+  // Positions are monotonic allocation tokens across independent orchestration
+  // records; closed/promoted lanes may leave gaps and must not invalidate the
+  // remaining queue.
   const active = lanes.filter((lane) => ["ready", "syncing", "promoting"].includes(lane.status));
   const head = active.sort((a, b) => (a.promotion.queuePosition ?? Number.MAX_SAFE_INTEGER) - (b.promotion.queuePosition ?? Number.MAX_SAFE_INTEGER))[0];
   if (head && head.promotion.queuePosition !== undefined && lanes.some((lane) => lane.status === "promoting" && lane.stableId !== head.stableId)) throw new IntegrationLaneValidationError("queue-head-only", "Only the promotion queue head may promote.");

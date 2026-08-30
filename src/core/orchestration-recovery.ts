@@ -116,7 +116,7 @@ export function createOrchestrationBatchState(
       .sort((a, b) => a - b);
     const predecessorsComplete = predecessors[issue]!.every((predecessor) => {
       const prior = byIssue.get(predecessor);
-      return prior?.status === "merged" || prior?.status === "closed";
+      return prior?.status === "integrated" || prior?.status === "merged" || prior?.status === "closed";
     });
     if (lane.status === "queued" && predecessorsComplete) ready.push(lane.issueNumber);
     else if (lane.status === "queued") deferred.push(lane.issueNumber);
@@ -262,7 +262,7 @@ export function planOrchestrationReload(input: {
   const capacity = Math.max(0, input.state.maxConcurrent - active);
   const done = new Set(
     input.state.lanes
-      .filter((lane) => lane.status === "merged" || lane.status === "closed")
+      .filter((lane) => lane.status === "integrated" || lane.status === "merged" || lane.status === "closed")
       .map((lane) => lane.issueNumber),
   );
   const gated = new Set(

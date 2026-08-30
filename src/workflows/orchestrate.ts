@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import type {
   ExtensionAPI,
@@ -60,13 +60,14 @@ export function createWorkOrderLane(input: {
   repository: string;
   issueNumbers: readonly number[];
   frozenBaseSha: string;
+  stableId?: string;
   now?: string;
 }): IntegrationLane {
   const slug = normalizeIntegrationSlug(input.slug);
   const now = input.now ?? new Date().toISOString();
   return createIntegrationLane({
     kind: "work-order",
-    stableId: `wo-${slug}`,
+    stableId: input.stableId ?? `wo-${slug}`,
     slug,
     repository: input.repository,
     frozenBase: { branch: "main", sha: input.frozenBaseSha },
@@ -483,8 +484,13 @@ export class ForgeOrchestrationController {
         deployedMain,
         ctx.signal,
       );
+      const stableId = `wo-${slug}-${createHash("sha256")
+        .update(JSON.stringify(issueNumbers))
+        .digest("hex")
+        .slice(0, 8)}`;
       integrationLane = createWorkOrderLane({
         slug,
+        stableId,
         repository: policy.repository.name,
         issueNumbers,
         frozenBaseSha,
@@ -608,6 +614,7 @@ export class ForgeOrchestrationController {
     if (!lane || lane.kind !== "work-order" || lane.legacy || lane.status === "closed") return false;
     if (!state.lanes.every((member) => ["integrated", "merged", "closed"].includes(member.status))) return false;
     const github = this.#githubFor(link);
+    const stagingBranch = github.configuredStagingToMainRoute().headRef;
     const shippingPull = await github.findPullRequest(lane.branch, ctx.signal);
     if (!shippingPull?.merged || !shippingPull.mergeCommitSha) return false;
     await this.promoteWorkOrder({
@@ -615,7 +622,7 @@ export class ForgeOrchestrationController {
       ownerId: link.orchestrationId,
       queuePosition: lane.promotion.queuePosition ?? 0,
       staging: {
-        branch: link.integrationBranch,
+        branch: stagingBranch,
         sha: shippingPull.baseSha,
         baselineSha: shippingPull.baseSha,
         idle: true,
@@ -629,7 +636,7 @@ export class ForgeOrchestrationController {
       reviewPassed: true,
       verificationPassed: true,
       mergeable: shippingPull.mergeability !== "conflicting",
-      authorityValid: shippingPull.baseRef === link.integrationBranch,
+      authorityValid: shippingPull.baseRef === stagingBranch,
       ctx,
     });
     return true;
@@ -662,6 +669,7 @@ export class ForgeOrchestrationController {
     let state = current.state;
     const journal = current.journal;
     const github = this.#githubFor(link);
+    const stagingBranch = github.configuredStagingToMainRoute().headRef;
     const laneState = state.integrationLane;
     if (!laneState) throw new Error("Durable integration lane disappeared during promotion.");
     const alreadyPromoted = laneState.status === "promoted" || laneState.status === "closed";
@@ -669,7 +677,8 @@ export class ForgeOrchestrationController {
       const shippingPull = await github.getPullRequest(input.shippingPullNumber, input.ctx.signal);
       if (!shippingPull.merged || !shippingPull.mergeCommitSha ||
           shippingPull.headRef !== initialLane.branch ||
-          shippingPull.baseRef !== link.integrationBranch ||
+          shippingPull.baseRef !== stagingBranch ||
+          input.staging.branch !== stagingBranch ||
           shippingPull.headSha !== input.sourceHeadSha ||
           shippingPull.baseSha !== input.staging.sha ||
           shippingPull.mergeCommitSha !== input.mergeCommitSha)
@@ -690,6 +699,9 @@ export class ForgeOrchestrationController {
       if (state.integrationLane?.status === "syncing") {
         state = await journal.syncLane({ orchestrationId: input.orchestrationId, laneId: initialLane.stableId, ownerId: input.ownerId, leaseEpoch, staging: input.staging, signal: input.ctx.signal });
       }
+      const currentStagingSha = await github.getBranchHeadSha(stagingBranch, input.ctx.signal);
+      if (currentStagingSha !== input.staging.sha)
+        throw new Error("Protected staging advanced after evidence capture; refresh and re-review before promotion.");
       const queueHead = await this.#promotionQueueHead(current.store, input.orchestrationId, state, input.ctx.signal);
       if (!queueHead || queueHead.stableId !== initialLane.stableId)
         throw new Error("Work-order promotion is gated: the durable shared queue head is another lane.");
@@ -741,6 +753,17 @@ export class ForgeOrchestrationController {
         orchestrationId,
         laneId: current.state.integrationLane!.stableId,
         ownerId: laneLease.ownerId,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      }).catch(() => undefined);
+    }
+    const lane = current.state.integrationLane;
+    if (lane && !lane.legacy && ["queued", "active", "ready", "syncing", "promoting"].includes(lane.status)) {
+      await cancellationJournal.append({
+        orchestrationId,
+        type: "integration-lane.blocked",
+        payload: { laneId: lane.stableId, reason: `Orchestration cancelled: ${reason}` },
+        idempotencyKey: `integration-lane:${lane.stableId}:cancelled`,
+        message: `Remove cancelled integration lane ${lane.stableId} from promotion queue`,
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       }).catch(() => undefined);
     }

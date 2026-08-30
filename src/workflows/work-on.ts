@@ -189,9 +189,16 @@ export interface StartIssueOptions {
 
 /** Resolve the only acceptable lane binding for an orchestrated child. */
 export function shouldDeferWorkOrderClosure(
-  lane: Partial<Pick<IntegrationLane, "kind" | "legacy">> | undefined,
+  lane: Partial<Pick<IntegrationLane, "kind" | "legacy" | "branch">> | undefined,
 ): boolean {
-  return lane?.kind === "work-order" && !lane.legacy;
+  // Older retained links omitted kind; a work-order branch is the only safe
+  // compatibility signal because closing it early loses deferred ownership.
+  return Boolean(
+    lane &&
+      (lane.kind === "work-order" ||
+        (lane.kind === undefined && lane.branch?.startsWith("work-order/"))) &&
+      !lane.legacy,
+  );
 }
 
 export function resolveAuthoritativeIntegrationLane(
