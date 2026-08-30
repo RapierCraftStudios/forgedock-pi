@@ -58,6 +58,10 @@ test("invalid refs and malformed lanes fail closed", () => {
     () => createIntegrationLane({ ...base, kind: "work-order", stableId: "WO 297", slug: "lane" }),
     /stableId/,
   );
+  assert.throws(
+    () => createIntegrationLane({ ...base, kind: "work-order", stableId: "wo-297", frozenBase: { branch: "main", sha: "abcdef1" } }),
+    /exact commit SHA|frozen base/i,
+  );
   const malformed = {
     ...createIntegrationLane({ ...base, kind: "work-order", stableId: "wo-297", slug: "lane" }),
     branch: "work-order/other-lane",

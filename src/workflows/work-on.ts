@@ -63,6 +63,7 @@ import {
   canAutoMerge,
   humanAuthorityReasonFromText,
   isGitHubCiRequired,
+  isIntegrationBranch,
   isProtectedBranch,
   type ForgePolicy,
 } from "../core/policy.ts";
@@ -2743,7 +2744,7 @@ export class ForgeWorkOnController {
         decision.headSha !== pull.headSha ||
         decision.baseSha !== pull.baseSha ||
         pull.baseRef !== link.prepared.baseBranch ||
-        !policy.branches.integration.includes(pull.baseRef) ||
+        !isIntegrationBranch(policy, pull.baseRef) ||
         !canAutoMerge(policy, pull.baseRef) ||
         actualHead !== pull.headSha ||
         actualFiles.length === 0
