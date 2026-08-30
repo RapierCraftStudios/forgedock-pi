@@ -458,29 +458,58 @@ if [ -z "${FORGE_COORD_ISSUE:-}" ]; then
   BATCH_ISSUE_COUNT="${#ISSUES[@]}"
   BATCH_ID="$(date -u +%Y%m%dT%H%M%S)-$$"
 
-  COORD_ISSUE_BODY="## Orchestration Batch Claims Board
+  COORD_ISSUE_TITLE="investigate: coordinate orchestration batch ${BATCH_ID}"
+  SCRATCHPAD="${FORGE_SCRATCHPAD:-$PWD/.forge-scratch}"
+  AGENT_TOKEN="${AGENT_ID:-${HOSTNAME:-orchestrator}-$$}"
+  mkdir -p "$SCRATCHPAD"
+  COORD_BODY_MARKER="FORGE:BODY-INTEGRITY:orchestration_${BATCH_ID}_${AGENT_TOKEN}"
+  COORD_BODY_FILE=$(mktemp "$SCRATCHPAD/orchestration_${BATCH_ID}_${AGENT_TOKEN}.XXXXXX.md")
+  cat > "$COORD_BODY_FILE" <<COORD_EOF
+## Problem
 
-This issue is the claims board for an orchestration batch of ${BATCH_ISSUE_COUNT} issues.
-Agents post \`FORGE:CLAIM\` here on build start and \`FORGE:CLAIM_RELEASED\` on terminal state.
+The orchestration batch needs one durable claims board to serialize overlapping implementation paths and preserve resumable batch identity.
+
+## Root Cause
+
+N/A — coordination artifact; no product defect or code mutation is asserted.
+
+## Affected Files
+
+N/A — coordination artifact; no code mutation requested. Member investigations publish their own authoritative claims.
+
+## Expected Behavior
+
+Every active member posts \`FORGE:CLAIM\`, every terminal member posts \`FORGE:CLAIM_RELEASED\`, and the batch reaches one durable terminal report without overlapping writers.
+
+## Acceptance Criteria
+
+- [ ] Every launched member has one durable claim or no-mutation verdict.
+- [ ] Every terminal member releases its claim.
+- [ ] The final batch report accounts for every issue.
+
+## Coordination Metadata
 
 **Batch ID**: ${BATCH_ID}
 **Issues in batch**: ${ISSUES[*]/#/#}
 **Created**: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 <!-- FORGE:COORD_ISSUE -->
-<!-- FORGE:BATCH_ID: ${BATCH_ID} -->"
+<!-- FORGE:BATCH_ID: ${BATCH_ID} -->
+COORD_EOF
+  printf '\n<!-- %s -->\n' "$COORD_BODY_MARKER" >> "$COORD_BODY_FILE"
 
-  # GOVERNOR-exempt: intentional coordination side-effect (best-effort lease/board/finding post), DRY_RUN-safe — reviewed & accepted for the check-command-side-effects gate. Flagged only by the staging->main full-diff; passes on every feature PR. forge#2627
-  COORD_ISSUE_URL=$(gh issue create -R {GH_REPO} \
-    --title "orchestrate: claims board for batch ${BATCH_ID}" \
-    --body "$COORD_ISSUE_BODY" \
-    --label "automation" 2>/dev/null || echo "")
+  # GOVERNOR-exempt coordination side effect, routed through the sole public issue hook.
+  ISSUE_SKILL_OUTPUT=$(Skill(skill="issue", args="--title \"$COORD_ISSUE_TITLE\" --body-file \"$COORD_BODY_FILE\" --label automation"))
+  rm -f "$COORD_BODY_FILE"
+  COORD_ISSUE_NUMBER=$(printf '%s\n' "$ISSUE_SKILL_OUTPUT" | sed -n \
+    -e 's/.*ISSUE_CREATE_RESULT:CREATED number=\([0-9][0-9]*\).*/\1/p' \
+    -e 's/.*ISSUE_CREATE_RESULT:DEDUP number=\([0-9][0-9]*\).*/\1/p' | head -1)
 
-  if [ -z "$COORD_ISSUE_URL" ]; then
-    echo "WARNING: failed to create coordination issue — claims board disabled for this batch. Layer-2/4 relaxation will not run."
-    FORGE_COORD_ISSUE=""
+  if [ -z "$COORD_ISSUE_NUMBER" ]; then
+    echo "ERROR: coordination issue hook returned no verified issue number; refusing to orchestrate without the overlap-safety claims board." >&2
+    exit 1
   else
-    COORD_ISSUE_NUMBER=$(echo "$COORD_ISSUE_URL" | grep -oE '[0-9]+$')
+    COORD_ISSUE_URL=$(gh issue view "$COORD_ISSUE_NUMBER" -R {GH_REPO} --json url --jq '.url')
     FORGE_COORD_ISSUE="$COORD_ISSUE_URL"
     echo "Coordination issue created: ${COORD_ISSUE_URL} (#${COORD_ISSUE_NUMBER})"
     export FORGE_COORD_ISSUE
