@@ -1095,36 +1095,36 @@ export class ForgeWorkOnController {
         policy.repository.name,
         issueNumber,
       );
-      if (integrationLane.kind !== "work-order" || integrationLane.legacy)
-        throw new Error("Only a typed work-order lane may use deployed-main routing.");
-      if (integrationLane.frozenBase.branch !== "main")
-        throw new Error("Work-order lane frozen base must be deployed main.");
-      if (!/^[0-9a-f]{40}$/i.test(integrationLane.frozenBase.sha))
-        throw new Error("Work-order lane frozen base must be an exact commit SHA.");
-      const currentMain = await this.#git.remoteBaseSha(
-        repositoryRoot,
-        integrationLane.frozenBase.branch,
-        ctx.signal,
-      );
-      if (!(await this.#git.isAncestor(
-        repositoryRoot,
-        integrationLane.frozenBase.sha,
-        currentMain,
-        ctx.signal,
-      )))
-        throw new Error("Work-order lane frozen base is not reachable from deployed main.");
-      const laneHead = await this.#git.remoteBaseSha(
-        repositoryRoot,
-        integrationLane.branch,
-        ctx.signal,
-      );
-      if (!(await this.#git.isAncestor(
-        repositoryRoot,
-        integrationLane.frozenBase.sha,
-        laneHead,
-        ctx.signal,
-      )))
-        throw new Error("Work-order lane branch is stale or unrelated to its frozen base.");
+      if (integrationLane.kind === "work-order" && !integrationLane.legacy) {
+        if (integrationLane.frozenBase.branch !== "main")
+          throw new Error("Work-order lane frozen base must be deployed main.");
+        if (!/^[0-9a-f]{40}$/i.test(integrationLane.frozenBase.sha))
+          throw new Error("Work-order lane frozen base must be an exact commit SHA.");
+        const currentMain = await this.#git.remoteBaseSha(
+          repositoryRoot,
+          integrationLane.frozenBase.branch,
+          ctx.signal,
+        );
+        if (!(await this.#git.isAncestor(
+          repositoryRoot,
+          integrationLane.frozenBase.sha,
+          currentMain,
+          ctx.signal,
+        )))
+          throw new Error("Work-order lane frozen base is not reachable from deployed main.");
+        const laneHead = await this.#git.remoteBaseSha(
+          repositoryRoot,
+          integrationLane.branch,
+          ctx.signal,
+        );
+        if (!(await this.#git.isAncestor(
+          repositoryRoot,
+          integrationLane.frozenBase.sha,
+          laneHead,
+          ctx.signal,
+        )))
+          throw new Error("Work-order lane branch is stale or unrelated to its frozen base.");
+      }
       integrationBranch = integrationLane.branch;
     } else {
       integrationBranch = chooseIntegrationBranch(policy);

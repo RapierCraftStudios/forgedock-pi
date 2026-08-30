@@ -1317,7 +1317,9 @@ function retainedChildrenForReload(
       ...(state.integrationLane
         ? {
             laneId: state.integrationLane.stableId,
-            baseSha: run.prepared.baseSha,
+            // Compare immutable lane authority on reload, not the child
+            // worktree's moving integration tip.
+            baseSha: state.integrationLane.frozenBase.sha,
             leaseEpoch: run.leaseEpoch,
           }
         : {}),

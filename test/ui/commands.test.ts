@@ -95,6 +95,13 @@ test("work-order confirmation requires explicit source intent", async () => {
     ),
     /must match explicit --work-order intent/,
   );
+  await assert.rejects(
+    confirmOrchestrationDispatch(
+      { hasUI: true, ui },
+      { ...input, sourceExpression: "#2 --work-order demo" },
+    ),
+    /requires workOrderSlug/,
+  );
   await confirmOrchestrationDispatch(
     { hasUI: true, ui },
     { ...input, sourceExpression: "#2 --work-order demo", workOrderSlug: "demo" },

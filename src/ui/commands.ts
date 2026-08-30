@@ -44,13 +44,14 @@ export async function confirmOrchestrationDispatch(
   ctx: Pick<ExtensionContext, "hasUI" | "ui">,
   input: OrchestrationConfirmationInput,
 ): Promise<void> {
-  if (input.workOrderSlug) {
-    const selector = input.sourceExpression.match(
-      /(?:^|\s)--work-order(?:=|\s+)([^\s,]+)/,
-    )?.[1];
-    if (!selector || normalizeIntegrationSlug(selector) !== normalizeIntegrationSlug(input.workOrderSlug))
-      throw new Error("workOrderSlug must match explicit --work-order intent in sourceExpression.");
-  }
+  const selector = input.sourceExpression.match(
+    /(?:^|\s)--work-order(?:=|\s+)([^\s,]+)/,
+  )?.[1];
+  if (selector && !input.workOrderSlug)
+    throw new Error("Explicit --work-order intent requires workOrderSlug.");
+  if (input.workOrderSlug &&
+      (!selector || normalizeIntegrationSlug(selector) !== normalizeIntegrationSlug(input.workOrderSlug)))
+    throw new Error("workOrderSlug must match explicit --work-order intent in sourceExpression.");
   if (!ctx.hasUI)
     throw new Error(
       "forge_orchestrate requires interactive operator confirmation.",
