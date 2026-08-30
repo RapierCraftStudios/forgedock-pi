@@ -34,6 +34,7 @@ import {
   parseGitStatusPaths,
   phaseProjectionLabels,
   reviewerStatusIsTerminal,
+  runProcess,
   writeTrustedResultFile,
 } from "../../src/agents/child-runtime.ts";
 import { redactGitHubTokens } from "../../src/adapters/github-api.ts";
@@ -44,6 +45,25 @@ const execFileAsync = promisify(execFile);
 async function git(cwd: string, ...args: string[]) {
   return execFileAsync("git", args, { cwd, encoding: "utf8" });
 }
+
+test("child process timeout force-terminates an uncooperative child", async () => {
+  const started = Date.now();
+  const result = await runProcess(
+    process.execPath,
+    [
+      "-e",
+      'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000);',
+    ],
+    {
+      cwd: process.cwd(),
+      timeoutMs: 25,
+      env: process.env,
+    },
+  );
+
+  assert.equal(result.timedOut, true);
+  assert.ok(Date.now() - started < 2_000);
+});
 
 test("technical phase failures do not project needs-human authority", () => {
   assert.deepEqual(phaseProjectionLabels("fail"), []);
