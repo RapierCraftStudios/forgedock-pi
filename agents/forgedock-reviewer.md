@@ -93,3 +93,5 @@ Do not wrap it in explanation or an additional code fence.
 every assigned unit exactly once, including split hunks. `findings` contains the full
 finding objects when nonempty and must be an empty array when clean. The trusted
 coordinator validates this exact body before writing or publishing it.
+
+<!-- protected-review refresh -->
