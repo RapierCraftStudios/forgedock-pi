@@ -43,7 +43,7 @@ export async function confirmOrchestrationDispatch(
   ctx: Pick<ExtensionContext, "hasUI" | "ui">,
   input: OrchestrationConfirmationInput,
 ): Promise<void> {
-  if (input.workOrderSlug && !/(^|\\s)--work-order(?:=|\\s)/.test(input.sourceExpression))
+  if (input.workOrderSlug && !/(^|\s)--work-order(?:=|\s)/.test(input.sourceExpression))
     throw new Error("workOrderSlug requires explicit --work-order intent in sourceExpression.");
   if (!ctx.hasUI)
     throw new Error(

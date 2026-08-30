@@ -84,6 +84,23 @@ test("orchestration confirmation names only the trusted exact issue set", async 
   assert.doesNotMatch(prompt, /eligible open issues/);
 });
 
+test("work-order confirmation requires explicit source intent", async () => {
+  const ui = {
+    confirm: async () => true,
+  } as unknown as ExtensionContext["ui"];
+  await assert.rejects(
+    confirmOrchestrationDispatch(
+      { hasUI: true, ui },
+      { ...input, workOrderSlug: "demo" },
+    ),
+    /requires explicit --work-order intent/,
+  );
+  await confirmOrchestrationDispatch(
+    { hasUI: true, ui },
+    { ...input, sourceExpression: "#2 --work-order demo", workOrderSlug: "demo" },
+  );
+});
+
 test("orchestration status renders authoritative lane details", () => {
   const state: OrchestrationState = {
     schema: "forgedock.orchestration-state/v1",
