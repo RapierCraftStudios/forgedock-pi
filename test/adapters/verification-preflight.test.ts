@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import {
   chmod,
   mkdir,
@@ -9,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import test from "node:test";
 
 import {
@@ -17,6 +19,8 @@ import {
   VerificationPreflightError,
 } from "../../src/adapters/verification-preflight.ts";
 import type { VerificationCommandPolicy } from "../../src/core/policy.ts";
+
+const execFileAsync = promisify(execFile);
 
 async function fixture(
   rootManifest: unknown = { dependencies: {} },
@@ -29,6 +33,8 @@ async function fixture(
   const root = await mkdtemp(join(tmpdir(), "forgedock-preflight-"));
   const outside = await mkdtemp(join(tmpdir(), "forgedock-preflight-outside-"));
   const bin = join(root, "bin");
+  await execFileAsync("git", ["init", "--quiet", root]);
+  await execFileAsync("git", ["-C", root, "config", "core.ignorecase", "true"]);
   await mkdir(join(root, "web"), { recursive: true });
   await mkdir(bin);
   await writeFile(join(root, "package.json"), JSON.stringify(rootManifest));
@@ -168,6 +174,25 @@ test("verification cwd rejects missing, control, and symlink-escape directories"
       resolveVerificationCommandDirectory(testFixture.root, "escaped"),
       /outside the repository/,
     );
+  } finally {
+    await testFixture.cleanup();
+  }
+});
+
+test("verification cwd rejects case variants and canonical reserved-directory targets", async () => {
+  const testFixture = await fixture();
+  try {
+    await mkdir(join(testFixture.root, ".PI"));
+    await symlink(join(testFixture.root, ".PI"), join(testFixture.root, "pi-alias"), "dir");
+    await symlink(join(testFixture.root, ".git"), join(testFixture.root, "git-alias"), "dir");
+
+    for (const configuredCwd of [".PI", ".GIT", "pi-alias", "git-alias"]) {
+      await assert.rejects(
+        resolveVerificationCommandDirectory(testFixture.root, configuredCwd),
+        /runtime control directories/,
+        configuredCwd,
+      );
+    }
   } finally {
     await testFixture.cleanup();
   }

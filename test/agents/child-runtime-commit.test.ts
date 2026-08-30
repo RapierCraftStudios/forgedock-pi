@@ -122,6 +122,17 @@ test("runtime path classification follows the checkout case contract", () => {
   assert.equal(isForgeRuntimePath("src/.pi-value.ts", true), false);
 });
 
+test("review changed-file numstat metadata fails closed when truncated", () => {
+  assert.throws(
+    () =>
+      assertCompleteProcessOutput(
+        { stdoutTruncated: true, stderrTruncated: false },
+        "Review changed-file metadata",
+      ),
+    ForgeOutputLimitError,
+  );
+});
+
 test("security evidence overflow stays typed across repeated output chunks", () => {
   const first = appendBounded("", "a".repeat(60 * 1024), 50 * 1024);
   const second = appendBounded(first.value, "b".repeat(60 * 1024), 50 * 1024);

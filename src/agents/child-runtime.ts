@@ -1102,6 +1102,11 @@ export function registerForgeRuntime(
           ...(signal ? { signal } : {}),
         },
       );
+      assertCompleteProcessOutput(stat, "Review changed-file metadata");
+      if (stat.exitCode !== 0 || stat.signal !== null || stat.timedOut)
+        throw new Error(
+          "Review changed-file metadata command did not complete successfully.",
+        );
       const fileNotes = stat.stdout
         .trim()
         .split("\n")
