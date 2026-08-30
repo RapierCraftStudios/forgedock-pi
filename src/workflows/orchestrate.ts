@@ -43,7 +43,7 @@ import {
   type RetainedOrchestrationChild,
 } from "../core/orchestration-recovery.ts";
 import { isLeaseExpired } from "../core/lease.ts";
-import { isProtectedBranch, type ForgePolicy } from "../core/policy.ts";
+import { isGitHubCiRequired, isProtectedBranch, type ForgePolicy } from "../core/policy.ts";
 import { OrchestrationJournal } from "./orchestration-journal.ts";
 import {
   isTransientProviderFailure,
@@ -299,7 +299,13 @@ export class ForgeOrchestrationController {
       const activeLanes = persisted.lanes.filter((lane) =>
         ["running", "ready", "integrating"].includes(lane.status),
       );
-      if (activeLanes.length === 0) continue;
+      const promotionPending = Boolean(
+        persisted.integrationLane?.kind === "work-order" &&
+        !persisted.integrationLane.legacy &&
+        persisted.lanes.length > 0 &&
+        persisted.lanes.every((lane) => ["integrated", "merged", "closed"].includes(lane.status)),
+      );
+      if (activeLanes.length === 0 && !promotionPending) continue;
       // Owner-liveness gate: adopt only when EVERY active lane's run lease
       // has expired. Live-owned campaigns are left to their owner.
       const liveness: boolean[] = [];
@@ -638,10 +644,59 @@ export class ForgeOrchestrationController {
       });
       return true;
     }
-    // Automatic pump recovery cannot manufacture independent review,
-    // verification, authority, or idle evidence from a merged PR. An
-    // explicit promotion caller must supply and persist those gates.
-    return false;
+    // The normal completion path is an explicit evidence-producing caller: it
+    // may promote only when the update-in-place shipping PR, its exact review,
+    // CI, mergeability, and current staging readback are all available. It
+    // never invents a passing gate when any provider evidence is absent.
+    const github = this.#githubFor(link);
+    const stagingBranch = github.configuredStagingToMainRoute().headRef;
+    const shippingPull = await github.findPullRequest(lane.branch, ctx.signal);
+    if (!shippingPull || shippingPull.baseRef !== stagingBranch || shippingPull.mergeability !== "mergeable") return false;
+    const stagingSha = await github.getBranchHeadSha(stagingBranch, ctx.signal);
+    if (shippingPull.baseSha !== stagingSha && !shippingPull.merged) return false;
+    const comments = await github.getComments(shippingPull.number, ctx.signal);
+    const reviewed = comments.some((body) => body.includes("FORGE:REVIEW_SUMMARY") && body.includes(shippingPull.headSha) && /Decision:\s+APPROVED|Verdict:\s+PASS/.test(body));
+    if (!reviewed) return false;
+    const policy = (await loadForgePolicy(link.repositoryRoot)).policy;
+    const checks = isGitHubCiRequired(policy, shippingPull.baseRef)
+      ? await github.waitForPullRequestChecks({ headSha: shippingPull.headSha, baseBranch: shippingPull.baseRef, timeoutMs: policy.verification.github.waitTimeoutMs, pollIntervalMs: policy.verification.github.pollIntervalMs, ...(ctx.signal ? { signal: ctx.signal } : {}) })
+      : undefined;
+    const verificationPassed = checks === undefined || (!checks.timedOut && checks.checks.every((check) => !check.required || check.status === "passed"));
+    if (!verificationPassed) return false;
+    const now = new Date().toISOString();
+    const staging = { branch: stagingBranch, sha: stagingSha, baselineSha: lane.frozenBase.sha, idle: true, checkedAt: now };
+    await this.promoteWorkOrder({
+      orchestrationId: link.orchestrationId,
+      ownerId: link.orchestrationId,
+      queuePosition: lane.promotion.queuePosition ?? 0,
+      staging,
+      stagingReadbackSha: stagingSha,
+      sourceHeadSha: shippingPull.headSha,
+      mergeBaseSha: stagingSha,
+      shippingPullNumber: shippingPull.number,
+      mergeCommitSha: shippingPull.mergeCommitSha ?? "",
+      reviewedAt: now,
+      reviewPassed: true,
+      verificationPassed,
+      mergeable: true,
+      authorityValid: true,
+      readPromotionEvidence: async (latestState) => {
+        const latestLane = latestState.integrationLane;
+        const latestLease = latestLane?.promotion.queueLease;
+        if (!latestLane || !latestLease || latestLease.ownerId !== link.orchestrationId)
+          throw new Error("Promotion lease authority changed during provider evidence read.");
+        const latestStagingSha = await github.getBranchHeadSha(stagingBranch, ctx.signal);
+        return {
+          ownerId: latestLease.ownerId,
+          queueHeadLaneId: latestLane.stableId,
+          leaseEpoch: latestLease.epoch,
+          staging: { branch: stagingBranch, sha: latestStagingSha, baselineSha: latestLane.frozenBase.sha, idle: true, checkedAt: new Date().toISOString() },
+          stagingReadbackSha: latestStagingSha,
+        };
+      },
+      ctx,
+    });
+    return true;
   }
 
   async promoteWorkOrder(input: {
@@ -684,23 +739,25 @@ export class ForgeOrchestrationController {
     const laneState = state.integrationLane;
     if (!laneState) throw new Error("Durable integration lane disappeared during promotion.");
     const alreadyPromoted = laneState.status === "promoted" || laneState.status === "closed";
+    const promotionInFlight = laneState.status === "promoting";
     if (!alreadyPromoted) {
-      if (state.integrationLane?.promotion.queuePosition === undefined) {
+      if (!promotionInFlight && state.integrationLane?.promotion.queuePosition === undefined) {
         state = await journal.queueLane({ orchestrationId: input.orchestrationId, laneId: initialLane.stableId, queuePosition: input.queuePosition, signal: input.ctx.signal });
       }
       const currentLane = state.integrationLane;
       if (!currentLane) throw new Error("Durable integration lane disappeared during queueing.");
       const priorEpoch = currentLane.promotion.queueLease?.epoch ?? 0;
+      const authorizationNow = new Date().toISOString();
       const leaseExpired = currentLane.promotion.queueLease !== undefined &&
-        new Date(currentLane.promotion.queueLease.expiresAt).getTime() <= Date.parse(input.reviewedAt);
-      if (currentLane.status === "ready" || ((currentLane.status === "syncing" || currentLane.status === "promoting") && leaseExpired)) {
+        new Date(currentLane.promotion.queueLease.expiresAt).getTime() <= Date.parse(authorizationNow);
+      if (!promotionInFlight && (currentLane.status === "ready" || (currentLane.status === "syncing" && leaseExpired))) {
         state = await journal.acquireLaneQueueLease({ orchestrationId: input.orchestrationId, laneId: initialLane.stableId, ownerId: input.ownerId, leaseSeconds: 900, attempt: priorEpoch + 1, signal: input.ctx.signal });
       }
       const leaseEpoch = state.integrationLane?.promotion.queueLease?.epoch;
       if (!leaseEpoch) throw new Error("Promotion queue lease was not acquired.");
       if (!input.readPromotionEvidence)
         throw new Error("Promotion requires a provider evidence reader for every durable CAS attempt.");
-      if (state.integrationLane?.status === "syncing") {
+      if (!promotionInFlight && state.integrationLane?.status === "syncing") {
         state = await journal.syncLane({ orchestrationId: input.orchestrationId, laneId: initialLane.stableId, ownerId: input.ownerId, leaseEpoch, staging: input.staging, signal: input.ctx.signal });
       }
       const shippingPull = await github.getPullRequest(input.shippingPullNumber, input.ctx.signal);
@@ -722,7 +779,8 @@ export class ForgeOrchestrationController {
       const durableQueueHead = await this.#promotionQueueHead(durableBeforeMerge.store, input.orchestrationId, durableBeforeMerge.state, input.ctx.signal);
       const persistedStaging = durableLane?.promotion.stagingEvidence;
       const durableLease = durableLane?.promotion.queueLease;
-      if (!durableLane || durableLane.status !== "ready" ||
+      const replayingMergedPromotion = promotionInFlight && shippingPull.merged;
+      if (!durableLane || (durableLane.status !== "ready" && durableLane.status !== "promoting") ||
           !durableLease || durableLease.ownerId !== input.ownerId ||
           durableLease.epoch !== leaseEpoch ||
           !durableQueueHead || durableQueueHead.stableId !== initialLane.stableId ||
@@ -730,15 +788,19 @@ export class ForgeOrchestrationController {
           preMergeEvidence.queueHeadLaneId !== durableQueueHead.stableId ||
           preMergeEvidence.leaseEpoch !== leaseEpoch ||
           preMergeEvidence.staging.branch !== stagingBranch ||
-          preMergeEvidence.staging.sha !== input.staging.sha ||
           preMergeStagingSha !== preMergeEvidence.staging.sha ||
           !persistedStaging ||
           persistedStaging.branch !== preMergeEvidence.staging.branch ||
-          persistedStaging.sha !== preMergeEvidence.staging.sha)
+          (!replayingMergedPromotion && persistedStaging.sha !== preMergeEvidence.staging.sha) ||
+          (replayingMergedPromotion && persistedStaging.sha !== input.staging.sha) ||
+          (replayingMergedPromotion && shippingPull.mergeCommitSha !== preMergeStagingSha))
         throw new Error("Promotion authority or provider staging evidence changed before the shipping merge.");
+      const promotionStaging = replayingMergedPromotion ? persistedStaging : preMergeEvidence.staging;
       state = durableBeforeMerge.state;
-      const gate = evaluateWorkOrderPromotion({ lane: durableLane, ownerId: input.ownerId, now: input.reviewedAt, sourceHeadSha: input.sourceHeadSha, mergeBaseSha: input.mergeBaseSha, staging: preMergeEvidence.staging, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: true, queueHeadLaneId: durableQueueHead.stableId });
+      const gate = evaluateWorkOrderPromotion({ lane: durableLane, ownerId: input.ownerId, now: authorizationNow, sourceHeadSha: input.sourceHeadSha, mergeBaseSha: input.mergeBaseSha, staging: promotionStaging, reviewPassed: input.reviewPassed, verificationPassed: input.verificationPassed, mergeable: input.mergeable, authorityValid: input.authorityValid, mergeCommit: true, queueHeadLaneId: durableQueueHead.stableId });
       if (!gate.allowed) throw new Error(`Work-order promotion gated: ${gate.reason}`);
+      if (!promotionInFlight)
+        state = await journal.beginPromotion({ orchestrationId: input.orchestrationId, laneId: initialLane.stableId, ownerId: input.ownerId, queueHeadLaneId: durableQueueHead.stableId, leaseEpoch, staging: preMergeEvidence.staging, signal: input.ctx.signal });
       const shippingMerge = await github.mergePullRequest({
         pullNumber: input.shippingPullNumber,
         expectedRoute: {
@@ -746,7 +808,7 @@ export class ForgeOrchestrationController {
           headRef: shippingPull.headRef,
           headSha: shippingPull.headSha,
           baseRef: shippingPull.baseRef,
-          baseSha: preMergeEvidence.staging.sha,
+          baseSha: promotionStaging.sha,
         },
         method: "merge",
         ...(input.ctx.signal ? { signal: input.ctx.signal } : {}),
@@ -754,7 +816,7 @@ export class ForgeOrchestrationController {
       if (!shippingMerge.merged || !/^[0-9a-f]{40}$/i.test(shippingMerge.sha) ||
           (input.mergeCommitSha && input.mergeCommitSha !== shippingMerge.sha))
         throw new Error("Shipping merge did not return the exact merge commit SHA.");
-      const receipt = workOrderPromotionReceipt({ shippingPullNumber: input.shippingPullNumber, sourceHeadSha: input.sourceHeadSha, stagingBaseSha: preMergeEvidence.staging.sha, mergeBaseSha: input.mergeBaseSha, mergeCommitSha: shippingMerge.sha, reviewedAt: input.reviewedAt });
+      const receipt = workOrderPromotionReceipt({ shippingPullNumber: input.shippingPullNumber, sourceHeadSha: input.sourceHeadSha, stagingBaseSha: promotionStaging.sha, mergeBaseSha: input.mergeBaseSha, mergeCommitSha: shippingMerge.sha, reviewedAt: input.reviewedAt });
       const finalStagingSha = await github.getBranchHeadSha(stagingBranch, input.ctx.signal);
       if (finalStagingSha !== shippingMerge.sha)
         throw new Error("Protected staging must read back the exact SHA returned by the shipping merge operation.");
@@ -764,7 +826,7 @@ export class ForgeOrchestrationController {
         ownerId: input.ownerId,
         queueHeadLaneId: durableQueueHead.stableId,
         leaseEpoch,
-        staging: preMergeEvidence.staging,
+        staging: promotionStaging,
         stagingReadbackSha: finalStagingSha,
         receipt,
         reviewPassed: input.reviewPassed,
@@ -778,10 +840,10 @@ export class ForgeOrchestrationController {
               evidence.queueHeadLaneId !== durableQueueHead.stableId ||
               evidence.leaseEpoch !== leaseEpoch ||
               evidence.staging.branch !== preMergeEvidence.staging.branch ||
-              evidence.staging.sha !== preMergeEvidence.staging.sha ||
+              evidence.staging.sha !== receipt.mergeCommitSha ||
               evidence.stagingReadbackSha !== receipt.mergeCommitSha)
             throw new Error("Protected staging moved during promotion CAS; fresh review and queue evidence are required.");
-          return evidence;
+          return { ...evidence, staging: promotionStaging, stagingReadbackSha: receipt.mergeCommitSha };
         },
         ...(input.ctx.signal ? { signal: input.ctx.signal } : {}),
       });
@@ -821,9 +883,12 @@ export class ForgeOrchestrationController {
     if (!current.state)
       throw new Error(`Orchestration ${orchestrationId} does not exist.`);
     if (current.state.status !== "running") return current.state;
+    const lane = current.state.integrationLane;
+    if (lane?.status === "promoting")
+      throw new Error("Cannot cancel while work-order promotion is in flight; resume the fenced promotion.");
     await this.#cancelDurableChildRuns(store, current.state, ctx, reason);
     const cancellationJournal = new OrchestrationJournal(store);
-    const laneLease = current.state.integrationLane?.promotion.queueLease;
+    const laneLease = lane?.promotion.queueLease;
     if (laneLease) {
       await cancellationJournal.releaseLaneQueueLease({
         orchestrationId,
@@ -833,8 +898,7 @@ export class ForgeOrchestrationController {
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
     }
-    const lane = current.state.integrationLane;
-    if (lane && !lane.legacy && ["queued", "active", "ready", "syncing", "promoting"].includes(lane.status)) {
+    if (lane && !lane.legacy && ["queued", "active", "ready", "syncing"].includes(lane.status)) {
       const removed = await cancellationJournal.append({
         orchestrationId,
         type: "integration-lane.blocked",

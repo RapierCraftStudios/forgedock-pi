@@ -244,6 +244,7 @@ export type IntegrationLaneTransition =
   | "acquire-queue-lease"
   | "release-queue-lease"
   | "sync"
+  | "begin-promotion"
   | "promote"
   | "close"
   | "block";
@@ -286,7 +287,7 @@ export function hasLiveQueueLease(
 
 /** Check the complete set of gates required before a lane can promote. */
 export function canPromoteIntegrationLane(
-  lane: Pick<IntegrationLane, "kind" | "status" | "promotion" | "stableId">,
+  lane: Pick<IntegrationLane, "kind" | "status" | "promotion" | "stableId" | "frozenBase">,
   input: {
     ownerId: string;
     now: string;
@@ -305,14 +306,14 @@ export function canPromoteIntegrationLane(
     return { ok: false, reason: "Only work-order lanes auto-promote." };
   if (input.queueHeadLaneId !== undefined && input.queueHeadLaneId !== lane.stableId)
     return { ok: false, reason: "Only the durable promotion queue head may promote." };
-  if (lane.status !== "syncing" && lane.status !== "ready")
+  if (lane.status !== "syncing" && lane.status !== "ready" && lane.status !== "promoting")
     return { ok: false, reason: `Lane is ${lane.status}, not ready for promotion.` };
   if (!hasLiveQueueLease(lane, input.ownerId, input.now))
     return { ok: false, reason: "Queue-head lease is missing, stale, or owned by another lane." };
   if (!input.staging.idle || input.staging.ownedByAnotherLane)
     return { ok: false, reason: "Staging is not idle or is owned by another promotion." };
-  if (input.staging.baselineSha !== input.staging.sha)
-    return { ok: false, reason: "Staging is not at the expected deployed baseline." };
+  if (input.staging.baselineSha !== input.staging.sha || input.staging.sha !== lane.frozenBase.sha)
+    return { ok: false, reason: "Staging is not at the expected deployed-main baseline." };
   if (!/^[0-9a-f]{40}$/i.test(input.sourceHeadSha))
     return { ok: false, reason: "Lane source head is not an exact reviewed commit SHA." };
   if (!/^[0-9a-f]{40}$/i.test(input.mergeBaseSha) || input.mergeBaseSha !== input.staging.sha)
@@ -345,7 +346,7 @@ export function transitionIntegrationLane(
       next.promotion.queuePosition = input.queuePosition;
       break;
     case "acquire-queue-lease": {
-      const reclaimable = lane.status === "syncing" || lane.status === "promoting";
+      const reclaimable = lane.status === "syncing";
       if (lane.status !== "ready" && !reclaimable) throw new IntegrationLaneValidationError("invalid-transition", `Cannot acquire a queue lease for a ${lane.status} lane.`);
       const ownerId = input.ownerId?.trim();
       const leaseSeconds = input.leaseSeconds;
@@ -372,8 +373,14 @@ export function transitionIntegrationLane(
       next.promotion.stagingSha = input.staging.sha;
       next.status = "ready";
       break;
+    case "begin-promotion":
+      if (lane.status !== "ready") throw new IntegrationLaneValidationError("invalid-transition", `Cannot begin promotion for a ${lane.status} lane.`);
+      if (!input.ownerId || !input.staging || input.queueHeadLaneId !== lane.stableId || input.leaseEpoch !== lane.promotion.queueLease?.epoch || !hasLiveQueueLease(lane, input.ownerId, input.now))
+        throw new IntegrationLaneValidationError("promotion-fence", "Promotion requires the current queue-head owner and live lease epoch.");
+      next.status = "promoting";
+      break;
     case "promote":
-      if (lane.status !== "ready") throw new IntegrationLaneValidationError("invalid-transition", `Cannot promote a ${lane.status} lane.`);
+      if (lane.status !== "ready" && lane.status !== "promoting") throw new IntegrationLaneValidationError("invalid-transition", `Cannot promote a ${lane.status} lane.`);
       if (!input.ownerId || !input.staging || !input.receipt || input.queueHeadLaneId !== lane.stableId || input.leaseEpoch !== lane.promotion.queueLease?.epoch || input.stagingReadbackSha !== input.receipt.mergeCommitSha) throw new IntegrationLaneValidationError("missing-promotion-evidence", "Queue owner, queue head, lease epoch, staging evidence, exact shipping merge readback, and receipt are required.");
       if (lane.promotion.stagingEvidence && (lane.promotion.stagingEvidence.sha !== input.staging.sha || lane.promotion.stagingEvidence.branch !== input.staging.branch)) throw new IntegrationLaneValidationError("staging-evidence-mismatch", "Promotion staging evidence does not match the persisted sync evidence.");
       if (input.receipt.stagingBaseSha !== input.staging.sha) throw new IntegrationLaneValidationError("staging-receipt-mismatch", "Promotion receipt staging base does not match staging evidence.");
@@ -395,7 +402,7 @@ export function transitionIntegrationLane(
       next.status = "closed";
       break;
     case "block":
-      if (!["queued", "active", "ready", "syncing", "promoting"].includes(lane.status)) throw new IntegrationLaneValidationError("invalid-transition", `Cannot block a ${lane.status} lane.`);
+      if (!["queued", "active", "ready", "syncing"].includes(lane.status)) throw new IntegrationLaneValidationError("invalid-transition", `Cannot block a ${lane.status} lane.`);
       next.status = "blocked";
       if (input.reason?.trim()) next.promotion = { ...next.promotion, blockReason: input.reason.trim() } as IntegrationLanePromotion;
       delete next.promotion.queueLease;
@@ -411,7 +418,7 @@ export function validatePromotionQueue(
   const positions = new Set<number>();
   const identities = new Set<string>();
   lanes.forEach((lane) => {
-    if (!["ready", "syncing", "promoting"].includes(lane.status)) return;
+    if (!["queued", "active", "ready", "syncing", "promoting"].includes(lane.status)) return;
     const identity = `${lane.repository ?? ""}/${lane.stableId}`;
     if (identities.has(identity)) throw new IntegrationLaneValidationError("duplicate-lane-identity", "Active repository/lane stable identities must be unique before queue-head authorization.");
     identities.add(identity);

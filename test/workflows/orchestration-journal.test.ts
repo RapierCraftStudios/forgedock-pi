@@ -58,7 +58,7 @@ function laneInput() {
     slug: "branch binding",
     branch: "work-order/wo-325-branch-binding",
     repository: "owner/repo",
-    frozenBase: { branch: "main", sha: "0123456789abcdef0123456789abcdef01234567" },
+    frozenBase: { branch: "main", sha: "a".repeat(40) },
     membership: [{ issueNumber: 2, ordinal: 0 }],
     sourceQuery: "#325",
     createdAt: "2026-08-24T00:00:00.000Z",

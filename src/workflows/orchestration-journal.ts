@@ -17,6 +17,7 @@ import {
   type IntegrationLaneInput,
   type IntegrationLanePromotionReceipt,
   type IntegrationLaneStagingEvidence,
+  validatePromotionQueue,
 } from "../core/integration-lane.ts";
 
 export class OrchestrationJournal {
@@ -148,7 +149,40 @@ export class OrchestrationJournal {
   async acquireLaneQueueLease(input: { orchestrationId: string; laneId: string; ownerId: string; leaseSeconds: number; attempt?: number; signal?: AbortSignal }): Promise<OrchestrationState> {
     const attempt = input.attempt ?? 1;
     if (!Number.isSafeInteger(attempt) || attempt < 1) throw new Error("Lease acquisition attempt must be a positive integer.");
-    return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.lease-acquired", payload: { laneId: input.laneId, ownerId: input.ownerId, leaseSeconds: input.leaseSeconds, attempt }, idempotencyKey: `integration-lane:${input.laneId}:lease:${input.ownerId}:${attempt}`, message: `Acquire integration lane queue lease ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
+    return stateCas(async () => {
+      const current = await this.#store.readOrchestration(input.orchestrationId, input.signal);
+      if (!current.state) throw new Error(`Orchestration ${input.orchestrationId} is not initialized.`);
+      const records = await this.#store.listOrchestrations(input.signal);
+      const lanes = records.map((record) =>
+        record.orchestrationId === input.orchestrationId ? current.state!.integrationLane : record.state?.integrationLane,
+      ).filter((lane): lane is IntegrationLane => Boolean(lane && lane.kind === "work-order" && !lane.legacy));
+      validatePromotionQueue(lanes);
+      const queueHead = lanes
+        .filter((lane) => ["ready", "syncing", "promoting"].includes(lane.status))
+        .sort((left, right) => (left.promotion.queuePosition ?? Number.MAX_SAFE_INTEGER) - (right.promotion.queuePosition ?? Number.MAX_SAFE_INTEGER))[0];
+      if (!queueHead || queueHead.stableId !== input.laneId)
+        throw new Error("Only the durable promotion queue head may acquire a lease.");
+      const idempotencyKey = `integration-lane:${input.laneId}:lease:${input.ownerId}:${attempt}`;
+      if (current.state.idempotencyKeys[idempotencyKey]) return current.state;
+      const event = createOrchestrationEvent({
+        orchestrationId: input.orchestrationId,
+        repository: current.state.repository,
+        sequence: current.state.sequence + 1,
+        previousEventHash: current.state.lastEventHash,
+        type: "integration-lane.lease-acquired",
+        idempotencyKey,
+        payload: { laneId: input.laneId, ownerId: input.ownerId, leaseSeconds: input.leaseSeconds, attempt },
+      });
+      const state = applyOrchestrationEvent(current.state, event);
+      await this.#store.commitOrchestrationState({
+        expectedTip: current.tip,
+        events: [...current.events, event],
+        state,
+        message: `Acquire integration lane queue lease ${input.laneId}`,
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+      return state;
+    }, input.signal);
   }
 
   async releaseLaneQueueLease(input: { orchestrationId: string; laneId: string; ownerId: string; leaseEpoch: number; signal?: AbortSignal }): Promise<OrchestrationState> {
@@ -157,6 +191,10 @@ export class OrchestrationJournal {
 
   async syncLane(input: { orchestrationId: string; laneId: string; ownerId: string; leaseEpoch: number; staging: IntegrationLaneStagingEvidence; signal?: AbortSignal }): Promise<OrchestrationState> {
     return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.sync", payload: { laneId: input.laneId, ownerId: input.ownerId, leaseEpoch: input.leaseEpoch, staging: input.staging }, idempotencyKey: `integration-lane:${input.laneId}:sync:${input.staging.sha}`, message: `Record integration lane sync ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
+  }
+
+  async beginPromotion(input: { orchestrationId: string; laneId: string; ownerId: string; queueHeadLaneId: string; leaseEpoch: number; staging: IntegrationLaneStagingEvidence; signal?: AbortSignal }): Promise<OrchestrationState> {
+    return this.append({ orchestrationId: input.orchestrationId, type: "integration-lane.promotion-started", payload: { laneId: input.laneId, ownerId: input.ownerId, queueHeadLaneId: input.queueHeadLaneId, leaseEpoch: input.leaseEpoch, staging: input.staging }, idempotencyKey: `integration-lane:${input.laneId}:promotion-started:${input.leaseEpoch}`, message: `Fence integration lane promotion ${input.laneId}`, ...(input.signal ? { signal: input.signal } : {}) });
   }
 
   async promoteLane(input: {
@@ -193,6 +231,16 @@ export class OrchestrationJournal {
       const priorReceipt = current.state.integrationLane?.promotion.receipt;
       if (priorReceipt && priorReceipt.mergeCommitSha === input.receipt.mergeCommitSha)
         return current.state;
+      const records = await this.#store.listOrchestrations(input.signal);
+      const lanes = records.map((record) =>
+        record.orchestrationId === input.orchestrationId ? current.state!.integrationLane : record.state?.integrationLane,
+      ).filter((lane): lane is IntegrationLane => Boolean(lane && lane.kind === "work-order" && !lane.legacy));
+      validatePromotionQueue(lanes);
+      const queueHead = lanes
+        .filter((lane) => ["ready", "syncing", "promoting"].includes(lane.status))
+        .sort((left, right) => (left.promotion.queuePosition ?? Number.MAX_SAFE_INTEGER) - (right.promotion.queuePosition ?? Number.MAX_SAFE_INTEGER))[0];
+      if (!queueHead || queueHead.stableId !== input.queueHeadLaneId || queueHead.stableId !== input.laneId)
+        throw new Error("Promotion queue head changed before durable receipt commit.");
       const evidence = await input.readPromotionEvidence(current.state);
       if (evidence.ownerId !== input.ownerId ||
           evidence.queueHeadLaneId !== input.queueHeadLaneId ||

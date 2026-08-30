@@ -115,6 +115,7 @@ export type OrchestrationEventType =
   | "integration-lane.lease-acquired"
   | "integration-lane.lease-released"
   | "integration-lane.sync"
+  | "integration-lane.promotion-started"
   | "integration-lane.promoted"
   | "integration-lane.closed"
   | "integration-lane.blocked"
@@ -240,10 +241,10 @@ export function applyOrchestrationEvent(
     state.completedAt = event.occurredAt;
   } else if (event.type === "orchestration.cancelled") {
     const laneStatus = state.integrationLane?.status;
-    if (laneStatus === "promoted" || laneStatus === "closed")
+    if (laneStatus === "promoted" || laneStatus === "closed" || laneStatus === "promoting")
       throw new OrchestrationTransitionError(
         "promotion-in-progress",
-        "Cannot cancel an orchestration after lane promotion or terminal cleanup; resume post-promotion cleanup.",
+        "Cannot cancel an orchestration during or after lane promotion; resume post-promotion cleanup.",
       );
     if (state.integrationLane && !state.integrationLane.legacy &&
         ["queued", "active", "ready", "syncing", "promoting"].includes(laneStatus ?? ""))
@@ -759,6 +760,7 @@ function applyIntegrationLaneEvent(
     "integration-lane.lease-acquired": "acquire-queue-lease",
     "integration-lane.lease-released": "release-queue-lease",
     "integration-lane.sync": "sync",
+    "integration-lane.promotion-started": "begin-promotion",
     "integration-lane.promoted": "promote",
     "integration-lane.closed": "close",
     "integration-lane.blocked": "block",

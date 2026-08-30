@@ -96,7 +96,7 @@ test("lane promotion events persist queue, lease, and merge receipt state", () =
     stableId: "wo-promote",
     slug: "promote",
     repository,
-    frozenBase: { branch: "main", sha: "0".repeat(40) },
+    frozenBase: { branch: "main", sha: "a".repeat(40) },
     membership: [{ issueNumber: 2, ordinal: 0 }],
     sourceQuery: "work-order:promote",
     createdAt: "2026-08-24T00:00:00.000Z",
@@ -110,6 +110,12 @@ test("lane promotion events persist queue, lease, and merge receipt state", () =
   state = applyOrchestrationEvent(state, next(state, "integration-lane.lease-acquired", { laneId: typed.stableId, ownerId: "owner", leaseSeconds: 60 }, "lease"));
   const staging = { branch: "staging", sha: "a".repeat(40), baselineSha: "a".repeat(40), idle: true, checkedAt: "2026-08-24T00:00:03.000Z" };
   state = applyOrchestrationEvent(state, next(state, "integration-lane.sync", { laneId: typed.stableId, ownerId: "owner", leaseEpoch: 1, staging }, "sync"));
+  state = applyOrchestrationEvent(state, next(state, "integration-lane.promotion-started", { laneId: typed.stableId, ownerId: "owner", queueHeadLaneId: typed.stableId, leaseEpoch: 1, staging }, "promotion-started"));
+  assert.equal(state.integrationLane?.status, "promoting");
+  assert.throws(
+    () => applyOrchestrationEvent(state, next(state, "integration-lane.blocked", { laneId: typed.stableId, reason: "cancelled" }, "cancel-during-promotion")),
+    /Cannot block a promoting lane/i,
+  );
   state = applyOrchestrationEvent(state, next(state, "integration-lane.promoted", { laneId: typed.stableId, ownerId: "owner", queueHeadLaneId: typed.stableId, leaseEpoch: 1, staging, stagingReadbackSha: "c".repeat(40), receipt: { shippingPullNumber: 9, sourceHeadSha: "b".repeat(40), stagingBaseSha: staging.sha, mergeBaseSha: staging.sha, mergeCommitSha: "c".repeat(40), mergeMethod: "merge", reviewedAt: staging.checkedAt }, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true }, "promoted"));
   assert.equal(state.integrationLane?.status, "promoted");
   assert.equal(state.integrationLane?.promotion.receipt?.shippingPullNumber, 9);
@@ -129,7 +135,7 @@ test("duplicate active repository/lane identities fail before queue-head authori
     stableId: "wo-duplicate",
     slug: "duplicate",
     repository,
-    frozenBase: { branch: "main", sha: "0".repeat(40) },
+    frozenBase: { branch: "main", sha: "a".repeat(40) },
     membership: [{ issueNumber: 2, ordinal: 0 }],
     sourceQuery: "first",
     createdAt: "2026-08-24T00:00:00.000Z",
@@ -150,7 +156,7 @@ test("shared promotion invariant end-to-end requires lane removal before termina
     stableId: "wo-cancel-order",
     slug: "cancel order",
     repository,
-    frozenBase: { branch: "main", sha: "0".repeat(40) },
+    frozenBase: { branch: "main", sha: "a".repeat(40) },
     membership: [{ issueNumber: 2, ordinal: 0 }],
     sourceQuery: "cancel-order",
     createdAt: "2026-08-24T00:00:00.000Z",

@@ -8,13 +8,14 @@ import {
   normalizeIntegrationSlug,
   validateGitRef,
   validateIntegrationLane,
+  transitionIntegrationLane,
   workOrderBranchName,
   type IntegrationLane,
 } from "../../src/core/integration-lane.ts";
 
 const base = {
   repository: "owner/repo",
-  frozenBase: { branch: "main", sha: "0123456789abcdef0123456789abcdef01234567" },
+  frozenBase: { branch: "main", sha: "a".repeat(40) },
   membership: [{ issueNumber: 7, ordinal: 0 }],
   sourceQuery: "priority:P1",
   createdAt: "2026-08-30T00:00:00.000Z",
@@ -114,4 +115,20 @@ test("queue lease release epoch and promotion lifecycle are guarded", async () =
   const duplicate = { ...ready, promotion: { ...ready.promotion, queuePosition: 1 } };
   assert.throws(() => validatePromotionQueue([ready, duplicate]), /repository\/lane stable identities must be unique/i);
   assert.throws(() => validateIntegrationLane({ ...ready, promotion: [] } as unknown as IntegrationLane), /promotion/i);
+});
+
+test("promotion binds staging to the frozen deployed-main baseline", async () => {
+  const { canPromoteIntegrationLane } = await import("../../src/core/integration-lane.ts");
+  const lane = createIntegrationLane({ ...base, kind: "work-order", stableId: "wo-baseline", slug: "baseline" });
+  const queued = transitionIntegrationLane(lane, "queue", { now: "2026-08-30T00:00:01.000Z", queuePosition: 0 });
+  const leased = transitionIntegrationLane(queued, "acquire-queue-lease", { now: "2026-08-30T00:00:02.000Z", ownerId: "owner", leaseSeconds: 60 });
+  const staging = { branch: "staging", sha: "b".repeat(40), baselineSha: "b".repeat(40), idle: true, checkedAt: "2026-08-30T00:00:03.000Z" };
+  assert.deepEqual(canPromoteIntegrationLane({ ...leased, status: "ready" }, { ownerId: "owner", now: staging.checkedAt, sourceHeadSha: "c".repeat(40), mergeBaseSha: staging.sha, staging, reviewPassed: true, verificationPassed: true, mergeable: true, authorityValid: true, mergeCommit: true, queueHeadLaneId: lane.stableId }), { ok: false, reason: "Staging is not at the expected deployed-main baseline." });
+});
+
+test("duplicate active identities fail before queue-head authorization", async () => {
+  const { validatePromotionQueue } = await import("../../src/core/integration-lane.ts");
+  const first = createIntegrationLane({ ...base, kind: "work-order", stableId: "wo-active-duplicate", slug: "active duplicate", status: "active" });
+  const second = { ...first, membership: [{ issueNumber: 8, ordinal: 0 }], status: "ready" as const, promotion: { queuePosition: 0 } };
+  assert.throws(() => validatePromotionQueue([first, second]), /repository\/lane stable identities must be unique/i);
 });
