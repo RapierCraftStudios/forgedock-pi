@@ -501,6 +501,29 @@ gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:CHECKPOINT -->
 
 ---
 
+## Controlled staging refresh during validation
+
+Validation is evaluated against an exact target identity. Immediately before the first
+validation command and again before returning `gate_passed: true`, fetch the configured
+`refs/heads/staging` and compare its SHA with the current review base. A changed target
+is not an unconditional failure: continue only if the new SHA is an authorized,
+reachable sibling merge in the active orchestration batch. Publish a
+`FORGE:BASE_REFRESH` record containing immutable launch SHA, old/new base SHAs, target
+ref, sibling merge SHA, merge-base SHA, and refresh attempt before changing the lane.
+
+For a verified advance, preserve all issue commits and the existing owned branch. Before
+push/PR, synchronize onto the new target with a guarded operation. If a PR already
+exists, do not reset or overwrite it: integrate the verified target non-destructively
+using the expected remote-head lease. Conflicts, ambiguous/non-fast-forward movement,
+or lease mismatch are automated `GATED` outcomes.
+
+After synchronization, rerun every configured verification command and every acceptance
+check from the beginning; pre-refresh output is historical only. Recompute the exact
+review base and merge-base, and hand off only a refreshed identity to review. The review
+phase must invalidate prior receipts and run a fresh complete panel. This refresh does
+not repeat investigation, planning, or implementation, and does not widen the claim.
+See `specs/qualitative-review-protocol.md`.
+
 ## Output
 
 Output this structured block — the routing loop in `work-on.md` will read this result, re-evaluate state, and continue to the next phase. This subcommand is complete; control returns to the router's loop iteration.

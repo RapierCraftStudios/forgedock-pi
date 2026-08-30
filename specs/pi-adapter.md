@@ -170,3 +170,20 @@ staging open-finding attribution and Phase 6.5 evidence.
 Deterministic code may make a single operation safe (bounded verification, frozen PR
 snapshot, exact-head guarded merge). It must not choose the next workflow phase,
 synthesize a verdict, dispatch a panel, close an issue, or reconcile a hidden run.
+
+## Moving-base translation
+
+The prompt-routed coordinator preserves `FORGE:BASE` as immutable launch attribution,
+then uses direct `git`/`gh` commands to handle a verified sibling advance of
+`refs/heads/staging`. It must publish old/new target evidence in
+`FORGE:BASE_REFRESH` before mutation, prove the movement is an authorized reachable
+sibling merge, and preserve the owned branch and PR through a guarded non-destructive
+synchronization. A conflict, ambiguous target, non-fast-forward movement, or remote
+lease mismatch is automated `GATED` evidence.
+
+After refresh, rerun every affected verification and acceptance command, compute and
+freeze the exact refreshed base/head/merge-base identity, invalidate older reviewer
+receipts, and join a fresh complete read-only reviewer panel. Pre-refresh results never
+authorize merge. Direct Git must never reset or overwrite another lane; protected
+`staging → main` rules and genuine human-authority handling remain unchanged. The
+shared contract is `specs/qualitative-review-protocol.md`.

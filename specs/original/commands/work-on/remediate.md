@@ -408,6 +408,23 @@ Skill("work-on:close", args="{ISSUE_NUMBER} --repo {GH_REPO} --gh-flag {GH_FLAG}
 
 ---
 
+## Controlled staging refresh during remediation
+
+Before accepting a remediation re-review or evaluating the merge bar, re-fetch the
+authoritative `refs/heads/staging` and compare its exact SHA with the recorded review
+base. A changed target may continue only after proving an authorized reachable sibling
+merge and publishing `FORGE:BASE_REFRESH` with immutable launch SHA, old/new base SHAs,
+target ref, sibling merge SHA, merge-base SHA, and attempt.
+
+Preserve the owned remediation branch and existing PR. Synchronize the verified target
+non-destructively with the expected remote-head lease; conflicts, ambiguous movement,
+non-fast-forward movement, or lease mismatch are GATED. Rerun every affected quality
+and acceptance check. Invalidate all prior reviewer receipts and approvals, freeze the
+new exact base/head/merge-base tuple, and run a fresh complete re-review. Do not count
+pre-refresh findings or checks as authorization, exceed the configured remediation
+round cap, widen the Builder Contract, or weaken protected-branch rules. See
+`specs/qualitative-review-protocol.md`.
+
 ## Output
 
 Return this structured block to the caller:

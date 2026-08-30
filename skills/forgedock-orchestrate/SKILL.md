@@ -86,3 +86,23 @@ reconcile retained child receipts by key. Resume only unlaunched ready nodes exa
 once within the concurrency cap. Unknown or duplicate keys, stale leases, missing
 predecessors, or ambiguous completion produce a paused report and launch nothing. Close
 the coordination issue after terminal cleanup.
+
+## Moving staging target
+
+The dispatch-time target SHA is immutable launch attribution, not a promise that the
+integration ref cannot advance. When a verified sibling merge advances `staging` while
+a lane is building, validating, reviewing, or awaiting merge, keep the lane and route it
+through a controlled refresh. Read the new target SHA from the authoritative ref, prove
+that the movement is a verified sibling merge and an allowed descendant of the prior
+base, then publish `FORGE:BASE_REFRESH` with the immutable launch SHA, old/new base
+SHAs, target ref, sibling merge SHA, and refresh attempt before any lane mutation.
+
+The coordinator must preserve the owned branch and PR, use a guarded non-destructive
+synchronization with the expected remote lease, and gate conflicts, ambiguous movement,
+non-fast-forward movement, or lease mismatch. The child reruns every affected
+verification and acceptance check, freezes a new exact base/head/merge-base tuple, and
+runs a fresh complete qualitative review. Older verification, approvals, and reviewer
+receipts cannot authorize the refreshed head. Do not reset or overwrite another lane,
+weaken protected-branch rules, or classify a mechanical refresh failure as
+`needs-human`; emit automated `GATED` evidence instead. See
+`specs/qualitative-review-protocol.md` for the shared identity and evidence contract.
