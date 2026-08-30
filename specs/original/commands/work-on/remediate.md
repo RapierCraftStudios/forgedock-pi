@@ -63,6 +63,32 @@ occurrence. Never close findings optimistically before re-review. If a fresh pan
 a blocker, carry its exact scenario/evidence into the next closure matrix when another
 configured round remains; after cap exhaustion, fail closed without another new head.
 
+### Unattended verification and irreversible-side-effect proof
+
+For non-interactive/headless remediation, execute verification in the coordinator process.
+A background verifier is allowed only when it durably persists the same-lifecycle
+continuation and automatically wakes that coordinator on every terminal state: completed,
+failed, killed, or cancelled. A launch receipt or progress response is not verification.
+Resource-sensitive packed-package smoke checks must run in a separate bounded serial
+step. They remain mandatory and must be joined into the one final verification result
+before push; do not run them inside the parallel aggregate suite.
+
+When a closure row touches an irreversible provider action (merge, deploy, branch deletion,
+publication, credential mutation, or equivalent), its proof must cover:
+
+1. all authority and preconditions before the side effect;
+2. the exact provider result bound to the durable receipt;
+3. idempotent replay/reconciliation after provider success;
+4. recovery when the process fails between side effect and durable receipt.
+
+Stop remediation and publish `FORGE:REINVESTIGATE_REQUIRED` when fresh evidence shows the
+accepted approach is invalid: no reachable active caller, a new authority boundary absent
+from the Builder Contract, implementation in dormant/legacy machinery while another path
+is authoritative, or repeated HIGH blockers in the same invariant after a substantive
+remediation head. Include the invalidated approach, surviving evidence, and proposed
+decomposition. Investigation/decomposition—not another remediation round—owns replacement
+of architecture or scope.
+
 **Engine coverage** (forge#2379, #2889): this subcommand's `command` name (`work-on/remediate`) and completion marker (`FORGE:REMEDIATION:COMPLETE`, including the `**Re-gate outcome**` field Phase M8 posts below) are registered in the headless engine's phase table — `RESERVED_TYPES.REMEDIATION` in `packages/protocol/src/types.js`, `remediate` in `packages/protocol/src/phases.js`'s `PHASE_IDS`/`PHASE_MARKERS`, and a matching `remediate` entry in `bin/engine/phases.mjs`'s `PHASES` array. A blocked review is committed with `terminalReason: "needs-human"`, then the engine continues directly into remediation; the divergence guard permits this specific handoff while keeping all other `needs-human` states paused.
 
 ---
@@ -143,7 +169,7 @@ mismatch is a stale handoff: stop before finding selection or mutation. Legacy s
 mode rejects inline-only flags and uses the current PR head as its target identity.
 
 **PR state guard**:
-- `PR_OPEN_STATE = MERGED` → EXIT `REMEDIATE_RESULT: status: ALREADY_DONE` (nothing to remediate — already landed).
+- `PR_OPEN_STATE = MERGED` → set `PR_ALREADY_MERGED=true`; do not return before linked-issue close/trajectory/cleanup reconciliation.
 - `PR_OPEN_STATE = CLOSED` (not merged) → EXIT `REMEDIATE_RESULT: status: BLOCKED`, blocker: "PR #{PR_NUMBER} is closed, not merged — nothing to remediate."
 
 **Resolve the linked issue** (`--issue` flag takes precedence; else parse from the PR body — anchored, matching the `"Closes #N" in:body` precedent from forge#1634/#1646, never a bare-number scan):
@@ -153,6 +179,11 @@ ISSUE_NUMBER="${ISSUE_NUMBER:-$(echo "$PR_BODY" | grep -oP '(?i)\bCloses #\K\d+'
 if [ -z "$ISSUE_NUMBER" ]; then
   echo "BLOCKED: cannot resolve linked issue — pass --issue explicitly"
   # EXIT REMEDIATE_RESULT: status: BLOCKED, blocker: "cannot resolve linked issue — pass --issue explicitly"
+fi
+if [ "${PR_ALREADY_MERGED:-false}" = "true" ]; then
+  Skill("work-on:close", args="{ISSUE_NUMBER} --repo {GH_REPO} --gh-flag {GH_FLAG} --pr {PR_NUMBER} --base {PR_BASE}")
+  # Require issue-close, trajectory, and cleanup read-back before returning ALREADY_DONE.
+  # EXIT REMEDIATE_RESULT: status: ALREADY_DONE
 fi
 ```
 
@@ -409,7 +440,35 @@ Extract the re-review verdict for the paper trail (Phase M8 reports this verbati
 ```bash
 RE_REVIEW_VERDICT=$(gh api repos/{GH_REPO}/issues/{PR_NUMBER}/comments \
   --jq '[.[] | select(.body | test("APPROVED:|CHANGES REQUESTED:"; "i"))] | last | .body // "unknown"' 2>/dev/null | head -c 200)
+POST_REVIEW_HEAD=$(gh pr view {PR_NUMBER} {GH_FLAG} --json headRefOid --jq '.headRefOid // empty')
 ```
+
+If fresh review proves the accepted approach is invalid (the triggers defined above), set
+`REINVESTIGATE_REQUIRED=true` and take this explicit cap-safe branch before Phase M7:
+
+```bash
+if [ "${REINVESTIGATE_REQUIRED:-false}" = "true" ]; then
+  REINVESTIGATE_MARKER="<!-- FORGE:REINVESTIGATE_REQUIRED pr={PR_NUMBER} head=${POST_REVIEW_HEAD} round=${REMEDIATION_ROUND} -->"
+  COMPLETE_MARKER="<!-- FORGE:REMEDIATION:COMPLETE pr={PR_NUMBER} head=${POST_REVIEW_HEAD} round=${REMEDIATION_ROUND} -->"
+  REINVESTIGATE_BODY="${REINVESTIGATE_MARKER}
+${COMPLETE_MARKER}
+## Remediation Approach Invalidated
+
+**Invalidated approach**: {summary}
+**Surviving evidence**: {current-head findings and invariant}
+**Proposed next action**: return to investigation/decomposition; preserve the PR as historical evidence.
+
+No new remediation head or panel is authorized from this invocation."
+  gh pr comment {PR_NUMBER} {GH_FLAG} --body "$REINVESTIGATE_BODY"
+  gh issue comment {ISSUE_NUMBER} {GH_FLAG} --body "$REINVESTIGATE_BODY"
+  Skill(skill="work-on/investigate", args="{ISSUE_NUMBER} --repo {GH_REPO} --gh-flag {GH_FLAG} --reinvestigate-from-pr {PR_NUMBER}")
+  # EXIT REMEDIATE_RESULT: status: BLOCKED, re_gate_outcome: REINVESTIGATE_REQUIRED
+fi
+```
+
+The tuple-scoped completion marker consumes the reviewed round before returning to
+investigation, so restart cannot delete/replay it as an interrupted attempt. Keep all
+finding issues open.
 
 After Phase M6, compare the fresh current-head findings with the closure matrix. For each
 candidate occurrence absent from the complete fresh panel, close its issue with a comment
@@ -489,9 +548,19 @@ fi
 
 **If the bar is met** (`BAR_MET=true`):
 ```bash
-gh pr merge {PR_NUMBER} {GH_FLAG} --merge
-MERGE_STATE=$(gh pr view {PR_NUMBER} {GH_FLAG} --json state --jq '.state')
-if [ "$MERGE_STATE" = "MERGED" ]; then
+PRE_MERGE=$(gh pr view {PR_NUMBER} {GH_FLAG} --json state,headRefOid,baseRefName)
+[ "$(echo "$PRE_MERGE" | jq -r '.state')" = "OPEN" ] || { echo "GATED: PR is not open"; exit 1; }
+[ "$(echo "$PRE_MERGE" | jq -r '.headRefOid')" = "$POST_REVIEW_HEAD" ] || { echo "GATED: PR head changed after review"; exit 1; }
+[ "$(echo "$PRE_MERGE" | jq -r '.baseRefName')" = "$LIVE_BASE_REF" ] || { echo "GATED: PR base changed after review"; exit 1; }
+
+gh pr merge {PR_NUMBER} {GH_FLAG} --merge --match-head-commit "$POST_REVIEW_HEAD"
+MERGE_RESULT=$(gh pr view {PR_NUMBER} {GH_FLAG} --json state,mergeCommit,headRefOid,baseRefName)
+MERGE_STATE=$(echo "$MERGE_RESULT" | jq -r '.state')
+MERGE_SHA=$(echo "$MERGE_RESULT" | jq -r '.mergeCommit.oid // empty')
+if [ "$MERGE_STATE" = "MERGED" ] && [[ "$MERGE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+  MERGE_RECEIPT="<!-- FORGE:REMEDIATION_MERGE_RECEIPT pr={PR_NUMBER} reviewed_head=${POST_REVIEW_HEAD} merge_sha=${MERGE_SHA} base=${LIVE_BASE_REF} -->"
+  gh pr comment {PR_NUMBER} {GH_FLAG} --body "$MERGE_RECEIPT"
+  gh issue comment {ISSUE_NUMBER} {GH_FLAG} --body "$MERGE_RECEIPT"
   RESOLUTION=$(resolve_script 'transition-label')
   TIER="${RESOLUTION%%:*}"; SCRIPT_PATH="${RESOLUTION#*:}"
   case "$TIER" in
@@ -504,8 +573,6 @@ if [ "$MERGE_STATE" = "MERGED" ]; then
   RE_GATE_OUTCOME="AUTO-LANDED"
 else
   RE_GATE_OUTCOME="HELD-AWAITING-MERGE"
-  # gh pr merge reported success but the PR isn't actually MERGED — leave workflow:awaiting-merge
-  # in place (unchanged) and let a human merge manually rather than retrying automatically.
 fi
 ```
 
@@ -569,7 +636,7 @@ Skill("work-on:close", args="{ISSUE_NUMBER} --repo {GH_REPO} --gh-flag {GH_FLAG}
 
 `work-on:close` handles project board update, final issue body, parent tracker, trajectory log, and worktree cleanup (including the remediation worktree at `{WORKTREE_PATH}`) — do not duplicate any of that here.
 
-**If the outcome was `HELD-AWAITING-MERGE`, `RE-ESCALATED`, or `UNFIXABLE`**: leave the worktree in place (a human may need it for manual inspection/merge) and return the structured result below without invoking close. Do not close the issue.
+**If the outcome was `HELD-AWAITING-MERGE`, `RE-ESCALATED`, `REINVESTIGATE_REQUIRED`, or `UNFIXABLE`**: leave the worktree in place and return the structured result below without invoking close. `REINVESTIGATE_REQUIRED` has already invoked investigation/decomposition; do not close the issue.
 
 ---
 
@@ -599,9 +666,9 @@ REMEDIATE_RESULT:
   status: COMPLETE | ALREADY_DONE | UNFIXABLE | BLOCKED
   pr_number: {PR_NUMBER}
   issue_number: {ISSUE_NUMBER}
-  re_gate_outcome: AUTO-LANDED | HELD-AWAITING-MERGE | RE-ESCALATED | UNFIXABLE | N/A
+  re_gate_outcome: AUTO-LANDED | HELD-AWAITING-MERGE | RE-ESCALATED | REINVESTIGATE_REQUIRED | UNFIXABLE | N/A
   findings_addressed: [{finding_number}, ...]
   blocker: {description if status=BLOCKED}
 ```
 
-**Caller behavior**: this Skill already drives its own close phase when `re_gate_outcome: AUTO-LANDED` (see Phase M8) — the caller does not need to invoke close itself. For every other `re_gate_outcome`, this result is terminal for the current invocation: the issue is left at `needs-human` or `workflow:awaiting-merge`, both already recognized as terminal states in the Universal Phase Dispatcher (see `work-on.md`). Whether invoked standalone (`/work-on <pr> --remediate`) or via the orchestrator's item 6.4 dispatch, no further action is required from the caller.
+**Caller behavior**: this Skill drives close when `AUTO-LANDED`. `REINVESTIGATE_REQUIRED` transfers control to investigation/decomposition with tuple-bound evidence and is terminal only for the current remediation invocation. Other non-land outcomes preserve their durable gated/awaiting state. The caller must never start another remediation head above the cap.

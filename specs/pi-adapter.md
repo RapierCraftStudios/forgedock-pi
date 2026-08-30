@@ -102,10 +102,22 @@ while unidentifiable findings remain open and outside automatic closure.
 
 Remediation clusters bound blockers by shared invariant and records one blocker closure
 matrix mapping each reviewer scenario to a failing-before/passing-after regression
-command or equivalent machine-checkable proof. No new remediation head or fresh panel
-may launch until every row passes locally. Local same-head edit/test/replan iterations do
-not consume another round; a substantive new reviewed head does. Only fresh current-head
-review can close findings. Never absorb unrelated review debt.
+command or equivalent machine-checkable proof. For irreversible provider actions, rows
+also prove authority before action, exact result binding, idempotent replay, and recovery
+between provider success and durable receipt.
+
+In headless Pi, verification runs directly unless a background task has a persisted
+same-lifecycle continuation and automatic terminal wake for success, failure, kill, and
+cancellation. Packed-package smoke checks must run separately and serially and stay mandatory. A
+progress-only response never completes verification. No new remediation head or fresh
+panel may launch until every row passes locally.
+
+When fresh review invalidates the architecture—no active caller, a new authority boundary,
+dormant/legacy machinery, or repeated HIGH blockers in one invariant—publish
+`FORGE:REINVESTIGATE_REQUIRED` and return to investigation/decomposition instead of
+spending another line-local round. Local same-head iterations do not consume another
+round; a substantive new reviewed head does. Only fresh current-head review can close
+findings. Never absorb unrelated review debt.
 
 Review may merge but never closes the issue. Close explicitly verifies the merge,
 closes the issue, updates labels, posts trajectory, and cleans the worktree before
