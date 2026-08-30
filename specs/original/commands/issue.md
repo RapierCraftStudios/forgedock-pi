@@ -209,10 +209,9 @@ if [ "$PROGRAMMATIC_MODE" = "true" ]; then
     exit 1
   elif [ -n "$PROGRAMMATIC_BODY_FILE" ]; then
     # Fail loudly on a missing/unreadable file — do NOT let a failed `cat` fall
-    # through as an empty $PROGRAMMATIC_BODY. An empty body would otherwise look
-    # like "no body given" to Phase 3F below, which would silently repair it
-    # with placeholder-only stub sections instead of surfacing the caller's
-    # file-path mistake as an error, same fail-loudly convention as the
+    # through as an empty $PROGRAMMATIC_BODY. A malformed empty body must fail
+    # canonical validation rather than hiding the caller's file-path mistake
+    # as an error, same fail-loudly convention as the
     # both/neither check directly above.
     if [ ! -r "$PROGRAMMATIC_BODY_FILE" ]; then
       echo "ERROR: --body-file '$PROGRAMMATIC_BODY_FILE' is missing or unreadable"
@@ -344,15 +343,12 @@ git fetch origin {STAGING_BRANCH} {DEFAULT_BRANCH} 2>/dev/null
 # Use git show origin/{STAGING_BRANCH}:{filepath} for project files
 ```
 
-### 2C: Identify ALL affected files
+### 2C: Identify candidate investigation starting points
 
-List every file that the fix/feature will need to touch. Be thorough:
-- The primary file with the bug/feature location
-- Test files that cover the affected code
-- Config files that need updating
-- Migration files if schema changes are needed
-- Frontend files if the change has UI implications
-- **Override files** (e.g., `docker-compose.prod.yml` if `docker-compose.yml` is affected)
+List the files most likely to contain relevant evidence, with a reason for each. Be thorough
+about companions, tests, config layers, migrations, and overrides, but do not present this
+list as an edit plan. Investigation independently confirms, narrows, expands, or rejects
+actual mutation scope before the Builder Contract is written.
 
 ### 2D: Check for duplicates
 
@@ -425,7 +421,7 @@ Rules:
 
 ### 3B: Compose the body
 
-Use this exact template. Every section is MANDATORY for bugs and features. Investigation issues use a simplified template (see 3C).
+Use this exact global template for every ForgeDock-created issue. Investigation issues specialize the content without replacing the five sections (see 3C).
 
 ```markdown
 ## Problem
@@ -435,7 +431,7 @@ Use this exact template. Every section is MANDATORY for bugs and features. Inves
 {If bug: Include the error message, stack trace snippet, or observable symptom.}
 {If regression: "Regression of #{N} — {brief description of original fix}."}
 
-## Root Cause (if known)
+## Root Cause
 
 {Point to the specific code path. Use `file:line` references.}
 {If the cause spans multiple files, list the chain:}
@@ -447,13 +443,13 @@ Use this exact template. Every section is MANDATORY for bugs and features. Inves
 
 ## Affected Files
 
-Files that need changes (ordered by dependency — change these in this order):
+Candidate investigation starting points (not mutation authority):
 
-1. `{filepath}` — {what needs to change}
-2. `{filepath}` — {what needs to change}
-3. `{filepath}` — {what needs to change}
+1. `{filepath}` — {why investigate here}
+2. `{filepath}` — {why investigate here}
+3. `{filepath}` — {why investigate here}
 
-{CRITICAL: Include ALL files. If docker-compose.yml needs a change, docker-compose.prod.yml almost certainly does too. If a model changes, the migration file and any routers importing it need updating.}
+{Include likely companion/override/test/config paths so investigation starts efficiently. Investigation determines the actual mutation set.}
 
 ## Expected Behavior
 
@@ -483,37 +479,43 @@ Should be done after #{N} — {brief reason}
 {Optional: "**Code branch**: `{branch}`" if the code only exists on a specific branch}
 ```
 
-### 3C: Investigation issue template
+### 3C: Investigation issue specialization
 
-For investigation/audit issues, use this simplified template:
+Investigation/audit issues use the same global five-section schema; uncertainty is
+explicit rather than replaced by a competing template:
 
 ```markdown
-## Scope
+## Problem
 
-{What needs to be investigated and why.}
+{What must be investigated, the observed risk/symptom, and why it matters.}
 
-## Questions to Answer
+## Root Cause
 
-- [ ] {Specific question 1}
-- [ ] {Specific question 2}
-- [ ] {Specific question 3}
+Root cause unknown — investigation required.
 
-## Starting Points
+Hypotheses:
+- {bounded hypothesis supported by current evidence}
 
-Files/areas to examine:
+## Affected Files
+
+Candidate investigation starting points (not mutation authority):
 1. `{filepath}` — {why start here}
 2. `{filepath}` — {why start here}
 
-## Deliverable
+## Expected Behavior
 
-{What the investigation should produce:}
-- Execution plan with specific sub-issues, OR
-- Root cause analysis with fix recommendation, OR
-- Decision document with trade-offs
+The investigation produces a CONFIRMED / INVALID / DECOMPOSED verdict with evidence,
+actual scope, non-goals, and machine-checkable acceptance.
+
+## Acceptance Criteria
+
+- [ ] Answer {specific question 1}. [type:manual]
+- [ ] Answer {specific question 2}. [type:manual]
+- [ ] Produce an evidence-backed verdict and recommended next action. [type:manual]
 
 ## Context
 
-{Background information the investigator needs.}
+{Optional background, logs, prior investigation, or decision constraints.}
 ```
 
 ### 3D: Pipeline Issue Template (machine-callable reference)
@@ -527,15 +529,19 @@ When pipeline agents create issues programmatically (not via user input), use th
 
 {1-3 sentences: what's wrong or what's missing. Specific and concrete.}
 
-## Root Cause (if known)
+## Root Cause
 
 {Point to the specific code path. Use `file:line` references. If unknown, say "Root cause unknown — investigation needed."}
 
 ## Affected Files
 
-Files that need changes (ordered by dependency):
-1. `{filepath}` — {what needs to change}
-2. `{filepath}` — {what needs to change}
+Candidate investigation starting points, with paths and reasons. This list is not an edit allowlist:
+1. `{filepath}` — {why investigate here}
+2. `{filepath}` — {why investigate here}
+
+## Expected Behavior
+
+{Observable behavior or invariant that should hold after validated work completes.}
 
 ## Acceptance Criteria
 
@@ -565,10 +571,11 @@ Files that need changes (ordered by dependency):
 
 **Rules for automated issue creation**:
 - Title MUST use conventional commit prefix: `fix:`, `feat:`, `refactor:`, `investigate:`, `docs:`
-- `## Problem` is MANDATORY — every issue must state what's wrong or what's needed
-- `## Affected Files` is MANDATORY — list actual file paths the investigator should read first
-- `## Acceptance Criteria` is MANDATORY — at least one testable `- [ ]` criterion; each item MAY carry an optional `[type:api|unit|e2e|manual]` annotation for deterministic test-gate classification (omit to fall back to regex inference)
-- Domain-specific sections (Evidence Trail, Pattern Metadata, Validation Checklist, etc.) SHOULD be preserved — they add pipeline value. Add mandatory sections around them, not instead of them.
+- Every issue contains exactly one H2 section in this order: `## Problem`, `## Root Cause`, `## Affected Files`, `## Expected Behavior`, `## Acceptance Criteria`.
+- Each mandatory section is substantive. Root cause may honestly state unknown/hypothetical; Affected Files are candidate investigation starting points, never mutation authority.
+- Acceptance Criteria contains at least one actionable `- [ ]` criterion and MAY carry `[type:api|unit|e2e|manual]` annotations.
+- Domain-specific sections (Evidence, Pattern Metadata, Source Context, Occurrences, etc.) are additive. They never replace or demote mandatory H2 sections.
+- User/legacy issues remain valid work-on inputs. This schema governs ForgeDock-owned creation and verified reuse; investigation autonomously normalizes imperfect intake.
 - `## Prior Investigation` is OPTIONAL — include only when parent/sibling investigation Gist URLs are available. Each Gist URL must be wrapped in a `<!-- FORGE:PRIOR_GIST: {url} -->` annotation for machine-readable parsing by downstream agents. <!-- Added: forge#339 -->
 
 ---
@@ -586,47 +593,33 @@ Before creating, verify:
 
 **Skip this step entirely in programmatic mode** — the caller already composed and is responsible for the draft. Programmatic mode has its own validation gate instead: Phase 3F below.
 
-### 3F: Programmatic Pre-Create Validation (programmatic mode only, MANDATORY)
+### 3F: Canonical Pre-Create Validation (MANDATORY for ForgeDock-created issues)
 
-**Skip if `PROGRAMMATIC_MODE=false`** — this step only runs for the `--title`-driven path; the free-text/interactive path uses 3E above instead.
+Interactive drafting and programmatic bodies use the same validator before creation. The
+five exact H2 headings are:
 
-Runs after Phase 2D (dedup) passes and before Phase 4B (create). This reuses the exact same three mandatory-section check Phase 4C.5 performs post-creation — but applied here, pre-create, against the caller-supplied body, so a programmatic caller's issue is validated *before* it exists rather than repaired after the fact. Phase 4C.5 still runs afterward too (unchanged, for both modes) as an idempotent safety net — after this step it will find nothing to repair.
-
-```bash
-MISSING_SECTIONS=""
-echo "$PROGRAMMATIC_BODY" | grep -q "^## Problem" || MISSING_SECTIONS="$MISSING_SECTIONS PROBLEM"
-echo "$PROGRAMMATIC_BODY" | grep -q "^## Affected Files" || MISSING_SECTIONS="$MISSING_SECTIONS AFFECTED_FILES"
-echo "$PROGRAMMATIC_BODY" | grep -q "^## Acceptance Criteria" || MISSING_SECTIONS="$MISSING_SECTIONS ACCEPTANCE_CRITERIA"
-
-if [ -n "$MISSING_SECTIONS" ]; then
-  echo "WARNING: supplied --body is missing sections:$MISSING_SECTIONS — adding placeholders before creation"
-
-  APPEND_TEXT=""
-  echo "$MISSING_SECTIONS" | grep -q "PROBLEM" && APPEND_TEXT="$APPEND_TEXT
+```text
 ## Problem
-
-Root cause unknown — investigation needed."
-
-  echo "$MISSING_SECTIONS" | grep -q "AFFECTED_FILES" && APPEND_TEXT="$APPEND_TEXT
+## Root Cause
 ## Affected Files
-
-Files to be identified during investigation."
-
-  echo "$MISSING_SECTIONS" | grep -q "ACCEPTANCE_CRITERIA" && APPEND_TEXT="$APPEND_TEXT
+## Expected Behavior
 ## Acceptance Criteria
-
-- [ ] Fix confirmed during investigation."
-
-  # Append missing sections to the supplied body (never replace — only extend),
-  # same non-blocking "repair, don't fail" semantics as Phase 4C.5.
-  PROGRAMMATIC_BODY="${PROGRAMMATIC_BODY}${APPEND_TEXT}"
-  echo "Body repaired in-memory before creation — added:$MISSING_SECTIONS"
-else
-  echo "Pre-create validation passed — all mandatory sections present"
-fi
 ```
 
-**This step never fails or blocks** — identical to Phase 4C.5's contract. Missing sections cause an in-memory repair, not an error; `$PROGRAMMATIC_BODY` (now guaranteed to contain all three mandatory sections) is what Phase 4B creates the issue with, and what a `--dry-run` preview (Phase 4A) prints.
+Validation is direct and fail-closed:
+
+1. Each exact heading line appears once; prefix matches such as `## Problematic` do not count.
+2. Heading line numbers are strictly ordered as listed above.
+3. Each section contains substantive non-placeholder text before the next H2 heading.
+4. Root Cause may explicitly say unknown/hypothetical; it must not fabricate certainty.
+5. Affected Files explains candidate investigation starting points and is not mutation authority.
+6. Acceptance Criteria contains at least one actionable unchecked `- [ ]` item.
+7. Specialized H2/H3 sections and machine markers may appear only in addition to the five sections.
+
+A ForgeDock-owned creator with a malformed body stops before creation and reports the
+missing/duplicate/out-of-order/empty section. Do not append generic placeholders and do
+not report success. This is creator correctness, not an admission gate: user-created and
+legacy issues remain valid work-on inputs and are normalized by investigation.
 
 ---
 
@@ -636,7 +629,7 @@ fi
 
 Once Phase 2D (dedup) has passed with no blocking duplicate, and either Phase 3E (interactive draft validation) or Phase 3F (programmatic pre-create validation) has passed, proceed directly to Phase 4B and create the issue. **No pre-create confirmation prompt.** This is the default for both interactive and programmatic invocations — dedup and validation are the correctness gates, not a human approval step.
 
-In programmatic mode, `{title}` = `$PROGRAMMATIC_TITLE`, `{full issue body}` = `$PROGRAMMATIC_BODY` (post-3F, i.e. already section-repaired), `{priority}, {category}` = the joined `PROGRAMMATIC_LABELS[@]`, and `{milestone}` = `$PROGRAMMATIC_MILESTONE` (or "none" if empty) — no interactive drafting occurred, so the dry-run preview below simply echoes back what the caller supplied (plus any 3F repairs).
+In programmatic mode, `{title}` = `$PROGRAMMATIC_TITLE`, `{full issue body}` = the unchanged `$PROGRAMMATIC_BODY` after Phase 3F validation, `{priority}, {category}` = the joined `PROGRAMMATIC_LABELS[@]`, and `{milestone}` = `$PROGRAMMATIC_MILESTONE` (or "none" if empty). No repair path exists; dry-run prints the validated caller body verbatim.
 
 **If `--dry-run` was passed** (see Argument Parsing): print the draft below and STOP. Do NOT run Phase 4B.
 
@@ -725,9 +718,8 @@ fi
 # obtains report metadata only; it must not replace that gate with a title search.
 ISSUE_URL=$(gh issue view "$NEW_NUMBER" {GH_FLAG} --json url --jq '.url')
 LABELS=$(gh issue view {NEW_NUMBER} {GH_FLAG} --json labels --jq '[.labels[].name] | join(", ")')
-echo "Created: ${ISSUE_URL}"
+echo "Created pending canonical read-back: ${ISSUE_URL}"
 echo "Labels: ${LABELS}"
-echo "ISSUE_CREATE_RESULT:CREATED number=${NEW_NUMBER} url=${ISSUE_URL}"
 ```
 
 **`--body-file` integrity read-back (MANDATORY)**: Immediately after every programmatic creation sourced from `--body-file`, re-read the issue body and assert the caller's exact marker is present. This is a hard error, not a warning: a missing marker means the write may have received another agent's plausible-looking body.
@@ -750,48 +742,22 @@ the submitted body, capture the returned object ID/number, then GET that exact
 object and assert the token is present. Empty output, a missing ID, or a failed
 read-back is a hard error, never a successful no-op or a search-indexing retry.
 
-### 4C.5: Body Validation (MANDATORY)
+### 4C.5: Canonical Body Read-Back (MANDATORY)
 
-After creation, verify the issue body contains the three mandatory pipeline sections. If any are missing, add placeholder content so downstream pipeline agents have the correct scaffolding.
+Re-read the exact created issue and apply the same five-section validator from Phase 3F,
+plus the create-token and optional caller integrity-marker checks. Success requires the
+created body—not merely the local draft—to retain exact heading uniqueness/order,
+substantive content, and an unchecked acceptance item.
 
-**Runs for both interactive and programmatic invocations, unconditionally — do not skip this step for programmatic mode.** For programmatic callers this is expected to be a no-op: Phase 3F already validated and repaired `$PROGRAMMATIC_BODY` before creation, so `$CREATED_BODY` here should already contain all three sections. This step still runs as an idempotent safety net (e.g. if GitHub or an intermediate transform altered the body between 3F and creation).
+A mismatch is a hard creation failure. Preserve the returned issue number for operator
+repair, but do not emit `ISSUE_CREATE_RESULT:CREATED`, do not append placeholders, and do
+not silently treat a malformed body as pipeline-ready. Existing user/legacy issues are
+unaffected because this check governs only the issue just created by ForgeDock.
 
-**This step never fails or blocks.** Missing sections cause a repair, not an error. Issues created with full structure pass through immediately.
+Only after canonical and integrity read-back passes, emit the success marker:
 
 ```bash
-CREATED_BODY=$(gh issue view {NEW_NUMBER} {GH_FLAG} --json body --jq '.body')
-
-MISSING_SECTIONS=""
-echo "$CREATED_BODY" | grep -q "^## Problem" || MISSING_SECTIONS="$MISSING_SECTIONS PROBLEM"
-echo "$CREATED_BODY" | grep -q "^## Affected Files" || MISSING_SECTIONS="$MISSING_SECTIONS AFFECTED_FILES"
-echo "$CREATED_BODY" | grep -q "^## Acceptance Criteria" || MISSING_SECTIONS="$MISSING_SECTIONS ACCEPTANCE_CRITERIA"
-
-if [ -n "$MISSING_SECTIONS" ]; then
-  echo "WARNING: Issue body is missing sections:$MISSING_SECTIONS — adding placeholders to preserve pipeline compatibility"
-
-  APPEND_TEXT=""
-  echo "$MISSING_SECTIONS" | grep -q "PROBLEM" && APPEND_TEXT="$APPEND_TEXT
-## Problem
-
-Root cause unknown — investigation needed."
-
-  echo "$MISSING_SECTIONS" | grep -q "AFFECTED_FILES" && APPEND_TEXT="$APPEND_TEXT
-## Affected Files
-
-Files to be identified during investigation."
-
-  echo "$MISSING_SECTIONS" | grep -q "ACCEPTANCE_CRITERIA" && APPEND_TEXT="$APPEND_TEXT
-## Acceptance Criteria
-
-- [ ] Fix confirmed during investigation."
-
-  # Append missing sections to the existing body (never replace — only extend)
-  REPAIRED_BODY="${CREATED_BODY}${APPEND_TEXT}"
-  gh issue edit {NEW_NUMBER} {GH_FLAG} --body "$REPAIRED_BODY"
-  echo "Body repaired — added:$MISSING_SECTIONS"
-else
-  echo "Body validation passed — all mandatory sections present"
-fi
+echo "ISSUE_CREATE_RESULT:CREATED number=${NEW_NUMBER} url=${ISSUE_URL}"
 ```
 
 ### 4D: Add to Project board (if configured)

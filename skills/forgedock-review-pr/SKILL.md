@@ -47,8 +47,13 @@ reasoning is not provider inactivity. Pi's generic 1,800-second attention event 
 a timeout; callers must continue waiting with `stopOnAttention: false` and must not
 steer, resume, replace, or duplicate an active reviewer before its real deadline.
 
-Create or deduplicate a GitHub issue for every finding before summary publication.
-Post an official PR review tied to the frozen SHA. Merge only when `--auto-merge` was
+Before summary publication, occurrence-deduplicate every finding, then route every new
+public finding issue through the packaged `forgedock-issue` hook. The finding body must
+extend—not replace—the global canonical Problem, Root Cause, Affected Files, Expected
+Behavior, and Acceptance Criteria sections; preserve reviewer/head/evidence/fingerprint
+metadata additively. A deduplicated legacy issue remains valid intake even when its body
+is noncanonical; preserve it unchanged and let investigation normalize the claim. Do not
+make formatting repair a reuse/admission gate. Post an official PR review tied to the frozen SHA. Merge only when `--auto-merge` was
 explicit, the original blocking policy passes, route identity is unchanged, and the
 base is authorized. Review never closes the linked issue or cleans the work-on tree.
 

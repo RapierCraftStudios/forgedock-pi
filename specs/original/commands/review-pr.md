@@ -1811,6 +1811,10 @@ cat <<'ISSUE_EOF' > "$FINDING_ISSUE_BODY_FILE"
 **Severity**: [CRITICAL/HIGH/MEDIUM/LOW]
 **Review comment**: [permalink to agent comment]
 
+## Root Cause
+
+[Verified mechanical cause, or: "Unverified review hypothesis: ...". Never present reviewer inference as established fact.]
+
 ## Pattern Metadata
 
 **Pattern**: [short slug identifying the bug class, e.g. type-coercion-at-boundary, missing-auth-check, n+1-query]
@@ -1827,8 +1831,8 @@ cat <<'ISSUE_EOF' > "$FINDING_ISSUE_BODY_FILE"
 
 ## Affected Files
 
-Files that need changes:
-1. `[file:line]` — [what needs to change to fix this finding]
+Candidate investigation starting points (not mutation authority):
+1. `[file:line]` — [why investigation should begin here]
 
 ## Source Branch Context
 
@@ -1858,6 +1862,10 @@ Files that need changes:
 
 ## Evidence
 [From agent comment]
+
+## Expected Behavior
+
+[Observable invariant or behavior that must hold if investigation validates the finding.]
 
 ## Acceptance Criteria
 

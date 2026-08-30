@@ -34,7 +34,10 @@ merge/head/patch commits reachable from frozen head and not frozen base, and ret
 6.5; ambiguous metadata fails closed. At Phase 6.5, translate the original nested
 `Skill("test-gate", ...)` call to `forgedock-test-gate` and require its
 `FORGE:TEST_GATE:RESULT=BLOCK|PASS|SKIP` marker. Translate mandatory finding creation
-calls to `forgedock-issue`; a missing marker or failed issue read-back is a hard
-failure, never a skipped gate. Emit exactly one authoritative terminal gate pass or
+calls to `forgedock-issue`; every new finding extends the global canonical Problem, Root
+Cause, Affected Files, Expected Behavior, and Acceptance Criteria sections with staging
+metadata. A missing marker or failed read-back for a newly created issue is a hard
+creator failure, never a skipped gate. Preserve a deduplicated legacy issue unchanged;
+investigation normalizes it, and formatting is not a reuse/admission gate. Emit exactly one authoritative terminal gate pass or
 failure for the reviewed SHA.
 Never merge, approve, deploy, close the source issue, or clean a work-on-owned tree.
