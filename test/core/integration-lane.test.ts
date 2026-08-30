@@ -54,6 +54,8 @@ test("milestone lanes retain their explicit branch and promotion metadata", () =
 
 test("invalid refs and malformed lanes fail closed", () => {
   assert.throws(() => validateGitRef("work-order/../unsafe"), /Invalid Git ref/);
+  assert.throws(() => validateGitRef("@"), /Invalid Git ref/);
+  assert.throws(() => validateGitRef("refs/heads/release.lock"), /Invalid Git ref/);
   assert.throws(
     () => createIntegrationLane({ ...base, kind: "work-order", stableId: "WO 297", slug: "lane" }),
     /stableId/,
@@ -67,6 +69,17 @@ test("invalid refs and malformed lanes fail closed", () => {
     branch: "work-order/other-lane",
   } as IntegrationLane;
   assert.throws(() => validateIntegrationLane(malformed), /branch/);
+  assert.throws(
+    () => createIntegrationLane({
+      ...base,
+      kind: "milestone",
+      stableId: "milestone-1",
+      slug: "lane",
+      branch: "milestone/lane",
+      frozenBase: { ...base.frozenBase, branch: "release.lock" },
+    }),
+    /Invalid Git ref/,
+  );
 });
 
 test("slug and branch helpers expose stable boundary behavior", () => {
