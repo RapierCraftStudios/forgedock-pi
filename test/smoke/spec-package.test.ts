@@ -412,18 +412,64 @@ test("pre-build proof stays builder-owned, singular, and executable", async () =
   assert.match(architect!, /Replay \/ Recovery Failure Scenario/);
   assert.match(architect!, /Exact Executable Command/);
   assert.match(architect!, /Risk[\s\S]*Severity[\s\S]*Concrete Failure Scenario[\s\S]*Exact Verification Command/);
-  assert.doesNotMatch(architect!, /### HIGH-Risk Verification/);
-  assert.doesNotMatch(architect!, /base-sha-A|reviewer receipts → apply findings/);
+  assert.match(architect!, /### HIGH-Risk Verification/);
+  assert.match(architect!, /base-sha-A[\s\S]*merge-base-sha-B/);
+  assert.match(architect!, /append reviewer receipts[\s\S]*apply findings[\s\S]*complete[\s\S]*replay/);
+  assert.match(architect!, /HIGH-risk gate.*CLOSED/);
 
   assert.match(implement!, /run every exact command/i);
   assert.match(implement!, /Architecture Verification Results/);
   assert.match(implement!, /Exact Command[\s\S]*Outcome/);
-  assert.doesNotMatch(implement!, /RISK_COUNT|PROOF_COUNT|HIGH-risk gate/);
+  assert.match(implement!, /HIGH-Risk Verification|HIGH-risk verification/i);
+  assert.match(implement!, /named test|named executable/i);
+  assert.match(implement!, /passing-after|passing-after proof/i);
   assert.match(builder!, /only Provider Transaction Proof/i);
   assert.match(builder!, /command plus passing outcome/i);
   assert.match(workOn!, /coordinator must\s+not generate architecture, provider proof, or risk matrices before fresh builder launch/i);
   assert.match(workOn!, /exactly one builder-owned Provider Transaction Proof/i);
   assert.doesNotMatch(workOn!, /HIGH-risk verification row|before builder launch,[\s\S]*Provider Transaction Proof/i);
+});
+
+test("HIGH architecture risks require discriminating regression closure", async () => {
+  const [build, architect, implement, builder, workOn] = await Promise.all(
+    [
+      "specs/original/commands/work-on/build.md",
+      "specs/original/commands/work-on/build/architect.md",
+      "specs/original/commands/work-on/build/implement.md",
+      "agents/forgedock-builder.md",
+      "skills/forgedock-work-on/SKILL.md",
+    ].map((path) => readFile(path, "utf8")),
+  );
+
+  for (const contract of [build, architect, implement, builder, workOn]) {
+    assert.match(contract!, /HIGH[- ]risk/i);
+    assert.match(contract!, /failure scenario/i);
+    assert.match(contract!, /named executable|named test/i);
+  }
+  assert.match(architect!, /identity fields[\s\S]*different sentinel values/);
+  assert.match(architect!, /durable-state risks[\s\S]*writes, clears[\s\S]*completion, and replay/);
+  assert.match(architect!, /base-sha-A[\s\S]*merge-base-sha-B/);
+  assert.match(architect!, /append reviewer receipts[\s\S]*apply findings[\s\S]*complete[\s\S]*replay/);
+  assert.match(build!, /every HIGH risk requires one verification row/);
+  assert.match(build!, /HIGH-risk gate is not closed/);
+  assert.match(implement!, /HIGH_PROOF_ROWS[\s\S]*eval/);
+  assert.match(implement!, /no HIGH risks, no extra table/);
+
+  const closesHighRisks = (body: string): boolean => {
+    const riskSection = body.split("### Risk Assessment")[1]?.split("\n### ")[0] ?? "";
+    const risks = riskSection.split("\n").filter((line) => /\|\s*HIGH\s*\|/.test(line));
+    if (risks.length === 0) return true;
+    const proofSection = body.split("### HIGH-Risk Verification")[1]?.split("\n### ")[0] ?? "";
+    const proofs = proofSection.split("\n").filter((line) => line.startsWith("|") && !/HIGH Risk|^\|[- ]+\|/.test(line));
+    return body.includes("**HIGH-risk gate**: CLOSED") && proofs.length === risks.length && proofs.every((row) => !/\{[^}]*\}|\b(?:TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|\s*\|/i.test(row));
+  };
+
+  assert.equal(closesHighRisks("### Risk Assessment\n| cache churn | MEDIUM | inspect |"), true);
+  assert.equal(closesHighRisks("### Risk Assessment\n| wrong identity | HIGH | test |"), false);
+  assert.equal(
+    closesHighRisks("### Risk Assessment\n| wrong identity | HIGH | test |\n### HIGH-Risk Verification\n| HIGH Risk | Scenario | Inputs | Test | Before |\n|---|---|---|---|---|\n| wrong identity | publishes wrong merge-base | base-sha-A / merge-base-sha-B | test distinct identity | fails before fix |\n\n**HIGH-risk gate**: CLOSED"),
+    true,
+  );
 });
 
 test("headless orchestrate waits two hours on its exact async workflow", async () => {
