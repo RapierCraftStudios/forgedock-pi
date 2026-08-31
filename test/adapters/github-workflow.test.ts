@@ -7,7 +7,10 @@ import {
   type GitHubResponse,
   type GitHubTransport,
 } from "../../src/adapters/github-api.ts";
-import { GitHubWorkflowAdapter } from "../../src/adapters/github-workflow.ts";
+import {
+  GitHubWorkflowAdapter,
+  type PullRequestReviewEvidence,
+} from "../../src/adapters/github-workflow.ts";
 
 class MockTransport implements GitHubTransport {
   readonly requests: GitHubRequest[] = [];
@@ -46,6 +49,27 @@ function pullData(
   };
 }
 
+const reviewRoute = {
+  pullNumber: 6,
+  headRef: "forge/issue-2",
+  headSha: "head-sha",
+  baseRef: "staging",
+  baseSha: "base-sha",
+  mergeBaseSha: "merge-base-sha",
+} as const;
+
+const reviewEvidence: PullRequestReviewEvidence = {
+  semanticDecision: "APPROVED",
+  repository: "owner/repo",
+  pullNumber: 6,
+  headSha: "head-sha",
+  baseSha: "base-sha",
+  mergeBaseSha: "merge-base-sha",
+  coverage: ["forge-review-security"],
+  checks: [{ name: "ci", status: "passed" }],
+  findingIds: ["F-1"],
+};
+
 function common(request: GitHubRequest): GitHubResponse<unknown> | undefined {
   if (request.path.includes("/protection/required_status_checks"))
     return response(200, { contexts: ["CI / test"], checks: [] });
@@ -59,6 +83,99 @@ function common(request: GitHubRequest): GitHubResponse<unknown> | undefined {
     return response(200, { state: "success", statuses: [] });
   return undefined;
 }
+
+test("review publication reads back an APPROVE bound to the frozen head", async () => {
+  const body = /Decision: APPROVED/;
+  let publishedBody = "";
+  const transport = new MockTransport((request) => {
+    if (request.path.includes("/pulls/6?"))
+      return response(200, { ...pullData(), user: { login: "owner" } });
+    if (request.path.includes("/git/ref/heads/staging"))
+      return response(200, { ref: "refs/heads/staging", object: { sha: "base-sha" } });
+    if (request.path.endsWith("/user")) return response(200, { login: "owner" });
+    if (request.method === "POST" && request.path.endsWith("/pulls/6/reviews")) {
+      assert.equal((request.body as { event: string }).event, "APPROVE");
+      publishedBody = (request.body as { body: string }).body;
+      return response(200, { id: 41, html_url: "https://example.test/reviews/41" });
+    }
+    if (request.method === "GET" && request.path.endsWith("/pulls/6/reviews")) {
+      return response(200, [{
+        id: 41,
+        html_url: "https://example.test/reviews/41",
+        state: "APPROVED",
+        commit_id: "head-sha",
+        body: publishedBody,
+        user: { login: "owner" },
+      }]);
+    }
+    throw new Error(`Unexpected request ${request.method} ${request.path}`);
+  });
+  const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
+  const publication = await adapter.publishPullRequestReview({
+    route: reviewRoute,
+    evidence: reviewEvidence,
+  });
+  assert.equal(publication.event, "APPROVE");
+  assert.equal(publication.url, "https://example.test/reviews/41");
+  assert.match(publication.body, body);
+  const post = transport.requests.find((request) => request.method === "POST");
+  assert.equal((post?.body as { commit_id: string }).commit_id, "head-sha");
+});
+
+test("review publication uses one pinned COMMENT only for exact self-approval rejection", async () => {
+  const events: string[] = [];
+  let publishedBody = "";
+  const transport = new MockTransport((request) => {
+    if (request.path.includes("/pulls/6?"))
+      return response(200, { ...pullData(), user: { login: "owner" } });
+    if (request.path.includes("/git/ref/heads/staging"))
+      return response(200, { ref: "refs/heads/staging", object: { sha: "base-sha" } });
+    if (request.path.endsWith("/user")) return response(200, { login: "owner" });
+    if (request.method === "POST" && request.path.endsWith("/pulls/6/reviews")) {
+      const body = request.body as { event: string; body: string };
+      events.push(body.event);
+      publishedBody = body.body;
+      return body.event === "APPROVE"
+        ? response(422, { message: "Review cannot be approved by pull request author." })
+        : response(200, { id: 42, html_url: "https://example.test/reviews/42" });
+    }
+    if (request.method === "GET" && request.path.endsWith("/pulls/6/reviews"))
+      return response(200, [{ id: 42, html_url: "https://example.test/reviews/42", state: "COMMENTED", commit_id: "head-sha", body: publishedBody, user: { login: "owner" } }]);
+    throw new Error(`Unexpected request ${request.method} ${request.path}`);
+  });
+  const publication = await new GitHubWorkflowAdapter(transport, "owner/repo").publishPullRequestReview({
+    route: reviewRoute,
+    evidence: reviewEvidence,
+  });
+  assert.deepEqual(events, ["APPROVE", "COMMENT"]);
+  assert.equal(publication.event, "COMMENT");
+  assert.match(publication.body, /head-sha/);
+  assert.match(publication.body, /base-sha/);
+  assert.match(publication.body, /merge-base-sha/);
+  assert.match(publication.body, /F-1/);
+});
+
+test("review publication never falls back for a generic provider failure", async () => {
+  const events: string[] = [];
+  const transport = new MockTransport((request) => {
+    if (request.path.includes("/pulls/6?"))
+      return response(200, { ...pullData(), user: { login: "owner" } });
+    if (request.path.includes("/git/ref/heads/staging"))
+      return response(200, { ref: "refs/heads/staging", object: { sha: "base-sha" } });
+    if (request.path.endsWith("/user")) return response(200, { login: "owner" });
+    if (request.method === "GET" && request.path.endsWith("/pulls/6/reviews")) return response(200, []);
+    if (request.method === "POST" && request.path.endsWith("/pulls/6/reviews")) {
+      events.push((request.body as { event: string }).event);
+      return response(500, { message: "provider unavailable" });
+    }
+    throw new Error(`Unexpected request ${request.method} ${request.path}`);
+  });
+  await assert.rejects(
+    new GitHubWorkflowAdapter(transport, "owner/repo").publishPullRequestReview({ route: reviewRoute, evidence: reviewEvidence }),
+    (error: unknown) => error instanceof GitHubApiError && error.status === 500,
+  );
+  assert.deepEqual(events, ["APPROVE"]);
+});
 
 test("PR lookup qualifies and exactly matches the bound head branch", async () => {
   const transport = new MockTransport((request) => {
@@ -193,7 +310,7 @@ test("merge rejects a PR retargeted from the reviewed base", async () => {
       expectedHeadSha: "head-sha",
       expectedBaseRef: "staging",
     }),
-    (error) =>
+    (error: unknown) =>
       error instanceof GitHubApiError &&
       error.status === 409 &&
       (error.response as { message?: string }).message ===
@@ -400,7 +517,7 @@ test("blocked_by 404 responses fail closed unless endpoint support is explicit",
   const missing = new MockTransport(() => response(404, { message: "Not Found" }));
   await assert.rejects(
     new GitHubWorkflowAdapter(missing, "owner/repo").listIssueBlockedBy(9),
-    (error) => error instanceof GitHubApiError && error.status === 404,
+    (error: unknown) => error instanceof GitHubApiError && error.status === 404,
   );
 });
 
@@ -411,7 +528,7 @@ test("blocked_by dependency reads reject untyped dependency records", async () =
   const adapter = new GitHubWorkflowAdapter(transport, "owner/repo");
   await assert.rejects(
     adapter.listIssueBlockedBy(9),
-    (error) => error instanceof GitHubApiError && error.status === 422,
+    (error: unknown) => error instanceof GitHubApiError && error.status === 422,
   );
 });
 
@@ -640,7 +757,7 @@ test("PR URL resolution is repository-bound and route snapshots revalidate all r
   }, TypeError);
   await assert.rejects(
     adapter.revalidatePullRequestRoute(snapshot),
-    (error) => error instanceof GitHubApiError && error.status === 409,
+    (error: unknown) => error instanceof GitHubApiError && error.status === 409,
   );
   await assert.rejects(
     adapter.resolvePullRequest("https://github.com/other/repo/pull/6"),

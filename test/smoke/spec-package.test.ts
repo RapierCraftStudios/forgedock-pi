@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -295,6 +297,8 @@ test("production seam ownership blocks test-only behavior before mutation", asyn
       "specs/original/commands/work-on/build/implement.md",
       "agents/forgedock-builder.md",
       "skills/forgedock-work-on/SKILL.md",
+      "skills/forgedock-review-pr/SKILL.md",
+      "specs/qualitative-review-protocol.md",
       "specs/pi-adapter.md",
     ].map((path) => readFile(path, "utf8")),
   );
@@ -310,6 +314,14 @@ test("production seam ownership blocks test-only behavior before mutation", asyn
   const implement = contracts[3]!;
   const builder = contracts[4]!;
   const workOn = contracts[5]!;
+  const reviewPr = contracts[6]!;
+  const reviewProtocol = contracts[7]!;
+  const piAdapter = contracts[8]!;
+  assert.match(reviewPr, /pinned `?(?:APPROVE|COMMENT)|self-approval|review URL/i);
+  assert.match(reviewPr, /independent approving identity|branch protection/i);
+  assert.match(reviewProtocol, /semantic.*(?:APPROVED|approval)[\s\S]*COMMENT|COMMENT[\s\S]*semantic/i);
+  assert.match(reviewProtocol, /merge-base|frozen.*head.*base/i);
+  assert.match(piAdapter, /publish.*review|review.*publication/i);
   assert.match(investigate, /unresolved or read-only owner[\s\S]*blocks `INVESTIGATION:COMPLETE`/);
   assert.match(build, /owner that controls the requested effect cannot remain related\/read-only/);
   assert.match(architect, /do not post `FORGE:ARCHITECT:COMPLETE`/);

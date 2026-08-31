@@ -19,6 +19,8 @@ import {
   GitHubWorkflowAdapter,
   type GitHubPullRequestRouteSnapshot,
   type MergeResult,
+  type PullRequestReviewEvidence,
+  type PullRequestReviewPublication,
 } from "../adapters/github-workflow.ts";
 import { ReviewJournal } from "../adapters/review-journal.ts";
 import {
@@ -51,6 +53,7 @@ import {
 } from "../core/recovery.ts";
 import type {
   ReviewMode,
+  ReviewPublication,
   ReviewRoster,
   ReviewState,
 } from "../core/review-state.ts";
@@ -114,6 +117,7 @@ export interface ReviewPrResult {
   findingIssues: Readonly<Record<string, number>>;
   merged: boolean;
   mergeSha?: string;
+  reviewUrl?: string;
   /** Machine-readable bundle derivation consumed by open-finding/Phase 6.5 gates. */
   stagingBundle?: StagingBundleResolution;
 }
@@ -460,10 +464,50 @@ export class ReviewPrCoordinator {
         },
         ...(input.signal ? { signal: input.signal } : {}),
       });
+      let publication: PullRequestReviewPublication | undefined;
+      if (passed) {
+        const evidence: PullRequestReviewEvidence = {
+          semanticDecision: "APPROVED",
+          repository: input.repository,
+          pullNumber: route.pullNumber,
+          headSha: decision.headSha,
+          baseSha: decision.baseSha,
+          mergeBaseSha: route.mergeBaseSha ?? await this.#github.getPullRequestMergeBase(route, input.signal),
+          coverage: snapshot.state.panel?.completedReviewers ?? [],
+          checks: snapshot.state.checks.map((check) => ({
+            name: check.name,
+            status: check.status,
+          })),
+          findingIds: forgeFindings.map((finding) => finding.id),
+        };
+        publication = await this.#github.publishPullRequestReview({
+          route,
+          evidence,
+          ...(input.signal ? { signal: input.signal } : {}),
+        });
+        const durablePublication: ReviewPublication = {
+          id: publication.id,
+          url: publication.url,
+          event: publication.event,
+          commitId: publication.commitId,
+          ...publication.evidence,
+        };
+        snapshot = await this.#journal.append({
+          reviewId: input.reviewId,
+          type: "review.publication-recorded",
+          payload: {
+            round: requirePanelRound(snapshot.state),
+            ...durablePublication,
+          },
+          idempotencyKey: "review:publication",
+          message: `Record review publication ${input.reviewId}`,
+          ...(input.signal ? { signal: input.signal } : {}),
+        });
+      }
       await this.#github.postPullArtifact({
         pullNumber: route.pullNumber,
         marker: reviewSummaryMarker(input.reviewId, route.headSha),
-        body: renderReviewSummary(decision, forgeFindings, findingIssues),
+        body: renderReviewSummary(decision, forgeFindings, findingIssues, publication),
         ...(input.signal ? { signal: input.signal } : {}),
       });
       if (mode === "staging") {
@@ -530,6 +574,7 @@ export class ReviewPrCoordinator {
         findingIssues,
         merged: Boolean(merge),
         ...(merge ? { mergeSha: merge.sha } : {}),
+        ...(publication ? { reviewUrl: publication.url } : {}),
         ...(stagingBundle ? { stagingBundle } : {}),
       };
     } finally {
@@ -1254,6 +1299,9 @@ function completedResult(
     findingIssues: {},
     merged: state.completion.outcome === "merged",
     ...(merge ? { mergeSha: merge.sha } : {}),
+    ...(state.completion.publication
+      ? { reviewUrl: state.completion.publication.url }
+      : {}),
   };
 }
 
@@ -1438,6 +1486,7 @@ function renderReviewSummary(
   decision: FinalReviewDecision,
   findings: readonly ForgeReviewFindingResult[],
   issueMap: Readonly<Record<string, number>>,
+  publication?: PullRequestReviewPublication,
 ): string {
   const renderedFindings = findings.length
     ? findings
@@ -1447,5 +1496,8 @@ function renderReviewSummary(
         )
         .join("\n")
     : "No findings reported.";
-  return `# PR Review Summary\n\n**Decision**: \`${decision.decision}\`\n**Reviewed head**: \`${decision.headSha}\`\n**Reviewed base**: \`${decision.baseSha}\`\n\n## Findings\n\n${renderedFindings}\n\n## Gate Reasons\n\n${decision.reasons.length ? decision.reasons.map((reason) => `- ${reason}`).join("\n") : "- None."}\n\n<!-- REVIEW-FINDINGS-START -->\n${findings.map((finding) => `<!-- FINDING:${finding.id}|${finding.confidence.toUpperCase()}|${finding.severity.toUpperCase()}|${finding.file}:${finding.line}|${finding.summary.replaceAll("|", "/")} -->`).join("\n")}\n<!-- REVIEW-FINDINGS-END -->`;
+  const publicationLine = publication
+    ? `\n**Review URL**: ${publication.url}\n**Review event**: ${publication.event}`
+    : "";
+  return `# PR Review Summary\n\n**Decision**: \`${decision.decision}\`\n**Reviewed head**: \`${decision.headSha}\`\n**Reviewed base**: \`${decision.baseSha}\`${publicationLine}\n\n## Findings\n\n${renderedFindings}\n\n## Gate Reasons\n\n${decision.reasons.length ? decision.reasons.map((reason) => `- ${reason}`).join("\n") : "- None."}\n\n<!-- REVIEW-FINDINGS-START -->\n${findings.map((finding) => `<!-- FINDING:${finding.id}|${finding.confidence.toUpperCase()}|${finding.severity.toUpperCase()}|${finding.file}:${finding.line}|${finding.summary.replaceAll("|", "/")} -->`).join("\n")}\n<!-- REVIEW-FINDINGS-END -->`;
 }

@@ -73,7 +73,13 @@ initialize one clean unpushed branch to that SHA, then publishes `FORGE:BASE`. A
 edits, commit, push, or PR creation, target repair by reset/rebase is forbidden and the
 lane gates automatically without claiming human authority.
 
-Review panels use fresh read-only reviewers with repository read/search access; a
+Review publication is a controller-owned production side effect after semantic gates:
+the GitHub adapter attempts one `APPROVE` bound to the frozen head and falls back to one
+`COMMENT` only for authenticated PR-owner HTTP 422 self-approval rejection. It reads back
+the durable URL and carries semantic `APPROVED`, frozen head/base/merge-base, coverage,
+checks, and finding IDs into durable review completion. COMMENT is audit evidence only and
+cannot satisfy independent protected-branch approval; generic provider/readback failures
+remain GATED. Review panels use fresh read-only reviewers with repository read/search access; a
 frozen diff is the starting point, never the sole code authority. Reviewers must trace
 callers, imports, registration points, and cross-service behavior as required by the
 review protocol. The bounded sibling shapes stay within Pi's default nesting depth:

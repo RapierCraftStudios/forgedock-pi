@@ -175,6 +175,16 @@ and automatically wakes it on completed, failed, killed, or cancelled terminal s
 Resource-sensitive packed-package checks must run separately and serially and remain mandatory evidence;
 a progress-only response is never terminal verification.
 
+Review publication records semantic approval separately from provider event state. The
+coordinator attempts one pinned `APPROVE` review for the frozen head, and falls back to
+one pinned `COMMENT` only when authenticated actor equals PR owner and GitHub returns
+HTTP 422 with the exact self-approval rejection message. The COMMENT URL is durable
+audit evidence and records semantic `APPROVED`, frozen head/base/merge-base, coverage,
+checks, and finding IDs; it never impersonates an independent protected-branch approval.
+Generic failures and readback mismatches remain gated. Non-protected exact-head routes
+may auto-merge only when existing policy authorizes them; protected routes remain gated
+for independent approval.
+
 For every irreversible provider action, the closure matrix also proves authority and all
 preconditions before the action, exact provider-result binding, idempotent replay after
 provider success, and recovery from failure between side effect and durable receipt.

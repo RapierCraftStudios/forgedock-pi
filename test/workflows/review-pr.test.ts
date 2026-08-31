@@ -124,6 +124,7 @@ class GitHubFake {
   currentRoute: GitHubPullRequestRouteSnapshot;
   readonly driftAfterFirstValidation?: Partial<GitHubPullRequestRouteSnapshot>;
   readonly artifacts: Array<{ marker: string; body: string }> = [];
+  readonly publications: unknown[] = [];
   readonly issues: Array<{
     number: number;
     title: string;
@@ -199,6 +200,22 @@ class GitHubFake {
   async postPullArtifact(input: { marker: string; body: string }) {
     this.artifacts.push({ marker: input.marker, body: input.body });
     return this.artifacts.length;
+  }
+
+  async getPullRequestMergeBase() {
+    return route.baseSha;
+  }
+
+  async publishPullRequestReview(input: { route: GitHubPullRequestRouteSnapshot; evidence: Record<string, unknown> }) {
+    this.publications.push(input);
+    return {
+      id: 1,
+      url: "https://example.test/pulls/7/reviews/1",
+      event: "APPROVE" as const,
+      commitId: input.route.headSha,
+      body: "review body",
+      evidence: input.evidence,
+    };
   }
 
   async listIssuesByLabel() {
@@ -405,6 +422,8 @@ test("clean standalone review posts route, reviewer, and summary and completes r
   assert.equal(result.merged, false);
   assert.equal(result.state.status, "completed");
   assert.equal(result.state.completion?.outcome, "reviewed");
+  assert.equal(result.reviewUrl, "https://example.test/pulls/7/reviews/1");
+  assert.equal(result.state.completion?.publication?.event, "APPROVE");
   assert.equal(result.decision.decision, "approved-with-follow-ups");
   assert.deepEqual(result.findingIssues, { "SEC-001": 100 });
   assert.deepEqual(
@@ -419,6 +438,7 @@ test("clean standalone review posts route, reviewer, and summary and completes r
       "review.panel-completed",
       "review.verdict-recorded",
       "review.gate-recorded",
+      "review.publication-recorded",
       "review.completed",
     ],
   );
@@ -451,6 +471,14 @@ test("clean standalone review posts route, reviewer, and summary and completes r
   assert.match(h.github.artifacts[1]?.body ?? "", /forge-review-security/);
   assert.match(h.github.artifacts[2]?.marker ?? "", /REVIEW_FINDING_ISSUES/);
   assert.match(h.github.artifacts[3]?.marker ?? "", /FORGE:REVIEW_SUMMARY/);
+});
+
+test("AlterLab PR #33394 fallback and PR #33392 false-gated regression keep review URL durable", async () => {
+  const h = harness();
+  const result = await h.coordinator.review(request());
+  assert.equal(result.reviewUrl, "https://example.test/pulls/7/reviews/1");
+  assert.equal(result.state.publication?.semanticDecision, "APPROVED");
+  assert.equal(result.state.publication?.headSha, route.headSha);
 });
 
 test("passing reviewer scope limitations remain audit context, not unknown checks", async () => {

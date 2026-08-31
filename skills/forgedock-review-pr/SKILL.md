@@ -5,6 +5,9 @@ description: Run the authoritative context-aware ForgeDock review for an exact P
 
 # ForgeDock Review PR
 
+This skill drives the production caller/adapter seam; test-local fixtures and
+prose-only contracts never substitute for production publication wiring.
+
 ## Required loading
 
 1. Read `../../specs/pi-adapter.md` completely.
@@ -46,6 +49,14 @@ set it to at least `3900000`. Never use 120000/180000 ms reviewer deadlines. Act
 reasoning is not provider inactivity. Pi's generic 1,800-second attention event is not
 a timeout; callers must continue waiting with `stopOnAttention: false` and must not
 steer, resume, replace, or duplicate an active reviewer before its real deadline.
+
+After semantic gates pass, publish exactly one official review on the frozen head. Attempt
+`APPROVE` first with `commit_id=headSha`; only authenticated actor = PR owner plus HTTP
+422 and the exact `Review cannot be approved by pull request author.` response permits one
+`COMMENT` fallback. Read back and require the durable review URL. The COMMENT body must
+retain `APPROVED`, frozen head/base/merge-base, coverage, checks, and finding IDs. It is
+audit evidence only and never supplies an independent approving identity or branch protection approval. Generic
+provider errors, stale identity, malformed evidence, and readback failures remain GATED.
 
 Before summary publication, occurrence-deduplicate every finding, then route every new
 public finding issue through the packaged `forgedock-issue` hook. The finding body must

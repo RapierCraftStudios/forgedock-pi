@@ -2,7 +2,8 @@
 
 This protocol applies to an issue lane whose integration target can move while the
 lane is being validated or reviewed. It is a review-safety contract, not a workflow
-engine.
+engine. The production caller/adapter seam owns publication; this protocol does not
+replace executable wiring with prose or test-local fixtures.
 
 ## Identity vocabulary
 
@@ -18,6 +19,23 @@ engine.
 
 A review or verification result is authorization only for its exact identity tuple.
 No result from a previous base, head, or tuple may authorize a later one.
+
+## Official review publication
+
+Semantic approval and GitHub review events are separate facts. After the complete
+frozen-head panel, checks, findings, mergeability, lease, and policy gates produce
+`APPROVED` (or `APPROVED_WITH_FOLLOWUPS`), the coordinator publishes exactly one
+review for the frozen head. It first attempts a pinned `APPROVE` request with
+`commit_id=review_head_sha`, then reads the review back and requires its durable URL.
+
+If and only if the authenticated actor equals the pull-request owner and GitHub
+returns HTTP 422 with the exact normalized message `Review cannot be approved by
+pull request author.`, ForgeDock makes one pinned `COMMENT` request using the same
+body and frozen identity. The body records semantic `APPROVED`, repository/PR,
+head/base/merge-base, complete reviewer coverage, checks, and finding IDs. The
+COMMENT URL is audit evidence and never satisfies an independent protected-branch
+approval. Generic provider errors, stale or malformed identity, and readback
+failures remain gated; mutations are never blindly retried.
 
 ## Controlled refresh transaction
 
