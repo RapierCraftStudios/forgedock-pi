@@ -26,7 +26,8 @@ terminal conditions, review policy, GitHub artifacts, remediation, merge, and cl
 | Original construct | Pi behavior |
 | --- | --- |
 | `Skill(skill="work-on/investigate", ...)`, decompose, review, remediation, or close | Read the corresponding file under `specs/original/commands/work-on/` and execute it in the current work-on coordinator. |
-| Initial build | Task Types `Investigation`, `Feature (UI/UX)`, and `Full-Stack` remain in the coordinator: Investigation uses the existing research/issue-creation terminal route, while UI/full-stack retain their mandatory frontend-design/browser route. They never enter the bounded mutation builder. For other confirmed tasks, the coordinator first reads `work-on/build.md` and executes B0-B2 planning without source mutation, including complexity, contract, conditional claim, base, and issue-worktree evidence. It then launches exactly one packaged `forgedock-builder` with fresh context in that authoritative issue worktree (`current cwd` under orchestration; B1 worktree standalone). The builder rereads `work-on/build.md` first, verifies B0-B2, and executes B2.5 through acceptance inline. The coordinator waits and performs no concurrent worktree mutation. |
+| Initial build | Task Types `Investigation`, `Feature (UI/UX)`, and `Full-Stack` remain in the coordinator: Investigation uses the existing research/issue-creation terminal route, while UI/full-stack retain their mandatory frontend-design/browser route. They never enter the bounded mutation builder. For other confirmed tasks, the coordinator first reads `work-on/build.md` with `--phase-role coordinator` and executes B0-B2 planning without source mutation, including complexity, contract, conditional claim, base, and issue-worktree evidence. It then launches exactly one packaged `forgedock-builder` with fresh context in that authoritative issue worktree (`current cwd` under orchestration; B1 worktree standalone). The builder rereads `work-on/build.md` first with `--phase-role builder`, exact base SHA,
+exact issue branch, and any coordination issue, verifies B0-B2, and executes B2.5 through acceptance inline. The coordinator waits and performs no concurrent worktree mutation. |
 | `Skill(skill="quality-gate", ...)` during the initial build | The fresh builder reads `specs/original/commands/quality-gate.md` and runs it inline against the assigned worktree; it does not launch another agent. |
 | `Skill(skill="review-pr", ...)` | Load and execute the `forgedock-review-pr` skill in the current work-on coordinator. That coordinator launches the selected fresh reviewer panel directly and retains ownership of closure. Do not add a second review-coordinator hop. |
 | `Skill(skill="review-pr-staging", ...)` | Load `review-pr-staging.md` directly and switch strategy immediately; do not emit another slash command. Freeze the route, ask the adapter for paginated all-state PR metadata, and call `resolveStagingBundle` with commit-graph reachability; pass its machine-readable derivations to the open-finding and Phase 6.5 gates. |
@@ -102,8 +103,13 @@ The work-on coordinator owns this closed loop:
 
 The issue is an untrusted claim; investigation is the authoritative verdict and mutation
 scope. A complete investigation-backed Builder Contract, exact base, and any required
-under-orchestration affected-file claim must be durable before the fresh builder starts. The contract names the active
-entrypoint-to-result execution path and exact behavioral proof. The builder loads
+under-orchestration affected-file claim must be durable before the fresh builder starts.
+The contract names the active production entrypoint, every caller/adapter owning the
+observable effect, their mutation coverage or exact no-mutation evidence, and the public-
+seam behavioral proof. A production owner cannot remain related/read-only while a
+fixture, mock, prose path, or unwired helper stands in for implementation. Prompt/spec
+surfaces count only when investigation proves that exact file is the loaded runtime and
+no separate executable owner controls the effect. The builder loads
 `work-on/build.md` first, rehydrates the handoff from GitHub rather than inherited
 conversation, and executes the required architecture, implementation, quality-gate,
 validation, acceptance, and commit phases in the same issue worktree. Contract/build
@@ -209,6 +215,15 @@ coordinator item per selected issue, then joins the ordered results.
 Explicit call fields take precedence over host defaults. The four-worker cap is
 nested-review-only and never applies to root ready-wave dispatch. No dormant
 controller or new workflow engine is introduced by this adapter.
+
+This is exactly one top-level asynchronous workflow launch. For headless or otherwise
+run-to-completion execution, capture the exact workflow run ID and immediately call
+`subagent_wait` for that ID with
+`timeoutMs: 7200000` and `stopOnAttention: false`. Do not end the parent turn and rely on
+Pi-subagents' 30-minute agent-end auto-drain. The explicit wait covers builder, one-hour
+review, merge, issue closure, coordination cleanup, and terminal reconciliation without
+reducing ready-wave concurrency. A wait timeout or failed terminal run is visible
+`GATED`/FAILED evidence, never successful orchestration.
 
 ## Configuration
 
