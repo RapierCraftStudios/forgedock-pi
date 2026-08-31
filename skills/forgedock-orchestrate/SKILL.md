@@ -77,12 +77,20 @@ the fresh read-only reviewers required by its review phase. Do not use the built
 run subagents" instruction; forbid nested issue/work-on orchestration while preserving
 its mandatory reviewer fanout.
 
-Launch the async orchestration workflow with
-`control.needsAttentionAfterMs: 3900000` or greater. While a valid one-hour reviewer is
-active, join with `stopOnAttention: false`; Pi's generic 1,800-second attention signal is
-observational, not a timeout or permission to steer, resume, replace, or relaunch the
-coordinator. Only the configured reviewer deadline or an explicit supervisor request
-may interrupt that wait.
+Launch exactly one top-level orchestration `workflowScript` with `async: true` and
+`control.needsAttentionAfterMs: 3900000` or greater. Capture the exact returned workflow
+run ID. Because `/orchestrate` is run-to-completion, immediately wait on that exact run:
+
+`subagent_wait({ id: "<workflow-run-id>", timeoutMs: 7200000, stopOnAttention: false })`
+
+Do not end a headless parent turn and rely on Pi-subagents' fixed 1,800,000 ms agent-end
+auto-drain. The explicit two-hour wait covers builder, valid one-hour review, merge,
+issue closure, coordination cleanup, and terminal reconciliation while child lanes retain
+bounded concurrency. A wait timeout, failed run, or unresolved work remains visible
+GATED/FAILED evidence and cannot be reported as successful orchestration. Pi's generic
+attention signal is observational, not permission to steer, resume, replace, or relaunch
+the coordinator. Only the configured reviewer deadline or an explicit supervisor request
+may interrupt the exact-run wait.
 
 After each investigation and before implementation, read finalized `FORGE:CLAIM`
 markers from the coordination issue. If active claims overlap, serialize before either

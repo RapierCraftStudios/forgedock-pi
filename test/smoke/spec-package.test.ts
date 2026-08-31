@@ -286,6 +286,123 @@ test("investigation acceptance checks preserve source cardinality and E2E behavi
   assert.match(build, /only build path that\s+may append `FORGE:BUILDER:COMPLETE`/);
 });
 
+test("production seam ownership blocks test-only behavior before mutation", async () => {
+  const contracts = await Promise.all(
+    [
+      "specs/original/commands/work-on/investigate.md",
+      "specs/original/commands/work-on/build.md",
+      "specs/original/commands/work-on/build/architect.md",
+      "specs/original/commands/work-on/build/implement.md",
+      "agents/forgedock-builder.md",
+      "skills/forgedock-work-on/SKILL.md",
+      "specs/pi-adapter.md",
+    ].map((path) => readFile(path, "utf8")),
+  );
+
+  for (const contract of contracts) {
+    assert.match(contract, /Production (?:Execution Seam|Seam Ownership)|production (?:execution seam|caller\/adapter)|production entrypoint[\s\S]{0,120}caller\/adapter/i);
+    assert.match(contract, /test-local (?:fixture|helper)|fixture\/mock|fixtures?, mocks?/i);
+    assert.match(contract, /production (?:owner|caller|entrypoint)/i);
+  }
+  const investigate = contracts[0]!;
+  const build = contracts[1]!;
+  const architect = contracts[2]!;
+  const implement = contracts[3]!;
+  const builder = contracts[4]!;
+  const workOn = contracts[5]!;
+  assert.match(investigate, /unresolved or read-only owner[\s\S]*blocks `INVESTIGATION:COMPLETE`/);
+  assert.match(build, /owner that controls the requested effect cannot remain related\/read-only/);
+  assert.match(architect, /do not post `FORGE:ARCHITECT:COMPLETE`/);
+  assert.match(architect, /returns?\s+automated `GATED` to investigation/i);
+  assert.match(implement, /Before I3, require a current `### Production Seam Ownership` section/);
+  assert.match(implement, /at least one\s+non-header ownership row/);
+  assert.match(implement, /before the first source mutation/);
+  assert.match(implement, /resume never bypasses current ownership/);
+  assert.match(investigate, /legacy completion marker[\s\S]*does not authorize build/);
+  assert.match(build, /INVESTIGATION:COMPLETE[\s\S]*### Production Execution Seam/);
+  assert.match(build, /FORGE:CONTRACT[\s\S]*### Production Seam Ownership/);
+  assert.match(build, /--phase-role coordinator\|builder/);
+  assert.match(build, /Coordinator role is allowed to create B2 artifacts/);
+  assert.match(build, /Select the latest terminal investigator artifact first/);
+  for (const field of ["Observable effect", "Public entrypoint", "Production owners", "Mutation coverage", "Acceptance seam"]) assert.match(build, new RegExp(field));
+  assert.match(build, /Builder Contract has no production ownership data row/);
+  assert.match(build, /Select the latest terminal investigator artifact first|Select the latest terminal investigator artifact/);
+  assert.match(build, /Select latest artifacts before checking completion/);
+  assert.match(build, /expected base SHA missing or malformed/);
+  assert.match(build, /FORGE:BASE SHA missing, ambiguous, or mismatched/);
+  assert.match(build, /active FORGE:CLAIM missing or incomplete/);
+  assert.match(build, /claim missing deliverable/);
+  assert.match(build, /ownership row is empty or placeholder/);
+  assert.match(build, /ownership gate is not exactly CLOSED/);
+  assert.match(build, /current architecture for resume/);
+  assert.match(architect, /Select the latest architect artifact before checking completion/);
+  assert.match(implement, /Select latest artifacts before checking schema\/completion/);
+  assert.match(implement, /resume never bypasses current ownership/);
+  assert.match(builder, /--phase-role builder/);
+  assert.match(workOn, /--phase-role coordinator/);
+  assert.match(workOn, /--phase-role builder/);
+  assert.match(architect, /Every complexity band, including TRIVIAL/);
+  assert.match(architect, /ownership-bearing Skip Marker/);
+  assert.doesNotMatch(architect, /TRIVIAL[^\n]*skip all phases/);
+  assert.match(architect, /legacy\/empty completion artifacts are insufficient/i);
+});
+
+test("production ownership artifact rules reject stale and placeholder authority", () => {
+  const latest = (comments: string[], marker: string): string =>
+    comments.filter((body) => body.includes(marker)).at(-1) ?? "";
+  const substantiveInvestigation = (body: string): boolean =>
+    [
+      "### Production Execution Seam",
+      "**Observable effect**:",
+      "**Public entrypoint**:",
+      "**Production owners**:",
+      "**Mutation coverage**:",
+      "**Acceptance seam**:",
+    ].every((field) => {
+      const line = body.split("\n").find((candidate) => candidate.startsWith(field));
+      const value = line?.slice(line.indexOf(":") + 1).trim() ?? "";
+      return value.length > 0 && !/^(?:\{.*\}|tbd|todo|unknown|none|n\/a|placeholder)$/i.test(value);
+    });
+  const closedOwnership = (body: string): boolean => {
+    const section = body.split("### Production Seam Ownership")[1]?.split("\n### ")[0] ?? "";
+    const rows = section
+      .split("\n")
+      .filter((line) => line.startsWith("|") && !/Observable Effect|^\|[- ]+\|/.test(line));
+    return (
+      body.includes("**Ownership gate**: CLOSED") &&
+      rows.length > 0 &&
+      rows.every((row) => !/\{[^}]*\}|\b(?:TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|\s*\|/i.test(row))
+    );
+  };
+
+  const oldValid = "<!-- FORGE:INVESTIGATOR -->\n<!-- INVESTIGATION:COMPLETE -->\n### Production Execution Seam\n**Observable effect**: publish review\n**Public entrypoint**: src/api.ts:run\n**Production owners**: src/adapter.ts:publish\n**Mutation coverage**: both deliverables\n**Acceptance seam**: public command";
+  const newerLegacy = "<!-- FORGE:INVESTIGATOR -->\n<!-- INVESTIGATION:COMPLETE -->";
+  assert.equal(latest([oldValid, newerLegacy], "FORGE:INVESTIGATOR"), newerLegacy);
+  assert.equal(substantiveInvestigation(newerLegacy), false);
+  assert.equal(substantiveInvestigation(oldValid), true);
+
+  const placeholderRow = "### Production Seam Ownership\n| Observable Effect | Public Entrypoint | Production Owner | Mutation | Test |\n|---|---|---|---|---|\n| {EFFECT} |  | TBD | {PROOF} | test |\n**Ownership gate**: OPEN";
+  const closedRow = "### Production Seam Ownership\n| Observable Effect | Public Entrypoint | Production Owner | Mutation | Test |\n|---|---|---|---|---|\n| publish review | cli:run | src/api.ts:run | change adapter | e2e |\n**Ownership gate**: CLOSED";
+  assert.equal(closedOwnership(placeholderRow), false);
+  assert.equal(closedOwnership(closedRow), true);
+});
+
+test("headless orchestrate waits two hours on its exact async workflow", async () => {
+  const orchestrate = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
+  const adapter = await readFile("specs/pi-adapter.md", "utf8");
+
+  for (const contract of [orchestrate, adapter]) {
+    assert.match(contract, /exactly one top-level.*async|exactly one top-level asynchronous/s);
+    assert.match(contract, /subagent_wait/);
+    assert.match(contract, /timeoutMs: 7200000/);
+    assert.match(contract, /stopOnAttention: false/);
+    assert.match(contract, /1,800,000 ms|30-minute/);
+    assert.match(contract, /coordination cleanup/);
+  }
+  assert.match(orchestrate, /exact returned workflow\s+run ID/);
+  assert.match(adapter, /exact workflow run ID/);
+});
+
 test("orchestrated work-on keeps review coordination in the issue coordinator", async () => {
   const orchestrate = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
   const workOn = await readFile("skills/forgedock-work-on/SKILL.md", "utf8");
