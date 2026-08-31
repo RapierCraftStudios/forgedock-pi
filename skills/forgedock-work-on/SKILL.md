@@ -20,20 +20,29 @@ GitHub is its durable memory.
 
 Before resolving state, resolve the config path as `FORGE_CONFIG` (defaulting to the
 literal `forge.yaml` only for standalone/non-managed runs). Under `--under-orchestration`,
-`FORGE_CONFIG` is mandatory and must point to the orchestrator's validated runtime-only
-projection at `.forge/runtime/forge.yaml`; never recreate or copy the parent config in the
-child. Read it with direct Bash, verify the active `gh` identity and repository access, and
-run `gh auth setup-git` so Git transport is noninteractive. Use direct `gh` and `git`
+`FORGE_CONFIG` is mandatory in the child task context and must point to the orchestrator's
+validated runtime-only projection at `.forge/runtime/forge.yaml`; never recreate or copy
+the parent config in the child. Because Pi's native child launch has no environment map,
+the coordinator must establish the value at startup (`FORGE_CONFIG=...`) and use that
+same value for every shell command; the projection path is also the default relative
+fallback `.forge/runtime/forge.yaml` when the task context cannot inject process
+variables. Read it with direct Bash, verify the active `gh` identity and repository access,
+and run `gh auth setup-git` so Git transport is noninteractive. Use direct `gh` and `git`
 commands throughout; do not use custom workflow runtime tools. Missing authentication,
 repository access, or projected config stops the route.
 
 Before resolving state in managed mode, run `realpath` on the assigned cwd and
 `FORGE_CONFIG`, require the config's parsed `paths.root` to equal the assigned cwd, and
-require `paths.worktree_base` to be within `<assigned-cwd>/.forge/runtime`. All loaded
-phase snippets that say `forge.yaml` must read `$FORGE_CONFIG` instead. Reject absolute
-parent-checkout paths, symlink escapes, traversal, and any fallback to a config outside
-the assigned cwd. The projected file is runtime-only and ignored; `git status` must remain
-clean and implementation commits must never add it. Standalone runs retain literal
+require `paths.worktree_base` to be within `<assigned-cwd>/.forge/runtime`. For legacy
+phase snippets that still contain literal `forge.yaml`, create a child-local relative
+compatibility symlink only when that name is absent:
+`ln -s .forge/runtime/forge.yaml forge.yaml`, record it in `.git/info/exclude`, and
+verify `realpath forge.yaml` remains inside the child. This on-disk alias makes every
+loaded phase consume the projection without modifying the packaged original specs; all
+new snippets must read `$FORGE_CONFIG`. Reject absolute parent-checkout paths, symlink
+escapes, traversal, and any fallback to a config outside the assigned cwd. The projected
+file and compatibility alias are runtime-only and ignored; `git status` must remain clean
+and implementation commits must never add either. Standalone runs retain literal
 `forge.yaml` and existing behavior.
 
 ## Under-orchestration work-order binding

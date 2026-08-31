@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { constants } from "node:fs";
+import { constants, lstatSync } from "node:fs";
 import { mkdir, open, readFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { realpathSync } from "node:fs";
@@ -92,16 +92,33 @@ function contained(root, candidate) {
   return suffix === "" || (!suffix.startsWith("..") && !isAbsolute(suffix));
 }
 
+function rejectSymlink(path, label) {
+  try {
+    const stat = lstatSync(path);
+    if (stat.isSymbolicLink()) throw new Error(`projection ${label} must not be a symlink`);
+    if (!stat.isDirectory()) throw new Error(`projection ${label} must be a directory`);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+}
+
 const options = args(process.argv.slice(2));
 const childRoot = realpathSync(resolve(options["child-root"]));
 const output = resolve(options.output);
 const runtimeRoot = resolve(childRoot, ".forge", "runtime");
-if (!contained(childRoot, runtimeRoot) || !contained(runtimeRoot, output))
-  throw new Error("projection output must be inside the child runtime directory");
+const expectedOutput = resolve(runtimeRoot, "forge.yaml");
+// Keep the output shape fixed. This avoids intermediate symlink traversal while
+// still allowing the command to be replayed for the same child.
+if (output !== expectedOutput)
+  throw new Error("projection output must be child/.forge/runtime/forge.yaml");
+if (!contained(childRoot, runtimeRoot))
+  throw new Error("projection runtime directory escapes the child root");
+rejectSymlink(resolve(childRoot, ".forge"), "child .forge directory");
+rejectSymlink(runtimeRoot, "runtime directory");
 await mkdir(runtimeRoot, { recursive: true });
 const runtimeParent = realpathSync(runtimeRoot);
-if (!contained(childRoot, runtimeParent) || !contained(runtimeParent, output))
-  throw new Error("projection output parent escapes the child root");
+if (!contained(childRoot, runtimeParent) || runtimeParent !== runtimeRoot)
+  throw new Error("projection runtime directory is a symlink escape");
 
 const value = YAML.parse(await readFile(resolve(options.input), "utf8"), {
   strict: true,
@@ -111,10 +128,14 @@ validate(value);
 const projected = { ...value, paths: { ...value.paths } };
 projected.paths.root = childRoot;
 projected.paths.worktree_base = resolve(childRoot, ".forge", "runtime", "worktrees");
+rejectSymlink(projected.paths.worktree_base, "worktree base");
 await mkdir(projected.paths.worktree_base, { recursive: true });
-const flags = constants.O_NOFOLLOW === undefined
-  ? constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC
-  : constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW;
+const worktreeParent = realpathSync(projected.paths.worktree_base);
+if (!contained(childRoot, worktreeParent) || worktreeParent !== projected.paths.worktree_base)
+  throw new Error("projection worktree base is a symlink escape");
+if (constants.O_NOFOLLOW === undefined)
+  throw new Error("projection requires O_NOFOLLOW support");
+const flags = constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW;
 const handle = await open(output, flags, 0o600);
 try {
   await handle.writeFile(YAML.stringify(projected), "utf8");

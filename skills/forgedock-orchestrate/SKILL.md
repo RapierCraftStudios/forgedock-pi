@@ -31,8 +31,12 @@ must never be copied verbatim into a child: absolute `paths.root` or
 `paths.worktree_base` values can point back to the anchor checkout. For each allocated
 child worktree, run the installed ForgeDock projection helper at the pinned package
 revision to parse/validate the canonical YAML and write only a runtime config at
-`<child-cwd>/.forge/runtime/forge.yaml`. Invoke the packaged command explicitly:
-`forgedock-project-config --input "$CANONICAL_FORGE_CONFIG" --output "$CHILD_ROOT/.forge/runtime/forge.yaml" --child-root "$CHILD_ROOT"`.
+`<child-cwd>/.forge/runtime/forge.yaml`. Resolve the packaged command from the
+installation rather than assuming Pi's PATH contains package bins:
+`PROJECTOR="${FORGEDOCK_PROJECTOR:-${FORGEDOCK_HOME:-}/scripts/project-forge-config.mjs}"`
+then invoke `node "$PROJECTOR" --input "$CANONICAL_FORGE_CONFIG" --output
+"$CHILD_ROOT/.forge/runtime/forge.yaml" --child-root "$CHILD_ROOT"`; if
+`FORGEDOCK_HOME`/the resolved helper is unavailable, stop as automated GATED evidence.
 The helper must rewrite only `paths.root=<child-cwd>` and
 `paths.worktree_base=<child-cwd>/.forge/runtime/worktrees`, preserving project identity,
 branches, review, verification, and agent policy fields. Create both directories before
