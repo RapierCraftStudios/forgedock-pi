@@ -474,11 +474,21 @@ export function registerForgeRuntime(
           ...(signal ? { signal } : {}),
         },
       );
-      if (remote.exitCode !== 0 || !remote.stdout.trim())
+      const remoteSha = remote.stdout.trim();
+      const previouslyReviewedHead = binding.reviewHeadSha?.trim();
+      if (remote.exitCode !== 0 || !remoteSha)
         throw new Error(
           "Cannot refresh a lane without the existing owned remote branch.",
         );
-      refreshPushLeaseSha = remote.stdout.trim();
+      if (!previouslyReviewedHead)
+        throw new Error(
+          "Cannot refresh a lane without the previously reviewed remote branch head.",
+        );
+      if (remoteSha !== previouslyReviewedHead)
+        throw new Error(
+          `Cannot refresh a lane whose remote branch head ${remoteSha} differs from the previously reviewed head ${previouslyReviewedHead}.`,
+        );
+      refreshPushLeaseSha = remoteSha;
       const rebased = await runProcess(
         "git",
         ["-C", root, "rebase", binding.baseSha],

@@ -18,6 +18,7 @@ import test from "node:test";
 import {
   ForgeOutputLimitError,
   FORGE_REVIEWER_CAPABILITY_CEILING,
+  registerForgeRuntime,
   allowedNodeTools,
   appendBounded,
   assertCommittedTree,
@@ -37,6 +38,8 @@ import {
   runProcess,
   writeTrustedResultFile,
 } from "../../src/agents/child-runtime.ts";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ForgeChildBinding } from "../../src/agents/child-runtime.ts";
 import { redactGitHubTokens } from "../../src/adapters/github-api.ts";
 import { FORGE_WORK_ON_TOOLS } from "../../src/agents/register.ts";
 
@@ -45,6 +48,103 @@ const execFileAsync = promisify(execFile);
 async function git(cwd: string, ...args: string[]) {
   return execFileAsync("git", args, { cwd, encoding: "utf8" });
 }
+
+async function refreshFixture() {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-refresh-"));
+  const remote = await mkdtemp(join(tmpdir(), "forgedock-refresh-remote-"));
+  await git(remote, "init", "--bare");
+  await git(root, "init", "-b", "staging");
+  await git(root, "config", "user.email", "test@example.com");
+  await git(root, "config", "user.name", "ForgeDock test");
+  await writeFile(join(root, "base.txt"), "base\\n");
+  await git(root, "add", "base.txt");
+  await git(root, "commit", "-m", "base");
+  const baseSha = (await git(root, "rev-parse", "HEAD")).stdout.trim();
+  await git(root, "checkout", "-b", "lane");
+  await writeFile(join(root, "lane.txt"), "lane\\n");
+  await git(root, "add", "lane.txt");
+  await git(root, "commit", "-m", "lane");
+  const laneSha = (await git(root, "rev-parse", "HEAD")).stdout.trim();
+  await git(root, "remote", "add", "origin", remote);
+  await git(root, "push", "origin", "staging", "lane");
+  return { root, remote, baseSha, laneSha };
+}
+
+type RefreshTool = {
+  execute: (
+    toolCallId: string,
+    params: Record<string, never>,
+    signal?: AbortSignal,
+  ) => Promise<unknown>;
+};
+
+async function executeRefresh(reviewHeadSha?: string) {
+  const fixture = await refreshFixture();
+  const boundReviewHeadSha =
+    reviewHeadSha === "match" ? fixture.laneSha : reviewHeadSha;
+  const tools = new Map<string, RefreshTool>();
+  const binding: ForgeChildBinding = {
+    runId: "refresh-test",
+    resultPath: join(fixture.root, "result.json"),
+    repository: "owner/repo",
+    worktreeRoot: fixture.root,
+    branch: "lane",
+    baseBranch: "staging",
+    baseSha: fixture.baseSha,
+    maxReviewRounds: 3,
+    reviewerTimeoutMs: 300_000,
+    verificationCommands: {},
+    refresh: true,
+    previousReviewRounds: 1,
+    ...(boundReviewHeadSha === undefined
+      ? {}
+      : { reviewHeadSha: boundReviewHeadSha }),
+  };
+  const pi = {
+    on: () => () => {},
+    registerTool: (tool: unknown) => {
+      const registered = tool as RefreshTool & { name: string };
+      tools.set(registered.name, registered);
+    },
+  } as unknown as ExtensionAPI;
+  const previousToken = process.env.FORGEDOCK_BOT_TOKEN;
+  process.env.FORGEDOCK_BOT_TOKEN = "test-token";
+  try {
+    registerForgeRuntime(pi, {
+      bindingProvider: () => binding,
+      registerAgents: false,
+    });
+    const tool = tools.get("forge_refresh_base");
+    assert.ok(tool);
+    return await tool.execute("refresh-test", {}, undefined);
+  } finally {
+    if (previousToken === undefined) delete process.env.FORGEDOCK_BOT_TOKEN;
+    else process.env.FORGEDOCK_BOT_TOKEN = previousToken;
+    await rm(fixture.root, { recursive: true, force: true });
+    await rm(fixture.remote, { recursive: true, force: true });
+  }
+}
+
+test("refresh records a lease only for the previously reviewed remote head", async () => {
+  const result = (await executeRefresh("match")) as {
+    details: { remoteLeaseSha: string };
+  };
+  assert.match(result.details.remoteLeaseSha, /^[a-f0-9]{40}$/);
+});
+
+test("refresh fails closed before rebasing when the remote head changed", async () => {
+  await assert.rejects(
+    executeRefresh("0000000000000000000000000000000000000000"),
+    /differs from the previously reviewed head/,
+  );
+});
+
+test("refresh fails closed when no previously reviewed head is bound", async () => {
+  await assert.rejects(
+    executeRefresh(),
+    /previously reviewed remote branch head/,
+  );
+});
 
 test("child process timeout force-terminates an uncooperative child", async () => {
   const started = Date.now();
@@ -375,7 +475,7 @@ test("Git pushes use an empty hooks path and redact GitHub credentials", () => {
     "origin",
     "main",
   ]);
-  const token = "github_pat_11AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const token = "github_pat_11AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"; // test fixture
   assert.equal(
     redactGitHubTokens(`git failed: ${token}`),
     "git failed: [redacted-token]",

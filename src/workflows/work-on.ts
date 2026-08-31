@@ -4143,6 +4143,7 @@ export class ForgeWorkOnController {
       this.#directBinding = {
         ...this.#directBinding,
         baseSha: currentBaseSha,
+        reviewHeadSha: result.review.headSha,
         refresh: true,
         previousReviewRounds: result.review.rounds,
       };

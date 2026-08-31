@@ -547,6 +547,7 @@ export class SubagentsRpcClient {
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
       verificationGithub: input.policy.verification.github,
+      reviewHeadSha: input.previousResult.review.headSha,
       refresh: true,
       leaseOwnerRunId: input.leaseOwnerRunId ?? input.runId,
       previousReviewRounds: input.previousResult.review.rounds,

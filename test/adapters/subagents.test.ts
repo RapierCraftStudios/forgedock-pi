@@ -13,6 +13,7 @@ import test from "node:test";
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
+import type { ForgeWorkOnResult } from "../../src/agents/contracts.ts";
 import {
   boundedNodeAgent,
   SubagentsRpcClient,
@@ -153,6 +154,36 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
   );
   assert.doesNotMatch(spawn.params.task, /Legacy Routing Classification/);
   assert.doesNotMatch(serialized, /gh auth token/);
+});
+
+test("RPC refresh launch carries the previous reviewed head into its binding", async () => {
+  const { pi, bus } = fakePi();
+  const client = new SubagentsRpcClient(pi);
+  await client.spawnRefreshReview({
+    runId: "run-refresh",
+    issueNumber: 314,
+    repository: "owner/repo",
+    worktreeRoot: "/tmp/worktree",
+    branch: "fix/refresh",
+    baseBranch: "staging",
+    baseSha: "abcdef1234567890",
+    leaseEpoch: 1,
+    policy,
+    issueContext: "refresh test",
+    previousResult: {
+      review: { rounds: 2, headSha: "fedcba9876543210" },
+    } as unknown as ForgeWorkOnResult,
+    refreshAttempt: 1,
+  });
+  const spawn = bus.requests.at(-1) as {
+    params: {
+      extensionBindings: Record<string, { reviewHeadSha?: string; refresh?: boolean }>;
+    };
+  };
+  const binding = spawn.params.extensionBindings["forgedock.pi/1"];
+  assert.ok(binding);
+  assert.equal(binding.reviewHeadSha, "fedcba9876543210");
+  assert.equal(binding.refresh, true);
 });
 
 test("RPC standalone reviewer binding has review authority without a fake issue lease", async () => {
