@@ -142,6 +142,18 @@ is valid. Operational timeout, provider loss, branch-base mismatch, and other
 mechanically recoverable failures remain automated GATED/review-degraded states and
 must not add `needs-human`.
 
+The review handoff distinguishes ForgeDock's semantic `APPROVED` decision from
+GitHub's approval event. The review route attempts exactly one pinned `APPROVE`, then
+uses exactly one pinned `COMMENT` only for the authenticated PR-owner self-approval
+rejection. The fallback preserves the frozen head/base/merge-base, panel coverage,
+checks, and finding IDs (`semantic_decision=APPROVED`), and requires a durable read-back
+`review_url`; generic provider,
+publication, readback, stale-identity, incomplete-coverage, and blocker failures remain
+`GATED`. Semantic approval plus COMMENT permits exact-head auto-merge only when the
+non-protected target has no independent-approval requirement. A protected target or
+policy requiring a distinct approving identity remains `GATED`; COMMENT never
+impersonates branch-protection approval.
+
 Review blocks only patch-introduced or patch-reachable defects. Deduplicate and file
 pre-existing findings as non-blocking follow-ups. On `CHANGES REQUESTED`, load
 `work-on/remediate.md` explicitly with `--inline-review-blockers --reviewed-head <SHA>

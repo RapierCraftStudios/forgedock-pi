@@ -29,6 +29,34 @@ test("Pi adapter keeps workflow decisions in visible specifications", async () =
   assert.match(adapter, /must not choose the next workflow phase/);
 });
 
+test("packaged review publication contracts preserve pinned self-owned fallback safety", async () => {
+  const [protocol, review, workOn, adapter] = await Promise.all([
+    readFile("specs/qualitative-review-protocol.md", "utf8"),
+    readFile("skills/forgedock-review-pr/SKILL.md", "utf8"),
+    readFile("skills/forgedock-work-on/SKILL.md", "utf8"),
+    readFile("specs/pi-adapter.md", "utf8"),
+  ]);
+  for (const contract of [protocol, review, workOn, adapter]) {
+    assert.match(contract, /exactly one[\s\S]{0,50}`APPROVE`/);
+    assert.match(contract, /exactly one[\s\S]{0,40}pinned `COMMENT`/);
+    assert.match(contract, /authenticated/i);
+    assert.match(contract, /PR[ -]owner/i);
+    assert.match(contract, /semantic_decision=APPROVED/);
+    assert.match(contract, /review_url/);
+    assert.match(contract, /head.*base.*merge-base|head\/base\/merge-base/s);
+    assert.match(contract, /panel coverage/);
+    assert.match(contract, /checks/);
+    assert.match(contract, /finding IDs/);
+    assert.match(contract, /independent.*approval|independent-approval/s);
+    assert.match(contract, /generic.*4xx.*5xx|generic provider/si);
+    assert.match(contract, /GATED/);
+  }
+  assert.match(protocol, /never report `review_url: none`/);
+  assert.match(review, /read back and require the\s+created review URL/i);
+  assert.match(workOn, /COMMENT never\s+impersonates branch-protection approval/);
+  assert.match(adapter, /exactly one GitHub `APPROVE` attempt/);
+});
+
 test("one canonical issue schema governs every ForgeDock creator", async () => {
   const issue = await readFile("specs/original/commands/issue.md", "utf8");
   const review = await readFile("specs/original/commands/review-pr.md", "utf8");

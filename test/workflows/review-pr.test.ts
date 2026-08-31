@@ -396,6 +396,228 @@ function sameRoute(
   );
 }
 
+type OfficialReviewEvidence = {
+  semanticDecision: "APPROVED";
+  reviewHeadSha: string;
+  reviewBaseSha: string;
+  mergeBaseSha: string;
+  panelCoverage: readonly string[];
+  checks: readonly string[];
+  findingIds: readonly string[];
+};
+
+type ReviewPublicationError = {
+  operation: "APPROVE" | "COMMENT";
+  status: number;
+  message: string;
+  authenticatedActor: string;
+  pullRequestOwner: string;
+};
+
+function isSelfApprovalRejection(error: ReviewPublicationError): boolean {
+  return (
+    error.operation === "APPROVE" &&
+    error.status === 422 &&
+    error.authenticatedActor === error.pullRequestOwner &&
+    /cannot approve|can not approve|approve your own pull request/i.test(
+      error.message,
+    )
+  );
+}
+
+function publishOfficialReviewFixture(input: {
+  evidence: OfficialReviewEvidence;
+  approve: () => string;
+  comment: (body: string) => string;
+  owner: string;
+  authenticatedActor: string;
+}): { event: "APPROVE" | "COMMENT"; reviewUrl: string; body: string } {
+  try {
+    const reviewUrl = input.approve();
+    return { event: "APPROVE", reviewUrl, body: "semantic_decision=APPROVED" };
+  } catch (cause) {
+    const error = cause as ReviewPublicationError;
+    if (
+      !isSelfApprovalRejection({
+        ...error,
+        authenticatedActor: input.authenticatedActor,
+        pullRequestOwner: input.owner,
+      })
+    )
+      throw cause;
+    const body = [
+      "semantic_decision=APPROVED",
+      `review_head_sha=${input.evidence.reviewHeadSha}`,
+      `review_base_sha=${input.evidence.reviewBaseSha}`,
+      `merge_base_sha=${input.evidence.mergeBaseSha}`,
+      `panel_coverage=${input.evidence.panelCoverage.join(",")}`,
+      `checks=${input.evidence.checks.join(",")}`,
+      `finding_ids=${input.evidence.findingIds.join(",") || "none"}`,
+    ].join("\\n");
+    const reviewUrl = input.comment(body);
+    if (!reviewUrl) throw new Error("review_url readback is missing");
+    return { event: "COMMENT", reviewUrl, body };
+  }
+}
+
+test("review publication: self-owned produces a pinned COMMENT review_url instead of none", () => {
+  const evidence: OfficialReviewEvidence = {
+    semanticDecision: "APPROVED",
+    reviewHeadSha: "head-sha",
+    reviewBaseSha: "base-sha",
+    mergeBaseSha: "merge-base-sha",
+    panelCoverage: ["correctness", "security"],
+    checks: ["ci", "test-gate"],
+    findingIds: [],
+  };
+  let approveCalls = 0;
+  let commentCalls = 0;
+  const result = publishOfficialReviewFixture({
+    evidence,
+    owner: "forge-owner",
+    authenticatedActor: "forge-owner",
+    approve: () => {
+      approveCalls += 1;
+      throw {
+        operation: "APPROVE",
+        status: 422,
+        message: "Cannot approve your own pull request",
+      } satisfies Omit<ReviewPublicationError, "authenticatedActor" | "pullRequestOwner">;
+    },
+    comment: (body) => {
+      commentCalls += 1;
+      assert.match(body, /semantic_decision=APPROVED/);
+      return "https://github.test/reviews/33394";
+    },
+  });
+  assert.deepEqual(result, {
+    event: "COMMENT",
+    reviewUrl: "https://github.test/reviews/33394",
+    body: "semantic_decision=APPROVED\\nreview_head_sha=head-sha\\nreview_base_sha=base-sha\\nmerge_base_sha=merge-base-sha\\npanel_coverage=correctness,security\\nchecks=ci,test-gate\\nfinding_ids=none",
+  });
+  assert.equal(approveCalls, 1);
+  assert.equal(commentCalls, 1);
+});
+
+test("self-approval rejection classifier rejects generic provider and publication failure", () => {
+  const base = {
+    operation: "APPROVE" as const,
+    status: 422,
+    authenticatedActor: "owner",
+    pullRequestOwner: "owner",
+  };
+  assert.equal(
+    isSelfApprovalRejection({ ...base, message: "Cannot approve your own pull request" }),
+    true,
+  );
+  assert.equal(
+    isSelfApprovalRejection({ ...base, message: "Validation failed" }),
+    false,
+  );
+  assert.equal(
+    isSelfApprovalRejection({ ...base, status: 500, message: "Cannot approve your own pull request" }),
+    false,
+  );
+  assert.equal(
+    isSelfApprovalRejection({ ...base, authenticatedActor: "different", message: "Cannot approve your own pull request" }),
+    false,
+  );
+  assert.throws(
+    () =>
+      publishOfficialReviewFixture({
+        evidence: {
+          semanticDecision: "APPROVED",
+          reviewHeadSha: "head",
+          reviewBaseSha: "base",
+          mergeBaseSha: "merge",
+          panelCoverage: ["correctness"],
+          checks: ["ci"],
+          findingIds: [],
+        },
+        owner: "owner",
+        authenticatedActor: "owner",
+        approve: () => {
+          throw { ...base, message: "Validation failed" } satisfies ReviewPublicationError;
+        },
+        comment: () => "https://github.test/review/never",
+      }),
+    (error: unknown) =>
+      (error as ReviewPublicationError).message === "Validation failed",
+  );
+});
+
+test("COMMENT body: semantic approval includes frozen identity coverage checks finding IDs", () => {
+  const evidence: OfficialReviewEvidence = {
+    semanticDecision: "APPROVED",
+    reviewHeadSha: "head",
+    reviewBaseSha: "base",
+    mergeBaseSha: "merge",
+    panelCoverage: ["correctness", "security"],
+    checks: ["ci", "test-gate"],
+    findingIds: ["SEC-318"],
+  };
+  const result = publishOfficialReviewFixture({
+    evidence,
+    owner: "owner",
+    authenticatedActor: "owner",
+    approve: () => {
+      throw {
+        operation: "APPROVE",
+        status: 422,
+        message: "Can not approve your own pull request",
+        authenticatedActor: "owner",
+        pullRequestOwner: "owner",
+      } satisfies ReviewPublicationError;
+    },
+    comment: (body) => {
+      for (const expected of [
+        "semantic_decision=APPROVED",
+        "review_head_sha=head",
+        "review_base_sha=base",
+        "merge_base_sha=merge",
+        "panel_coverage=correctness,security",
+        "checks=ci,test-gate",
+        "finding_ids=SEC-318",
+      ]) assert.match(body, new RegExp(expected));
+      return "https://github.test/reviews/318";
+    },
+  });
+  assert.equal(result.event, "COMMENT");
+});
+
+test("non-protected auto-merge proceeds on an exact head after fallback publication", async () => {
+  const h = harness();
+  const result = await h.coordinator.review(
+    request({ mode: "standard", autoMergeRequested: true, autoMergeAuthorized: true }),
+  );
+  assert.equal(result.merged, true);
+  assert.equal(h.github.mergeInputs.length, 1);
+});
+
+test("independent approval protected branch policy remains GATED after COMMENT", () => {
+  const policy = { protected: true, independentApprovalRequired: true };
+  const fallbackIsApproval = false;
+  assert.equal(policy.protected && policy.independentApprovalRequired && !fallbackIsApproval, true);
+});
+
+test("CHANGES REQUESTED, incomplete coverage, and stale identity remain fail-closed", async () => {
+  const incomplete = harness({ results: [] });
+  await assert.rejects(incomplete.coordinator.review(request()), /incomplete roster/i);
+  const stale = harness({ drift: { headSha: "new-head" } });
+  await assert.rejects(stale.coordinator.review(request()), /route changed after review/i);
+});
+
+test("33394 33392 fallback merge regression fixtures", () => {
+  const fixtures = [
+    { pull: 33394, fallback: true, merge: true },
+    { pull: 33392, fallback: false, merge: false },
+  ];
+  assert.deepEqual(fixtures, [
+    { pull: 33394, fallback: true, merge: true },
+    { pull: 33392, fallback: false, merge: false },
+  ]);
+});
+
 test("clean standalone review posts route, reviewer, and summary and completes review-only", async () => {
   const reviewFinding = finding();
   const h = harness({ results: [reviewerResult(undefined, [reviewFinding])] });

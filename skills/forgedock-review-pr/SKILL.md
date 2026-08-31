@@ -53,9 +53,21 @@ extend—not replace—the global canonical Problem, Root Cause, Affected Files,
 Behavior, and Acceptance Criteria sections; preserve reviewer/head/evidence/fingerprint
 metadata additively. A deduplicated legacy issue remains valid intake even when its body
 is noncanonical; preserve it unchanged and let investigation normalize the claim. Do not
-make formatting repair a reuse/admission gate. Post an official PR review tied to the frozen SHA. Merge only when `--auto-merge` was
-explicit, the original blocking policy passes, route identity is unchanged, and the
-base is authorized. Review never closes the linked issue or cleans the work-on tree.
+make formatting repair a reuse/admission gate.
+
+Publish one official review tied to the frozen SHA using the deterministic
+APPROVE-then-COMMENT transaction from `specs/qualitative-review-protocol.md`. First try
+exactly one pinned `APPROVE`. If GitHub rejects it specifically because the authenticated
+actor is the PR owner, and only for that self-approval rejection, publish exactly one
+pinned `COMMENT` with the same semantic `APPROVED` decision (`semantic_decision=APPROVED`)
+and the same frozen head/base/merge-base, panel coverage, checks, and finding IDs. Read back and require the
+created review URL as durable `review_url`; a missing URL, generic provider error,
+stale/malformed evidence, incomplete panel, or any other publication failure is
+`GATED` and never triggers the fallback. The COMMENT is an audit artifact, not an
+approval event. Merge only when `--auto-merge` was explicit, the original blocking policy
+passes, route identity is unchanged, the base is authorized, and no independent approval
+is required by target policy. A protected/independent-approval target remains `GATED`.
+Review never closes the linked issue or cleans the work-on tree.
 
 ## Refreshed integration bases
 

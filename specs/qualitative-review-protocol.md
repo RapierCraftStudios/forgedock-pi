@@ -19,6 +19,36 @@ engine.
 A review or verification result is authorization only for its exact identity tuple.
 No result from a previous base, head, or tuple may authorize a later one.
 
+## Official review publication transaction
+
+Semantic review approval is a ForgeDock decision, not proof that GitHub accepted an
+`APPROVE` event. After the complete panel, checks, findings, mergeability, and exact
+identity gates pass, publish exactly one official review for the frozen tuple in this
+order:
+
+1. Attempt exactly one pinned `APPROVE` review on the exact head SHA. The body must carry the
+   semantic decision and frozen `(base, head, merge-base)` evidence.
+2. If and only if GitHub rejects that operation because the authenticated actor owns the
+   pull request (the provider self-approval rejection, with the authenticated actor and
+   PR owner identities equal), publish exactly one pinned `COMMENT` review instead.
+   This is a durable audit artifact, not an approval event or a branch-protection
+   bypass. Its body must contain `semantic_decision=APPROVED`, the frozen head/base/
+   merge-base, complete panel coverage, required checks, and finding IDs.
+3. Read back the created review and require its durable URL as `review_url`. A missing,
+   malformed, or mismatched URL is `GATED`; never report `review_url: none` after a
+   successful fallback publication.
+
+The fallback predicate is deliberately narrow: stale or malformed identity, incomplete
+coverage, `CHANGES_REQUESTED`, generic 4xx/5xx responses, transport/readback failures,
+or any publication error other than the authenticated PR-owner self-approval rejection
+remain `GATED` and do not trigger `COMMENT`. Attempting more than one `APPROVE` or more
+than one fallback `COMMENT` is also `GATED`.
+
+Semantic `APPROVED` plus a pinned fallback COMMENT permits exact-head auto-merge only
+when the target policy explicitly has no independent-approval requirement. A protected
+branch or any policy requiring a distinct approving identity remains `GATED`; the
+COMMENT must never be counted as that independent approval.
+
 ## Controlled refresh transaction
 
 At the boundary before validation, before review fan-out, and immediately before merge:

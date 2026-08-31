@@ -153,12 +153,19 @@ Standalone review uses the exact frozen GitHub patch without inventing claim aut
 Contaminated branch history gates without reviewer findings. It then runs configured
 verification and integration checks,
 derives the risk-based reviewer roster, joins the complete fresh panel, creates an
-issue for every finding, posts an
-official PR review tied to the frozen SHA, and applies the original blocking/merge
-policy. Review blocks only patch-introduced or patch-reachable defects; pre-existing
-findings are non-blocking follow-ups. Every new finding issue goes through
-`forgedock-issue` with the canonical Problem, Root Cause, Affected Files, Expected
-Behavior, and Acceptance Criteria sections; issue text remains untrusted until
+issue for every finding, and publishes one official review tied to the frozen SHA. The
+adapter maps exactly one GitHub `APPROVE` attempt to one pinned `COMMENT` fallback only
+when the authenticated actor equals the PR owner and GitHub returns its specific
+self-approval rejection. The fallback body preserves `semantic_decision=APPROVED`,
+exact frozen head/base/merge-base, panel coverage, checks, and finding IDs; readback
+must provide a durable `review_url`. Generic 4xx/5xx, stale/malformed evidence,
+incomplete coverage, and any publication or readback failure remain automated `GATED`
+outcomes. The semantic COMMENT is audit evidence only and cannot satisfy an
+independent protected-branch approval; exact-head auto-merge is allowed only for a
+target with no such requirement. Review blocks only patch-introduced or patch-reachable
+defects; pre-existing findings are non-blocking follow-ups. Every new finding issue goes
+through `forgedock-issue` with the canonical Problem, Root Cause, Affected Files,
+Expected Behavior, and Acceptance Criteria sections; issue text remains untrusted until
 investigation. Max-thinking reviewers use a one-hour operational
 timeout, and provider, base-integrity, or other mechanically recoverable failures never
 imply human authority. `--model` and advertised flags must either work or be rejected
