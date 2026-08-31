@@ -76,6 +76,9 @@ export interface StandaloneReviewerLaunchInput {
   reviewer: string;
   round: number;
   reviewerTimeoutMs: number;
+  /** Optional parent deadline; omitted for joined panels to avoid a shorter hard timeout. */
+  parentTimeoutMs?: number;
+  joinGraceMs?: number;
   context?: string;
 }
 
@@ -118,7 +121,11 @@ export class SubagentsRpcClient {
   async spawnStandaloneReviewNode(
     input: StandaloneReviewerLaunchInput,
   ): Promise<SubagentSpawnReceipt> {
-    validateReviewDeadlines({ reviewerTimeoutMs: input.reviewerTimeoutMs });
+    validateReviewDeadlines({
+      reviewerTimeoutMs: input.reviewerTimeoutMs,
+      ...(input.parentTimeoutMs === undefined ? {} : { parentTimeoutMs: input.parentTimeoutMs }),
+      ...(input.joinGraceMs === undefined ? {} : { joinGraceMs: input.joinGraceMs }),
+    });
     if (!this.#asyncCompleteEvent) await this.ping();
     if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(input.reviewId))
       throw new TypeError("Review ID contains unsafe characters.");
@@ -168,6 +175,8 @@ export class SubagentsRpcClient {
       baseSha: input.baseSha,
       maxReviewRounds: 5,
       reviewerTimeoutMs: input.reviewerTimeoutMs,
+      ...(input.parentTimeoutMs === undefined ? {} : { parentTimeoutMs: input.parentTimeoutMs }),
+      ...(input.joinGraceMs === undefined ? {} : { joinGraceMs: input.joinGraceMs }),
       verificationCommands: {},
       nodeId,
       node: `review-${role}`,

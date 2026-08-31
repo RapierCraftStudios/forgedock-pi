@@ -49,6 +49,7 @@ import {
   reviewerEvidenceKey,
   validateReviewDeadlines,
   validateReviewerPanel,
+  type ReviewerEvidenceOutcome,
 } from "../core/recovery.ts";
 import type {
   ReviewMode,
@@ -130,6 +131,12 @@ export interface ReviewPanelRunInput {
   reviewers: readonly string[];
   round: number;
   reviewerTimeoutMs: number;
+  parentTimeoutMs?: number;
+  joinGraceMs?: number;
+  completed?: readonly ForgeReviewerResult[];
+  failures?: Readonly<Record<string, ReturnType<typeof classifyReviewerFailure>>>;
+  retryCountByReviewer?: Readonly<Record<string, number>>;
+  onEvidence?: (reviewer: string, outcome: ReviewerEvidenceOutcome) => Promise<void>;
   context?: string;
   signal?: AbortSignal;
 }
@@ -633,6 +640,9 @@ export class ReviewPrCoordinator {
 
     const findingsKey = `panel:${requestedRound}:findings`;
     if (!state.idempotencyKeys[findingsKey]) {
+      const persistedResults = latestReviewerResults(state);
+      const persistedFailures = latestReviewerFailures(state);
+      const persistedRetryCounts = reviewerRetryCounts(state);
       const results = await this.#panel.run({
         reviewId: input.reviewId,
         repository: input.repository,
@@ -645,9 +655,33 @@ export class ReviewPrCoordinator {
         reviewers: input.roster.reviewers,
         round: requestedRound,
         reviewerTimeoutMs: input.reviewerTimeoutMs,
+        completed: persistedResults,
+        failures: persistedFailures,
+        retryCountByReviewer: persistedRetryCounts,
+        onEvidence: async (reviewer, outcome) => {
+          const key = `${route.headSha}:${reviewer}:${outcome.attempt}`;
+          snapshot = await this.#journal.append({
+            reviewId: input.reviewId,
+            type: "review.reviewer-evidence-recorded",
+            payload: {
+              round: requestedRound,
+              reviewer,
+              attempt: outcome.attempt,
+              status: outcome.status,
+              effectiveTimeoutMs: outcome.effectiveTimeoutMs,
+              ...(outcome.status === "completed"
+                ? { result: Object.assign({}, outcome.result) }
+                : { failureKind: outcome.kind, reason: outcome.reason }),
+            },
+            idempotencyKey: `reviewer:${key}`,
+            message: `Record reviewer ${reviewer} evidence for ${input.reviewId}`,
+            ...(input.signal ? { signal: input.signal } : {}),
+          });
+        },
         ...(input.reviewerContext ? { context: input.reviewerContext } : {}),
         ...(input.signal ? { signal: input.signal } : {}),
       });
+      snapshot = (await this.#journal.read(input.reviewId, input.signal)) ?? snapshot;
       const normalized = normalizePanelResults(
         results,
         input.reviewId,
@@ -686,16 +720,18 @@ export class ReviewPrCoordinator {
         payload: {
           round: requestedRound,
           findings: normalized.findings,
-          reviewerResults: Object.fromEntries(
-            normalized.results.map((result) => [
-              reviewerEvidenceKey({
-                headSha: route.headSha,
-                reviewer: result.reviewer,
-                attempt: requestedRound,
-              }),
-              result,
-            ]),
-          ),
+          reviewerResults:
+            snapshot.state.reviewerResults ??
+            Object.fromEntries(
+              normalized.results.map((result) => [
+                reviewerEvidenceKey({
+                  headSha: route.headSha,
+                  reviewer: result.reviewer,
+                  attempt: requestedRound,
+                }),
+                result,
+              ]),
+            ),
         },
         idempotencyKey: findingsKey,
         message: `Record review findings for ${input.reviewId}`,
@@ -724,6 +760,58 @@ export class ReviewPrCoordinator {
   }
 }
 
+function latestReviewerResults(state: ReviewState): ForgeReviewerResult[] {
+  const latest = new Map<string, { attempt: number; result: ForgeReviewerResult }>();
+  for (const [key, value] of Object.entries(state.reviewerResults ?? {})) {
+    const match = key.match(/^(.+):([^:]+):(\d+)$/);
+    if (!match || value.schema !== "forgedock.reviewer-result/v1") continue;
+    const attempt = Number(match[3]);
+    const reviewer = match[2]!;
+    if (value.headSha !== state.headSha || value.reviewer !== reviewer || !Number.isSafeInteger(attempt)) continue;
+    const prior = latest.get(reviewer);
+    if (!prior || attempt > prior.attempt) {
+      // SAFETY: reviewerResults are schema-checked at the state transition boundary above.
+      latest.set(reviewer, { attempt, result: value as unknown as ForgeReviewerResult });
+    }
+  }
+  return state.roster.reviewers.flatMap((reviewer) => latest.get(reviewer)?.result ?? []);
+}
+
+function latestReviewerFailures(state: ReviewState): Readonly<Record<string, ReturnType<typeof classifyReviewerFailure>>> {
+  const failures: Record<string, ReturnType<typeof classifyReviewerFailure>> = {};
+  const attempts = new Map<string, number>();
+  for (const [key, value] of Object.entries(state.reviewerFailures ?? {})) {
+    const match = key.match(/^(.+):([^:]+):(\d+)$/);
+    if (!match || value.headSha !== state.headSha) continue;
+    const attempt = Number(match[3]);
+    const reviewer = match[2]!;
+    if (!Number.isSafeInteger(attempt) || typeof value.kind !== "string") continue;
+    const prior = attempts.get(reviewer) ?? 0;
+    if (attempt >= prior) {
+      attempts.set(reviewer, attempt);
+      failures[reviewer] = value.kind as ReturnType<typeof classifyReviewerFailure>;
+    }
+  }
+  return failures;
+}
+
+function failureReason(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function reviewerRetryCounts(state: ReviewState): Readonly<Record<string, number>> {
+  const counts: Record<string, number> = {};
+  const round = state.panel?.round ?? 1;
+  for (const key of Object.keys(state.reviewerFailures ?? {})) {
+    const match = key.match(/^(.+):([^:]+):(\d+)$/);
+    if (!match) continue;
+    const attempt = Number(match[3]);
+    const reviewer = match[2]!;
+    counts[reviewer] = Math.max(counts[reviewer] ?? 0, Math.max(0, attempt - round));
+  }
+  return counts;
+}
+
 export class SubagentReviewPanelRunner implements ReviewPanelRunner {
   readonly #rpc: SubagentsRpcClient;
   readonly #active = new Map<string, SubagentSpawnReceipt[]>();
@@ -735,15 +823,20 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
   async run(
     input: ReviewPanelRunInput,
   ): Promise<readonly ForgeReviewerResult[]> {
-    validateReviewDeadlines({ reviewerTimeoutMs: input.reviewerTimeoutMs });
+    validateReviewDeadlines({
+      reviewerTimeoutMs: input.reviewerTimeoutMs,
+      ...(input.parentTimeoutMs === undefined ? {} : { parentTimeoutMs: input.parentTimeoutMs }),
+      ...(input.joinGraceMs === undefined ? {} : { joinGraceMs: input.joinGraceMs }),
+    });
     await this.#rpc.ping();
     const receipts: Array<{
       receipt: SubagentSpawnReceipt;
       expected: ExpectedReviewerResult;
       reviewer: string;
+      attempt: number;
     }> = [];
     this.#active.set(input.reviewId, []);
-    const spawn = async (reviewer: string, reviewerTimeoutMs = input.reviewerTimeoutMs): Promise<(typeof receipts)[number]> => {
+    const spawn = async (reviewer: string, reviewerTimeoutMs = input.reviewerTimeoutMs, attempt = input.round): Promise<(typeof receipts)[number]> => {
       const receipt = await this.#rpc.spawnStandaloneReviewNode({
         reviewId: input.reviewId,
         repository: input.repository,
@@ -763,28 +856,57 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
         receipt,
         expected: { runId: input.reviewId, headSha: input.route.headSha, reviewer },
         reviewer,
+        attempt,
       };
       receipts.push(entry);
       this.#active.get(input.reviewId)?.push(receipt);
       return entry;
     };
     try {
-      // The first panel is the only fan-out. A completed result is retained
-      // verbatim, so recovery never reruns a sibling that already persisted it.
+      // Durable completed evidence is supplied by the coordinator; only missing roles fan out.
+      const completed = input.completed ?? [];
+      const completedRoles = new Set(completed.map((result) => result.reviewer));
+      const priorFailures = input.failures ?? {};
+      const retryCounts = input.retryCountByReviewer ?? {};
+      const missing = input.reviewers.filter((reviewer) => {
+        if (completedRoles.has(reviewer)) return false;
+        const kind = priorFailures[reviewer];
+        if (!kind) return true;
+        return (kind === "timeout" || kind === "provider-inactivity") && (retryCounts[reviewer] ?? 0) < 1;
+      });
       const launchSettled = await Promise.allSettled(
-        input.reviewers.map((reviewer) => spawn(reviewer)),
+        missing.map((reviewer) => {
+          const retry = Boolean(priorFailures[reviewer]);
+          const attempt = input.round + (retry ? (retryCounts[reviewer] ?? 0) + 1 : 0);
+          const timeout = retry ? extendedReviewerTimeout(input.reviewerTimeoutMs) : input.reviewerTimeoutMs;
+          return spawn(reviewer, timeout, attempt);
+        }),
       );
       const launched = launchSettled.flatMap((entry) =>
         entry.status === "fulfilled" ? [entry.value] : [],
       );
-      const failures: Record<string, ReturnType<typeof classifyReviewerFailure>> =
-        Object.fromEntries(
+          const failures: Record<string, ReturnType<typeof classifyReviewerFailure>> = {
+        ...(input.failures ?? {}),
+        ...Object.fromEntries(
           launchSettled.flatMap((entry, index) =>
             entry.status === "rejected"
-              ? [[input.reviewers[index]!, classifyReviewerFailure(entry.reason, input.signal)]]
+              ? [[missing[index]!, classifyReviewerFailure(entry.reason, input.signal)]]
               : [],
           ),
-        );
+        ),
+      };
+      for (const [index, entry] of launchSettled.entries()) {
+        if (entry.status === "rejected") {
+          const reviewer = missing[index]!;
+          await input.onEvidence?.(reviewer, {
+            status: "failed",
+            attempt: input.round,
+            kind: failures[reviewer]!,
+            effectiveTimeoutMs: input.reviewerTimeoutMs,
+            reason: failureReason(entry.reason),
+          });
+        }
+      }
       const settled = await Promise.allSettled(
         launched.map((entry) =>
           waitForReviewerResult(
@@ -797,9 +919,9 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
           ),
         ),
       );
-      const retained = settled.flatMap((entry) =>
+      const retained = [...completed, ...settled.flatMap((entry) =>
         entry.status === "fulfilled" ? [entry.value] : [],
-      );
+      )];
       Object.assign(
         failures,
         Object.fromEntries(
@@ -810,12 +932,32 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
           ),
         ),
       );
+      for (const [index, entry] of settled.entries()) {
+        const reviewer = launched[index]!.reviewer;
+        if (entry.status === "fulfilled") {
+          await input.onEvidence?.(reviewer, {
+            status: "completed",
+            result: entry.value,
+            attempt: launched[index]!.attempt,
+            effectiveTimeoutMs: input.reviewerTimeoutMs,
+          });
+        } else {
+          await input.onEvidence?.(reviewer, {
+            status: "failed",
+            attempt: launched[index]!.attempt,
+            kind: failures[reviewer]!,
+            effectiveTimeoutMs: input.reviewerTimeoutMs,
+            reason: failureReason(entry.reason),
+          });
+        }
+      }
       const recoveryPlan = planReviewRecovery({
         reviewers: input.reviewers,
         headSha: input.route.headSha,
         attempt: input.round,
         completed: retained,
         failures,
+        retryCountByReviewer: input.retryCountByReviewer,
         reviewerTimeoutMs: input.reviewerTimeoutMs,
       });
       const retryable = [...recoveryPlan.retryReviewers];
@@ -827,14 +969,23 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
         );
         const retryTimeoutMs = extendedReviewerTimeout(input.reviewerTimeoutMs);
         const retryLaunchSettled = await Promise.allSettled(
-          retryable.map((reviewer) => spawn(reviewer, retryTimeoutMs)),
+          retryable.map((reviewer) => spawn(reviewer, retryTimeoutMs, input.round + 1)),
         );
         const retryEntries = retryLaunchSettled.flatMap((entry) =>
           entry.status === "fulfilled" ? [entry.value] : [],
         );
         for (const [index, entry] of retryLaunchSettled.entries()) {
-          if (entry.status === "rejected")
-            failures[retryable[index]!] = classifyReviewerFailure(entry.reason, input.signal);
+          if (entry.status === "rejected") {
+            const reviewer = retryable[index]!;
+            failures[reviewer] = classifyReviewerFailure(entry.reason, input.signal);
+            await input.onEvidence?.(reviewer, {
+              status: "failed",
+              attempt: input.round + 1,
+              kind: failures[reviewer]!,
+              effectiveTimeoutMs: retryTimeoutMs,
+              reason: failureReason(entry.reason),
+            });
+          }
         }
         const retrySettled = await Promise.allSettled(
           retryEntries.map((entry) =>
@@ -849,10 +1000,40 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
           ),
         );
         for (const [index, entry] of retrySettled.entries()) {
-          if (entry.status === "fulfilled") retained.push(entry.value);
-          else failures[retryEntries[index]!.reviewer] = classifyReviewerFailure(entry.reason, input.signal);
+          const reviewer = retryEntries[index]!.reviewer;
+          if (entry.status === "fulfilled") {
+            retained.push(entry.value);
+            await input.onEvidence?.(reviewer, {
+              status: "completed",
+              result: entry.value,
+              attempt: retryEntries[index]!.attempt,
+              effectiveTimeoutMs: retryTimeoutMs,
+            });
+          } else {
+            failures[reviewer] = classifyReviewerFailure(entry.reason, input.signal);
+            await input.onEvidence?.(reviewer, {
+              status: "failed",
+              attempt: retryEntries[index]!.attempt,
+              kind: failures[reviewer]!,
+              effectiveTimeoutMs: retryTimeoutMs,
+              reason: failureReason(entry.reason),
+            });
+          }
         }
       }
+      const finalPlan = planReviewRecovery({
+        reviewers: input.reviewers,
+        headSha: input.route.headSha,
+        attempt: input.round,
+        completed: retained,
+        failures,
+        retryCountByReviewer: {
+          ...(input.retryCountByReviewer ?? {}),
+          ...Object.fromEntries(retryable.map((reviewer) => [reviewer, (input.retryCountByReviewer?.[reviewer] ?? 0) + 1])),
+        },
+        reviewerTimeoutMs: input.reviewerTimeoutMs,
+      });
+      if (!finalPlan.synthesisAllowed) throw new Error(finalPlan.reason ?? "Reviewer panel is incomplete.");
       // The coordinator validates the complete keyed panel before any finding
       // is journaled or synthesized. This also rejects duplicate retry output.
       return validateReviewerPanel({

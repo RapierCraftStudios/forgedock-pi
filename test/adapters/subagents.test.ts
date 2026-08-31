@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import assert from "node:assert/strict";
 import {
   mkdir,
@@ -186,6 +187,29 @@ test("RPC standalone reviewer binding has review authority without a fake issue 
   assert.equal(binding?.stateBranch, undefined);
   assert.match(spawn.params.task, /pull request #17/);
   assert.match(spawn.params.task, /never edit files/i);
+});
+
+test("reviewer launch rejects an unsafe parent timeout hierarchy", async () => {
+  const { pi } = fakePi();
+  const client = new SubagentsRpcClient(pi);
+  await assert.rejects(
+    () => client.spawnStandaloneReviewNode({
+      reviewId: "review-deadline",
+      repository: "owner/repo",
+      pullNumber: 17,
+      worktreeRoot: "/tmp/review-worktree",
+      headRef: "feature/review",
+      headSha: "fedcba9876543210",
+      baseRef: "staging",
+      baseSha: "abcdef1234567890",
+      reviewer: "forge-review-security",
+      round: 1,
+      reviewerTimeoutMs: 900_000,
+      parentTimeoutMs: 900_001,
+      joinGraceMs: 30_000,
+    }),
+    /Unsafe deadline/,
+  );
 });
 
 test("RPC dedicated reviewer launch uses the registered reviewer and reviewer schema", async () => {

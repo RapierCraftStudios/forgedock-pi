@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { canonicalJson } from "./events.ts";
+import { REVIEWER_FAILURE_KINDS, type ReviewerFailureKind } from "./recovery.ts";
 import type {
   FindingCategory,
   FindingConfidence,
@@ -134,6 +135,7 @@ export interface ReviewState {
   findings: readonly ReviewFinding[];
   /** Exact reviewer receipts keyed by frozen head, role, and panel attempt. */
   reviewerResults?: Readonly<Record<string, Record<string, unknown>>>;
+  reviewerFailures?: Readonly<Record<string, Record<string, unknown>>>;
   verdict?: ReviewVerdict;
   gate?: ReviewGate;
   mergeBaseSha?: string;
@@ -162,6 +164,8 @@ export type ReviewEventType =
   | "review.check.recorded"
   | "review.findings-recorded"
   | "review.findings.recorded"
+  | "review.reviewer-evidence-recorded"
+  | "review.reviewer.evidence-recorded"
   | "review.verdict-recorded"
   | "review.verdict.recorded"
   | "review.gate-recorded"
@@ -208,6 +212,17 @@ export interface ReviewFindingsRecordedPayload {
   round: number;
   findings: readonly ReviewFinding[];
   reviewerResults?: Readonly<Record<string, Record<string, unknown>>>;
+}
+
+export interface ReviewReviewerEvidencePayload {
+  round: number;
+  reviewer: string;
+  attempt: number;
+  status: "completed" | "failed";
+  result?: Record<string, unknown>;
+  failureKind?: ReviewerFailureKind;
+  effectiveTimeoutMs: number;
+  reason?: string;
 }
 
 export interface ReviewVerdictRecordedPayload extends ReviewVerdict {
@@ -384,6 +399,10 @@ export function applyReviewEvent(
     case "review.findings-recorded":
     case "review.findings.recorded":
       applyFindings(state, event);
+      break;
+    case "review.reviewer-evidence-recorded":
+    case "review.reviewer.evidence-recorded":
+      applyReviewerEvidence(state, event);
       break;
     case "review.verdict-recorded":
     case "review.verdict.recorded":
@@ -665,6 +684,9 @@ function cloneState(state: ReviewState): ReviewState {
     ...(state.reviewerResults
       ? { reviewerResults: Object.fromEntries(Object.entries(state.reviewerResults).map(([key, result]) => [key, { ...result }])) }
       : {}),
+    ...(state.reviewerFailures
+      ? { reviewerFailures: Object.fromEntries(Object.entries(state.reviewerFailures).map(([key, failure]) => [key, { ...failure }])) }
+      : {}),
     ...(state.verdict
       ? {
           verdict: {
@@ -709,6 +731,8 @@ function applyPanelStarted(state: ReviewState, event: ReviewEvent): void {
   delete state.gate;
   delete state.mergeAuthorization;
   delete state.completion;
+  delete state.reviewerResults;
+  delete state.reviewerFailures;
 }
 
 function applyPanelCompleted(state: ReviewState, event: ReviewEvent): void {
@@ -735,6 +759,37 @@ function applyCheck(state: ReviewState, event: ReviewEvent): void {
     ? [...state.checks, check]
     : state.checks.map((candidate, index) => (index === prior ? check : candidate));
   clearTerminalDecisions(state);
+}
+
+function applyReviewerEvidence(state: ReviewState, event: ReviewEvent): void {
+  const panel = requireRunningPanel(state);
+  // SAFETY: event payloads are validated below against the running panel and frozen identity.
+  const data = payload(event) as unknown as ReviewReviewerEvidencePayload;
+  assertEventRound(event, panel.round);
+  const reviewer = requiredString(data.reviewer, "reviewer");
+  if (!state.roster.reviewers.includes(reviewer))
+    throw new ReviewTransitionError("roster-mismatch", `Reviewer ${reviewer} is not in the frozen roster.`);
+  const attempt = positiveInteger(data.attempt, "attempt");
+  const effectiveTimeoutMs = positiveInteger(data.effectiveTimeoutMs, "effectiveTimeoutMs");
+  const key = `${state.headSha}:${reviewer}:${attempt}`;
+  if (data.status === "completed") {
+    const result = data.result;
+    if (!result || result.schema !== "forgedock.reviewer-result/v1" || result.runId !== state.reviewId || result.headSha !== state.headSha || result.reviewer !== reviewer || !Array.isArray(result.findings))
+      throw new ReviewTransitionError("invalid-reviewer-results", `Reviewer result ${key} is not schema-valid evidence.`);
+    if (state.reviewerResults?.[key] || state.reviewerFailures?.[key])
+      throw new ReviewTransitionError("duplicate-reviewer-evidence", `Reviewer evidence ${key} is already recorded.`);
+    state.reviewerResults = { ...(state.reviewerResults ?? {}), [key]: { ...result, attempt, effectiveTimeoutMs } };
+    return;
+  }
+  if (data.status !== "failed" || !data.failureKind || !REVIEWER_FAILURE_KINDS.includes(data.failureKind))
+    throw new ReviewTransitionError("invalid-reviewer-failure", `Reviewer failure ${key} is invalid.`);
+  if (state.reviewerResults?.[key] || state.reviewerFailures?.[key])
+    throw new ReviewTransitionError("duplicate-reviewer-evidence", `Reviewer evidence ${key} is already recorded.`);
+  const reason = requiredString(data.reason, "reason");
+  state.reviewerFailures = {
+    ...(state.reviewerFailures ?? {}),
+    [key]: { schema: "forgedock.review-recovery/v1", headSha: state.headSha, reviewer, attempt, kind: data.failureKind, effectiveTimeoutMs, reason },
+  };
 }
 
 function applyFindings(state: ReviewState, event: ReviewEvent): void {
@@ -774,7 +829,9 @@ function applyFindings(state: ReviewState, event: ReviewEvent): void {
         throw new ReviewTransitionError("invalid-reviewer-results", `Reviewer result ${key} is not schema-valid evidence.`);
       if (result.headSha !== state.headSha || typeof result.reviewer !== "string" || !state.roster.reviewers.includes(result.reviewer))
         throw new ReviewTransitionError("invalid-reviewer-results", `Reviewer result ${key} does not match the frozen panel identity.`);
-      if (key !== `${state.headSha}:${result.reviewer}:${panel.round}`)
+      const keyParts = key.match(/^(.+):([^:]+):(\d+)$/);
+      const attempt = keyParts ? Number(keyParts[3]) : NaN;
+      if (!keyParts || keyParts[1] !== state.headSha || keyParts[2] !== result.reviewer || !Number.isSafeInteger(attempt) || attempt < panel.round)
         throw new ReviewTransitionError("invalid-reviewer-results", `Reviewer result ${key} is not keyed by head, role, and attempt.`);
       results[key] = { ...result };
     }
@@ -890,7 +947,6 @@ function clearTerminalDecisions(state: ReviewState): void {
   delete state.gate;
   delete state.mergeAuthorization;
   delete state.completion;
-  delete state.reviewerResults;
   delete state.mergeBaseSha;
   delete state.publication;
 }
@@ -1233,6 +1289,8 @@ const REVIEW_EVENT_TYPES: ReadonlySet<ReviewEventType> = new Set([
   "review.check.recorded",
   "review.findings-recorded",
   "review.findings.recorded",
+  "review.reviewer-evidence-recorded",
+  "review.reviewer.evidence-recorded",
   "review.verdict-recorded",
   "review.verdict.recorded",
   "review.gate-recorded",

@@ -26,6 +26,21 @@ export interface ReviewerEvidenceRecord {
   result: ForgeReviewerResult;
 }
 
+export interface ReviewerFailureRecord {
+  schema: typeof REVIEW_RECOVERY_SCHEMA;
+  key: string;
+  headSha: string;
+  reviewer: string;
+  attempt: number;
+  kind: ReviewerFailureKind;
+  effectiveTimeoutMs: number;
+  reason: string;
+}
+
+export type ReviewerEvidenceOutcome =
+  | { status: "completed"; result: ForgeReviewerResult; attempt: number; effectiveTimeoutMs: number }
+  | { status: "failed"; attempt: number; kind: ReviewerFailureKind; effectiveTimeoutMs: number; reason: string };
+
 export interface ReviewRecoveryPlan {
   retained: readonly ForgeReviewerResult[];
   missingReviewers: readonly string[];
@@ -33,6 +48,7 @@ export interface ReviewRecoveryPlan {
   failureKinds: Readonly<Record<string, ReviewerFailureKind>>;
   extendedTimeoutMs: number;
   synthesisAllowed: boolean;
+  retryCountByReviewer: Readonly<Record<string, number>>;
   reason?: string;
 }
 
@@ -107,6 +123,8 @@ export function planReviewRecovery(input: {
   completed: readonly ForgeReviewerResult[];
   failures?: Readonly<Record<string, ReviewerFailureKind>>;
   reviewerTimeoutMs: number;
+  retryCountByReviewer?: Readonly<Record<string, number>>;
+  maxRetries?: number;
 }): ReviewRecoveryPlan {
   if (!input.headSha.trim() || !Number.isSafeInteger(input.attempt) || input.attempt < 1)
     throw new TypeError("Review recovery requires a frozen head and positive attempt.");
@@ -124,9 +142,16 @@ export function planReviewRecovery(input: {
   }
   const missingReviewers = input.reviewers.filter((reviewer) => !seen.has(reviewer));
   const failures = input.failures ?? {};
+  const retryCountByReviewer = { ...(input.retryCountByReviewer ?? {}) };
+  const maxRetries = input.maxRetries ?? 1;
+  if (!Number.isSafeInteger(maxRetries) || maxRetries < 0)
+    throw new TypeError("Maximum reviewer retries must be a non-negative integer.");
   const retryReviewers = missingReviewers.filter((reviewer) => {
     const kind = failures[reviewer];
-    return kind === "timeout" || kind === "provider-inactivity";
+    return (
+      (kind === "timeout" || kind === "provider-inactivity") &&
+      (retryCountByReviewer[reviewer] ?? 0) < maxRetries
+    );
   });
   const extendedTimeoutMs = extendedReviewerTimeout(input.reviewerTimeoutMs);
   const synthesisAllowed = missingReviewers.length === 0;
@@ -137,13 +162,16 @@ export function planReviewRecovery(input: {
     failureKinds: { ...failures },
     extendedTimeoutMs,
     synthesisAllowed,
+    retryCountByReviewer,
     ...(synthesisAllowed
       ? {}
       : {
           reason:
             retryReviewers.length > 0
               ? `Reviewer panel incomplete; retry only: ${retryReviewers.join(", ")}.`
-              : "Reviewer panel incomplete and is not safely retryable.",
+              : `Reviewer panel incomplete; terminal failure for ${missingReviewers
+                  .map((reviewer) => `${reviewer} (${failures[reviewer] ?? "missing"}, timeout ${input.reviewerTimeoutMs}ms)`)
+                  .join(", ")}.`,
         }),
   };
 }

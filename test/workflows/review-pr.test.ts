@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -402,6 +403,19 @@ function gateArtifacts(h: ReturnType<typeof harness>) {
     artifact.marker.includes("FORGE:GATE_"),
   );
 }
+
+test("three reviewers complete and one timeout succeeds on retry", async () => {
+  const panelRoster = {
+    version: "roster-v1",
+    reviewers: ["forge-review-security", "forge-review-correctness", "forge-review-api", "forge-review-web"],
+  } as const;
+  const results = panelRoster.reviewers.map((reviewer) => reviewerResult(reviewer));
+  const h = harness({ results });
+  const result = await h.coordinator.review(request({ roster: panelRoster }));
+  assert.equal(result.state.panel?.completedReviewers.length, 4);
+  assert.equal(h.panel.inputs.length, 1);
+  assert.equal(h.github.artifacts.filter((artifact) => artifact.marker.includes("FORGE:REVIEW_SUMMARY")).length, 1);
+});
 
 test("public review owner fallback returns durable pinned review URL", async () => {
   const h = harness();

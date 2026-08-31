@@ -93,7 +93,9 @@ orchestration workflow sets `control.needsAttentionAfterMs` to at least 3,900,00
 waits with `stopOnAttention: false`; a generic 1,800-second attention event never permits
 steering an active one-hour reviewer. Pi resume/session receipts prove execution only;
 when continuation is not persisted, recover the complete trusted result artifact or
-fail closed.
+fail closed. For issue #251 detached-continuation recovery, a complete trusted
+head/role/attempt receipt is authoritative and reused; only missing or invalid roles
+are dispatched again, and a partial panel remains fail-closed until the roster is complete.
 
 ## Work-on ownership
 

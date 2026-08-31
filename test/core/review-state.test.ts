@@ -94,6 +94,60 @@ test("public review preserves distinct base and merge-base through replay", () =
   assert.equal(replayed.publication?.url, "https://example.test/reviews/42");
 });
 
+test("replays durable partial-panel evidence", () => {
+  const genesis = createdEvent();
+  let state = applyReviewEvent(undefined, genesis);
+  const events: ReviewEvent[] = [genesis];
+  const started = next(state, "review.panel-started", { round: 1 }, "partial-start");
+  events.push(started);
+  state = applyReviewEvent(state, started);
+  const completed = next(state, "review.reviewer-evidence-recorded", {
+    round: 1,
+    reviewer: "correctness",
+    attempt: 1,
+    status: "completed",
+    effectiveTimeoutMs: 100,
+    result: {
+      schema: "forgedock.reviewer-result/v1",
+      runId: reviewId,
+      reviewer: "correctness",
+      headSha: "head-sha",
+      verdict: "pass",
+      findings: [],
+    },
+  }, "partial-correctness");
+  events.push(completed);
+  state = applyReviewEvent(state, completed);
+  const failed = next(state, "review.reviewer-evidence-recorded", {
+    round: 1,
+    reviewer: "security",
+    attempt: 1,
+    status: "failed",
+    failureKind: "timeout",
+    effectiveTimeoutMs: 100,
+    reason: "timed out",
+  }, "partial-security");
+  events.push(failed);
+  state = applyReviewEvent(state, failed);
+  const replayed = replayReviewEvents(events);
+  assert.equal(replayed.reviewerResults?.["head-sha:correctness:1"]?.reviewer, "correctness");
+  assert.equal(replayed.reviewerFailures?.["head-sha:security:1"]?.kind, "timeout");
+});
+
+function createdEvent(): ReviewEvent {
+  return next(undefined, "review.created", {
+    pullNumber: 9,
+    issueNumber: 7,
+    mode: "staging",
+    headRef: "forge/7",
+    headSha: "head-sha",
+    baseRef: "staging",
+    baseSha: "base-sha",
+    roster: { version: "roster-v1", reviewers: ["correctness", "security"] },
+    route: "staging-review",
+  }, "create");
+}
+
 test("reviewer receipts survive publication completion and replay", () => {
   const { state, events } = approvedWithPublication();
   assert.equal(state.publication?.commitId, state.headSha);
