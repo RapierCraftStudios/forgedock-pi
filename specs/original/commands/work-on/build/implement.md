@@ -74,6 +74,15 @@ if [ "$TASK_TYPE" != Investigation ]; then
       ;;
     *) echo "IMPLEMENT_RESULT: status: GATED blocker: side-effect classification missing"; exit 1 ;;
   esac
+  HIGH_RISKS=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### Risk Assessment/{p=1;next} /^### /{p=0} p' | grep -E '\|[[:space:]]*HIGH[[:space:]]*\|' || true)
+  if [ -n "$HIGH_RISKS" ]; then
+    printf '%s' "$ARCHITECT_BODY" | grep -qF '**HIGH-risk gate**: CLOSED' || { echo "IMPLEMENT_RESULT: status: GATED blocker: HIGH-risk gate is not closed"; exit 1; }
+    HIGH_PROOFS=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### HIGH-Risk Verification/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||HIGH Risk')
+    RISK_COUNT=$(printf '%s\n' "$HIGH_RISKS" | grep -c '^|' || true)
+    PROOF_COUNT=$(printf '%s\n' "$HIGH_PROOFS" | grep -c '^|' || true)
+    [ "$RISK_COUNT" -eq "$PROOF_COUNT" ] && [ "$PROOF_COUNT" -gt 0 ] || { echo "IMPLEMENT_RESULT: status: GATED blocker: every HIGH risk requires exactly one verification row"; exit 1; }
+    ! printf '%s\n' "$HIGH_PROOFS" | grep -Eqi '\{[^}]*\}|\b(TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|[[:space:]]*\|' || { echo "IMPLEMENT_RESULT: status: GATED blocker: HIGH-risk verification row is empty or placeholder"; exit 1; }
+  fi
 fi
 ```
 
@@ -116,12 +125,23 @@ Extract from architect plan (when present):
 - All affected paths (every file that must change for consistency)
 - Consistency checks (invariants the builder must verify before committing)
 - Risk assessment (HIGH/MEDIUM/LOW risks to watch for)
+- HIGH-Risk Verification rows (failure scenario, discriminating inputs/state sequence, named test, and failing-before evidence)
 
 Before I3, require a current `### Production Seam Ownership` section with at least one
 non-header ownership row and require every row to be closed. If an executable
 owner of the requested behavior is omitted, marked read-only without source proof, or
 represented only by a test-local fixture/mock, return automated `GATED` to investigation
-before the first source mutation. For provider work, every proof row must name authority, exact operation/failure scope,
+before the first source mutation.
+
+If the architecture contains any HIGH Risk Assessment row, require exactly one
+substantive HIGH-Risk Verification row per HIGH risk and `**HIGH-risk gate**: CLOSED`
+before I3. Reject placeholder rows. Identity-risk rows must use distinct values for fields
+that could be conflated; durable-state rows must name the full transition/replay sequence.
+Before staging, run every named test, record its passing-after result, and include the
+row-to-test mapping in the Builder report. A missing or failing row is `GATED`. If there
+are no HIGH risks, no extra table is required.
+
+For provider work, every proof row must name authority, exact operation/failure scope,
 required result/readback, replay/recovery, and a deterministic current-transaction test.
 Fallback rows identify the exact failed operation that authorizes them. Run safe
 failing-before tests when available and require every named scenario to pass before
