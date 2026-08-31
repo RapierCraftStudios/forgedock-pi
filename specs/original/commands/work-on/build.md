@@ -15,7 +15,7 @@ argument-hint: "[issue number] [--repo GH_REPO] [--gh-flag GH_FLAG] [--base PR_B
 **Agent model policy**: `model: "{DEFAULT_MODEL}"` — resolved from forge.yaml `agents.default_model`, else "sonnet" (standard tier). Fallback: `model: "opus"` if rate-limited. Feature gate: pass `effort` in Task/Skill spawns only on Claude Code >= 2.1.154. This file's mechanical bits (3B classification, 3D label transitions) stay at this tier because they're interleaved with the reasoning-heavy build steps (3C.5/3C.6/3F) in the same `Skill()` invocation — see `work-on.md` section "Model and Effort Tiering — What Actually Applies". <!-- Added: forge#1827 -->
 **NEVER use plan mode (EnterPlanMode).**
 
-**CRITICAL: You MUST execute ALL phases B0–B6 in order. Phases B3 (context) and B4 (architect) are skipped ONLY when COMPLEXITY_BAND: TRIVIAL (read from FORGE:FAST_PATH comment in Phase B0). For STANDARD and COMPLEX tasks they are NOT optional — skipping them degrades build quality.**
+**CRITICAL: You MUST execute ALL phases B0–B6 in order. TRIVIAL may skip B3 context work and B4 planning work, but it must still load `build/architect.md` and publish that specification's explicit completed skip marker before B5. For STANDARD and COMPLEX tasks B3/B4 are not optional.**
 
 ### Canonical Build Path (STANDARD/fast-lane) <!-- Added: forge#1276 -->
 
@@ -29,13 +29,32 @@ argument-hint: "[issue number] [--repo GH_REPO] [--gh-flag GH_FLAG] [--base PR_B
 |------|------|--------|
 | **STANDARD/fast-lane (default)** | All issues not matching exceptions below | B0 → B1 → B2 → B2.5 → [B3] → [B4] → B5 → B6 — all inline |
 | **Spawn exception (Row c)** | ≥20 Skill invocations OR ≥10 files changed before build | Spawn B3/B4 as fresh sub-agents via `Skill()` |
-| **TRIVIAL fast-path** | COMPLEXITY_BAND: TRIVIAL | Skip B3 and B4 entirely |
+| **TRIVIAL fast-path** | COMPLEXITY_BAND: TRIVIAL | Skip B3 context work; execute the B4 explicit completed skip-marker path; then B5/B6 |
 
 This resolves the three-topology conflict: `work-on.md` Phase 3 (inline 3A–3M), `work-on/build.md` (this file), and `work-on-monolithic.md` ([BENCHMARK]) all describe the **same canonical inline path**. `work-on/build.md` adds worktree lifecycle management (B1) and the FORGE:CONTRACT handoff (B2) that the monolithic variant omits for brevity. The `Skill()` forms in B3/B4 below document the sub-phase contract and serve as the exception path only. <!-- Added: forge#1276 -->
 
 <!-- FORGE:SPEC_LOADED — work-on/build.md loaded and active. Agent is bound by this spec. -->
 
 ---
+
+## Fresh Pi builder entry contract
+
+Authoritative Task Types `Investigation`, `Feature (UI/UX)`, and `Full-Stack` do not enter
+the bounded mutation builder. The coordinator executes the existing Investigation
+research/issue-creation special case or the mandatory frontend-design/browser route. For
+all other confirmed tasks,
+the work-on coordinator completes investigation, frozen-base setup,
+the Builder Contract, and any required under-orchestration affected-file claim before
+launching one fresh `forgedock-builder` in the same issue worktree. The builder's first repository read is
+this file. It rehydrates the issue, latest completed investigation, latest contract,
+exact base, and any required orchestration claim from GitHub; inherited coordinator conversation is not a
+build input. A missing or ambiguous handoff is automated `GATED`.
+
+The fresh builder verifies completed B0-B2 evidence and resumes at B2.5 rather than
+creating another worktree or duplicate contract. It executes B3-B6.5 inline, loads each
+referenced phase file when reached, and does not launch subagents. No source mutation may
+precede this file load and the required architecture artifact. The coordinator waits and
+must not mutate the worktree concurrently.
 
 ## Inputs
 
@@ -51,48 +70,69 @@ Parse from $ARGUMENTS:
 
 ## Phase B0: Load State from GitHub (MANDATORY)
 
-Re-read current state before doing anything:
+Re-read current state before doing anything. Pagination, completion filtering, and latest
+selection are mandatory for every durable handoff artifact:
 
 ```bash
 gh issue view {NUMBER} {GH_FLAG} --json number,title,body,labels,state,milestone
+COMMENTS=$(gh api --paginate repos/{GH_REPO}/issues/{NUMBER}/comments --slurp | jq 'flatten')
+INVESTIGATOR_BODY=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:INVESTIGATOR -->") and contains("<!-- INVESTIGATION:COMPLETE -->"))) | last | .body // ""')
+CONTRACT_BODY=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:CONTRACT -->"))) | last | .body // ""')
+FAST_PATH_BODY=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:FAST_PATH -->"))) | last | .body // ""')
+COMPLETE_BUILDER_BODY=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:BUILDER -->") and contains("<!-- FORGE:BUILDER:COMPLETE -->"))) | last | .body // ""')
+PARTIAL_BUILDER_ID=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:BUILDER -->") and (contains("<!-- FORGE:BUILDER:COMPLETE -->") | not))) | last | .id // ""')
 
-# Check investigation report
-gh api repos/{GH_REPO}/issues/{NUMBER}/comments \
-  --jq '.[] | select(.body | contains("FORGE:INVESTIGATOR")) | .body'
+[ -n "$INVESTIGATOR_BODY" ] || { echo "BUILD_RESULT: status: GATED blocker: latest completed investigation missing"; exit 1; }
+[ -n "$CONTRACT_BODY" ] || { echo "BUILD_RESULT: status: GATED blocker: Builder Contract missing"; exit 1; }
+# Also require the exact FORGE:BASE supplied by the coordinator and, under orchestration,
+# the active FORGE:CLAIM to be present, unambiguous, and identity-matched before continuing.
 
-# Check if build already completed
-gh api repos/{GH_REPO}/issues/{NUMBER}/comments \
-  --jq '.[] | select(.body | contains("FORGE:BUILDER")) | .body'
+COMPLEXITY_BAND=$(printf '%s' "$FAST_PATH_BODY" | sed -n 's/.*\*\*COMPLEXITY_BAND\*\*: \([A-Z_]*\).*/\1/p' | head -1)
+case "$COMPLEXITY_BAND" in TRIVIAL|STANDARD|COMPLEX) ;; *) echo "BUILD_RESULT: status: GATED blocker: valid FORGE:FAST_PATH complexity marker missing"; exit 1 ;; esac
 ```
 
-**Resume check**:
-- If `<!-- FORGE:BUILDER:COMPLETE -->` is present in a BUILDER comment → build already complete. Return `BUILD_RESULT: status: ALREADY_DONE` to router.
-- If `<!-- FORGE:BUILDER -->` exists BUT `<!-- FORGE:BUILDER:COMPLETE -->` is ABSENT → build was interrupted after the comment was posted but before the commit (validate.md V5). Delete the partial comment and restart from Phase B2 (contract): <!-- Added: forge#1305 -->
-  ```bash
-  PARTIAL_ID=$(gh api repos/{GH_REPO}/issues/{NUMBER}/comments \
-    --jq '[.[] | select(.body | contains("FORGE:BUILDER") and (contains("FORGE:BUILDER:COMPLETE") | not))] | last | .id // ""')
-  if [ -n "$PARTIAL_ID" ]; then
-    gh api repos/{GH_REPO}/issues/comments/$PARTIAL_ID -X DELETE
-    echo "Deleted partial FORGE:BUILDER comment (no FORGE:BUILDER:COMPLETE) — restarting build from Phase B2"
-  fi
-  ```
-- If no `<!-- FORGE:INVESTIGATOR -->` comment with `<!-- INVESTIGATION:COMPLETE -->` → EXIT with `BUILD_RESULT: status: BLOCKED`, blocker: "Investigation not complete — run investigate first".
+**Resume check — one authoritative route per state**:
 
-Extract from investigation report:
-- Affected files list
-- Root cause
-- Recommendation
-- Task type (Bug Fix / Feature / Refactor / Maintenance / UI/UX / Full-Stack)
+1. **Completed marker**: extract `validated_commit` from the latest complete builder body;
+   require one 40-character SHA, equality with clean `HEAD`, frozen-base ancestry, and the
+   expected issue branch. Only then return `BUILD_RESULT: status: ALREADY_DONE` with that
+   exact `commit_sha`; stale or malformed completion is `GATED`.
+2. **Partial marker plus staged/uncommitted changes**: preserve the partial comment and
+   existing worktree exactly, then continue directly to B6 validation/commit. Do not
+   delete artifacts, restart planning, or rerun implementation.
+3. **Partial marker plus clean committed `HEAD` different from the frozen base**: preserve
+   it, rerun configured verification and the V5 ancestry audit against that exact commit,
+   set `VALIDATED_COMMIT_SHA` only after both pass, then execute B6.5 acceptance and bind
+   completion. Do not create another commit.
+4. **Partial marker plus clean frozen-base `HEAD`**: the artifact and Git state conflict;
+   return automated `GATED` without deleting either.
 
-**Read COMPLEXITY_BAND** (from `FORGE:FAST_PATH` comment posted by Phase 3B of `work-on.md` — the complexity classification step that runs before invoking this file): <!-- Fixed: forge#1380 -->
 ```bash
-COMPLEXITY_BAND=$(gh api repos/{GH_REPO}/issues/{NUMBER}/comments \
-  --jq '.[] | select(.body | contains("FORGE:FAST_PATH")) | .body' 2>/dev/null \
-  | sed -n 's/.*\*\*COMPLEXITY_BAND\*\*: \([A-Z_]*\).*/\1/p' | head -1)
-# Default to STANDARD if not found (conservative — runs full pipeline)
-COMPLEXITY_BAND="${COMPLEXITY_BAND:-STANDARD}"
-echo "COMPLEXITY_BAND: $COMPLEXITY_BAND"
+FROZEN_BASE_SHA="{FROZEN_BASE_SHA_FROM_FORGE_BASE}"
+if [ -n "$COMPLETE_BUILDER_BODY" ]; then
+  mapfile -t VALIDATED_COMMIT_LINES < <(printf '%s' "$COMPLETE_BUILDER_BODY" | sed -n 's/^validated_commit: \([a-f0-9]\{40\}\)$/\1/p')
+  [ "${#VALIDATED_COMMIT_LINES[@]}" -eq 1 ] || { echo "BUILD_RESULT: status: GATED blocker: completed builder must contain exactly one validated_commit"; exit 1; }
+  VALIDATED_COMMIT_SHA="${VALIDATED_COMMIT_LINES[0]}"
+  EXPECTED_ISSUE_BRANCH="{EXPECTED_ISSUE_BRANCH_FROM_HANDOFF}"
+  [ -n "$EXPECTED_ISSUE_BRANCH" ] && [ "$(git branch --show-current)" = "$EXPECTED_ISSUE_BRANCH" ] || { echo "BUILD_RESULT: status: GATED blocker: completed builder branch identity invalid"; exit 1; }
+  [ "$(git rev-parse HEAD)" = "$VALIDATED_COMMIT_SHA" ] || { echo "BUILD_RESULT: status: GATED blocker: completed builder commit is stale"; exit 1; }
+  [ -z "$(git status --porcelain)" ] || { echo "BUILD_RESULT: status: GATED blocker: completed builder worktree is dirty"; exit 1; }
+  git merge-base --is-ancestor "$FROZEN_BASE_SHA" "$VALIDATED_COMMIT_SHA" || { echo "BUILD_RESULT: status: GATED blocker: completed builder ancestry invalid"; exit 1; }
+  echo "BUILD_RESULT: status: ALREADY_DONE commit_sha: $VALIDATED_COMMIT_SHA"
+  exit 0
+elif [ -n "$PARTIAL_BUILDER_ID" ] && [ -n "$(git status --porcelain)" ]; then
+  echo "Partial pre-commit build preserved; continue directly to B6"
+elif [ -n "$PARTIAL_BUILDER_ID" ] && [ "$(git rev-parse HEAD)" != "$FROZEN_BASE_SHA" ]; then
+  RESUME_COMMIT_SHA=$(git rev-parse HEAD)
+  echo "Partial committed build $RESUME_COMMIT_SHA preserved; rerun verification and ancestry before B6.5"
+elif [ -n "$PARTIAL_BUILDER_ID" ]; then
+  echo "BUILD_RESULT: status: GATED blocker: partial builder artifact conflicts with frozen-base HEAD"
+  exit 1
+fi
 ```
+
+Extract affected files, root cause, recommendation, and task type from the selected
+`INVESTIGATOR_BODY`; never from an older or incomplete comment.
 
 ---
 
@@ -110,7 +150,7 @@ Append `-{NUMBER}` to ensure uniqueness: e.g. `fix/work-on-build-landing-file-85
 ### B1B: Determine source branch
 
 - Review-finding issue → parse `**Code branch**: \`{branch}\`` from issue body; branch from `origin/{branch}`
-  - **Milestone review-finding hybrid lane** (ONLY when Code branch matches `milestone/*`): This is a high-risk lane. The worktree will carry the full milestone history. The PR target is `staging` (or the base specified). **DANGER: Agents MUST NOT use `git merge` to resolve any conflicts in this lane.** Merge-based conflict resolution will pull the entire milestone commit tree onto staging, contaminating it with unapproved code. Use `git rebase` or `git cherry-pick` only. If conflicts cannot be resolved without a merge, post a comment on the issue, add `needs-human`, and STOP.
+  - **Milestone review-finding hybrid lane** (ONLY when Code branch matches `milestone/*`): This is a high-risk lane. The worktree will carry the full milestone history. The PR target is `staging` (or the base specified). **DANGER: Agents MUST NOT use `git merge` to resolve any conflicts in this lane.** Merge-based conflict resolution will pull the entire milestone commit tree onto staging, contaminating it with unapproved code. Use `git rebase` or `git cherry-pick` only. If conflicts cannot be resolved without a merge, post evidence and return automated `GATED`; do not add `needs-human` or perform the merge.
   - **Missing ref fallback**: After parsing, verify the Code branch still exists on remote. If not, fall back to the lane default (`staging` for fast lane, `milestone/{slug}` for feature lane) and note the fallback:
     ```bash
     SOURCE_BRANCH="{CODE_BRANCH_FROM_ISSUE_BODY}"
@@ -190,6 +230,16 @@ gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:CONTRACT -->
 
 {ACCEPTANCE_CRITERIA_CHECKLIST}
 
+### Execution Path and Proof
+
+`{ACTIVE_PUBLIC_OR_PRODUCTION_ENTRYPOINT}` → `{CHANGED_BOUNDARY}` → `{OBSERVABLE_RESULT}`
+
+**Exact behavioral test**: `{COMMAND_OR_NAMED_TEST}`
+**Bug reproduction before fix**: `{FAILING_BEFORE_COMMAND_OR_NOT_APPLICABLE_FOR_NON_BUG}`
+
+An export, prose instruction, direct import of an otherwise unwired helper, or broad test
+suite alone is not an active execution path.
+
 ### Quality Considerations
 
 {AUTH_MODEL_NEW_ENV_VARS_SQL_SAFETY_SECURITY_SURFACE}
@@ -200,7 +250,7 @@ gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:CONTRACT -->
 ${ATTRIBUTION_LINE}"
 ```
 
-Contract must be grounded in the investigation report. Every deliverable file must appear in the affected files list from the investigator. Adversarially validate the proposed fix against adjacent system layers before posting.
+Contract must be grounded in the investigation report. Every deliverable file must appear in the affected files list from the investigator. Adversarially validate the proposed fix against adjacent system layers before posting. The execution path must name the real caller/entrypoint that activates every new helper, command, or configuration boundary and the exact test that invokes that seam. For a bug, run and record a safe deterministic failing-before reproduction when one exists.
 
 ### B2.1: Post FORGE:CLAIM on coordination issue (conditional — when running under orchestration batch) <!-- Added: forge#1736 -->
 
@@ -296,9 +346,9 @@ If `FUNCTION_NAMES` is empty, omit `--functions`. The Skill() form above is the 
 
 ## Phase B4: Architecture Planning (MANDATORY for STANDARD/COMPLEX — skip for TRIVIAL)
 
-**Skip if COMPLEXITY_BAND: TRIVIAL** (read from FORGE:FAST_PATH in Phase B0) — skip this phase entirely. Proceed directly to Phase B5.
+**If COMPLEXITY_BAND: TRIVIAL**: load `commands/work-on/build/architect.md` and execute only its mandatory Skip Marker path, producing a same-issue `FORGE:ARCHITECT:COMPLETE` artifact, then proceed to B5. Do not silently bypass the architect phase.
 
-**For STANDARD and COMPLEX tasks**: Always run. Even a 1-file STANDARD fix benefits from cross-path consistency checks. Do NOT skip without a TRIVIAL COMPLEXITY_BAND.
+**For STANDARD and COMPLEX tasks**: Always run. Even a 1-file STANDARD fix benefits from cross-path consistency checks. Do NOT skip without a TRIVIAL COMPLEXITY_BAND. Implementation cannot start until a same-issue `FORGE:ARCHITECT:COMPLETE` artifact exists. A legitimate skip still posts the explicit completed skip artifact defined by `build/architect.md`; an absent artifact is never a skip.
 
 **Execution model**: Run **inline** (see Canonical Build Path above). Read the `commands/work-on/build/architect.md` spec and execute its steps directly in this context window. Only spawn a Skill() sub-agent when the Spawn-Decision Table Row (c) applies. <!-- Added: forge#1276 -->
 
@@ -327,9 +377,9 @@ Skill("work-on:build:implement", args="{NUMBER} --repo {GH_REPO} --gh-flag {GH_F
 
 **After subcommand returns**:
 - `IMPLEMENT_RESULT: status: COMPLETE` → continue to B6
-- `IMPLEMENT_RESULT: status: ALREADY_DONE` → skip to B6 (validate what's already there)
+- `IMPLEMENT_RESULT: status: ALREADY_DONE` with a clean partial-build commit → use the B0 recovery route: do not run V5 or create another commit; rerun configured verification and the V5 ancestry audit against base..HEAD, set `VALIDATED_COMMIT_SHA` only after both pass, then execute B6.5
 - `IMPLEMENT_RESULT: status: INVESTIGATION_COMPLETE` → issues created as deliverables; return `BUILD_RESULT: status: INVESTIGATION_COMPLETE`
-- `IMPLEMENT_RESULT: status: BLOCKED` → post comment with blocker description, add `needs-human`, return `BUILD_RESULT: status: BLOCKED`
+- `IMPLEMENT_RESULT: status: GATED | BLOCKED` → return the same fail-closed status with blocker evidence; mechanical scope/phase failures are `GATED`, not `needs-human`
 # MUST CONTINUE to Phase B6 — implement result is intermediate, NOT terminal (validation still required).
 
 ---
@@ -339,14 +389,14 @@ Skill("work-on:build:implement", args="{NUMBER} --repo {GH_REPO} --gh-flag {GH_F
 Invoke the validate subcommand to run the quality gate loop, formatting, and deploy checks:
 
 ```
-Skill("work-on:build:validate", args="{NUMBER} --repo {GH_REPO} --gh-flag {GH_FLAG} --worktree {WORKTREE_PATH} --files {CHANGED_FILES}")
+Skill("work-on:build:validate", args="{NUMBER} --repo {GH_REPO} --gh-flag {GH_FLAG} --worktree {WORKTREE_PATH} --base-sha {FROZEN_BASE_SHA} --files {CHANGED_FILES}")
 ```
 
 Where `{CHANGED_FILES}` is the space-separated list of files changed by the implement subcommand (read from `IMPLEMENT_RESULT` or from the `<!-- FORGE:BUILDER -->` comment).
 
 **After subcommand returns**:
-- `VALIDATE_RESULT: gate_passed: true` → continue to Phase B6.5 (acceptance gate)
-- `VALIDATE_RESULT: gate_passed: false` → subcommand has already posted comment and added `needs-human` label; return `BUILD_RESULT: status: BLOCKED`
+- `VALIDATE_RESULT: status: COMPLETE`, `gate_passed: true`, and a non-empty exact `validated_commit_sha` → set `VALIDATED_COMMIT_SHA` to that returned field and continue to B6.5
+- missing/invalid commit evidence or `gate_passed: false` → return `BUILD_RESULT: status: GATED`; never infer validation success from current `HEAD`
 
 ---
 
@@ -357,9 +407,9 @@ Where `{CHANGED_FILES}` is the space-separated list of files changed by the impl
 **Read acceptance spec from FORGE:INVESTIGATOR comment**:
 
 ```bash
-ACCEPTANCE_CHECKS=$(gh api repos/{GH_REPO}/issues/{NUMBER}/comments \
-  --jq '.[] | select(.body | contains("FORGE:INVESTIGATOR")) | .body' \
-  | grep "^ACCEPTANCE_CHECK:" )
+INVESTIGATOR_BODY=$(gh api --paginate repos/{GH_REPO}/issues/{NUMBER}/comments \
+  --slurp | jq -r 'flatten | map(select(.body | contains("<!-- FORGE:INVESTIGATOR -->") and contains("<!-- INVESTIGATION:COMPLETE -->"))) | last | .body // ""')
+ACCEPTANCE_CHECKS=$(printf '%s\n' "$INVESTIGATOR_BODY" | grep '^ACCEPTANCE_CHECK:' || true)
 ```
 
 **If `ACCEPTANCE_CHECKS` is empty** (investigation predates this feature or comment was deleted): post a warning comment and **block** — do not silently pass:
@@ -375,9 +425,20 @@ No \`ACCEPTANCE_CHECK:\` lines found in the FORGE:INVESTIGATOR comment. This may
 **Gate result: BLOCKED** — re-run \`/work-on:investigate {NUMBER}\` to regenerate the acceptance spec, then retry the build.
 
 <!-- FORGE:ACCEPTANCE_GATE:BLOCKED -->"
-gh issue edit {NUMBER} {GH_FLAG} --add-label "needs-human"
 ```
-Return `BUILD_RESULT: status: BLOCKED`, blocker: "No acceptance spec — re-run investigate to emit ACCEPTANCE_CHECK lines".
+Return `BUILD_RESULT: status: GATED`, blocker: "No acceptance spec — re-run investigation to emit ACCEPTANCE_CHECK lines". Do not add `needs-human`; this is mechanically recoverable.
+
+**Before executing checks — cardinality and type fidelity gate (MANDATORY)**:
+
+When the issue contains an `## Acceptance Criteria` section, count its actionable
+checkbox items (`- [ ]` or `- [x]`) and require exactly the same number of
+`ACCEPTANCE_CHECK` lines
+with the exact ordered IDs `ac-1..ac-N`. For each criterion marked `[type:e2e]`, require
+the corresponding check to be `type=command` or `type=behavior` and to execute the active
+public/production seam named in the Builder Contract. `contains`, grep-only prose checks,
+a direct leaf-helper import, or an unnamed broad suite is a hard mismatch. On any count,
+ID, or type mismatch, post `FORGE:ACCEPTANCE_GATE:FAILED` and return automated `GATED`;
+do not rewrite, combine, or silently bless the checks during build.
 
 **If all checks are `type=skipped`**: post a pass comment noting human review is required, then continue to the checkpoint (non-blocking — skip was deliberate):
 
@@ -481,21 +542,57 @@ $(echo -e "$FAILED_CHECKS")
 Merge is blocked. Fix the failing criteria and re-run the validate phase.
 
 <!-- FORGE:ACCEPTANCE_GATE:FAILED -->"
-  gh issue edit {NUMBER} {GH_FLAG} --add-label "needs-human"
-  # Return BLOCKED — merge gate failed
+  # Return automated GATED — merge gate failed
 fi
 ```
 
-If `GATE_PASS = false`: return `BUILD_RESULT: status: BLOCKED`, blocker: "Acceptance gate failed — see FORGE:ACCEPTANCE_GATE comment".
+If `GATE_PASS = false`: return `BUILD_RESULT: status: GATED`, blocker: "Acceptance gate failed — see FORGE:ACCEPTANCE_GATE comment".
 
-If `GATE_PASS = true`: continue to write the phase checkpoint below.
+If `GATE_PASS = true`: bind completion to the exact commit returned by
+`build/validate.md`, then write the phase checkpoint. This is the only build path that
+may append `FORGE:BUILDER:COMPLETE`.
 
-**When gate_passed is true — write machine-readable phase checkpoint before returning (MANDATORY)**:
+**When gate_passed is true — bind completion and write checkpoint (MANDATORY)**:
 ```bash
+[ -n "${VALIDATED_COMMIT_SHA:-}" ] || {
+  echo "BUILD_RESULT: status: GATED blocker: validated_commit_sha missing from VALIDATE_RESULT"
+  exit 1
+}
+[ "$(git rev-parse HEAD)" = "$VALIDATED_COMMIT_SHA" ] || {
+  echo "BUILD_RESULT: status: GATED blocker: validated commit does not equal HEAD"
+  exit 1
+}
+[ -z "$(git status --porcelain)" ] || {
+  echo "BUILD_RESULT: status: GATED blocker: validated worktree is not clean"
+  exit 1
+}
+EXPECTED_ISSUE_BRANCH="{EXPECTED_ISSUE_BRANCH_FROM_HANDOFF}"
+[ -n "$EXPECTED_ISSUE_BRANCH" ] && [ "$(git branch --show-current)" = "$EXPECTED_ISSUE_BRANCH" ] || {
+  echo "BUILD_RESULT: status: GATED blocker: validated branch identity invalid"
+  exit 1
+}
+
+BUILDER_COMMENT_ID=$(gh api --paginate repos/{GH_REPO}/issues/{NUMBER}/comments --slurp \
+  | jq -r 'flatten | map(select(.body | contains("<!-- FORGE:BUILDER -->") and (contains("<!-- FORGE:BUILDER:COMPLETE -->") | not))) | last | .id // ""')
+[ -n "$BUILDER_COMMENT_ID" ] || {
+  echo "BUILD_RESULT: status: GATED blocker: partial FORGE:BUILDER comment missing"
+  exit 1
+}
+CURRENT_BODY=$(gh api repos/{GH_REPO}/issues/comments/$BUILDER_COMMENT_ID --jq '.body')
+UPDATED_BODY="${CURRENT_BODY}
+
+validated_commit: ${VALIDATED_COMMIT_SHA}
+<!-- FORGE:BUILDER:COMPLETE -->"
+gh api repos/{GH_REPO}/issues/comments/$BUILDER_COMMENT_ID \
+  -X PATCH --field body="$UPDATED_BODY" || exit 1
+READBACK=$(gh api repos/{GH_REPO}/issues/comments/$BUILDER_COMMENT_ID --jq '.body') || exit 1
+printf '%s' "$READBACK" | grep -qF "validated_commit: ${VALIDATED_COMMIT_SHA}" || exit 1
+printf '%s' "$READBACK" | grep -qF '<!-- FORGE:BUILDER:COMPLETE -->' || exit 1
+
 CHECKPOINT_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:CHECKPOINT -->
 \`\`\`json
-{\"phase\": \"BUILD\", \"status\": \"COMPLETE\", \"next_phase\": \"REVIEW\", \"timestamp\": \"${CHECKPOINT_TIMESTAMP}\"}
+{\"phase\": \"BUILD\", \"status\": \"COMPLETE\", \"next_phase\": \"REVIEW\", \"timestamp\": \"${CHECKPOINT_TIMESTAMP}\", \"commit\": \"${VALIDATED_COMMIT_SHA}\"}
 \`\`\`"
 ```
 
@@ -530,10 +627,15 @@ Output this structured block — the routing loop in `work-on.md` will read this
 
 ```
 BUILD_RESULT:
-  status: COMPLETE | ALREADY_DONE | INVESTIGATION_COMPLETE | BLOCKED
+  status: COMPLETE | ALREADY_DONE | INVESTIGATION_COMPLETE | GATED | BLOCKED
   branch: {BRANCH}
   worktree: {WORKTREE_PATH}
-  blocker: {description if status=BLOCKED}
+  commit_sha: {exact validated commit when status=COMPLETE or ALREADY_DONE}
+  changed_files: [{every changed path}]
+  tests: [{named tests added or updated}]
+  commands: [{command and outcome}]
+  validation: {quality gate, configured verification, acceptance, ancestry, and clean-status evidence}
+  blocker: {description if status=GATED or BLOCKED}
 ```
 
 ---
