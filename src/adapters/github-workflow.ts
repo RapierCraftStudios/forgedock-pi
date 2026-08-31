@@ -29,6 +29,8 @@ export interface GitHubPullRequestData {
   htmlUrl: string;
   state: "open" | "closed";
   merged: boolean;
+  /** GitHub login of the pull-request author, when supplied. */
+  ownerLogin?: string;
   /** Present when GitHub supplied the merge_commit_sha field. */
   mergeCommitSha?: string;
   headSha: string;
@@ -111,6 +113,27 @@ export interface GitHubCiResult {
   timedOut: boolean;
 }
 
+export type GitHubReviewEvent = "APPROVE" | "COMMENT";
+
+export interface PullRequestReviewEvidence {
+  semanticDecision: "APPROVED";
+  headSha: string;
+  baseSha: string;
+  mergeBaseSha: string;
+  coverage: string;
+  checks: readonly string[];
+  findingIds: readonly string[];
+}
+
+export interface PullRequestReviewPublication {
+  reviewId: number;
+  reviewUrl: string;
+  event: GitHubReviewEvent;
+  actorLogin: string;
+  route: GitHubPullRequestRouteSnapshot;
+  evidence: PullRequestReviewEvidence;
+}
+
 interface IssueApiResponse {
   number: number;
   title: string;
@@ -136,9 +159,24 @@ interface PullApiResponse {
   state: "open" | "closed";
   merged: boolean;
   merge_commit_sha?: string | null;
+  user?: { login?: string } | null;
   head: { sha: string; ref: string };
   base: { sha: string; ref: string };
   mergeable: boolean | null;
+}
+
+interface UserApiResponse {
+  login?: string;
+}
+
+interface PullRequestReviewApiResponse {
+  id: number;
+  html_url?: string | null;
+  user?: { login?: string } | null;
+  body?: string | null;
+  commit_id?: string | null;
+  event?: string | null;
+  state?: string | null;
 }
 
 interface MergeApiResponse {
@@ -697,6 +735,107 @@ export class GitHubWorkflowAdapter {
     signal?: AbortSignal,
   ): Promise<GitHubPullRequestData> {
     return this.revalidatePullRequestRoute(snapshot, signal);
+  }
+
+  /**
+   * Publish one review bound to the frozen route. The only recoverable provider
+   * failure is the exact APPROVE self-review rejection from this POST; no
+   * lookup or readback error can authorize the COMMENT fallback.
+   */
+  async publishPullRequestReview(input: {
+    route: GitHubPullRequestRouteSnapshot;
+    evidence: PullRequestReviewEvidence;
+    body: string;
+    signal?: AbortSignal;
+  }): Promise<PullRequestReviewPublication> {
+    assertNumber(input.route.pullNumber, "pull request");
+    assertReviewEvidence(input.evidence, input.route);
+    if (!input.body.trim()) throw new TypeError("Review body must be non-empty.");
+    const current = await this.revalidatePullRequestRoute(input.route, input.signal);
+    const ownerLogin = current.ownerLogin;
+    if (!ownerLogin)
+      throw new GitHubApiError(422, `${this.#apiRoot}/pulls/${input.route.pullNumber}`, {
+        message: "Pull request owner identity is missing.",
+      });
+    const actorPath = `${this.#apiRoot}/user`;
+    const actorResponse = await this.#transport.request<UserApiResponse>({
+      method: "GET",
+      path: actorPath,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
+    const actor = requireGitHubSuccess(actorResponse, actorPath, [200]);
+    const actorLogin = actor.login?.trim();
+    if (!actorLogin)
+      throw new GitHubApiError(422, actorPath, { message: "Authenticated actor identity is missing." });
+
+    const reviewPath = `${this.#apiRoot}/pulls/${input.route.pullNumber}/reviews`;
+    const post = async (event: GitHubReviewEvent): Promise<PullRequestReviewPublication> => {
+      const response = await this.#transport.request<PullRequestReviewApiResponse>({
+        method: "POST",
+        path: reviewPath,
+        body: { event, commit_id: input.route.headSha, body: input.body },
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+      const review = requireGitHubSuccess(response, reviewPath, [200, 201]);
+      return this.#readBackPullRequestReview({
+        route: input.route,
+        evidence: input.evidence,
+        body: input.body,
+        event,
+        actorLogin,
+        review,
+        signal: input.signal,
+      });
+    };
+
+    try {
+      return await post("APPROVE");
+    } catch (error) {
+      if (!(error instanceof GitHubApiError) ||
+          !isExactSelfApprovalRejection(error) ||
+          actorLogin !== ownerLogin)
+        throw error;
+      return post("COMMENT");
+    }
+  }
+
+  async #readBackPullRequestReview(input: {
+    route: GitHubPullRequestRouteSnapshot;
+    evidence: PullRequestReviewEvidence;
+    body: string;
+    event: GitHubReviewEvent;
+    actorLogin: string;
+    review: PullRequestReviewApiResponse;
+    signal?: AbortSignal;
+  }): Promise<PullRequestReviewPublication> {
+    if (!Number.isSafeInteger(input.review.id) || input.review.id < 1)
+      throw new GitHubApiError(422, `${this.#apiRoot}/pulls/${input.route.pullNumber}/reviews`, { message: "Review response has no valid ID." });
+    const reviewPath = `${this.#apiRoot}/pulls/${input.route.pullNumber}/reviews/${input.review.id}`;
+    const response = await this.#transport.request<PullRequestReviewApiResponse>({
+      method: "GET",
+      path: reviewPath,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
+    const readBack = requireGitHubSuccess(response, reviewPath, [200]);
+    const expectedState = input.event === "APPROVE" ? "APPROVED" : "COMMENTED";
+    const actualState = (readBack.state ?? readBack.event ?? "").toUpperCase();
+    if (
+      !readBack.html_url ||
+      !readBack.user?.login ||
+      readBack.user.login !== input.actorLogin ||
+      readBack.commit_id !== input.route.headSha ||
+      readBack.body !== input.body ||
+      actualState !== expectedState
+    )
+      throw new GitHubApiError(422, reviewPath, { message: "Pull request review read-back did not match the pinned request." });
+    return {
+      reviewId: readBack.id,
+      reviewUrl: readBack.html_url,
+      event: input.event,
+      actorLogin: input.actorLogin,
+      route: input.route,
+      evidence: input.evidence,
+    };
   }
 
   async findPullRequest(
@@ -1351,12 +1490,41 @@ function assertPullRequestRouteSnapshot(
   });
 }
 
+function assertReviewEvidence(
+  evidence: PullRequestReviewEvidence,
+  route: GitHubPullRequestRouteSnapshot,
+): void {
+  if (
+    evidence.semanticDecision !== "APPROVED" ||
+    evidence.headSha !== route.headSha ||
+    !evidence.baseSha.trim() ||
+    !evidence.mergeBaseSha.trim() ||
+    !evidence.coverage.trim() ||
+    !Array.isArray(evidence.checks) ||
+    !evidence.checks.every((value) => typeof value === "string" && value.trim()) ||
+    !Array.isArray(evidence.findingIds) ||
+    !evidence.findingIds.every((value) => typeof value === "string" && value.trim())
+  )
+    throw new TypeError("Review evidence must match the frozen route and contain complete identity fields.");
+}
+
+function isExactSelfApprovalRejection(error: GitHubApiError): boolean {
+  if (error.status !== 422) return false;
+  const response = error.response;
+  const message = response && typeof response === "object" && !Array.isArray(response)
+    ? (response as { message?: unknown }).message
+    : undefined;
+  return typeof message === "string" && message.replace(/\s+/g, " ").trim().toLowerCase() ===
+    "review cannot be approved by pull request author.";
+}
+
 function normalizePull(pull: PullApiResponse): GitHubPullRequestData {
   return {
     number: pull.number,
     htmlUrl: pull.html_url,
     state: pull.state,
     merged: pull.merged,
+    ...(pull.user?.login ? { ownerLogin: pull.user.login } : {}),
     ...(pull.merge_commit_sha
       ? { mergeCommitSha: pull.merge_commit_sha }
       : {}),
@@ -1422,7 +1590,8 @@ async function abortableDelay(
   if (signal?.aborted) throw signal.reason;
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(resolve, milliseconds);
-    timer.unref();
+    if (typeof timer === "object" && "unref" in timer)
+      (timer as { unref(): void }).unref();
     signal?.addEventListener(
       "abort",
       () => {

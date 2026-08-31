@@ -94,10 +94,21 @@ export interface MergeAuthorization {
 
 export type ReviewCompletionOutcome = "reviewed" | "merged";
 
+export interface ReviewPublication {
+  reviewId: number;
+  reviewUrl: string;
+  event: "APPROVE" | "COMMENT";
+  actorLogin: string;
+  headSha: string;
+  baseSha: string;
+  mergeBaseSha: string;
+}
+
 export interface ReviewCompletion {
   round: number;
   outcome: ReviewCompletionOutcome;
   reason?: string;
+  publication?: ReviewPublication;
 }
 
 export type ReviewStatus = "active" | "completed" | "cancelled";
@@ -127,6 +138,8 @@ export interface ReviewState {
   verdict?: ReviewVerdict;
   gate?: ReviewGate;
   mergeAuthorization?: MergeAuthorization;
+  /** Durable provider review publication, recorded before completion. */
+  publication?: ReviewPublication;
   completion?: ReviewCompletion;
   status: ReviewStatus;
   cancellationReason?: string;
@@ -156,6 +169,8 @@ export type ReviewEventType =
   | "review.gate.recorded"
   | "review.merge-authorized"
   | "review.merge.authorization"
+  | "review.publication-recorded"
+  | "review.publication.recorded"
   | "review.completed"
   | "review.cancelled";
 
@@ -203,6 +218,9 @@ export interface ReviewGateRecordedPayload extends ReviewGate {
   round: number;
 }
 export interface ReviewMergeAuthorizedPayload extends MergeAuthorization {
+  round: number;
+}
+export interface ReviewPublicationRecordedPayload extends ReviewPublication {
   round: number;
 }
 export interface ReviewCompletedPayload extends ReviewCompletion {}
@@ -377,6 +395,10 @@ export function applyReviewEvent(
     case "review.merge.authorization":
       applyMergeAuthorization(state, event);
       break;
+    case "review.publication-recorded":
+    case "review.publication.recorded":
+      applyReviewPublication(state, event);
+      break;
     case "review.completed":
       applyCompletion(state, event);
       break;
@@ -485,6 +507,13 @@ export function validateReviewState(value: unknown): asserts value is ReviewStat
     if (authorization.authorized && !state.gate.passed)
       throw new ReviewTransitionError("invalid-snapshot", "Merge authorization bypasses the review gate.");
   }
+  if (state.publication !== undefined) {
+    // SAFETY: ReviewState.publication is validated structurally below; this cast
+    // only exposes its fields to the defensive validator.
+    const publication = validateReviewPublication(state.publication as unknown as Record<string, unknown>);
+    if (publication.headSha !== state.headSha || publication.baseSha !== state.baseSha)
+      throw new ReviewTransitionError("invalid-snapshot", "Publication identity does not match the frozen route.");
+  }
   if (state.completion !== undefined) {
     // SAFETY: validateCompletion only reads Record<string, unknown> fields
     // defensively; the double cast bypasses the partial ReviewState type, not
@@ -502,6 +531,13 @@ export function validateReviewState(value: unknown): asserts value is ReviewStat
       throw new ReviewTransitionError("invalid-snapshot", "Merged completion requires merge authorization.");
     if (completion.outcome === "reviewed" && state.mergeAuthorization?.authorized)
       throw new ReviewTransitionError("invalid-snapshot", "Authorized merge cannot complete as review-only.");
+    if (completion.publication) {
+      // SAFETY: ReviewCompletion.publication is validated structurally below;
+      // the cast only exposes its fields to the defensive validator.
+      const publication = validateReviewPublication(completion.publication as unknown as Record<string, unknown>);
+      if (publication.headSha !== state.headSha || publication.baseSha !== state.baseSha)
+        throw new ReviewTransitionError("invalid-snapshot", "Publication identity does not match the frozen route.");
+    }
   }
   if (state.status === "completed" && !state.completion)
     throw new ReviewTransitionError("invalid-snapshot", "Completed review must record its outcome.");
@@ -645,7 +681,8 @@ function cloneState(state: ReviewState): ReviewState {
       ? { gate: { ...state.gate, reasons: [...state.gate.reasons] } }
       : {}),
     ...(state.mergeAuthorization ? { mergeAuthorization: { ...state.mergeAuthorization } } : {}),
-    ...(state.completion ? { completion: { ...state.completion } } : {}),
+    ...(state.publication ? { publication: { ...state.publication } } : {}),
+    ...(state.completion ? { completion: { ...state.completion, ...(state.completion.publication ? { publication: { ...state.completion.publication } } : {}) } } : {}),
     idempotencyKeys: Object.assign(Object.create(null), state.idempotencyKeys),
     eventIds: Object.assign(Object.create(null), state.eventIds),
   };
@@ -790,6 +827,20 @@ function applyGate(state: ReviewState, event: ReviewEvent): void {
   delete state.mergeAuthorization;
 }
 
+function applyReviewPublication(state: ReviewState, event: ReviewEvent): void {
+  const panel = requireCompletedPanel(state);
+  assertEventRound(event, panel.round);
+  if (!state.gate?.passed)
+    throw new ReviewTransitionError("gate-blocked", "Review publication requires a passed review gate.");
+  if (state.publication || state.completion)
+    throw new ReviewTransitionError("duplicate-publication", "Review publication is already recorded.");
+  const publication = validateReviewPublication(payload(event));
+  assertFrozenIdentity(state, publication.headSha, publication.baseSha);
+  if (state.verdict?.decision !== "approved" && state.verdict?.decision !== "approved-with-follow-ups")
+    throw new ReviewTransitionError("gate-blocked", "Review publication requires semantic approval.");
+  state.publication = publication;
+}
+
 function applyMergeAuthorization(state: ReviewState, event: ReviewEvent): void {
   const panel = requireCompletedPanel(state);
   assertEventRound(event, panel.round);
@@ -827,6 +878,13 @@ function applyCompletion(state: ReviewState, event: ReviewEvent): void {
       "completion-outcome",
       "Authorized merge cannot complete as review-only.",
     );
+  if (completion.publication) {
+    // SAFETY: validateCompletion guarantees publication has the ReviewPublication
+    // shape before this identity check; the cast is only for the validator input.
+    const publication = validateReviewPublication(completion.publication as unknown as Record<string, unknown>);
+    assertFrozenIdentity(state, publication.headSha, publication.baseSha);
+    state.publication = publication;
+  }
   state.completion = completion;
   state.status = "completed";
 }
@@ -835,6 +893,7 @@ function clearTerminalDecisions(state: ReviewState): void {
   delete state.verdict;
   delete state.gate;
   delete state.mergeAuthorization;
+  delete state.publication;
   delete state.completion;
   delete state.reviewerResults;
 }
@@ -1085,6 +1144,24 @@ function validateMergeAuthorization(value: Record<string, unknown>): MergeAuthor
   };
 }
 
+function validateReviewPublication(value: Record<string, unknown>): ReviewPublication {
+  const reviewId = positiveInteger(value.reviewId, "publication.reviewId");
+  const reviewUrl = requiredString(value.reviewUrl, "publication.reviewUrl");
+  if (!/^https:\/\//.test(reviewUrl))
+    throw new ReviewTransitionError("invalid-publication", "publication.reviewUrl must be HTTPS.");
+  if (value.event !== "APPROVE" && value.event !== "COMMENT")
+    throw new ReviewTransitionError("invalid-publication", "publication.event is unsupported.");
+  return {
+    reviewId,
+    reviewUrl,
+    event: value.event,
+    actorLogin: requiredString(value.actorLogin, "publication.actorLogin"),
+    headSha: requiredString(value.headSha, "publication.headSha"),
+    baseSha: requiredString(value.baseSha, "publication.baseSha"),
+    mergeBaseSha: requiredString(value.mergeBaseSha, "publication.mergeBaseSha"),
+  };
+}
+
 function validateCompletion(value: Record<string, unknown>): ReviewCompletion {
   const round = positiveInteger(value.round, "completion.round");
   if (value.outcome !== "reviewed" && value.outcome !== "merged")
@@ -1098,6 +1175,13 @@ function validateCompletion(value: Record<string, unknown>): ReviewCompletion {
     ...(value.reason === undefined
       ? {}
       : { reason: requiredString(value.reason, "completion.reason") }),
+    ...(value.publication === undefined
+      ? {}
+      : {
+          // SAFETY: validateReviewPublication performs the complete runtime
+          // shape check for this untyped journal payload.
+          publication: validateReviewPublication(value.publication as unknown as Record<string, unknown>),
+        }),
   };
 }
 
@@ -1165,6 +1249,8 @@ const REVIEW_EVENT_TYPES: ReadonlySet<ReviewEventType> = new Set([
   "review.gate.recorded",
   "review.merge-authorized",
   "review.merge.authorization",
+  "review.publication-recorded",
+  "review.publication.recorded",
   "review.completed",
   "review.cancelled",
 ]);

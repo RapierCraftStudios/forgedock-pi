@@ -132,6 +132,7 @@ class GitHubFake {
     labels: readonly string[];
   }> = [];
   readonly mergeInputs: unknown[] = [];
+  readonly publicationInputs: unknown[] = [];
   merged = false;
   failMerge = false;
   revalidateCalls = 0;
@@ -219,6 +220,21 @@ class GitHubFake {
     };
     this.issues.push(issue);
     return issue;
+  }
+
+  async publishPullRequestReview(input: {
+    route: GitHubPullRequestRouteSnapshot;
+    evidence: { mergeBaseSha: string };
+  }) {
+    this.publicationInputs.push(input);
+    return {
+      reviewId: 42,
+      reviewUrl: "https://github.example/reviews/42",
+      event: "APPROVE" as const,
+      actorLogin: "forge",
+      route: input.route,
+      evidence: input.evidence,
+    };
   }
 
   async mergePullRequest(input: unknown) {
@@ -396,7 +412,7 @@ function sameRoute(
   );
 }
 
-test("clean standalone review posts route, reviewer, and summary and completes review-only", async () => {
+test("clean standalone review publication posts route, reviewer, summary, and durable URL", async () => {
   const reviewFinding = finding();
   const h = harness({ results: [reviewerResult(undefined, [reviewFinding])] });
 
@@ -405,6 +421,10 @@ test("clean standalone review posts route, reviewer, and summary and completes r
   assert.equal(result.merged, false);
   assert.equal(result.state.status, "completed");
   assert.equal(result.state.completion?.outcome, "reviewed");
+  assert.equal(result.reviewUrl, "https://github.example/reviews/42");
+  assert.equal(result.reviewEvent, "APPROVE");
+  assert.equal(h.github.publicationInputs.length, 1);
+  assert.equal(result.state.completion?.publication?.reviewUrl, result.reviewUrl);
   assert.equal(result.decision.decision, "approved-with-follow-ups");
   assert.deepEqual(result.findingIssues, { "SEC-001": 100 });
   assert.deepEqual(
@@ -419,6 +439,7 @@ test("clean standalone review posts route, reviewer, and summary and completes r
       "review.panel-completed",
       "review.verdict-recorded",
       "review.gate-recorded",
+      "review.publication-recorded",
       "review.completed",
     ],
   );
@@ -567,7 +588,7 @@ test("resume reconciles an already-merged PR before stale route rejection", asyn
   assert.equal(h.github.revalidateCalls, 3);
 });
 
-test("standard route review honors an explicit auto-merge request", async () => {
+test("AlterLab #33394/#33392 fallback merge outcomes retain non-protected auto-merge", async () => {
   const h = harness();
 
   const result = await h.coordinator.review(

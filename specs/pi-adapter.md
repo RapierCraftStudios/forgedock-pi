@@ -247,3 +247,14 @@ receipts, and join a fresh complete read-only reviewer panel. Pre-refresh result
 authorize merge. Direct Git must never reset or overwrite another lane; protected
 `staging → main` rules and genuine human-authority handling remain unchanged. The
 shared contract is `specs/qualitative-review-protocol.md`.
+
+## Official review publication transaction
+
+After a passed semantic gate, the production coordinator invokes the typed GitHub
+adapter. It validates the frozen route and authenticated actor/PR owner, posts exactly
+one pinned `APPROVE`, and requires exact provider URL/state/actor/commit/body readback.
+Only the exact 422 `Review cannot be approved by pull request author.` from that APPROVE
+POST, with actor equal to the PR owner, permits one identical pinned `COMMENT`. Actor
+lookup, route, generic provider, and readback failures remain GATED. Durable state stores
+semantic `APPROVED` separately from the provider event; COMMENT never satisfies
+independent protected approval and replay never blindly repeats a provider mutation.

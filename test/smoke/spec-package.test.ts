@@ -29,6 +29,22 @@ test("Pi adapter keeps workflow decisions in visible specifications", async () =
   assert.match(adapter, /must not choose the next workflow phase/);
 });
 
+test("official review publication remains a guarded production transaction", async () => {
+  const protocol = await readFile("specs/qualitative-review-protocol.md", "utf8");
+  const review = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
+  const workOn = await readFile("skills/forgedock-work-on/SKILL.md", "utf8");
+  const adapter = await readFile("specs/pi-adapter.md", "utf8");
+  for (const contract of [protocol, review, workOn, adapter]) {
+    assert.match(contract, /production/i);
+    assert.match(contract, /exact[\s\S]*APPROVE/);
+    assert.match(contract, /COMMENT/);
+    assert.match(contract, /readback/);
+    assert.match(contract, /protected.*approval/i);
+  }
+  for (const contract of [protocol, review, adapter])
+    assert.match(contract, /Review cannot be approved by pull request author/);
+});
+
 test("one canonical issue schema governs every ForgeDock creator", async () => {
   const issue = await readFile("specs/original/commands/issue.md", "utf8");
   const review = await readFile("specs/original/commands/review-pr.md", "utf8");

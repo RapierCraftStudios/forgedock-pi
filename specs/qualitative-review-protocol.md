@@ -77,3 +77,21 @@ unchanged.
 
 Single-issue lanes with no target movement, overlap serialization, exact-head merge,
 and existing protected-branch behavior remain unchanged.
+
+## Official review publication transaction
+
+After the semantic gate passes, the production coordinator asks the GitHub adapter to
+publish exactly one review bound to the frozen route. The adapter validates the
+authenticated `/user` actor, pull-request owner, and route immediately before the
+mutation, then posts `APPROVE` with the frozen `commit_id` and complete evidence.
+Only the exact HTTP 422 message `Review cannot be approved by pull request author.`
+from that APPROVE POST, together with actor/owner equality, authorizes one identical
+`COMMENT` POST. Actor lookup, route reads, generic provider failures, and readback
+failures never authorize fallback. The adapter reads the review back and requires URL,
+ID, event/state, actor, commit, and body/evidence equality.
+
+The semantic decision is `APPROVED` independently of the GitHub event. `COMMENT` is
+auditable evidence and never satisfies an independent protected-branch approval. The
+completion projection stores review URL, event, actor, and frozen head/base/merge-base
+identity. On uncertain provider outcome, reconcile the exact review before retrying;
+replay uses the stored publication and never blindly republishes.

@@ -57,6 +57,19 @@ make formatting repair a reuse/admission gate. Post an official PR review tied t
 explicit, the original blocking policy passes, route identity is unchanged, and the
 base is authorized. Review never closes the linked issue or cleans the work-on tree.
 
+## Official review publication
+
+A passed semantic gate is published through the production coordinator and typed GitHub
+adapter. The adapter revalidates the frozen route and authenticated actor/PR owner,
+posts one pinned `APPROVE` review, and requires complete URL/state/actor/commit/body
+readback. Only the exact 422 `Review cannot be approved by pull request author.` from
+that APPROVE POST, when the actor owns the PR, permits one pinned identical `COMMENT`
+review. Failures from actor lookup, route validation, generic provider operations, or
+readback remain GATED and never trigger fallback. The durable result records semantic
+`APPROVED` separately from provider `APPROVE`/`COMMENT`; COMMENT cannot satisfy a
+protected branch's independent approval requirement. Replay reconciles and reuses the
+stored review URL rather than repeating an uncertain mutation.
+
 ## Refreshed integration bases
 
 For a work-on-owned PR targeting `staging`, the launch `FORGE:BASE` SHA remains

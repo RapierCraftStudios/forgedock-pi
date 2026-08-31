@@ -197,6 +197,18 @@ after pushing. Review the frozen remote PR head without rewriting the child work
 After confirmed merge, load `work-on/close.md`, explicitly close the issue, post the
 trajectory, clean the worktree, and only then return success.
 
+## Review event and merge-policy separation
+
+After a passed semantic review, the coordinator publishes one frozen review through the
+production GitHub adapter. It attempts `APPROVE` once and permits one identical pinned
+`COMMENT` only when that APPROVE POST returned the exact owner self-approval 422 and the
+authenticated actor is the PR owner. The adapter requires provider URL/state/actor/
+commit/body readback; unrelated provider or readback failures remain GATED. Durable
+state carries semantic `APPROVED` separately from the GitHub event and replays the URL
+without republishing. A COMMENT is never an independent protected-branch approval, so
+protected merge policy remains a separate gate; non-protected exact-head merge remains
+subject to its existing authorization.
+
 ## Controlled staging refresh
 
 `FORGE:BASE` records immutable launch attribution. It does not make `staging` immutable

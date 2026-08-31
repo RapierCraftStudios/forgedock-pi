@@ -608,6 +608,109 @@ test("pull artifacts paginate markers and read back the exact created comment", 
   assert.equal(comments.length, 101);
 });
 
+test("pinned APPROVE publication requires exact result and readback", async () => {
+  const route = {
+    pullNumber: 6,
+    headRef: "forge/issue-2",
+    headSha: "head-sha",
+    baseRef: "staging",
+    baseSha: "base-sha",
+  } as const;
+  const body = "ForgeDock semantic review: APPROVED\\nFrozen head: head-sha";
+  const evidence = {
+    semanticDecision: "APPROVED" as const,
+    headSha: route.headSha,
+    baseSha: route.baseSha,
+    mergeBaseSha: "merge-base-sha",
+    coverage: "complete",
+    checks: ["ci:passed"],
+    findingIds: [],
+  };
+  const transport = new MockTransport((request) => {
+    if (request.method === "GET" && request.path.includes("/pulls/6?"))
+      return response(200, { ...pullData(), user: { login: "owner" } });
+    if (request.method === "GET" && request.path.includes("/git/ref/heads/"))
+      return response(200, { object: { sha: route.baseSha } });
+    if (request.method === "GET" && request.path === "/repos/owner/repo/user")
+      return response(200, { login: "reviewer" });
+    if (request.method === "POST") {
+      assert.deepEqual(request.body, { event: "APPROVE", commit_id: route.headSha, body });
+      return response(201, { id: 91, html_url: "https://example.test/reviews/91" });
+    }
+    if (request.method === "GET" && request.path.endsWith("/reviews/91"))
+      return response(200, {
+        id: 91,
+        html_url: "https://example.test/reviews/91",
+        user: { login: "reviewer" },
+        body,
+        commit_id: route.headSha,
+        state: "APPROVED",
+      });
+    throw new Error(`Unexpected request ${request.method} ${request.path}`);
+  });
+  const publication = await new GitHubWorkflowAdapter(transport, "owner/repo").publishPullRequestReview({
+    route,
+    evidence,
+    body,
+  });
+  assert.equal(publication.event, "APPROVE");
+  assert.equal(publication.reviewUrl, "https://example.test/reviews/91");
+  assert.equal(transport.requests.filter((request) => request.method === "POST").length, 1);
+});
+
+test("owner self-approval rejection permits exactly one pinned COMMENT fallback", async () => {
+  const route = {
+    pullNumber: 6,
+    headRef: "forge/issue-2",
+    headSha: "head-sha",
+    baseRef: "staging",
+    baseSha: "base-sha",
+  } as const;
+  const body = "ForgeDock semantic review: APPROVED";
+  const evidence = {
+    semanticDecision: "APPROVED" as const,
+    headSha: route.headSha,
+    baseSha: route.baseSha,
+    mergeBaseSha: "merge-base-sha",
+    coverage: "complete",
+    checks: ["ci:passed"],
+    findingIds: ["SEC-1"],
+  };
+  let posts = 0;
+  const transport = new MockTransport((request) => {
+    if (request.method === "GET" && request.path.includes("/pulls/6?"))
+      return response(200, { ...pullData(), user: { login: "owner" } });
+    if (request.method === "GET" && request.path.includes("/git/ref/heads/"))
+      return response(200, { object: { sha: route.baseSha } });
+    if (request.method === "GET" && request.path === "/repos/owner/repo/user")
+      return response(200, { login: "owner" });
+    if (request.method === "POST") {
+      posts += 1;
+      if (posts === 1)
+        return response(422, { message: "Review cannot be approved by pull request author." });
+      assert.deepEqual(request.body, { event: "COMMENT", commit_id: route.headSha, body });
+      return response(201, { id: 92, html_url: "https://example.test/reviews/92" });
+    }
+    if (request.method === "GET" && request.path.endsWith("/reviews/92"))
+      return response(200, {
+        id: 92,
+        html_url: "https://example.test/reviews/92",
+        user: { login: "owner" },
+        body,
+        commit_id: route.headSha,
+        state: "COMMENTED",
+      });
+    throw new Error(`Unexpected request ${request.method} ${request.path}`);
+  });
+  const publication = await new GitHubWorkflowAdapter(transport, "owner/repo").publishPullRequestReview({
+    route,
+    evidence,
+    body,
+  });
+  assert.equal(publication.event, "COMMENT");
+  assert.equal(posts, 2);
+});
+
 test("PR URL resolution is repository-bound and route snapshots revalidate all refs and SHAs", async () => {
   let reads = 0;
   const transport = new MockTransport((request) => {

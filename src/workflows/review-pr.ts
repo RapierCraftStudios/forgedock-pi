@@ -19,6 +19,7 @@ import {
   GitHubWorkflowAdapter,
   type GitHubPullRequestRouteSnapshot,
   type MergeResult,
+  type PullRequestReviewEvidence,
 } from "../adapters/github-workflow.ts";
 import { ReviewJournal } from "../adapters/review-journal.ts";
 import {
@@ -91,6 +92,8 @@ export interface ReviewPrRequest {
   testGateOutput?: unknown;
   malformedResults?: readonly string[];
   mergeability?: "mergeable" | "conflicting" | "unknown";
+  /** Exact merge-base used in the official review evidence. */
+  mergeBaseSha?: string;
   protectedBranches: readonly string[];
   autoMergeAuthorized: boolean;
   autoMergeRequested: boolean;
@@ -114,6 +117,8 @@ export interface ReviewPrResult {
   findingIssues: Readonly<Record<string, number>>;
   merged: boolean;
   mergeSha?: string;
+  reviewUrl?: string;
+  reviewEvent?: "APPROVE" | "COMMENT";
   /** Machine-readable bundle derivation consumed by open-finding/Phase 6.5 gates. */
   stagingBundle?: StagingBundleResolution;
 }
@@ -223,6 +228,9 @@ export class ReviewPrCoordinator {
           round: requirePanelRound(snapshot.state),
           outcome: "merged",
           reason: `Reconciled already-merged PR as ${merge.sha}`,
+          ...(snapshot.state.publication
+            ? { publication: snapshot.state.publication }
+            : {}),
         },
         idempotencyKey: "review:completed",
         message: `Reconcile already-merged review ${input.reviewId}`,
@@ -252,6 +260,9 @@ export class ReviewPrCoordinator {
           round: requirePanelRound(snapshot.state),
           outcome: "merged",
           reason: `Merged as ${merge.sha}`,
+          ...(snapshot.state.publication
+            ? { publication: snapshot.state.publication }
+            : {}),
         },
         idempotencyKey: "review:completed",
         message: `Complete merged review ${input.reviewId}`,
@@ -483,6 +494,44 @@ export class ReviewPrCoordinator {
         });
       }
 
+      const publication = passed
+        ? await this.#github.publishPullRequestReview({
+            route,
+            evidence: reviewEvidence(
+              route,
+              snapshot.state.checks,
+              forgeFindings,
+              input.mergeBaseSha ?? route.baseSha,
+            ),
+            body: renderOfficialReview(
+              route,
+              snapshot.state.checks,
+              forgeFindings,
+              input.mergeBaseSha ?? route.baseSha,
+            ),
+            ...(input.signal ? { signal: input.signal } : {}),
+          })
+        : undefined;
+      if (publication) {
+        snapshot = await this.#journal.append({
+          reviewId: input.reviewId,
+          type: "review.publication-recorded",
+          payload: {
+            round: requirePanelRound(snapshot.state),
+            reviewId: publication.reviewId,
+            reviewUrl: publication.reviewUrl,
+            event: publication.event,
+            actorLogin: publication.actorLogin,
+            headSha: publication.route.headSha,
+            baseSha: publication.route.baseSha,
+            mergeBaseSha: publication.evidence.mergeBaseSha,
+          },
+          idempotencyKey: "review:publication",
+          message: `Record official review publication for ${input.reviewId}`,
+          ...(input.signal ? { signal: input.signal } : {}),
+        });
+      }
+
       let merge: MergeResult | undefined;
       if (input.autoMergeRequested && passed) {
         if (mode !== "standard" || !input.autoMergeAuthorized)
@@ -513,6 +562,17 @@ export class ReviewPrCoordinator {
         payload: {
           round: requirePanelRound(snapshot.state),
           outcome: merge ? "merged" : "reviewed",
+          ...(publication ? {
+            publication: {
+              reviewId: publication.reviewId,
+              reviewUrl: publication.reviewUrl,
+              event: publication.event,
+              actorLogin: publication.actorLogin,
+              headSha: publication.route.headSha,
+              baseSha: publication.route.baseSha,
+              mergeBaseSha: publication.evidence.mergeBaseSha,
+            },
+          } : {}),
           ...(merge ? { reason: `Merged as ${merge.sha}` } : {}),
         },
         idempotencyKey: "review:completed",
@@ -529,6 +589,7 @@ export class ReviewPrCoordinator {
         checks: snapshot.state.checks,
         findingIssues,
         merged: Boolean(merge),
+        ...(publication ? { reviewUrl: publication.reviewUrl, reviewEvent: publication.event } : {}),
         ...(merge ? { mergeSha: merge.sha } : {}),
         ...(stagingBundle ? { stagingBundle } : {}),
       };
@@ -1253,6 +1314,12 @@ function completedResult(
     checks: state.checks,
     findingIssues: {},
     merged: state.completion.outcome === "merged",
+    ...(state.publication
+      ? {
+          reviewUrl: state.publication.reviewUrl,
+          reviewEvent: state.publication.event,
+        }
+      : {}),
     ...(merge ? { mergeSha: merge.sha } : {}),
   };
 }
@@ -1432,6 +1499,41 @@ function hasExactSourcePull(body: string, pullNumber: number): boolean {
     `(?:source-pr=|Source PR\\**:?\\s*#)${String(pullNumber)}(?!\\d)`,
     "i",
   ).test(body);
+}
+
+function reviewEvidence(
+  route: GitHubPullRequestRouteSnapshot,
+  checks: readonly VerificationResult[],
+  findings: readonly ForgeReviewFindingResult[],
+  mergeBaseSha: string,
+): PullRequestReviewEvidence {
+  return {
+    semanticDecision: "APPROVED",
+    headSha: route.headSha,
+    baseSha: route.baseSha,
+    mergeBaseSha,
+    coverage: "complete",
+    checks: checks.map((check) => `${check.name}:${check.status}`),
+    findingIds: findings.map((finding) => finding.id),
+  };
+}
+
+function renderOfficialReview(
+  route: GitHubPullRequestRouteSnapshot,
+  checks: readonly VerificationResult[],
+  findings: readonly ForgeReviewFindingResult[],
+  mergeBaseSha: string,
+): string {
+  const evidence = reviewEvidence(route, checks, findings, mergeBaseSha);
+  return [
+    "ForgeDock semantic review: APPROVED",
+    `Frozen head: ${evidence.headSha}`,
+    `Frozen base: ${evidence.baseSha}`,
+    `Merge base: ${evidence.mergeBaseSha}`,
+    `Coverage: ${evidence.coverage}`,
+    `Checks: ${evidence.checks.join(", ") || "none"}`,
+    `Finding IDs: ${evidence.findingIds.join(", ") || "none"}`,
+  ].join("\\n");
 }
 
 function renderReviewSummary(
