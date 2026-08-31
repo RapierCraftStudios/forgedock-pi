@@ -81,12 +81,23 @@ ARCHITECT_LATEST=$(gh api --paginate repos/{GH_REPO}/issues/{NUMBER}/comments --
   | jq -c 'flatten | map(select(.body | contains("<!-- FORGE:ARCHITECT -->"))) | last // {}')
 ARCHITECT_BODY=$(printf '%s' "$ARCHITECT_LATEST" | jq -r '.body // ""')
 ARCHITECT_ID=$(printf '%s' "$ARCHITECT_LATEST" | jq -r '.id // ""')
+SIDE_EFFECT=$(printf '%s\n' "$INVESTIGATION_REPORT" | sed -n 's/^\*\*Irreversible\/provider side effect\*\*: \(YES\|NO\)$/\1/p' | tail -1)
 
 if printf '%s' "$ARCHITECT_BODY" | grep -qF '<!-- FORGE:ARCHITECT:COMPLETE -->'; then
   rows=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### Production Seam Ownership/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||Observable Effect')
+  provider_ok=false
+  if [ "$SIDE_EFFECT" = NO ]; then
+    provider_ok=true
+  elif [ "$SIDE_EFFECT" = YES ]; then
+    provider_rows=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### Provider Transaction Proof/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||Provider operation')
+    [ -n "$provider_rows" ] \
+      && ! printf '%s\n' "$provider_rows" | grep -Eqi '\{[^}]*\}|\b(TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|[[:space:]]*\|' \
+      && printf '%s' "$ARCHITECT_BODY" | grep -qF '**Provider transaction gate**: CLOSED' && provider_ok=true
+  fi
   if [ -n "$rows" ] \
     && ! printf '%s\n' "$rows" | grep -Eqi '\{[^}]*\}|\b(TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|[[:space:]]*\|' \
-    && printf '%s' "$ARCHITECT_BODY" | grep -qF '**Ownership gate**: CLOSED'; then
+    && printf '%s' "$ARCHITECT_BODY" | grep -qF '**Ownership gate**: CLOSED' \
+    && [ "$provider_ok" = true ]; then
     echo "Current architecture ownership is complete; reuse exact latest artifact $ARCHITECT_ID"
     exit 0
   fi
@@ -492,6 +503,14 @@ Add a `### Production Seam Ownership` section to the architecture output listing
 effect, entrypoint, owner, mutation path, and exact public-seam test. Every row must be
 closed before implementation.
 
+When investigation marks `Irreversible/provider side effect: YES`, also reconcile and
+close a `### Provider Transaction Proof`. Add one row per actual mutation or fallback.
+Each row names authority/preconditions, the exact call and errors it handles, required
+result/readback, replay/recovery, and a deterministic test derived from this transaction.
+A fallback must identify the exact failed operation that authorizes it; unrelated
+operations cannot. Execute safe failing-before tests when available. Missing,
+placeholder, or cross-operation rows are `GATED` before architecture completion.
+
 ---
 
 ## Phase A2.5: Pipeline Phase-Dependency Check
@@ -675,6 +694,13 @@ gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:ARCHITECT -->
 **Ownership gate**: CLOSED — every executable owner is a deliverable or has exact
 no-mutation evidence.
 
+### Provider Transaction Proof (required only when investigation says YES)
+| Provider Operation or Fallback | Authority / Preconditions | Exact Call and Failure Scope | Required Result / Readback | Replay / Recovery | Deterministic Test |
+|---|---|---|---|---|---|
+| {ACTUAL_OPERATION} | {WHO_MAY_ACT} | {CALL_AND_ONLY_ERRORS_IT_HANDLES} | {SUCCESS_FIELDS} | {RECONCILIATION} | {NAMED_TEST} |
+
+**Provider transaction gate**: CLOSED
+
 ### Affected Paths (ALL must be updated)
 | # | File | Function/Class | Change Required | Why |
 |---|------|----------------|-----------------|-----|
@@ -750,6 +776,9 @@ SKIP_BODY=$(cat <<SKIP_EOF
 
 **Ownership gate**: CLOSED — every executable owner is a deliverable or has exact
 no-mutation evidence.
+
+{If investigation says YES, include the substantive Provider Transaction Proof and
+`**Provider transaction gate**: CLOSED` here. Provider work cannot skip this matrix.}
 
 <!-- FORGE:ARCHITECT:COMPLETE -->
 SKIP_EOF
