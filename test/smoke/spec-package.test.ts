@@ -176,6 +176,116 @@ test("package exposes a depth-bounded work-on coordinator with reviewer fanout",
   assert.doesNotMatch(agent, /maxSubagentDepth: 1/);
 });
 
+test("fresh builder receives the durable build handoff before mutation", async () => {
+  const builder = await readFile("agents/forgedock-builder.md", "utf8");
+  const coordinator = await readFile("agents/forgedock-work-on-coordinator.md", "utf8");
+  const workOn = await readFile("skills/forgedock-work-on/SKILL.md", "utf8");
+  const adapter = await readFile("specs/pi-adapter.md", "utf8");
+  const build = await readFile("specs/original/commands/work-on/build.md", "utf8");
+  const implement = await readFile(
+    "specs/original/commands/work-on/build/implement.md",
+    "utf8",
+  );
+  const validate = await readFile(
+    "specs/original/commands/work-on/build/validate.md",
+    "utf8",
+  );
+
+  assert.match(builder, /name: forgedock-builder/);
+  assert.match(builder, /defaultContext: fresh/);
+  assert.match(builder, /tools: read, grep, find, ls, bash, edit, write/);
+  assert.doesNotMatch(builder, /tools:.*\bsubagent\b/);
+  assert.match(builder, /first repository read must be `specs\/original\/commands\/work-on\/build\.md`/);
+  assert.match(builder, /latest completed `FORGE:INVESTIGATOR`/);
+  assert.match(builder, /latest `FORGE:CONTRACT`/);
+  assert.match(builder, /active coordination\s+`FORGE:CLAIM`/);
+  assert.match(builder, /exact `FORGE:BASE`/);
+  assert.match(builder, /do not create another worktree/i);
+  assert.match(builder, /Only `build\.md` Phase B6\.5 may append `FORGE:BUILDER:COMPLETE`/);
+  assert.match(builder, /active public or production seam/);
+
+  for (const contract of [coordinator, workOn, adapter]) {
+    assert.match(contract, /exactly one.*`forgedock-builder`/s);
+    assert.match(contract, /fresh context|context: "fresh"/i);
+    assert.match(contract, /acceptance: false/);
+    assert.match(contract, /same.*worktree|same cwd|authoritative issue worktree/s);
+    assert.match(contract, /wait[\s\S]*(?:without\s+mutating|do not[\s\S]*mutate)/i);
+    assert.match(contract, /work-on\/build\.md/);
+    assert.match(contract, /B0-B2/);
+    assert.match(contract, /FORGE:BUILDER:COMPLETE/);
+  }
+  assert.match(coordinator, /sequential siblings/);
+  assert.match(adapter, /work-on coordinator → builder/);
+  assert.match(adapter, /work-on coordinator → reviewers/);
+  assert.match(build, /Fresh Pi builder entry contract/);
+  assert.match(build, /Execution Path and Proof/);
+  assert.match(build, /absent artifact is never a skip/);
+  assert.match(implement, /mandatory implementation precondition/);
+  assert.match(implement, /Exact contract\/claim path gate/);
+  assert.doesNotMatch(implement, /If `<!-- FORGE:ARCHITECT -->` is absent.*proceed/s);
+  assert.match(validate, /Do \*\*not\*\* append `<!-- FORGE:BUILDER:COMPLETE -->` here/);
+  assert.match(validate, /VALIDATED_COMMIT_SHA/);
+  assert.match(validate, /No whole-phase skip/);
+  assert.match(validate, /Phase V4\.5: Final Contract\/Claim Path Gate/);
+  assert.match(validate, /validated_commit_sha:/);
+  assert.match(build, /validated_commit: \$\{VALIDATED_COMMIT_SHA\}/);
+  assert.match(build, /validated_commit_sha missing from VALIDATE_RESULT/);
+  assert.doesNotMatch(build, /VALIDATED_COMMIT_SHA:-\$\(git rev-parse HEAD\)/);
+  assert.match(build, /TRIVIAL[\s\S]*explicit completed skip-marker path/);
+  assert.match(build, /latest completed investigation/);
+  assert.match(implement, /clean `HEAD` different from frozen base/);
+  assert.match(implement, /IMPLEMENT_RESULT: status: ALREADY_DONE/);
+  assert.match(implement, /staged\/uncommitted changes[\s\S]*status: COMPLETE/);
+  assert.doesNotMatch(implement, /Deleted partial FORGE:BUILDER/);
+  assert.match(implement, /only build\.md Phase B6\.5 appends the marker/);
+  assert.match(implement, /Task Type\s+`Investigation`[\s\S]*skip the architecture prerequisite/);
+  assert.match(build, /must contain exactly one validated_commit/);
+  assert.match(build, /completed builder branch identity invalid/);
+  assert.match(build, /completed builder lacks validated_commit|must contain exactly one validated_commit/);
+  assert.match(build, /completed builder commit is stale/);
+  assert.match(build, /Partial pre-commit build preserved; continue directly to B6/);
+  assert.match(build, /rerun configured verification and the V5 ancestry audit/);
+  assert.match(build, /valid FORGE:FAST_PATH complexity marker missing/);
+  assert.doesNotMatch(build, /COMPLEXITY_BAND:-STANDARD/);
+  assert.match(validate, /QUALITY-GATE-TIMEOUT.*mechanical `GATED` outcome/s);
+  assert.doesNotMatch(validate, /QUALITY-GATE-TIMEOUT[\s\S]{0,500}add `needs-human`/);
+  assert.match(validate, /merge-base --is-ancestor "\{FROZEN_BASE_SHA\}" HEAD/);
+  assert.match(validate, /ancestry audit failed/);
+  assert.doesNotMatch(validate, /ANCESTRY_FAILED[\s\S]{0,300}--add-label "needs-human"/);
+  assert.doesNotMatch(implement, /contract is wrong[\s\S]{0,300}add label `needs-human`/);
+  for (const outputContract of [build, implement]) assert.match(outputContract, /GATED/);
+  for (const routeContract of [builder, coordinator, workOn, adapter, build]) {
+    assert.match(routeContract, /Task Type.*`Investigation`|Task Type is\s+`Investigation`|Task Type of `Investigation`/s);
+    assert.match(routeContract, /Feature \(UI\/UX\)|UI\/full-stack|UI\/Full-Stack/);
+  }
+  assert.ok(build.indexOf("FORGE:ACCEPTANCE_GATE:PASSED") < build.indexOf("validated_commit: ${VALIDATED_COMMIT_SHA}"));
+});
+
+test("investigation acceptance checks preserve source cardinality and E2E behavior", async () => {
+  const investigate = await readFile(
+    "specs/original/commands/work-on/investigate.md",
+    "utf8",
+  );
+  const build = await readFile("specs/original/commands/work-on/build.md", "utf8");
+
+  assert.match(investigate, /emit exactly one machine-checkable check line/);
+  assert.match(investigate, /counts and expected IDs match/);
+  assert.match(build, /require exactly the same number/);
+  for (const contract of [investigate, build]) {
+    assert.match(contract, /ac-1\.\.ac-N/);
+    assert.match(contract, /\[type:e2e\]/);
+    assert.match(contract, /active\s+public\/production seam/);
+    assert.match(contract, /direct imports?.*leaf helper|leaf-helper import/);
+    assert.match(contract, /broad (?:test )?suite/);
+  }
+  assert.match(build, /FORGE:ACCEPTANCE_GATE:FAILED/);
+  assert.ok([...build.matchAll(/--paginate/g)].length >= 3);
+  assert.match(build, /latest completed investigation missing/);
+  assert.match(build, /INVESTIGATION:COMPLETE/);
+  assert.match(build, /\| last \| \.body/);
+  assert.match(build, /only build path that\s+may append `FORGE:BUILDER:COMPLETE`/);
+});
+
 test("orchestrated work-on keeps review coordination in the issue coordinator", async () => {
   const orchestrate = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
   const workOn = await readFile("skills/forgedock-work-on/SKILL.md", "utf8");
@@ -227,6 +337,7 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
   assert.match(review, /timeoutMs: 3600000/);
   assert.match(review, /stopOnAttention: false/);
   assert.match(review, /not `needs-human`/);
+  assert.match(adapter, /visible orchestrator → work-on coordinator → builder/);
   assert.match(adapter, /visible orchestrator → work-on coordinator → reviewers/);
   assert.match(adapter, /inherit the launch checkout's HEAD/);
   assert.match(adapter, /control\.needsAttentionAfterMs/);

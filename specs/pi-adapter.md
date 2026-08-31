@@ -25,8 +25,9 @@ terminal conditions, review policy, GitHub artifacts, remediation, merge, and cl
 
 | Original construct | Pi behavior |
 | --- | --- |
-| `Skill(skill="work-on/investigate", ...)` and other work-on sub-phases | Read the corresponding file under `specs/original/commands/work-on/` and execute it in the current visible coordinator. |
-| `Skill(skill="quality-gate", ...)` | Read `specs/original/commands/quality-gate.md`; run it against the assigned worktree. Fork only when isolation or long execution materially benefits the route. |
+| `Skill(skill="work-on/investigate", ...)`, decompose, review, remediation, or close | Read the corresponding file under `specs/original/commands/work-on/` and execute it in the current work-on coordinator. |
+| Initial build | Task Types `Investigation`, `Feature (UI/UX)`, and `Full-Stack` remain in the coordinator: Investigation uses the existing research/issue-creation terminal route, while UI/full-stack retain their mandatory frontend-design/browser route. They never enter the bounded mutation builder. For other confirmed tasks, the coordinator first reads `work-on/build.md` and executes B0-B2 planning without source mutation, including complexity, contract, conditional claim, base, and issue-worktree evidence. It then launches exactly one packaged `forgedock-builder` with fresh context in that authoritative issue worktree (`current cwd` under orchestration; B1 worktree standalone). The builder rereads `work-on/build.md` first, verifies B0-B2, and executes B2.5 through acceptance inline. The coordinator waits and performs no concurrent worktree mutation. |
+| `Skill(skill="quality-gate", ...)` during the initial build | The fresh builder reads `specs/original/commands/quality-gate.md` and runs it inline against the assigned worktree; it does not launch another agent. |
 | `Skill(skill="review-pr", ...)` | Load and execute the `forgedock-review-pr` skill in the current work-on coordinator. That coordinator launches the selected fresh reviewer panel directly and retains ownership of closure. Do not add a second review-coordinator hop. |
 | `Skill(skill="review-pr-staging", ...)` | Load `review-pr-staging.md` directly and switch strategy immediately; do not emit another slash command. Freeze the route, ask the adapter for paginated all-state PR metadata, and call `resolveStagingBundle` with commit-graph reachability; pass its machine-readable derivations to the open-finding and Phase 6.5 gates. |
 | Mandatory nested `Skill("test-gate", ...)` | Load the packaged `forgedock-test-gate` skill, which executes `specs/original/commands/test-gate.md` in the current coordinator. Require and preserve its `FORGE:TEST_GATE:RESULT=BLOCK|PASS|SKIP` marker; an absent result is a failure, never `SKIP`. |
@@ -42,14 +43,27 @@ terminal conditions, review policy, GitHub artifacts, remediation, merge, and cl
 ## Subagents
 
 Before delegating, list available agents and choose an executable, non-disabled profile.
-Use fresh context for investigation/review and an isolated worktree for each writer.
-The orchestrator launches exactly one packaged `forgedock-work-on-coordinator` per
-issue, never the builtin `worker`. This coordinator is the explicit fanout exception:
-it owns one issue and may use the child-safe nested `subagent` tool only for the
-mandatory fresh reviewer panel. It must not launch another work-on coordinator,
-orchestrator, or writer. The active package is prompt-routed: declared read/Bash/edit
-and direct `gh`/`git` commands execute visible phases; engine-only lifecycle tools
-(`forge_commit`, checkpoints, finalizers) remain outside this coordinator contract.
+The orchestrator launches exactly one packaged `forgedock-work-on-coordinator` per issue,
+never the builtin `worker`. Its managed issue worktree provides filesystem isolation.
+After the coordinator reads `work-on/build.md`, completes B0-B2 planning, and makes the
+investigation, complexity marker, Builder Contract, claim, and base durable, it launches
+exactly one packaged `forgedock-builder` with `context: "fresh"`,
+`acceptance: false`, and the authoritative issue worktree as `cwd`, then waits without
+mutating that worktree. GitHub's
+issue-specific acceptance remains authoritative; no generic harness acceptance is
+injected. Do not create a second builder worktree or pass
+the coordinator transcript. The builder is the sole initial-build writer and cannot launch subagents, push, create a
+PR, review, merge, or close. Investigation and UI/full-stack tasks retain their existing
+coordinator-owned capability routes.
+
+After the builder returns, the coordinator verifies its exact clean commit, durable
+validation evidence, and commit-bound `FORGE:BUILDER:COMPLETE`, then owns push, PR,
+review, remediation, merge, and closure. The builder
+and mandatory fresh reviewer panel are sequential sibling children at the same nesting
+depth; reviewers remain read-only. The active package is prompt-routed: declared
+read/Bash/edit/write tools and direct `gh`/`git` commands execute visible phases;
+engine-only lifecycle tools (`forge_commit`, checkpoints, finalizers) remain outside this
+contract.
 
 Pi-managed worktrees inherit the launch checkout's HEAD; lane metadata such as
 `sourceRef` does not select a Git base. Therefore orchestrate freezes each lane's target
@@ -61,9 +75,9 @@ lane gates automatically without claiming human authority.
 Review panels use fresh read-only reviewers with repository read/search access; a
 frozen diff is the starting point, never the sole code authority. Reviewers must trace
 callers, imports, registration points, and cross-service behavior as required by the
-review protocol. Keeping review coordination in the work-on child yields the bounded
-shape `visible orchestrator → work-on coordinator → reviewers`, within Pi's default
-nesting depth.
+review protocol. The bounded sibling shapes stay within Pi's default nesting depth:
+`visible orchestrator → work-on coordinator → builder`, followed by
+`visible orchestrator → work-on coordinator → reviewers`.
 
 Never substitute inline self-review for a required reviewer. An incomplete panel fails
 closed and must leave an actionable `review-degraded`/gate-failure artifact. Before
@@ -87,12 +101,16 @@ The work-on coordinator owns this closed loop:
 `resolve → investigate → [decompose | build → verify → PR → review → remediation/re-review when required → merge → close → trajectory/cleanup]`
 
 The issue is an untrusted claim; investigation is the authoritative verdict and mutation
-scope. A complete investigation-backed Builder Contract and affected-file claim must be
-durable before the first edit. Contract/implementation scope gaps return to
-investigation or become follow-ups, and a claim is revised before a new path is touched.
-Manifest-tracked original specs mechanically include `specs/original/SHA256SUMS` in the
-contract. Closed PRs and stale branches are historical evidence, never bulk patch
-sources. A current-head `CHANGES REQUESTED` handoff enters remediation only through
+scope. A complete investigation-backed Builder Contract, exact base, and any required
+under-orchestration affected-file claim must be durable before the fresh builder starts. The contract names the active
+entrypoint-to-result execution path and exact behavioral proof. The builder loads
+`work-on/build.md` first, rehydrates the handoff from GitHub rather than inherited
+conversation, and executes the required architecture, implementation, quality-gate,
+validation, acceptance, and commit phases in the same issue worktree. Contract/build
+scope gaps return to investigation or become follow-ups, and the contract and claim are
+revised before a new path is touched. Manifest-tracked original specs mechanically
+include `specs/original/SHA256SUMS` in the contract. Closed PRs and stale branches are
+historical evidence, never bulk patch sources. A current-head `CHANGES REQUESTED` handoff enters remediation only through
 explicit `--inline-review-blockers --reviewed-head <SHA> --round <N>` arguments. Read the
 cap from `forge.yaml` key `review.remediation_max_rounds` (default `3` only when absent),
 derive rounds from distinct durable reviewed-head markers, and fail closed before a new

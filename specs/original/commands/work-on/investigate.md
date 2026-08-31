@@ -442,7 +442,9 @@ gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:INVESTIGATOR -->
 {if YES: proposed sub-issues with titles and dependencies}
 
 ### Acceptance Spec <!-- Added: forge#1829 -->
-{For each item in the issue's ## Acceptance Criteria section, emit one machine-checkable check line using the format below. If the issue has no Acceptance Criteria section, derive checks from the Recommendation above. Each check MUST be specific, observable, and testable — not vague prose. Checks are consumed by build/validate Phase B6.5 as the merge gate.}
+{For each item in the issue's ## Acceptance Criteria section, emit exactly one machine-checkable check line using the format below. Preserve source order and ordinal identity: the first criterion is `ac-1`, the second is `ac-2`, through `ac-N`, with no merging, omission, or renumbering. Before posting, count unchecked criteria and emitted checks and fail closed unless the counts and expected IDs match. If the issue has no Acceptance Criteria section, derive checks from the Recommendation above. Each check MUST be specific, observable, and testable — not vague prose. Checks are consumed by build/validate Phase B6.5 as the merge gate.}
+
+{Preserve test-type intent. A source criterion marked `[type:e2e]` must use `type=command` or `type=behavior` and execute the active public/production seam end to end. `contains`, grep-only prose checks, direct imports of an otherwise unwired leaf helper, and a broad test suite without a named scenario do not satisfy an E2E criterion. Unit criteria may use focused unit commands; integration/API criteria must exercise their corresponding boundary. For a bug, include the deterministic reproduction command that fails before the fix and becomes the regression proof when safely possible.}
 
 **Quoting (MANDATORY)**: `target=` and `matcher=` MUST always be wrapped in double quotes — `target="..."` / `matcher="..."` — even when the value is a single token (e.g. a plain file path). The downstream Phase B6.5 parser only extracts quoted values; an unquoted `target=`/`matcher=` will silently truncate at the first space and cause a false-negative gate failure for any multi-word value (shell commands with flags/arguments/pipes are almost always multi-word). Neither `target` nor `matcher` may contain a literal `"` character — use single quotes for any embedded string/regex literal inside the value, as shown below. `id=` and `type=` are always single tokens and are never quoted. `description=` is always the last field on the line and is captured to end-of-line — it does not need quoting.
 
@@ -457,10 +459,12 @@ ACCEPTANCE_CHECK: id=ac-4 type=command target="grep -qE '(>= ?2|2\+)' commands/o
 ```
 
 **Check types**:
-- `exists` — assert a file or directory exists (`target` = path, `matcher` = ignored)
-- `contains` — assert a file contains a string or regex (`target` = file path, `matcher` = string/regex)
+- `exists` — assert a file or directory exists (`target` = path, `matcher` = ignored); never sufficient for `[type:e2e]`
+- `contains` — assert a file contains a string or regex (`target` = file path, `matcher` = string/regex); never sufficient for `[type:e2e]`
 - `command` — run a shell command and assert exit 0 (`target` = shell command, `matcher` = `exit_0`)
 - `behavior` — assert a runtime/observable behavior via shell command (`target` = shell command, `matcher` = expected output string or regex)
+
+**Cardinality gate (MANDATORY before posting)**: when the source issue has an Acceptance Criteria section, compare its actionable checkbox-item count (`- [ ]` or `- [x]`) to the emitted check count and require the IDs to be the exact sequence `ac-1..ac-N`. A mismatch blocks investigation completion; do not compensate by combining criteria into one broad command.
 
 **Self-defeating pipe guideline**: do NOT chain a `-q`/`--quiet` command into a downstream pipe consumer (e.g. `grep -q ... | grep ...`). A `-q` flag suppresses all stdout, so the next command in the pipe always receives empty input and the check can never pass regardless of the actual file content. If a check needs to verify two conditions against the same output, sequence them instead — e.g. `grep -qE 'first' file && grep -qE 'second' file` — or capture the output once and grep the captured variable.
 

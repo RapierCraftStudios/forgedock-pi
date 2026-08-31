@@ -22,6 +22,7 @@ const COORDINATOR_TOOLS = [
   "contact_supervisor",
   "subagent",
 ] as const;
+const BUILDER_TOOLS = ["read", "grep", "find", "ls", "bash", "edit", "write"] as const;
 const REVIEWER_TOOLS = ["read", "grep", "find", "ls"] as const;
 
 async function registerPackedProjectPackage(project: string): Promise<void> {
@@ -37,7 +38,7 @@ async function registerPackedProjectPackage(project: string): Promise<void> {
  * source discovery paths. Preflight is the public pi-subagents launch contract
  * and does not require a model or spawn a child process.
  */
-test("packed coordinator and qualitative reviewer resolve with bounded tools", async () => {
+test("packed coordinator, fresh builder, and reviewer resolve with bounded tools", async () => {
   const root = process.cwd();
   const temp = await mkdtemp("/tmp/forgedock-package-canary-");
   try {
@@ -51,6 +52,7 @@ test("packed coordinator and qualitative reviewer resolve with bounded tools", a
     const packagedFiles = packedManifest(stdout).files.map((file) => file.path);
     for (const required of [
       "agents/forgedock-work-on-coordinator.md",
+      "agents/forgedock-builder.md",
       "agents/forgedock-reviewer.md",
       "skills/forgedock-test-gate/SKILL.md",
       "skills/forgedock-issue/SKILL.md",
@@ -111,6 +113,36 @@ test("packed coordinator and qualitative reviewer resolve with bounded tools", a
       new Set(COORDINATOR_TOOLS),
     );
     assert.equal(result.contract.tools.configuredExtensions.length, 0);
+
+    const builderResult = await resolveSubagentLaunchContract({
+      agent: "forgedock-builder",
+      cwd: project,
+      context: "fresh",
+      skill: false,
+      output: false,
+      artifacts: false,
+      capabilityCeiling: {
+        version: SUBAGENT_CAPABILITY_CEILING_VERSION,
+        allowedAgents: ["forgedock-builder"],
+        allowedTools: [...BUILDER_TOOLS],
+        denyExtensions: false,
+        sources: ["package-canary"],
+      },
+    });
+    assert.equal(builderResult.ok, true, builderResult.ok ? "" : builderResult.message);
+    if (!builderResult.ok) return;
+    assert.equal(builderResult.contract.agent.source, "package");
+    assert.equal(builderResult.contract.tools.explicitAllowlist, true);
+    assert.equal(builderResult.contract.tools.fanoutAuthorized, false);
+    for (const actual of [
+      builderResult.contract.tools.requestedBuiltin,
+      builderResult.contract.tools.declaredBuiltin,
+      builderResult.contract.tools.effectiveAllowlist,
+    ])
+      assert.deepEqual(new Set(actual), new Set(BUILDER_TOOLS));
+    assert.equal(builderResult.contract.tools.configuredExtensions.length, 0);
+    for (const forbidden of ["contact_supervisor", "subagent"])
+      assert.equal(builderResult.contract.tools.effectiveAllowlist.includes(forbidden), false);
 
     const reviewerResult = await resolveSubagentLaunchContract({
       agent: "forgedock-reviewer",

@@ -57,11 +57,18 @@ Adjacent-path discovery is read-only unless investigation proves another mutatio
 required for compilation, runtime correctness, or an interface/schema/security
 contract. Optional adjacent work becomes a follow-up issue.
 
-Before the first `write` or `edit`, post a complete `FORGE:CONTRACT` derived only from
-the investigation: task type, approach, per-file change/why table, acceptance mapping,
-quality considerations, out-of-scope items, and alternatives. Then post the finalized
-affected-file `FORGE:CLAIM` on the orchestration coordination issue. A path absent from
-the investigation and contract cannot be mutated; a discovered scope gap returns to
+Before composing the contract, read
+`../../specs/original/commands/work-on/build.md` and execute its B0-B2 planning
+requirements without source mutation, including the explicit complexity classification.
+Before the first `write` or `edit` of source, post a complete `FORGE:CONTRACT` derived only
+from the investigation: task type, approach, per-file change/why table, acceptance
+mapping, quality considerations, out-of-scope items, alternatives, and one concise
+execution path from the active public/production entrypoint through the changed boundary
+to an observable result and exact test. For bug fixes, include a safe failing-before
+reproduction when one is deterministic. When running under orchestration, post the
+finalized affected-file `FORGE:CLAIM` on the coordination issue; standalone work-on has
+no coordination claim. A path absent from the
+investigation and contract cannot be mutated; a discovered scope gap returns to
 investigation or becomes a follow-up. Revise the durable contract and claim before
 editing any newly discovered path. If any manifest-tracked file under `specs/original/`
 is claimed, include `specs/original/SHA256SUMS` before mutation as a mechanically coupled
@@ -77,9 +84,42 @@ The original specification is authoritative for phase ordering, labels, artifact
 acceptance checks, branch targets, review handoff, merge rules, and terminal states.
 Apply the Pi adapter only to translate Claude-specific tool/skill mechanics.
 
-Do not stop at an intermediate success. Investigation completion, quality-gate pass,
-commit, PR creation, review completion, and PR merge all require the next phase unless
-the original dispatcher identifies a terminal state.
+## Fresh build handoff
+
+If the authoritative Task Type is `Investigation`, keep it in the coordinator and execute
+the `build/implement.md` Investigation special case with its mandatory read-only research
+fanout and packaged `forgedock-issue` creation; it has no mutation-builder handoff.
+`Feature (UI/UX)` and `Full-Stack` also remain coordinator-owned so the existing mandatory
+frontend-design skill and browser-capability route is preserved.
+
+For every other confirmed build task, after completed B0-B2 planning, contract, complexity marker,
+exact `FORGE:BASE`, and any required orchestration claim are durable, launch exactly one packaged
+`forgedock-builder` with `context: "fresh"` and `acceptance: false`. Pass the
+authoritative issue worktree as its `cwd`: the coordinator's current managed cwd under
+orchestration, or the B1 worktree for standalone build. Do not allocate another managed
+worktree, pass the coordinator transcript, or inject generic harness acceptance. The issue-specific GitHub
+acceptance contract remains authoritative. Wait synchronously and do not mutate the worktree while the builder runs.
+The task supplies only issue/repository identity, frozen target identity, cwd authority,
+and the required durable markers. The builder rehydrates its primary context from
+GitHub and must read `specs/original/commands/work-on/build.md` before any other
+repository file or source mutation.
+
+The builder executes context, architecture, implementation, quality-gate, validation,
+acceptance, and commit work inline from the original specifications. Missing
+`FORGE:ARCHITECT:COMPLETE` is never an implicit skip; a legitimate skip uses the explicit
+completed skip artifact from `build/architect.md`. The coordinator must not replace a
+failed builder with inline implementation.
+
+Before push or PR creation, independently require the returned commit to equal clean
+`HEAD`, retain frozen-base ancestry, and have every changed/new path covered by the
+latest contract and any required orchestration claim. Re-read the issue and require the architecture
+artifact, real validation evidence, and commit-bound `FORGE:BUILDER:COMPLETE`. A missing,
+ambiguous, or mismatched result is automated `GATED`, not a reason to improvise or add
+`needs-human`.
+
+Do not stop at an intermediate success. Investigation completion, builder completion,
+quality-gate pass, commit, PR creation, review completion, and PR merge all require the
+next phase unless the original dispatcher identifies a terminal state.
 
 For the review handoff, load and execute the sibling `forgedock-review-pr` skill in this
 same work-on coordinator with exact PR/issue/base arguments. Before reviewer fanout,
@@ -90,10 +130,12 @@ branch history into review findings.
 Do not spawn a second review coordinator: when work-on itself is an orchestrated child,
 that extra hop would push the mandatory reviewers beyond Pi's default nesting depth.
 
-The work-on coordinator may use its child-safe `subagent` tool only to launch the
-complete bounded fresh-context reviewer panel selected by the review skill. Join every
-selected reviewer before synthesis and continuation. Reviewer operational timeouts for
-max-thinking models are 3,600,000 ms; parent/join windows are omitted or at least
+The work-on coordinator may use its child-safe `subagent` tool only for the one fresh
+`forgedock-builder` handoff, the complete bounded fresh-context reviewer panel selected
+by the review skill, and the mandatory read-only research fanout of an Investigation task. Builder and reviewers run sequentially as sibling children; neither
+may launch subagents. Join every selected reviewer before synthesis and continuation.
+Reviewer operational timeouts for max-thinking models are 3,600,000 ms; parent/join
+windows are omitted or at least
 3,900,000 ms. A generic 1,800-second attention event is not a reviewer timeout: continue
 waiting without steering by using `stopOnAttention: false` while the reviewer deadline
 is valid. Operational timeout, provider loss, branch-base mismatch, and other
