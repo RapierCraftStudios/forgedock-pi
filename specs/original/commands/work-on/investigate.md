@@ -263,8 +263,9 @@ gh api repos/{GH_REPO}/issues/{NUMBER}/comments --jq '.[] | {id: .id, body: .bod
 ```
 
 **Resume logic**:
-- If `<!-- FORGE:INVESTIGATOR -->` comment exists AND (`<!-- INVESTIGATION:COMPLETE -->` OR `<!-- INVESTIGATION:INVALID -->`) is present in the SAME comment → investigation already complete, EXIT (return existing verdict to caller). `INVESTIGATION:INVALID` is the terminal sentinel Phase 1C emits for an INVALID verdict (see Phase 1C below) — it is just as much a completion marker as `INVESTIGATION:COMPLETE`, not an "interrupted" state.
-- If `<!-- FORGE:INVESTIGATOR -->` comment exists BUT NEITHER `<!-- INVESTIGATION:COMPLETE -->` NOR `<!-- INVESTIGATION:INVALID -->` is present → investigation was interrupted, delete the partial comment and restart:
+- A comment ending `<!-- INVESTIGATION:INVALID -->` remains terminal and may be reused; no build follows it.
+- Reuse a `<!-- INVESTIGATION:COMPLETE -->` comment only when the same comment contains the current `### Production Execution Seam` section, a concrete public entrypoint, at least one production owner, mutation/no-mutation coverage, and an acceptance seam. A legacy completion marker without that schema is preserved as history but does not authorize build; run and post a superseding current investigation.
+- If `<!-- FORGE:INVESTIGATOR -->` exists with neither terminal sentinel, investigation was interrupted; delete only that partial comment and restart:
   ```bash
   gh api repos/{GH_REPO}/issues/comments/{COMMENT_ID} -X DELETE
   ```
@@ -421,6 +422,21 @@ gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:INVESTIGATOR -->
 ### Affected Files
 {numbered list of files that need changes}
 
+### Production Execution Seam (MANDATORY)
+**Observable effect**: {runtime/provider/persistence/API/CLI behavior, or prompt/spec behavior}
+**Public entrypoint**: `{file}:{symbol or command}`
+**Production owners**: {concrete caller/adapter/handler files and symbols that cause the effect}
+**Mutation coverage**: {for every production owner, either list it in Affected Files or give source evidence that it already performs the requested behavior and needs no mutation}
+**Acceptance seam**: {the public command/API/runtime path the E2E check executes}
+
+A conceptual documentation path, exported but unwired helper, test-local fixture, mock, or
+broad suite is not a production execution seam. If the requested observable behavior is
+absent from a production owner, that owner must enter Affected Files. If this is truly a
+prompt/spec-only project, prove that the specification is itself the loaded production
+surface and that no separate executable owner exists. Any unresolved or read-only owner
+that controls the requested effect blocks `INVESTIGATION:COMPLETE` and returns for
+further investigation.
+
 ### Evidence
 {specific findings — function names, line numbers, behavior observed}
 
@@ -444,7 +460,7 @@ gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:INVESTIGATOR -->
 ### Acceptance Spec <!-- Added: forge#1829 -->
 {For each item in the issue's ## Acceptance Criteria section, emit exactly one machine-checkable check line using the format below. Preserve source order and ordinal identity: the first criterion is `ac-1`, the second is `ac-2`, through `ac-N`, with no merging, omission, or renumbering. Before posting, count unchecked criteria and emitted checks and fail closed unless the counts and expected IDs match. If the issue has no Acceptance Criteria section, derive checks from the Recommendation above. Each check MUST be specific, observable, and testable — not vague prose. Checks are consumed by build/validate Phase B6.5 as the merge gate.}
 
-{Preserve test-type intent. A source criterion marked `[type:e2e]` must use `type=command` or `type=behavior` and execute the active public/production seam end to end. `contains`, grep-only prose checks, direct imports of an otherwise unwired leaf helper, and a broad test suite without a named scenario do not satisfy an E2E criterion. Unit criteria may use focused unit commands; integration/API criteria must exercise their corresponding boundary. For a bug, include the deterministic reproduction command that fails before the fix and becomes the regression proof when safely possible.}
+{Preserve test-type intent. A source criterion marked `[type:e2e]` must use `type=command` or `type=behavior` and execute the active public/production seam—the exact Acceptance seam named in Production Execution Seam—end to end. `contains`, grep-only prose checks, direct imports of an otherwise unwired leaf helper, and a broad test suite without a named scenario do not satisfy an E2E criterion. Unit criteria may use focused unit commands; integration/API criteria must exercise their corresponding boundary. For a bug, include the deterministic reproduction command that fails before the fix and becomes the regression proof when safely possible.}
 
 **Quoting (MANDATORY)**: `target=` and `matcher=` MUST always be wrapped in double quotes — `target="..."` / `matcher="..."` — even when the value is a single token (e.g. a plain file path). The downstream Phase B6.5 parser only extracts quoted values; an unquoted `target=`/`matcher=` will silently truncate at the first space and cause a false-negative gate failure for any multi-word value (shell commands with flags/arguments/pipes are almost always multi-word). Neither `target` nor `matcher` may contain a literal `"` character — use single quotes for any embedded string/regex literal inside the value, as shown below. `id=` and `type=` are always single tokens and are never quoted. `description=` is always the last field on the line and is captured to end-of-line — it does not need quoting.
 

@@ -19,7 +19,9 @@ directory is the coordinator's already-isolated issue worktree and is the only r
 root. Do not create another worktree, launch subagents, push, create or review a PR, merge,
 close issues, or run another lifecycle.
 
-Your first repository read must be `specs/original/commands/work-on/build.md`. Before the
+Your first repository read must be `specs/original/commands/work-on/build.md`, entered with
+`--phase-role builder`, exact `--expected-base-sha`, exact `--expected-branch`, and any
+under-orchestration `--coord-issue` supplied by the coordinator. Before the
 first source `edit` or `write`, reconstruct the exact handoff from GitHub: issue body,
 latest completed `FORGE:INVESTIGATOR`, latest `FORGE:CONTRACT`, exact `FORGE:BASE`, and,
 when invoked under orchestration, the active coordination `FORGE:CLAIM`. Treat the investigation and contract as mutation
@@ -38,7 +40,11 @@ when their phase is reached. When validation invokes the quality gate, load
 replacement build path or manually publish completion markers.
 
 For non-trivial work, implementation cannot begin without a same-issue
-`FORGE:ARCHITECT:COMPLETE` artifact. A legitimate architecture skip must still be the
+`FORGE:ARCHITECT:COMPLETE` artifact containing at least one Production Seam Ownership
+row and closing every requested observable effect. A discovered production caller/adapter that owns the effect
+cannot remain read-only or outside Deliverables without exact source proof that no
+mutation is needed. Test-local fixtures, mocks, unwired exports, and prose do not count as
+production implementation. A legitimate architecture skip must still be the
 explicit completed skip artifact required by `build/architect.md`; absence is never a
 skip. Follow the architecture plan as the primary implementation guide.
 

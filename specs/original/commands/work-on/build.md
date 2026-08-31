@@ -50,7 +50,9 @@ this file. It rehydrates the issue, latest completed investigation, latest contr
 exact base, and any required orchestration claim from GitHub; inherited coordinator conversation is not a
 build input. A missing or ambiguous handoff is automated `GATED`.
 
-The fresh builder verifies completed B0-B2 evidence and resumes at B2.5 rather than
+The coordinator enters this specification with `--phase-role coordinator`; the fresh
+builder rereads it with `--phase-role builder`, verifies completed B0-B2 evidence, and
+resumes at B2.5 rather than
 creating another worktree or duplicate contract. It executes B3-B6.5 inline, loads each
 referenced phase file when reached, and does not launch subagents. No source mutation may
 precede this file load and the required architecture artifact. The coordinator waits and
@@ -63,6 +65,10 @@ Parse from $ARGUMENTS:
 - `--repo {GH_REPO}` — GitHub repo (e.g. `{owner}/{repo}` — resolved from `forge.yaml → project`)
 - `--gh-flag {GH_FLAG}` — gh CLI repo flag (e.g. `-R {owner}/{repo}`)
 - `--base {PR_BASE}` — PR target branch (e.g. `milestone/modular-pipeline-architecture` or `staging`)
+- `--phase-role coordinator|builder` — `coordinator` executes fresh B0-B2 and may create the contract/complexity marker; `builder` verifies the completed handoff and resumes at B2.5
+- `--expected-base-sha {SHA}` — exact 40-character SHA from the coordinator's frozen target (required for builder role)
+- `--expected-branch {BRANCH}` — exact issue branch from the coordinator handoff (required for builder role)
+- `--coord-issue {NUMBER}` — orchestration coordination issue carrying the active claim (required only under orchestration)
 
 **Phase notation**: This file uses **B0–B6** for its own phases. The calling orchestrator (`work-on.md`) uses **3A–3M** for its sub-phases. Mapping: work-on.md Phase 3A = B0 (load state), Phase 3B = complexity classification (posts `FORGE:FAST_PATH` before invoking build), Phase 3C onward maps to B1+ in this file. When cross-references mention "Phase 3B", they refer to work-on.md's Phase 3B, not a phase in this file. <!-- Added: forge#1380 -->
 
@@ -75,20 +81,73 @@ selection are mandatory for every durable handoff artifact:
 
 ```bash
 gh issue view {NUMBER} {GH_FLAG} --json number,title,body,labels,state,milestone
+BUILD_PHASE_ROLE="{coordinator|builder}"
+case "$BUILD_PHASE_ROLE" in coordinator|builder) ;; *) echo "BUILD_RESULT: status: GATED blocker: --phase-role must be coordinator or builder"; exit 1 ;; esac
+
 COMMENTS=$(gh api --paginate repos/{GH_REPO}/issues/{NUMBER}/comments --slurp | jq 'flatten')
-INVESTIGATOR_BODY=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:INVESTIGATOR -->") and contains("<!-- INVESTIGATION:COMPLETE -->"))) | last | .body // ""')
+# Select the latest terminal investigator artifact first; never filter by schema and fall
+# back to an older artifact.
+INVESTIGATOR_BODY=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:INVESTIGATOR -->") and (contains("<!-- INVESTIGATION:COMPLETE -->") or contains("<!-- INVESTIGATION:INVALID -->")))) | last | .body // ""')
 CONTRACT_BODY=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:CONTRACT -->"))) | last | .body // ""')
 FAST_PATH_BODY=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:FAST_PATH -->"))) | last | .body // ""')
-COMPLETE_BUILDER_BODY=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:BUILDER -->") and contains("<!-- FORGE:BUILDER:COMPLETE -->"))) | last | .body // ""')
-PARTIAL_BUILDER_ID=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:BUILDER -->") and (contains("<!-- FORGE:BUILDER:COMPLETE -->") | not))) | last | .id // ""')
+BASE_BODY=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:BASE -->"))) | last | .body // ""')
+# Select latest artifacts before checking completion so newer partial/malformed state cannot
+# fall back to stale completed authority.
+ARCHITECT_BODY=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:ARCHITECT -->"))) | last | .body // ""')
+BUILDER_BODY=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:BUILDER -->"))) | last | .body // ""')
+BUILDER_ID=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:BUILDER -->"))) | last | .id // ""')
 
 [ -n "$INVESTIGATOR_BODY" ] || { echo "BUILD_RESULT: status: GATED blocker: latest completed investigation missing"; exit 1; }
-[ -n "$CONTRACT_BODY" ] || { echo "BUILD_RESULT: status: GATED blocker: Builder Contract missing"; exit 1; }
-# Also require the exact FORGE:BASE supplied by the coordinator and, under orchestration,
-# the active FORGE:CLAIM to be present, unambiguous, and identity-matched before continuing.
+printf '%s' "$INVESTIGATOR_BODY" | grep -qF '<!-- INVESTIGATION:INVALID -->' && { echo "BUILD_RESULT: status: INVESTIGATION_COMPLETE blocker: latest investigation is INVALID"; exit 0; }
+printf '%s' "$INVESTIGATOR_BODY" | grep -qF '### Production Execution Seam' || { echo "BUILD_RESULT: status: GATED blocker: latest completed investigation missing Production Execution Seam"; exit 1; }
+for label in 'Observable effect' 'Public entrypoint' 'Production owners' 'Mutation coverage' 'Acceptance seam'; do
+  line=$(printf '%s\n' "$INVESTIGATOR_BODY" | grep -F "**${label}**:" | tail -1)
+  value=${line#*:}
+  value=$(printf '%s' "$value" | xargs)
+  [ -n "$value" ] && ! printf '%s' "$value" | grep -Eqi '^\{|\}$|^(tbd|todo|unknown|none|n/a|placeholder)$' || { echo "BUILD_RESULT: status: GATED blocker: Production Execution Seam field $label is empty or placeholder"; exit 1; }
+done
 
-COMPLEXITY_BAND=$(printf '%s' "$FAST_PATH_BODY" | sed -n 's/.*\*\*COMPLEXITY_BAND\*\*: \([A-Z_]*\).*/\1/p' | head -1)
-case "$COMPLEXITY_BAND" in TRIVIAL|STANDARD|COMPLEX) ;; *) echo "BUILD_RESULT: status: GATED blocker: valid FORGE:FAST_PATH complexity marker missing"; exit 1 ;; esac
+validate_ownership_rows() {
+  local body="$1" source="$2" require_closed="$3" rows
+  printf '%s' "$body" | grep -qF '### Production Seam Ownership' || { echo "BUILD_RESULT: status: GATED blocker: $source missing Production Seam Ownership"; return 1; }
+  rows=$(printf '%s\n' "$body" | awk '/^### Production Seam Ownership/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||Observable [Ee]ffect')
+  if [ -z "$rows" ]; then
+    [ "$source" = 'Builder Contract' ] && echo "BUILD_RESULT: status: GATED blocker: Builder Contract has no production ownership data row" || echo "BUILD_RESULT: status: GATED blocker: architecture has no current ownership data row"
+    return 1
+  fi
+  ! printf '%s\n' "$rows" | grep -Eqi '\{[^}]*\}|\b(TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|[[:space:]]*\|' || { echo "BUILD_RESULT: status: GATED blocker: $source ownership row is empty or placeholder"; return 1; }
+  if [ "$require_closed" = true ]; then
+    printf '%s' "$body" | grep -qF '**Ownership gate**: CLOSED' || { echo "BUILD_RESULT: status: GATED blocker: $source ownership gate is not exactly CLOSED"; return 1; }
+  fi
+}
+
+# Coordinator role is allowed to create B2 artifacts on a fresh build. Builder role must
+# receive and validate them; this avoids requiring the contract before contract creation.
+if [ "$BUILD_PHASE_ROLE" = builder ] || [ -n "$CONTRACT_BODY" ]; then
+  validate_ownership_rows "$CONTRACT_BODY" 'Builder Contract' false || exit 1
+fi
+
+if [ "$BUILD_PHASE_ROLE" = builder ]; then
+  COMPLEXITY_BAND=$(printf '%s' "$FAST_PATH_BODY" | sed -n 's/.*\*\*COMPLEXITY_BAND\*\*: \([A-Z_]*\).*/\1/p' | head -1)
+  case "$COMPLEXITY_BAND" in TRIVIAL|STANDARD|COMPLEX) ;; *) echo "BUILD_RESULT: status: GATED blocker: valid FORGE:FAST_PATH complexity marker missing"; exit 1 ;; esac
+
+  [ "${EXPECTED_BASE_SHA:-}" != "" ] && printf '%s' "$EXPECTED_BASE_SHA" | grep -Eq '^[a-f0-9]{40}$' || { echo "BUILD_RESULT: status: GATED blocker: expected base SHA missing or malformed"; exit 1; }
+  [ -n "${EXPECTED_ISSUE_BRANCH:-}" ] || { echo "BUILD_RESULT: status: GATED blocker: expected issue branch missing"; exit 1; }
+  mapfile -t BASE_SHA_LINES < <(printf '%s\n' "$BASE_BODY" | sed -n 's/^\*\*Target SHA\*\*: `\([a-f0-9]\{40\}\)`$/\1/p')
+  mapfile -t BASE_BRANCH_LINES < <(printf '%s\n' "$BASE_BODY" | sed -n 's/^\*\*Issue branch\*\*: `\([^`]*\)`$/\1/p')
+  [ "${#BASE_SHA_LINES[@]}" -eq 1 ] && [ "${BASE_SHA_LINES[0]}" = "$EXPECTED_BASE_SHA" ] || { echo "BUILD_RESULT: status: GATED blocker: FORGE:BASE SHA missing, ambiguous, or mismatched"; exit 1; }
+  [ "${#BASE_BRANCH_LINES[@]}" -eq 1 ] && [ "${BASE_BRANCH_LINES[0]}" = "$EXPECTED_ISSUE_BRANCH" ] || { echo "BUILD_RESULT: status: GATED blocker: FORGE:BASE branch missing, ambiguous, or mismatched"; exit 1; }
+  [ "$(git branch --show-current)" = "$EXPECTED_ISSUE_BRANCH" ] || { echo "BUILD_RESULT: status: GATED blocker: assigned worktree branch mismatches handoff"; exit 1; }
+
+  if [ -n "${COORD_ISSUE:-}" ]; then
+    COORD_COMMENTS=$(gh api --paginate repos/{GH_REPO}/issues/$COORD_ISSUE/comments --slurp | jq 'flatten')
+    CLAIM_BODY=$(printf '%s' "$COORD_COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:CLAIM -->"))) | last | .body // ""')
+    printf '%s' "$CLAIM_BODY" | grep -qF '<!-- CLAIM:COMPLETE -->' || { echo "BUILD_RESULT: status: GATED blocker: active FORGE:CLAIM missing or incomplete"; exit 1; }
+    printf '%s' "$CLAIM_BODY" | grep -qE "\*\*Holder\*\*: #${NUMBER}( |$)" || { echo "BUILD_RESULT: status: GATED blocker: FORGE:CLAIM holder mismatch"; exit 1; }
+    DELIVERABLE_PATHS=$(printf '%s\n' "$CONTRACT_BODY" | awk '/^### Deliverables/{p=1;next} /^### /{p=0} p' | grep -oE '`[^`]+`' | tr -d '`' | grep -E '\.(py|tsx?|jsx?|sql|json|ya?ml|md|mjs|sh)$' | sort -u)
+    while IFS= read -r path; do [ -z "$path" ] || printf '%s' "$CLAIM_BODY" | grep -qF "$path" || { echo "BUILD_RESULT: status: GATED blocker: claim missing deliverable $path"; exit 1; }; done <<< "$DELIVERABLE_PATHS"
+  fi
+fi
 ```
 
 **Resume check — one authoritative route per state**:
@@ -108,24 +167,26 @@ case "$COMPLEXITY_BAND" in TRIVIAL|STANDARD|COMPLEX) ;; *) echo "BUILD_RESULT: s
    return automated `GATED` without deleting either.
 
 ```bash
-FROZEN_BASE_SHA="{FROZEN_BASE_SHA_FROM_FORGE_BASE}"
-if [ -n "$COMPLETE_BUILDER_BODY" ]; then
-  mapfile -t VALIDATED_COMMIT_LINES < <(printf '%s' "$COMPLETE_BUILDER_BODY" | sed -n 's/^validated_commit: \([a-f0-9]\{40\}\)$/\1/p')
+FROZEN_BASE_SHA="${EXPECTED_BASE_SHA:-}"
+if [ "$BUILD_PHASE_ROLE" = builder ] && [ -n "$BUILDER_BODY" ]; then
+  validate_ownership_rows "$ARCHITECT_BODY" 'current architecture for resume' true || exit 1
+fi
+if [ "$BUILD_PHASE_ROLE" = builder ] && printf '%s' "$BUILDER_BODY" | grep -qF '<!-- FORGE:BUILDER:COMPLETE -->'; then
+  mapfile -t VALIDATED_COMMIT_LINES < <(printf '%s' "$BUILDER_BODY" | sed -n 's/^validated_commit: \([a-f0-9]\{40\}\)$/\1/p')
   [ "${#VALIDATED_COMMIT_LINES[@]}" -eq 1 ] || { echo "BUILD_RESULT: status: GATED blocker: completed builder must contain exactly one validated_commit"; exit 1; }
   VALIDATED_COMMIT_SHA="${VALIDATED_COMMIT_LINES[0]}"
-  EXPECTED_ISSUE_BRANCH="{EXPECTED_ISSUE_BRANCH_FROM_HANDOFF}"
   [ -n "$EXPECTED_ISSUE_BRANCH" ] && [ "$(git branch --show-current)" = "$EXPECTED_ISSUE_BRANCH" ] || { echo "BUILD_RESULT: status: GATED blocker: completed builder branch identity invalid"; exit 1; }
   [ "$(git rev-parse HEAD)" = "$VALIDATED_COMMIT_SHA" ] || { echo "BUILD_RESULT: status: GATED blocker: completed builder commit is stale"; exit 1; }
   [ -z "$(git status --porcelain)" ] || { echo "BUILD_RESULT: status: GATED blocker: completed builder worktree is dirty"; exit 1; }
   git merge-base --is-ancestor "$FROZEN_BASE_SHA" "$VALIDATED_COMMIT_SHA" || { echo "BUILD_RESULT: status: GATED blocker: completed builder ancestry invalid"; exit 1; }
   echo "BUILD_RESULT: status: ALREADY_DONE commit_sha: $VALIDATED_COMMIT_SHA"
   exit 0
-elif [ -n "$PARTIAL_BUILDER_ID" ] && [ -n "$(git status --porcelain)" ]; then
+elif [ "$BUILD_PHASE_ROLE" = builder ] && [ -n "$BUILDER_ID" ] && [ -n "$(git status --porcelain)" ]; then
   echo "Partial pre-commit build preserved; continue directly to B6"
-elif [ -n "$PARTIAL_BUILDER_ID" ] && [ "$(git rev-parse HEAD)" != "$FROZEN_BASE_SHA" ]; then
+elif [ "$BUILD_PHASE_ROLE" = builder ] && [ -n "$BUILDER_ID" ] && [ "$(git rev-parse HEAD)" != "$FROZEN_BASE_SHA" ]; then
   RESUME_COMMIT_SHA=$(git rev-parse HEAD)
   echo "Partial committed build $RESUME_COMMIT_SHA preserved; rerun verification and ancestry before B6.5"
-elif [ -n "$PARTIAL_BUILDER_ID" ]; then
+elif [ "$BUILD_PHASE_ROLE" = builder ] && [ -n "$BUILDER_ID" ]; then
   echo "BUILD_RESULT: status: GATED blocker: partial builder artifact conflicts with frozen-base HEAD"
   exit 1
 fi
@@ -232,13 +293,23 @@ gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:CONTRACT -->
 
 ### Execution Path and Proof
 
-`{ACTIVE_PUBLIC_OR_PRODUCTION_ENTRYPOINT}` → `{CHANGED_BOUNDARY}` → `{OBSERVABLE_RESULT}`
+`{ACTIVE_PUBLIC_OR_PRODUCTION_ENTRYPOINT}` → `{PRODUCTION_CALLER_AND_ADAPTER}` → `{CHANGED_BOUNDARY}` → `{OBSERVABLE_RESULT}`
 
-**Exact behavioral test**: `{COMMAND_OR_NAMED_TEST}`
+### Production Seam Ownership
+
+| Observable effect | Entrypoint | Owning production file/symbol | Deliverable or no-mutation evidence |
+|---|---|---|---|
+| {EFFECT} | {ENTRYPOINT} | {OWNER_PATH_AND_SYMBOL} | {DELIVERABLE_PATH or exact source evidence behavior already exists} |
+
+**Exact behavioral test**: `{COMMAND_OR_NAMED_TEST_THAT_INVOKES_THE_PUBLIC_SEAM}`
 **Bug reproduction before fix**: `{FAILING_BEFORE_COMMAND_OR_NOT_APPLICABLE_FOR_NON_BUG}`
 
-An export, prose instruction, direct import of an otherwise unwired helper, or broad test
-suite alone is not an active execution path.
+Every executable owner of the requested effect must be a deliverable unless source
+evidence proves it already performs the requested behavior. An export, prose instruction,
+direct import of an otherwise unwired helper, test-local fixture/mock, or broad suite is
+not an active execution path. A prompt/spec may be the production owner only when the
+investigation proves that exact file is loaded as the runtime surface and no separate
+executable owner controls the effect.
 
 ### Quality Considerations
 
@@ -250,7 +321,7 @@ suite alone is not an active execution path.
 ${ATTRIBUTION_LINE}"
 ```
 
-Contract must be grounded in the investigation report. Every deliverable file must appear in the affected files list from the investigator. Adversarially validate the proposed fix against adjacent system layers before posting. The execution path must name the real caller/entrypoint that activates every new helper, command, or configuration boundary and the exact test that invokes that seam. For a bug, run and record a safe deterministic failing-before reproduction when one exists.
+Contract must be grounded in the investigation report. Every deliverable file must appear in the affected files list from the investigator. Adversarially validate the proposed fix against adjacent system layers before posting. The execution path must name the real caller/entrypoint that activates every new helper, command, or configuration boundary and the exact test that invokes that seam. Compare the Production Seam Ownership rows to Deliverables before posting: an owner that controls the requested effect cannot remain related/read-only or be omitted unless its no-mutation evidence proves the behavior already exists. Any mismatch returns to investigation before contract publication. For a bug, run and record a safe deterministic failing-before reproduction when one exists.
 
 ### B2.1: Post FORGE:CLAIM on coordination issue (conditional — when running under orchestration batch) <!-- Added: forge#1736 -->
 
@@ -346,7 +417,7 @@ If `FUNCTION_NAMES` is empty, omit `--functions`. The Skill() form above is the 
 
 ## Phase B4: Architecture Planning (MANDATORY for STANDARD/COMPLEX — skip for TRIVIAL)
 
-**If COMPLEXITY_BAND: TRIVIAL**: load `commands/work-on/build/architect.md` and execute only its mandatory Skip Marker path, producing a same-issue `FORGE:ARCHITECT:COMPLETE` artifact, then proceed to B5. Do not silently bypass the architect phase.
+**If COMPLEXITY_BAND: TRIVIAL**: load `commands/work-on/build/architect.md`, execute its entrypoint/caller trace and mandatory A2.1 Production Seam Ownership Gate, then use the ownership-bearing Skip Marker for remaining planning work. Do not emit an empty completion artifact or bypass ownership reconciliation.
 
 **For STANDARD and COMPLEX tasks**: Always run. Even a 1-file STANDARD fix benefits from cross-path consistency checks. Do NOT skip without a TRIVIAL COMPLEXITY_BAND. Implementation cannot start until a same-issue `FORGE:ARCHITECT:COMPLETE` artifact exists. A legitimate skip still posts the explicit completed skip artifact defined by `build/architect.md`; an absent artifact is never a skip.
 
@@ -372,7 +443,7 @@ The Skill() form above is the exception path — not the default. <!-- Added: fo
 Invoke the implement subcommand to write code, stage, and post the builder comment:
 
 ```
-Skill("work-on:build:implement", args="{NUMBER} --repo {GH_REPO} --gh-flag {GH_FLAG} --worktree {WORKTREE_PATH} --branch {BRANCH}")
+Skill("work-on:build:implement", args="{NUMBER} --repo {GH_REPO} --gh-flag {GH_FLAG} --worktree {WORKTREE_PATH} --branch {BRANCH} --base-sha {FROZEN_BASE_SHA}")
 ```
 
 **After subcommand returns**:

@@ -26,7 +26,8 @@ Parse from $ARGUMENTS:
 - `--repo {GH_REPO}` — GitHub repo (e.g. `{owner}/{repo}` — resolved from `forge.yaml → project`)
 - `--gh-flag {GH_FLAG}` — gh CLI repo flag (e.g. `-R {owner}/{repo}`)
 - `--worktree {WORKTREE_PATH}` — absolute path to the git worktree (set by caller)
-- `--branch {BRANCH}` — feature branch name (e.g. `feat/my-feature`)
+- `--branch {BRANCH}` — exact issue branch name (e.g. `feat/my-feature`)
+- `--base-sha {FROZEN_BASE_SHA}` — exact frozen base SHA from the verified handoff
 
 ---
 
@@ -38,44 +39,53 @@ Read the full context chain before writing a single line of code:
 # Issue body and labels
 gh issue view {NUMBER} {GH_FLAG} --json number,title,body,labels
 
-# Architect plan (primary implementation guide — read BEFORE writing any code)
-gh api repos/{GH_REPO}/issues/{NUMBER}/comments \
-  --jq '.[] | select(.body | contains("FORGE:ARCHITECT")) | .body'
-
-# Investigation report
-gh api repos/{GH_REPO}/issues/{NUMBER}/comments \
-  --jq '.[] | select(.body | contains("FORGE:INVESTIGATOR")) | .body'
-
-# Builder contract
-gh api repos/{GH_REPO}/issues/{NUMBER}/comments \
-  --jq '.[] | select(.body | contains("FORGE:CONTRACT")) | .body'
-
-# Context briefing (if present)
-gh api repos/{GH_REPO}/issues/{NUMBER}/comments \
-  --jq '.[] | select(.body | contains("FORGE:CONTEXT")) | .body'
+COMMENTS=$(gh api --paginate repos/{GH_REPO}/issues/{NUMBER}/comments --slurp | jq 'flatten')
+# Select latest artifacts before checking schema/completion; never fall back to an older
+# completed artifact when a newer partial/malformed one exists.
+INVESTIGATOR_BODY=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:INVESTIGATOR -->") and (contains("<!-- INVESTIGATION:COMPLETE -->") or contains("<!-- INVESTIGATION:INVALID -->")))) | last | .body // ""')
+ARCHITECT_BODY=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:ARCHITECT -->"))) | last | .body // ""')
+CONTRACT_BODY=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:CONTRACT -->"))) | last | .body // ""')
+CONTEXT_BODY=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:CONTEXT -->"))) | last | .body // ""')
+BUILDER_BODY=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:BUILDER -->"))) | last | .body // ""')
+BUILDER_ID=$(printf '%s' "$COMMENTS" | jq -r 'map(select(.body | contains("<!-- FORGE:BUILDER -->"))) | last | .id // ""')
 ```
 
-**Resume check**:
-- If `<!-- FORGE:BUILDER:COMPLETE -->` is present in a BUILDER comment → implementation is done — EXIT and return `IMPLEMENT_RESULT: status: ALREADY_DONE` to caller.
-- If `<!-- FORGE:BUILDER -->` exists BUT `<!-- FORGE:BUILDER:COMPLETE -->` is ABSENT, use the same exclusive state routes as build.md B0; never delete the artifact or discard the worktree:
-  - staged/uncommitted changes → preserve them and return `IMPLEMENT_RESULT: status: COMPLETE` so the caller continues directly to B6;
-  - clean `HEAD` different from frozen base → return `ALREADY_DONE` with that exact commit for verification, ancestry audit, and B6.5;
-  - clean frozen-base `HEAD` → return `GATED` because durable and Git state conflict.
-  ```bash
-  PARTIAL_ID=$(gh api repos/{GH_REPO}/issues/{NUMBER}/comments \
-    --jq '[.[] | select(.body | contains("FORGE:BUILDER") and (contains("FORGE:BUILDER:COMPLETE") | not))] | last | .id // ""')
-  FROZEN_BASE_SHA="{FROZEN_BASE_SHA_FROM_FORGE_BASE}"
-  if [ -n "$PARTIAL_ID" ] && [ -n "$(git status --porcelain)" ]; then
-    echo "IMPLEMENT_RESULT: status: COMPLETE files_changed: preserved-worktree-diff"
-    exit 0
-  elif [ -n "$PARTIAL_ID" ] && [ "$(git rev-parse HEAD)" != "$FROZEN_BASE_SHA" ]; then
-    echo "IMPLEMENT_RESULT: status: ALREADY_DONE commits: [$(git rev-parse HEAD)]"
-    exit 0
-  elif [ -n "$PARTIAL_ID" ]; then
-    echo "IMPLEMENT_RESULT: status: GATED blocker: partial builder artifact conflicts with frozen-base HEAD"
-    exit 1
-  fi
-  ```
+Before evaluating any resume shortcut, validate the latest current authority; resume never bypasses current ownership. Task Type
+`Investigation` alone uses its coordinator-owned no-mutation exception. Every mutation
+task requires current-schema investigation/contract plus a latest completed architecture
+with substantive closed ownership:
+
+```bash
+TASK_TYPE=$(printf '%s\n' "$INVESTIGATOR_BODY" | sed -n 's/^\*\*Task Type\*\*: //p' | tail -1)
+if [ "$TASK_TYPE" != Investigation ]; then
+  printf '%s' "$INVESTIGATOR_BODY" | grep -qF '### Production Execution Seam' || { echo "IMPLEMENT_RESULT: status: GATED blocker: current production investigation missing"; exit 1; }
+  printf '%s' "$CONTRACT_BODY" | grep -qF '### Production Seam Ownership' || { echo "IMPLEMENT_RESULT: status: GATED blocker: current ownership contract missing"; exit 1; }
+  printf '%s' "$ARCHITECT_BODY" | grep -qF '<!-- FORGE:ARCHITECT:COMPLETE -->' || { echo "IMPLEMENT_RESULT: status: GATED blocker: latest architecture is incomplete"; exit 1; }
+  printf '%s' "$ARCHITECT_BODY" | grep -qF '**Ownership gate**: CLOSED' || { echo "IMPLEMENT_RESULT: status: GATED blocker: latest architecture ownership is not exactly CLOSED"; exit 1; }
+  ARCHITECT_ROWS=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### Production Seam Ownership/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||Observable Effect')
+  [ -n "$ARCHITECT_ROWS" ] && ! printf '%s\n' "$ARCHITECT_ROWS" | grep -Eqi '\{[^}]*\}|\b(TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|[[:space:]]*\|' || { echo "IMPLEMENT_RESULT: status: GATED blocker: architecture ownership row missing or placeholder"; exit 1; }
+fi
+```
+
+**Resume check** — branch only on the latest builder artifact. A clean `HEAD` different from frozen base is an `ALREADY_DONE` candidate only after the current ownership checks above; staged/uncommitted changes return `status: COMPLETE` only after those same checks:
+```bash
+[ -n "${FROZEN_BASE_SHA:-}" ] && printf '%s' "$FROZEN_BASE_SHA" | grep -Eq '^[a-f0-9]{40}$' || { echo "IMPLEMENT_RESULT: status: GATED blocker: parsed --base-sha missing or malformed"; exit 1; }
+if [ -n "$BUILDER_ID" ] && printf '%s' "$BUILDER_BODY" | grep -qF '<!-- FORGE:BUILDER:COMPLETE -->'; then
+  mapfile -t VALIDATED_LINES < <(printf '%s\n' "$BUILDER_BODY" | sed -n 's/^validated_commit: \([a-f0-9]\{40\}\)$/\1/p')
+  [ "${#VALIDATED_LINES[@]}" -eq 1 ] && [ "${VALIDATED_LINES[0]}" = "$(git rev-parse HEAD)" ] && [ -z "$(git status --porcelain)" ] && [ "$(git branch --show-current)" = "$BRANCH" ] || { echo "IMPLEMENT_RESULT: status: GATED blocker: completed builder identity is stale or ambiguous"; exit 1; }
+  echo "IMPLEMENT_RESULT: status: ALREADY_DONE commits: [${VALIDATED_LINES[0]}]"
+  exit 0
+elif [ -n "$BUILDER_ID" ] && [ -n "$(git status --porcelain)" ]; then
+  echo "IMPLEMENT_RESULT: status: COMPLETE files_changed: preserved-worktree-diff"
+  exit 0
+elif [ -n "$BUILDER_ID" ] && [ "$(git rev-parse HEAD)" != "$FROZEN_BASE_SHA" ]; then
+  echo "IMPLEMENT_RESULT: status: ALREADY_DONE commits: [$(git rev-parse HEAD)]"
+  exit 0
+elif [ -n "$BUILDER_ID" ]; then
+  echo "IMPLEMENT_RESULT: status: GATED blocker: partial builder artifact conflicts with frozen-base HEAD"
+  exit 1
+fi
+```
 
 **Primary guide**: First read Task Type from the completed investigation. For Task Type
 `Investigation`, skip the architecture prerequisite and execute only the coordinator-owned
@@ -91,10 +101,17 @@ required by `build/architect.md`. If the completed marker is absent, STOP as aut
 `GATED`; never infer a skip or proceed from investigation/contract alone.
 
 Extract from architect plan (when present):
+- Production Seam Ownership rows (every observable effect, public entrypoint, production owner, mutation/proof, and public-seam test)
 - Ordered implementation list (sequence of file changes to make)
 - All affected paths (every file that must change for consistency)
 - Consistency checks (invariants the builder must verify before committing)
 - Risk assessment (HIGH/MEDIUM/LOW risks to watch for)
+
+Before I3, require a current `### Production Seam Ownership` section with at least one
+non-header ownership row and require every row to be closed. If an executable
+owner of the requested behavior is omitted, marked read-only without source proof, or
+represented only by a test-local fixture/mock, return automated `GATED` to investigation
+before the first source mutation.
 
 Extract from investigation report:
 - Affected files list
@@ -132,7 +149,8 @@ Work in `{WORKTREE_PATH}`. Follow the contract deliverables table exactly — im
 **Implementation rules**:
 - Read the current file before modifying it — never assume its state
 - Read related files identified in the context briefing before touching the changed code
-- For each acceptance criterion in the contract: implement it, then mentally verify it's met
+- For each acceptance criterion in the contract: implement it, then verify it through the named public production seam
+- A test-local helper, fixture, mock, unwired export, or prose contract cannot substitute for production wiring; require the public caller to invoke the changed implementation
 - Do NOT add unrequested scope — contract out-of-scope items stay out of scope
 - **Library callback verification**: When writing a lambda or callable that will be passed to a library/framework parameter (e.g., `prepared_statement_name_func=lambda: ""`, `key=lambda x: ...`), you MUST verify the expected calling convention BEFORE writing it. Check the library's default value for that parameter, its documentation, or its source code. A lambda with wrong arity causes `TypeError` at runtime — this is invisible to static analysis and linting. The P0 incident from PR #14391 was caused by `lambda _: ""` (1 arg) passed where SQLAlchemy expects 0 args.
 - **Worktree-aware path derivation**: When writing shell code that derives repository paths, ALWAYS use `git rev-parse --show-toplevel` for the repo root in regular checkouts, or `git rev-parse --git-common-dir` (then `dirname`) to get the shared `.git` directory when the context may be a linked worktree. For worktree cleanup code specifically, ALWAYS use `--git-common-dir` — `--show-toplevel` returns the worktree path itself, NOT the main repo root. NEVER use `pwd`, relative paths, or `dirname` chains on `--show-toplevel` output for repo root derivation. Test path logic for both regular checkouts and linked worktrees. (Ref: review-findings #104, #105 — 4 PATH_DERIVATION defects, 15% of all review findings)

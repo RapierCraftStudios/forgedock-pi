@@ -45,13 +45,16 @@ required for compilation, runtime correctness, or an interface/schema/security
 contract. Optional adjacent work becomes a follow-up issue.
 
 Before composing the contract, read
-`../../specs/original/commands/work-on/build.md` and execute its B0-B2 planning
-requirements without source mutation, including the explicit complexity classification.
+`../../specs/original/commands/work-on/build.md` with `--phase-role coordinator` and
+execute its B0-B2 planning requirements without source mutation, including the explicit complexity classification.
 Before the first `write` or `edit` of source, post a complete `FORGE:CONTRACT` derived only
 from the investigation: task type, approach, per-file change/why table, acceptance
 mapping, quality considerations, out-of-scope items, alternatives, and one concise
-execution path from the active public/production entrypoint through the changed boundary
-to an observable result and exact test. For bug fixes, include a safe failing-before
+execution path from the active public/production entrypoint through every owning
+caller/adapter and changed boundary to an observable result and exact public-seam test.
+Every executable owner of the requested effect must be a deliverable unless exact source
+evidence proves it already performs the behavior. A related/read-only owner, test-local
+fixture/mock, unwired export, or prose path cannot substitute for production wiring. For bug fixes, include a safe failing-before
 reproduction when one is deterministic. When running under orchestration, post the
 finalized affected-file `FORGE:CLAIM` on the coordination issue; standalone work-on has
 no coordination claim. A path absent from the
@@ -86,13 +89,16 @@ authoritative issue worktree as its `cwd`: the coordinator's current managed cwd
 orchestration, or the B1 worktree for standalone build. Do not allocate another managed
 worktree, pass the coordinator transcript, or inject generic harness acceptance. The issue-specific GitHub
 acceptance contract remains authoritative. Wait synchronously and do not mutate the worktree while the builder runs.
-The task supplies only issue/repository identity, frozen target identity, cwd authority,
-and the required durable markers. The builder rehydrates its primary context from
-GitHub and must read `specs/original/commands/work-on/build.md` before any other
-repository file or source mutation.
+The task supplies issue/repository identity, cwd authority, `--phase-role builder`, exact
+`--expected-base-sha`, exact `--expected-branch`, optional `--coord-issue`, and the required
+durable markers. The builder rehydrates its primary context from
+GitHub and must read `specs/original/commands/work-on/build.md` with
+`--phase-role builder` before any other repository file or source mutation.
 
 The builder executes context, architecture, implementation, quality-gate, validation,
-acceptance, and commit work inline from the original specifications. Missing
+acceptance, and commit work inline from the original specifications. Architecture must
+close Production Seam Ownership for every observable effect before mutation; unresolved
+or test-only production wiring returns to investigation rather than review. Missing
 `FORGE:ARCHITECT:COMPLETE` is never an implicit skip; a legitimate skip uses the explicit
 completed skip artifact from `build/architect.md`. The coordinator must not replace a
 failed builder with inline implementation.
