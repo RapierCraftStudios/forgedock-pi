@@ -416,6 +416,58 @@ test("provider side effects require a bounded transaction proof", async () => {
   assert.match(implement!, /provider transaction proof is incomplete/);
 });
 
+test("HIGH architecture risks require discriminating regression closure", async () => {
+  const contracts = await Promise.all(
+    [
+      "specs/original/commands/work-on/build.md",
+      "specs/original/commands/work-on/build/architect.md",
+      "specs/original/commands/work-on/build/implement.md",
+      "agents/forgedock-builder.md",
+      "skills/forgedock-work-on/SKILL.md",
+    ].map((path) => readFile(path, "utf8")),
+  );
+
+  for (const contract of contracts) {
+    assert.match(contract, /HIGH[- ]risk/i);
+    assert.match(contract, /failure scenario/i);
+    assert.match(contract, /named executable|named test/i);
+  }
+  const [build, architect, implement] = contracts;
+  assert.match(build!, /every HIGH risk requires one verification row/);
+  assert.match(build!, /HIGH-risk gate is not closed/);
+  assert.match(architect!, /identity fields[\s\S]*different sentinel values/);
+  assert.match(architect!, /base-sha-A[\s\S]*merge-base-sha-B/);
+  assert.match(architect!, /append reviewer[\s\S]*apply findings[\s\S]*complete[\s\S]*replay/);
+  assert.match(implement!, /RISK_COUNT/);
+  assert.match(implement!, /PROOF_COUNT/);
+  assert.match(implement!, /run every named test/i);
+  assert.match(implement!, /no HIGH risks[\s\S]{0,30}no extra table/i);
+
+  const closesHighRisks = (body: string): boolean => {
+    const riskSection = body.split("### Risk Assessment")[1]?.split("\n### ")[0] ?? "";
+    const risks = riskSection
+      .split("\n")
+      .filter((line) => /\|\s*HIGH\s*\|/.test(line));
+    if (risks.length === 0) return true;
+    const proofSection = body.split("### HIGH-Risk Verification")[1]?.split("\n### ")[0] ?? "";
+    const proofs = proofSection
+      .split("\n")
+      .filter((line) => line.startsWith("|") && !/HIGH Risk|^\|[- ]+\|/.test(line));
+    return (
+      body.includes("**HIGH-risk gate**: CLOSED") &&
+      proofs.length === risks.length &&
+      proofs.every((row) => !/\{[^}]*\}|\b(?:TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|\s*\|/i.test(row))
+    );
+  };
+
+  assert.equal(closesHighRisks("### Risk Assessment\n| cache churn | MEDIUM | inspect |"), true);
+  assert.equal(closesHighRisks("### Risk Assessment\n| wrong identity | HIGH | test |"), false);
+  assert.equal(
+    closesHighRisks("### Risk Assessment\n| wrong identity | HIGH | test |\n### HIGH-Risk Verification\n| HIGH Risk | Scenario | Inputs | Test | Before |\n|---|---|---|---|---|\n| wrong identity | publishes wrong merge-base | base-sha-A / merge-base-sha-B | test distinct identity | fails before fix |\n**HIGH-risk gate**: CLOSED"),
+    true,
+  );
+});
+
 test("headless orchestrate waits two hours on its exact async workflow", async () => {
   const orchestrate = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
   const adapter = await readFile("specs/pi-adapter.md", "utf8");

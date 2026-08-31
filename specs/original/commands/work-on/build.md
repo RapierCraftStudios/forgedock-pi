@@ -132,6 +132,17 @@ validate_provider_proof() {
   if [ "$require_closed" = true ]; then printf '%s' "$body" | grep -qF '**Provider transaction gate**: CLOSED' || { echo "BUILD_RESULT: status: GATED blocker: $source provider gate is not exactly CLOSED"; return 1; }; fi
 }
 
+validate_high_risk_proof() {
+  local body="$1" risks proofs risk_count proof_count
+  risks=$(printf '%s\n' "$body" | awk '/^### Risk Assessment/{p=1;next} /^### /{p=0} p' | grep -E '\|[[:space:]]*HIGH[[:space:]]*\|' || true)
+  [ -n "$risks" ] || return 0
+  proofs=$(printf '%s\n' "$body" | awk '/^### HIGH-Risk Verification/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||^\| HIGH Risk \|')
+  risk_count=$(printf '%s\n' "$risks" | grep -c '^|' || true); proof_count=$(printf '%s\n' "$proofs" | grep -c '^|' || true)
+  [ "$risk_count" -eq "$proof_count" ] && [ "$proof_count" -gt 0 ] || { echo "BUILD_RESULT: status: GATED blocker: every HIGH risk requires one verification row"; return 1; }
+  ! printf '%s\n' "$proofs" | grep -Eqi '\{[^}]*\}|\b(TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|[[:space:]]*\|' || { echo "BUILD_RESULT: status: GATED blocker: HIGH-risk row is empty or placeholder"; return 1; }
+  printf '%s' "$body" | grep -qF '**HIGH-risk gate**: CLOSED' || { echo "BUILD_RESULT: status: GATED blocker: HIGH-risk gate is not closed"; return 1; }
+}
+
 # Coordinator role is allowed to create B2 artifacts on a fresh build. Builder role must
 # receive and validate them; this avoids requiring the contract before contract creation.
 if [ "$BUILD_PHASE_ROLE" = builder ] || [ -n "$CONTRACT_BODY" ]; then
@@ -183,6 +194,7 @@ FROZEN_BASE_SHA="${EXPECTED_BASE_SHA:-}"
 if [ "$BUILD_PHASE_ROLE" = builder ] && [ -n "$BUILDER_BODY" ]; then
   validate_ownership_rows "$ARCHITECT_BODY" 'current architecture for resume' true || exit 1
   [ "$SIDE_EFFECT" = NO ] || validate_provider_proof "$ARCHITECT_BODY" 'current architecture for resume' true || exit 1
+  validate_high_risk_proof "$ARCHITECT_BODY" || exit 1
 fi
 if [ "$BUILD_PHASE_ROLE" = builder ] && printf '%s' "$BUILDER_BODY" | grep -qF '<!-- FORGE:BUILDER:COMPLETE -->'; then
   mapfile -t VALIDATED_COMMIT_LINES < <(printf '%s' "$BUILDER_BODY" | sed -n 's/^validated_commit: \([a-f0-9]\{40\}\)$/\1/p')
@@ -457,6 +469,7 @@ Skill("work-on:build:architect", args="{NUMBER} --repo {GH_REPO} --gh-flag {GH_F
 The Skill() form above is the exception path — not the default. <!-- Added: forge#1276 -->
 
 **After architecture planning**:
+- If any Risk Assessment row is HIGH, require a matching substantive `HIGH-Risk Verification` row with a concrete failure scenario, discriminating inputs or full state sequence, named executable test, and exact `**HIGH-risk gate**: CLOSED`; otherwise return `GATED` before B5
 - Returns ordered implementation plan → continue to B5
 - BLOCKED (conflicting constraints that cannot be resolved inline) → post comment, add `needs-human`, return `BUILD_RESULT: status: BLOCKED`
 # MUST CONTINUE to Phase B5 — architect result is intermediate, NOT terminal.
