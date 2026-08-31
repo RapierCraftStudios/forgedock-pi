@@ -69,20 +69,11 @@ if [ "$TASK_TYPE" != Investigation ]; then
     NO) ;;
     YES)
       printf '%s' "$ARCHITECT_BODY" | grep -qF '**Provider transaction gate**: CLOSED' || { echo "IMPLEMENT_RESULT: status: GATED blocker: provider transaction gate is not closed"; exit 1; }
-      PROVIDER_ROWS=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### Provider Transaction Proof/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||Provider Operation')
+      PROVIDER_ROWS=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### Provider Transaction Proof/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||^\| Provider Operation')
       [ -n "$PROVIDER_ROWS" ] && ! printf '%s\n' "$PROVIDER_ROWS" | grep -Eqi '\{[^}]*\}|\b(TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|[[:space:]]*\|' || { echo "IMPLEMENT_RESULT: status: GATED blocker: provider transaction proof is incomplete"; exit 1; }
       ;;
     *) echo "IMPLEMENT_RESULT: status: GATED blocker: side-effect classification missing"; exit 1 ;;
   esac
-  HIGH_RISKS=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### Risk Assessment/{p=1;next} /^### /{p=0} p' | grep -E '\|[[:space:]]*HIGH[[:space:]]*\|' || true)
-  if [ -n "$HIGH_RISKS" ]; then
-    printf '%s' "$ARCHITECT_BODY" | grep -qF '**HIGH-risk gate**: CLOSED' || { echo "IMPLEMENT_RESULT: status: GATED blocker: HIGH-risk gate is not closed"; exit 1; }
-    HIGH_PROOFS=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### HIGH-Risk Verification/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||^\| HIGH Risk \|')
-    RISK_COUNT=$(printf '%s\n' "$HIGH_RISKS" | grep -c '^|' || true)
-    PROOF_COUNT=$(printf '%s\n' "$HIGH_PROOFS" | grep -c '^|' || true)
-    [ "$RISK_COUNT" -eq "$PROOF_COUNT" ] && [ "$PROOF_COUNT" -gt 0 ] || { echo "IMPLEMENT_RESULT: status: GATED blocker: every HIGH risk requires exactly one verification row"; exit 1; }
-    ! printf '%s\n' "$HIGH_PROOFS" | grep -Eqi '\{[^}]*\}|\b(TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|[[:space:]]*\|' || { echo "IMPLEMENT_RESULT: status: GATED blocker: HIGH-risk verification row is empty or placeholder"; exit 1; }
-  fi
 fi
 ```
 
@@ -124,8 +115,8 @@ Extract from architect plan (when present):
 - Ordered implementation list (sequence of file changes to make)
 - All affected paths (every file that must change for consistency)
 - Consistency checks (invariants the builder must verify before committing)
-- Risk assessment (HIGH/MEDIUM/LOW risks to watch for)
-- HIGH-Risk Verification rows (failure scenario, discriminating inputs/state sequence, named test, and failing-before evidence)
+- Risk Assessment rows, including each HIGH risk's failure scenario and exact verification command
+- The single Provider Transaction Proof when provider effects exist, including operation/fallback/replay commands
 
 Before I3, require a current `### Production Seam Ownership` section with at least one
 non-header ownership row and require every row to be closed. If an executable
@@ -133,19 +124,12 @@ owner of the requested behavior is omitted, marked read-only without source proo
 represented only by a test-local fixture/mock, return automated `GATED` to investigation
 before the first source mutation.
 
-If the architecture contains any HIGH Risk Assessment row, require exactly one
-substantive HIGH-Risk Verification row per HIGH risk and `**HIGH-risk gate**: CLOSED`
-before I3. Reject placeholder rows. Identity-risk rows must use distinct values for fields
-that could be conflated; durable-state rows must name the full transition/replay sequence.
-Before staging, run every named test, record its passing-after result, and include the
-row-to-test mapping in the Builder report. A missing or failing row is `GATED`. If there
-are no HIGH risks, no extra table is required.
-
-For provider work, every proof row must name authority, exact operation/failure scope,
-required result/readback, replay/recovery, and a deterministic current-transaction test.
-Fallback rows identify the exact failed operation that authorizes them. Run safe
-failing-before tests when available and require every named scenario to pass before
-staging.
+Before staging, run every exact command in HIGH Risk Assessment rows and, for provider
+work, every command in the single Provider Transaction Proof. Record each literal command
+and outcome in the Builder report. A missing command or nonzero result is `GATED`.
+Fallback rows identify the exact failed operation that authorizes them; replay/recovery
+rows exercise the concrete interruption sequence. Do not infer success from table shape,
+markers, broad suites, or prose.
 
 Extract from investigation report:
 - Affected files list
@@ -341,6 +325,11 @@ gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:BUILDER -->
 ### Acceptance Criteria Status
 {Checklist of each criterion from the contract, marked ✅ or ❌}
 
+### Architecture Verification Results
+| Architecture Scenario | Exact Command | Outcome |
+|---|---|---|
+| {HIGH_RISK_OR_PROVIDER_SCENARIO} | `{LITERAL_COMMAND}` | PASS (exit 0) |
+
 ### Testing Checklist
 - [ ] {Test scenario 1} [type:api]
 - [ ] {Test scenario 2} [type:unit]
@@ -364,6 +353,7 @@ IMPLEMENT_RESULT:
   commits: [{SHA}, ...]
   files_changed: [{file}, ...]
   tests_changed: [{file or named scenario}, ...]
+  architecture_commands: [{exact command and outcome}, ...]
   comment_url: {url of FORGE:BUILDER comment}
   blocker: {description if status=GATED or BLOCKED}
 ```
