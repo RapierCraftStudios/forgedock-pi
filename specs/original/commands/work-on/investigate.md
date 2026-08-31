@@ -29,6 +29,21 @@ If called from `work-on`, these are passed through. If invoked standalone, `--re
 
 ---
 
+## Bounded confirmed-intake path
+
+When the issue already has a concrete Root Cause, real candidate files, Expected Behavior,
+and actionable Acceptance Criteria, first verify those claims against the current target
+and trace the production seam. If current evidence agrees, set `CONFIRMED_INTAKE=true`:
+
+- skip Phases 0.5/0.6 and the history/blame/pickaxe steps below;
+- stop broad issue/history archaeology;
+- report only current evidence, actual scope, operations, and acceptance checks;
+- finish investigation within five minutes and keep the report under 6,000 characters,
+  excluding machine-readable acceptance lines.
+
+If current evidence conflicts with intake, use the full path. This shortcut never skips
+current code, caller/adapter, companion-file, or production-seam verification.
+
 ## Phase 0.5: Memory Retrieval — Prior Run Priors <!-- Added: forge#1316 -->
 
 **Goal**: Before investigating, retrieve the top-k relevant prior pipeline runs from the per-repo memory index. Inject confirmed priors into the investigation context so the pipeline compounds intelligence across runs.
@@ -264,7 +279,7 @@ gh api repos/{GH_REPO}/issues/{NUMBER}/comments --jq '.[] | {id: .id, body: .bod
 
 **Resume logic**:
 - A comment ending `<!-- INVESTIGATION:INVALID -->` remains terminal and may be reused; no build follows it.
-- Reuse a `<!-- INVESTIGATION:COMPLETE -->` comment only when the same comment contains the current `### Production Execution Seam` section, concrete public entrypoint, production owner, mutation/no-mutation coverage, acceptance seam, and exact `Irreversible/provider side effect: YES|NO`. When `YES`, the same comment must contain a substantive Provider Transaction Proof with one row per actual mutation/fallback, including authority, exact failure scope, required readback, recovery, and its deterministic test. A legacy completion marker without this schema does not authorize build. Preserve legacy/incomplete artifacts as history and post a superseding investigation.
+- Reuse a `<!-- INVESTIGATION:COMPLETE -->` comment only when the same comment contains the current `### Production Execution Seam` section, concrete public entrypoint, production owner, mutation/no-mutation coverage, acceptance seam, and exact `Irreversible/provider side effect: YES|NO`. When `YES`, the same comment must list every actual provider operation or fallback under `### Provider Operations`. Detailed transaction proof belongs only to builder-owned architecture. A legacy completion marker without this schema does not authorize build. Preserve legacy/incomplete artifacts as history and post a superseding investigation.
 - If `<!-- FORGE:INVESTIGATOR -->` exists with neither terminal sentinel, investigation was interrupted; delete only that partial comment and restart:
   ```bash
   gh api repos/{GH_REPO}/issues/comments/{COMMENT_ID} -X DELETE
@@ -324,7 +339,7 @@ bash {REPO_PATH}/scripts/code-index.sh query --domain {DOMAIN_LABEL} --repo-path
 1. **Check the right branch** — read from the branch specified in the issue body (`**Code branch**: \`{branch}\``) if present
 2. **Read domain files** — start with the key files for the affected domain (use index query results from Step 0E as the file list; fall back to directory inspection if index is absent)
 3. **Verify claims** — does the code actually have the problem described?
-4. **Git blame** — trace when/why the relevant code was written. Run bounded, local commands (no network round-trip):
+4. **Git blame** — skip when `CONFIRMED_INTAKE=true`; otherwise trace when/why the relevant code was written. Run bounded, local commands (no network round-trip):
    ```bash
    # Introducing commit for each affected file (first commit that added it)
    git log --reverse --format='%h %an %ad %s' --date=short -- {affected_file} | head -1
@@ -334,7 +349,7 @@ bash {REPO_PATH}/scripts/code-index.sh query --domain {DOMAIN_LABEL} --repo-path
    git blame -L {start},{end} -- {affected_file}
    ```
    Record the introducing commit and last-touch commit for each primary affected file — this feeds the mandatory **History findings** field in Phase 1C.
-5. **Domain context discovery** (narrow scope only, 1–5 files):
+5. **Domain context discovery** — skip when `CONFIRMED_INTAKE=true`; otherwise use narrow scope only (1–5 files):
    ```bash
    git log --oneline --all -30 -- {affected_files} | grep -oP '#\d+' | sort -u
    gh issue list -R {GH_REPO} --state closed --limit 8 --search "{function_name}"
@@ -430,27 +445,22 @@ gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:INVESTIGATOR -->
 **Acceptance seam**: {the public command/API/runtime path the E2E check executes}
 **Irreversible/provider side effect**: {YES|NO}
 
-If `YES`, include the bounded proof below. Omit it for `NO`; ordinary local computation
-has no extra ceremony.
+If `YES`, list the actual operations once; omit this section for `NO`.
 
-### Provider Transaction Proof (MANDATORY WHEN SIDE EFFECT = YES)
-| Provider operation or fallback | Authority / preconditions | Exact call and failure scope | Required result / readback | Idempotent replay / recovery | Deterministic test |
-|---|---|---|---|---|---|
-| {ACTUAL_OPERATION} | {WHO_MAY_ACT} | {CALL_AND_ONLY_ERRORS_IT_CLASSIFIES} | {FIELDS_REQUIRED_FOR_SUCCESS} | {RECONCILIATION_AFTER_SUCCESS} | {NAMED_TEST} |
+### Provider Operations (MANDATORY WHEN SIDE EFFECT = YES)
+- `{OPERATION}` — authority: `{WHO_MAY_ACT}`; fallback from: `{NAMED_OPERATION_AND_FAILURE or NONE}`
 
-Add one row per actual provider mutation or fallback—no hypothetical rows or fixed row
-count. A fallback row names the exact failed operation that authorizes it; errors from
-other operations cannot. Authority, successful result/readback, and replay after provider
-success must be explicit. Tests are derived from the current transaction, not hardcoded
-global scenarios.
+List only operations or fallbacks that can actually occur. Detailed failure scope,
+readback, recovery, and executable scenarios are builder-owned architecture work and must
+not be duplicated here.
 
 A conceptual documentation path, exported but unwired helper, test-local fixture, mock, or
 broad suite is not a production execution seam. If the requested observable behavior is
 absent from a production owner, that owner must enter Affected Files. If this is truly a
 prompt/spec-only project, prove that the specification is itself the loaded production
-surface and that no separate executable owner exists. Any unresolved or read-only owner that controls the requested effect, or any incomplete
-required Provider Transaction Proof row, blocks `INVESTIGATION:COMPLETE` and returns for
-further investigation.
+surface and that no separate executable owner exists. Any unresolved or read-only owner
+that controls the requested effect, or a missing actual provider operation when side
+effects are `YES`, blocks `INVESTIGATION:COMPLETE` and returns for further investigation.
 
 ### Evidence
 {specific findings — function names, line numbers, behavior observed}
@@ -459,7 +469,7 @@ further investigation.
 **Introducing commit**: {hash — author — date — subject, per primary affected file}
 **Last touched**: {hash — author — date — subject}
 **Pickaxe hits (prior fixes / regressions)**: {commit(s) found via \`git log -S\`/\`-G\`, or 'None found' — max 5}
-{This field is MANDATORY — populate from the git blame + pickaxe commands in step 4/5. If a file is newly created (no history), write 'New file — no history.'}
+{On the full path, populate this from steps 4/5. For confirmed intake, write 'Skipped — current production evidence confirmed the stated root cause.' If a file is newly created, write 'New file — no history.'}
 **Prior Investigations (via recall)**: {Comma-separated issue citations from \`RECALL_ISSUE_CITATIONS\` (e.g. '#1172, #1243 — building on, not repeating'), or 'None — no Forge Ledger match above threshold' if \`RECALL_RESULTS\` was empty. Use the \`RECALL_ISSUE_CITATIONS\` variable populated in Phase 0.6.}
 
 ### Recommendation
