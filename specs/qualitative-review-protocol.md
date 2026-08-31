@@ -77,3 +77,7 @@ unchanged.
 
 Single-issue lanes with no target movement, overlap serialization, exact-head merge,
 and existing protected-branch behavior remain unchanged.
+
+## Official review publication
+
+A passing semantic review is not itself a GitHub review event. After revalidating the frozen `(head, base)` route, ForgeDock computes the exact local `merge-base` only after fetching both refs, then publishes one pinned `APPROVE` review and reads it back. If GitHub returns only its exact PR-owner self-approval rejection, the same evidence may be published once as `COMMENT`; generic provider failures never authorize fallback. The durable publication receipt records URL, actor, event, state, commit, body, and merge-base before completion. Resume reuses that receipt and never republishes. `COMMENT` is audit evidence and cannot satisfy an independent protected-branch approval.

@@ -1,6 +1,7 @@
 /// <reference types="node" />
 
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import test from "node:test";
 
@@ -573,6 +574,12 @@ test("provider retry classification includes WebSocket failures but excludes quo
     true,
   );
   assert.equal(isTransientProviderFailure("insufficient_quota billing"), false);
+});
+
+test("work-on merge boundary requires durable official review publication", async () => {
+  const source = await readFile("src/workflows/work-on.ts", "utf8");
+  assert.match(source, /sharedReview\.state\.publication/);
+  assert.match(source, /durable official publication evidence/);
 });
 
 test("terminal workflow completion is matched only by top-level run ID", () => {

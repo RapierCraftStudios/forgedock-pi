@@ -593,6 +593,19 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
   );
 });
 
+test("packaged review contracts require guarded official publication", async () => {
+  const review = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
+  const workOn = await readFile("skills/forgedock-work-on/SKILL.md", "utf8");
+  const adapter = await readFile("specs/pi-adapter.md", "utf8");
+  const protocol = await readFile("specs/qualitative-review-protocol.md", "utf8");
+  for (const document of [review, workOn, adapter, protocol]) {
+    assert.match(document, /official review publication/i);
+    assert.match(document, /COMMENT/);
+    assert.match(document, /merge-base/);
+    assert.match(document, /GATED/);
+  }
+});
+
 test("moving staging targets use a guarded refresh and fresh review identity", async () => {
   const orchestrate = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
   const workOn = await readFile("skills/forgedock-work-on/SKILL.md", "utf8");

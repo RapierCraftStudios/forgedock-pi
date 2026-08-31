@@ -5151,6 +5151,16 @@ export class ForgeWorkOnController {
     }
 
     if (
+      gate.decision === "approved" ||
+      gate.decision === "approved-with-follow-ups"
+    ) {
+      if (!sharedReview.state.publication)
+        throw new Error(
+          "Review passed without durable official publication evidence; merge is gated.",
+        );
+    }
+
+    if (
       gate.decision !== "approved" &&
       gate.decision !== "approved-with-follow-ups"
     ) {

@@ -87,5 +87,8 @@ synthesize or merge.
 
 Operational timeout/provider failure leaves the issue in an automated review-degraded
 or `workflow:in-review` state, not `needs-human`. Reserve `needs-human` for a genuine
-human authority decision or unavoidable external action. Pi receipts prove execution
+human authority decision or unavoidable external action.
+
+### Official review publication
+After semantic approval, the coordinator freezes head/base and the locally computed merge-base, then publishes one pinned `APPROVE` review and reads it back. Only GitHub's exact PR-owner self-approval rejection permits one identical pinned `COMMENT`; all other provider failures remain gated. Persist the URL, event, actor, state, commit, body, and merge-base before completion. Resume must reuse the receipt and must never publish a duplicate. COMMENT is not an independent protected-branch approval. Pi receipts prove execution
 only; recover the complete saved result or fail closed rather than claiming completion.

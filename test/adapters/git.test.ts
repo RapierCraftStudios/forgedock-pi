@@ -54,6 +54,24 @@ async function git(cwd: string, ...args: string[]): Promise<void> {
   await execFileAsync("git", args, { cwd, encoding: "utf8" });
 }
 
+test("fresh checkout fetches review head before merge-base", async () => {
+  const calls: string[][] = [];
+  const manager = new GitWorktreeManager({
+    async exec(command, args) {
+      calls.push([command, ...args]);
+      if (args[0] === "fetch") return { stdout: "", stderr: "", code: 0 };
+      if (args[0] === "merge-base") return { stdout: "merge-base-sha\n", stderr: "", code: 0 };
+      throw new Error(`unexpected command ${args.join(" ")}`);
+    },
+  });
+  await manager.fetchRefs("/repo", ["feature/review", "staging"]);
+  assert.equal(await manager.mergeBase("/repo", "base-sha", "head-sha"), "merge-base-sha");
+  assert.deepEqual(calls, [
+    ["git", "fetch", "--no-tags", "origin", "feature/review", "staging"],
+    ["git", "merge-base", "base-sha", "head-sha"],
+  ]);
+});
+
 test("NUL-delimited changed paths retain rename sources, destinations, and deletions", () => {
   assert.deepEqual(
     parseChangedGitPaths("R100\0src/old.ts\0src/new.ts\0D\0src/gone.ts\0"),
