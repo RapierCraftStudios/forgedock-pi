@@ -44,7 +44,10 @@ For non-trivial work, implementation cannot begin without a same-issue
 row and closing every requested observable effect. A discovered production caller/adapter that owns the effect
 cannot remain read-only or outside Deliverables without exact source proof that no
 mutation is needed. Test-local fixtures, mocks, unwired exports, and prose do not count as
-production implementation. When investigation marks an irreversible/provider side
+production implementation. Every HIGH architecture risk must have a CLOSED verification
+row with a concrete failure scenario and named executable test, using discriminating identity values or complete durable-
+state transition sequence, and a named executable regression. No HIGH risks means no
+extra table. When investigation marks an irreversible/provider side
 effect, architecture owns the only Provider Transaction Proof. Each actual
 operation/fallback/replay scenario and each HIGH Risk Assessment row names an exact
 executable command. Run those commands and record command plus passing outcome in the
