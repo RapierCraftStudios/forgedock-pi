@@ -96,6 +96,25 @@ export interface MergeResult {
   message: string;
 }
 
+export type GitHubReviewEvent = "APPROVE" | "COMMENT";
+
+export interface GitHubReviewPublication {
+  id: number;
+  url: string;
+  actor: string;
+  event: GitHubReviewEvent;
+  state: string;
+  commitId: string;
+  body: string;
+}
+
+export interface PublishPullRequestReviewInput {
+  pullNumber: number;
+  commitId: string;
+  body: string;
+  signal?: AbortSignal;
+}
+
 export interface GitHubCiCheck {
   name: string;
   required: boolean;
@@ -155,6 +174,16 @@ interface GitRefApiResponse {
 interface CommentApiResponse {
   id: number;
   body: string;
+}
+
+interface ReviewApiResponse {
+  id: number;
+  html_url?: string;
+  user?: { login?: string } | null;
+  state?: string;
+  body?: string | null;
+  commit_id?: string;
+  event?: string;
 }
 
 interface CheckRunsApiResponse {
@@ -853,6 +882,85 @@ export class GitHubWorkflowAdapter {
     }
   }
 
+  /**
+   * Publish one official review after the semantic gate has passed. GitHub
+   * rejects self-approval; only its exact owner-only rejection permits the
+   * equivalent COMMENT evidence, never any other provider failure.
+   */
+  async publishPullRequestReview(
+    input: PublishPullRequestReviewInput,
+  ): Promise<GitHubReviewPublication> {
+    assertNumber(input.pullNumber, "pull request");
+    assertNonEmptyRefOrSha(input.commitId, "review commit");
+    if (!input.body.trim()) throw new TypeError("Review body is required.");
+    const path = `${this.#apiRoot}/pulls/${input.pullNumber}/reviews`;
+    const approve = await this.#transport.request<ReviewApiResponse>({
+      method: "POST",
+      path,
+      body: { body: input.body, event: "APPROVE", commit_id: input.commitId },
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
+    let event: GitHubReviewEvent = "APPROVE";
+    let created: ReviewApiResponse;
+    if (approve.status >= 200 && approve.status < 300) {
+      created = approve.data;
+    } else if (isExactOwnerSelfApprovalRejection(approve)) {
+      const fallback = await this.#transport.request<ReviewApiResponse>({
+        method: "POST",
+        path,
+        body: { body: input.body, event: "COMMENT", commit_id: input.commitId },
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+      created = requireGitHubSuccess(fallback, path, [201]);
+      event = "COMMENT";
+    } else {
+      throw new GitHubApiError(approve.status, path, approve.data);
+    }
+    return this.#readBackReview(
+      input.pullNumber,
+      input.commitId,
+      input.body,
+      event,
+      created,
+      input.signal,
+    );
+  }
+
+  async #readBackReview(
+    pullNumber: number,
+    commitId: string,
+    body: string,
+    event: GitHubReviewEvent,
+    created: ReviewApiResponse,
+    signal?: AbortSignal,
+  ): Promise<GitHubReviewPublication> {
+    if (!Number.isSafeInteger(created?.id) || created.id < 1)
+      throw new GitHubApiError(422, `${this.#apiRoot}/pulls/${pullNumber}/reviews`, { message: "Review creation response lacked an id." });
+    const readPath = `${this.#apiRoot}/pulls/${pullNumber}/reviews/${created.id}`;
+    const response = await this.#transport.request<ReviewApiResponse>({
+      method: "GET",
+      path: readPath,
+      ...(signal ? { signal } : {}),
+    });
+    const review = requireGitHubSuccess(response, readPath, [200]);
+    const actor = review.user?.login;
+    const state = review.state;
+    const actualBody = review.body ?? "";
+    const actualCommit = review.commit_id;
+    if (
+      review.id !== created.id ||
+      typeof review.html_url !== "string" ||
+      !review.html_url.trim() ||
+      typeof actor !== "string" ||
+      !actor.trim() ||
+      typeof state !== "string" ||
+      actualCommit !== commitId ||
+      actualBody !== body
+    )
+      throw new GitHubApiError(422, readPath, { message: "Review read-back did not match the requested frozen evidence." });
+    return { id: review.id, url: review.html_url, actor, event, state, commitId, body };
+  }
+
   async mergePullRequest(input: {
     pullNumber: number;
     expectedHeadSha?: string;
@@ -1349,6 +1457,16 @@ function assertPullRequestRouteSnapshot(
   throw new GitHubApiError(409, `${apiRoot}/pulls/${snapshot.pullNumber}`, {
     message: `Pull request route changed after review: ${mismatches.join(", ")}`,
   });
+}
+
+function isExactOwnerSelfApprovalRejection(
+  response: { status: number; data: unknown },
+): boolean {
+  if (response.status !== 422 || !response.data || typeof response.data !== "object")
+    return false;
+  const message = (response.data as { message?: unknown }).message;
+  return typeof message === "string" &&
+    /^(?:can(?:not|'t| not) approve your own pull request|cannot approve your own pull request)\.?$/i.test(message.trim());
 }
 
 function normalizePull(pull: PullApiResponse): GitHubPullRequestData {

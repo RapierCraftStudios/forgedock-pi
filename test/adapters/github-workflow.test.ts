@@ -60,6 +60,68 @@ function common(request: GitHubRequest): GitHubResponse<unknown> | undefined {
   return undefined;
 }
 
+test("only exact owner self-approval rejection permits COMMENT fallback", async () => {
+  const requests: GitHubRequest[] = [];
+  const transport = new MockTransport((request) => {
+    requests.push(request);
+    if (request.method === "POST" && (request.body as { event: string }).event === "APPROVE")
+      return response(422, { message: "Can not approve your own pull request" });
+    if (request.method === "POST")
+      return response(201, { id: 17 });
+    return response(200, {
+      id: 17,
+      html_url: "https://example.test/reviews/17",
+      user: { login: "owner" },
+      state: "COMMENTED",
+      commit_id: "head-sha",
+      body: "semantic evidence",
+    });
+  });
+  const publication = await new GitHubWorkflowAdapter(transport, "owner/repo").publishPullRequestReview({
+    pullNumber: 7,
+    commitId: "head-sha",
+    body: "semantic evidence",
+  });
+  assert.equal(publication.event, "COMMENT");
+  assert.deepEqual((requests[1]?.body as { event: string }).event, "COMMENT");
+  assert.equal(requests.length, 3);
+});
+
+test("COMMENT readback preserves semantic approval and frozen evidence", async () => {
+  const transport = new MockTransport((request) => {
+    if (request.method === "POST") return response(201, { id: 18 });
+    return response(200, {
+      id: 18,
+      html_url: "https://example.test/reviews/18",
+      user: { login: "owner" },
+      state: "APPROVED",
+      commit_id: "head-sha",
+      body: "semantic evidence\\nhead=head-sha base=base-sha finding=F-1",
+    });
+  });
+  const publication = await new GitHubWorkflowAdapter(transport, "owner/repo").publishPullRequestReview({
+    pullNumber: 7,
+    commitId: "head-sha",
+    body: "semantic evidence\\nhead=head-sha base=base-sha finding=F-1",
+  });
+  assert.equal(publication.commitId, "head-sha");
+  assert.match(publication.body, /base=base-sha/);
+  assert.equal(publication.state, "APPROVED");
+});
+
+test("generic provider failures never trigger COMMENT fallback", async () => {
+  let posts = 0;
+  const transport = new MockTransport((request) => {
+    if (request.method === "POST") { posts += 1; return response(500, { message: "server unavailable" }); }
+    return response(500, { message: "unexpected" });
+  });
+  await assert.rejects(
+    () => new GitHubWorkflowAdapter(transport, "owner/repo").publishPullRequestReview({ pullNumber: 7, commitId: "head-sha", body: "evidence" }),
+    /GitHub API 500/,
+  );
+  assert.equal(posts, 1);
+});
+
 test("PR lookup qualifies and exactly matches the bound head branch", async () => {
   const transport = new MockTransport((request) => {
     assert.match(request.path, /head=owner%3Aforge%2Fissue-2&per_page=20$/);

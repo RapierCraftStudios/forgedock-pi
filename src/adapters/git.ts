@@ -330,6 +330,26 @@ export class GitWorktreeManager {
   }
 
   /** Return Git's exact ancestry answer; provider/command errors fail closed. */
+  /** Compute the exact common ancestor after callers have prepared frozen refs. */
+  async mergeBase(
+    repositoryRoot: string,
+    baseSha: string,
+    headSha: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    if (!baseSha.trim() || !headSha.trim())
+      throw new TypeError("Commit SHAs are required for merge-base.");
+    const result = await this.#git(
+      repositoryRoot,
+      ["merge-base", baseSha, headSha],
+      30_000,
+      signal,
+    );
+    const mergeBase = result.stdout.trim();
+    if (!mergeBase) throw new Error("Git returned an empty merge-base.");
+    return mergeBase;
+  }
+
   async isAncestor(
     repositoryRoot: string,
     ancestorSha: string,

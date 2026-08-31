@@ -247,3 +247,11 @@ receipts, and join a fresh complete read-only reviewer panel. Pre-refresh result
 authorize merge. Direct Git must never reset or overwrite another lane; protected
 `staging → main` rules and genuine human-authority handling remain unchanged. The
 shared contract is `specs/qualitative-review-protocol.md`.
+
+## Official review publication mapping
+The runtime maps a semantic passing review to one pinned GitHub `APPROVE` with the
+frozen head commit and reads back its identity. Only the exact GitHub rejection for an
+actor approving their own pull request permits one identical `COMMENT` publication.
+Other 4xx/5xx responses, stale or malformed readback, and transport ambiguity remain
+GATED. The durable review receipt includes URL, actor, event, state, commit, body, and
+merge-base; COMMENT never impersonates protected-branch approval.

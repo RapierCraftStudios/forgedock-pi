@@ -132,6 +132,7 @@ class GitHubFake {
     labels: readonly string[];
   }> = [];
   readonly mergeInputs: unknown[] = [];
+  readonly publications: unknown[] = [];
   merged = false;
   failMerge = false;
   revalidateCalls = 0;
@@ -221,6 +222,19 @@ class GitHubFake {
     return issue;
   }
 
+  async publishPullRequestReview(input: { pullNumber: number; commitId: string; body: string }) {
+    this.publications.push(input);
+    return {
+      id: this.publications.length,
+      url: `https://example.test/pulls/${input.pullNumber}#review-${this.publications.length}`,
+      actor: "fixture-owner",
+      event: "COMMENT" as const,
+      state: "COMMENTED",
+      commitId: input.commitId,
+      body: input.body,
+    };
+  }
+
   async mergePullRequest(input: unknown) {
     this.mergeInputs.push(input);
     if (this.failMerge) throw new Error("simulated merge transport failure");
@@ -257,6 +271,12 @@ class GitFake {
 
   async head(_worktreePath: string): Promise<string> {
     return this.headSha;
+  }
+
+  async fetchRefs(): Promise<void> {}
+
+  async mergeBase(): Promise<string> {
+    return "merge-base-sha";
   }
 
   async cleanupReview(prepared: PreparedReviewWorktree): Promise<void> {
@@ -383,6 +403,55 @@ function gateArtifacts(h: ReturnType<typeof harness>) {
   );
 }
 
+test("public review owner fallback returns durable pinned review URL", async () => {
+  const h = harness();
+  const result = await h.coordinator.review(request());
+  assert.equal(result.publication?.event, "COMMENT");
+  assert.match(result.publication?.url ?? "", /^https:\/\/example\.test/);
+  assert.equal(h.github.publications.length, 1);
+});
+
+test("non-protected exact-head owner fallback remains mergeable", async () => {
+  const h = harness();
+  const result = await h.coordinator.review(request({ autoMergeRequested: true }));
+  assert.equal(result.merged, true);
+  assert.equal(h.github.mergeInputs.length, 1);
+  assert.equal(result.publication?.commitId, route.headSha);
+});
+
+test("COMMENT cannot satisfy independent protected approval", async () => {
+  const h = harness();
+  const result = await h.coordinator.review(request({
+    protectedBranches: ["main"],
+    autoMergeAuthorized: false,
+    autoMergeRequested: false,
+  }));
+  assert.notEqual(result.decision.decision, "approved");
+  assert.equal(result.publication, undefined);
+  assert.equal(h.github.publications.length, 0);
+});
+
+test("review publication remains fail closed before semantic approval", async () => {
+  const h = harness({ results: [] });
+  await assert.rejects(() => h.coordinator.review(request()), /incomplete roster/);
+  assert.equal(h.github.publications.length, 0);
+});
+
+test("AlterLab 33394 33392 owner review regressions", async () => {
+  const h = harness();
+  const result = await h.coordinator.review(request());
+  assert.equal(result.publication?.event, "COMMENT");
+  assert.equal(result.merged, false);
+});
+
+test("published review replay never posts a second provider review", async () => {
+  const h = harness();
+  await h.coordinator.review(request());
+  const result = await h.coordinator.review(request());
+  assert.equal(result.state.status, "completed");
+  assert.equal(h.github.publications.length, 1);
+});
+
 function sameRoute(
   left: GitHubPullRequestRouteSnapshot,
   right: GitHubPullRequestRouteSnapshot,
@@ -419,6 +488,7 @@ test("clean standalone review posts route, reviewer, and summary and completes r
       "review.panel-completed",
       "review.verdict-recorded",
       "review.gate-recorded",
+      "review.publication-recorded",
       "review.completed",
     ],
   );

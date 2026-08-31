@@ -84,6 +84,16 @@ export interface ReviewGate {
   reasons: readonly string[];
 }
 
+export interface ReviewPublication {
+  id: number;
+  url: string;
+  actor: string;
+  event: "APPROVE" | "COMMENT";
+  state: string;
+  commitId: string;
+  body: string;
+}
+
 export interface MergeAuthorization {
   authorized: boolean;
   headSha: string;
@@ -126,6 +136,8 @@ export interface ReviewState {
   reviewerResults?: Readonly<Record<string, Record<string, unknown>>>;
   verdict?: ReviewVerdict;
   gate?: ReviewGate;
+  mergeBaseSha?: string;
+  publication?: ReviewPublication;
   mergeAuthorization?: MergeAuthorization;
   completion?: ReviewCompletion;
   status: ReviewStatus;
@@ -154,6 +166,8 @@ export type ReviewEventType =
   | "review.verdict.recorded"
   | "review.gate-recorded"
   | "review.gate.recorded"
+  | "review.publication-recorded"
+  | "review.publication.recorded"
   | "review.merge-authorized"
   | "review.merge.authorization"
   | "review.completed"
@@ -202,6 +216,11 @@ export interface ReviewVerdictRecordedPayload extends ReviewVerdict {
 export interface ReviewGateRecordedPayload extends ReviewGate {
   round: number;
 }
+export interface ReviewPublicationRecordedPayload {
+  round: number;
+  mergeBaseSha: string;
+  publication: ReviewPublication;
+}
 export interface ReviewMergeAuthorizedPayload extends MergeAuthorization {
   round: number;
 }
@@ -219,6 +238,7 @@ export type ReviewEventPayload =
   | ReviewFindingsRecordedPayload
   | ReviewVerdictRecordedPayload
   | ReviewGateRecordedPayload
+  | ReviewPublicationRecordedPayload
   | ReviewMergeAuthorizedPayload
   | ReviewCompletedPayload
   | ReviewCancelledPayload
@@ -373,6 +393,10 @@ export function applyReviewEvent(
     case "review.gate.recorded":
       applyGate(state, event);
       break;
+    case "review.publication-recorded":
+    case "review.publication.recorded":
+      applyPublication(state, event);
+      break;
     case "review.merge-authorized":
     case "review.merge.authorization":
       applyMergeAuthorization(state, event);
@@ -472,6 +496,16 @@ export function validateReviewState(value: unknown): asserts value is ReviewStat
       throw new ReviewTransitionError("invalid-snapshot", "Gate identity does not match the frozen route.");
     if (state.verdict && gate.decision !== state.verdict.decision)
       throw new ReviewTransitionError("invalid-snapshot", "Gate decision does not match the verdict.");
+  }
+  if (state.mergeBaseSha !== undefined)
+    requiredString(state.mergeBaseSha, "mergeBaseSha");
+  if (state.publication !== undefined) {
+    // SAFETY: validatePublication performs the runtime shape check for this persisted JSON record.
+    const publication = validatePublication(state.publication as unknown as Record<string, unknown>);
+    if (!state.gate?.passed || publication.commitId !== state.headSha)
+      throw new ReviewTransitionError("invalid-snapshot", "Publication requires a passed gate and frozen head.");
+    if (state.mergeBaseSha === undefined)
+      throw new ReviewTransitionError("invalid-snapshot", "Publication requires a frozen merge base.");
   }
   if (state.mergeAuthorization !== undefined) {
     // SAFETY: validateMergeAuthorization only reads Record<string, unknown> fields
@@ -644,6 +678,8 @@ function cloneState(state: ReviewState): ReviewState {
     ...(state.gate
       ? { gate: { ...state.gate, reasons: [...state.gate.reasons] } }
       : {}),
+    ...(state.mergeBaseSha ? { mergeBaseSha: state.mergeBaseSha } : {}),
+    ...(state.publication ? { publication: { ...state.publication } } : {}),
     ...(state.mergeAuthorization ? { mergeAuthorization: { ...state.mergeAuthorization } } : {}),
     ...(state.completion ? { completion: { ...state.completion } } : {}),
     idempotencyKeys: Object.assign(Object.create(null), state.idempotencyKeys),
@@ -790,6 +826,24 @@ function applyGate(state: ReviewState, event: ReviewEvent): void {
   delete state.mergeAuthorization;
 }
 
+function applyPublication(state: ReviewState, event: ReviewEvent): void {
+  const panel = requireCompletedPanel(state);
+  assertEventRound(event, panel.round);
+  if (!state.gate?.passed)
+    throw new ReviewTransitionError("gate-blocked", "Review publication requires a passed semantic gate.");
+  if (state.publication)
+    throw new ReviewTransitionError("duplicate-publication", "A review publication is already recorded.");
+  // SAFETY: publication payload is validated immediately below before use.
+  const data = payload(event) as unknown as ReviewPublicationRecordedPayload;
+  const mergeBaseSha = requiredString(data.mergeBaseSha, "mergeBaseSha");
+  // SAFETY: validatePublication performs the runtime shape check for this event payload.
+  const publication = validatePublication(data.publication as unknown as Record<string, unknown>);
+  if (publication.commitId !== state.headSha)
+    throw new ReviewTransitionError("stale-head", "Review publication commit does not match frozen head.");
+  state.mergeBaseSha = mergeBaseSha;
+  state.publication = publication;
+}
+
 function applyMergeAuthorization(state: ReviewState, event: ReviewEvent): void {
   const panel = requireCompletedPanel(state);
   assertEventRound(event, panel.round);
@@ -837,6 +891,8 @@ function clearTerminalDecisions(state: ReviewState): void {
   delete state.mergeAuthorization;
   delete state.completion;
   delete state.reviewerResults;
+  delete state.mergeBaseSha;
+  delete state.publication;
 }
 
 function requirePanel(state: ReviewState): ReviewPanel {
@@ -1073,6 +1129,24 @@ function validateGate(value: Record<string, unknown>): ReviewGate {
   };
 }
 
+function validatePublication(value: Record<string, unknown>): ReviewPublication {
+  const id = value.id;
+  if (!Number.isSafeInteger(id) || (id as number) < 1)
+    throw new ReviewTransitionError("invalid-publication", "publication.id must be a positive integer.");
+  const event = value.event;
+  if (event !== "APPROVE" && event !== "COMMENT")
+    throw new ReviewTransitionError("invalid-publication", "publication.event is unsupported.");
+  return {
+    id: id as number,
+    url: requiredString(value.url, "publication.url"),
+    actor: requiredString(value.actor, "publication.actor"),
+    event,
+    state: requiredString(value.state, "publication.state"),
+    commitId: requiredString(value.commitId, "publication.commitId"),
+    body: requiredString(value.body, "publication.body"),
+  };
+}
+
 function validateMergeAuthorization(value: Record<string, unknown>): MergeAuthorization {
   if (typeof value.authorized !== "boolean")
     throw new ReviewTransitionError("invalid-merge-authorization", "authorized must be boolean.");
@@ -1163,6 +1237,8 @@ const REVIEW_EVENT_TYPES: ReadonlySet<ReviewEventType> = new Set([
   "review.verdict.recorded",
   "review.gate-recorded",
   "review.gate.recorded",
+  "review.publication-recorded",
+  "review.publication.recorded",
   "review.merge-authorized",
   "review.merge.authorization",
   "review.completed",

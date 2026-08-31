@@ -223,3 +223,10 @@ affected verification and acceptance check, freeze the refreshed exact
 approvals, and launch a fresh complete qualitative review. Do not repeat investigation,
 expand the Builder Contract, weaken protected-branch rules, or classify mechanical
 refresh failures as `needs-human`. See `specs/qualitative-review-protocol.md`.
+
+## Official review publication
+A passing shared review must include a durable official publication receipt before the
+merge boundary. Publish pinned `APPROVE`, and permit one identical pinned `COMMENT` only
+for GitHub's exact PR-owner self-approval rejection. COMMENT preserves semantic evidence
+but never satisfies independent approval required by protected branch policy; protected
+routes remain gated.

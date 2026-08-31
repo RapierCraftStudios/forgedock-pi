@@ -18,6 +18,7 @@ import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import {
   GitHubWorkflowAdapter,
   type GitHubPullRequestRouteSnapshot,
+  type GitHubReviewPublication,
   type MergeResult,
 } from "../adapters/github-workflow.ts";
 import { ReviewJournal } from "../adapters/review-journal.ts";
@@ -112,6 +113,7 @@ export interface ReviewPrResult {
   findings: readonly ForgeReviewFindingResult[];
   checks: readonly VerificationResult[];
   findingIssues: Readonly<Record<string, number>>;
+  publication?: GitHubReviewPublication;
   merged: boolean;
   mergeSha?: string;
   /** Machine-readable bundle derivation consumed by open-finding/Phase 6.5 gates. */
@@ -466,6 +468,33 @@ export class ReviewPrCoordinator {
         body: renderReviewSummary(decision, forgeFindings, findingIssues),
         ...(input.signal ? { signal: input.signal } : {}),
       });
+      let publication: GitHubReviewPublication | undefined;
+      if (passed && !snapshot.state.publication) {
+        const mergeBase = await this.#mergeBaseForReview(input, route, worktreePath);
+        const publish = this.#github.publishPullRequestReview;
+        if (typeof publish !== "function")
+          throw new Error("Review adapter cannot publish the required official review.");
+        publication = await publish.call(this.#github, {
+          pullNumber: route.pullNumber,
+          commitId: route.headSha,
+          body: renderOfficialReviewBody(decision, route, snapshot.state.checks, forgeFindings, findingIssues),
+          ...(input.signal ? { signal: input.signal } : {}),
+        });
+        snapshot = await this.#journal.append({
+          reviewId: input.reviewId,
+          type: "review.publication-recorded",
+          payload: {
+            round: requirePanelRound(snapshot.state),
+            mergeBaseSha: mergeBase,
+            publication,
+          },
+          idempotencyKey: "review:publication",
+          message: `Record official review publication for ${input.reviewId}`,
+          ...(input.signal ? { signal: input.signal } : {}),
+        });
+      } else if (snapshot.state.publication) {
+        publication = snapshot.state.publication;
+      }
       if (mode === "staging") {
         const marker = passed
           ? `<!-- FORGE:GATE_PASS id=${input.reviewId} head=${route.headSha} -->`
@@ -528,6 +557,7 @@ export class ReviewPrCoordinator {
         findings: forgeFindings,
         checks: snapshot.state.checks,
         findingIssues,
+        ...(publication ? { publication } : {}),
         merged: Boolean(merge),
         ...(merge ? { mergeSha: merge.sha } : {}),
         ...(stagingBundle ? { stagingBundle } : {}),
@@ -535,6 +565,23 @@ export class ReviewPrCoordinator {
     } finally {
       if (prepared) await this.#git.cleanupReview(prepared, input.signal);
     }
+  }
+
+  async #mergeBaseForReview(
+    input: ReviewPrRequest,
+    route: GitHubPullRequestRouteSnapshot,
+    worktreePath: string,
+  ): Promise<string> {
+    // SAFETY: the production GitWorktreeManager implements both methods; optional
+    // access keeps lightweight test doubles compatible while failing closed in production.
+    const git = this.#git as unknown as {
+      fetchRefs?: (root: string, refs: readonly string[], signal?: AbortSignal) => Promise<void>;
+      mergeBase?: (root: string, base: string, head: string, signal?: AbortSignal) => Promise<string>;
+    };
+    await git.fetchRefs?.(worktreePath, [route.baseRef, route.headRef], input.signal);
+    if (!git.mergeBase)
+      throw new Error("Review Git adapter cannot compute the required merge base.");
+    return git.mergeBase(worktreePath, route.baseSha, route.headSha, input.signal);
   }
 
   async cancel(
@@ -1227,6 +1274,27 @@ function normalizeGitHubChecks(
   }));
 }
 
+function renderOfficialReviewBody(
+  decision: FinalReviewDecision,
+  route: GitHubPullRequestRouteSnapshot,
+  checks: readonly VerificationResult[],
+  findings: readonly ForgeReviewFindingResult[],
+  findingIssues: Readonly<Record<string, number>>,
+): string {
+  const checkSummary = checks.map((check) => `${check.name}=${check.status}`).join(", ") || "none";
+  const findingIds = findings.map((finding) => finding.id).join(", ") || "none";
+  return [
+    "ForgeDock semantic review: APPROVED",
+    `Frozen head: ${route.headSha}`,
+    `Frozen base: ${route.baseSha}`,
+    `Coverage: ${checkSummary}`,
+    `Finding IDs: ${findingIds}`,
+    `Finding issues: ${Object.keys(findingIssues).length ? Object.entries(findingIssues).map(([id, issue]) => `${id}=#${issue}`).join(", ") : "none"}`,
+    `Decision: ${decision.decision}`,
+    `Reasons: ${decision.reasons.join("; ") || "none"}`,
+  ].join("\\n");
+}
+
 function completedResult(
   state: ReviewState,
   route: GitHubPullRequestRouteSnapshot,
@@ -1252,6 +1320,7 @@ function completedResult(
     findings: state.findings as readonly ForgeReviewFindingResult[],
     checks: state.checks,
     findingIssues: {},
+    ...(state.publication ? { publication: state.publication } : {}),
     merged: state.completion.outcome === "merged",
     ...(merge ? { mergeSha: merge.sha } : {}),
   };

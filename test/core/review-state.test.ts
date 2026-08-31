@@ -56,6 +56,50 @@ function created(): ReviewState {
   );
 }
 
+function approvedWithPublication(): { state: ReviewState; events: ReviewEvent[] } {
+  const genesis = next(undefined, "review.created", {
+    pullNumber: 9,
+    issueNumber: 7,
+    mode: "staging",
+    headRef: "forge/7",
+    headSha: "head-sha",
+    baseRef: "staging",
+    baseSha: "base-sha",
+    roster: { version: "roster-v1", reviewers: ["correctness", "security"] },
+    route: "staging-review",
+  }, "create");
+  let state = applyReviewEvent(undefined, genesis);
+  const events: ReviewEvent[] = [genesis];
+  for (const [type, payload, key] of [
+    ["review.panel-started", { round: 1 }, "panel-start"],
+    ["review.findings-recorded", { round: 1, findings: [], reviewerResults: {} }, "findings"],
+    ["review.panel-completed", { round: 1, completedReviewers: ["correctness", "security"] }, "panel-complete"],
+    ["review.verdict-recorded", { round: 1, decision: "approved", headSha: "head-sha", baseSha: "base-sha", reasons: [], blockingFindingIds: [], followUpFindingIds: [] }, "verdict"],
+    ["review.gate-recorded", { round: 1, decision: "approved", passed: true, headSha: "head-sha", baseSha: "base-sha", reasons: [] }, "gate"],
+    ["review.publication-recorded", { round: 1, mergeBaseSha: "merge-base-sha", publication: { id: 42, url: "https://example.test/reviews/42", actor: "owner", event: "COMMENT", state: "COMMENTED", commitId: "head-sha", body: "ForgeDock semantic review: APPROVED" } }, "publication"],
+  ] as const) {
+    const event = next(state, type as ReviewEventType, payload, key);
+    events.push(event);
+    state = applyReviewEvent(state, event);
+  }
+  return { state, events };
+}
+
+test("public review preserves distinct base and merge-base through replay", () => {
+  const { state, events } = approvedWithPublication();
+  const replayed = replayReviewEvents(events);
+  assert.equal(state.baseSha, "base-sha");
+  assert.equal(state.mergeBaseSha, "merge-base-sha");
+  assert.equal(replayed.mergeBaseSha, "merge-base-sha");
+  assert.equal(replayed.publication?.url, "https://example.test/reviews/42");
+});
+
+test("reviewer receipts survive publication completion and replay", () => {
+  const { state, events } = approvedWithPublication();
+  assert.equal(state.publication?.commitId, state.headSha);
+  assert.equal(replayReviewEvents(events).publication?.event, "COMMENT");
+});
+
 test("standalone review replay freezes identity and roster through terminal authorization", () => {
   const events: ReviewEvent[] = [];
   let state = created();
