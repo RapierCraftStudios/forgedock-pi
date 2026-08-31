@@ -124,6 +124,14 @@ owner of the requested behavior is omitted, marked read-only without source proo
 represented only by a test-local fixture/mock, return automated `GATED` to investigation
 before the first source mutation.
 
+If the architecture contains any HIGH Risk Assessment row, require exactly one
+substantive HIGH-Risk Verification row per HIGH risk and `**HIGH-risk gate**: CLOSED`
+before I3. Reject placeholder rows. Identity-risk rows must use distinct values for fields
+that could be conflated; durable-state rows must name the full transition/replay sequence.
+Before staging, run every named test, record its passing-after result, and include the
+row-to-test mapping in the Builder report. A missing or failing row is `GATED`. If there
+are no HIGH risks, no extra table is required.
+
 Before staging, run every exact command in HIGH Risk Assessment rows and, for provider
 work, every command in the single Provider Transaction Proof. Record each literal command
 and outcome in the Builder report. A missing command or nonzero result is `GATED`.
@@ -282,6 +290,32 @@ git fetch origin
 git log --oneline origin/{PR_BASE}..HEAD -- {MIGRATION_PATHS}
 ```
 If a collision is detected, post evidence and return automated `GATED` before staging; do not add `needs-human`.
+
+Run every named HIGH-risk verification command before staging. The architecture table's
+fourth column is the exact command; execute each row once and retain the literal command
+and outcome for the Builder report. This is the passing-after proof (the architecture's
+failing-before field records the pre-patch reproduction when safe):
+```bash
+HIGH_RISK_RESULTS=""
+HIGH_RISKS=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### Risk Assessment/{p=1;next} /^### /{p=0} p' | grep -E '\|[[:space:]]*HIGH[[:space:]]*\|' || true)
+if [ -n "$HIGH_RISKS" ]; then
+  printf '%s' "$ARCHITECT_BODY" | grep -qF '**HIGH-risk gate**: CLOSED' || { echo "IMPLEMENT_RESULT: status: GATED blocker: HIGH-risk gate is not closed"; exit 1; }
+fi
+HIGH_PROOF_ROWS=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### HIGH-Risk Verification/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||^\| HIGH Risk \|' || true)
+if [ -n "$HIGH_RISKS" ]; then
+  RISK_COUNT=$(printf '%s\n' "$HIGH_RISKS" | grep -c '^|' || true)
+  PROOF_COUNT=$(printf '%s\n' "$HIGH_PROOF_ROWS" | grep -c '^|' || true)
+  [ "$RISK_COUNT" -eq "$PROOF_COUNT" ] && [ "$PROOF_COUNT" -gt 0 ] || { echo "IMPLEMENT_RESULT: status: GATED blocker: every HIGH risk requires exactly one verification row"; exit 1; }
+  ! printf '%s\n' "$HIGH_PROOF_ROWS" | grep -Eqi '\{[^}]*\}|\b(TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|[[:space:]]*\|' || { echo "IMPLEMENT_RESULT: status: GATED blocker: HIGH-risk verification row is empty or placeholder"; exit 1; }
+fi
+while IFS= read -r proof_row; do
+  [ -z "$proof_row" ] && continue
+  HIGH_TEST=$(printf '%s' "$proof_row" | awk -F'|' '{print $5}' | sed 's/^ *//; s/ *$//' | tr -d '`')
+  [ -n "$HIGH_TEST" ] || { echo "IMPLEMENT_RESULT: status: GATED blocker: HIGH-risk verification command missing"; exit 1; }
+  eval "$HIGH_TEST" >/dev/null 2>&1 || { echo "IMPLEMENT_RESULT: status: GATED blocker: HIGH-risk verification failed: $HIGH_TEST"; exit 1; }
+  HIGH_RISK_RESULTS="${HIGH_RISK_RESULTS}${HIGH_TEST} — PASS (exit 0)\n"
+done <<< "$HIGH_PROOF_ROWS"
+```
 
 Stage the changed files:
 ```bash

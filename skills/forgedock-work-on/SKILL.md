@@ -68,8 +68,11 @@ evidence instead of repeating it.
 Every executable production owner of the requested effect must be a deliverable unless exact source
 evidence proves it already performs the behavior. A related/read-only owner, test-local
 fixture/mock, unwired export, or prose path cannot substitute for production wiring. For
-bug fixes, include a safe failing-before command when one is deterministic. Investigation
-classifies provider side effects and lists actual operations once; the coordinator must
+bug fixes, include a safe failing-before command when one is deterministic. For every HIGH
+architecture risk, require one closed verification row with its failure scenario,
+discriminating inputs or full durable-state sequence, and named executable test; omit this
+table when no HIGH risks exist. Investigation classifies provider side effects and lists
+actual operations once; the coordinator must
 not generate architecture, provider proof, or risk matrices before fresh builder launch.
 When running under orchestration, post the
 finalized affected-file `FORGE:CLAIM` on the coordination issue; standalone work-on has
