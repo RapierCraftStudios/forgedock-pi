@@ -387,6 +387,35 @@ test("production ownership artifact rules reject stale and placeholder authority
   assert.equal(closedOwnership(closedRow), true);
 });
 
+test("provider side effects require a bounded transaction proof", async () => {
+  const contracts = await Promise.all(
+    [
+      "specs/original/commands/work-on/investigate.md",
+      "specs/original/commands/work-on/build.md",
+      "specs/original/commands/work-on/build/architect.md",
+      "specs/original/commands/work-on/build/implement.md",
+      "agents/forgedock-builder.md",
+      "skills/forgedock-work-on/SKILL.md",
+    ].map((path) => readFile(path, "utf8")),
+  );
+
+  for (const contract of contracts) {
+    assert.match(contract, /Provider Transaction Proof|provider transaction proof/i);
+    assert.match(contract, /authority|who may act/i);
+    assert.match(contract, /exact call|exact operation/i);
+    assert.match(contract, /readback/i);
+    assert.match(contract, /recovery|replay/i);
+    assert.match(contract, /deterministic test|current-transaction test/i);
+  }
+  const [investigate, build, architect, implement] = contracts;
+  assert.match(investigate!, /Irreversible\/provider side effect/);
+  assert.match(investigate!, /one row per actual provider mutation or fallback/);
+  assert.match(build!, /has no provider transaction row/);
+  assert.match(architect!, /one row per actual mutation or fallback/);
+  assert.match(implement!, /PROVIDER_ROWS/);
+  assert.match(implement!, /provider transaction proof is incomplete/);
+});
+
 test("headless orchestrate waits two hours on its exact async workflow", async () => {
   const orchestrate = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
   const adapter = await readFile("specs/pi-adapter.md", "utf8");

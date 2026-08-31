@@ -264,7 +264,7 @@ gh api repos/{GH_REPO}/issues/{NUMBER}/comments --jq '.[] | {id: .id, body: .bod
 
 **Resume logic**:
 - A comment ending `<!-- INVESTIGATION:INVALID -->` remains terminal and may be reused; no build follows it.
-- Reuse a `<!-- INVESTIGATION:COMPLETE -->` comment only when the same comment contains the current `### Production Execution Seam` section, a concrete public entrypoint, at least one production owner, mutation/no-mutation coverage, and an acceptance seam. A legacy completion marker without that schema is preserved as history but does not authorize build; run and post a superseding current investigation.
+- Reuse a `<!-- INVESTIGATION:COMPLETE -->` comment only when the same comment contains the current `### Production Execution Seam` section, concrete public entrypoint, production owner, mutation/no-mutation coverage, acceptance seam, and exact `Irreversible/provider side effect: YES|NO`. When `YES`, the same comment must contain a substantive Provider Transaction Proof with one row per actual mutation/fallback, including authority, exact failure scope, required readback, recovery, and its deterministic test. A legacy completion marker without this schema does not authorize build. Preserve legacy/incomplete artifacts as history and post a superseding investigation.
 - If `<!-- FORGE:INVESTIGATOR -->` exists with neither terminal sentinel, investigation was interrupted; delete only that partial comment and restart:
   ```bash
   gh api repos/{GH_REPO}/issues/comments/{COMMENT_ID} -X DELETE
@@ -428,13 +428,28 @@ gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:INVESTIGATOR -->
 **Production owners**: {concrete caller/adapter/handler files and symbols that cause the effect}
 **Mutation coverage**: {for every production owner, either list it in Affected Files or give source evidence that it already performs the requested behavior and needs no mutation}
 **Acceptance seam**: {the public command/API/runtime path the E2E check executes}
+**Irreversible/provider side effect**: {YES|NO}
+
+If `YES`, include the bounded proof below. Omit it for `NO`; ordinary local computation
+has no extra ceremony.
+
+### Provider Transaction Proof (MANDATORY WHEN SIDE EFFECT = YES)
+| Provider operation or fallback | Authority / preconditions | Exact call and failure scope | Required result / readback | Idempotent replay / recovery | Deterministic test |
+|---|---|---|---|---|---|
+| {ACTUAL_OPERATION} | {WHO_MAY_ACT} | {CALL_AND_ONLY_ERRORS_IT_CLASSIFIES} | {FIELDS_REQUIRED_FOR_SUCCESS} | {RECONCILIATION_AFTER_SUCCESS} | {NAMED_TEST} |
+
+Add one row per actual provider mutation or fallback—no hypothetical rows or fixed row
+count. A fallback row names the exact failed operation that authorizes it; errors from
+other operations cannot. Authority, successful result/readback, and replay after provider
+success must be explicit. Tests are derived from the current transaction, not hardcoded
+global scenarios.
 
 A conceptual documentation path, exported but unwired helper, test-local fixture, mock, or
 broad suite is not a production execution seam. If the requested observable behavior is
 absent from a production owner, that owner must enter Affected Files. If this is truly a
 prompt/spec-only project, prove that the specification is itself the loaded production
-surface and that no separate executable owner exists. Any unresolved or read-only owner
-that controls the requested effect blocks `INVESTIGATION:COMPLETE` and returns for
+surface and that no separate executable owner exists. Any unresolved or read-only owner that controls the requested effect, or any incomplete
+required Provider Transaction Proof row, blocks `INVESTIGATION:COMPLETE` and returns for
 further investigation.
 
 ### Evidence

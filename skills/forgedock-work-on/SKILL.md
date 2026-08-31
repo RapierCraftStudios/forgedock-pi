@@ -55,7 +55,10 @@ caller/adapter and changed boundary to an observable result and exact public-sea
 Every executable owner of the requested effect must be a deliverable unless exact source
 evidence proves it already performs the behavior. A related/read-only owner, test-local
 fixture/mock, unwired export, or prose path cannot substitute for production wiring. For bug fixes, include a safe failing-before
-reproduction when one is deterministic. When running under orchestration, post the
+reproduction when one is deterministic. For irreversible/provider side effects, include a closed Provider Transaction Proof before
+builder launch, with one row per actual mutation or fallback: authority/preconditions,
+exact call and failure scope, required result/readback, replay/recovery, and a deterministic
+test. A fallback may be authorized only by failure of its named operation. When running under orchestration, post the
 finalized affected-file `FORGE:CLAIM` on the coordination issue; standalone work-on has
 no coordination claim. A path absent from the
 investigation and contract cannot be mutated; a discovered scope gap returns to
@@ -98,7 +101,8 @@ GitHub and must read `specs/original/commands/work-on/build.md` with
 The builder executes context, architecture, implementation, quality-gate, validation,
 acceptance, and commit work inline from the original specifications. Architecture must
 close Production Seam Ownership for every observable effect before mutation; unresolved
-or test-only production wiring returns to investigation rather than review. Missing
+or test-only production wiring returns to investigation rather than review. Provider work also requires a closed Provider Transaction Proof and passing tests for its
+actual operation/fallback rows. Missing
 `FORGE:ARCHITECT:COMPLETE` is never an implicit skip; a legitimate skip uses the explicit
 completed skip artifact from `build/architect.md`. The coordinator must not replace a
 failed builder with inline implementation.

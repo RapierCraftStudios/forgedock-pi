@@ -44,7 +44,10 @@ For non-trivial work, implementation cannot begin without a same-issue
 row and closing every requested observable effect. A discovered production caller/adapter that owns the effect
 cannot remain read-only or outside Deliverables without exact source proof that no
 mutation is needed. Test-local fixtures, mocks, unwired exports, and prose do not count as
-production implementation. A legitimate architecture skip must still be the
+production implementation. When investigation marks an irreversible/provider side effect,
+architecture must also contain a CLOSED Provider Transaction Proof with one substantive
+row per actual mutation or fallback: authority, exact call/failure scope, required
+result/readback, replay/recovery, and a current-transaction test. A legitimate architecture skip must still be the
 explicit completed skip artifact required by `build/architect.md`; absence is never a
 skip. Follow the architecture plan as the primary implementation guide.
 

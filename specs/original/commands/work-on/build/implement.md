@@ -64,6 +64,16 @@ if [ "$TASK_TYPE" != Investigation ]; then
   printf '%s' "$ARCHITECT_BODY" | grep -qF '**Ownership gate**: CLOSED' || { echo "IMPLEMENT_RESULT: status: GATED blocker: latest architecture ownership is not exactly CLOSED"; exit 1; }
   ARCHITECT_ROWS=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### Production Seam Ownership/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||Observable Effect')
   [ -n "$ARCHITECT_ROWS" ] && ! printf '%s\n' "$ARCHITECT_ROWS" | grep -Eqi '\{[^}]*\}|\b(TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|[[:space:]]*\|' || { echo "IMPLEMENT_RESULT: status: GATED blocker: architecture ownership row missing or placeholder"; exit 1; }
+  SIDE_EFFECT=$(printf '%s\n' "$INVESTIGATOR_BODY" | sed -n 's/^\*\*Irreversible\/provider side effect\*\*: \(YES\|NO\)$/\1/p' | tail -1)
+  case "$SIDE_EFFECT" in
+    NO) ;;
+    YES)
+      printf '%s' "$ARCHITECT_BODY" | grep -qF '**Provider transaction gate**: CLOSED' || { echo "IMPLEMENT_RESULT: status: GATED blocker: provider transaction gate is not closed"; exit 1; }
+      PROVIDER_ROWS=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### Provider Transaction Proof/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||Provider Operation')
+      [ -n "$PROVIDER_ROWS" ] && ! printf '%s\n' "$PROVIDER_ROWS" | grep -Eqi '\{[^}]*\}|\b(TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|[[:space:]]*\|' || { echo "IMPLEMENT_RESULT: status: GATED blocker: provider transaction proof is incomplete"; exit 1; }
+      ;;
+    *) echo "IMPLEMENT_RESULT: status: GATED blocker: side-effect classification missing"; exit 1 ;;
+  esac
 fi
 ```
 
@@ -111,7 +121,11 @@ Before I3, require a current `### Production Seam Ownership` section with at lea
 non-header ownership row and require every row to be closed. If an executable
 owner of the requested behavior is omitted, marked read-only without source proof, or
 represented only by a test-local fixture/mock, return automated `GATED` to investigation
-before the first source mutation.
+before the first source mutation. For provider work, every proof row must name authority, exact operation/failure scope,
+required result/readback, replay/recovery, and a deterministic current-transaction test.
+Fallback rows identify the exact failed operation that authorizes them. Run safe
+failing-before tests when available and require every named scenario to pass before
+staging.
 
 Extract from investigation report:
 - Affected files list
