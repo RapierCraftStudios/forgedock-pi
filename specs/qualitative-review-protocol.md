@@ -77,3 +77,6 @@ unchanged.
 
 Single-issue lanes with no target movement, overlap serialization, exact-head merge,
 and existing protected-branch behavior remain unchanged.
+
+### Pinned semantic review publication
+A passing semantic review is an `APPROVED` decision distinct from the GitHub review event. The controller publishes exactly one review at the frozen head SHA with the frozen base SHA and computed merge-base SHA, then reads the provider review back and requires an exact URL, actor, event, commit, and evidence match before journaling completion. It first attempts `APPROVE`. Only GitHub status 422 whose normalized message specifically rejects approving one's own pull request, with the authenticated actor equal to the PR owner, permits one `COMMENT` retry. No other 4xx/5xx, identity, route, malformed response, or readback error permits fallback. A `COMMENT` is audit evidence and never satisfies independent approval required by branch protection. Completed replay returns the journaled URL and never republishes.

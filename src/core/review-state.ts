@@ -23,6 +23,7 @@ export interface ReviewRouteSnapshot {
   headSha: string;
   baseRef: string;
   baseSha: string;
+  mergeBaseSha?: string;
 }
 
 export type ReviewRoute = string | ReviewRouteSnapshot;
@@ -84,6 +85,17 @@ export interface ReviewGate {
   reasons: readonly string[];
 }
 
+export interface ReviewPublication {
+  id: number;
+  url: string;
+  event: "APPROVE" | "COMMENT";
+  state: string;
+  actorLogin: string;
+  commitSha: string;
+  body: string;
+  evidence: Readonly<Record<string, unknown>>;
+}
+
 export interface MergeAuthorization {
   authorized: boolean;
   headSha: string;
@@ -117,6 +129,7 @@ export interface ReviewState {
   headSha: string;
   baseRef: string;
   baseSha: string;
+  mergeBaseSha?: string;
   roster: ReviewRoster;
   route?: ReviewRoute;
   panel?: ReviewPanel;
@@ -124,6 +137,7 @@ export interface ReviewState {
   findings: readonly ReviewFinding[];
   /** Exact reviewer receipts keyed by frozen head, role, and panel attempt. */
   reviewerResults?: Readonly<Record<string, Record<string, unknown>>>;
+  publication?: ReviewPublication;
   verdict?: ReviewVerdict;
   gate?: ReviewGate;
   mergeAuthorization?: MergeAuthorization;
@@ -150,6 +164,7 @@ export type ReviewEventType =
   | "review.check.recorded"
   | "review.findings-recorded"
   | "review.findings.recorded"
+  | "review.publication-recorded"
   | "review.verdict-recorded"
   | "review.verdict.recorded"
   | "review.gate-recorded"
@@ -167,6 +182,7 @@ export interface ReviewCreatedPayload {
   headSha: string;
   baseRef: string;
   baseSha: string;
+  mergeBaseSha?: string;
   roster: ReviewRoster;
   route?: ReviewRoute;
 }
@@ -196,6 +212,10 @@ export interface ReviewFindingsRecordedPayload {
   reviewerResults?: Readonly<Record<string, Record<string, unknown>>>;
 }
 
+export interface ReviewPublicationRecordedPayload extends ReviewPublication {
+  round: number;
+}
+
 export interface ReviewVerdictRecordedPayload extends ReviewVerdict {
   round: number;
 }
@@ -217,6 +237,7 @@ export type ReviewEventPayload =
   | ReviewPanelCompletedPayload
   | ReviewCheckRecordedPayload
   | ReviewFindingsRecordedPayload
+  | ReviewPublicationRecordedPayload
   | ReviewVerdictRecordedPayload
   | ReviewGateRecordedPayload
   | ReviewMergeAuthorizedPayload
@@ -365,6 +386,9 @@ export function applyReviewEvent(
     case "review.findings.recorded":
       applyFindings(state, event);
       break;
+    case "review.publication-recorded":
+      applyPublication(state, event);
+      break;
     case "review.verdict-recorded":
     case "review.verdict.recorded":
       applyVerdict(state, event);
@@ -418,6 +442,7 @@ export function validateReviewState(value: unknown): asserts value is ReviewStat
   requiredString(state.headSha, "headSha");
   requiredString(state.baseRef, "baseRef");
   requiredString(state.baseSha, "baseSha");
+  if (state.mergeBaseSha !== undefined) requiredString(state.mergeBaseSha, "mergeBaseSha");
   if (state.route !== undefined) {
     const route = validateRoute(state.route);
     assertRouteIdentity(route, state.pullNumber as number, state.headRef as string, state.headSha as string, state.baseRef as string, state.baseSha as string);
@@ -551,6 +576,9 @@ function createInitialState(event: ReviewEvent): ReviewState {
   const headSha = requiredString(data.headSha ?? head?.sha, "headSha");
   const baseRef = requiredString(data.baseRef ?? base?.ref, "baseRef");
   const baseSha = requiredString(data.baseSha ?? base?.sha, "baseSha");
+  const mergeBaseSha = data.mergeBaseSha === undefined
+    ? undefined
+    : requiredString(data.mergeBaseSha, "mergeBaseSha");
   if (head && (head.ref !== headRef || head.sha !== headSha))
     throw new ReviewTransitionError("identity-mismatch", "head and headRef/headSha must match.");
   if (base && (base.ref !== baseRef || base.sha !== baseSha))
@@ -571,6 +599,7 @@ function createInitialState(event: ReviewEvent): ReviewState {
     headSha,
     baseRef,
     baseSha,
+    ...(mergeBaseSha ? { mergeBaseSha } : {}),
     roster,
     ...(route ? { route } : {}),
     checks: [],
@@ -630,6 +659,9 @@ function cloneState(state: ReviewState): ReviewState {
     findings: state.findings.map((finding) => ({ ...finding, evidence: [...finding.evidence] })),
     ...(state.reviewerResults
       ? { reviewerResults: Object.fromEntries(Object.entries(state.reviewerResults).map(([key, result]) => [key, { ...result }])) }
+      : {}),
+    ...(state.publication
+      ? { publication: { ...state.publication, evidence: { ...state.publication.evidence } } }
       : {}),
     ...(state.verdict
       ? {
@@ -747,6 +779,17 @@ function applyFindings(state: ReviewState, event: ReviewEvent): void {
   clearTerminalDecisions(state);
 }
 
+function applyPublication(state: ReviewState, event: ReviewEvent): void {
+  const panel = requireCompletedPanel(state);
+  assertEventRound(event, panel.round);
+  if (state.publication)
+    throw new ReviewTransitionError("duplicate-publication", "A review publication is already recorded.");
+  const publication = validatePublication(payload(event));
+  if (publication.commitSha !== state.headSha)
+    throw new ReviewTransitionError("stale-head", "Review publication commit does not match the frozen review head.");
+  state.publication = publication;
+}
+
 function applyVerdict(state: ReviewState, event: ReviewEvent): void {
   const panel = requireCompletedPanel(state);
   assertEventRound(event, panel.round);
@@ -836,7 +879,7 @@ function clearTerminalDecisions(state: ReviewState): void {
   delete state.gate;
   delete state.mergeAuthorization;
   delete state.completion;
-  delete state.reviewerResults;
+  // Reviewer receipts are validated evidence, not a replaceable terminal decision.
 }
 
 function requirePanel(state: ReviewState): ReviewPanel {
@@ -908,6 +951,7 @@ function validateRoute(value: unknown): ReviewRoute {
     headSha: requiredString(route.headSha, "route.headSha"),
     baseRef: requiredString(route.baseRef, "route.baseRef"),
     baseSha: requiredString(route.baseSha, "route.baseSha"),
+    ...(route.mergeBaseSha === undefined ? {} : { mergeBaseSha: requiredString(route.mergeBaseSha, "route.mergeBaseSha") }),
   };
 }
 
@@ -1045,6 +1089,21 @@ function validateFinding(value: unknown): ReviewFinding {
   };
 }
 
+function validatePublication(value: Record<string, unknown>): ReviewPublication {
+  const id = positiveInteger(value.id, "publication.id");
+  const event = value.event;
+  if (event !== "APPROVE" && event !== "COMMENT")
+    throw new ReviewTransitionError("invalid-publication", "publication.event is unsupported.");
+  const state = requiredString(value.state, "publication.state");
+  const actorLogin = requiredString(value.actorLogin, "publication.actorLogin");
+  const commitSha = requiredString(value.commitSha, "publication.commitSha");
+  const body = requiredString(value.body, "publication.body");
+  const url = requiredString(value.url, "publication.url");
+  if (!value.evidence || typeof value.evidence !== "object" || Array.isArray(value.evidence))
+    throw new ReviewTransitionError("invalid-publication", "publication.evidence must be an object.");
+  return { id, url, event, state, actorLogin, commitSha, body, evidence: { ...value.evidence as Record<string, unknown> } };
+}
+
 function validateVerdict(value: Record<string, unknown>): ReviewVerdict {
   const decision = reviewDecision(value.decision);
   return {
@@ -1159,6 +1218,7 @@ const REVIEW_EVENT_TYPES: ReadonlySet<ReviewEventType> = new Set([
   "review.check.recorded",
   "review.findings-recorded",
   "review.findings.recorded",
+  "review.publication-recorded",
   "review.verdict-recorded",
   "review.verdict.recorded",
   "review.gate-recorded",

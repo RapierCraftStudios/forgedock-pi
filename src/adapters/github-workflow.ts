@@ -36,6 +36,7 @@ export interface GitHubPullRequestData {
   headRef: string;
   baseRef: string;
   mergeability: "mergeable" | "conflicting" | "unknown";
+  ownerLogin?: string;
 }
 
 /**
@@ -51,6 +52,7 @@ export interface GitHubPullRequestRouteSnapshot {
   headSha: string;
   baseRef: string;
   baseSha: string;
+  mergeBaseSha?: string;
 }
 
 /** Historical spelling retained for integrations that call this a PR route. */
@@ -139,6 +141,7 @@ interface PullApiResponse {
   head: { sha: string; ref: string };
   base: { sha: string; ref: string };
   mergeable: boolean | null;
+  user?: { login?: string };
 }
 
 interface MergeApiResponse {
@@ -155,6 +158,36 @@ interface GitRefApiResponse {
 interface CommentApiResponse {
   id: number;
   body: string;
+}
+
+interface ReviewApiResponse {
+  id: number;
+  html_url: string;
+  state: string;
+  body: string;
+  user?: { login?: string };
+  commit_id: string;
+}
+
+export type PullRequestReviewEvent = "APPROVE" | "COMMENT";
+
+export interface PullRequestReviewPublication {
+  id: number;
+  url: string;
+  event: PullRequestReviewEvent;
+  state: string;
+  actorLogin: string;
+  commitSha: string;
+  body: string;
+  evidence: Readonly<Record<string, unknown>>;
+}
+
+export interface PublishPullRequestReviewInput {
+  pullNumber: number;
+  commitSha: string;
+  body: string;
+  evidence: Readonly<Record<string, unknown>>;
+  signal?: AbortSignal;
 }
 
 interface CheckRunsApiResponse {
@@ -758,6 +791,84 @@ export class GitHubWorkflowAdapter {
       ...(signal ? { signal } : {}),
     });
     return normalizePull(requireGitHubSuccess(response, path, [200]));
+  }
+
+  async getAuthenticatedUser(signal?: AbortSignal): Promise<string> {
+    const path = "/user";
+    const response = await this.#transport.request<{ login?: string }>({
+      method: "GET",
+      path,
+      ...(signal ? { signal } : {}),
+    });
+    const user = requireGitHubSuccess(response, path, [200]);
+    if (typeof user.login !== "string" || !user.login.trim())
+      throw new GitHubApiError(422, path, { message: "Authenticated user login is missing." });
+    return user.login;
+  }
+
+  async publishPullRequestReview(
+    input: PublishPullRequestReviewInput,
+  ): Promise<PullRequestReviewPublication> {
+    assertNumber(input.pullNumber, "pull request");
+    assertNonEmptyRefOrSha(input.commitSha, "review commit SHA");
+    if (!input.body.trim()) throw new TypeError("review body must be non-empty");
+    const pull = await this.getPullRequest(input.pullNumber, input.signal);
+    const actorLogin = await this.getAuthenticatedUser(input.signal);
+    if (!pull.ownerLogin)
+      throw new GitHubApiError(422, `${this.#apiRoot}/pulls/${input.pullNumber}`, {
+        message: "Pull request owner login is missing.",
+      });
+    const path = `${this.#apiRoot}/pulls/${input.pullNumber}/reviews`;
+    const post = async (event: PullRequestReviewEvent) => {
+      const response = await this.#transport.request<ReviewApiResponse>({
+        method: "POST",
+        path,
+        body: { event, commit_id: input.commitSha, body: input.body },
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+      const review = requireGitHubSuccess(response, path, [200]);
+      return { event, review };
+    };
+    let published: { event: PullRequestReviewEvent; review: ReviewApiResponse };
+    try {
+      published = await post("APPROVE");
+    } catch (error) {
+      if (!isExactSelfApprovalRejection(error) || actorLogin !== pull.ownerLogin)
+        throw error;
+      published = await post("COMMENT");
+    }
+    const expectedState = published.event === "APPROVE" ? "APPROVED" : "COMMENTED";
+    const review = published.review;
+    if (!Number.isSafeInteger(review.id) || review.id < 1 ||
+        typeof review.html_url !== "string" || !review.html_url.trim() ||
+        review.state !== expectedState || review.commit_id !== input.commitSha ||
+        review.body !== input.body || review.user?.login !== actorLogin)
+      throw new GitHubApiError(422, path, {
+        message: "Pull request review publication response is malformed or stale.",
+      });
+    const readPath = `${path}/${review.id}`;
+    const readResponse = await this.#transport.request<ReviewApiResponse>({
+      method: "GET",
+      path: readPath,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
+    const readBack = requireGitHubSuccess(readResponse, readPath, [200]);
+    if (readBack.id !== review.id || readBack.html_url !== review.html_url ||
+        readBack.state !== expectedState || readBack.commit_id !== input.commitSha ||
+        readBack.body !== input.body || readBack.user?.login !== actorLogin)
+      throw new GitHubApiError(422, readPath, {
+        message: "Pull request review read-back mismatch.",
+      });
+    return {
+      id: review.id,
+      url: review.html_url,
+      event: published.event,
+      state: review.state,
+      actorLogin,
+      commitSha: input.commitSha,
+      body: input.body,
+      evidence: input.evidence,
+    };
   }
 
   async waitForPullRequestHead(input: {
@@ -1370,7 +1481,17 @@ function normalizePull(pull: PullApiResponse): GitHubPullRequestData {
         : pull.mergeable === false
           ? "conflicting"
           : "unknown",
+    ...(pull.user?.login ? { ownerLogin: pull.user.login } : {}),
   };
+}
+
+export function isExactSelfApprovalRejection(error: unknown): boolean {
+  if (!(error instanceof GitHubApiError) || error.status !== 422) return false;
+  const response = error.response;
+  if (!response || typeof response !== "object" || Array.isArray(response)) return false;
+  const message = (response as { message?: unknown }).message;
+  return typeof message === "string" &&
+    /(?:cannot|can not|can't)\s+approve\s+(?:your|an?\s+author's?)\s+own\s+pull\s+request|approve.*own pull request/i.test(message.replace(/\s+/g, " ").trim());
 }
 
 function checkRunStatus(

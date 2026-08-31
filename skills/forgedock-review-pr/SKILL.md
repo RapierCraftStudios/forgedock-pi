@@ -89,3 +89,6 @@ Operational timeout/provider failure leaves the issue in an automated review-deg
 or `workflow:in-review` state, not `needs-human`. Reserve `needs-human` for a genuine
 human authority decision or unavoidable external action. Pi receipts prove execution
 only; recover the complete saved result or fail closed rather than claiming completion.
+
+### Pinned review event and owner fallback
+After semantic checks, coverage, findings, frozen head/base/merge-base, and mergeability pass, publish one review tied to the exact head. Use `gh api --method POST /repos/{owner}/{repo}/pulls/{number}/reviews -f event=APPROVE -f commit_id={head}` with a body containing semantic `APPROVED`, all three identity SHAs, coverage, checks, and finding IDs. If GitHub returns exactly the owner self-approval 422 for this APPROVE operation and the authenticated actor is the PR owner, publish one same-body `COMMENT`; do not fallback for any other status/message/identity/readback error. Read the created review back, require its URL, actor, commit, event, and byte-identical evidence, and persist it as `review_url`. COMMENT records semantic approval but is not an independent branch-protection approval; protected routes remain GATED unless policy supplies a distinct approving identity. Replay reconciles the saved review and never posts a duplicate.

@@ -241,6 +241,9 @@ sibling merge, and preserve the owned branch and PR through a guarded non-destru
 synchronization. A conflict, ambiguous target, non-fast-forward movement, or remote
 lease mismatch is automated `GATED` evidence.
 
+### Review publication translation
+The typed review boundary separates semantic `APPROVED` from GitHub's event. After exact route, actor/owner, checks, findings, and computed merge-base validation, it posts one pinned `APPROVE` review and requires URL/result/readback identity. Only the exact 422 self-owner approval response for that APPROVE operation, with authenticated actor equal to PR owner, translates to one pinned `COMMENT` retry carrying identical evidence. Generic provider failures, other statuses/messages, non-owner identity, stale route, malformed result, and failed readback remain `GATED`. COMMENT is durable audit evidence and cannot satisfy independent protected-branch approval; replay returns the saved URL without another mutation.
+
 After refresh, rerun every affected verification and acceptance command, compute and
 freeze the exact refreshed base/head/merge-base identity, invalidate older reviewer
 receipts, and join a fresh complete read-only reviewer panel. Pre-refresh results never

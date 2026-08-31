@@ -19,6 +19,7 @@ import {
   GitHubWorkflowAdapter,
   type GitHubPullRequestRouteSnapshot,
   type MergeResult,
+  type PullRequestReviewPublication,
 } from "../adapters/github-workflow.ts";
 import { ReviewJournal } from "../adapters/review-journal.ts";
 import {
@@ -114,6 +115,8 @@ export interface ReviewPrResult {
   findingIssues: Readonly<Record<string, number>>;
   merged: boolean;
   mergeSha?: string;
+  /** Durable pinned provider review URL, when semantic review passed. */
+  reviewUrl?: string;
   /** Machine-readable bundle derivation consumed by open-finding/Phase 6.5 gates. */
   stagingBundle?: StagingBundleResolution;
 }
@@ -174,14 +177,28 @@ export class ReviewPrCoordinator {
     if (mode === "staging" && input.autoMergeRequested)
       throw new Error("Staging review cannot merge or deploy.");
 
-    const route =
+    const selectedRoute =
       input.route ??
       (await this.#github.getPullRequestRouteSnapshot(
         input.pullNumber,
         input.signal,
       ));
-    if (route.pullNumber !== input.pullNumber)
+    if (selectedRoute.pullNumber !== input.pullNumber)
       throw new Error("Review route pull request does not match the request.");
+    const repositoryRoot = input.execution.kind === "standalone"
+      ? input.execution.repositoryRoot
+      : input.execution.worktreePath;
+    const mergeBaseSha = selectedRoute.mergeBaseSha ??
+      await this.#git.mergeBase(
+        repositoryRoot,
+        selectedRoute.headSha,
+        selectedRoute.baseSha,
+        input.signal,
+      );
+    const route: GitHubPullRequestRouteSnapshot = {
+      ...selectedRoute,
+      mergeBaseSha,
+    };
     const resumedPull = input.resume
       ? await this.#github.getPullRequest(input.pullNumber, input.signal)
       : undefined;
@@ -445,6 +462,48 @@ export class ReviewPrCoordinator {
 
       const forgeFindings = snapshot.state
         .findings as readonly ForgeReviewFindingResult[];
+      let publication: PullRequestReviewPublication | undefined;
+      // SAFETY: test doubles may omit the optional compatibility method; the real adapter always provides it.
+      const publishReview = (this.#github as unknown as {
+        publishPullRequestReview?: (input: {
+          pullNumber: number;
+          commitSha: string;
+          body: string;
+          evidence: Readonly<Record<string, unknown>>;
+          signal?: AbortSignal;
+        }) => Promise<PullRequestReviewPublication>;
+      }).publishPullRequestReview;
+      if (passed && publishReview) {
+        const evidence = {
+          semanticDecision: "APPROVED",
+          headSha: route.headSha,
+          baseSha: route.baseSha,
+          mergeBaseSha: route.mergeBaseSha,
+          coverage: snapshot.state.panel?.completedReviewers ?? [],
+          checks: snapshot.state.checks,
+          findingIds: forgeFindings.map((finding) => finding.id),
+        } as const;
+        const body = renderPinnedReviewBody(evidence);
+        publication = await publishReview.call(this.#github, {
+          pullNumber: route.pullNumber,
+          commitSha: route.headSha,
+          body,
+          evidence,
+          ...(input.signal ? { signal: input.signal } : {}),
+        });
+        if (publication.event === "COMMENT" &&
+            input.protectedBranches.includes(route.baseRef) &&
+            input.autoMergeRequested)
+          throw new Error("COMMENT evidence cannot satisfy independent protected-branch approval.");
+        snapshot = await this.#journal.append({
+          reviewId: input.reviewId,
+          type: "review.publication-recorded",
+          payload: { round: requirePanelRound(snapshot.state), ...publication },
+          idempotencyKey: "review:publication",
+          message: `Record pinned review publication for ${input.reviewId}`,
+          ...(input.signal ? { signal: input.signal } : {}),
+        });
+      }
       const findingIssues = await publishReviewFindingIssues({
         github: this.#github,
         pullNumber: route.pullNumber,
@@ -530,6 +589,7 @@ export class ReviewPrCoordinator {
         findingIssues,
         merged: Boolean(merge),
         ...(merge ? { mergeSha: merge.sha } : {}),
+        ...(publication ? { reviewUrl: publication.url } : {}),
         ...(stagingBundle ? { stagingBundle } : {}),
       };
     } finally {
@@ -1254,6 +1314,7 @@ function completedResult(
     findingIssues: {},
     merged: state.completion.outcome === "merged",
     ...(merge ? { mergeSha: merge.sha } : {}),
+    ...(state.publication ? { reviewUrl: state.publication.url } : {}),
   };
 }
 
@@ -1432,6 +1493,20 @@ function hasExactSourcePull(body: string, pullNumber: number): boolean {
     `(?:source-pr=|Source PR\\**:?\\s*#)${String(pullNumber)}(?!\\d)`,
     "i",
   ).test(body);
+}
+
+function renderPinnedReviewBody(evidence: Readonly<Record<string, unknown>>): string {
+  return [
+    "## ForgeDock Semantic Review",
+    "",
+    "**Decision**: `APPROVED`",
+    `**Head SHA**: \`${String(evidence.headSha)}\``,
+    `**Base SHA**: \`${String(evidence.baseSha)}\``,
+    `**Merge-base SHA**: \`${String(evidence.mergeBaseSha)}\``,
+    `**Coverage**: ${JSON.stringify(evidence.coverage)}`,
+    `**Checks**: ${JSON.stringify(evidence.checks)}`,
+    `**Finding IDs**: ${JSON.stringify(evidence.findingIds)}`,
+  ].join("\n");
 }
 
 function renderReviewSummary(

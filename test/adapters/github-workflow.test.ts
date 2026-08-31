@@ -60,6 +60,55 @@ function common(request: GitHubRequest): GitHubResponse<unknown> | undefined {
   return undefined;
 }
 
+test("only exact owner self-approval rejection permits COMMENT fallback", async () => {
+  const requests: GitHubRequest[] = [];
+  const transport: GitHubTransport = {
+    async request<T>(request: GitHubRequest): Promise<GitHubResponse<T>> {
+      requests.push(request);
+      if (request.path === "/repos/owner/repo/pulls/7?cache_bust=" + request.path.split("cache_bust=")[1])
+        return response(200, { ...pullData({ number: 7 }), user: { login: "owner" } }) as GitHubResponse<T>;
+      if (request.path === "/user") return response(200, { login: "owner" }) as GitHubResponse<T>;
+      if (request.method === "POST" && request.path.endsWith("/reviews")) {
+        const body = request.body as { event: string };
+        if (body.event === "APPROVE")
+          return response(422, { message: "Can not approve your own pull request" }) as GitHubResponse<T>;
+        return response(200, { id: 9, html_url: "https://example.test/reviews/9", state: "COMMENTED", body: "evidence", commit_id: "head-sha", user: { login: "owner" } }) as GitHubResponse<T>;
+      }
+      if (request.path.endsWith("/reviews/9"))
+        return response(200, { id: 9, html_url: "https://example.test/reviews/9", state: "COMMENTED", body: "evidence", commit_id: "head-sha", user: { login: "owner" } }) as GitHubResponse<T>;
+      throw new Error(`unexpected request ${request.method} ${request.path}`);
+    },
+  };
+  const publication = await new GitHubWorkflowAdapter(transport, "owner/repo").publishPullRequestReview({
+    pullNumber: 7,
+    commitSha: "head-sha",
+    body: "evidence",
+    evidence: { semanticDecision: "APPROVED" },
+  });
+  assert.equal(publication.event, "COMMENT");
+  assert.equal(requests.filter((request) => request.method === "POST").length, 2);
+});
+
+test("review publication remains fail closed", async () => {
+  const transport = new MockTransport((request) => {
+    if (request.method === "POST") return response(500, { message: "provider unavailable" });
+    if (request.path.startsWith("/repos/owner/repo/pulls/7"))
+      return response(200, { ...pullData({ number: 7 }), user: { login: "owner" } });
+    if (request.path === "/user") return response(200, { login: "owner" });
+    return response(500, { message: "provider unavailable" });
+  });
+  await assert.rejects(
+    () => new GitHubWorkflowAdapter(transport, "owner/repo").publishPullRequestReview({
+      pullNumber: 7,
+      commitSha: "head-sha",
+      body: "evidence",
+      evidence: {},
+    }),
+    /500|provider unavailable/i,
+  );
+  assert.equal(transport.requests.filter((request) => request.method === "POST").length, 1);
+});
+
 test("PR lookup qualifies and exactly matches the bound head branch", async () => {
   const transport = new MockTransport((request) => {
     assert.match(request.path, /head=owner%3Aforge%2Fissue-2&per_page=20$/);

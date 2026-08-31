@@ -438,6 +438,27 @@ export class GitWorktreeManager {
     ).stdout.trim();
   }
 
+  /** Compute the actual common ancestor; callers must never substitute a route base. */
+  async mergeBase(
+    repositoryRoot: string,
+    headSha: string,
+    baseSha: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    assertCommitSha(headSha, "headSha");
+    assertCommitSha(baseSha, "baseSha");
+    const result = await this.#git(
+      repositoryRoot,
+      ["merge-base", headSha, baseSha],
+      30_000,
+      signal,
+    );
+    const mergeBase = result.stdout.trim();
+    if (!mergeBase) throw new Error("Git merge-base returned empty output.");
+    assertCommitSha(mergeBase, "mergeBaseSha");
+    return mergeBase;
+  }
+
   async changedFiles(
     worktreePath: string,
     baseSha: string,

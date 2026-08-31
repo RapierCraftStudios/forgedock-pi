@@ -62,6 +62,25 @@ test("NUL-delimited changed paths retain rename sources, destinations, and delet
   assert.throws(() => parseChangedGitPaths("R100\0src/old.ts\0"));
 });
 
+test("merge-base computation returns the exact ancestor and fails on empty output", async () => {
+  const headSha = "a".repeat(40);
+  const baseSha = "b".repeat(40);
+  const mergeSha = "c".repeat(40);
+  const manager = new GitWorktreeManager({
+    async exec(_command, args) {
+      assert.equal(args[0], "merge-base");
+      return { stdout: `${mergeSha}\n`, stderr: "", code: 0 };
+    },
+  });
+  assert.equal(await manager.mergeBase("/repo", headSha, baseSha), mergeSha);
+  await assert.rejects(
+    () => new GitWorktreeManager({
+      async exec() { return { stdout: "", stderr: "", code: 0 }; },
+    }).mergeBase("/repo", headSha, baseSha),
+    /empty output/i,
+  );
+});
+
 test("exact remote branch creation is idempotent and rejects unrelated collisions", async () => {
   const baseSha = "a".repeat(40);
   const matchingSha = "b".repeat(40);

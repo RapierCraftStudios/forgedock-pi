@@ -27,6 +27,11 @@ test("Pi adapter keeps workflow decisions in visible specifications", async () =
   assert.match(adapter, /Orchestrate is a dispatcher, never a builder/);
   assert.match(adapter, /does not create or require a GitHub\s+state\s+branch/);
   assert.match(adapter, /must not choose the next workflow phase/);
+  assert.match(adapter, /semantic.*APPROVED/i);
+  assert.match(adapter, /APPROVE/);
+  assert.match(adapter, /COMMENT/);
+  assert.match(adapter, /self-owner/);
+  assert.match(adapter, /readback/i);
 });
 
 test("one canonical issue schema governs every ForgeDock creator", async () => {

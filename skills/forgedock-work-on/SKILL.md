@@ -222,3 +222,6 @@ affected verification and acceptance check, freeze the refreshed exact
 approvals, and launch a fresh complete qualitative review. Do not repeat investigation,
 expand the Builder Contract, weaken protected-branch rules, or classify mechanical
 refresh failures as `needs-human`. See `specs/qualitative-review-protocol.md`.
+
+### Semantic review versus provider approval
+A complete passing review has semantic decision `APPROVED` before publication. The lifecycle publishes one pinned `APPROVE` review on the frozen head and exact evidence, or uses one `COMMENT` only when the immediately preceding APPROVE request receives GitHub's exact authenticated-owner self-approval rejection. The URL and readback are durable evidence. COMMENT never counts as an independent approving identity; auto-merge may continue only on a non-protected route whose policy does not require one. Protected independent-approval routes remain GATED.

@@ -4,6 +4,7 @@ import test from "node:test";
 import type {
   GitHubPullRequestRouteSnapshot,
   GitHubWorkflowAdapter,
+  PullRequestReviewPublication,
 } from "../../src/adapters/github-workflow.ts";
 import type {
   AppendReviewEventInput,
@@ -19,6 +20,7 @@ import type { ForgeReviewerResult } from "../../src/agents/contracts.ts";
 import {
   applyReviewEvent,
   createReviewEvent,
+  replayReviewEvents,
   type ReviewCreatedPayload,
   type ReviewEvent,
   type ReviewState,
@@ -228,6 +230,30 @@ class GitHubFake {
   }
 }
 
+class PublishingGitHubFake extends GitHubFake {
+  readonly reviewPublications: PullRequestReviewPublication[] = [];
+
+  async publishPullRequestReview(input: {
+    pullNumber: number;
+    commitSha: string;
+    body: string;
+    evidence: Readonly<Record<string, unknown>>;
+  }): Promise<PullRequestReviewPublication> {
+    const publication: PullRequestReviewPublication = {
+      id: this.reviewPublications.length + 1,
+      url: `https://example.test/pulls/${input.pullNumber}#review-${this.reviewPublications.length + 1}`,
+      event: "COMMENT",
+      state: "COMMENTED",
+      actorLogin: "owner",
+      commitSha: input.commitSha,
+      body: input.body,
+      evidence: input.evidence,
+    };
+    this.reviewPublications.push(publication);
+    return publication;
+  }
+}
+
 class GitFake {
   headSha = route.headSha;
   readonly prepared: PreparedReviewWorktree[] = [];
@@ -257,6 +283,10 @@ class GitFake {
 
   async head(_worktreePath: string): Promise<string> {
     return this.headSha;
+  }
+
+  async mergeBase(): Promise<string> {
+    return "merge-base-sha";
   }
 
   async cleanupReview(prepared: PreparedReviewWorktree): Promise<void> {
@@ -361,9 +391,12 @@ function harness(
   options: {
     results?: readonly ForgeReviewerResult[];
     drift?: Partial<GitHubPullRequestRouteSnapshot>;
+    publish?: boolean;
   } = {},
 ) {
-  const github = new GitHubFake(route, options.drift);
+  const github = options.publish
+    ? new PublishingGitHubFake(route, options.drift)
+    : new GitHubFake(route, options.drift);
   const journal = new InMemoryReviewJournal();
   const git = new GitFake();
   const panel = new PanelFake(options.results ?? [reviewerResult()]);
@@ -451,6 +484,76 @@ test("clean standalone review posts route, reviewer, and summary and completes r
   assert.match(h.github.artifacts[1]?.body ?? "", /forge-review-security/);
   assert.match(h.github.artifacts[2]?.marker ?? "", /REVIEW_FINDING_ISSUES/);
   assert.match(h.github.artifacts[3]?.marker ?? "", /FORGE:REVIEW_SUMMARY/);
+});
+
+test("owner fallback publishes durable pinned review URL through coordinator", async () => {
+  const h = harness({ publish: true });
+  const result = await h.coordinator.review(request());
+  const publishing = h.github as unknown as PublishingGitHubFake;
+  assert.equal(result.reviewUrl, publishing.reviewPublications[0]?.url);
+  assert.equal(result.state.publication?.event, "COMMENT");
+  assert.equal(result.state.publication?.evidence.mergeBaseSha, "merge-base-sha");
+  assert.equal(result.state.status, "completed");
+});
+
+test("COMMENT readback preserves complete semantic review evidence", async () => {
+  const h = harness({ publish: true });
+  const result = await h.coordinator.review(request());
+  const publication = result.state.publication;
+  assert.equal(publication?.event, "COMMENT");
+  assert.equal(publication?.evidence.semanticDecision, "APPROVED");
+  assert.equal(publication?.evidence.headSha, route.headSha);
+  assert.equal(publication?.evidence.baseSha, route.baseSha);
+  assert.equal(publication?.evidence.mergeBaseSha, "merge-base-sha");
+  assert.deepEqual(publication?.evidence.findingIds, []);
+  assert.equal(publication?.url, result.reviewUrl);
+});
+
+test("owner fallback can merge authorized non-protected exact head", async () => {
+  const h = harness({ publish: true });
+  const result = await h.coordinator.review(request({
+    autoMergeRequested: true,
+    autoMergeAuthorized: true,
+  }));
+  assert.equal(result.merged, true);
+  assert.equal(h.github.mergeInputs.length, 1);
+  assert.equal(result.state.publication?.event, "COMMENT");
+});
+
+test("COMMENT does not satisfy protected independent approval", async () => {
+  const h = harness({ publish: true });
+  const result = await h.coordinator.review(request({
+    protectedBranches: [route.baseRef],
+    autoMergeRequested: true,
+    autoMergeAuthorized: true,
+  }));
+  assert.equal(result.merged, false);
+  assert.notEqual(result.decision.decision, "approved");
+  assert.equal(h.github.mergeInputs.length, 0);
+});
+
+test("reviewer receipts survive findings publication completion replay", async () => {
+  const h = harness({ publish: true });
+  const result = await h.coordinator.review(request());
+  const replayed = replayReviewEvents(h.journal.events);
+  const key = `${route.headSha}:${roster.reviewers[0]}:1`;
+  assert.ok(result.state.reviewerResults?.[key]);
+  assert.deepEqual(replayed.reviewerResults?.[key], result.state.reviewerResults?.[key]);
+  assert.equal(replayed.publication?.url, result.reviewUrl);
+});
+
+test("AlterLab owner review regression fixtures", async () => {
+  const owner = harness({ publish: true });
+  const ownerResult = await owner.coordinator.review(request());
+  assert.match(ownerResult.reviewUrl ?? "", /review-1/);
+  const protectedOwner = harness({ publish: true });
+  const protectedResult = await protectedOwner.coordinator.review(request({
+    protectedBranches: [route.baseRef],
+    autoMergeRequested: true,
+    autoMergeAuthorized: true,
+  }));
+  assert.notEqual(protectedResult.decision.decision, "approved");
+  assert.equal(protectedResult.merged, false);
 });
 
 test("passing reviewer scope limitations remain audit context, not unknown checks", async () => {
