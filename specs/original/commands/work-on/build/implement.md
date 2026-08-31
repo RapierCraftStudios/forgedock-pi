@@ -57,19 +57,38 @@ gh api repos/{GH_REPO}/issues/{NUMBER}/comments \
 
 **Resume check**:
 - If `<!-- FORGE:BUILDER:COMPLETE -->` is present in a BUILDER comment → implementation is done — EXIT and return `IMPLEMENT_RESULT: status: ALREADY_DONE` to caller.
-- If `<!-- FORGE:BUILDER -->` exists BUT `<!-- FORGE:BUILDER:COMPLETE -->` is ABSENT → implementation was interrupted after the comment was posted but before the commit (validate.md V5). Delete the partial comment and restart from Phase I2:
+- If `<!-- FORGE:BUILDER -->` exists BUT `<!-- FORGE:BUILDER:COMPLETE -->` is ABSENT, use the same exclusive state routes as build.md B0; never delete the artifact or discard the worktree:
+  - staged/uncommitted changes → preserve them and return `IMPLEMENT_RESULT: status: COMPLETE` so the caller continues directly to B6;
+  - clean `HEAD` different from frozen base → return `ALREADY_DONE` with that exact commit for verification, ancestry audit, and B6.5;
+  - clean frozen-base `HEAD` → return `GATED` because durable and Git state conflict.
   ```bash
   PARTIAL_ID=$(gh api repos/{GH_REPO}/issues/{NUMBER}/comments \
     --jq '[.[] | select(.body | contains("FORGE:BUILDER") and (contains("FORGE:BUILDER:COMPLETE") | not))] | last | .id // ""')
-  if [ -n "$PARTIAL_ID" ]; then
-    gh api repos/{GH_REPO}/issues/comments/$PARTIAL_ID -X DELETE
-    echo "Deleted partial FORGE:BUILDER comment (no FORGE:BUILDER:COMPLETE) — restarting implementation"
+  FROZEN_BASE_SHA="{FROZEN_BASE_SHA_FROM_FORGE_BASE}"
+  if [ -n "$PARTIAL_ID" ] && [ -n "$(git status --porcelain)" ]; then
+    echo "IMPLEMENT_RESULT: status: COMPLETE files_changed: preserved-worktree-diff"
+    exit 0
+  elif [ -n "$PARTIAL_ID" ] && [ "$(git rev-parse HEAD)" != "$FROZEN_BASE_SHA" ]; then
+    echo "IMPLEMENT_RESULT: status: ALREADY_DONE commits: [$(git rev-parse HEAD)]"
+    exit 0
+  elif [ -n "$PARTIAL_ID" ]; then
+    echo "IMPLEMENT_RESULT: status: GATED blocker: partial builder artifact conflicts with frozen-base HEAD"
+    exit 1
   fi
   ```
 
-**Primary guide**: If `<!-- FORGE:ARCHITECT -->` is present, it is the **primary implementation input**. Follow its ordered implementation list exactly — it defines which files change, in what order, and what consistency checks must pass. The investigation report and contract are secondary context.
+**Primary guide**: First read Task Type from the completed investigation. For Task Type
+`Investigation`, skip the architecture prerequisite and execute only the coordinator-owned
+Investigation special case in I2; it performs no source mutation. For every mutation task,
+a same-issue `<!-- FORGE:ARCHITECT -->` comment containing
+`<!-- FORGE:ARCHITECT:COMPLETE -->` is a mandatory implementation precondition and the
+**primary implementation input**. Follow its ordered implementation list exactly — it
+defines which files change, in what order, and what consistency checks must pass. The
+investigation report and contract are secondary context.
 
-**Fallback**: If `<!-- FORGE:ARCHITECT -->` is absent (architect step was skipped), proceed with investigation report + contract as the sole implementation guide.
+A legitimate architecture skip is represented by the explicit completed skip artifact
+required by `build/architect.md`. If the completed marker is absent, STOP as automated
+`GATED`; never infer a skip or proceed from investigation/contract alone.
 
 Extract from architect plan (when present):
 - Ordered implementation list (sequence of file changes to make)
@@ -119,7 +138,7 @@ Work in `{WORKTREE_PATH}`. Follow the contract deliverables table exactly — im
 - **Worktree-aware path derivation**: When writing shell code that derives repository paths, ALWAYS use `git rev-parse --show-toplevel` for the repo root in regular checkouts, or `git rev-parse --git-common-dir` (then `dirname`) to get the shared `.git` directory when the context may be a linked worktree. For worktree cleanup code specifically, ALWAYS use `--git-common-dir` — `--show-toplevel` returns the worktree path itself, NOT the main repo root. NEVER use `pwd`, relative paths, or `dirname` chains on `--show-toplevel` output for repo root derivation. Test path logic for both regular checkouts and linked worktrees. (Ref: review-findings #104, #105 — 4 PATH_DERIVATION defects, 15% of all review findings)
 - **State machine completeness verification**: When implementing routing logic, state transition tables, or phase dispatch code (e.g., adding a `Skill()` call in a routing loop, adding a new phase to a state machine, creating a new subcommand file), you MUST run three checks BEFORE staging: (1) **Routing target existence** — for each `Skill("subcommand", ...)` call or file reference in routing logic, verify the target file exists at `commands/{subcommand-path}.md`; (2) **State reachability** — for each declared state or phase, verify at least one prior state or entry condition in the router routes to it; (3) **Subcommand invocation wiring** — for each `commands/work-on/*.md` file that declares its invocation condition (e.g., `Invoked by work-on.md routing loop, when X`), verify that condition is actually handled in the router. A missing target file, an unreachable state, or a declared-but-unwired subcommand will not surface until review. (Ref: review-findings #85, #116, #137 — 4 ROUTING defects, 15% of all review findings)
 - **Migration safety checklist** *(trigger: diff includes `*.sql` files or files under a `migrations/` path)*: When any migration file is in the diff, verify ALL of the following BEFORE staging. Fix each violation inline — do not defer to review or the quality gate: (a) **Rollback file**: a corresponding down/rollback migration file exists (e.g. `0042_down_*.sql`, `rollback_*.sql`) or the migration is explicitly self-reversing (DROP of a previously-added column); (b) **NOT NULL safety**: any `ADD COLUMN ... NOT NULL` either includes a `DEFAULT` clause or is preceded by a backfill step — a NOT NULL column without DEFAULT locks the table and fails on existing rows; (c) **Constraint name consistency**: constraint names in the migration match ORM model declarations — a mismatch causes `alembic stamp` and FK introspection to silently diverge; (d) **CREATE TRIGGER idempotency**: every `CREATE TRIGGER` uses `CREATE OR REPLACE TRIGGER` or is preceded by `DROP TRIGGER IF EXISTS` — a bare `CREATE TRIGGER` fails on re-run in test and CI environments; (e) **Migration prefix uniqueness**: confirm the new file's numeric prefix does not already exist in the `infra/migrations/` tree (`ls infra/migrations/*.sql | grep -oP '^\d+' | sort | uniq -d` prints duplicates) — a duplicate prefix hard-fails the deploy gate regardless of file content. <!-- Added: forge#373 -->
-- If you discover the contract is wrong (e.g. a file doesn't exist, a function has a different signature): STOP, post a comment on the issue explaining the discrepancy, add label `needs-human`, and EXIT
+- If you discover the contract is wrong (e.g. a file doesn't exist, a function has a different signature): STOP, post the discrepancy, and return automated `GATED` for coordinator-led reinvestigation/contract revision; do not add `needs-human`
 
 **Worktree working directory**:
 ```bash
@@ -209,12 +228,24 @@ grep -rnE "(api_key|secret|password|token|credential)\s*=\s*(f?['\"]|\`)[^{'\"\`
 
 **Precondition**: Do NOT commit yet — the validate subcommand (validate.md) runs AFTER implement and will make the commit in Phase V5 after the gate passes. Commit will happen in validate.md Phase V5 after the gate passes.
 
+### Exact contract/claim path gate
+
+Before staging, load the latest completed Builder Contract and, under orchestration, the
+active coordination claim, then enumerate every modified, deleted, renamed, and untracked
+non-ignored path in the assigned worktree. Every resulting path must be listed literally
+in the contract and, when present, the claim. If a
+required path is absent, STOP before staging and return automated `GATED` so investigation
+and the durable contract/claim can be revised. Do not edit the newly discovered path,
+weaken the comparison, or silently classify it as mechanical. A mechanically coupled
+path such as `specs/original/SHA256SUMS` must still have been added to the contract and
+claim before staging.
+
 Migration collision check (if applicable):
 ```bash
 git fetch origin
 git log --oneline origin/{PR_BASE}..HEAD -- {MIGRATION_PATHS}
 ```
-If a collision is detected, post a comment and add `needs-human` label before staging.
+If a collision is detected, post evidence and return automated `GATED` before staging; do not add `needs-human`.
 
 Stage the changed files:
 ```bash
@@ -239,7 +270,7 @@ gh issue edit {NUMBER} {GH_FLAG} --body "{UPDATED_BODY}"
 
 ## Phase I6: Post FORGE:BUILDER Comment
 
-Post the implementation summary comment. **Do NOT include `<!-- FORGE:BUILDER:COMPLETE -->` here** — that marker is posted by `validate.md` Phase V5 after the commit succeeds. A crash between I6 and V5 would otherwise leave a completion-marked comment with no commit on the branch.
+Post the implementation summary comment. **Do NOT include `<!-- FORGE:BUILDER:COMPLETE -->` here**. Validation V5 commits and returns `validated_commit_sha`; only build.md Phase B6.5 appends the marker after every acceptance check passes and binds it to that exact commit.
 
 ```bash
 gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:BUILDER -->
@@ -266,7 +297,7 @@ gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:BUILDER -->
 > **Test-type annotation** (optional): Append `[type:api]`, `[type:unit]`, `[type:e2e]`, or `[type:manual]` to each checklist item. The test gate reads this annotation directly and skips regex inference. Omit it to rely on regex classification fallback."
 ```
 
-**Note**: `<!-- FORGE:BUILDER:COMPLETE -->` is intentionally absent from this comment. It is appended to this comment by `validate.md` Phase V5 after the git commit completes — see `validate.md § Phase V5`. This ordering ensures the completion marker only exists when a real commit is present on the branch.
+**Note**: `<!-- FORGE:BUILDER:COMPLETE -->` is intentionally absent from this comment. Build.md Phase B6.5 appends it only after validate.md returns an exact clean commit and every acceptance check passes. A commit alone is not build completion.
 
 ---
 
@@ -276,12 +307,13 @@ The subcommand writes its results to GitHub (FORGE:BUILDER comment). Return stru
 
 ```
 IMPLEMENT_RESULT:
-  status: COMPLETE | ALREADY_DONE | INVESTIGATION_COMPLETE | BLOCKED
+  status: COMPLETE | ALREADY_DONE | INVESTIGATION_COMPLETE | GATED | BLOCKED
   branch: {BRANCH}
   commits: [{SHA}, ...]
   files_changed: [{file}, ...]
+  tests_changed: [{file or named scenario}, ...]
   comment_url: {url of FORGE:BUILDER comment}
-  blocker: {description if status=BLOCKED}
+  blocker: {description if status=GATED or BLOCKED}
 ```
 
 ---
