@@ -106,6 +106,8 @@ for label in 'Observable effect' 'Public entrypoint' 'Production owners' 'Mutati
   value=$(printf '%s' "$value" | xargs)
   [ -n "$value" ] && ! printf '%s' "$value" | grep -Eqi '^\{|\}$|^(tbd|todo|unknown|none|n/a|placeholder)$' || { echo "BUILD_RESULT: status: GATED blocker: Production Execution Seam field $label is empty or placeholder"; exit 1; }
 done
+SIDE_EFFECT=$(printf '%s\n' "$INVESTIGATOR_BODY" | sed -n 's/^\*\*Irreversible\/provider side effect\*\*: \(YES\|NO\)$/\1/p' | tail -1)
+case "$SIDE_EFFECT" in YES|NO) ;; *) echo "BUILD_RESULT: status: GATED blocker: investigation side-effect classification missing"; exit 1 ;; esac
 
 validate_ownership_rows() {
   local body="$1" source="$2" require_closed="$3" rows
@@ -121,10 +123,20 @@ validate_ownership_rows() {
   fi
 }
 
+validate_provider_proof() {
+  local body="$1" source="$2" require_closed="$3" rows
+  printf '%s' "$body" | grep -qF '### Provider Transaction Proof' || { echo "BUILD_RESULT: status: GATED blocker: $source missing Provider Transaction Proof"; return 1; }
+  rows=$(printf '%s\n' "$body" | awk '/^### Provider Transaction Proof/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||Provider operation')
+  [ -n "$rows" ] || { echo "BUILD_RESULT: status: GATED blocker: $source has no provider transaction row"; return 1; }
+  ! printf '%s\n' "$rows" | grep -Eqi '\{[^}]*\}|\b(TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|[[:space:]]*\|' || { echo "BUILD_RESULT: status: GATED blocker: $source provider row is empty or placeholder"; return 1; }
+  if [ "$require_closed" = true ]; then printf '%s' "$body" | grep -qF '**Provider transaction gate**: CLOSED' || { echo "BUILD_RESULT: status: GATED blocker: $source provider gate is not exactly CLOSED"; return 1; }; fi
+}
+
 # Coordinator role is allowed to create B2 artifacts on a fresh build. Builder role must
 # receive and validate them; this avoids requiring the contract before contract creation.
 if [ "$BUILD_PHASE_ROLE" = builder ] || [ -n "$CONTRACT_BODY" ]; then
   validate_ownership_rows "$CONTRACT_BODY" 'Builder Contract' false || exit 1
+  [ "$SIDE_EFFECT" = NO ] || validate_provider_proof "$CONTRACT_BODY" 'Builder Contract' true || exit 1
 fi
 
 if [ "$BUILD_PHASE_ROLE" = builder ]; then
@@ -170,6 +182,7 @@ fi
 FROZEN_BASE_SHA="${EXPECTED_BASE_SHA:-}"
 if [ "$BUILD_PHASE_ROLE" = builder ] && [ -n "$BUILDER_BODY" ]; then
   validate_ownership_rows "$ARCHITECT_BODY" 'current architecture for resume' true || exit 1
+  [ "$SIDE_EFFECT" = NO ] || validate_provider_proof "$ARCHITECT_BODY" 'current architecture for resume' true || exit 1
 fi
 if [ "$BUILD_PHASE_ROLE" = builder ] && printf '%s' "$BUILDER_BODY" | grep -qF '<!-- FORGE:BUILDER:COMPLETE -->'; then
   mapfile -t VALIDATED_COMMIT_LINES < <(printf '%s' "$BUILDER_BODY" | sed -n 's/^validated_commit: \([a-f0-9]\{40\}\)$/\1/p')
@@ -301,6 +314,14 @@ gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:CONTRACT -->
 |---|---|---|---|
 | {EFFECT} | {ENTRYPOINT} | {OWNER_PATH_AND_SYMBOL} | {DELIVERABLE_PATH or exact source evidence behavior already exists} |
 
+### Provider Transaction Proof (include only when investigation says YES)
+
+| Provider operation or fallback | Authority / preconditions | Exact call and failure scope | Required result / readback | Replay / recovery | Deterministic test |
+|---|---|---|---|---|---|
+| {ACTUAL_OPERATION} | {WHO_MAY_ACT} | {CALL_AND_ONLY_ERRORS_IT_CLASSIFIES} | {FIELDS_REQUIRED_FOR_SUCCESS} | {RECONCILIATION_AFTER_SUCCESS} | {NAMED_TEST} |
+
+**Provider transaction gate**: CLOSED
+
 **Exact behavioral test**: `{COMMAND_OR_NAMED_TEST_THAT_INVOKES_THE_PUBLIC_SEAM}`
 **Bug reproduction before fix**: `{FAILING_BEFORE_COMMAND_OR_NOT_APPLICABLE_FOR_NON_BUG}`
 
@@ -321,7 +342,11 @@ executable owner controls the effect.
 ${ATTRIBUTION_LINE}"
 ```
 
-Contract must be grounded in the investigation report. Every deliverable file must appear in the affected files list from the investigator. Adversarially validate the proposed fix against adjacent system layers before posting. The execution path must name the real caller/entrypoint that activates every new helper, command, or configuration boundary and the exact test that invokes that seam. Compare the Production Seam Ownership rows to Deliverables before posting: an owner that controls the requested effect cannot remain related/read-only or be omitted unless its no-mutation evidence proves the behavior already exists. Any mismatch returns to investigation before contract publication. For a bug, run and record a safe deterministic failing-before reproduction when one exists.
+Contract must be grounded in the investigation report. Every deliverable file must appear in the affected files list from the investigator. Adversarially validate the proposed fix against adjacent system layers before posting. The execution path must name the real caller/entrypoint that activates every new helper, command, or configuration boundary and the exact test that invokes that seam. Compare the Production Seam Ownership rows to Deliverables before posting: an owner that controls the requested effect cannot remain related/read-only or be omitted unless its no-mutation evidence proves the behavior already exists. Any mismatch returns to investigation before contract publication. When investigation marks `Irreversible/provider side effect: YES`, require one
+substantive proof row per actual mutation or fallback. Each row states authority,
+operation-scoped failure handling, required result/readback, replay/recovery, and a
+current-transaction test. Do not invent a fixed global scenario list. For a bug, run and record a
+safe deterministic failing-before reproduction when one exists.
 
 ### B2.1: Post FORGE:CLAIM on coordination issue (conditional — when running under orchestration batch) <!-- Added: forge#1736 -->
 
