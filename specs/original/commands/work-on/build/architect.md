@@ -97,7 +97,7 @@ if printf '%s' "$ARCHITECT_BODY" | grep -qF '<!-- FORGE:ARCHITECT:COMPLETE -->';
   high_risks=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### Risk Assessment/{p=1;next} /^### /{p=0} p' | grep -E '\|[[:space:]]*HIGH[[:space:]]*\|' || true)
   high_ok=true
   if [ -n "$high_risks" ]; then
-    high_proofs=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### HIGH-Risk Verification/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||HIGH Risk')
+    high_proofs=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### HIGH-Risk Verification/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||^\| HIGH Risk \|')
     risk_count=$(printf '%s\n' "$high_risks" | grep -c '^|' || true)
     proof_count=$(printf '%s\n' "$high_proofs" | grep -c '^|' || true)
     [ "$risk_count" -eq "$proof_count" ] && [ "$proof_count" -gt 0 ] \

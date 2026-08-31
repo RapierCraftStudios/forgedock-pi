@@ -77,7 +77,7 @@ if [ "$TASK_TYPE" != Investigation ]; then
   HIGH_RISKS=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### Risk Assessment/{p=1;next} /^### /{p=0} p' | grep -E '\|[[:space:]]*HIGH[[:space:]]*\|' || true)
   if [ -n "$HIGH_RISKS" ]; then
     printf '%s' "$ARCHITECT_BODY" | grep -qF '**HIGH-risk gate**: CLOSED' || { echo "IMPLEMENT_RESULT: status: GATED blocker: HIGH-risk gate is not closed"; exit 1; }
-    HIGH_PROOFS=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### HIGH-Risk Verification/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||HIGH Risk')
+    HIGH_PROOFS=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### HIGH-Risk Verification/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||^\| HIGH Risk \|')
     RISK_COUNT=$(printf '%s\n' "$HIGH_RISKS" | grep -c '^|' || true)
     PROOF_COUNT=$(printf '%s\n' "$HIGH_PROOFS" | grep -c '^|' || true)
     [ "$RISK_COUNT" -eq "$PROOF_COUNT" ] && [ "$PROOF_COUNT" -gt 0 ] || { echo "IMPLEMENT_RESULT: status: GATED blocker: every HIGH risk requires exactly one verification row"; exit 1; }

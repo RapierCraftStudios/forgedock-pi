@@ -136,7 +136,7 @@ validate_high_risk_proof() {
   local body="$1" risks proofs risk_count proof_count
   risks=$(printf '%s\n' "$body" | awk '/^### Risk Assessment/{p=1;next} /^### /{p=0} p' | grep -E '\|[[:space:]]*HIGH[[:space:]]*\|' || true)
   [ -n "$risks" ] || return 0
-  proofs=$(printf '%s\n' "$body" | awk '/^### HIGH-Risk Verification/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||HIGH Risk')
+  proofs=$(printf '%s\n' "$body" | awk '/^### HIGH-Risk Verification/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||^\| HIGH Risk \|')
   risk_count=$(printf '%s\n' "$risks" | grep -c '^|' || true); proof_count=$(printf '%s\n' "$proofs" | grep -c '^|' || true)
   [ "$risk_count" -eq "$proof_count" ] && [ "$proof_count" -gt 0 ] || { echo "BUILD_RESULT: status: GATED blocker: every HIGH risk requires one verification row"; return 1; }
   ! printf '%s\n' "$proofs" | grep -Eqi '\{[^}]*\}|\b(TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|[[:space:]]*\|' || { echo "BUILD_RESULT: status: GATED blocker: HIGH-risk row is empty or placeholder"; return 1; }
