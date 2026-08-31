@@ -911,7 +911,7 @@ export class GitHubWorkflowAdapter {
         body: { body: input.body, event: "COMMENT", commit_id: input.commitId },
         ...(input.signal ? { signal: input.signal } : {}),
       });
-      created = requireGitHubSuccess(fallback, path, [201]);
+      created = requireGitHubSuccess(fallback, path, [200]);
       event = "COMMENT";
     } else {
       throw new GitHubApiError(approve.status, path, approve.data);

@@ -67,7 +67,7 @@ test("only exact owner self-approval rejection permits COMMENT fallback", async 
     if (request.method === "POST" && (request.body as { event: string }).event === "APPROVE")
       return response(422, { message: "Can not approve your own pull request" });
     if (request.method === "POST")
-      return response(201, { id: 17 });
+      return response(200, { id: 17 });
     return response(200, {
       id: 17,
       html_url: "https://example.test/reviews/17",
