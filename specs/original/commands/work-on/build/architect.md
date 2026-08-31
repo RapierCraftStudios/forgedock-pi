@@ -89,26 +89,15 @@ if printf '%s' "$ARCHITECT_BODY" | grep -qF '<!-- FORGE:ARCHITECT:COMPLETE -->';
   if [ "$SIDE_EFFECT" = NO ]; then
     provider_ok=true
   elif [ "$SIDE_EFFECT" = YES ]; then
-    provider_rows=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### Provider Transaction Proof/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||Provider operation')
+    provider_rows=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### Provider Transaction Proof/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||^\| Provider (Operation|operation)')
     [ -n "$provider_rows" ] \
       && ! printf '%s\n' "$provider_rows" | grep -Eqi '\{[^}]*\}|\b(TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|[[:space:]]*\|' \
       && printf '%s' "$ARCHITECT_BODY" | grep -qF '**Provider transaction gate**: CLOSED' && provider_ok=true
   fi
-  high_risks=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### Risk Assessment/{p=1;next} /^### /{p=0} p' | grep -E '\|[[:space:]]*HIGH[[:space:]]*\|' || true)
-  high_ok=true
-  if [ -n "$high_risks" ]; then
-    high_proofs=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### HIGH-Risk Verification/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||^\| HIGH Risk \|')
-    risk_count=$(printf '%s\n' "$high_risks" | grep -c '^|' || true)
-    proof_count=$(printf '%s\n' "$high_proofs" | grep -c '^|' || true)
-    [ "$risk_count" -eq "$proof_count" ] && [ "$proof_count" -gt 0 ] \
-      && ! printf '%s\n' "$high_proofs" | grep -Eqi '\{[^}]*\}|\b(TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|[[:space:]]*\|' \
-      && printf '%s' "$ARCHITECT_BODY" | grep -qF '**HIGH-risk gate**: CLOSED' || high_ok=false
-  fi
   if [ -n "$rows" ] \
     && ! printf '%s\n' "$rows" | grep -Eqi '\{[^}]*\}|\b(TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|[[:space:]]*\|' \
     && printf '%s' "$ARCHITECT_BODY" | grep -qF '**Ownership gate**: CLOSED' \
-    && [ "$provider_ok" = true ] \
-    && [ "$high_ok" = true ]; then
+    && [ "$provider_ok" = true ]; then
     echo "Current architecture ownership is complete; reuse exact latest artifact $ARCHITECT_ID"
     exit 0
   fi
@@ -514,13 +503,13 @@ Add a `### Production Seam Ownership` section to the architecture output listing
 effect, entrypoint, owner, mutation path, and exact public-seam test. Every row must be
 closed before implementation.
 
-When investigation marks `Irreversible/provider side effect: YES`, also reconcile and
-close a `### Provider Transaction Proof`. Add one row per actual mutation or fallback.
-Each row names authority/preconditions, the exact call and errors it handles, required
-result/readback, replay/recovery, and a deterministic test derived from this transaction.
-A fallback must identify the exact failed operation that authorizes it; unrelated
-operations cannot. Execute safe failing-before tests when available. Missing,
-placeholder, or cross-operation rows are `GATED` before architecture completion.
+When investigation marks `Irreversible/provider side effect: YES`, create the only
+`### Provider Transaction Proof` for this build. Add one row per investigated operation
+or fallback. Each row names authority/preconditions, exact call/failure scope, required
+result/readback, replay/recovery failure scenario, and an exact executable command that
+proves that scenario. A fallback identifies the named failed operation that authorizes
+it; unrelated failures cannot. Do not repeat these rows in Risk Assessment. Missing or
+cross-operation rows are `GATED` before architecture completion.
 
 ---
 
@@ -621,26 +610,11 @@ Rules for ordering:
 
 ## Phase A5: Risk Assessment
 
-For each non-obvious interaction or potential failure mode:
-- State the risk in one sentence
-- Rate it: HIGH / MEDIUM / LOW
-- Suggest a mitigation or check
-
-For every **HIGH** row, also create one `HIGH-Risk Verification` row with a concrete
-failure scenario and named executable test. The test must discriminate the exact risk:
-
-- identity fields that must not be conflated use deliberately different sentinel values;
-- durable-state risks execute the complete relevant sequence of writes, clears,
-  intermediate transitions, completion, and replay;
-- caller/adapter risks exercise the public production seam rather than a local helper.
-
-Run a safe failing-before scenario when practical and record its outcome. A HIGH risk with
-no substantive verification row blocks `FORGE:ARCHITECT:COMPLETE`. MEDIUM/LOW risks do
-not gain this ceremony.
-
-Examples of discriminating proof: use `base-sha-A` and `merge-base-sha-B` when those
-identities must remain distinct; for durable reviewer evidence, execute append reviewer
-receipts → apply findings → complete → replay and assert the receipts survive every step.
+For each non-obvious interaction or potential failure mode, add one Risk Assessment row
+with severity, a concrete failure scenario, and its exact verification command. A HIGH
+risk without an executable scenario command blocks architecture completion. Keep the
+scenario in this table; do not create a second verification table. Provider operation,
+fallback, and replay scenarios stay only in Provider Transaction Proof.
 
 Focus on:
 - Churn / hot-spot files (see below) — high historical change frequency correlates with defect density
@@ -722,9 +696,9 @@ gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:ARCHITECT -->
 no-mutation evidence.
 
 ### Provider Transaction Proof (required only when investigation says YES)
-| Provider Operation or Fallback | Authority / Preconditions | Exact Call and Failure Scope | Required Result / Readback | Replay / Recovery | Deterministic Test |
+| Provider Operation or Fallback | Authority / Preconditions | Exact Call and Failure Scope | Required Result / Readback | Replay / Recovery Failure Scenario | Exact Executable Command |
 |---|---|---|---|---|---|
-| {ACTUAL_OPERATION} | {WHO_MAY_ACT} | {CALL_AND_ONLY_ERRORS_IT_HANDLES} | {SUCCESS_FIELDS} | {RECONCILIATION} | {NAMED_TEST} |
+| {ACTUAL_OPERATION} | {WHO_MAY_ACT} | {CALL_AND_ONLY_ERRORS_IT_HANDLES} | {SUCCESS_FIELDS} | {CONCRETE_INTERRUPTION_OR_REPLAY_SCENARIO} | `{EXECUTABLE_COMMAND}` |
 
 **Provider transaction gate**: CLOSED
 
@@ -745,19 +719,9 @@ no-mutation evidence.
 - [ ] {INVARIANT_3}
 
 ### Risk Assessment
-| Risk | Severity | Mitigation |
-|------|----------|------------|
-| {RISK_DESCRIPTION} | HIGH/MEDIUM/LOW | {MITIGATION} |
-
-### HIGH-Risk Verification (include only when HIGH risks exist)
-| HIGH Risk | Concrete Failure Scenario | Distinguishing Inputs or Full State Sequence | Named Executable Test | Failing-Before Evidence |
-|---|---|---|---|---|
-| {RISK_ID_OR_DESCRIPTION} | {FAILURE_SCENARIO} | {DISTINCT_SENTINELS_OR_TRANSITION_SEQUENCE} | {TEST_NAME_COMMAND} | {EXPECTED_FAILURE_OR_SAFE_NOT_AVAILABLE_REASON} |
-
-**HIGH-risk gate**: CLOSED
-
-Every HIGH Risk Assessment row has exactly one substantive verification row. If there are
-no HIGH risks, omit this section.
+| Risk | Severity | Concrete Failure Scenario | Exact Verification Command |
+|------|----------|---------------------------|----------------------------|
+| {NON_PROVIDER_RISK_DESCRIPTION} | HIGH/MEDIUM/LOW | {OBSERVABLE_FAILURE} | `{EXECUTABLE_COMMAND}` |
 
 ### Files to Read Before Coding
 <!-- Builder MUST read these files before writing any code -->
@@ -781,8 +745,7 @@ no HIGH risks, omit this section.
 ## Skip Conditions
 
 After the mandatory entrypoint/caller trace and A2.1 Production Seam Ownership Gate have
-closed at least one ownership row and no HIGH risk was identified, the remaining planning
-work may be skipped for:
+closed at least one ownership row, the remaining planning work may be skipped for:
 - **COMPLEXITY_BAND: TRIVIAL**;
 - only-new-file, one-file config/docs, or `docs:`/`chore:` work whose ownership row proves the new/spec/config file is the actual production surface;
 - empty initial Affected Files only after investigation is superseded with a concrete production owner.

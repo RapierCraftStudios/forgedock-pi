@@ -123,31 +123,14 @@ validate_ownership_rows() {
   fi
 }
 
-validate_provider_proof() {
-  local body="$1" source="$2" require_closed="$3" rows
-  printf '%s' "$body" | grep -qF '### Provider Transaction Proof' || { echo "BUILD_RESULT: status: GATED blocker: $source missing Provider Transaction Proof"; return 1; }
-  rows=$(printf '%s\n' "$body" | awk '/^### Provider Transaction Proof/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||Provider operation')
-  [ -n "$rows" ] || { echo "BUILD_RESULT: status: GATED blocker: $source has no provider transaction row"; return 1; }
-  ! printf '%s\n' "$rows" | grep -Eqi '\{[^}]*\}|\b(TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|[[:space:]]*\|' || { echo "BUILD_RESULT: status: GATED blocker: $source provider row is empty or placeholder"; return 1; }
-  if [ "$require_closed" = true ]; then printf '%s' "$body" | grep -qF '**Provider transaction gate**: CLOSED' || { echo "BUILD_RESULT: status: GATED blocker: $source provider gate is not exactly CLOSED"; return 1; }; fi
-}
-
-validate_high_risk_proof() {
-  local body="$1" risks proofs risk_count proof_count
-  risks=$(printf '%s\n' "$body" | awk '/^### Risk Assessment/{p=1;next} /^### /{p=0} p' | grep -E '\|[[:space:]]*HIGH[[:space:]]*\|' || true)
-  [ -n "$risks" ] || return 0
-  proofs=$(printf '%s\n' "$body" | awk '/^### HIGH-Risk Verification/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||^\| HIGH Risk \|')
-  risk_count=$(printf '%s\n' "$risks" | grep -c '^|' || true); proof_count=$(printf '%s\n' "$proofs" | grep -c '^|' || true)
-  [ "$risk_count" -eq "$proof_count" ] && [ "$proof_count" -gt 0 ] || { echo "BUILD_RESULT: status: GATED blocker: every HIGH risk requires one verification row"; return 1; }
-  ! printf '%s\n' "$proofs" | grep -Eqi '\{[^}]*\}|\b(TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|[[:space:]]*\|' || { echo "BUILD_RESULT: status: GATED blocker: HIGH-risk row is empty or placeholder"; return 1; }
-  printf '%s' "$body" | grep -qF '**HIGH-risk gate**: CLOSED' || { echo "BUILD_RESULT: status: GATED blocker: HIGH-risk gate is not closed"; return 1; }
-}
-
 # Coordinator role is allowed to create B2 artifacts on a fresh build. Builder role must
 # receive and validate them; this avoids requiring the contract before contract creation.
 if [ "$BUILD_PHASE_ROLE" = builder ] || [ -n "$CONTRACT_BODY" ]; then
   validate_ownership_rows "$CONTRACT_BODY" 'Builder Contract' false || exit 1
-  [ "$SIDE_EFFECT" = NO ] || validate_provider_proof "$CONTRACT_BODY" 'Builder Contract' true || exit 1
+fi
+if [ "$SIDE_EFFECT" = YES ]; then
+  printf '%s' "$INVESTIGATOR_BODY" | grep -qF '### Provider Operations' || { echo "BUILD_RESULT: status: GATED blocker: provider operations missing from investigation"; exit 1; }
+  printf '%s\n' "$INVESTIGATOR_BODY" | awk '/^### Provider Operations/{p=1;next} /^### /{p=0} p' | grep -q '^- ' || { echo "BUILD_RESULT: status: GATED blocker: investigation has no actual provider operation"; exit 1; }
 fi
 
 if [ "$BUILD_PHASE_ROLE" = builder ]; then
@@ -193,8 +176,10 @@ fi
 FROZEN_BASE_SHA="${EXPECTED_BASE_SHA:-}"
 if [ "$BUILD_PHASE_ROLE" = builder ] && [ -n "$BUILDER_BODY" ]; then
   validate_ownership_rows "$ARCHITECT_BODY" 'current architecture for resume' true || exit 1
-  [ "$SIDE_EFFECT" = NO ] || validate_provider_proof "$ARCHITECT_BODY" 'current architecture for resume' true || exit 1
-  validate_high_risk_proof "$ARCHITECT_BODY" || exit 1
+  if [ "$SIDE_EFFECT" = YES ]; then
+    printf '%s' "$ARCHITECT_BODY" | grep -qF '### Provider Transaction Proof' || { echo "BUILD_RESULT: status: GATED blocker: current architecture missing provider proof"; exit 1; }
+    printf '%s' "$ARCHITECT_BODY" | grep -qF '**Provider transaction gate**: CLOSED' || { echo "BUILD_RESULT: status: GATED blocker: current architecture provider gate is not closed"; exit 1; }
+  fi
 fi
 if [ "$BUILD_PHASE_ROLE" = builder ] && printf '%s' "$BUILDER_BODY" | grep -qF '<!-- FORGE:BUILDER:COMPLETE -->'; then
   mapfile -t VALIDATED_COMMIT_LINES < <(printf '%s' "$BUILDER_BODY" | sed -n 's/^validated_commit: \([a-f0-9]\{40\}\)$/\1/p')
@@ -326,13 +311,9 @@ gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:CONTRACT -->
 |---|---|---|---|
 | {EFFECT} | {ENTRYPOINT} | {OWNER_PATH_AND_SYMBOL} | {DELIVERABLE_PATH or exact source evidence behavior already exists} |
 
-### Provider Transaction Proof (include only when investigation says YES)
-
-| Provider operation or fallback | Authority / preconditions | Exact call and failure scope | Required result / readback | Replay / recovery | Deterministic test |
-|---|---|---|---|---|---|
-| {ACTUAL_OPERATION} | {WHO_MAY_ACT} | {CALL_AND_ONLY_ERRORS_IT_CLASSIFIES} | {FIELDS_REQUIRED_FOR_SUCCESS} | {RECONCILIATION_AFTER_SUCCESS} | {NAMED_TEST} |
-
-**Provider transaction gate**: CLOSED
+**Provider operations**: use the latest investigation's `### Provider Operations`; do
+not reproduce transaction proof in this coordinator-owned contract. The fresh builder
+closes that proof in architecture before mutation.
 
 **Exact behavioral test**: `{COMMAND_OR_NAMED_TEST_THAT_INVOKES_THE_PUBLIC_SEAM}`
 **Bug reproduction before fix**: `{FAILING_BEFORE_COMMAND_OR_NOT_APPLICABLE_FOR_NON_BUG}`
@@ -344,21 +325,18 @@ not an active execution path. A prompt/spec may be the production owner only whe
 investigation proves that exact file is loaded as the runtime surface and no separate
 executable owner controls the effect.
 
-### Quality Considerations
-
-{AUTH_MODEL_NEW_ENV_VARS_SQL_SAFETY_SECURITY_SURFACE}
-
 ### Out of Scope
 
 {OUT_OF_SCOPE_ITEMS}
 ${ATTRIBUTION_LINE}"
 ```
 
-Contract must be grounded in the investigation report. Every deliverable file must appear in the affected files list from the investigator. Adversarially validate the proposed fix against adjacent system layers before posting. The execution path must name the real caller/entrypoint that activates every new helper, command, or configuration boundary and the exact test that invokes that seam. Compare the Production Seam Ownership rows to Deliverables before posting: an owner that controls the requested effect cannot remain related/read-only or be omitted unless its no-mutation evidence proves the behavior already exists. Any mismatch returns to investigation before contract publication. When investigation marks `Irreversible/provider side effect: YES`, require one
-substantive proof row per actual mutation or fallback. Each row states authority,
-operation-scoped failure handling, required result/readback, replay/recovery, and a
-current-transaction test. Do not invent a fixed global scenario list. For a bug, run and record a
-safe deterministic failing-before reproduction when one exists.
+Contract must be grounded in the investigation report and remain concise. Every
+deliverable file must appear in the investigator's affected files. The execution path
+names the real entrypoint/caller and exact public-seam test. Compare Production Seam
+Ownership to Deliverables. A production owner that controls the requested effect cannot remain related/read-only. An omitted executable owner returns to investigation. Do not
+repeat investigation evidence, provider matrices, risk tables, alternatives, or history.
+For a bug, record one safe deterministic failing-before command when one exists.
 
 ### B2.1: Post FORGE:CLAIM on coordination issue (conditional — when running under orchestration batch) <!-- Added: forge#1736 -->
 
@@ -469,7 +447,8 @@ Skill("work-on:build:architect", args="{NUMBER} --repo {GH_REPO} --gh-flag {GH_F
 The Skill() form above is the exception path — not the default. <!-- Added: forge#1276 -->
 
 **After architecture planning**:
-- If any Risk Assessment row is HIGH, require a matching substantive `HIGH-Risk Verification` row with a concrete failure scenario, discriminating inputs or full state sequence, named executable test, and exact `**HIGH-risk gate**: CLOSED`; otherwise return `GATED` before B5
+- Provider work requires the one architecture-owned Provider Transaction Proof to be CLOSED; no earlier artifact may duplicate it
+- Every HIGH Risk Assessment row includes its concrete failure scenario and exact executable verification command in that same row; there is no second HIGH-risk table
 - Returns ordered implementation plan → continue to B5
 - BLOCKED (conflicting constraints that cannot be resolved inline) → post comment, add `needs-human`, return `BUILD_RESULT: status: BLOCKED`
 # MUST CONTINUE to Phase B5 — architect result is intermediate, NOT terminal.

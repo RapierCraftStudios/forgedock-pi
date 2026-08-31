@@ -44,13 +44,11 @@ For non-trivial work, implementation cannot begin without a same-issue
 row and closing every requested observable effect. A discovered production caller/adapter that owns the effect
 cannot remain read-only or outside Deliverables without exact source proof that no
 mutation is needed. Test-local fixtures, mocks, unwired exports, and prose do not count as
-production implementation. Every HIGH architecture risk must have a CLOSED verification
-row with a concrete failure scenario, discriminating identity values or complete durable-
-state transition sequence, and a named executable regression. No HIGH risks means no
-extra table. When investigation marks an irreversible/provider side effect,
-architecture must also contain a CLOSED Provider Transaction Proof with one substantive
-row per actual mutation or fallback: authority, exact call/failure scope, required
-result/readback, replay/recovery, and a current-transaction test. A legitimate architecture skip must still be the
+production implementation. When investigation marks an irreversible/provider side
+effect, architecture owns the only Provider Transaction Proof. Each actual
+operation/fallback/replay scenario and each HIGH Risk Assessment row names an exact
+executable command. Run those commands and record command plus passing outcome in the
+builder result; do not create a second HIGH-risk table. A legitimate architecture skip must still be the
 explicit completed skip artifact required by `build/architect.md`; absence is never a
 skip. Follow the architecture plan as the primary implementation guide.
 
