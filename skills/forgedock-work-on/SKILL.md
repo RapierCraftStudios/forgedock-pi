@@ -47,21 +47,18 @@ contract. Optional adjacent work becomes a follow-up issue.
 Before composing the contract, read
 `../../specs/original/commands/work-on/build.md` with `--phase-role coordinator` and
 execute its B0-B2 planning requirements without source mutation, including the explicit complexity classification.
-Before the first `write` or `edit` of source, post a complete `FORGE:CONTRACT` derived only
-from the investigation: task type, approach, per-file change/why table, acceptance
-mapping, quality considerations, out-of-scope items, alternatives, and one concise
-execution path from the active public/production entrypoint through every owning
-caller/adapter and changed boundary to an observable result and exact public-seam test.
-Every executable owner of the requested effect must be a deliverable unless exact source
+Before the first `write` or `edit` of source, post a concise `FORGE:CONTRACT` derived only
+from the investigation: task type, one-paragraph approach, per-file change/why table,
+acceptance mapping, out-of-scope items, and one execution path from the public production
+entrypoint to the observable result and exact public-seam test. Reference investigation
+evidence instead of repeating it.
+Every executable production owner of the requested effect must be a deliverable unless exact source
 evidence proves it already performs the behavior. A related/read-only owner, test-local
-fixture/mock, unwired export, or prose path cannot substitute for production wiring. For bug fixes, include a safe failing-before
-reproduction when one is deterministic. For every HIGH architecture risk, require one
-closed verification row with its failure scenario, discriminating inputs or full durable-
-state sequence, and named executable test; omit this table when no HIGH risks exist. For
-irreversible/provider side effects, include a closed Provider Transaction Proof before
-builder launch, with one row per actual mutation or fallback: authority/preconditions,
-exact call and failure scope, required result/readback, replay/recovery, and a deterministic
-test. A fallback may be authorized only by failure of its named operation. When running under orchestration, post the
+fixture/mock, unwired export, or prose path cannot substitute for production wiring. For
+bug fixes, include a safe failing-before command when one is deterministic. Investigation
+classifies provider side effects and lists actual operations once; the coordinator must
+not generate architecture, provider proof, or risk matrices before fresh builder launch.
+When running under orchestration, post the
 finalized affected-file `FORGE:CLAIM` on the coordination issue; standalone work-on has
 no coordination claim. A path absent from the
 investigation and contract cannot be mutated; a discovered scope gap returns to
@@ -104,17 +101,21 @@ GitHub and must read `specs/original/commands/work-on/build.md` with
 The builder executes context, architecture, implementation, quality-gate, validation,
 acceptance, and commit work inline from the original specifications. Architecture must
 close Production Seam Ownership for every observable effect before mutation; unresolved
-or test-only production wiring returns to investigation rather than review. Provider work also requires a closed Provider Transaction Proof and passing tests for its
-actual operation/fallback rows. Every HIGH-risk verification row must pass before build
-completion. Missing
+or test-only production wiring returns to investigation rather than review. Provider work
+uses exactly one builder-owned Provider Transaction Proof in architecture. Its actual
+operation/fallback/replay scenarios and every HIGH Risk Assessment row name exact
+executable commands; the builder records each command and passing outcome before build
+completion. Do not add a second HIGH-risk table. Missing
 `FORGE:ARCHITECT:COMPLETE` is never an implicit skip; a legitimate skip uses the explicit
 completed skip artifact from `build/architect.md`. The coordinator must not replace a
 failed builder with inline implementation.
 
 Before push or PR creation, independently require the returned commit to equal clean
 `HEAD`, retain frozen-base ancestry, and have every changed/new path covered by the
-latest contract and any required orchestration claim. Re-read the issue and require the architecture
-artifact, real validation evidence, and commit-bound `FORGE:BUILDER:COMPLETE`. A missing,
+latest contract and any required orchestration claim. Re-read the issue and require the
+architecture artifact, exact command outcomes, real validation evidence, and commit-bound
+`FORGE:BUILDER:COMPLETE`. Do not rerun a full configured suite already bound to that exact
+commit; rerun only when evidence is missing or the target/head changed. A missing,
 ambiguous, or mismatched result is automated `GATED`, not a reason to improvise or add
 `needs-human`.
 
