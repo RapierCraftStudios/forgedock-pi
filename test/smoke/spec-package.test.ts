@@ -96,6 +96,9 @@ test("one canonical issue schema governs every ForgeDock creator", async () => {
   assert.doesNotMatch(staging, /STAGING_FINDING_TITLE="chore:/);
   assert.doesNotMatch(staging, /Title: `Staging Review:/);
   assert.match(staging, /STAGING_FINDING_TITLE="fix:/);
+  assert.match(staging, /frozen commit-graph reachability/);
+  assert.match(staging, /head\.repo\.full_name/);
+  assert.doesNotMatch(staging, /git log[\s\S]*grep -oP ['"]?#\\d+/);
   for (const creator of [signalPlanner, upgradeDeps, resolutionPhase, dependencyPhase]) {
     for (const heading of headings) assert.ok(creator.includes(heading), heading);
     assert.match(creator, /Skill\(skill="issue"/);

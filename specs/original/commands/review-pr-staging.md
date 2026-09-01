@@ -183,21 +183,40 @@ fi
 ```bash
 git fetch origin $DEFAULT_BRANCH $STAGING_BRANCH
 
-# Step 1: Find all PR numbers in the staging→main bundle
-# These are the PRs whose commits are included in staging but not yet in main
-BUNDLE_PRS=$(git log origin/$DEFAULT_BRANCH..origin/$STAGING_BRANCH --oneline \
-  | grep -oP '#\d+' \
-  | sort -u \
-  | tr -d '#')
+# Step 1: Resolve all PRs in the staging→main bundle by the packaged resolver's
+# frozen commit-graph reachability contract. Never infer membership from commit
+# subjects, issue references, or PR numbers in prose.
+#
+# The resolver accepts GitHub PR identity plus head/merge commit evidence. A candidate
+# contributes when one of those commits is reachable from frozen staging but not from
+# frozen main, which handles merge, squash, and rebase merges without subject parsing.
+BUNDLE_CANDIDATES=$(gh api --paginate \
+  "repos/${GH_REPO}/pulls?state=all&base=${STAGING_BRANCH}&per_page=100" \
+  --jq '.[] | [(.number | tostring), (.base.ref // ""), (.head.sha // ""), (.merge_commit_sha // ""), (.head.repo.full_name // "")] | @tsv')
 
-# Also extract PR numbers from merge commit subjects (most reliable)
-MERGE_PRS=$(git log origin/$DEFAULT_BRANCH..origin/$STAGING_BRANCH --merges --oneline \
-  | grep -oP '(?<=pull request #)\d+' \
-  | sort -u)
+ALL_PR_NUMBERS=""
+while IFS=$'\t' read -r PR_NUM CANDIDATE_BASE HEAD_SHA MERGE_SHA HEAD_REPOSITORY; do
+  [ -n "$PR_NUM" ] || continue
+  [ "$HEAD_REPOSITORY" = "$GH_REPO" ] || continue
+  [ "$CANDIDATE_BASE" = "$STAGING_BRANCH" ] || continue
 
-ALL_PR_NUMBERS=$(echo "$BUNDLE_PRS $MERGE_PRS" | tr ' ' '\n' | sort -u | grep -E '^[0-9]+$')
+  INCLUDED=0
+  for EVIDENCE_SHA in "$HEAD_SHA" "$MERGE_SHA"; do
+    [ -n "$EVIDENCE_SHA" ] || continue
+    if git merge-base --is-ancestor "$EVIDENCE_SHA" "origin/$STAGING_BRANCH" \
+      && ! git merge-base --is-ancestor "$EVIDENCE_SHA" "origin/$DEFAULT_BRANCH"; then
+      INCLUDED=1
+      break
+    fi
+  done
 
-echo "PRs in staging→main bundle: $(echo $ALL_PR_NUMBERS | tr '\n' ' ')"
+  if [ "$INCLUDED" -eq 1 ]; then
+    ALL_PR_NUMBERS="${ALL_PR_NUMBERS}${PR_NUM}\n"
+  fi
+done <<< "$BUNDLE_CANDIDATES"
+ALL_PR_NUMBERS=$(printf '%b' "$ALL_PR_NUMBERS" | sort -n -u)
+
+echo "PRs in staging→main bundle (frozen reachability): $(echo "$ALL_PR_NUMBERS" | tr '\n' ' ')"
 
 # Step 2: For each PR in the bundle, check for open review-finding issues and degraded panels
 BLOCKING_FINDINGS=""
@@ -592,7 +611,7 @@ TEST_GATE_VERDICT="SKIP"
 TEST_GATE_REASON="Phase 6.5 not yet run"
 
 # Invoke /test-gate with the bundle PRs already computed in Phase 0A
-# ALL_PR_NUMBERS is the de-duplicated union of both scan methods (commit log + merge subjects)
+# ALL_PR_NUMBERS is the de-duplicated set resolved by frozen commit-graph reachability
 GATE_OUTPUT=$(Skill("test-gate", "--prs \"$(echo $ALL_PR_NUMBERS | tr '\n' ' ' | xargs)\" --base $DEFAULT_BRANCH"))
 
 # Extract machine-readable verdict from Skill output
