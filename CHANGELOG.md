@@ -7,6 +7,7 @@
 - Added a packaged, depth-bounded work-on coordinator agent that can launch the mandatory fresh reviewer panel without enabling recursive issue orchestration.
 - Explicitly allowlisted the child-safe `subagent` tool for that coordinator so pi-subagents 0.59 preserves it through the profile's strict tool filter.
 - Packaged the original ForgeDock command/helper corpus with a SHA-256 integrity manifest.
+- Packaged deterministic helpers referenced by the original specifications: `specs/original/bin/engine/admission.mjs`, `specs/original/bin/engine/resolve.mjs`, `specs/original/bin/engine/orchestrate-canary.mjs`, `specs/original/bin/engine/invariants.mjs`, and `specs/original/bin/labels.json`.
 - Restored `forge.yaml` as workflow configuration authority.
 - Documented the visible-coordinator, GitHub-state closed-loop architecture.
 
