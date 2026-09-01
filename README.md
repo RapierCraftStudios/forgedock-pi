@@ -64,6 +64,16 @@ pi install /absolute/path/to/forgedock-pi
 
 Restart Pi or run `/reload` after installation.
 
+Before starting a workflow, verify that GitHub CLI is authenticated:
+
+```bash
+gh auth status
+```
+
+The authenticated account must have access to the configured repository in `forge.yaml`
+under `project.owner` and `project.repo`. If the check fails, run `gh auth login` and
+select an account with access to that repository.
+
 ## Configuration
 
 The prompt-routed workflow uses the original `forge.yaml` contract. Start from the
