@@ -105,6 +105,9 @@ test("one canonical issue schema governs every ForgeDock creator", async () => {
   assert.match(staging, /missing or malformed commit evidence/);
   assert.match(staging, /git cat-file -e/);
   assert.match(staging, /commit evidence is unavailable locally/);
+  assert.match(staging, /STAGING_REACHABILITY_STATUS=\$\?/);
+  assert.match(staging, /BASE_REACHABILITY_STATUS=\$\?/);
+  assert.match(staging, /could not verify PR #\$\{PR_NUM\} reachability/);
   assert.match(staging, /FROZEN_DEFAULT_SHA=\$\(git rev-parse/);
   assert.match(staging, /TEST_GATE_MARKER=.*RESULT=\(BLOCK\|PASS\|SKIP\)/);
   assert.match(staging, /FORGE:TEST_GATE:RESULT=\(BLOCK\|PASS\|SKIP\) -->/);

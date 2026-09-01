@@ -243,9 +243,25 @@ while IFS='|' read -r PR_NUM CANDIDATE_BASE HEAD_SHA MERGE_SHA; do
       echo "⛔ DEPLOY BLOCKED — PR #${PR_NUM} commit evidence is unavailable locally." >&2
       break
     fi
-    if git merge-base --is-ancestor "$EVIDENCE_SHA" "$FROZEN_STAGING_SHA" \
-      && ! git merge-base --is-ancestor "$EVIDENCE_SHA" "$FROZEN_DEFAULT_SHA"; then
-      INCLUDED=1
+    if git merge-base --is-ancestor "$EVIDENCE_SHA" "$FROZEN_STAGING_SHA"; then
+      if git merge-base --is-ancestor "$EVIDENCE_SHA" "$FROZEN_DEFAULT_SHA"; then
+        continue
+      fi
+      BASE_REACHABILITY_STATUS=$?
+      if [ "$BASE_REACHABILITY_STATUS" -eq 1 ]; then
+        INCLUDED=1
+        break
+      fi
+      BUNDLE_GATE_QUERY_FAILED=1
+      REACHABILITY_ERROR=1
+      echo "⛔ DEPLOY BLOCKED — could not verify PR #${PR_NUM} reachability against the frozen default branch." >&2
+      break
+    fi
+    STAGING_REACHABILITY_STATUS=$?
+    if [ "$STAGING_REACHABILITY_STATUS" -gt 1 ]; then
+      BUNDLE_GATE_QUERY_FAILED=1
+      REACHABILITY_ERROR=1
+      echo "⛔ DEPLOY BLOCKED — could not verify PR #${PR_NUM} reachability against the frozen staging branch." >&2
       break
     fi
   done
