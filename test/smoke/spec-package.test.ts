@@ -101,6 +101,9 @@ test("one canonical issue schema governs every ForgeDock creator", async () => {
   assert.match(staging, /if ! BUNDLE_CANDIDATES=\$\(gh api/);
   assert.match(staging, /if ! git fetch origin \$DEFAULT_BRANCH \$STAGING_BRANCH/);
   assert.match(staging, /BUNDLE_GATE_QUERY_FAILED=0/);
+  assert.match(staging, /VALID_EVIDENCE=0/);
+  assert.match(staging, /INVALID_EVIDENCE=0/);
+  assert.match(staging, /missing or malformed commit evidence/);
   assert.match(staging, /FROZEN_DEFAULT_SHA=\$\(git rev-parse/);
   assert.match(staging, /TEST_GATE_MARKER=.*RESULT=\(BLOCK\|PASS\|SKIP\)/);
   assert.match(staging, /FORGE:TEST_GATE:RESULT=\(BLOCK\|PASS\|SKIP\) -->/);

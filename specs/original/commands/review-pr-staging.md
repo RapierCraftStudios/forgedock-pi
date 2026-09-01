@@ -219,9 +219,28 @@ Retry after GitHub authentication, rate-limit, or network recovery. The gate fai
 fi
 
 ALL_PR_NUMBERS=""
+BUNDLE_GATE_QUERY_FAILED=0
 while IFS=$'\t' read -r PR_NUM CANDIDATE_BASE HEAD_SHA MERGE_SHA; do
   [ -n "$PR_NUM" ] || continue
   [ "$CANDIDATE_BASE" = "$STAGING_BRANCH" ] || continue
+
+  # A candidate with missing or malformed commit evidence has unknown bundle
+  # membership. Never silently omit it and continue as if the bundle were clean.
+  VALID_EVIDENCE=0
+  INVALID_EVIDENCE=0
+  for EVIDENCE_SHA in "$HEAD_SHA" "$MERGE_SHA"; do
+    [ -n "$EVIDENCE_SHA" ] || continue
+    if ! printf '%s' "$EVIDENCE_SHA" | grep -qE '^[0-9a-fA-F]{40}$'; then
+      INVALID_EVIDENCE=1
+      continue
+    fi
+    VALID_EVIDENCE=1
+  done
+  if [ "$INVALID_EVIDENCE" -eq 1 ] || [ "$VALID_EVIDENCE" -eq 0 ]; then
+    BUNDLE_GATE_QUERY_FAILED=1
+    echo "⛔ DEPLOY BLOCKED — PR #${PR_NUM} has missing or malformed commit evidence." >&2
+    continue
+  fi
 
   INCLUDED=0
   for EVIDENCE_SHA in "$HEAD_SHA" "$MERGE_SHA"; do
@@ -244,7 +263,6 @@ echo "PRs in staging→main bundle (frozen reachability): $(echo "$ALL_PR_NUMBER
 # Step 2: For each PR in the bundle, check for open review-finding issues and degraded panels
 BLOCKING_FINDINGS=""
 DEGRADED_REVIEWS=""
-BUNDLE_GATE_QUERY_FAILED=0
 for pr_num in $ALL_PR_NUMBERS; do
   if ! IS_REVIEW_DEGRADED=$(gh pr view "$pr_num" -R "$GH_REPO" --json labels \
     --jq '[.labels[].name] | any(. == "review-degraded")'); then
@@ -283,7 +301,7 @@ if [ "$BUNDLE_GATE_QUERY_FAILED" -eq 1 ]; then
 ## Deploy Gate: BLOCKED
 
 **Gate**: bundle-state-integrity
-**Result**: BLOCK — review-panel or open-finding metadata was unavailable.
+**Result**: BLOCK — candidate commit evidence or review-panel/open-finding metadata was unavailable.
 **Bundle PRs**: ${ALL_PR_NUMBERS}
 **Timestamp**: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 
