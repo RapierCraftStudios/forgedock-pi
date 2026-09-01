@@ -37,7 +37,7 @@ async function registerPackedProjectPackage(project: string): Promise<void> {
  * source discovery paths. Preflight is the public pi-subagents launch contract
  * and does not require a model or spawn a child process.
  */
-test("packed coordinator, fresh builder, and reviewer resolve with bounded tools", async () => {
+test("packed coordinator, fresh reviewer, and bounded tools resolve from the package", async () => {
   const root = process.cwd();
   const temp = await mkdtemp("/tmp/forgedock-package-canary-");
   try {
