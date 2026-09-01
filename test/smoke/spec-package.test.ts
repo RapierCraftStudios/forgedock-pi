@@ -126,6 +126,7 @@ test("canonical dispatch recipe governs wave, successor, and recovery launches",
   assert.match(reviewSkill, /For a remediation re-review/);
   assert.match(reviewSkill, /personas that produced the blocking findings plus one general/);
   assert.match(reviewSkill, /A full-domain union\s+panel is never required/);
+  // Reviewer effort calibrates to risk; the blocking standard never drops.
   assert.match(reviewSkill, /calibrate reviewer effort to that risk/);
   assert.match(reviewSkill, /medium thinking effort/);
   assert.match(reviewSkill, /never by lowering the blocking standard/);
