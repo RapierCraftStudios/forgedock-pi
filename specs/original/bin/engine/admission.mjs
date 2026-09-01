@@ -564,6 +564,22 @@ function batchRepositoryKey(batch) {
   return separator > 0 ? id.slice(0, separator) : null;
 }
 
+function batchSafetyKey(batch) {
+  if (typeof batch?.safetyClass === "string" && batch.safetyClass.trim() !== "") return batch.safetyClass;
+  if (typeof batch?.class === "string" && batch.class.trim() !== "") return batch.class;
+  const classes = (batch?.members || [])
+    .filter((member) => member && typeof member === "object")
+    .map(safetyKey)
+    .filter((value, index, values) => values.indexOf(value) === index);
+  return classes.length === 1 ? classes[0] : null;
+}
+
+function batchIdentity(batch, repo) {
+  if (typeof batch?.id === "string" && batch.id.trim() !== "") return batch.id;
+  if (batch?.number !== undefined && batch?.number !== null) return `${repo}:${batch.number}`;
+  return null;
+}
+
 function safetyKey(candidate) {
   return classifyBatchSafety(`${candidate?.title || ""}\n${candidate?.body || ""}`) || "routine";
 }
@@ -595,6 +611,7 @@ export function planP3Batches({ candidates = [], openBatches = [] } = {}) {
   const normalizedBatches = openBatches.map((batch) => ({
     ...batch,
     members: (batch.memberIds || batch.members || []).map(memberId).filter(Boolean),
+    safetyClass: batchSafetyKey(batch),
   }));
   const partitions = new Map();
   for (const candidate of normalizedCandidates) {
@@ -611,7 +628,13 @@ export function planP3Batches({ candidates = [], openBatches = [] } = {}) {
     const repo = repositoryKey(members[0]);
     const batches = normalizedBatches.filter((batch) => {
       const batchRepo = batchRepositoryKey(batch);
-      return batchRepo === repo || (batchRepo === null && repositoryCount === 1);
+      const batchRepoMatches = batchRepo === repo || (batchRepo === null && repositoryCount === 1);
+      const candidateSafety = safetyKey(members[0]);
+      const batchSafety = batch.safetyClass;
+      const safetyMatches = candidateSafety === "routine"
+        ? batchSafety === null || batchSafety === "routine"
+        : batchSafety === candidateSafety;
+      return batchRepoMatches && safetyMatches;
     });
     const securityPartition = safetyKey(members[0]) !== "routine";
     const rules = securityPartition ? { ...P3_BATCHING_RULES, maxMembers: 3 } : P3_BATCHING_RULES;
@@ -625,7 +648,15 @@ export function planP3Batches({ candidates = [], openBatches = [] } = {}) {
   const create = groups
     .sort((left, right) => `${left.key}:${left.members.join(",")}`.localeCompare(`${right.key}:${right.members.join(",")}`))
     .map(({ kind, key, members }) => ({ kind, key, memberIds: members }));
-  const extend = extensions.map(({ batch, key, members }) => ({ batch, key, memberIds: members }));
+  const extend = extensions.map(({ batch, key, members }) => {
+    const candidateRepo = repositoryKey(ids.get(members[0]));
+    const sourceBatch = normalizedBatches.find((candidate) =>
+      candidate.number === batch &&
+      (batchRepositoryKey(candidate) === candidateRepo || batchRepositoryKey(candidate) === null),
+    );
+    const repo = sourceBatch ? batchRepositoryKey(sourceBatch) || candidateRepo : candidateRepo;
+    return { batch, batchId: batchIdentity(sourceBatch, repo), key, memberIds: members };
+  });
   const ungrouped = candidates
     .map((candidate) => candidateId(candidate))
     .filter((id) => id !== null && !grouped.has(id))
