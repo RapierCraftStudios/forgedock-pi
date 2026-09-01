@@ -244,22 +244,29 @@ echo "PRs in staging→main bundle (frozen reachability): $(echo "$ALL_PR_NUMBER
 # Step 2: For each PR in the bundle, check for open review-finding issues and degraded panels
 BLOCKING_FINDINGS=""
 DEGRADED_REVIEWS=""
+BUNDLE_GATE_QUERY_FAILED=0
 for pr_num in $ALL_PR_NUMBERS; do
-  IS_REVIEW_DEGRADED=$(gh pr view "$pr_num" -R "$GH_REPO" --json labels \
-    --jq '[.labels[].name] | any(. == "review-degraded")' 2>/dev/null || echo "false")
+  if ! IS_REVIEW_DEGRADED=$(gh pr view "$pr_num" -R "$GH_REPO" --json labels \
+    --jq '[.labels[].name] | any(. == "review-degraded")'); then
+    BUNDLE_GATE_QUERY_FAILED=1
+    continue
+  fi
   if [ "$IS_REVIEW_DEGRADED" = "true" ]; then
     DEGRADED_REVIEWS="${DEGRADED_REVIEWS}
 **PR #${pr_num}** has a \`review-degraded\` label and requires a full fresh-context re-review."
   fi
 
   # Search for open review-finding issues that reference this PR
-  OPEN_FINDINGS=$(gh issue list -R "$GH_REPO" \
+  if ! OPEN_FINDINGS=$(gh issue list -R "$GH_REPO" \
     --label "review-finding" \
     --state open \
     --search "PR #${pr_num}" \
     --limit 20 \
     --json number,title \
-    --jq ".[] | \"  - #\(.number): \(.title)\"" 2>/dev/null)
+    --jq ".[] | \"  - #\(.number): \(.title)\""); then
+    BUNDLE_GATE_QUERY_FAILED=1
+    continue
+  fi
 
   if [ -n "$OPEN_FINDINGS" ]; then
     BLOCKING_FINDINGS="${BLOCKING_FINDINGS}
@@ -267,6 +274,25 @@ for pr_num in $ALL_PR_NUMBERS; do
 ${OPEN_FINDINGS}"
   fi
 done
+
+# Any failed bundle-state read is unknown state and blocks deployment.
+if [ "$BUNDLE_GATE_QUERY_FAILED" -eq 1 ]; then
+  echo "⛔ DEPLOY BLOCKED — could not retrieve review-panel or open-finding state for every bundle PR."
+  if [ -n "$PR_NUMBER" ]; then
+    gh pr comment "$PR_NUMBER" -R "$GH_REPO" --body "<!-- FORGE:GATE_FAILURE -->
+## Deploy Gate: BLOCKED
+
+**Gate**: bundle-state-integrity
+**Result**: BLOCK — review-panel or open-finding metadata was unavailable.
+**Bundle PRs**: ${ALL_PR_NUMBERS}
+**Timestamp**: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+Retry after GitHub API recovery; unknown review state is never treated as clean.
+
+<!-- FORGE:GATE_FAILURE:TYPE=bundle-state-integrity -->" 2>/dev/null || true
+  fi
+  exit 1
+fi
 
 # A degraded panel is a review-integrity failure, not a finding that an override may waive.
 if [ -n "$DEGRADED_REVIEWS" ]; then
@@ -640,8 +666,9 @@ if ! GATE_OUTPUT=$(Skill("test-gate", "--prs \"$(echo $ALL_PR_NUMBERS | tr '\n' 
 else
   # Missing or malformed output is an error, not an intentional SKIP. SKIP is reserved
   # for the test-gate's explicit machine-readable result.
-  TEST_GATE_MARKER=$(echo "$GATE_OUTPUT" | grep -oP '^FORGE:TEST_GATE:RESULT=(BLOCK|PASS|SKIP)$' | tail -1 || true)
-  TEST_GATE_VERDICT="${TEST_GATE_MARKER#*=}"
+  TEST_GATE_MARKER=$(echo "$GATE_OUTPUT" | grep -oP '^<!-- FORGE:TEST_GATE:RESULT=(BLOCK|PASS|SKIP) -->$' | tail -1 || true)
+  TEST_GATE_VERDICT="${TEST_GATE_MARKER#*RESULT=}"
+  TEST_GATE_VERDICT="${TEST_GATE_VERDICT% -->}"
   if [ -z "$TEST_GATE_MARKER" ]; then
     TEST_GATE_VERDICT="ERROR"
     TEST_GATE_REASON="BLOCK — test-gate returned no recognized FORGE:TEST_GATE:RESULT marker"
