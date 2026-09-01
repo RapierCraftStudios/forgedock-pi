@@ -549,10 +549,30 @@ function memberId(member) {
   return member === undefined || member === null ? null : String(member);
 }
 
+function repositoryKey(candidate) {
+  if (typeof candidate?.repo === "string" && candidate.repo.trim() !== "") return candidate.repo;
+  const id = candidateId(candidate);
+  const separator = id?.lastIndexOf(":") ?? -1;
+  return separator > 0 ? id.slice(0, separator) : "__unscoped__";
+}
+
+function batchRepositoryKey(batch) {
+  if (typeof batch?.repo === "string" && batch.repo.trim() !== "") return batch.repo;
+  if (typeof batch?.repository === "string" && batch.repository.trim() !== "") return batch.repository;
+  const id = typeof batch?.id === "string" ? batch.id : "";
+  const separator = id.lastIndexOf(":");
+  return separator > 0 ? id.slice(0, separator) : null;
+}
+
+function safetyKey(candidate) {
+  return classifyBatchSafety(`${candidate?.title || ""}\n${candidate?.body || ""}`) || "routine";
+}
+
 /**
  * Plan batches using the object-form contract consumed by phase-1-resolve.md.
  * The established array-form planner remains the single source of grouping
- * rules; this adapter only translates its actions to stable member IDs.
+ * rules; this adapter partitions the candidate registry at repository and
+ * security-class boundaries before translating its actions to stable IDs.
  *
  * @param {{candidates?: Object[], openBatches?: Object[]}} input
  * @returns {{create: Object[], extend: Object[], ungrouped: Object[]}}
@@ -571,27 +591,41 @@ export function planP3Batches({ candidates = [], openBatches = [] } = {}) {
       return { ...candidate, number: id };
     })
     .filter(Boolean);
+  const repositoryCount = new Set(normalizedCandidates.map(repositoryKey)).size;
   const normalizedBatches = openBatches.map((batch) => ({
     ...batch,
     members: (batch.memberIds || batch.members || []).map(memberId).filter(Boolean),
   }));
-  const legacyPlan = planP3BatchGroups(normalizedCandidates, P3_BATCHING_RULES, {
-    openBatches: normalizedBatches,
-  });
-  const grouped = new Set([
-    ...legacyPlan.groups.flatMap((group) => group.members),
-    ...legacyPlan.extensions.flatMap((extension) => extension.members),
-  ]);
-  const create = legacyPlan.groups.map(({ kind, key, members }) => ({
-    kind,
-    key,
-    memberIds: members,
-  }));
-  const extend = legacyPlan.extensions.map(({ batch, key, members }) => ({
-    batch,
-    key,
-    memberIds: members,
-  }));
+  const partitions = new Map();
+  for (const candidate of normalizedCandidates) {
+    const key = `${repositoryKey(candidate)}\u0000${safetyKey(candidate)}`;
+    const members = partitions.get(key) || [];
+    members.push(candidate);
+    partitions.set(key, members);
+  }
+
+  const groups = [];
+  const extensions = [];
+  const grouped = new Set();
+  for (const members of partitions.values()) {
+    const repo = repositoryKey(members[0]);
+    const batches = normalizedBatches.filter((batch) => {
+      const batchRepo = batchRepositoryKey(batch);
+      return batchRepo === repo || (batchRepo === null && repositoryCount === 1);
+    });
+    const securityPartition = safetyKey(members[0]) !== "routine";
+    const rules = securityPartition ? { ...P3_BATCHING_RULES, maxMembers: 3 } : P3_BATCHING_RULES;
+    const partitionPlan = planP3BatchGroups(members, rules, { openBatches: batches });
+    groups.push(...partitionPlan.groups);
+    extensions.push(...partitionPlan.extensions);
+    partitionPlan.groups.flatMap((group) => group.members).forEach((id) => grouped.add(id));
+    partitionPlan.extensions.flatMap((extension) => extension.members).forEach((id) => grouped.add(id));
+  }
+
+  const create = groups
+    .sort((left, right) => `${left.key}:${left.members.join(",")}`.localeCompare(`${right.key}:${right.members.join(",")}`))
+    .map(({ kind, key, members }) => ({ kind, key, memberIds: members }));
+  const extend = extensions.map(({ batch, key, members }) => ({ batch, key, memberIds: members }));
   const ungrouped = candidates
     .map((candidate) => candidateId(candidate))
     .filter((id) => id !== null && !grouped.has(id))

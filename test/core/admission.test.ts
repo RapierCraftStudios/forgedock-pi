@@ -18,22 +18,56 @@ test("preserves repository-qualified IDs in create actions and summaries", () =>
   const plan = planP3Batches({
     candidates: [
       { id: "alpha:12", number: 12, repo: "alpha", title: "first", affectedFile: "src/shared.ts", labels: ["priority:P3"] },
-      { id: "beta:12", number: 12, repo: "beta", title: "second", affectedFile: "src/shared.ts", labels: ["priority:P3"] },
-      { id: "alpha:13", number: 13, repo: "alpha", title: "singleton", affectedFile: "src/other.ts", labels: ["priority:P3"] },
+      { id: "alpha:13", number: 13, repo: "alpha", title: "second", affectedFile: "src/shared.ts", labels: ["priority:P3"] },
+      { id: "alpha:14", number: 14, repo: "alpha", title: "singleton", affectedFile: "src/other.ts", labels: ["priority:P3"] },
     ],
     openBatches: [],
   });
 
   assert.deepEqual(plan.create, [
-    { kind: "same-file", key: "src/shared.ts", memberIds: ["alpha:12", "beta:12"] },
+    { kind: "same-file", key: "src/shared.ts", memberIds: ["alpha:12", "alpha:13"] },
   ]);
-  assert.deepEqual(plan.ungrouped, [{ memberId: "alpha:13", reason: "no matching batch threshold" }]);
+  assert.deepEqual(plan.ungrouped, [{ memberId: "alpha:14", reason: "no matching batch threshold" }]);
   assert.deepEqual(summarizeP3BatchPlan(plan), {
     clustersFormed: 1,
     membersAbsorbed: 2,
     openBatchesExtended: 0,
-    ungroupedMembers: [{ memberId: "alpha:13", reason: "no matching batch threshold" }],
+    ungroupedMembers: [{ memberId: "alpha:14", reason: "no matching batch threshold" }],
   });
+});
+
+test("does not combine same-file candidates across repositories", () => {
+  const plan = planP3Batches({
+    candidates: [
+      { id: "alpha:12", number: 12, repo: "alpha", affectedFile: "src/shared.ts", labels: ["priority:P3"] },
+      { id: "alpha:13", number: 13, repo: "alpha", affectedFile: "src/shared.ts", labels: ["priority:P3"] },
+      { id: "beta:12", number: 12, repo: "beta", affectedFile: "src/shared.ts", labels: ["priority:P3"] },
+      { id: "beta:13", number: 13, repo: "beta", affectedFile: "src/shared.ts", labels: ["priority:P3"] },
+    ],
+    openBatches: [],
+  });
+
+  assert.deepEqual(plan.create, [
+    { kind: "same-file", key: "src/shared.ts", memberIds: ["alpha:12", "alpha:13"] },
+    { kind: "same-file", key: "src/shared.ts", memberIds: ["beta:12", "beta:13"] },
+  ]);
+});
+
+test("keeps security findings in same-class groups", () => {
+  const plan = planP3Batches({
+    candidates: [
+      { id: "org:31", number: 31, repo: "org", title: "SSRF protection", affectedFile: "src/security.ts", labels: ["priority:P3"] },
+      { id: "org:32", number: 32, repo: "org", title: "SSRF validation", affectedFile: "src/security.ts", labels: ["priority:P3"] },
+      { id: "org:33", number: 33, repo: "org", title: "credential leak", affectedFile: "src/security.ts", labels: ["priority:P3"] },
+      { id: "org:34", number: 34, repo: "org", title: "credential handling", affectedFile: "src/security.ts", labels: ["priority:P3"] },
+    ],
+    openBatches: [],
+  });
+
+  assert.deepEqual(plan.create, [
+    { kind: "same-file", key: "src/security.ts", memberIds: ["org:31", "org:32"] },
+    { kind: "same-file", key: "src/security.ts", memberIds: ["org:33", "org:34"] },
+  ]);
 });
 
 test("returns stable IDs for open-batch extensions", () => {
