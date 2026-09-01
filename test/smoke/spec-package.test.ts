@@ -99,8 +99,11 @@ test("one canonical issue schema governs every ForgeDock creator", async () => {
   assert.match(staging, /frozen commit-graph reachability/);
   assert.match(staging, /\.merge_commit_sha/);
   assert.match(staging, /if ! BUNDLE_CANDIDATES=\$\(gh api/);
+  assert.match(staging, /FROZEN_DEFAULT_SHA=\$\(git rev-parse/);
+  assert.match(staging, /TEST_GATE_VERDICT="ERROR"/);
   assert.doesNotMatch(staging, /head\.repo\.full_name/);
   assert.doesNotMatch(staging, /git log[\s\S]*grep -oP ['"]?#\\d+/);
+  assert.doesNotMatch(staging, /-R \{GH_REPO\}/);
   for (const creator of [signalPlanner, upgradeDeps, resolutionPhase, dependencyPhase]) {
     for (const heading of headings) assert.ok(creator.includes(heading), heading);
     assert.match(creator, /Skill\(skill="issue"/);

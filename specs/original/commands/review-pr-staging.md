@@ -182,6 +182,12 @@ fi
 
 ```bash
 git fetch origin $DEFAULT_BRANCH $STAGING_BRANCH
+FROZEN_DEFAULT_SHA=$(git rev-parse "origin/$DEFAULT_BRANCH")
+FROZEN_STAGING_SHA=$(git rev-parse "origin/$STAGING_BRANCH")
+[ -n "$FROZEN_DEFAULT_SHA" ] && [ -n "$FROZEN_STAGING_SHA" ] || {
+  echo "⛔ DEPLOY BLOCKED — could not freeze default/staging refs for bundle review."
+  exit 1
+}
 
 # Step 1: Resolve all PRs in the staging→main bundle by the packaged resolver's
 # frozen commit-graph reachability contract. Never infer membership from commit
@@ -217,8 +223,8 @@ while IFS=$'\t' read -r PR_NUM CANDIDATE_BASE HEAD_SHA MERGE_SHA; do
   INCLUDED=0
   for EVIDENCE_SHA in "$HEAD_SHA" "$MERGE_SHA"; do
     [ -n "$EVIDENCE_SHA" ] || continue
-    if git merge-base --is-ancestor "$EVIDENCE_SHA" "origin/$STAGING_BRANCH" \
-      && ! git merge-base --is-ancestor "$EVIDENCE_SHA" "origin/$DEFAULT_BRANCH"; then
+    if git merge-base --is-ancestor "$EVIDENCE_SHA" "$FROZEN_STAGING_SHA" \
+      && ! git merge-base --is-ancestor "$EVIDENCE_SHA" "$FROZEN_DEFAULT_SHA"; then
       INCLUDED=1
       break
     fi
@@ -236,7 +242,7 @@ echo "PRs in staging→main bundle (frozen reachability): $(echo "$ALL_PR_NUMBER
 BLOCKING_FINDINGS=""
 DEGRADED_REVIEWS=""
 for pr_num in $ALL_PR_NUMBERS; do
-  IS_REVIEW_DEGRADED=$(gh pr view "$pr_num" -R {GH_REPO} --json labels \
+  IS_REVIEW_DEGRADED=$(gh pr view "$pr_num" -R "$GH_REPO" --json labels \
     --jq '[.labels[].name] | any(. == "review-degraded")' 2>/dev/null || echo "false")
   if [ "$IS_REVIEW_DEGRADED" = "true" ]; then
     DEGRADED_REVIEWS="${DEGRADED_REVIEWS}
@@ -244,7 +250,7 @@ for pr_num in $ALL_PR_NUMBERS; do
   fi
 
   # Search for open review-finding issues that reference this PR
-  OPEN_FINDINGS=$(gh issue list -R {GH_REPO} \
+  OPEN_FINDINGS=$(gh issue list -R "$GH_REPO" \
     --label "review-finding" \
     --state open \
     --search "PR #${pr_num}" \
@@ -264,7 +270,7 @@ if [ -n "$DEGRADED_REVIEWS" ]; then
   echo "⛔ DEPLOY BLOCKED — An included PR has an incomplete isolated review panel."
   echo "$DEGRADED_REVIEWS"
   if [ -n "$PR_NUMBER" ]; then
-    gh pr comment "$PR_NUMBER" -R {GH_REPO} --body "<!-- FORGE:GATE_FAILURE -->
+    gh pr comment "$PR_NUMBER" -R "$GH_REPO" --body "<!-- FORGE:GATE_FAILURE -->
 ## Deploy Gate: BLOCKED
 
 **Gate**: review-panel-integrity
@@ -284,7 +290,7 @@ fi
 if [ -n "$BLOCKING_FINDINGS" ]; then
   # Check for human override comment on the staging→main PR
   if [ -n "$PR_NUMBER" ]; then
-    OVERRIDE=$(gh pr view "$PR_NUMBER" -R {GH_REPO} \
+    OVERRIDE=$(gh pr view "$PR_NUMBER" -R "$GH_REPO" \
       --json comments \
       --jq '[.comments[].body | select(startswith("OVERRIDE: shipping with open findings"))] | length' 2>/dev/null)
   else
@@ -307,7 +313,7 @@ if [ -n "$BLOCKING_FINDINGS" ]; then
     FINDING_COUNT=$(echo "$BLOCKING_FINDINGS" | grep -c '^\s*- #' || echo "unknown")
     GATE_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     if [ -n "$PR_NUMBER" ]; then
-      gh pr comment "$PR_NUMBER" -R {GH_REPO} --body "<!-- FORGE:GATE_FAILURE -->
+      gh pr comment "$PR_NUMBER" -R "$GH_REPO" --body "<!-- FORGE:GATE_FAILURE -->
 ## Deploy Gate: BLOCKED
 
 **Gate**: open-review-finding
@@ -336,7 +342,7 @@ else
   echo "✅ Open review-finding gate: PASSED — no open findings for PRs in this bundle."
   # Post FORGE:GATE_PASS for symmetric observability — bypass is indistinguishable from clean pass without this
   if [ -n "$PR_NUMBER" ]; then
-    gh pr comment "$PR_NUMBER" -R {GH_REPO} --body "<!-- FORGE:GATE_PASS -->
+    gh pr comment "$PR_NUMBER" -R "$GH_REPO" --body "<!-- FORGE:GATE_PASS -->
 ## Deploy Gate: PASSED
 
 **Gate**: open-review-finding check
@@ -358,10 +364,9 @@ If the gate exits with `RESULT: PASS` → a `<!-- FORGE:GATE_PASS -->` structure
 ## Phase 0B: Scope Analysis
 
 ```bash
-git fetch origin $DEFAULT_BRANCH $STAGING_BRANCH
-git diff origin/$DEFAULT_BRANCH...origin/$STAGING_BRANCH --stat | tail -20
-git diff origin/$DEFAULT_BRANCH...origin/$STAGING_BRANCH --numstat | awk '{add+=$1; del+=$2} END {print "Added:", add, "Deleted:", del, "Total:", add+del}'
-git diff origin/$DEFAULT_BRANCH...origin/$STAGING_BRANCH --name-only | sort | uniq
+git diff "$FROZEN_DEFAULT_SHA...$FROZEN_STAGING_SHA" --stat | tail -20
+git diff "$FROZEN_DEFAULT_SHA...$FROZEN_STAGING_SHA" --numstat | awk '{add+=$1; del+=$2} END {print "Added:", add, "Deleted:", del, "Total:", add+del}'
+git diff "$FROZEN_DEFAULT_SHA...$FROZEN_STAGING_SHA" --name-only | sort | uniq
 ```
 
 Categorize by service (API, Worker, Web, Shared, Infra). Identify high-risk files (billing, credits, pricing, auth, security, migration, scraper).
@@ -436,7 +441,7 @@ fi
 
 ### 1D: Secrets Scan
 ```bash
-git diff origin/$DEFAULT_BRANCH...origin/$STAGING_BRANCH | grep -iE "(api[_-]?key|secret|password|token|credential)" | grep -vE "(#|//|\.example|placeholder)" | head -20
+git diff "$FROZEN_DEFAULT_SHA...$FROZEN_STAGING_SHA" | grep -iE "(api[_-]?key|secret|password|token|credential)" | grep -vE "(#|//|\.example|placeholder)" | head -20
 ```
 
 ### 1E: CI Status Gate (BLOCKING)
@@ -624,12 +629,38 @@ echo "Posture: ${GATE_POSTURE}"
 TEST_GATE_VERDICT="SKIP"
 TEST_GATE_REASON="Phase 6.5 not yet run"
 
-# Invoke /test-gate with the bundle PRs already computed in Phase 0A
-# ALL_PR_NUMBERS is the de-duplicated set resolved by frozen commit-graph reachability
-GATE_OUTPUT=$(Skill("test-gate", "--prs \"$(echo $ALL_PR_NUMBERS | tr '\n' ' ' | xargs)\" --base $DEFAULT_BRANCH"))
+# Invoke /test-gate with the bundle PRs already computed in Phase 0A.
+# ALL_PR_NUMBERS is the de-duplicated set resolved by frozen commit-graph reachability.
+if ! GATE_OUTPUT=$(Skill("test-gate", "--prs \"$(echo $ALL_PR_NUMBERS | tr '\n' ' ' | xargs)\" --base $DEFAULT_BRANCH")); then
+  TEST_GATE_VERDICT="ERROR"
+  TEST_GATE_REASON="BLOCK — test-gate invocation failed; runtime acceptance is unknown"
+else
+  # Missing or malformed output is an error, not an intentional SKIP. SKIP is reserved
+  # for the test-gate's explicit machine-readable result.
+  TEST_GATE_VERDICT=$(echo "$GATE_OUTPUT" | grep -oP '(?<=FORGE:TEST_GATE:RESULT=)(BLOCK|PASS|SKIP)' | tail -1 || true)
+  if [ -z "$TEST_GATE_VERDICT" ]; then
+    TEST_GATE_VERDICT="ERROR"
+    TEST_GATE_REASON="BLOCK — test-gate returned no recognized FORGE:TEST_GATE:RESULT marker"
+  fi
+fi
 
-# Extract machine-readable verdict from Skill output
-TEST_GATE_VERDICT=$(echo "$GATE_OUTPUT" | grep -oP '(?<=FORGE:TEST_GATE:RESULT=)(BLOCK|PASS|SKIP)' | tail -1 || echo "SKIP")
+if [ "$TEST_GATE_VERDICT" = "ERROR" ]; then
+  echo "⛔ DEPLOY BLOCKED — ${TEST_GATE_REASON}"
+  if [ -n "$PR_NUMBER" ]; then
+    gh pr comment "$PR_NUMBER" ${GH_FLAG} --body "<!-- FORGE:GATE_FAILURE -->
+## Deploy Gate: BLOCKED
+
+**Gate**: test-gate-integrity
+**Result**: ${TEST_GATE_REASON}
+**Bundle PRs**: ${ALL_PR_NUMBERS}
+**Timestamp**: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+The staging review fails closed when runtime-gate execution or its structured result is unavailable. Retry after the test-gate is healthy.
+
+<!-- FORGE:GATE_FAILURE:TYPE=test-gate-integrity -->" 2>/dev/null || true
+  fi
+  exit 1
+fi
 
 echo "Test-gate verdict: ${TEST_GATE_VERDICT}"
 ```
@@ -800,9 +831,9 @@ Keep ALL findings (CONFIRMED/LIKELY/POSSIBLE). Deduplicate by file:line (keep hi
 ```bash
 # Colors match the canonical ForgeDock label manifest (bin/labels.json).
 # Run `npx forgedock labels setup` to bootstrap all managed labels at once.
-gh label create "review-finding" --color "D93F0B" --description "Defect or improvement found during automated PR review. Managed by ForgeDock." --force -R {GH_REPO} 2>/dev/null
-gh label create "needs-validation" --color "FBCA04" --description "Review finding awaiting human validation. Managed by ForgeDock." --force -R {GH_REPO} 2>/dev/null
-gh label create "staging-review" --color "1D76DB" --description "Finding from a staging branch review before deploy to main. Managed by ForgeDock." --force -R {GH_REPO} 2>/dev/null
+gh label create "review-finding" --color "D93F0B" --description "Defect or improvement found during automated PR review. Managed by ForgeDock." --force -R "$GH_REPO" 2>/dev/null
+gh label create "needs-validation" --color "FBCA04" --description "Review finding awaiting human validation. Managed by ForgeDock." --force -R "$GH_REPO" 2>/dev/null
+gh label create "staging-review" --color "1D76DB" --description "Finding from a staging branch review before deploy to main. Managed by ForgeDock." --force -R "$GH_REPO" 2>/dev/null
 ```
 
 ### 7D: Milestone & Code Branch Detection
@@ -817,7 +848,7 @@ MILESTONE_FLAG=""
 # milestone derivation — commands/review-pr.md and commands/review-pr-staging.md
 # both call it identically so the two specs cannot independently drift.
 # <!-- forge#2443 -->
-MILESTONE_TITLE=$(bash scripts/derive-finding-milestone.sh "${PR_NUMBER}" -R {GH_REPO})
+MILESTONE_TITLE=$(bash scripts/derive-finding-milestone.sh "${PR_NUMBER}" -R "$GH_REPO")
 # Quoted so multi-word milestone titles survive as a single value wherever
 # MILESTONE_FLAG is later interpolated — matches the quoting convention already
 # used for --title/--body-file/--label below.
