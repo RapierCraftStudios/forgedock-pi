@@ -1,6 +1,6 @@
 ---
 description: Remediate subcommand — checkout a needs-human PR, fix review findings, re-review, and re-gate with a FORGE:REMEDIATION paper trail
-argument-hint: "[PR number] [--issue N] [--repo GH_REPO] [--gh-flag GH_FLAG] [--base PR_BASE] [--inline-review-blockers --reviewed-head SHA --round N]"
+argument-hint: "[PR number] [--issue N] [--repo GH_REPO] [--gh-flag GH_FLAG] [--base PR_BASE]"
 ---
 <!-- SPDX-FileCopyrightText: Copyright (c) RapierCraft Studios -->
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
@@ -12,7 +12,6 @@ argument-hint: "[PR number] [--issue N] [--repo GH_REPO] [--gh-flag GH_FLAG] [--
 **Invoked by**:
 - `work-on.md` Phase 0A, standalone: `/work-on <pr> --remediate` (see forge#1813).
 - `commands/orchestrate/phase-4-execution.md` item 6.4, auto-dispatched against a `needs-human`-gated predecessor's own open PR.
-- The active work-on coordinator after an exact current-head `CHANGES REQUESTED` result, with the mandatory explicit handoff `--inline-review-blockers --reviewed-head {FULL_SHA} --round {N}`.
 
 **Output**: Checkout the PR's existing branch → classify the block reason (fixable vs. policy escalation) → apply fixes → quality-gate → commit/push → re-invoke `/review-pr --auto-merge` → compute the #1809 Q1 auto-land bar → merge-if-verified or hold at `workflow:awaiting-merge` → emit a `FORGE:REMEDIATION` paper trail. Return result to caller.
 
@@ -20,74 +19,6 @@ argument-hint: "[PR number] [--issue N] [--repo GH_REPO] [--gh-flag GH_FLAG] [--
 **NEVER use plan mode (EnterPlanMode).**
 
 **Scope note**: This mode owns exactly one gap — re-driving a `needs-human` PR's own remediation. It does NOT implement the `needs-human` sub-label taxonomy (#1815's scope) and it does NOT edit `review-pr.md`'s Phase 8 guard (forge#1810) — that guard's existing safe-default (`workflow:awaiting-merge` on any clean re-review of a previously-escalated PR) is reused as-is; this file only adds a bar-check *after* that guard has already fired.
-
-### Inline current-head blocker remediation (authoritative override)
-
-When the active `work-on` coordinator reaches this phase directly from a current-head
-`CHANGES REQUESTED` review, this is inline code-blocker remediation, not the legacy
-standalone `needs-human` entry path. In that mode, the M0 `needs-human` prerequisite and
-PR-global single-attempt stop do not apply. Attempt identity is the reviewed head plus the
-configured remediation round; the configured round cap remains mandatory.
-
-Before any edit, reload every current-head blocker and post exactly one
-`FORGE:REMEDIATION_PLAN` containing a **blocker closure matrix** with one row per blocker
-occurrence:
-
-| Required column | Meaning |
-|---|---|
-| Blocker | Stable finding/occurrence ID and reviewer scenario/evidence |
-| Shared invariant | The common safety/correctness boundary being repaired |
-| Code boundary | Exact affected path/symbol authorized by the Builder Contract |
-| Failing-before proof | Deterministic regression command that fails on the reviewed head |
-| Passing-after proof | The same command and expected result after the cohesive patch |
-
-If a safe deterministic regression cannot reproduce a row, provide an equivalent
-machine-checkable proof and state why a test is unavailable. Add at least one end-to-end
-test covering the shared invariant. Iterate edits/tests/replanning on the same local head
-until every closure row passes. These local iterations do not consume additional rounds.
-Only publishing one substantive new head for a fresh complete panel consumes the round.
-Do not publish that head or launch the panel while any row is unproven.
-
-Inline mode persists these exact tuple-scoped markers on the PR and linked issue:
-
-```text
-<!-- FORGE:REMEDIATION pr={PR_NUMBER} head={REVIEWED_HEAD} round={N} -->
-<!-- FORGE:REMEDIATION:COMPLETE pr={PR_NUMBER} head={POST_REVIEW_HEAD} round={N} -->
-```
-
-The complete marker is written only after the fresh panel returns. Distinct complete
-marker heads are the durable round counter used by the next invocation.
-
-A finding remains open until the fresh current-head review no longer returns its
-occurrence. Never close findings optimistically before re-review. If a fresh panel returns
-a blocker, carry its exact scenario/evidence into the next closure matrix when another
-configured round remains; after cap exhaustion, fail closed without another new head.
-
-### Unattended verification and irreversible-side-effect proof
-
-For non-interactive/headless remediation, execute verification in the coordinator process.
-A background verifier is allowed only when it durably persists the same-lifecycle
-continuation and automatically wakes that coordinator on every terminal state: completed,
-failed, killed, or cancelled. A launch receipt or progress response is not verification.
-Resource-sensitive packed-package smoke checks must run in a separate bounded serial
-step. They remain mandatory and must be joined into the one final verification result
-before push; do not run them inside the parallel aggregate suite.
-
-When a closure row touches an irreversible provider action (merge, deploy, branch deletion,
-publication, credential mutation, or equivalent), its proof must cover:
-
-1. all authority and preconditions before the side effect;
-2. the exact provider result bound to the durable receipt;
-3. idempotent replay/reconciliation after provider success;
-4. recovery when the process fails between side effect and durable receipt.
-
-Stop remediation and publish `FORGE:REINVESTIGATE_REQUIRED` when fresh evidence shows the
-accepted approach is invalid: no reachable active caller, a new authority boundary absent
-from the Builder Contract, implementation in dormant/legacy machinery while another path
-is authoritative, or repeated HIGH blockers in the same invariant after a substantive
-remediation head. Include the invalidated approach, surviving evidence, and proposed
-decomposition. Investigation/decomposition—not another remediation round—owns replacement
-of architecture or scope.
 
 **Engine coverage** (forge#2379, #2889): this subcommand's `command` name (`work-on/remediate`) and completion marker (`FORGE:REMEDIATION:COMPLETE`, including the `**Re-gate outcome**` field Phase M8 posts below) are registered in the headless engine's phase table — `RESERVED_TYPES.REMEDIATION` in `packages/protocol/src/types.js`, `remediate` in `packages/protocol/src/phases.js`'s `PHASE_IDS`/`PHASE_MARKERS`, and a matching `remediate` entry in `bin/engine/phases.mjs`'s `PHASES` array. A blocked review is committed with `terminalReason: "needs-human"`, then the engine continues directly into remediation; the divergence guard permits this specific handoff while keeping all other `needs-human` states paused.
 
@@ -101,43 +32,6 @@ Parse from $ARGUMENTS:
 - `--repo {GH_REPO}` — GitHub repo (resolved from `forge.yaml → project` if omitted)
 - `--gh-flag {GH_FLAG}` — gh CLI repo flag
 - `--base {PR_BASE}` — PR target branch (optional; resolved from the PR's `baseRefName` if omitted)
-- `--inline-review-blockers` — explicit current-head inline remediation mode; never inferred from labels or comments.
-- `--reviewed-head {FULL_SHA}` — exact reviewed PR head required with inline mode.
-- `--round {N}` — substantive remediation round required with inline mode.
-
-During argument parsing, initialize `INLINE_REMEDIATION=false`, `REVIEWED_HEAD=""`, and
-`REMEDIATION_ROUND=""`; set `INLINE_REMEDIATION=true` only when
-`--inline-review-blockers` is present, and assign the following flag values to the other
-two variables. Inline mode requires all three inline flags together. A partial flag set
-is a usage error.
-
-Resolve the assigned repository root with `git rev-parse --show-toplevel` and read only
-its literal `forge.yaml`; environment or caller overrides are not authority. The cap's
-authoritative key is `review.remediation_max_rounds`. Use the
-package's YAML dependency directly so this path has no optional parser branch:
-
-```bash
-REPOSITORY_ROOT=$(git rev-parse --show-toplevel)
-CONFIG_FILE="$REPOSITORY_ROOT/forge.yaml"
-CONFIG_VALUES=$(node --input-type=module - "$CONFIG_FILE" <<'NODE'
-import fs from "node:fs";
-import YAML from "yaml";
-const config = YAML.parse(fs.readFileSync(process.argv[2], "utf8"));
-process.stdout.write(JSON.stringify({
-  staging: config?.branches?.staging ?? "",
-  maxRounds: config?.review?.remediation_max_rounds ?? 3,
-}));
-NODE
-)
-STAGING_BRANCH=$(echo "$CONFIG_VALUES" | jq -r '.staging')
-MAX_REMEDIATION_ROUNDS=$(echo "$CONFIG_VALUES" | jq -r '.maxRounds')
-```
-
-Reject a missing staging branch, a non-integer cap, or a cap outside `1..10`. Count distinct durable,
-tuple-scoped `FORGE:REMEDIATION:COMPLETE` reviewed-head markers for this PR.
-`REMEDIATION_ROUND` must equal the next substantive round, and remediation stops before
-mutation when it exceeds `MAX_REMEDIATION_ROUNDS`. Local same-head edit/test/replan
-iterations do not change the round.
 
 ---
 
@@ -146,30 +40,15 @@ iterations do not change the round.
 Re-read current state before doing anything:
 
 ```bash
-PR_STATE=$(gh pr view {PR_NUMBER} {GH_FLAG} --json state,headRefName,headRefOid,baseRefName,body,mergeable,mergeStateStatus,url)
+PR_STATE=$(gh pr view {PR_NUMBER} {GH_FLAG} --json state,headRefName,baseRefName,body,mergeable,mergeStateStatus,url)
 PR_OPEN_STATE=$(echo "$PR_STATE" | jq -r '.state')
 HEAD_BRANCH=$(echo "$PR_STATE" | jq -r '.headRefName')
 PR_BASE="${PR_BASE:-$(echo "$PR_STATE" | jq -r '.baseRefName')}"
 PR_BODY=$(echo "$PR_STATE" | jq -r '.body')
-CURRENT_PR_HEAD=$(echo "$PR_STATE" | jq -r '.headRefOid // empty')
 ```
-
-Set the mode-independent target identity before finding selection:
-
-```bash
-if [ "$INLINE_REMEDIATION" = "true" ]; then
-  TARGET_REVIEWED_HEAD="$REVIEWED_HEAD"
-else
-  TARGET_REVIEWED_HEAD="$CURRENT_PR_HEAD"
-fi
-```
-
-For inline mode, require `REVIEWED_HEAD` to be a full SHA and equal `CURRENT_PR_HEAD`. A
-mismatch is a stale handoff: stop before finding selection or mutation. Legacy standalone
-mode rejects inline-only flags and uses the current PR head as its target identity.
 
 **PR state guard**:
-- `PR_OPEN_STATE = MERGED` → set `PR_ALREADY_MERGED=true`; do not return before linked-issue close/trajectory/cleanup reconciliation.
+- `PR_OPEN_STATE = MERGED` → EXIT `REMEDIATE_RESULT: status: ALREADY_DONE` (nothing to remediate — already landed).
 - `PR_OPEN_STATE = CLOSED` (not merged) → EXIT `REMEDIATE_RESULT: status: BLOCKED`, blocker: "PR #{PR_NUMBER} is closed, not merged — nothing to remediate."
 
 **Resolve the linked issue** (`--issue` flag takes precedence; else parse from the PR body — anchored, matching the `"Closes #N" in:body` precedent from forge#1634/#1646, never a bare-number scan):
@@ -180,11 +59,6 @@ if [ -z "$ISSUE_NUMBER" ]; then
   echo "BLOCKED: cannot resolve linked issue — pass --issue explicitly"
   # EXIT REMEDIATE_RESULT: status: BLOCKED, blocker: "cannot resolve linked issue — pass --issue explicitly"
 fi
-if [ "${PR_ALREADY_MERGED:-false}" = "true" ]; then
-  Skill("work-on:close", args="{ISSUE_NUMBER} --repo {GH_REPO} --gh-flag {GH_FLAG} --pr {PR_NUMBER} --base {PR_BASE}")
-  # Require issue-close, trajectory, and cleanup read-back before returning ALREADY_DONE.
-  # EXIT REMEDIATE_RESULT: status: ALREADY_DONE
-fi
 ```
 
 **Load the linked issue and validate it is a genuine remediation target**:
@@ -194,61 +68,22 @@ ISSUE_STATE=$(gh issue view {ISSUE_NUMBER} {GH_FLAG} --json labels,state,body,mi
 ISSUE_LABELS=$(echo "$ISSUE_STATE" | jq -r '[.labels[].name] | join(",")')
 ```
 
-- **Legacy standalone mode:** if `needs-human` is NOT among `ISSUE_LABELS` → EXIT `REMEDIATE_RESULT: status: BLOCKED`, blocker: "issue #{ISSUE_NUMBER} is not `needs-human` — legacy remediation only targets `needs-human`-gated PRs; use the normal `/work-on {ISSUE_NUMBER}` resume path instead."
-- **Inline mode:** require `workflow:in-review` (or the exact non-terminal review state defined by the caller), a matching current PR head, and at least one revalidated current-head blocker. Do not require or add `needs-human`.
+- If `needs-human` is NOT among `ISSUE_LABELS` → EXIT `REMEDIATE_RESULT: status: BLOCKED`, blocker: "issue #{ISSUE_NUMBER} is not `needs-human` — remediation mode only targets `needs-human`-gated PRs; use the normal `/work-on {ISSUE_NUMBER}` resume path instead." This keeps blast radius scoped to exactly the gap this mode fills — it is not a general-purpose re-review trigger.
 
-**Idempotency / resume check** — the paper trail lives on **both** the PR and linked
-issue. Select one exact attempt marker, and retain both object IDs and bodies:
+**Idempotency / resume check** — the paper trail lives on **both** the PR (primary — checked by the orchestrator's item 6.4 dispatch guard) and the linked issue (mirror — keeps `/work-on`'s standard FORGE-annotation trajectory and resume logic consistent with every other phase):
 
 ```bash
-if [ "$INLINE_REMEDIATION" = "true" ]; then
-  START_MARKER="<!-- FORGE:REMEDIATION pr={PR_NUMBER} head=${TARGET_REVIEWED_HEAD} round=${REMEDIATION_ROUND} -->"
-else
-  START_MARKER="<!-- FORGE:REMEDIATION -->"
-fi
 PR_REMEDIATION_COMMENT=$(gh api repos/{GH_REPO}/issues/{PR_NUMBER}/comments \
-  | jq --arg marker "$START_MARKER" '[.[] | select(.body | contains($marker))] | last // {}')
-ISSUE_REMEDIATION_COMMENT=$(gh api repos/{GH_REPO}/issues/{ISSUE_NUMBER}/comments \
-  | jq --arg marker "$START_MARKER" '[.[] | select(.body | contains($marker))] | last // {}')
-PARTIAL_PR_COMMENT_ID=$(echo "$PR_REMEDIATION_COMMENT" | jq -r '.id // empty')
-PARTIAL_ISSUE_COMMENT_ID=$(echo "$ISSUE_REMEDIATION_COMMENT" | jq -r '.id // empty')
-PR_REMEDIATION_BODY=$(echo "$PR_REMEDIATION_COMMENT" | jq -r '.body // ""')
-ISSUE_REMEDIATION_BODY=$(echo "$ISSUE_REMEDIATION_COMMENT" | jq -r '.body // ""')
-if [ "$INLINE_REMEDIATION" = "true" ]; then
-  ALL_PR_COMMENTS=$(gh api repos/{GH_REPO}/issues/{PR_NUMBER}/comments)
-  INLINE_COMPLETED_TUPLES=$(echo "$ALL_PR_COMMENTS" | jq -r '.[].body // ""' \
-    | grep -oE "<!-- FORGE:REMEDIATION:COMPLETE pr={PR_NUMBER} head=[0-9a-fA-F]{40} round=[0-9]+ -->" \
-    | sed -E 's/.*head=([0-9a-fA-F]{40}) round=([0-9]+).*/\1 \2/' || true)
-  if echo "$INLINE_COMPLETED_TUPLES" | awk -v head="$TARGET_REVIEWED_HEAD" -v round="$REMEDIATION_ROUND" '$1 == head && $2 == round { found=1 } END { exit (found ? 0 : 1) }'; then
-    echo "REMEDIATE_RESULT: status: ALREADY_DONE"
-    exit 0
-  fi
-  MAX_COMPLETED_ROUND=$(echo "$INLINE_COMPLETED_TUPLES" | awk 'BEGIN { max=0 } $2 > max { max=$2 } END { print max }')
-  EXPECTED_REMEDIATION_ROUND=$((MAX_COMPLETED_ROUND + 1))
-  [ "$REMEDIATION_ROUND" -eq "$EXPECTED_REMEDIATION_ROUND" ] || {
-    echo "BLOCKED: expected remediation round $EXPECTED_REMEDIATION_ROUND, got $REMEDIATION_ROUND"
-    exit 1
-  }
-  [ "$REMEDIATION_ROUND" -le "$MAX_REMEDIATION_ROUNDS" ] || {
-    echo "GATED: remediation round cap exhausted before mutation"
-    exit 1
-  }
-fi
+  --jq '[.[] | select(.body | contains("FORGE:REMEDIATION"))] | last')
 ```
 
-- **Legacy standalone mode:** an unscoped complete marker is `ALREADY_DONE`; preserve its
-  single-attempt semantics.
-- **Inline mode:** ignore legacy unscoped markers. If a scoped complete marker already
-  exists for `(PR, REMEDIATION_ROUND)`, the round is `ALREADY_DONE`. A different head may
-  continue only at the next derived round and below the authoritative cap.
-- If an exact start marker exists without its matching scoped completion, delete only
-  those exact partial PR/issue comments by their retrieved IDs, then restart the same
-  round. Never delete another head/round's artifact:
+- If a comment is found AND its body contains `FORGE:REMEDIATION:COMPLETE` → EXIT `REMEDIATE_RESULT: status: ALREADY_DONE`. **Single-attempt semantics (AC5)**: once a `FORGE:REMEDIATION:COMPLETE` marker exists for this PR, do NOT re-attempt fixes on a subsequent invocation, regardless of the prior verdict — this is what prevents an infinite remediation retry loop on a genuinely-blocked PR.
+- If a comment is found WITHOUT `:COMPLETE` → a prior attempt was interrupted mid-flight (same failure mode as the investigation phase's partial-comment case). Delete the partial comment(s) on both the PR and the issue, then continue below as a fresh attempt:
   ```bash
-  [ -z "$PARTIAL_PR_COMMENT_ID" ] || gh api repos/{GH_REPO}/issues/comments/$PARTIAL_PR_COMMENT_ID -X DELETE
-  [ -z "$PARTIAL_ISSUE_COMMENT_ID" ] || gh api repos/{GH_REPO}/issues/comments/$PARTIAL_ISSUE_COMMENT_ID -X DELETE
+  gh api repos/{GH_REPO}/issues/comments/{PARTIAL_PR_COMMENT_ID} -X DELETE 2>/dev/null || true
+  gh api repos/{GH_REPO}/issues/comments/{PARTIAL_ISSUE_COMMENT_ID} -X DELETE 2>/dev/null || true
   ```
-- If no exact attempt marker exists, continue as a fresh attempt.
+- If no comment is found → fresh attempt, continue below.
 
 ---
 
@@ -256,24 +91,12 @@ fi
 
 Gather everything that caused (or is still causing) `needs-human`:
 
-**M1a — Open current-head review-finding occurrences spawned from this PR**:
-
-Title matching is discovery only, never remediation authority. For each candidate, read
-its body and comments and require both the source PR and reviewed-head identity from a
-structured marker such as `FORGE:REVIEW_FINDING ... head={FULL_SHA}`. Select only
-occurrences whose source PR is `{PR_NUMBER}` and whose head equals `TARGET_REVIEWED_HEAD`.
-
-A legacy candidate without a head marker must remain open. It may enter the closure
-matrix only after the coordinator revalidates its exact reviewer scenario against the
-current head and posts:
-
-```text
-<!-- FORGE:REMEDIATION_BINDING finding={OCCURRENCE_ID} pr={PR_NUMBER} head={TARGET_REVIEWED_HEAD} -->
+**M1a — Open review-finding issues spawned from this PR** (same title-match precedent as `review-pr.md` Phase 8B/9A):
+```bash
+FINDINGS=$(gh issue list {GH_FLAG} --state open --label "review-finding" --limit 100 \
+  --json number,title,body \
+  --jq "[.[] | select(.title | test(\"PR #{PR_NUMBER}\"))]")
 ```
-
-An occurrence that cannot be revalidated or identified remains open, is excluded from
-automatic remediation/closure, and is reported as residual evidence. Never infer current
-head identity from title text, line proximity, or the fact that an issue is still open.
 
 **M1b — PR review verdicts and merge-block reasons** (Phase 8 of `review-pr.md` records the exact block reason on the linked issue when it aborts auto-merge — read that trail rather than re-deriving it):
 ```bash
@@ -299,7 +122,7 @@ else
 fi
 ```
 
-Do not perform this transition for an UNFIXABLE policy escalation. Mechanical checkout, quality-gate, push, provider, or publication failures produce automated `GATED`/`review-degraded` evidence and never add `needs-human`. Only a genuine policy or human-authority result may add `needs-human`; after such a re-review, remove `workflow:in-review` whenever that terminal label is present.
+Do not perform this transition for an UNFIXABLE policy escalation. Any later quality-gate, push, or re-review block re-adds `needs-human`; after re-review, remove `workflow:in-review` whenever that terminal label is present.
 
 ---
 
@@ -320,15 +143,13 @@ else
 fi
 ```
 
-If the worktree/branch checkout fails for any reason (branch deleted, force-pushed out from under us, etc.): post automated `GATED`/`review-degraded` evidence and EXIT `REMEDIATE_RESULT: status: BLOCKED`. Do not add `needs-human`.
+If the worktree/branch checkout fails for any reason (branch deleted, force-pushed out from under us, etc.): post a comment, add `needs-human`, EXIT `REMEDIATE_RESULT: status: BLOCKED`.
 
 ---
 
 ## Phase M3: Apply Fixes
 
-For all FIXABLE items from Phase M1, first build the single blocker closure matrix defined above and cluster rows by shared invariant. Read every affected file in `{WORKTREE_PATH}` before editing (never assume current state), then apply one cohesive fix rather than sequential line-local patches. Follow the same implementation discipline as `work-on.md` Phase 3F (cross-lane import guard, library-callback verification, deliverable-type consistency, no unrequested scope) — this file does not restate those rules, it inherits them.
-
-Before Phase M4, run every failing-before/passing-after command and the shared-invariant end-to-end test. Do not commit, push, or consume a fresh-review round until every matrix row has machine-checkable passing evidence.
+For each FIXABLE item from Phase M1: read the affected file(s) in `{WORKTREE_PATH}` before editing (never assume current state), apply the fix. Follow the same implementation discipline as `work-on.md` Phase 3F (cross-lane import guard, library-callback verification, deliverable-type consistency, no unrequested scope) — this file does not restate those rules, it inherits them.
 
 **If the block reason was a mergeability conflict** (`CONFLICTING`/`DIRTY`/`BLOCKED`): resolve it by rebasing `{HEAD_BRANCH}` onto `origin/{PR_BASE}` (or merging `{PR_BASE}` in, whichever preserves a clean, reviewable history) — resolve conflicts manually, do not blindly take "ours"/"theirs".
 
@@ -341,7 +162,7 @@ while iteration < 3:
     if result == "QUALITY GATE: PASS": GATE_PASSED=true; break
     else: fix each HIGH/MEDIUM finding, re-stage
 ```
-If still failing after 3 iterations: post automated `GATED`/`review-degraded` evidence and EXIT `REMEDIATE_RESULT: status: BLOCKED`. Do not add `needs-human` or proceed to re-review with an unresolved gate failure.
+If still failing after 3 iterations: post a comment, re-affirm `needs-human`, EXIT `REMEDIATE_RESULT: status: BLOCKED`. Do not proceed to re-review with an unresolved gate failure — that would just re-escalate one phase later with a worse paper trail.
 
 **Format/verify**: run the project's configured `verification.commands` (same as Phase 3H) before committing.
 
@@ -356,18 +177,18 @@ git commit -s -m "fix(remediate): {description} (#{ISSUE_NUMBER})"
 git push origin {HEAD_BRANCH}
 ```
 
-If push fails, retry with `--force-with-lease` only when M3 explicitly authorized a history rewrite for conflict resolution. If it still fails: post automated `GATED`/`review-degraded` evidence and EXIT `REMEDIATE_RESULT: status: BLOCKED`. Do not add `needs-human`.
+If push fails, retry with `--force-with-lease` (expected when M3 rebased to resolve a conflict). If it still fails: post a comment, add `needs-human`, EXIT `REMEDIATE_RESULT: status: BLOCKED`.
 
-**Do not close review-finding issues in this phase.** Preserve candidates separately
-from findings that fresh review has actually cleared:
-
+**Close each addressed review-finding issue directly** (this remediation fixes findings in-place on the existing PR, rather than each finding spawning its own downstream `/work-on` pipeline — leaving them open would have a future run rediscover already-fixed code). Track the closed numbers in `ADDRESSED_FINDING_NUMBERS[]` — Phase M8 reports this array in the final paper trail:
 ```bash
-CANDIDATE_FINDING_NUMBERS=({FIXABLE_FINDING_NUMBERS_FROM_M1})
 ADDRESSED_FINDING_NUMBERS=()
+for FINDING_NUM in {FIXABLE_FINDING_NUMBERS_FROM_M1}; do
+  gh issue close "$FINDING_NUM" {GH_FLAG} \
+    --comment "Fixed by remediation of PR #{PR_NUMBER} (commit {COMMIT_SHA}). See #{ISSUE_NUMBER}."
+  ADDRESSED_FINDING_NUMBERS+=("$FINDING_NUM")
+done
 ```
-
-Keep every candidate open until Phase M6's fresh current-head panel proves that its exact
-occurrence is absent. A local patch or passing quality gate is not closure authority.
+Only close findings actually addressed in this commit — leave any FIXABLE-but-deferred or unrelated open findings untouched.
 
 ---
 
@@ -376,20 +197,20 @@ occurrence is absent. A local patch or passing quality gate is not closure autho
 Post the same body to **both** `{PR_NUMBER}` and `{ISSUE_NUMBER}` (PR copy is the idempotency source of truth; issue copy keeps the standard trajectory/resume logic consistent):
 
 ```bash
-gh pr comment {PR_NUMBER} {GH_FLAG} --body "${START_MARKER}
+gh pr comment {PR_NUMBER} {GH_FLAG} --body "<!-- FORGE:REMEDIATION -->
 ## Remediation In Progress for PR #{PR_NUMBER}
 
-**Candidate findings patched (pending fresh-review closure)**:
+**Findings addressed**:
 {bulleted list: finding # — title — one-line fix summary}
 
 **Commit**: {COMMIT_SHA}
 **Quality gate**: {iterations} iteration(s), PASS
 
 Re-invoking \`/review-pr --auto-merge\` now."
-gh issue comment {ISSUE_NUMBER} {GH_FLAG} --body "${START_MARKER}
+gh issue comment {ISSUE_NUMBER} {GH_FLAG} --body "<!-- FORGE:REMEDIATION -->
 ## Remediation In Progress for PR #{PR_NUMBER}
 
-**Candidate findings patched (pending fresh-review closure)**:
+**Findings addressed**:
 {bulleted list: finding # — title — one-line fix summary}
 
 **Commit**: {COMMIT_SHA}
@@ -398,7 +219,7 @@ gh issue comment {ISSUE_NUMBER} {GH_FLAG} --body "${START_MARKER}
 Re-invoking \`/review-pr --auto-merge\` now."
 ```
 
-`START_MARKER` is tuple-scoped in inline mode and unscoped only in legacy mode. Its lack of `:COMPLETE` records an in-progress exact attempt; M0 may delete/restart only that matching tuple after interruption.
+Note the marker is `<!-- FORGE:REMEDIATION -->` with **no** `:COMPLETE` suffix yet — per the marker-presence convention (forge#1360/#1357), the absence of `:COMPLETE` correctly signals "in progress" to any concurrent reader, and the M0 resume check above treats this exact state as an interrupted attempt if a session dies before M8.
 
 ---
 
@@ -426,7 +247,7 @@ Wait for the completed child result and retain its `REVIEW_RESULT` in remediatio
 
 This re-runs the full review (domain agents → verdict → Phase 8 auto-merge gate). The FIXABLE transition above left the issue at the non-terminal `workflow:in-review` state. `review-pr.md` recognizes the in-progress `FORGE:REMEDIATION` marker posted in Phase M5 as evidence of the prior escalation, so one of two things happens inside Phase 8:
 
-- **Re-escalated**: in inline mode, fresh deterministic code blockers remain `workflow:in-review` for the next available configured round, or become automated `GATED`/`review-degraded` after cap exhaustion; they never imply `needs-human`. Purpose, calibration, trust, or other genuine human-authority results may add `needs-human` and remove `workflow:in-review`. Legacy standalone mode retains its historical human-escalation behavior.
+- **Re-escalated**: the re-review itself trips a fresh block (`CHANGES REQUESTED`, purpose-regression, calibration, trust, or a still-`CONFLICTING` mergeability check) → it adds `needs-human`, and this phase removes `workflow:in-review`, leaving one terminal state.
 - **Clean re-review**: `VERDICT=APPROVED`-equivalent, mergeable, and the "Previously-escalated re-review guard" (forge#1810) fires — setting `workflow:awaiting-merge` and removing `workflow:in-review`, *without* auto-merging (that guard's own safe default, left untouched by this file).
 
 ```bash
@@ -440,42 +261,7 @@ Extract the re-review verdict for the paper trail (Phase M8 reports this verbati
 ```bash
 RE_REVIEW_VERDICT=$(gh api repos/{GH_REPO}/issues/{PR_NUMBER}/comments \
   --jq '[.[] | select(.body | test("APPROVED:|CHANGES REQUESTED:"; "i"))] | last | .body // "unknown"' 2>/dev/null | head -c 200)
-POST_REVIEW_HEAD=$(gh pr view {PR_NUMBER} {GH_FLAG} --json headRefOid --jq '.headRefOid // empty')
 ```
-
-If fresh review proves the accepted approach is invalid (the triggers defined above), set
-`REINVESTIGATE_REQUIRED=true` and take this explicit cap-safe branch before Phase M7:
-
-```bash
-if [ "${REINVESTIGATE_REQUIRED:-false}" = "true" ]; then
-  REINVESTIGATE_MARKER="<!-- FORGE:REINVESTIGATE_REQUIRED pr={PR_NUMBER} head=${POST_REVIEW_HEAD} round=${REMEDIATION_ROUND} -->"
-  COMPLETE_MARKER="<!-- FORGE:REMEDIATION:COMPLETE pr={PR_NUMBER} head=${POST_REVIEW_HEAD} round=${REMEDIATION_ROUND} -->"
-  REINVESTIGATE_BODY="${REINVESTIGATE_MARKER}
-${COMPLETE_MARKER}
-## Remediation Approach Invalidated
-
-**Invalidated approach**: {summary}
-**Surviving evidence**: {current-head findings and invariant}
-**Proposed next action**: return to investigation/decomposition; preserve the PR as historical evidence.
-
-No new remediation head or panel is authorized from this invocation."
-  gh pr comment {PR_NUMBER} {GH_FLAG} --body "$REINVESTIGATE_BODY"
-  gh issue comment {ISSUE_NUMBER} {GH_FLAG} --body "$REINVESTIGATE_BODY"
-  Skill(skill="work-on/investigate", args="{ISSUE_NUMBER} --repo {GH_REPO} --gh-flag {GH_FLAG} --reinvestigate-from-pr {PR_NUMBER}")
-  # EXIT REMEDIATE_RESULT: status: BLOCKED, re_gate_outcome: REINVESTIGATE_REQUIRED
-fi
-```
-
-The tuple-scoped completion marker consumes the reviewed round before returning to
-investigation, so restart cannot delete/replay it as an interrupted attempt. Keep all
-finding issues open.
-
-After Phase M6, compare the fresh current-head findings with the closure matrix. For each
-candidate occurrence absent from the complete fresh panel, close its issue with a comment
-binding the remediation commit and append its number to `ADDRESSED_FINDING_NUMBERS[]`.
-Keep every returned, deferred, or unrelated occurrence open and carry its updated
-scenario/evidence forward when another configured round remains. Phase M8 reports only
-`ADDRESSED_FINDING_NUMBERS[]`, never the unverified candidate list.
 
 ---
 
@@ -515,15 +301,17 @@ APPROVED_COUNT=$(echo "$REVIEW_BODIES" | grep -cE 'APPROVED:' 2>/dev/null || tru
 # a trust/security decision, so it must be immune to a caller-overridable input.
 LIVE_BASE_REF=$(gh pr view {PR_NUMBER} {GH_FLAG} --json baseRefName --jq '.baseRefName' 2>/dev/null || echo "")
 
-# forge#2570: only the known reversible integration bases use the fast-lane bar:
-# the exact configured `staging` branch and `milestone/*`. `main`, empty/null values,
-# and every unknown branch name fail closed as deploy-gate/hold. A caller-controlled
-# `--base` never participates in this allowlist decision.
-if { [ -n "${STAGING_BRANCH:-}" ] && [ "$LIVE_BASE_REF" = "$STAGING_BRANCH" ]; } || [[ "$LIVE_BASE_REF" == milestone/* ]]; then
-  IS_DEPLOY_GATE=false
-else
-  IS_DEPLOY_GATE=true
-fi
+# forge#2570: `main` (and any deploy-gate base) keeps the strict #1809 Q1 verified-human bar;
+# every other base (staging, milestone/* — the reversible integration branches) reconciles to
+# the fast-lane bar. Key on "is the deploy gate", NOT the literal string "staging", so milestone
+# branches reconcile too. Fail closed: only a KNOWN, non-empty, non-`main` LIVE base reconciles
+# to the fast lane; an empty/unresolved fetch is treated as the deploy gate (strict) so a base-
+# resolution failure (or a caller passing a stale/incorrect --base) can never accidentally
+# relax the bar.
+# forge#2625: `jq -r '.baseRefName'` stringifies a JSON null to the literal text "null" (not an
+# empty string), so the `-n` check alone does not catch it — add an explicit `!= "null"` check
+# so a literal-string "null" is treated the same as an empty/unresolved base (strict).
+if [ -n "$LIVE_BASE_REF" ] && [ "$LIVE_BASE_REF" != "null" ] && [ "$LIVE_BASE_REF" != "main" ]; then IS_DEPLOY_GATE=false; else IS_DEPLOY_GATE=true; fi
 ```
 
 **Non-`main` base (`IS_DEPLOY_GATE=false` — staging / milestone)** — reconcile to the fast-lane bar. `review-pr.md`'s Phase 8 guard only parks a PR at `workflow:awaiting-merge` after a clean, mergeable `APPROVED` re-review (the same bot-`APPROVED` signal the normal fast lane auto-merges on), so the only additional condition is this remediation's own quality gate:
@@ -548,19 +336,9 @@ fi
 
 **If the bar is met** (`BAR_MET=true`):
 ```bash
-PRE_MERGE=$(gh pr view {PR_NUMBER} {GH_FLAG} --json state,headRefOid,baseRefName)
-[ "$(echo "$PRE_MERGE" | jq -r '.state')" = "OPEN" ] || { echo "GATED: PR is not open"; exit 1; }
-[ "$(echo "$PRE_MERGE" | jq -r '.headRefOid')" = "$POST_REVIEW_HEAD" ] || { echo "GATED: PR head changed after review"; exit 1; }
-[ "$(echo "$PRE_MERGE" | jq -r '.baseRefName')" = "$LIVE_BASE_REF" ] || { echo "GATED: PR base changed after review"; exit 1; }
-
-gh pr merge {PR_NUMBER} {GH_FLAG} --merge --match-head-commit "$POST_REVIEW_HEAD"
-MERGE_RESULT=$(gh pr view {PR_NUMBER} {GH_FLAG} --json state,mergeCommit,headRefOid,baseRefName)
-MERGE_STATE=$(echo "$MERGE_RESULT" | jq -r '.state')
-MERGE_SHA=$(echo "$MERGE_RESULT" | jq -r '.mergeCommit.oid // empty')
-if [ "$MERGE_STATE" = "MERGED" ] && [[ "$MERGE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
-  MERGE_RECEIPT="<!-- FORGE:REMEDIATION_MERGE_RECEIPT pr={PR_NUMBER} reviewed_head=${POST_REVIEW_HEAD} merge_sha=${MERGE_SHA} base=${LIVE_BASE_REF} -->"
-  gh pr comment {PR_NUMBER} {GH_FLAG} --body "$MERGE_RECEIPT"
-  gh issue comment {ISSUE_NUMBER} {GH_FLAG} --body "$MERGE_RECEIPT"
+gh pr merge {PR_NUMBER} {GH_FLAG} --merge
+MERGE_STATE=$(gh pr view {PR_NUMBER} {GH_FLAG} --json state --jq '.state')
+if [ "$MERGE_STATE" = "MERGED" ]; then
   RESOLUTION=$(resolve_script 'transition-label')
   TIER="${RESOLUTION%%:*}"; SCRIPT_PATH="${RESOLUTION#*:}"
   case "$TIER" in
@@ -573,6 +351,8 @@ if [ "$MERGE_STATE" = "MERGED" ] && [[ "$MERGE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; the
   RE_GATE_OUTCOME="AUTO-LANDED"
 else
   RE_GATE_OUTCOME="HELD-AWAITING-MERGE"
+  # gh pr merge reported success but the PR isn't actually MERGED — leave workflow:awaiting-merge
+  # in place (unchanged) and let a human merge manually rather than retrying automatically.
 fi
 ```
 
@@ -602,19 +382,7 @@ case "$RE_GATE_OUTCOME" in
   *)                   AUTO_LAND_BAR_TEXT="N/A"; OUTCOME_DETAIL="" ;;
 esac
 
-POST_REVIEW_HEAD=$(gh pr view {PR_NUMBER} {GH_FLAG} --json headRefOid --jq '.headRefOid // empty')
-if ! [[ "$POST_REVIEW_HEAD" =~ ^[0-9a-fA-F]{40}$ ]]; then
-  echo "BLOCKED: fresh review returned no exact PR head"
-  # EXIT REMEDIATE_RESULT: status: BLOCKED
-fi
-if [ "$INLINE_REMEDIATION" = "true" ]; then
-  COMPLETE_MARKER="<!-- FORGE:REMEDIATION:COMPLETE pr={PR_NUMBER} head=${POST_REVIEW_HEAD} round=${REMEDIATION_ROUND} -->"
-  COMPLETION_TRAILER=""
-else
-  COMPLETE_MARKER="<!-- FORGE:REMEDIATION -->"
-  COMPLETION_TRAILER="<!-- FORGE:REMEDIATION:COMPLETE -->"
-fi
-REMEDIATION_BODY="${COMPLETE_MARKER}
+REMEDIATION_BODY="<!-- FORGE:REMEDIATION -->
 ## Remediation Complete for PR #{PR_NUMBER}
 
 **Findings addressed**: ${#ADDRESSED_FINDING_NUMBERS[@]} (${ADDRESSED_FINDING_NUMBERS[*]:-none})
@@ -622,7 +390,7 @@ REMEDIATION_BODY="${COMPLETE_MARKER}
 **Auto-land bar**: ${AUTO_LAND_BAR_TEXT}
 **Re-gate outcome**: ${RE_GATE_OUTCOME} ${OUTCOME_DETAIL}
 
-${COMPLETION_TRAILER}"
+<!-- FORGE:REMEDIATION:COMPLETE -->"
 
 gh pr comment {PR_NUMBER} {GH_FLAG} --body "$REMEDIATION_BODY"
 gh issue comment {ISSUE_NUMBER} {GH_FLAG} --body "$REMEDIATION_BODY"
@@ -636,26 +404,9 @@ Skill("work-on:close", args="{ISSUE_NUMBER} --repo {GH_REPO} --gh-flag {GH_FLAG}
 
 `work-on:close` handles project board update, final issue body, parent tracker, trajectory log, and worktree cleanup (including the remediation worktree at `{WORKTREE_PATH}`) — do not duplicate any of that here.
 
-**If the outcome was `HELD-AWAITING-MERGE`, `RE-ESCALATED`, `REINVESTIGATE_REQUIRED`, or `UNFIXABLE`**: leave the worktree in place and return the structured result below without invoking close. `REINVESTIGATE_REQUIRED` has already invoked investigation/decomposition; do not close the issue.
+**If the outcome was `HELD-AWAITING-MERGE`, `RE-ESCALATED`, or `UNFIXABLE`**: leave the worktree in place (a human may need it for manual inspection/merge) and return the structured result below without invoking close. Do not close the issue.
 
 ---
-
-## Controlled staging refresh during remediation
-
-Before accepting a remediation re-review or evaluating the merge bar, re-fetch the
-authoritative `refs/heads/staging` and compare its exact SHA with the recorded review
-base. A changed target may continue only after proving an authorized reachable sibling
-merge and publishing `FORGE:BASE_REFRESH` with immutable launch SHA, old/new base SHAs,
-target ref, sibling merge SHA, merge-base SHA, and attempt.
-
-Preserve the owned remediation branch and existing PR. Synchronize the verified target
-non-destructively with the expected remote-head lease; conflicts, ambiguous movement,
-non-fast-forward movement, or lease mismatch are GATED. Rerun every affected quality
-and acceptance check. Invalidate all prior reviewer receipts and approvals, freeze the
-new exact base/head/merge-base tuple, and run a fresh complete re-review. Do not count
-pre-refresh findings or checks as authorization, exceed the configured remediation
-round cap, widen the Builder Contract, or weaken protected-branch rules. See
-`specs/qualitative-review-protocol.md`.
 
 ## Output
 
@@ -666,9 +417,9 @@ REMEDIATE_RESULT:
   status: COMPLETE | ALREADY_DONE | UNFIXABLE | BLOCKED
   pr_number: {PR_NUMBER}
   issue_number: {ISSUE_NUMBER}
-  re_gate_outcome: AUTO-LANDED | HELD-AWAITING-MERGE | RE-ESCALATED | REINVESTIGATE_REQUIRED | UNFIXABLE | N/A
+  re_gate_outcome: AUTO-LANDED | HELD-AWAITING-MERGE | RE-ESCALATED | UNFIXABLE | N/A
   findings_addressed: [{finding_number}, ...]
   blocker: {description if status=BLOCKED}
 ```
 
-**Caller behavior**: this Skill drives close when `AUTO-LANDED`. `REINVESTIGATE_REQUIRED` transfers control to investigation/decomposition with tuple-bound evidence and is terminal only for the current remediation invocation. Other non-land outcomes preserve their durable gated/awaiting state. The caller must never start another remediation head above the cap.
+**Caller behavior**: this Skill already drives its own close phase when `re_gate_outcome: AUTO-LANDED` (see Phase M8) — the caller does not need to invoke close itself. For every other `re_gate_outcome`, this result is terminal for the current invocation: the issue is left at `needs-human` or `workflow:awaiting-merge`, both already recognized as terminal states in the Universal Phase Dispatcher (see `work-on.md`). Whether invoked standalone (`/work-on <pr> --remediate`) or via the orchestrator's item 6.4 dispatch, no further action is required from the caller.

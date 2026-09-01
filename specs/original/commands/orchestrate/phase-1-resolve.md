@@ -475,34 +475,11 @@ grouped. `policy: all` does not remove this batching ceiling. <!-- Added: forge#
 ```bash
 SAFE_SURFACE_AREA=$(printf '%s' "{SURFACE_AREA}" | tr -cd 'A-Za-z0-9._/-')
 MEMBER_LIST="{N1},{N2},{N3},..."  # comma-joined member issue numbers for this cluster (e.g. "2422,2424")
-SCRATCHPAD="${FORGE_SCRATCHPAD:-$PWD/.forge-scratch}"
-AGENT_TOKEN="${AGENT_ID:-${HOSTNAME:-orchestrator}-$$}"
-mkdir -p "$SCRATCHPAD"
-BATCH_BODY_MARKER="FORGE:BODY-INTEGRITY:p3-batch_{BATCH_N}_${AGENT_TOKEN}"
-BATCH_BODY_FILE=$(mktemp "$SCRATCHPAD/p3-batch_{BATCH_N}_${AGENT_TOKEN}.XXXXXX.md")
+BATCH_BODY_FILE="$(mktemp)"
 cat > "$BATCH_BODY_FILE" <<'BATCH_EOF'
 ## Problem
 
 Batch of P3 review findings in **{SURFACE_AREA}** (same file or leaf directory), grouped to reduce per-finding pipeline overhead.
-
-## Root Cause
-
-Unverified grouped finding hypotheses. Investigation must validate each member and determine whether one shared cause exists.
-
-## Affected Files
-
-Candidate investigation starting points (not mutation authority):
-1. `{SURFACE_AREA}` — inspect the common file or leaf-directory evidence cited by members.
-
-## Expected Behavior
-
-Validated member findings are resolved or closed as false positives without unrelated scope growth or regression.
-
-## Acceptance Criteria
-
-- [ ] All member findings validated and addressed or closed as false-positive.
-- [ ] Member issues auto-closed with reference to the batch PR on merge.
-- [ ] No security, billing, anti-bot, or auth paths touched unless separately investigated and claimed.
 
 ## Member Findings
 
@@ -516,6 +493,12 @@ Validated member findings are resolved or closed as false positives without unre
 
 **Generation >= 2 members admitted by bounded batching**: {#{NUM} (generation N), or "none"}
 
+## Acceptance Criteria
+
+- [ ] All member findings addressed or closed as false-positive
+- [ ] Member issues auto-closed with reference to this batch PR on merge
+- [ ] No security, billing, anti-bot, or auth paths touched (validated before batching)
+
 ## Context
 
 **Batch policy**: 2+ same file, 2+ same source PR cohort, 2+ same explicit defect class, or 3+ same leaf directory (or oldest > 72h).
@@ -523,7 +506,6 @@ Validated member findings are resolved or closed as false positives without unre
 
 <!-- FORGE:BATCHABLE -->
 BATCH_EOF
-printf '\n<!-- %s -->\n' "$BATCH_BODY_MARKER" >> "$BATCH_BODY_FILE"
 ```
 
 ```

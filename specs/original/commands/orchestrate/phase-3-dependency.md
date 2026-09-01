@@ -415,7 +415,7 @@ Build a **directed acyclic graph (DAG)** of per-issue dependencies. Each issue g
 - **Conservative fallback edges**: Low-confidence issues (Layer 4) get edges to same-domain issues as per Step 3C rules.
 - **Co-change coupling edges** <!-- Added: forge#1196 -->: High co-change file pairs (Layer 5, 3+ shared commits in the bounded window) that span two different issues get a directed edge using the same lower-issue-number-is-predecessor convention as Layer 1. Verified-independent pairs (Layer 5, zero shared commits) may instead REMOVE an edge that Layer 2 or Layer 4 would otherwise have added for that pair — Layer 1 and Layer 3 edges are never removed by a Layer 5 downgrade.
 - **Claims-board downgrade (Layer 2/4 edges only)** <!-- Added: forge#1736 -->: After dispatch begins (Phase 4A), when both issues in a Layer-2 or Layer-4 serialized pair post `FORGE:CLAIM` annotations on the coordination issue and their claimed file sets are **disjoint** (no path appears in both claims), the serialization edge for that pair MAY be relaxed — the blocked issue becomes ready. This downgrade is **never** applied to Layer-1 (same-file) or Layer-3 (high-fan-in) edges. See Step 4B: Claims-board relaxation sweep for the runtime check.
-- **Concurrency is user-configured and required** <!-- Updated: forge#1912 --> — issues with empty predecessor sets are all *eligible* to dispatch simultaneously (file overlap, explicit dependencies, and co-change coupling remain the only DAG-ordering constraints), while Phase 4 holds at most the target `forge.yaml → orchestration.max_concurrent` in flight. Missing or malformed configuration stops before launch; ready issues beyond the configured cap queue and dispatch as running workers complete (see Engine mode § Concurrency model, and `phase-4-execution.md` Step 4A-pre.0.2).
+- **Concurrency is capped by default** <!-- Updated: forge#1912 --> — issues with empty predecessor sets are still all *eligible* to dispatch simultaneously (file overlap, explicit dependencies, and co-change coupling remain the only DAG-ordering constraints), but Phase 4's dispatch loop holds at most `MAX_CONCURRENT` in flight at once (default 12; `forge.yaml → orchestration.max_concurrent` overrides). Ready issues beyond the cap queue and dispatch as running workers complete (see Engine mode § Concurrency model, and `phase-4-execution.md` Step 4A-pre.0.2).
 
 **Materialize the DAG** <!-- Added: forge#1913 -->: The rules above describe how edges are derived, but they must be applied into real, checkable data structures — not carried in prose or reconstructed from memory later. Step 3D.1 (coordination issue), Step 3D.5 (cycle detection), Step 3E.5 (scoring), and Step 3E (plan presentation) all read `ISSUES[]` and `PREDECESSORS[]` as if this already happened; this is the one place they're actually built:
 
@@ -458,58 +458,29 @@ if [ -z "${FORGE_COORD_ISSUE:-}" ]; then
   BATCH_ISSUE_COUNT="${#ISSUES[@]}"
   BATCH_ID="$(date -u +%Y%m%dT%H%M%S)-$$"
 
-  COORD_ISSUE_TITLE="investigate: coordinate orchestration batch ${BATCH_ID}"
-  SCRATCHPAD="${FORGE_SCRATCHPAD:-$PWD/.forge-scratch}"
-  AGENT_TOKEN="${AGENT_ID:-${HOSTNAME:-orchestrator}-$$}"
-  mkdir -p "$SCRATCHPAD"
-  COORD_BODY_MARKER="FORGE:BODY-INTEGRITY:orchestration_${BATCH_ID}_${AGENT_TOKEN}"
-  COORD_BODY_FILE=$(mktemp "$SCRATCHPAD/orchestration_${BATCH_ID}_${AGENT_TOKEN}.XXXXXX.md")
-  cat > "$COORD_BODY_FILE" <<COORD_EOF
-## Problem
+  COORD_ISSUE_BODY="## Orchestration Batch Claims Board
 
-The orchestration batch needs one durable claims board to serialize overlapping implementation paths and preserve resumable batch identity.
-
-## Root Cause
-
-N/A — coordination artifact; no product defect or code mutation is asserted.
-
-## Affected Files
-
-N/A — coordination artifact; no code mutation requested. Member investigations publish their own authoritative claims.
-
-## Expected Behavior
-
-Every active member posts \`FORGE:CLAIM\`, every terminal member posts \`FORGE:CLAIM_RELEASED\`, and the batch reaches one durable terminal report without overlapping writers.
-
-## Acceptance Criteria
-
-- [ ] Every launched member has one durable claim or no-mutation verdict.
-- [ ] Every terminal member releases its claim.
-- [ ] The final batch report accounts for every issue.
-
-## Coordination Metadata
+This issue is the claims board for an orchestration batch of ${BATCH_ISSUE_COUNT} issues.
+Agents post \`FORGE:CLAIM\` here on build start and \`FORGE:CLAIM_RELEASED\` on terminal state.
 
 **Batch ID**: ${BATCH_ID}
 **Issues in batch**: ${ISSUES[*]/#/#}
 **Created**: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 <!-- FORGE:COORD_ISSUE -->
-<!-- FORGE:BATCH_ID: ${BATCH_ID} -->
-COORD_EOF
-  printf '\n<!-- %s -->\n' "$COORD_BODY_MARKER" >> "$COORD_BODY_FILE"
+<!-- FORGE:BATCH_ID: ${BATCH_ID} -->"
 
-  # GOVERNOR-exempt coordination side effect, routed through the sole public issue hook.
-  ISSUE_SKILL_OUTPUT=$(Skill(skill="issue", args="--title \"$COORD_ISSUE_TITLE\" --body-file \"$COORD_BODY_FILE\" --label automation"))
-  rm -f "$COORD_BODY_FILE"
-  COORD_ISSUE_NUMBER=$(printf '%s\n' "$ISSUE_SKILL_OUTPUT" | sed -n \
-    -e 's/.*ISSUE_CREATE_RESULT:CREATED number=\([0-9][0-9]*\).*/\1/p' \
-    -e 's/.*ISSUE_CREATE_RESULT:DEDUP number=\([0-9][0-9]*\).*/\1/p' | head -1)
+  # GOVERNOR-exempt: intentional coordination side-effect (best-effort lease/board/finding post), DRY_RUN-safe — reviewed & accepted for the check-command-side-effects gate. Flagged only by the staging->main full-diff; passes on every feature PR. forge#2627
+  COORD_ISSUE_URL=$(gh issue create -R {GH_REPO} \
+    --title "orchestrate: claims board for batch ${BATCH_ID}" \
+    --body "$COORD_ISSUE_BODY" \
+    --label "automation" 2>/dev/null || echo "")
 
-  if [ -z "$COORD_ISSUE_NUMBER" ]; then
-    echo "ERROR: coordination issue hook returned no verified issue number; refusing to orchestrate without the overlap-safety claims board." >&2
-    exit 1
+  if [ -z "$COORD_ISSUE_URL" ]; then
+    echo "WARNING: failed to create coordination issue — claims board disabled for this batch. Layer-2/4 relaxation will not run."
+    FORGE_COORD_ISSUE=""
   else
-    COORD_ISSUE_URL=$(gh issue view "$COORD_ISSUE_NUMBER" -R {GH_REPO} --json url --jq '.url')
+    COORD_ISSUE_NUMBER=$(echo "$COORD_ISSUE_URL" | grep -oE '[0-9]+$')
     FORGE_COORD_ISSUE="$COORD_ISSUE_URL"
     echo "Coordination issue created: ${COORD_ISSUE_URL} (#${COORD_ISSUE_NUMBER})"
     export FORGE_COORD_ISSUE
@@ -1195,11 +1166,10 @@ scripts/worktree-lifecycle.sh cleanup <issue-number>
 ```
 
 **Concurrency cap** (`forge.yaml → orchestration.max_concurrent`): <!-- Updated: forge#1912 -->
-- The target repository must provide a positive integer. Missing or malformed configuration fails closed before any launch; there is no built-in fallback.
-- The dispatch loop holds at most that configured number of top-level `/work-on` coordinators. Newly ready issues queue and start as running coordinators complete.
-- DAG readiness remains the only eligibility constraint. Generic session limits, dollar budget, and nested review fanout must not silently lower the configured issue-lane count; provider/host capacity failures are reported explicitly.
-- The Pi adapter provisions `maxSubagentSpawnsPerRun` separately at 64 logical child admissions per selected coordinator.
-- See `phase-4-execution.md` Step 4A-pre.0.2 for the concrete initialization and headroom-gated dispatch logic.
+- Default: **12** — the dispatch loop holds at most 12 in-flight workers unless overridden. This is an enforced default, not opt-in: earlier revisions defaulted to uncapped, which let a large ready set (e.g. 40+ issues) dispatch in one burst and saturate the Anthropic API rate limit.
+- When `max_concurrent: N` is set, the dispatch loop holds at most N in-flight workers instead of the default 12. Newly ready issues queue and start as running workers complete. It is a top-level worker cap only: each worker normally consumes roughly **8 total subagent spawns** across `/work-on`, build, quality-gate, and review. Set `N <= session_subagent_budget / 8`; for a 200-spawn session budget, use 25 or fewer.
+- Prevents wave-triggered rate-limit storms on large batches (e.g., 40-issue milestone dispatches).
+- See `phase-4-execution.md` Step 4A-pre.0.2 for the concrete initialization and headroom-gated dispatch logic that enforces this cap on both the engine-first and Agent-spawn-fallback dispatch paths.
 
 **Rate-limit backpressure** (pre-dispatch gate):
 
@@ -1224,7 +1194,7 @@ fi
 **Configuration reference** (`forge.yaml`):
 ```yaml
 orchestration:
-  max_concurrent: 8          # required positive integer; no fallback
+  max_concurrent: 8          # optional; default: 12
   rate_limit_floor: 200      # optional; default: 200
 ```
 

@@ -283,15 +283,15 @@ This mode is reachable both standalone (a human or script running `/work-on <pr>
 
 **Skip entirely if `UNDER_ORCHESTRATION` is `false`** — a solo run has no stall detector polling comment timestamps, so this write has zero consumer. Do not post it "just in case."
 
-When `UNDER_ORCHESTRATION` is `true`: post a lightweight activity signal immediately after resolving the issue number. This gives the stall detector (orchestrate Step 4B.5) a fresh GitHub `created_at` timestamp to compare against `STALL_TIMEOUT`. The heartbeat body deliberately contains no coordinator-authored timestamp: GitHub's immutable `created_at` is authoritative, and any legacy body `Timestamp` is ignored. Without this, the stall detector can only see the last structured comment (INVESTIGATOR, BUILDER, etc.) which may be hours old during a valid long-running phase.
+When `UNDER_ORCHESTRATION` is `true`: post a lightweight activity signal immediately after resolving the issue number. This gives the stall detector (orchestrate Step 4B.5) a fresh timestamp to compare against `STALL_TIMEOUT`. Without this, the stall detector can only see the last structured comment (INVESTIGATOR, BUILDER, etc.) which may be hours old during a valid long-running phase.
 
 ```bash
+PHASE_START_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:HEARTBEAT -->
 **Phase**: Phase 0 — starting pipeline
+**Timestamp**: ${PHASE_START_TIMESTAMP}
 **Issue**: #{NUMBER}"
 ```
-
-After posting, do not add a timestamp to the body. Reconciliation reads the returned GitHub comment metadata (`created_at`) as the deterministic runtime clock.
 
 **Also post at major phase entry points** (Phases 1, 3, and 5) — replace `Phase 0` with the correct phase name in each case, and same `UNDER_ORCHESTRATION` gate. These mid-pipeline heartbeats ensure the stall detector sees recent activity during long phases (e.g., a build phase running for 20 minutes is not falsely classified as stalled). Inline snippets are embedded at Phase 1A, Phase 3A, and Phase 5A — agents resuming mid-pipeline encounter them without reading this section. <!-- Added: forge#740 -->
 
@@ -562,24 +562,64 @@ esac
 
 **Post Phase 1 heartbeat** (skip unless `UNDER_ORCHESTRATION` is `true`; also skip if issue already has a terminal label — `workflow:merged`, `workflow:invalid`, `needs-human`, `workflow:awaiting-merge`):
 ```bash
+PHASE_START_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:HEARTBEAT -->
 **Phase**: Phase 1 — Investigation
+**Timestamp**: ${PHASE_START_TIMESTAMP}
 **Issue**: #{NUMBER}"
 ```
 
-### 1A.5: Preserve Intake and Normalize Through Investigation
+### 1A.5: Normalize Issue Body (MANDATORY)
 
-Do not edit, reject, score, or append placeholder sections to a user-created, legacy, or
-deduplicated issue before investigation. Reuse `ISSUE_BODY` from Phase 0B (re-fetch only
-after compaction) as untrusted intake.
+Before investigation begins, verify the issue body contains the four mandatory pipeline sections. If any are missing, add placeholder content so the investigator has the correct scaffolding.
 
-If canonical sections are missing, record that fact in the investigator's evidence and
-produce the normalized Problem, Root Cause/hypotheses, actual affected paths, Expected
-Behavior, acceptance checks, and non-goals inside the durable investigation report and
-Builder Contract. Investigation may narrow, expand, decompose, invalidate, or create
-follow-ups. The original issue body and provenance remain unchanged.
+**Skip if**: All four sections (`## Problem`, `## Affected Files`, `## Expected Behavior`, `## Acceptance Criteria`) are already present.
 
-Continue to Phase 1B unconditionally; body quality is never an admission gate.
+**Reuse `ISSUE_BODY` from Phase 0B** — it was already read in full there. Only re-fetch with the command below if `ISSUE_BODY` is not actually present in this session's context (compaction or a fresh resume).
+
+```bash
+ISSUE_BODY=$(gh issue view {NUMBER} {GH_FLAG} --json body --jq '.body')
+
+MISSING_SECTIONS=""
+echo "$ISSUE_BODY" | grep -q "^## Problem" || MISSING_SECTIONS="$MISSING_SECTIONS PROBLEM"
+echo "$ISSUE_BODY" | grep -q "^## Affected Files" || MISSING_SECTIONS="$MISSING_SECTIONS AFFECTED_FILES"
+echo "$ISSUE_BODY" | grep -q "^## Expected Behavior" || MISSING_SECTIONS="$MISSING_SECTIONS EXPECTED_BEHAVIOR"
+echo "$ISSUE_BODY" | grep -q "^## Acceptance Criteria" || MISSING_SECTIONS="$MISSING_SECTIONS ACCEPTANCE_CRITERIA"
+
+if [ -n "$MISSING_SECTIONS" ]; then
+  echo "Missing sections:$MISSING_SECTIONS — normalizing issue body before investigation"
+
+  APPEND_TEXT=""
+  echo "$MISSING_SECTIONS" | grep -q "PROBLEM" && APPEND_TEXT="$APPEND_TEXT
+## Problem
+
+Root cause unknown — investigation needed."
+
+  echo "$MISSING_SECTIONS" | grep -q "AFFECTED_FILES" && APPEND_TEXT="$APPEND_TEXT
+## Affected Files
+
+Files to be identified during investigation."
+
+  echo "$MISSING_SECTIONS" | grep -q "EXPECTED_BEHAVIOR" && APPEND_TEXT="$APPEND_TEXT
+## Expected Behavior
+
+Expected behavior to be determined during investigation."
+
+  echo "$MISSING_SECTIONS" | grep -q "ACCEPTANCE_CRITERIA" && APPEND_TEXT="$APPEND_TEXT
+## Acceptance Criteria
+
+- [ ] Fix confirmed during investigation."
+
+  # Append missing sections to the existing body (never replace — only extend)
+  NORMALIZED_BODY="${ISSUE_BODY}${APPEND_TEXT}"
+  gh issue edit {NUMBER} {GH_FLAG} --body "$NORMALIZED_BODY"
+  echo "Issue body normalized — added:$MISSING_SECTIONS"
+else
+  echo "Issue body already contains all mandatory sections — skipping normalization"
+fi
+```
+
+**Continue to Phase 1B unconditionally.** Normalization is a compensation step — it never blocks investigation.
 
 ### 1B: Investigate the issue
 
@@ -1026,8 +1066,10 @@ fi
 
 **Post Phase 3 heartbeat** (skip unless `UNDER_ORCHESTRATION` is `true`; also skip if issue already has a terminal label — `workflow:merged`, `workflow:invalid`, `needs-human`, `workflow:awaiting-merge`):
 ```bash
+PHASE_START_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:HEARTBEAT -->
 **Phase**: Phase 3 — Build
+**Timestamp**: ${PHASE_START_TIMESTAMP}
 **Issue**: #{NUMBER}"
 ```
 
@@ -1940,8 +1982,10 @@ esac
 
 **Post Phase 5 heartbeat** (skip unless `UNDER_ORCHESTRATION` is `true`; also skip if issue already has a terminal label — `workflow:merged`, `workflow:invalid`, `needs-human`, `workflow:awaiting-merge`):
 ```bash
+PHASE_START_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:HEARTBEAT -->
 **Phase**: Phase 5 — Review
+**Timestamp**: ${PHASE_START_TIMESTAMP}
 **Issue**: #{NUMBER}"
 ```
 

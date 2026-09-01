@@ -10,18 +10,29 @@ The visible session is a dispatcher, never a builder.
 ## Required loading
 
 1. Parse the arguments appended to this skill invocation.
-2. Read `../../specs/pi-adapter.md` and
-   `../../specs/original/commands/orchestrate/config.md` for runtime rules and defaults.
-3. Use this skill as the compact execution checklist. Consult the original orchestrate
-   specification only when a current decision is ambiguous; do not preload the root
-   specification, phase files, or generic subagent reference corpus before dispatch.
+2. Read `../../specs/pi-adapter.md` completely.
+3. Read `../../specs/original/commands/orchestrate/config.md` first.
+4. Read `../../specs/original/commands/orchestrate.md` completely.
+5. Load the phase files under `../../specs/original/commands/orchestrate/` only as each
+   phase becomes current.
 
 ## Execution contract
 
-Before resolution, use direct Bash to read `forge.yaml`, verify `gh` authentication and
-repository access, and configure `gh auth setup-git` for noninteractive Git transport.
-Use direct `gh` and `git` commands for all workflow operations; do not use custom runtime
-tools.
+Use direct Bash with `gh` and `git` commands for all orchestration operations; verify
+`gh` authentication and repository access first. The original specification and its
+phase files are authoritative for resolution, triage, dependency analysis, execution,
+cleanup, and reporting.
+
+Dispatch through the canonical recipe in `specs/pi-adapter.md` (§ Orchestrate dispatch
+mechanics). For a supported compact plan — a literal issue list with unambiguous
+eligibility, no cycles, and a standard fast-lane wave — the recipe is the primary
+execution path: do not read the full `phase-4-execution.md` corpus or the pi-subagents
+reference corpus; consult the original phase files only when a decision is genuinely
+ambiguous (non-literal inputs such as `milestone`/`all`/`next <N>` queries, deep-plan
+features, recovery beyond the recipe's documented shapes). Consolidate the mechanical
+resolution, triage, and dependency steps (issue fetch, dependency markers, affected
+files via the packaged helpers, lane classification, DAG, claims board, lease) into
+single script blocks instead of one turn per query.
 
 Resolve and filter the requested issue set, show the concrete plan, and obtain the
 original mandatory confirmation before launching any child unless `--auto` or
@@ -32,152 +43,24 @@ overlap, database/migration serialization, and configured global files. Detect c
 and gate them visibly. Do not inspect or implement product code and never adjudicate
 issue validity or duplicates.
 
-## Ready-wave concurrency contract
-
-At every dispatch boundary, read and validate `forge.yaml` directly. `MAX_CONCURRENT`
-must be the positive integer at `orchestration.max_concurrent`; malformed or missing
-configuration is a loud preflight failure, never a fallback or silent clamp. The DAG is
-the sole source of eligibility: `READY_DAG_NODES` contains only queued nodes whose
-predecessors are complete and which are not blocked or already active. Do not apply a
-second issue-lane, budget, rate-limit, or fixed-four filter to this set.
-
-Select exactly one wave before launching:
-
-```text
-READY_COORDINATORS = READY_DAG_NODES.slice(0, Math.min(MAX_CONCURRENT, READY_DAG_NODES.length))
-READY_COORDINATOR_COUNT = READY_COORDINATORS.length
-```
-
-For a non-empty wave, first run a non-launching pi-subagents preflight with the exact
-workflow request fields below. If preflight rejects either
-`globalConcurrencyLimit` or `maxSubagentSpawnsPerRun` (including an unknown-field
-error), stop loudly before any child launch. Never omit, rename, clamp, or move these
-fields to configuration. This is an API capability requirement, not an optional
-optimization.
-
-```text
-subagent({
-  action: "validate",
-  workflowScript: READY_WAVE_SCRIPT,
-  globalConcurrencyLimit: MAX_CONCURRENT,
-  maxSubagentSpawnsPerRun: READY_COORDINATOR_COUNT * 64
-})
-```
-
-After that preflight succeeds, make exactly one top-level `subagent` call for the wave:
-
-```text
-subagent({
-  async: true,
-  workflowScript: READY_WAVE_SCRIPT, // one `await runs.all([...])`, one item per coordinator
-  globalConcurrencyLimit: MAX_CONCURRENT,
-  maxSubagentSpawnsPerRun: READY_COORDINATOR_COUNT * 64,
-  control: { needsAttentionAfterMs: 3900000 }
-})
-```
-
-`READY_WAVE_SCRIPT` serializes the already-derived wave and must call
-`await runs.all([...])` exactly once with exactly `READY_COORDINATORS.length` items:
-
-```javascript
-const results = await runs.all(READY_COORDINATORS.map((issue) => ({
-  key: `work-on-${issue.number}`,
-  agent: "forgedock-work-on-coordinator",
-  task: `${issue.number} --under-orchestration`,
-  context: "fresh",
-  worktree: true,
-})));
-return results;
-```
-
-Every item uses the packaged `forgedock-work-on-coordinator` agent, a fresh context,
-and the issue's isolated worktree; each coordinator owns its complete lifecycle.
-`runs.all` returns an ordered array; join all results before advancing the DAG. The
-top-level explicit fields have precedence over any host defaults.
-`--budget` controls admission (which eligible issues enter a wave) only; it does not
-control or reduce concurrency. A four-worker cap is nested-review-only and must never
-be applied to root ready-wave dispatch.
-
-For every selected ready issue, launch exactly one fresh `forgedock-work-on-coordinator`
-agent with the `forgedock-work-on` skill and `<issue> --under-orchestration`. Use the
-single bounded workflow wave above and isolated issue worktrees. Each child owns the
-complete issue lifecycle; orchestrate must not invent a second implementation/review
-path.
-
-The managed child worktree is the child's only repository root. In every child task,
-state that its current working directory is authoritative and that any parent checkout
-path is identity-only. Do not instruct a child to use the visible session's absolute
-repository path, and do not pass that path as `repositoryRoot`; the child must use
-relative paths and default ForgeDock runtime-tool roots from its assigned cwd. Treat an
-anchor checkout that becomes dirty as a safety-critical batch stop.
-
-Before dispatching each issue, resolve its authoritative PR target through the original
-lane rules and freeze the exact remote target SHA. Persist that ref/SHA in the
-coordination issue and child task. A Pi-managed worktree inherits the launch checkout's
-HEAD; its generated branch is not evidence that it is based on the lane target. Require
-the child to initialize and verify the clean unpushed branch with direct Git commands
-and publish `FORGE:BASE` before any implementation mutation. A missing or mismatched base marker gates the
-lane before contract/claim acceptance, push, PR creation, or reviewer fanout.
+For every ready issue, launch exactly one fresh `forgedock-work-on-coordinator` agent
+with the `forgedock-work-on` skill and `<issue> --under-orchestration`. Use bounded
+concurrency (`orchestration.max_concurrent` from `forge.yaml`) and isolated issue
+worktrees. Each child owns the complete issue lifecycle; orchestrate must not invent a
+second implementation/review path.
 
 The packaged coordinator is an explicit, depth-bounded fanout child: it may launch only
 the fresh read-only reviewers required by its review phase. Do not use the builtin
 `worker` for a complete work-on lane, and do not give the coordinator a blanket "never
 run subagents" instruction; forbid nested issue/work-on orchestration while preserving
-its mandatory reviewer fanout.
-
-Launch exactly one top-level orchestration `workflowScript` with `async: true` and
-`control.needsAttentionAfterMs: 3900000` or greater. Capture the exact returned workflow
-run ID. Because `/orchestrate` is run-to-completion, immediately wait on that exact run:
-
-`subagent_wait({ id: "<workflow-run-id>", timeoutMs: 7200000, stopOnAttention: false })`
-
-Do not end a headless parent turn and rely on Pi-subagents' fixed 1,800,000 ms agent-end
-auto-drain. The explicit two-hour wait covers builder, valid one-hour review, merge,
-issue closure, coordination cleanup, and terminal reconciliation while child lanes retain
-bounded concurrency. A wait timeout, failed run, or unresolved work remains visible
-GATED/FAILED evidence and cannot be reported as successful orchestration. Pi's generic
-attention signal is observational, not permission to steer, resume, replace, or relaunch
-the coordinator. Only the configured reviewer deadline or an explicit supervisor request
-may interrupt the exact-run wait.
-
-After each investigation and before implementation, read finalized `FORGE:CLAIM`
-markers from the coordination issue. If active claims overlap, serialize before either
-writer mutates shared paths: the lower issue number proceeds and the other remains
-deferred until the predecessor reaches terminal success and refreshes its base.
+its mandatory reviewer fanout. All dispatch — wave, successor, and recovery relaunch —
+follows the canonical recipe in `specs/pi-adapter.md` (§ Orchestrate dispatch
+mechanics): child task text is always exactly `<issue> --under-orchestration`, globals
+appear only on workflowScript calls, and recovery relaunches verify GitHub state first
+and reuse the identical first-dispatch shape. Never compose improvised prose task
+texts for coordinators.
 
 Classify GitHub state as DONE, GATED, FAILED, or IN_PROGRESS. GATED is not FAILED.
-Durable GitHub artifacts override a missing/malformed provider envelope. Dispatch
-successors immediately after successful predecessors complete. Do not poll. After the
-queue drains or reaches a documented paused state, execute mandatory cleanup and
-publish the consolidated report.
-
-## Reload and recovery contract
-
-Before dispatch, create one coordination issue and record the batch ID, lease epoch,
-deterministic child keys, predecessor set, and ready/deferred queues in machine-readable
-`FORGE:` markers in its body or comments. This issue is the durable batch state; do not
-create or require a GitHub state branch. On reload, read the coordination issue and
-reconcile retained child receipts by key. Resume only unlaunched ready nodes exactly
-once within the concurrency cap. Unknown or duplicate keys, stale leases, missing
-predecessors, or ambiguous completion produce a paused report and launch nothing. Close
-the coordination issue after terminal cleanup.
-
-## Moving staging target
-
-The dispatch-time target SHA is immutable launch attribution, not a promise that the
-integration ref cannot advance. When a verified sibling merge advances `staging` while
-a lane is building, validating, reviewing, or awaiting merge, keep the lane and route it
-through a controlled refresh. Read the new target SHA from the authoritative ref, prove
-that the movement is a verified sibling merge and an allowed descendant of the prior
-base, then publish `FORGE:BASE_REFRESH` with the immutable launch SHA, old/new base
-SHAs, target ref, sibling merge SHA, and refresh attempt before any lane mutation.
-
-The coordinator must preserve the owned branch and PR, use a guarded non-destructive
-synchronization with the expected remote lease, and gate conflicts, ambiguous movement,
-non-fast-forward movement, or lease mismatch. The child reruns every affected
-verification and acceptance check, freezes a new exact base/head/merge-base tuple, and
-runs a fresh complete qualitative review. Older verification, approvals, and reviewer
-receipts cannot authorize the refreshed head. Do not reset or overwrite another lane,
-weaken protected-branch rules, or classify a mechanical refresh failure as
-`needs-human`; emit automated `GATED` evidence instead. See
-`specs/qualitative-review-protocol.md` for the shared identity and evidence contract.
+Dispatch successors immediately after successful predecessors complete. Do not poll.
+After the queue drains or reaches a documented paused state, execute mandatory cleanup
+and publish the consolidated report.
