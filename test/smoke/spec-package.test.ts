@@ -73,7 +73,8 @@ test("public skills are thin routers over the original specifications", async ()
 test("review-pr is independently invocable without a work-on ownership gate", async () => {
   const skill = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
   assert.match(skill, /Every PR is independently\s+reviewable/);
-  assert.match(skill, /Launch one complete fresh-context reviewer panel/);
+  assert.match(skill, /Launch the fresh-context reviewer panel/);
+  assert.match(skill, /Prepare each reviewer bundle deterministically/);
   assert.match(skill, /Merge only when `--auto-merge` was explicit/);
   for (const banned of [
     /work-on[- ]owned PR/,
@@ -165,7 +166,7 @@ test("package exposes a depth-bounded work-on coordinator with reviewer fanout",
     assert.doesNotMatch(agent, banned);
 });
 
-test("reviewer profile is read-only with a structured return contract", async () => {
+test("reviewer profile enforces incident-blocking standard without metadata deadlocks", async () => {
   const reviewer = await readFile("agents/forgedock-reviewer.md", "utf8");
   assert.match(reviewer, /name: forgedock-reviewer/);
   assert.match(reviewer, /tools: read, grep, find, ls/);
@@ -173,6 +174,17 @@ test("reviewer profile is read-only with a structured return contract", async ()
   assert.match(reviewer, /You must not:/);
   assert.match(reviewer, /launch subagents/);
   assert.match(reviewer, /FORGE:QUALITATIVE_REVIEW:v1/);
+  // Deterministic bundle prep: reviewer receives a complete bundle and never deadlocks on metadata.
+  assert.match(reviewer, /complete review bundle inline/);
+  assert.match(reviewer, /never refuse to review|never refuse to review over it|keep reviewing/);
+  assert.match(reviewer, /"unknown"/);
+  // Blocking standard: production-incident risk introduced by the patch, verified in code.
+  assert.match(reviewer, /production incident/);
+  assert.match(reviewer, /introduced or made reachable by this patch/);
+  assert.match(reviewer, /Read the actual code path/);
+  assert.match(reviewer, /Position discipline/);
+  assert.match(reviewer, /verified against the actual file content/);
+  assert.match(reviewer, /Exit reflection/);
 });
 
 test("headless orchestrate waits on its exact async workflow", async () => {

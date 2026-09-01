@@ -31,8 +31,11 @@ the protected/default branch as specified; load
 nested slash command.
 
 Run configured automated and integration checks. Derive the reviewer roster from the
-actual risk surface. Launch one complete fresh-context reviewer panel with Pi subagents
-and join every selected reviewer. Reviewers start from the frozen diff but retain
+actual risk surface. Prepare each reviewer bundle deterministically yourself: fetch the
+full diff once, slice it per reviewer with its persona and identity (repository, PR,
+head SHA; remaining tuple fields optional), and pass it inline — reviewers receive a
+complete bundle and never search for one. Launch the fresh-context reviewer panel with
+Pi subagents and join every selected reviewer. Reviewers start from the frozen diff but retain
 repository read/search access for evidence tracing.
 
 Create or deduplicate a GitHub issue for every finding before summary publication
