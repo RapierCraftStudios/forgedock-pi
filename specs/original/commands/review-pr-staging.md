@@ -181,7 +181,10 @@ fi
 **Why this matters**: Review findings are filed before the originating PR merges to staging. Without this gate, a staging→main bundle can include commits with known unfixed bugs — the review system caught the issue, but the deploy path ignored it. This gate closes the gap between issue discovery and deploy execution. <!-- Added: forge#303 -->
 
 ```bash
-git fetch origin $DEFAULT_BRANCH $STAGING_BRANCH
+if ! git fetch origin $DEFAULT_BRANCH $STAGING_BRANCH; then
+  echo "⛔ DEPLOY BLOCKED — could not refresh default/staging refs before freezing the review snapshot."
+  exit 1
+fi
 FROZEN_DEFAULT_SHA=$(git rev-parse "origin/$DEFAULT_BRANCH")
 FROZEN_STAGING_SHA=$(git rev-parse "origin/$STAGING_BRANCH")
 [ -n "$FROZEN_DEFAULT_SHA" ] && [ -n "$FROZEN_STAGING_SHA" ] || {
@@ -637,8 +640,9 @@ if ! GATE_OUTPUT=$(Skill("test-gate", "--prs \"$(echo $ALL_PR_NUMBERS | tr '\n' 
 else
   # Missing or malformed output is an error, not an intentional SKIP. SKIP is reserved
   # for the test-gate's explicit machine-readable result.
-  TEST_GATE_VERDICT=$(echo "$GATE_OUTPUT" | grep -oP '(?<=FORGE:TEST_GATE:RESULT=)(BLOCK|PASS|SKIP)' | tail -1 || true)
-  if [ -z "$TEST_GATE_VERDICT" ]; then
+  TEST_GATE_MARKER=$(echo "$GATE_OUTPUT" | grep -oP '^FORGE:TEST_GATE:RESULT=(BLOCK|PASS|SKIP)$' | tail -1 || true)
+  TEST_GATE_VERDICT="${TEST_GATE_MARKER#*=}"
+  if [ -z "$TEST_GATE_MARKER" ]; then
     TEST_GATE_VERDICT="ERROR"
     TEST_GATE_REASON="BLOCK — test-gate returned no recognized FORGE:TEST_GATE:RESULT marker"
   fi

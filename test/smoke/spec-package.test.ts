@@ -99,7 +99,9 @@ test("one canonical issue schema governs every ForgeDock creator", async () => {
   assert.match(staging, /frozen commit-graph reachability/);
   assert.match(staging, /\.merge_commit_sha/);
   assert.match(staging, /if ! BUNDLE_CANDIDATES=\$\(gh api/);
+  assert.match(staging, /if ! git fetch origin \$DEFAULT_BRANCH \$STAGING_BRANCH/);
   assert.match(staging, /FROZEN_DEFAULT_SHA=\$\(git rev-parse/);
+  assert.match(staging, /TEST_GATE_MARKER=.*RESULT=\(BLOCK\|PASS\|SKIP\)/);
   assert.match(staging, /TEST_GATE_VERDICT="ERROR"/);
   assert.doesNotMatch(staging, /head\.repo\.full_name/);
   assert.doesNotMatch(staging, /git log[\s\S]*grep -oP ['"]?#\\d+/);
