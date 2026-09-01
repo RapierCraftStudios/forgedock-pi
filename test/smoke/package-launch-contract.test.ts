@@ -136,6 +136,7 @@ test("packed coordinator, fresh builder, and reviewer resolve with bounded tools
       "skills/forgedock-issue/SKILL.md",
       "specs/original/commands/test-gate.md",
       "specs/original/commands/issue.md",
+      "specs/original/bin/orchestrate-preflight.mjs",
     ])
       assert.ok(packagedFiles.includes(required), `missing packed file ${required}`);
     const archivePath = `${temp}/${archive}`;

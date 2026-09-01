@@ -39,7 +39,7 @@ exact issue branch, and any coordination issue, verifies B0-B2, and executes B2.
 | `$FORGE_HOME/commands/...` | `specs/original/commands/...` in this package. |
 | `yq`-based config reads | Use direct Bash with `yq` when installed, or a short `node` command with the package's YAML dependency. Missing/malformed required configuration fails closed. |
 | GitHub and Git operations | Use direct `gh` and `git` commands. Verify `gh auth status`, repository access, and run `gh auth setup-git` before noninteractive fetch/push. Switch `gh` identities explicitly when approval requires a non-author. |
-| `$FORGE_HOME/bin/...` and `$FORGE_HOME/scripts/...` (including bare `bin/...` and `scripts/...` shorthand inside the specs) | Resolve the packaged source under `specs/original/bin/...` and `specs/original/scripts/...`; before a target-worktree command invokes a self-contained runtime helper, materialize it at the exact target `bin/...` or `scripts/...` path. Never silently substitute an unrelated target-repository file. |
+| `$FORGE_HOME/bin/...` and `$FORGE_HOME/scripts/...` (including bare `bin/...` and `scripts/...` shorthand inside the specs) | Resolve the packaged source under `specs/original/bin/...` and `specs/original/scripts/...`; this includes the deterministic `/orchestrate` compact planner `orchestrate-preflight.mjs`. Before a target-worktree command invokes a self-contained runtime helper, materialize it at the exact target `bin/...` or `scripts/...` path. Never silently substitute an unrelated target-repository file. |
 
 | Missing optional helper script | Follow the prose fallback already described by the specification. Never use an unbounded filesystem search. |
 
