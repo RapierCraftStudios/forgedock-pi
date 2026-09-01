@@ -66,6 +66,34 @@ the exact returned workflow run ID with `subagent_wait` and a generous `timeoutM
 rather than ending the parent turn; a wait timeout or failed terminal run is visible
 GATED/FAILED evidence, never successful orchestration.
 
+### Canonical dispatch recipe (authoritative — do not improvise)
+
+All coordinator launches — initial wave, successor, and recovery relaunch — use the
+same shapes. Never load the pi-subagents reference corpus to compose a script; this
+recipe is the whole translation of the original Claude Code `Task()` dispatch.
+
+1. **Wave (two or more ready issues)** — one `subagent({ async: true, workflowScript,
+   globalConcurrencyLimit, maxSubagentSpawnsPerRun })` call. Inside the script, one
+   `await runs.all(ready.map((issue) => ({ key: \`work-on-\${issue.number}\`,
+   agent: "forgedock-work-on-coordinator", task: \`\${issue.number} --under-orchestration\`,
+   context: "fresh", worktree: true })))`, then return the ordered results.
+2. **Single issue** — either a bare `subagent({ agent, task, context: "fresh",
+   worktree: true })` call with **no** `globalConcurrencyLimit`/
+   `maxSubagentSpawnsPerRun` (those are valid only with `workflowScript`), or a
+   workflowScript wrapping one `runs.run`. Successor issues launch inside the
+   original workflowScript (sequential `runs.run` after a completed `runs.all` item)
+   rather than as ad-hoc top-level calls.
+3. **Child task text is always exactly** `"<issue number> --under-orchestration"` —
+   for first dispatch and recovery alike. Never compose prose task descriptions;
+   the coordinator rehydrates its state from GitHub, and improvised task text
+   produces off-spec coordinator behavior.
+4. **Recovery relaunch** — after verifying GitHub state (which lanes reached terminal
+   labels), relaunch only the non-terminal issues through shape 1 or 2 exactly as a
+   first dispatch. A workflow-level failure never fails lanes whose GitHub state is
+   terminal; report them DONE and relaunch the remainder.
+5. **Do not launch nested workflows inside a coordinator task.** Investigation
+   research fanout is direct read-only children, not a sub-workflow of domain lanes.
+
 ## Configuration
 
 The original `forge.yaml` contract is authoritative. At the start of every visible or

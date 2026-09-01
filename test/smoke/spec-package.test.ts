@@ -110,6 +110,30 @@ test("orchestrate dispatches coordinators and reports state without building", a
   assert.match(skill, /Do not poll/);
 });
 
+test("canonical dispatch recipe governs wave, successor, and recovery launches", async () => {
+  const adapter = await readFile("specs/pi-adapter.md", "utf8");
+  const skill = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
+  const coordinator = await readFile("agents/forgedock-work-on-coordinator.md", "utf8");
+
+  // Recipe is authoritative and covers all three launch shapes.
+  assert.match(adapter, /Canonical dispatch recipe \(authoritative/);
+  assert.match(adapter, /Wave \(two or more ready issues\)/);
+  assert.match(adapter, /Single issue/);
+  assert.match(adapter, /Recovery relaunch/);
+  assert.match(adapter, /only with `workflowScript`/);
+  assert.match(adapter, /do not improvise|do not improvise|Never compose improvised prose/s);
+  // Child task text is exactly the canonical handoff, for recovery too.
+  assert.match(adapter, /--under-orchestration/);
+  assert.match(adapter, /for first dispatch and recovery alike/);
+  // The dispatcher must not research its own translation at runtime.
+  assert.match(adapter, /Never load the pi-subagents reference corpus/);
+  assert.match(skill, /canonical recipe in `specs\/pi-adapter\.md`/);
+  assert.match(skill, /Never compose improvised prose task/);
+  // Coordinators execute artifacts exactly and never spawn sub-workflows.
+  assert.match(coordinator, /Never paraphrase artifact formats/);
+  assert.match(coordinator, /not a sub-workflow|no sub-workflow|not a sub-workflow of domain lanes|direct read-only children/);
+});
+
 test("one canonical issue schema governs every ForgeDock creator", async () => {
   const issue = await readFile("specs/original/commands/issue.md", "utf8");
   const review = await readFile("specs/original/commands/review-pr.md", "utf8");

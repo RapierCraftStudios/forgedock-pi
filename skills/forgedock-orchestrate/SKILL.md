@@ -42,7 +42,12 @@ The packaged coordinator is an explicit, depth-bounded fanout child: it may laun
 the fresh read-only reviewers required by its review phase. Do not use the builtin
 `worker` for a complete work-on lane, and do not give the coordinator a blanket "never
 run subagents" instruction; forbid nested issue/work-on orchestration while preserving
-its mandatory reviewer fanout.
+its mandatory reviewer fanout. All dispatch — wave, successor, and recovery relaunch —
+follows the canonical recipe in `specs/pi-adapter.md` (§ Orchestrate dispatch
+mechanics): child task text is always exactly `<issue> --under-orchestration`, globals
+appear only on workflowScript calls, and recovery relaunches verify GitHub state first
+and reuse the identical first-dispatch shape. Never compose improvised prose task
+texts for coordinators.
 
 Classify GitHub state as DONE, GATED, FAILED, or IN_PROGRESS. GATED is not FAILED.
 Dispatch successors immediately after successful predecessors complete. Do not poll.
