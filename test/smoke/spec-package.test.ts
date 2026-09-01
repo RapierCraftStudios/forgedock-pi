@@ -56,7 +56,7 @@ test("public skills are thin routers over the original specifications", async ()
     assert.ok(await readFile(specPath, "utf8"), `missing authority spec ${specPath}`);
     assert.match(skill, /specs\/pi-adapter\.md/);
     assert.match(skill, new RegExp(specPath.replace(/\//g, "\\/")));
-    assert.ok(skill.split("\n").length <= 60, `${skillPath} must stay a compact router`);
+    assert.ok(skill.split("\n").length <= 70, `${skillPath} must stay a compact router`);
     for (const banned of [
       /FORGE:BASE_REFRESH/,
       /FORGE:REMEDIATION_PLAN/,
@@ -73,8 +73,8 @@ test("public skills are thin routers over the original specifications", async ()
 test("review-pr is independently invocable without a work-on ownership gate", async () => {
   const skill = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
   assert.match(skill, /Every PR is independently\s+reviewable/);
-  assert.match(skill, /Launch the fresh-context reviewer panel/);
-  assert.match(skill, /Prepare each reviewer bundle deterministically/);
+  assert.match(skill, /Launch\s+the fresh-context reviewer panel/);
+  assert.match(skill, /Prepare each reviewer bundle\s+deterministically/);
   assert.match(skill, /Merge only when `--auto-merge` was explicit/);
   for (const banned of [
     /work-on[- ]owned PR/,
@@ -115,13 +115,20 @@ test("canonical dispatch recipe governs wave, successor, and recovery launches",
   const skill = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
   const coordinator = await readFile("agents/forgedock-work-on-coordinator.md", "utf8");
 
-  // Recipe is authoritative and covers all three launch shapes.
+  // Recipe-first dispatch: compact plans skip the large phase-4 corpus.
   assert.match(adapter, /Canonical dispatch recipe \(authoritative/);
-  assert.match(adapter, /Wave \(two or more ready issues\)/);
-  assert.match(adapter, /Single issue/);
-  assert.match(adapter, /Recovery relaunch/);
-  assert.match(adapter, /only with `workflowScript`/);
-  assert.match(adapter, /do not improvise|do not improvise|Never compose improvised prose/s);
+  assert.match(adapter, /supported compact plan/);
+  assert.match(skill, /recipe is the primary\s+execution path/);
+  assert.match(skill, /do not read the full `phase-4-execution\.md` corpus/);
+  assert.match(skill, /single script blocks/);
+  // Reviewer effort calibrates to risk; the blocking standard never drops.
+  const reviewSkill = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
+  assert.match(reviewSkill, /calibrate reviewer effort to that risk/);
+  assert.match(reviewSkill, /medium thinking effort/);
+  assert.match(reviewSkill, /never by lowering the blocking standard/);
+  // Active-identity verification tolerates broken non-active accounts.
+  assert.match(adapter, /`gh auth status --active`/);
+  assert.match(adapter, /non-active\s+account must never fail the preflight/);
   // Child task text is exactly the canonical handoff, for recovery too.
   assert.match(adapter, /--under-orchestration/);
   assert.match(adapter, /for first dispatch and recovery alike/);

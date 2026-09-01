@@ -23,6 +23,17 @@ Use direct Bash with `gh` and `git` commands for all orchestration operations; v
 phase files are authoritative for resolution, triage, dependency analysis, execution,
 cleanup, and reporting.
 
+Dispatch through the canonical recipe in `specs/pi-adapter.md` (§ Orchestrate dispatch
+mechanics). For a supported compact plan — a literal issue list with unambiguous
+eligibility, no cycles, and a standard fast-lane wave — the recipe is the primary
+execution path: do not read the full `phase-4-execution.md` corpus or the pi-subagents
+reference corpus; consult the original phase files only when a decision is genuinely
+ambiguous (non-literal inputs such as `milestone`/`all`/`next <N>` queries, deep-plan
+features, recovery beyond the recipe's documented shapes). Consolidate the mechanical
+resolution, triage, and dependency steps (issue fetch, dependency markers, affected
+files via the packaged helpers, lane classification, DAG, claims board, lease) into
+single script blocks instead of one turn per query.
+
 Resolve and filter the requested issue set, show the concrete plan, and obtain the
 original mandatory confirmation before launching any child unless `--auto` or
 `--confirm` was explicitly supplied.

@@ -92,15 +92,22 @@ recipe is the whole translation of the original Claude Code `Task()` dispatch.
    labels), relaunch only the non-terminal issues through shape 1 or 2 exactly as a
    first dispatch. A workflow-level failure never fails lanes whose GitHub state is
    terminal; report them DONE and relaunch the remainder.
-5. **Do not launch nested workflows inside a coordinator task.** Investigation
+5. **Compact plans run entirely on this recipe.** A supported compact plan — literal
+   issue list, unambiguous eligibility, no cycles, standard fast-lane wave — dispatches
+   without loading the phase-4 corpus; consult the original phase files only for
+   genuinely ambiguous plans (non-literal inputs, deep-plan features) or recovery
+   beyond these shapes.
+6. **Do not launch nested workflows inside a coordinator task.** Investigation
    research fanout is direct read-only children, not a sub-workflow of domain lanes.
 
 ## Configuration
 
 The original `forge.yaml` contract is authoritative. At the start of every visible or
 nested work-on/orchestrate/review route, read `forge.yaml` directly and verify the
-selected `gh` identity has repository access. Run `gh auth setup-git` before fetch or
-push. If configuration or authentication is missing, stop before GitHub writes or
+selected `gh` identity has repository access. Verify the **active** identity
+(`gh auth status --active`) and repository access; a stored-but-failing non-active
+account must never fail the preflight. Run `gh auth setup-git` before fetch or push.
+If configuration or authentication is missing, stop before GitHub writes or
 implementation.
 
 ## Safety leaves
