@@ -126,6 +126,10 @@ test("canonical dispatch recipe governs wave, successor, and recovery launches",
   assert.match(reviewSkill, /For a remediation re-review/);
   assert.match(reviewSkill, /personas that produced the blocking findings plus one general/);
   assert.match(reviewSkill, /A full-domain union\s+panel is never required/);
+  // Multi-blocker remediation is one cohesive head in the existing PR worktree, one re-review round.
+  assert.match(reviewSkill, /remediation is one cohesive pass on the/);
+  assert.match(reviewSkill, /never one head per blocker/);
+  assert.match(reviewSkill, /all\s+blocker invariants on that single new head in one review round/);
   // Reviewer effort calibrates to risk; the blocking standard never drops.
   assert.match(reviewSkill, /calibrate reviewer effort to that risk/);
   assert.match(reviewSkill, /medium thinking effort/);
