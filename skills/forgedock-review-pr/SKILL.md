@@ -35,7 +35,14 @@ actual risk surface, and calibrate reviewer effort to that risk: documentation-o
 template, or single-file metadata lanes run their panel at medium thinking effort;
 lanes touching executable code paths, security/auth/data/concurrency surfaces, or
 cross-file integration run it at high. Set the effort per reviewer task via the model
-thinking suffix — never by lowering the blocking standard. Prepare each reviewer bundle
+thinking suffix — never by lowering the blocking standard. For a remediation re-review
+of a head with known blockers, the panel is scoped to exactly the remediated change:
+reviewers are the personas that produced the blocking findings plus one general
+reviewer, each receiving the remediated hunks and the blocker's invariant, verifying
+whether the blocker remains reachable on the frozen new head. A full-domain union
+panel is never required to verify a blocker closure — re-reviewing everything
+re-introduces the round-count and wall-clock spiral that stalled the previous
+generation of this pipeline. Prepare each reviewer bundle
 deterministically yourself: fetch the full diff once, slice it per reviewer with its
 persona and identity (repository, PR, head SHA; remaining tuple fields optional), and
 pass it inline — reviewers receive a complete bundle and never search for one. Launch

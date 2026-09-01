@@ -114,6 +114,7 @@ test("canonical dispatch recipe governs wave, successor, and recovery launches",
   const adapter = await readFile("specs/pi-adapter.md", "utf8");
   const skill = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
   const coordinator = await readFile("agents/forgedock-work-on-coordinator.md", "utf8");
+  const reviewSkill = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
 
   // Recipe-first dispatch: compact plans skip the large phase-4 corpus.
   assert.match(adapter, /Canonical dispatch recipe \(authoritative/);
@@ -121,8 +122,10 @@ test("canonical dispatch recipe governs wave, successor, and recovery launches",
   assert.match(skill, /recipe is the primary\s+execution path/);
   assert.match(skill, /do not read the full `phase-4-execution\.md` corpus/);
   assert.match(skill, /single script blocks/);
-  // Reviewer effort calibrates to risk; the blocking standard never drops.
-  const reviewSkill = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
+  // Remediation re-review scope: blocker personas + one general, never a full union panel.
+  assert.match(reviewSkill, /For a remediation re-review/);
+  assert.match(reviewSkill, /personas that produced the blocking findings plus one general/);
+  assert.match(reviewSkill, /A full-domain union\s+panel is never required/);
   assert.match(reviewSkill, /calibrate reviewer effort to that risk/);
   assert.match(reviewSkill, /medium thinking effort/);
   assert.match(reviewSkill, /never by lowering the blocking standard/);
