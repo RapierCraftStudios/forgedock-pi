@@ -15,29 +15,14 @@ description: Run the authoritative non-merging staging-to-protected-target deplo
 
 ## Execution contract
 
-Before route discovery, use direct Bash to read `forge.yaml` and verify `gh`
-authentication and repository access. Use direct `gh` and `git` commands for all review
-operations; do not use custom workflow runtime tools.
-
-This is a deployment/bundle strategy, not thorough standard review. Preserve included
-PR discovery, prior open-finding gates across the bundle, automated build and CI gates,
-material-change analysis, service/domain bug hunting, regression assessment, runtime
-test gate, finding triage, and deployment checklist.
+Use direct Bash with `gh` and `git` commands for all review operations; verify `gh`
+authentication and repository access first. The original staging specification is
+authoritative for bundle discovery, gates, reviewer panels, finding triage, and the
+deployment checklist; follow its phases and hard rules.
 
 Use complete fresh-context reviewer panels and fail closed on any missing reviewer.
-Before the open-finding gate, freeze the staging PR base/head SHAs and call the
-exported `resolveStagingBundle` safety leaf with paginated, all-state GitHub PR
-metadata plus commit-graph reachability evidence. Never derive membership from commit
-subjects or lexical `#N` references. The resolver accepts only same-repository PRs with
-merge/head/patch commits reachable from frozen head and not frozen base, and returns
-`forgedock.staging-bundle-resolution/v1` evidence for the open-finding gate and Phase
-6.5; ambiguous metadata fails closed. At Phase 6.5, translate the original nested
-`Skill("test-gate", ...)` call to `forgedock-test-gate` and require its
-`FORGE:TEST_GATE:RESULT=BLOCK|PASS|SKIP` marker. Translate mandatory finding creation
-calls to `forgedock-issue`; every new finding extends the global canonical Problem, Root
-Cause, Affected Files, Expected Behavior, and Acceptance Criteria sections with staging
-metadata. A missing marker or failed read-back for a newly created issue is a hard
-creator failure, never a skipped gate. Preserve a deduplicated legacy issue unchanged;
-investigation normalizes it, and formatting is not a reuse/admission gate. Emit exactly one authoritative terminal gate pass or
-failure for the reviewed SHA.
-Never merge, approve, deploy, close the source issue, or clean a work-on-owned tree.
+Translate nested `Skill("issue", ...)` calls to the packaged `forgedock-issue` skill
+and nested `Skill("test-gate", ...)` calls to the packaged `forgedock-test-gate` skill,
+requiring its `FORGE:TEST_GATE:RESULT=BLOCK|PASS|SKIP` marker. Emit exactly one
+authoritative terminal gate pass or failure for the reviewed SHA. Never merge, approve,
+deploy, close the source issue, or clean a work-on-owned tree.

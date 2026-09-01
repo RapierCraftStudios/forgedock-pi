@@ -29,21 +29,6 @@ If called from `work-on`, these are passed through. If invoked standalone, `--re
 
 ---
 
-## Bounded confirmed-intake path
-
-When the issue already has a concrete Root Cause, real candidate files, Expected Behavior,
-and actionable Acceptance Criteria, first verify those claims against the current target
-and trace the production seam. If current evidence agrees, set `CONFIRMED_INTAKE=true`:
-
-- skip Phases 0.5/0.6 and the history/blame/pickaxe steps below;
-- stop broad issue/history archaeology;
-- report only current evidence, actual scope, operations, and acceptance checks;
-- finish investigation within five minutes and keep the report under 6,000 characters,
-  excluding machine-readable acceptance lines.
-
-If current evidence conflicts with intake, use the full path. This shortcut never skips
-current code, caller/adapter, companion-file, or production-seam verification.
-
 ## Phase 0.5: Memory Retrieval — Prior Run Priors <!-- Added: forge#1316 -->
 
 **Goal**: Before investigating, retrieve the top-k relevant prior pipeline runs from the per-repo memory index. Inject confirmed priors into the investigation context so the pipeline compounds intelligence across runs.
@@ -278,9 +263,8 @@ gh api repos/{GH_REPO}/issues/{NUMBER}/comments --jq '.[] | {id: .id, body: .bod
 ```
 
 **Resume logic**:
-- A comment ending `<!-- INVESTIGATION:INVALID -->` remains terminal and may be reused; no build follows it.
-- Reuse a `<!-- INVESTIGATION:COMPLETE -->` comment only when the same comment contains the current `### Production Execution Seam` section, concrete public entrypoint, production owner, mutation/no-mutation coverage, acceptance seam, and exact `Irreversible/provider side effect: YES|NO`. When `YES`, the same comment must list every actual provider operation or fallback under `### Provider Operations`. Detailed transaction proof belongs only to builder-owned architecture. A legacy completion marker without this schema does not authorize build. Preserve legacy/incomplete artifacts as history and post a superseding investigation.
-- If `<!-- FORGE:INVESTIGATOR -->` exists with neither terminal sentinel, investigation was interrupted; delete only that partial comment and restart:
+- If `<!-- FORGE:INVESTIGATOR -->` comment exists AND (`<!-- INVESTIGATION:COMPLETE -->` OR `<!-- INVESTIGATION:INVALID -->`) is present in the SAME comment → investigation already complete, EXIT (return existing verdict to caller). `INVESTIGATION:INVALID` is the terminal sentinel Phase 1C emits for an INVALID verdict (see Phase 1C below) — it is just as much a completion marker as `INVESTIGATION:COMPLETE`, not an "interrupted" state.
+- If `<!-- FORGE:INVESTIGATOR -->` comment exists BUT NEITHER `<!-- INVESTIGATION:COMPLETE -->` NOR `<!-- INVESTIGATION:INVALID -->` is present → investigation was interrupted, delete the partial comment and restart:
   ```bash
   gh api repos/{GH_REPO}/issues/comments/{COMMENT_ID} -X DELETE
   ```
@@ -339,7 +323,7 @@ bash {REPO_PATH}/scripts/code-index.sh query --domain {DOMAIN_LABEL} --repo-path
 1. **Check the right branch** — read from the branch specified in the issue body (`**Code branch**: \`{branch}\``) if present
 2. **Read domain files** — start with the key files for the affected domain (use index query results from Step 0E as the file list; fall back to directory inspection if index is absent)
 3. **Verify claims** — does the code actually have the problem described?
-4. **Git blame** — skip when `CONFIRMED_INTAKE=true`; otherwise trace when/why the relevant code was written. Run bounded, local commands (no network round-trip):
+4. **Git blame** — trace when/why the relevant code was written. Run bounded, local commands (no network round-trip):
    ```bash
    # Introducing commit for each affected file (first commit that added it)
    git log --reverse --format='%h %an %ad %s' --date=short -- {affected_file} | head -1
@@ -349,7 +333,7 @@ bash {REPO_PATH}/scripts/code-index.sh query --domain {DOMAIN_LABEL} --repo-path
    git blame -L {start},{end} -- {affected_file}
    ```
    Record the introducing commit and last-touch commit for each primary affected file — this feeds the mandatory **History findings** field in Phase 1C.
-5. **Domain context discovery** — skip when `CONFIRMED_INTAKE=true`; otherwise use narrow scope only (1–5 files):
+5. **Domain context discovery** (narrow scope only, 1–5 files):
    ```bash
    git log --oneline --all -30 -- {affected_files} | grep -oP '#\d+' | sort -u
    gh issue list -R {GH_REPO} --state closed --limit 8 --search "{function_name}"
@@ -437,31 +421,6 @@ gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:INVESTIGATOR -->
 ### Affected Files
 {numbered list of files that need changes}
 
-### Production Execution Seam (MANDATORY)
-**Observable effect**: {runtime/provider/persistence/API/CLI behavior, or prompt/spec behavior}
-**Public entrypoint**: `{file}:{symbol or command}`
-**Production owners**: {concrete caller/adapter/handler files and symbols that cause the effect}
-**Mutation coverage**: {for every production owner, either list it in Affected Files or give source evidence that it already performs the requested behavior and needs no mutation}
-**Acceptance seam**: {the public command/API/runtime path the E2E check executes}
-**Irreversible/provider side effect**: {YES|NO}
-
-If `YES`, list the actual operations once; omit this section for `NO`.
-
-### Provider Operations (MANDATORY WHEN SIDE EFFECT = YES)
-- `{OPERATION}` — authority: `{WHO_MAY_ACT}`; fallback from: `{NAMED_OPERATION_AND_FAILURE or NONE}`
-
-List only operations or fallbacks that can actually occur. Detailed failure scope,
-readback, recovery, and executable scenarios are builder-owned architecture work and must
-not be duplicated here.
-
-A conceptual documentation path, exported but unwired helper, test-local fixture, mock, or
-broad suite is not a production execution seam. If the requested observable behavior is
-absent from a production owner, that owner must enter Affected Files. If this is truly a
-prompt/spec-only project, prove that the specification is itself the loaded production
-surface and that no separate executable owner exists. Any unresolved or read-only owner
-that controls the requested effect, or a missing actual provider operation when side
-effects are `YES`, blocks `INVESTIGATION:COMPLETE` and returns for further investigation.
-
 ### Evidence
 {specific findings — function names, line numbers, behavior observed}
 
@@ -469,7 +428,7 @@ effects are `YES`, blocks `INVESTIGATION:COMPLETE` and returns for further inves
 **Introducing commit**: {hash — author — date — subject, per primary affected file}
 **Last touched**: {hash — author — date — subject}
 **Pickaxe hits (prior fixes / regressions)**: {commit(s) found via \`git log -S\`/\`-G\`, or 'None found' — max 5}
-{On the full path, populate this from steps 4/5. For confirmed intake, write 'Skipped — current production evidence confirmed the stated root cause.' If a file is newly created, write 'New file — no history.'}
+{This field is MANDATORY — populate from the git blame + pickaxe commands in step 4/5. If a file is newly created (no history), write 'New file — no history.'}
 **Prior Investigations (via recall)**: {Comma-separated issue citations from \`RECALL_ISSUE_CITATIONS\` (e.g. '#1172, #1243 — building on, not repeating'), or 'None — no Forge Ledger match above threshold' if \`RECALL_RESULTS\` was empty. Use the \`RECALL_ISSUE_CITATIONS\` variable populated in Phase 0.6.}
 
 ### Recommendation
@@ -483,9 +442,7 @@ effects are `YES`, blocks `INVESTIGATION:COMPLETE` and returns for further inves
 {if YES: proposed sub-issues with titles and dependencies}
 
 ### Acceptance Spec <!-- Added: forge#1829 -->
-{For each item in the issue's ## Acceptance Criteria section, emit exactly one machine-checkable check line using the format below. Preserve source order and ordinal identity: the first criterion is `ac-1`, the second is `ac-2`, through `ac-N`, with no merging, omission, or renumbering. Before posting, count unchecked criteria and emitted checks and fail closed unless the counts and expected IDs match. If the issue has no Acceptance Criteria section, derive checks from the Recommendation above. Each check MUST be specific, observable, and testable — not vague prose. Checks are consumed by build/validate Phase B6.5 as the merge gate.}
-
-{Preserve test-type intent. A source criterion marked `[type:e2e]` must use `type=command` or `type=behavior` and execute the active public/production seam—the exact Acceptance seam named in Production Execution Seam—end to end. `contains`, grep-only prose checks, direct imports of an otherwise unwired leaf helper, and a broad test suite without a named scenario do not satisfy an E2E criterion. Unit criteria may use focused unit commands; integration/API criteria must exercise their corresponding boundary. For a bug, include the deterministic reproduction command that fails before the fix and becomes the regression proof when safely possible.}
+{For each item in the issue's ## Acceptance Criteria section, emit one machine-checkable check line using the format below. If the issue has no Acceptance Criteria section, derive checks from the Recommendation above. Each check MUST be specific, observable, and testable — not vague prose. Checks are consumed by build/validate Phase B6.5 as the merge gate.}
 
 **Quoting (MANDATORY)**: `target=` and `matcher=` MUST always be wrapped in double quotes — `target="..."` / `matcher="..."` — even when the value is a single token (e.g. a plain file path). The downstream Phase B6.5 parser only extracts quoted values; an unquoted `target=`/`matcher=` will silently truncate at the first space and cause a false-negative gate failure for any multi-word value (shell commands with flags/arguments/pipes are almost always multi-word). Neither `target` nor `matcher` may contain a literal `"` character — use single quotes for any embedded string/regex literal inside the value, as shown below. `id=` and `type=` are always single tokens and are never quoted. `description=` is always the last field on the line and is captured to end-of-line — it does not need quoting.
 
@@ -500,12 +457,10 @@ ACCEPTANCE_CHECK: id=ac-4 type=command target="grep -qE '(>= ?2|2\+)' commands/o
 ```
 
 **Check types**:
-- `exists` — assert a file or directory exists (`target` = path, `matcher` = ignored); never sufficient for `[type:e2e]`
-- `contains` — assert a file contains a string or regex (`target` = file path, `matcher` = string/regex); never sufficient for `[type:e2e]`
+- `exists` — assert a file or directory exists (`target` = path, `matcher` = ignored)
+- `contains` — assert a file contains a string or regex (`target` = file path, `matcher` = string/regex)
 - `command` — run a shell command and assert exit 0 (`target` = shell command, `matcher` = `exit_0`)
 - `behavior` — assert a runtime/observable behavior via shell command (`target` = shell command, `matcher` = expected output string or regex)
-
-**Cardinality gate (MANDATORY before posting)**: when the source issue has an Acceptance Criteria section, compare its actionable checkbox-item count (`- [ ]` or `- [x]`) to the emitted check count and require the IDs to be the exact sequence `ac-1..ac-N`. A mismatch blocks investigation completion; do not compensate by combining criteria into one broad command.
 
 **Self-defeating pipe guideline**: do NOT chain a `-q`/`--quiet` command into a downstream pipe consumer (e.g. `grep -q ... | grep ...`). A `-q` flag suppresses all stdout, so the next command in the pipe always receives empty input and the check can never pass regardless of the actual file content. If a check needs to verify two conditions against the same output, sequence them instead — e.g. `grep -qE 'first' file && grep -qE 'second' file` — or capture the output once and grep the captured variable.
 

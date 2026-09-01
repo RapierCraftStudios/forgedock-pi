@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased — Prompt-router simplification
+
+- Restored the three lifecycle commands (orchestrate, work-on, review-pr, plus the
+  staging strategy) as thin prompt routers over the packaged original specifications.
+- Resynced `specs/original/**` byte-for-byte with the tested upstream ForgeDock command
+  corpus and regenerated the SHA-256 manifest.
+- Removed the port-layer gate machinery that had accreted over the skills, coordinator
+  profile, and Pi adapter: work-on ownership gating of standalone reviews,
+  `FORGE:BASE`/`FORGE:BASE_REFRESH` refresh transactions, reviewer receipt/recovery
+  contracts, remediation closure matrices, and the separate qualitative-review-protocol
+  spec. Mechanical failures remain visible `GATED` evidence per the adapter.
+- Dropped the packaged `forgedock-builder` hop; the work-on coordinator executes build
+  phases inline from the original phase files, as the tested upstream commands do.
+- Slimmed the work-on coordinator profile and reviewer profile to short runtime
+  contracts; reviewer deadlines stay runtime plumbing with `stopOnAttention: false`.
+- Rewrote the smoke specs to pin the router shape (thin skills, standalone-review
+  invocability, manifest integrity, read-only reviewer profiles) instead of gate text.
+
 ## Unreleased — Prompt-routed reset
 
 - Replaced controller-backed workflow command registration with a lexical Pi skill router.

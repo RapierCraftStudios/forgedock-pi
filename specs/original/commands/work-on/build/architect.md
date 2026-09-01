@@ -29,9 +29,9 @@ COMPLEXITY_BAND=$(gh api repos/{GH_REPO}/issues/{NUMBER}/comments \
 COMPLEXITY_BAND="${COMPLEXITY_BAND:-STANDARD}"
 ```
 
-Every complexity band, including TRIVIAL, must execute the production entrypoint/caller trace and Phase A2.1 Production Seam Ownership Gate. TRIVIAL may skip only the remaining planning work after those ownership rows are closed, then publish the ownership-bearing Skip Marker below. No complexity band may emit an empty architecture completion artifact. <!-- forge#679; ownership gate supersedes empty skip behavior -->
+**If COMPLEXITY_BAND: TRIVIAL** → skip all phases (A0 through A5), **post the minimal skip marker comment described in "Skip Marker" under Skip Conditions below** (reason: `TRIVIAL complexity band`), then return an empty plan to caller immediately. Do not read any files. This is not an error — trivial single-file changes have no cross-path consistency risk. The skip marker (ending in `<!-- FORGE:ARCHITECT:COMPLETE -->`) is what makes a legitimate skip observable to the headless engine's marker-only gate, so the issue advances to build instead of being stranded at `needs-human`. <!-- Added: forge#679; skip-marker on skip: forge#2689 -->
 
-**STANDARD or COMPLEX** → execute the full A0–A5 plan.
+**If COMPLEXITY_BAND: STANDARD or COMPLEX** → proceed to Phase A0 below.
 
 ---
 
@@ -73,40 +73,20 @@ gh api repos/{GH_REPO}/issues/{NUMBER}/comments \
 
 ## Resume Check
 
-Select the latest architect artifact before checking completion; never filter to an older
-completed comment when a newer partial/malformed one exists. Legacy/empty completion artifacts are insufficient and must be superseded:
+Before doing any work:
 
 ```bash
-ARCHITECT_LATEST=$(gh api --paginate repos/{GH_REPO}/issues/{NUMBER}/comments --slurp \
-  | jq -c 'flatten | map(select(.body | contains("<!-- FORGE:ARCHITECT -->"))) | last // {}')
-ARCHITECT_BODY=$(printf '%s' "$ARCHITECT_LATEST" | jq -r '.body // ""')
-ARCHITECT_ID=$(printf '%s' "$ARCHITECT_LATEST" | jq -r '.id // ""')
-SIDE_EFFECT=$(printf '%s\n' "$INVESTIGATION_REPORT" | sed -n 's/^\*\*Irreversible\/provider side effect\*\*: \(YES\|NO\)$/\1/p' | tail -1)
-
-if printf '%s' "$ARCHITECT_BODY" | grep -qF '<!-- FORGE:ARCHITECT:COMPLETE -->'; then
-  rows=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### Production Seam Ownership/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||Observable Effect')
-  provider_ok=false
-  if [ "$SIDE_EFFECT" = NO ]; then
-    provider_ok=true
-  elif [ "$SIDE_EFFECT" = YES ]; then
-    provider_rows=$(printf '%s\n' "$ARCHITECT_BODY" | awk '/^### Provider Transaction Proof/{p=1;next} /^### /{p=0} p' | grep '^|' | grep -vE '^\|[- ]+\||^\| Provider (Operation|operation)')
-    [ -n "$provider_rows" ] \
-      && ! printf '%s\n' "$provider_rows" | grep -Eqi '\{[^}]*\}|\b(TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|[[:space:]]*\|' \
-      && printf '%s' "$ARCHITECT_BODY" | grep -qF '**Provider transaction gate**: CLOSED' && provider_ok=true
-  fi
-  if [ -n "$rows" ] \
-    && ! printf '%s\n' "$rows" | grep -Eqi '\{[^}]*\}|\b(TBD|TODO|UNKNOWN|PLACEHOLDER)\b|\|[[:space:]]*\|' \
-    && printf '%s' "$ARCHITECT_BODY" | grep -qF '**Ownership gate**: CLOSED' \
-    && [ "$provider_ok" = true ]; then
-    echo "Current architecture ownership is complete; reuse exact latest artifact $ARCHITECT_ID"
-    exit 0
-  fi
-  echo "Legacy/malformed completed architecture is preserved but superseded by a current plan"
-elif [ -n "$ARCHITECT_ID" ]; then
-  gh api repos/{GH_REPO}/issues/comments/$ARCHITECT_ID -X DELETE
-  echo "Deleted latest interrupted architecture artifact; restarting"
-fi
+gh api repos/{GH_REPO}/issues/{NUMBER}/comments \
+  --jq '.[] | select(.body | contains("FORGE:ARCHITECT")) | .body'
 ```
+
+- If `<!-- FORGE:ARCHITECT -->` comment exists AND `<!-- FORGE:ARCHITECT:COMPLETE -->` is present in the SAME comment → plan already complete, return existing plan to caller, EXIT.
+- If `<!-- FORGE:ARCHITECT -->` comment exists BUT `<!-- FORGE:ARCHITECT:COMPLETE -->` is ABSENT → plan was interrupted, delete the partial comment and restart:
+  ```bash
+  COMMENT_ID=$(gh api repos/{GH_REPO}/issues/{NUMBER}/comments \
+    --jq '.[] | select(.body | contains("FORGE:ARCHITECT")) | .id')
+  gh api repos/{GH_REPO}/issues/comments/$COMMENT_ID -X DELETE
+  ```
 
 ---
 
@@ -473,46 +453,6 @@ Produce a table of ALL files/functions that must change to maintain consistency.
 
 ---
 
-## Phase A2.1: Production Seam Ownership Gate (MANDATORY)
-
-Reconcile the full A1/A2 caller trace with the investigation's `Production Execution
-Seam` and the Builder Contract's `Production Seam Ownership` table before producing a
-plan.
-
-For every requested observable runtime, provider, persistence, API, CLI, or prompt/spec
-effect:
-
-1. Identify the concrete production entrypoint and every caller/adapter/handler that owns
-   the effect.
-2. If the requested behavior is absent in an owner, require that file/symbol in both
-   Affected Paths and the Builder Contract Deliverables.
-3. A production owner may remain read-only only with exact source evidence that it already
-   performs the requested behavior and the proposed mutation reaches it without another
-   code change.
-4. Reject test-local helpers, fixtures, mocks, exports without callers, and prose-only
-   assertions as implementation of production behavior.
-5. For prompt/spec-only behavior, prove the named specification is the file actually loaded
-   by the public runtime and that no separate executable owner controls the effect.
-
-If a related path discovered during tracing owns the requested effect but is omitted or
-marked read-only without that proof, do not post `FORGE:ARCHITECT:COMPLETE`. Return
-automated `GATED` to investigation so Affected Files, acceptance seam, contract, and claim
-are revised before mutation.
-
-Add a `### Production Seam Ownership` section to the architecture output listing each
-effect, entrypoint, owner, mutation path, and exact public-seam test. Every row must be
-closed before implementation.
-
-When investigation marks `Irreversible/provider side effect: YES`, create the only
-`### Provider Transaction Proof` for this build. Add one row per investigated operation
-or fallback. Each row names authority/preconditions, exact call/failure scope, required
-result/readback, replay/recovery failure scenario, and an exact executable command that
-proves that scenario. A fallback identifies the named failed operation that authorizes
-it; unrelated failures cannot. Do not repeat these rows in Risk Assessment. Missing or
-cross-operation rows are `GATED` before architecture completion.
-
----
-
 ## Phase A2.5: Pipeline Phase-Dependency Check
 
 **Skip if**: None of the `{AFFECTED_FILES}` are Forge pipeline command files (i.e., no file matches `commands/**/*.md`). When skipped, proceed directly to A3.
@@ -610,11 +550,10 @@ Rules for ordering:
 
 ## Phase A5: Risk Assessment
 
-For each non-obvious interaction or potential failure mode, add one Risk Assessment row
-with severity, a concrete failure scenario, and its exact verification command. A HIGH
-risk without an executable scenario command blocks architecture completion. Keep the
-scenario in this table; do not create a second verification table. Provider operation,
-fallback, and replay scenarios stay only in Provider Transaction Proof.
+For each non-obvious interaction or potential failure mode:
+- State the risk in one sentence
+- Rate it: HIGH / MEDIUM / LOW
+- Suggest a mitigation or check
 
 Focus on:
 - Churn / hot-spot files (see below) — high historical change frequency correlates with defect density
@@ -687,21 +626,6 @@ gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:ARCHITECT -->
      status: needs-review ADRs are excluded — their anchors are dead. -->
 {PRIOR_DECISIONS}
 
-### Production Seam Ownership
-| Observable Effect | Public Entrypoint | Production Owner | Mutation / No-Mutation Evidence | Public-Seam Test |
-|---|---|---|---|---|
-| {EFFECT} | {ENTRYPOINT} | {OWNER_FILE_AND_SYMBOL} | {DELIVERABLE_CHANGE_OR_PROOF} | {EXACT_TEST} |
-
-**Ownership gate**: CLOSED — every executable owner is a deliverable or has exact
-no-mutation evidence.
-
-### Provider Transaction Proof (required only when investigation says YES)
-| Provider Operation or Fallback | Authority / Preconditions | Exact Call and Failure Scope | Required Result / Readback | Replay / Recovery Failure Scenario | Exact Executable Command |
-|---|---|---|---|---|---|
-| {ACTUAL_OPERATION} | {WHO_MAY_ACT} | {CALL_AND_ONLY_ERRORS_IT_HANDLES} | {SUCCESS_FIELDS} | {CONCRETE_INTERRUPTION_OR_REPLAY_SCENARIO} | `{EXECUTABLE_COMMAND}` |
-
-**Provider transaction gate**: CLOSED
-
 ### Affected Paths (ALL must be updated)
 | # | File | Function/Class | Change Required | Why |
 |---|------|----------------|-----------------|-----|
@@ -719,9 +643,9 @@ no-mutation evidence.
 - [ ] {INVARIANT_3}
 
 ### Risk Assessment
-| Risk | Severity | Concrete Failure Scenario | Exact Verification Command |
-|------|----------|---------------------------|----------------------------|
-| {NON_PROVIDER_RISK_DESCRIPTION} | HIGH/MEDIUM/LOW | {OBSERVABLE_FAILURE} | `{EXECUTABLE_COMMAND}` |
+| Risk | Severity | Mitigation |
+|------|----------|------------|
+| {RISK_DESCRIPTION} | HIGH/MEDIUM/LOW | {MITIGATION} |
 
 ### Files to Read Before Coding
 <!-- Builder MUST read these files before writing any code -->
@@ -744,20 +668,20 @@ no-mutation evidence.
 
 ## Skip Conditions
 
-After the mandatory entrypoint/caller trace and A2.1 Production Seam Ownership Gate have
-closed at least one ownership row, the remaining planning work may be skipped for:
-- **COMPLEXITY_BAND: TRIVIAL**;
-- only-new-file, one-file config/docs, or `docs:`/`chore:` work whose ownership row proves the new/spec/config file is the actual production surface;
-- empty initial Affected Files only after investigation is superseded with a concrete production owner.
+Skip the planning work (Phases A0–A5) and return an empty plan to caller — **but always post the Skip Marker below first** — if:
+- **COMPLEXITY_BAND: TRIVIAL** — checked via FORGE:FAST_PATH comment at entry (see guard above) <!-- Primary skip path: forge#679 -->
+- Issue creates only **new files** with no callers to find (e.g. a new command file with no existing integration point yet)
+- Issue is a 1-file config or docs edit with no code logic
+- Issue title starts with "docs:" or "chore:"
+- `{AFFECTED_FILES}` is empty
 
-No route returns an empty plan. If ownership cannot be proven, return `GATED` to
-investigation instead of posting a completion marker.
+When skipped, the builder proceeds with investigation report + context briefing only (see Integration Point below — the builder falls back gracefully on an empty plan).
 
 ### Skip Marker (MANDATORY on every skip — do NOT post nothing) <!-- forge#2689 -->
 
-**Do not post nothing or an empty marker.** The completion sentinel remains mandatory, but
-the marker must carry the closed production ownership evidence. On every permitted skip,
-post this bounded ownership-bearing comment:
+**Do not post nothing.** The headless engine gate (`bin/engine/phases.mjs` → `architect.detectOutcome`) treats a **missing** `FORGE:ARCHITECT:COMPLETE` sentinel as a phase **failure**, retries to `maxAttempts` (3), then strands the issue at `needs-human`. It reads GitHub comment markers only — it cannot see this subcommand's in-process "empty plan" return value. So a skip that posts no marker is indistinguishable from a crashed architect run and deterministically strands **every** `chore:`/`docs:`/trivial issue.
+
+On **every** skip branch above, post exactly this minimal comment (substitute the concrete `{SKIP_REASON}`, e.g. `chore:/docs: title`, `TRIVIAL complexity band`, `new files only — no callers`, or `AFFECTED_FILES empty`) **before** returning the empty plan:
 
 ```bash
 # The skip marker is mandatory and un-gated by design — posting it IS the point
@@ -766,20 +690,9 @@ post this bounded ownership-bearing comment:
 # same allowlist rather than a DRY_RUN guard.
 SKIP_BODY=$(cat <<SKIP_EOF
 <!-- FORGE:ARCHITECT -->
-## Architecture Plan — Remaining Planning Skipped
+## Architecture Plan — Skipped
 
-**Skipped after ownership reconciliation**: {SKIP_REASON}
-
-### Production Seam Ownership
-| Observable Effect | Public Entrypoint | Production Owner | Mutation / No-Mutation Evidence | Public-Seam Test |
-|---|---|---|---|---|
-| {EFFECT} | {ENTRYPOINT} | {OWNER_FILE_AND_SYMBOL} | {DELIVERABLE_CHANGE_OR_PROOF} | {EXACT_TEST} |
-
-**Ownership gate**: CLOSED — every executable owner is a deliverable or has exact
-no-mutation evidence.
-
-{If investigation says YES, include the substantive Provider Transaction Proof and
-`**Provider transaction gate**: CLOSED` here. Provider work cannot skip this matrix.}
+**Skipped**: {SKIP_REASON}. No cross-path consistency risk — the builder proceeds with the investigation report + context briefing.
 
 <!-- FORGE:ARCHITECT:COMPLETE -->
 SKIP_EOF
@@ -787,9 +700,7 @@ SKIP_EOF
 gh issue comment {NUMBER} {GH_FLAG} --body "$SKIP_BODY" # <!-- allowlist:check-command-side-effects -->
 ```
 
-The ownership-bearing marker keeps legitimate small-task skips observable without
-weakening the production-seam gate. A genuinely interrupted or legacy empty run has no
-current closed ownership row and remains ineligible for implementation.
+The empty-plan-with-marker changes no downstream behavior — the builder already falls back to the investigation report + contract when the plan is empty (see Integration Point below). The marker only makes the legitimate skip **observable** to the marker-only engine gate. This intentionally does **not** weaken crash detection: a genuinely interrupted architect run still posts no marker at all, so `detectOutcome` still fails-and-escalates it correctly.
 
 ---
 
@@ -804,7 +715,6 @@ This module runs at **Step 3C.6** — after Context Gathering, before Implement:
           Phase A0: Read Custom Instructions and Project Conventions (highest precedence)
           Phase A1: Read Entry Points
           Phase A2: Trace the Data Flow
-          Phase A2.1: Reconcile Production Seam Ownership (mandatory for every band)
           Phase A2.5: Pipeline Phase-Dependency Check
           Phase A3: Consistency Rules
           Phase A4: Sequence the Implementation

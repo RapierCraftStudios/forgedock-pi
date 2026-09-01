@@ -10,7 +10,7 @@ argument-hint: "[issue number] [--repo GH_REPO] [--gh-flag GH_FLAG] [--worktree 
 **Input**: $ARGUMENTS
 
 **Invoked by**: `work-on.md` Step 3F.5, after `implement.md` has written and staged code (not committed).
-**Output**: Return `VALIDATE_RESULT` with `COMPLETE` or automated `GATED`; mechanical failures never set `needs-human`.
+**Output**: Return `GATE_PASSED: true/false` to caller. On failure after max iterations, post comment and set `needs-human`.
 
 **Agent model policy**: `model: "{DEFAULT_MODEL}"` — resolved from forge.yaml `agents.default_model`, else "sonnet" (standard tier). Fallback: `model: "opus"` if rate-limited. Feature gate: pass `effort` in Task/Skill spawns only on Claude Code >= 2.1.154.
 **NEVER use plan mode (EnterPlanMode).**
@@ -26,17 +26,16 @@ Parse from $ARGUMENTS:
 - `--repo {GH_REPO}` — GitHub repo (e.g. `{owner}/{repo}` — resolved from `forge.yaml → project`)
 - `--gh-flag {GH_FLAG}` — gh CLI repo flag (e.g. `-R {owner}/{repo}`)
 - `--worktree {WORKTREE_PATH}` — absolute path to the git worktree
-- `--base-sha {FROZEN_BASE_SHA}` — exact frozen base SHA from `FORGE:BASE` (required)
 - `--files {CHANGED_FILES}` — space-separated list of changed files (from implement result)
 
 ---
 
-## No whole-phase skip
+## Skip Conditions
 
-Every build reaches V5 commit and commit-evidence production. A one-file documentation or
-configuration change may skip inapplicable language, browser, database, and deployment
-checks inside their individual phases, but it must not return before the quality result,
-exact scope gate, commit, ancestry audit, and validated commit SHA.
+Skip all phases (return `GATE_PASSED: true` immediately) if:
+- Only 1 file was changed AND it is a config or docs file with no code logic (e.g. `.md`, `.yml` with no scripts, `.env.example`)
+
+In all other cases, the gate MUST run.
 
 ---
 
@@ -101,7 +100,8 @@ while iteration < max_iterations:
 if iteration == max_iterations AND result != PASS AND blocker_findings not empty:
     GATE_PASSED = false
     → post comment (see V1-FAIL below)
-    → return VALIDATE_RESULT: status: GATED, gate_passed: false to caller, STOP
+    → add label needs-human
+    → return GATE_PASSED: false to caller, STOP
 ```
 
 **Quality gate invocation**:
@@ -109,7 +109,7 @@ if iteration == max_iterations AND result != PASS AND blocker_findings not empty
 Skill("quality-gate", args="{CHANGED_FILES} --worktree {WORKTREE_PATH}")
 ```
 
-**Timeout handling**: The quality-gate's executable checks carry their own explicit timeouts; a `QUALITY-GATE-TIMEOUT` result is a mechanical `GATED` outcome. Record it as HIGH, do not apply speculative fixes, post the failure evidence, and return `VALIDATE_RESULT: status: GATED, gate_passed: false` without `needs-human`. Do not retry a timed-out check. A wall-time timeout for the in-context `Skill(...)` invocation itself requires native runtime support and is not claimed by this workflow.
+**Timeout handling**: The quality-gate's executable checks carry their own explicit timeouts; a `QUALITY-GATE-TIMEOUT` result is a failed gate iteration. Record it as HIGH, do not apply speculative fixes, and proceed to V1-FAIL immediately (post the failure comment, add `needs-human`, return `GATE_PASSED: false`). Do not retry a timed-out check. A wall-time timeout for the in-context `Skill(...)` invocation itself requires native runtime support and is not claimed by this workflow.
 
 **Rules**:
 - Re-run after EVERY fix pass — never trust that fixes resolved findings without verification
@@ -121,12 +121,12 @@ Skill("quality-gate", args="{CHANGED_FILES} --worktree {WORKTREE_PATH}")
 ```bash
 gh issue comment {NUMBER} {GH_FLAG} --body "## Quality Gate Failed After 3 Iterations
 
-Quality gate findings persist after 3 fix passes. Build remains mechanically GATED.
+Quality gate findings persist after 3 fix passes. Flagging for human review.
 
 **Files**: {CHANGED_FILES}
 **Final findings**: {SUMMARY_OF_REMAINING_FINDINGS}
 
-No commit or PR is authorized.
+Needs human review before proceeding to commit.
 
 <!-- FORGE:GATE_FAILED -->"
 ```
@@ -365,20 +365,6 @@ If any required location is missing the var:
 
 ---
 
-## Phase V4.5: Final Contract/Claim Path Gate (MANDATORY)
-
-Validation and formatting may modify or add paths after implement.md's pre-stage check.
-Immediately before V5, re-read the latest completed Builder Contract and, under
-orchestration, the active claim. Enumerate every modified, deleted, renamed, staged, and
-untracked non-ignored path. Every path must appear literally in the contract and, when
-present, the claim. Any mismatch returns automated `GATED` before commit; do not stage or
-silently absorb validation-created scope.
-
-This is the final mutation-authority check. V5 may commit only the exact path set that
-passed it.
-
----
-
 ## Phase V5: Commit (always — after GATE_PASSED=true)
 
 After the gate passes, commit all staged changes in a single commit. This includes:
@@ -402,17 +388,11 @@ This is the **only** commit for this build cycle. It replaces the old `git commi
 
 ### V5 Post-Commit Ancestry Audit (MANDATORY)
 
-After committing, require exact frozen-base ancestry and detect unrelated merge commits
-before the branch is pushed. Missing or invalid base evidence is `GATED`:
+After committing, run the ancestry audit to detect merge commits from unrelated branches before the branch is pushed:
 
 ```bash
 cd {WORKTREE_PATH}
-[ -n "{FROZEN_BASE_SHA}" ] || { echo "VALIDATE_RESULT: status: GATED blocker: frozen base SHA missing"; exit 1; }
-git merge-base --is-ancestor "{FROZEN_BASE_SHA}" HEAD || {
-  echo "VALIDATE_RESULT: status: GATED blocker: HEAD is not descended from frozen base"
-  exit 1
-}
-MERGE_COMMITS=$(git log --merges HEAD ^"{FROZEN_BASE_SHA}" 2>/dev/null)
+MERGE_COMMITS=$(git log --merges HEAD ^origin/{PR_BASE} 2>/dev/null)
 if [ -n "$MERGE_COMMITS" ]; then
   echo "ANCESTRY AUDIT FAILED: merge commits from unrelated branches detected on this branch:"
   echo "$MERGE_COMMITS"
@@ -426,32 +406,49 @@ Branch \`{BRANCH}\` contains merge commits from branches outside the PR base (\`
 ${MERGE_COMMITS}
 \`\`\`
 
-Build remains mechanically GATED; no push or PR is authorized.
+Human review required before this branch can be pushed.
 
 <!-- FORGE:ANCESTRY_FAILED -->"
-  echo "VALIDATE_RESULT: status: GATED gate_passed: false blocker: ancestry audit failed"
+  gh issue edit {NUMBER} {GH_FLAG} --add-label "needs-human"
+  # Return GATE_PASSED: false — do not push
   exit 1
 fi
 ```
 
-### V5 Post-Commit: Return Commit Evidence (MANDATORY)
-
-After the ancestry audit passes (or is skipped), return the exact clean commit SHA to the
-calling build phase. Do **not** append `<!-- FORGE:BUILDER:COMPLETE -->` here: the build is
-not complete until Phase B6.5 executes every acceptance check. The caller appends the
-completion marker only after acceptance passes and binds it to this commit.
-
+If `origin/{PR_BASE}` does not exist yet (new branch), skip this check — no contamination is possible from a non-existent base. Detect with:
 ```bash
-VALIDATED_COMMIT_SHA=$(git rev-parse HEAD)
-[ -z "$(git status --porcelain)" ] || {
-  echo "VALIDATE-COMMIT | HIGH | worktree | validation left uncommitted changes"
-  exit 1
-}
-echo "VALIDATED_COMMIT_SHA=$VALIDATED_COMMIT_SHA"
+git ls-remote --exit-code origin {PR_BASE} >/dev/null 2>&1 || echo "PR_BASE not on origin — skipping ancestry audit"
 ```
 
-A crash after commit but before acceptance leaves the partial `FORGE:BUILDER` comment
-without `:COMPLETE`; resume must rerun acceptance rather than treating the build as done.
+### V5 Post-Commit: Mark Build Complete (MANDATORY)
+
+After the ancestry audit passes (or is skipped), append `<!-- FORGE:BUILDER:COMPLETE -->` to the existing FORGE:BUILDER comment. This is the **only** place this marker is written — it signals that a real commit exists on the branch and the build is safe to resume-skip. <!-- Added: forge#1305 -->
+
+```bash
+# Find the FORGE:BUILDER comment posted by implement.md Phase I6
+BUILDER_COMMENT_ID=$(gh api repos/{GH_REPO}/issues/{NUMBER}/comments \
+  --jq '[.[] | select(.body | contains("FORGE:BUILDER") and (contains("FORGE:BUILDER:COMPLETE") | not))] | last | .id // ""')
+
+if [ -n "$BUILDER_COMMENT_ID" ]; then
+  # Fetch current body and append the completion marker plus best-effort cost signal
+  CURRENT_BODY=$(gh api repos/{GH_REPO}/issues/comments/$BUILDER_COMMENT_ID --jq '.body')
+  # Best-effort cost append: only include if session telemetry provides a value; never block
+  PHASE_COST_LINE=""
+  [ -n "${PHASE_COST_USD:-}" ] && PHASE_COST_LINE="
+cost_usd: ${PHASE_COST_USD}"
+  UPDATED_BODY="${CURRENT_BODY}${PHASE_COST_LINE}
+
+<!-- FORGE:BUILDER:COMPLETE -->"
+  gh api repos/{GH_REPO}/issues/comments/$BUILDER_COMMENT_ID \
+    -X PATCH \
+    --field body="$UPDATED_BODY"
+  echo "FORGE:BUILDER:COMPLETE appended to comment $BUILDER_COMMENT_ID"
+else
+  echo "WARNING: FORGE:BUILDER comment not found or already marked complete — skipping BUILDER:COMPLETE append"
+fi
+```
+
+**Why here and not in implement.md**: The commit (`git commit`) runs in this phase (V5). Appending `:COMPLETE` after the commit ensures that a session crash between implement.md I6 (comment posted) and this step (commit) leaves a partial BUILDER comment without `:COMPLETE`. The next resume will detect the partial comment, delete it, and restart the build. See `implement.md § Phase I1 resume check`.
 
 ---
 
@@ -461,9 +458,7 @@ Return structured output to the caller:
 
 ```
 VALIDATE_RESULT:
-  status: COMPLETE | GATED
   gate_passed: true | false
-  validated_commit_sha: {exact SHA from V5; required when status=COMPLETE}
   quality_gate_iterations: {COUNT}
   format_issues_fixed: {COUNT}
   proxy_violations_fixed: {COUNT}
@@ -491,4 +486,4 @@ This module runs at **Step 3F.5** — after implement, before commit (3J) and PR
 3J  → V5 commit happens here after GATE_PASSED=true (single commit for implementation + any fixes)
 ```
 
-If `VALIDATE_RESULT: gate_passed: false`, the router preserves automated `GATED` evidence and stops — no PR is created and no `needs-human` label is added.
+If `VALIDATE_RESULT: gate_passed: false`, the router adds `needs-human` label and stops — no PR is created.

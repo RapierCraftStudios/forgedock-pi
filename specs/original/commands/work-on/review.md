@@ -341,27 +341,6 @@ gh issue view {NUMBER} {GH_FLAG} --json state --jq '.state'
 
 ---
 
-## Controlled refresh before review
-
-Before pushing, creating a PR, or invoking `/review-pr`, re-fetch the authoritative
-`refs/heads/staging` and compare its exact SHA with the immutable launch/current base.
-When a verified sibling merge advanced the target, publish `FORGE:BASE_REFRESH` with the
-launch SHA, old/new target SHAs, target ref, sibling merge SHA, merge-base SHA, and
-attempt. Prove the movement is authorized and reachable; unexpected or ambiguous
-movement is GATED.
-
-Preserve the owned branch, issue commits, and existing PR. Before a PR exists, use a
-guarded synchronization onto the verified target. After a PR exists, integrate the
-verified target non-destructively and push only with the expected remote-head lease;
-never reset, overwrite, or force-push an unverified remote head. Conflicts and lease
-mismatch remain automated GATED outcomes.
-
-After refresh, rerun all affected verification and acceptance checks, update the same
-PR, and freeze the refreshed exact base/head/merge-base identity. Invoke review only
-with that identity; all earlier reviewer receipts and approvals are stale and cannot
-authorize merge. The refreshed review must use a fresh complete panel. See
-`specs/qualitative-review-protocol.md`.
-
 ## Output
 
 **After posting this result, immediately proceed to the close subcommand — do NOT stop here. `REVIEW_RESULT: status: COMPLETE` is an intermediate result, NOT a terminal state. The pipeline is not done. You MUST invoke `Skill("work-on:close", ...)` now to close the issue, update labels to `workflow:merged`, post the trajectory log, and clean up the worktree.**
