@@ -39,7 +39,11 @@ thinking suffix — never by lowering the blocking standard. For a remediation r
 of a head with known blockers, the panel is scoped to exactly the remediated change:
 reviewers are the personas that produced the blocking findings plus one general
 reviewer, each receiving the remediated hunks and the blocker's invariant, verifying
-whether the blocker remains reachable on the frozen new head. A full-domain union
+whether the blocker remains reachable on the frozen new head. When a review returns
+multiple blockers plus non-blocking findings, remediation is one cohesive pass on the
+existing PR branch: every blocker is fixed in the same head in the same worktree —
+never one head per blocker — and the scoped blocker-persona re-review verifies all
+blocker invariants on that single new head in one review round. A full-domain union
 panel is never required to verify a blocker closure — re-reviewing everything
 re-introduces the round-count and wall-clock spiral that stalled the previous
 generation of this pipeline. Prepare each reviewer bundle
