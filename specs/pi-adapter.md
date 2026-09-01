@@ -33,7 +33,8 @@ terminal conditions, review policy, GitHub artifacts, remediation, merge, and cl
 | `Task(...)` or `Agent(...)` | Use Pi's `subagent` tool with fresh context. Join every dispatched child before synthesis. |
 | Claude `Read`, `Grep`, `Glob`, `Bash` | Pi `read`, search/navigation tools, and `bash`. |
 | `$FORGE_HOME/commands/...` | `specs/original/commands/...` in this package. |
-| `yq`-based config reads | Use direct Bash with `yq` when installed, or a short `node` command with the package's YAML dependency. Missing/malformed required configuration fails closed. |
+| `$FORGE_HOME/bin/...` and `$FORGE_HOME/scripts/...` (including bare `bin/...` and `scripts/...` shorthand inside the specs) | `specs/original/bin/...` and `specs/original/scripts/...` in this package. Resolve against the package root, never the target repository root. |
+| `yq`-based config reads | Use direct Bash with `yq` when installed, or a short `node` command with the package's YAML dependency. Missing/malformed required configuration fails closed. A missing `yq` binary itself is never a failure: use the fallback automatically. |
 | GitHub and Git operations | Use direct `gh` and `git` commands. Verify `gh auth status` and repository access, and run `gh auth setup-git` before noninteractive fetch/push. |
 | Missing optional helper script | Follow the prose fallback already described by the specification. Never use an unbounded filesystem search. |
 | Mechanical failure recovery | A mechanical failure (timeout, provider loss, gate mismatch, conflict) is automated `GATED`/`review-degraded` evidence with actionable detail. Reserve `needs-human` for a genuine human authority decision. |

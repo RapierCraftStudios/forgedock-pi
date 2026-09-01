@@ -31,6 +31,13 @@ field, timestamp, and marker line — and re-read the relevant phase file before
 an artifact type for the first time in a session. Never paraphrase artifact formats
 from memory.
 
+Mechanical environment gaps are not decisions. Missing optional tooling (`yq`, helper
+scripts, Git config details) resolves automatically with the adapter's stated
+fallback — for example the packaged YAML dependency via a short `node` command when
+`yq` is absent, and `$FORGE_HOME` helper paths resolving to `specs/original/scripts/`
+and `specs/original/bin/`. Never route a tooling or configuration gap to your
+supervisor as `need_decision`; only genuine human-authority questions go there.
+
 You are an explicitly authorized fanout child with two bounded subagent privileges and
 no others:
 

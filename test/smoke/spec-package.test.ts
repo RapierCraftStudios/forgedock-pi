@@ -127,10 +127,16 @@ test("canonical dispatch recipe governs wave, successor, and recovery launches",
   assert.match(adapter, /for first dispatch and recovery alike/);
   // The dispatcher must not research its own translation at runtime.
   assert.match(adapter, /Never load the pi-subagents reference corpus/);
+  // Helper paths and tooling fallbacks resolve deterministically.
+  assert.match(adapter, /`specs\/original\/bin\/\.\.\.` and `specs\/original\/scripts/);
+  assert.match(adapter, /never a failure: use the fallback automatically/);
   assert.match(skill, /canonical recipe in `specs\/pi-adapter\.md`/);
   assert.match(skill, /Never compose improvised prose task/);
-  // Coordinators execute artifacts exactly and never spawn sub-workflows.
+  // Coordinators execute artifacts exactly and never spawn sub-workflows;
+  // mechanical gaps use adapter fallbacks, never supervisor decisions.
   assert.match(coordinator, /Never paraphrase artifact formats/);
+  assert.match(coordinator, /Mechanical environment gaps are not decisions/);
+  assert.match(coordinator, /Never route a tooling or configuration gap/);
   assert.match(coordinator, /not a sub-workflow|no sub-workflow|not a sub-workflow of domain lanes|direct read-only children/);
 });
 
