@@ -20,3 +20,11 @@ completed `FORGE:*` issue and pull-request artifacts preserve the evidence requi
 a new session.
 
 No hidden local phase state is required to continue the workflow.
+
+## Smoke-suite verification
+
+Run the focused smoke suite without executing the full test corpus:
+
+```bash
+npm run test:smoke
+```
