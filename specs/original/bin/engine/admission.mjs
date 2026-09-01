@@ -575,7 +575,11 @@ function batchSafetyKey(batch) {
 }
 
 function batchIdentity(batch, repo) {
-  if (typeof batch?.id === "string" && batch.id.trim() !== "") return batch.id;
+  const rawId = typeof batch?.id === "string" ? batch.id.trim() : "";
+  if (rawId !== "") {
+    const suffix = rawId.slice(rawId.lastIndexOf(":") + 1);
+    return `${repo}:${suffix}`;
+  }
   if (batch?.number !== undefined && batch?.number !== null) return `${repo}:${batch.number}`;
   return null;
 }
@@ -632,7 +636,7 @@ export function planP3Batches({ candidates = [], openBatches = [] } = {}) {
       const candidateSafety = safetyKey(members[0]);
       const batchSafety = batch.safetyClass;
       const safetyMatches = candidateSafety === "routine"
-        ? batchSafety === null || batchSafety === "routine"
+        ? batchSafety === "routine"
         : batchSafety === candidateSafety;
       return batchRepoMatches && safetyMatches;
     });
@@ -681,7 +685,9 @@ export function summarizeP3BatchPlan(plan = {}) {
   const ungrouped = Array.isArray(plan.ungrouped) ? plan.ungrouped : [];
   return {
     clustersFormed: create.length,
-    membersAbsorbed: create.reduce((total, group) => total + (group.memberIds?.length || 0), 0),
+    membersAbsorbed:
+      create.reduce((total, group) => total + (group.memberIds?.length || 0), 0) +
+      extend.reduce((total, batch) => total + (batch.memberIds?.length || 0), 0),
     openBatchesExtended: extend.length,
     ungroupedMembers: ungrouped,
   };

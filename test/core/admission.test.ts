@@ -75,7 +75,7 @@ test("returns stable IDs for open-batch extensions", () => {
     candidates: [
       { id: "org:21", number: 21, repo: "org", affectedFile: "src/shared.ts", labels: ["priority:P3"] },
     ],
-    openBatches: [{ number: 99, affectedFile: "src/shared.ts", memberIds: ["org:20"], memberCount: 1 }],
+    openBatches: [{ number: 99, affectedFile: "src/shared.ts", memberIds: ["org:20"], memberCount: 1, safetyClass: "routine" }],
   });
 
   assert.deepEqual(plan.extend, [
@@ -83,10 +83,22 @@ test("returns stable IDs for open-batch extensions", () => {
   ]);
   assert.deepEqual(summarizeP3BatchPlan(plan), {
     clustersFormed: 0,
-    membersAbsorbed: 0,
+    membersAbsorbed: 1,
     openBatchesExtended: 1,
     ungroupedMembers: [],
   });
+});
+
+test("does not extend an open batch with unknown safety metadata", () => {
+  const plan = planP3Batches({
+    candidates: [
+      { id: "org:22", number: 22, repo: "org", title: "routine maintenance", affectedFile: "src/shared.ts", labels: ["priority:P3"] },
+    ],
+    openBatches: [{ number: 99, repo: "org", affectedFile: "src/shared.ts", memberIds: ["org:20"] }],
+  });
+
+  assert.deepEqual(plan.extend, []);
+  assert.deepEqual(plan.ungrouped, [{ memberId: "org:22", reason: "no matching batch threshold" }]);
 });
 
 test("does not extend an open batch across safety classes", () => {
@@ -94,7 +106,7 @@ test("does not extend an open batch across safety classes", () => {
     candidates: [
       { id: "org:41", number: 41, repo: "org", title: "SSRF protection", affectedFile: "src/security.ts", labels: ["priority:P3"] },
     ],
-    openBatches: [{ number: 99, repo: "org", affectedFile: "src/security.ts", memberIds: ["org:40"] }],
+    openBatches: [{ number: 99, repo: "org", affectedFile: "src/security.ts", memberIds: ["org:40"], safetyClass: "credential" }],
   });
 
   assert.deepEqual(plan.extend, []);
