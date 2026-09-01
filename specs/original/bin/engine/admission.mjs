@@ -527,3 +527,168 @@ export function planP3BatchGroups(findings, rules = P3_BATCHING_RULES, { openBat
 
   return { groups, extensions, ungrouped: [...remaining.keys()] };
 }
+
+/**
+ * Return the stable repository-qualified identifier used at orchestration
+ * boundaries. Existing registries already provide `id`; the repo/number
+ * fallback keeps the adapter convenient for callers constructing candidates.
+ * @param {Object} candidate
+ * @returns {string|null}
+ */
+function candidateId(candidate) {
+  if (typeof candidate?.id === "string" && candidate.id.trim() !== "") return candidate.id;
+  if (candidate?.repo && candidate?.number !== undefined && candidate?.number !== null) {
+    return `${candidate.repo}:${candidate.number}`;
+  }
+  if (candidate?.number !== undefined && candidate?.number !== null) return String(candidate.number);
+  return null;
+}
+
+function memberId(member) {
+  if (member && typeof member === "object") return candidateId(member);
+  return member === undefined || member === null ? null : String(member);
+}
+
+function repositoryKey(candidate) {
+  if (typeof candidate?.repo === "string" && candidate.repo.trim() !== "") return candidate.repo;
+  const id = candidateId(candidate);
+  const separator = id?.lastIndexOf(":") ?? -1;
+  return separator > 0 ? id.slice(0, separator) : "__unscoped__";
+}
+
+function batchRepositoryKey(batch) {
+  if (typeof batch?.repo === "string" && batch.repo.trim() !== "") return batch.repo;
+  if (typeof batch?.repository === "string" && batch.repository.trim() !== "") return batch.repository;
+  const id = typeof batch?.id === "string" ? batch.id : "";
+  const separator = id.lastIndexOf(":");
+  return separator > 0 ? id.slice(0, separator) : null;
+}
+
+function batchSafetyKey(batch) {
+  if (typeof batch?.safetyClass === "string" && batch.safetyClass.trim() !== "") return batch.safetyClass;
+  if (typeof batch?.class === "string" && batch.class.trim() !== "") return batch.class;
+  const classes = (batch?.members || [])
+    .filter((member) => member && typeof member === "object")
+    .map(safetyKey)
+    .filter((value, index, values) => values.indexOf(value) === index);
+  return classes.length === 1 ? classes[0] : null;
+}
+
+function batchIdentity(batch, repo) {
+  const rawId = typeof batch?.id === "string" ? batch.id.trim() : "";
+  if (rawId !== "") {
+    const suffix = rawId.slice(rawId.lastIndexOf(":") + 1);
+    return `${repo}:${suffix}`;
+  }
+  if (batch?.number !== undefined && batch?.number !== null) return `${repo}:${batch.number}`;
+  return null;
+}
+
+function safetyKey(candidate) {
+  return classifyBatchSafety(`${candidate?.title || ""}\n${candidate?.body || ""}`) || "routine";
+}
+
+/**
+ * Plan batches using the object-form contract consumed by phase-1-resolve.md.
+ * The established array-form planner remains the single source of grouping
+ * rules; this adapter partitions the candidate registry at repository and
+ * security-class boundaries before translating its actions to stable IDs.
+ *
+ * @param {{candidates?: Object[], openBatches?: Object[]}} input
+ * @returns {{create: Object[], extend: Object[], ungrouped: Object[]}}
+ */
+export function planP3Batches({ candidates = [], openBatches = [] } = {}) {
+  if (!Array.isArray(candidates) || !Array.isArray(openBatches)) {
+    throw new TypeError("planP3Batches expects { candidates: [], openBatches: [] }");
+  }
+
+  const ids = new Map();
+  const normalizedCandidates = candidates
+    .map((candidate) => {
+      const id = candidateId(candidate);
+      if (id === null) return null;
+      ids.set(id, candidate);
+      return { ...candidate, number: id };
+    })
+    .filter(Boolean);
+  const repositoryCount = new Set(normalizedCandidates.map(repositoryKey)).size;
+  const normalizedBatches = openBatches.map((batch) => ({
+    ...batch,
+    members: (batch.memberIds || batch.members || []).map(memberId).filter(Boolean),
+    safetyClass: batchSafetyKey(batch),
+  }));
+  const partitions = new Map();
+  for (const candidate of normalizedCandidates) {
+    const key = `${repositoryKey(candidate)}\u0000${safetyKey(candidate)}`;
+    const members = partitions.get(key) || [];
+    members.push(candidate);
+    partitions.set(key, members);
+  }
+
+  const groups = [];
+  const extensions = [];
+  const grouped = new Set();
+  for (const members of partitions.values()) {
+    const repo = repositoryKey(members[0]);
+    const batches = normalizedBatches.filter((batch) => {
+      const batchRepo = batchRepositoryKey(batch);
+      const batchRepoMatches = batchRepo === repo || (batchRepo === null && repositoryCount === 1);
+      const candidateSafety = safetyKey(members[0]);
+      const batchSafety = batch.safetyClass;
+      const safetyMatches = candidateSafety === "routine"
+        ? batchSafety === "routine"
+        : batchSafety === candidateSafety;
+      return batchRepoMatches && safetyMatches;
+    });
+    const securityPartition = safetyKey(members[0]) !== "routine";
+    const rules = securityPartition ? { ...P3_BATCHING_RULES, maxMembers: 3 } : P3_BATCHING_RULES;
+    const partitionPlan = planP3BatchGroups(members, rules, { openBatches: batches });
+    groups.push(...partitionPlan.groups);
+    extensions.push(...partitionPlan.extensions);
+    partitionPlan.groups.flatMap((group) => group.members).forEach((id) => grouped.add(id));
+    partitionPlan.extensions.flatMap((extension) => extension.members).forEach((id) => grouped.add(id));
+  }
+
+  const create = groups
+    .sort((left, right) => `${left.key}:${left.members.join(",")}`.localeCompare(`${right.key}:${right.members.join(",")}`))
+    .map(({ kind, key, members }) => ({ kind, key, memberIds: members }));
+  const extend = extensions.map(({ batch, key, members }) => {
+    const candidateRepo = repositoryKey(ids.get(members[0]));
+    const sourceBatch = normalizedBatches.find((candidate) =>
+      candidate.number === batch &&
+      (batchRepositoryKey(candidate) === candidateRepo || batchRepositoryKey(candidate) === null),
+    );
+    const repo = sourceBatch ? batchRepositoryKey(sourceBatch) || candidateRepo : candidateRepo;
+    return { batch, batchId: batchIdentity(sourceBatch, repo), key, memberIds: members };
+  });
+  const ungrouped = candidates
+    .map((candidate) => candidateId(candidate))
+    .filter((id) => id !== null && !grouped.has(id))
+    .map((id) => ({
+      memberId: id,
+      reason: !ids.get(id)?.affectedFile
+        ? "missing affected file"
+        : batchExclusionReason(ids.get(id)) || "no matching batch threshold",
+    }));
+
+  return { create, extend, ungrouped };
+}
+
+/**
+ * Summarize the object-form plan for the per-run orchestration record.
+ * @param {{create?: Object[], extend?: Object[], ungrouped?: Object[]}} plan
+ * @returns {{clustersFormed: number, membersAbsorbed: number, openBatchesExtended: number, ungroupedMembers: Object[]}}
+ */
+export function summarizeP3BatchPlan(plan = {}) {
+  const create = Array.isArray(plan.create) ? plan.create : [];
+  const extend = Array.isArray(plan.extend) ? plan.extend : [];
+  const ungrouped = Array.isArray(plan.ungrouped) ? plan.ungrouped : [];
+  return {
+    clustersFormed: create.length,
+    membersAbsorbed:
+      create.reduce((total, group) => total + (group.memberIds?.length || 0), 0) +
+      extend.reduce((total, batch) => total + (batch.memberIds?.length || 0), 0),
+    openBatchesExtended: extend.length,
+    ungroupedMembers: ungrouped,
+  };
+}
