@@ -33,6 +33,26 @@ the protected/default branch as specified; load
 `../../specs/original/commands/review-pr-staging.md` directly rather than emitting a
 nested slash command.
 
+## Staging bundle handoff
+
+`/review-pr staging` is the explicit second-tier review after individual issue PRs
+have landed on `staging`. The packaged route loads `forgedock-review-pr-staging`,
+which reviews the current staging-to-main PR without merging or deploying it.
+
+The staging review resolves the accumulated bundle from frozen commit-graph
+reachability: included PRs contribute a merge, head, or patch commit reachable from
+the frozen staging head and not from the frozen base. Commit subjects and arbitrary
+issue/PR references are not bundle membership evidence. Its terminal gate result
+names every included PR and lists any open review-finding issue that blocks
+promotion, alongside the build/CI and runtime gate results. A passing result is a
+promotion decision for an operator; staging review never merges automatically.
+
+The two tiers are therefore:
+
+1. Per-issue `/review-pr <PR>` review before each change lands on `staging`.
+2. `/review-pr staging` bundle review before an operator promotes `staging` to
+   `main`.
+
 Run configured automated and integration checks. Derive the reviewer roster from the
 actual risk surface. Launch one complete fresh-context reviewer panel with Pi subagents
 and join every selected reviewer. Every reviewer task must say that blocking findings

@@ -120,6 +120,17 @@ The underlying native Pi skills remain directly available as:
 /skill:forgedock-quality-gate
 ```
 
+## Promotion from staging
+
+ForgeDock uses a two-tier review flow. First, run `/review-pr <PR>` for each issue
+change before it lands on `staging`. Once changes accumulate, run `/review-pr staging`
+to review the staging-to-main bundle before promotion.
+
+The staging route discovers included PRs with frozen commit-graph reachability rather
+than commit subjects, then runs the open-finding, build/CI, and runtime gates. Its
+terminal result names every included PR and any blocking open review finding. A pass
+is a visible promotion decision for the operator; staging review never merges automatically or deploys automatically.
+
 ## Packaged behavioral authority
 
 The package includes:

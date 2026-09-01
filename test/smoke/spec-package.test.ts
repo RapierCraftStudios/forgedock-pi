@@ -18,6 +18,22 @@ test("packaged original specifications and helpers match their manifest", async 
   }
 });
 
+test("staging review handoff is documented at every package entrypoint", async () => {
+  const skill = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
+  const canary = await readFile("docs/prompt-routing-canary.md", "utf8");
+  const readme = await readFile("README.md", "utf8");
+
+  assert.match(skill, /`\/review-pr staging`/);
+  assert.match(skill, /frozen commit-graph\s+reachability/);
+  assert.match(skill, /terminal gate result/);
+  assert.match(skill, /never merges automatically/);
+  assert.match(canary, /per-issue review/i);
+  assert.match(canary, /Staging bundle review/);
+  assert.match(canary, /included PR and any open review-finding issue/);
+  assert.match(readme, /## Promotion from staging/);
+  assert.match(readme, /staging review never merges automatically or\s+deploys automatically/);
+});
+
 test("Pi adapter keeps workflow decisions in visible specifications", async () => {
   const adapter = await readFile("specs/pi-adapter.md", "utf8");
   assert.match(adapter, /visible Pi session is the coordinator/);
