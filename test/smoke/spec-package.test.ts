@@ -18,6 +18,22 @@ test("packaged original specifications and helpers match their manifest", async 
   }
 });
 
+test("staging review handoff is documented at every package entrypoint", async () => {
+  const skill = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
+  const canary = await readFile("docs/prompt-routing-canary.md", "utf8");
+  const readme = await readFile("README.md", "utf8");
+
+  assert.match(skill, /`\/review-pr staging`/);
+  assert.match(skill, /frozen commit-graph\s+reachability/);
+  assert.match(skill, /terminal gate result/);
+  assert.match(skill, /never merges automatically/);
+  assert.match(canary, /per-issue review/i);
+  assert.match(canary, /Staging bundle review/);
+  assert.match(canary, /included PR and any open review-finding issue/);
+  assert.match(readme, /## Promotion from staging/);
+  assert.match(readme, /staging review never merges automatically or\s+deploys automatically/);
+});
+
 test("Pi adapter keeps workflow decisions in visible specifications", async () => {
   const adapter = await readFile("specs/pi-adapter.md", "utf8");
   assert.match(adapter, /visible Pi session is the coordinator/);
@@ -80,6 +96,25 @@ test("one canonical issue schema governs every ForgeDock creator", async () => {
   assert.doesNotMatch(staging, /STAGING_FINDING_TITLE="chore:/);
   assert.doesNotMatch(staging, /Title: `Staging Review:/);
   assert.match(staging, /STAGING_FINDING_TITLE="fix:/);
+  assert.match(staging, /frozen commit-graph reachability/);
+  assert.match(staging, /\.merge_commit_sha/);
+  assert.match(staging, /if ! BUNDLE_CANDIDATES=\$\(gh api/);
+  assert.match(staging, /if ! git fetch origin \$DEFAULT_BRANCH \$STAGING_BRANCH/);
+  assert.match(staging, /BUNDLE_GATE_QUERY_FAILED=0/);
+  assert.match(staging, /while IFS='\\|' read -r PR_NUM CANDIDATE_BASE HEAD_SHA MERGE_SHA/);
+  assert.match(staging, /missing or malformed commit evidence/);
+  assert.match(staging, /git cat-file -e/);
+  assert.match(staging, /commit evidence is unavailable locally/);
+  assert.match(staging, /STAGING_REACHABILITY_STATUS=\$\?/);
+  assert.match(staging, /BASE_REACHABILITY_STATUS=\$\?/);
+  assert.match(staging, /could not verify PR #\$\{PR_NUM\} reachability/);
+  assert.match(staging, /FROZEN_DEFAULT_SHA=\$\(git rev-parse/);
+  assert.match(staging, /TEST_GATE_MARKER=.*RESULT=\(BLOCK\|PASS\|SKIP\)/);
+  assert.match(staging, /FORGE:TEST_GATE:RESULT=\(BLOCK\|PASS\|SKIP\) -->/);
+  assert.match(staging, /TEST_GATE_VERDICT="ERROR"/);
+  assert.doesNotMatch(staging, /head\.repo\.full_name/);
+  assert.doesNotMatch(staging, /git log[\s\S]*grep -oP ['"]?#\\d+/);
+  assert.doesNotMatch(staging, /-R \{GH_REPO\}/);
   for (const creator of [signalPlanner, upgradeDeps, resolutionPhase, dependencyPhase]) {
     for (const heading of headings) assert.ok(creator.includes(heading), heading);
     assert.match(creator, /Skill\(skill="issue"/);

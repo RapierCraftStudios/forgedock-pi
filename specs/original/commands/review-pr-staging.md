@@ -181,43 +181,127 @@ fi
 **Why this matters**: Review findings are filed before the originating PR merges to staging. Without this gate, a staging→main bundle can include commits with known unfixed bugs — the review system caught the issue, but the deploy path ignored it. This gate closes the gap between issue discovery and deploy execution. <!-- Added: forge#303 -->
 
 ```bash
-git fetch origin $DEFAULT_BRANCH $STAGING_BRANCH
+if ! git fetch origin $DEFAULT_BRANCH $STAGING_BRANCH; then
+  echo "⛔ DEPLOY BLOCKED — could not refresh default/staging refs before freezing the review snapshot."
+  exit 1
+fi
+FROZEN_DEFAULT_SHA=$(git rev-parse "origin/$DEFAULT_BRANCH")
+FROZEN_STAGING_SHA=$(git rev-parse "origin/$STAGING_BRANCH")
+[ -n "$FROZEN_DEFAULT_SHA" ] && [ -n "$FROZEN_STAGING_SHA" ] || {
+  echo "⛔ DEPLOY BLOCKED — could not freeze default/staging refs for bundle review."
+  exit 1
+}
 
-# Step 1: Find all PR numbers in the staging→main bundle
-# These are the PRs whose commits are included in staging but not yet in main
-BUNDLE_PRS=$(git log origin/$DEFAULT_BRANCH..origin/$STAGING_BRANCH --oneline \
-  | grep -oP '#\d+' \
-  | sort -u \
-  | tr -d '#')
+# Step 1: Resolve all PRs in the staging→main bundle by the packaged resolver's
+# frozen commit-graph reachability contract. Never infer membership from commit
+# subjects, issue references, or PR numbers in prose.
+#
+# The resolver accepts GitHub PR identity plus head/merge commit evidence. A candidate
+# contributes when one of those commits is reachable from frozen staging but not from
+# frozen main, which handles merge, squash, and rebase merges without subject parsing.
+if ! BUNDLE_CANDIDATES=$(gh api --paginate \
+  "repos/${GH_REPO}/pulls?state=all&base=${STAGING_BRANCH}&per_page=100" \
+  --jq '.[] | [(.number | tostring), (.base.ref // ""), (.head.sha // ""), (.merge_commit_sha // "")] | join("|")'); then
+  echo "⛔ DEPLOY BLOCKED — unable to retrieve GitHub pull-request metadata for bundle resolution."
+  if [ -n "${PR_NUMBER:-}" ]; then
+    gh pr comment "$PR_NUMBER" -R "$GH_REPO" --body "<!-- FORGE:GATE_FAILURE -->
+## Deploy Gate: BLOCKED
 
-# Also extract PR numbers from merge commit subjects (most reliable)
-MERGE_PRS=$(git log origin/$DEFAULT_BRANCH..origin/$STAGING_BRANCH --merges --oneline \
-  | grep -oP '(?<=pull request #)\d+' \
-  | sort -u)
+**Gate**: staging-bundle-resolution
+**Result**: BLOCK — GitHub pull-request metadata could not be retrieved; bundle membership is unknown.
+**Timestamp**: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-ALL_PR_NUMBERS=$(echo "$BUNDLE_PRS $MERGE_PRS" | tr ' ' '\n' | sort -u | grep -E '^[0-9]+$')
+Retry after GitHub authentication, rate-limit, or network recovery. The gate fails closed and does not treat an empty candidate set as clean.
 
-echo "PRs in staging→main bundle: $(echo $ALL_PR_NUMBERS | tr '\n' ' ')"
+<!-- FORGE:GATE_FAILURE:TYPE=staging-bundle-resolution -->" 2>/dev/null || true
+  fi
+  exit 1
+fi
+
+ALL_PR_NUMBERS=""
+BUNDLE_GATE_QUERY_FAILED=0
+while IFS='|' read -r PR_NUM CANDIDATE_BASE HEAD_SHA MERGE_SHA; do
+  [ -n "$PR_NUM" ] || continue
+  [ "$CANDIDATE_BASE" = "$STAGING_BRANCH" ] || continue
+
+  # A candidate with missing or malformed commit evidence has unknown bundle
+  # membership. Never silently omit it and continue as if the bundle were clean.
+  if ! printf '%s' "$HEAD_SHA" | grep -qE '^[0-9a-fA-F]{40}$' \
+    || { [ -n "$MERGE_SHA" ] && ! printf '%s' "$MERGE_SHA" | grep -qE '^[0-9a-fA-F]{40}$'; }; then
+    BUNDLE_GATE_QUERY_FAILED=1
+    echo "⛔ DEPLOY BLOCKED — PR #${PR_NUM} has missing or malformed commit evidence." >&2
+    continue
+  fi
+
+  INCLUDED=0
+  REACHABILITY_ERROR=0
+  for EVIDENCE_SHA in "$HEAD_SHA" "$MERGE_SHA"; do
+    [ -n "$EVIDENCE_SHA" ] || continue
+    if ! git cat-file -e "${EVIDENCE_SHA}^{commit}" 2>/dev/null; then
+      BUNDLE_GATE_QUERY_FAILED=1
+      REACHABILITY_ERROR=1
+      echo "⛔ DEPLOY BLOCKED — PR #${PR_NUM} commit evidence is unavailable locally." >&2
+      break
+    fi
+    if git merge-base --is-ancestor "$EVIDENCE_SHA" "$FROZEN_STAGING_SHA"; then
+      if git merge-base --is-ancestor "$EVIDENCE_SHA" "$FROZEN_DEFAULT_SHA"; then
+        continue
+      else
+        BASE_REACHABILITY_STATUS=$?
+        if [ "$BASE_REACHABILITY_STATUS" -eq 1 ]; then
+          INCLUDED=1
+          break
+        fi
+        BUNDLE_GATE_QUERY_FAILED=1
+        REACHABILITY_ERROR=1
+        echo "⛔ DEPLOY BLOCKED — could not verify PR #${PR_NUM} reachability against the frozen default branch." >&2
+        break
+      fi
+    else
+      STAGING_REACHABILITY_STATUS=$?
+      if [ "$STAGING_REACHABILITY_STATUS" -gt 1 ]; then
+        BUNDLE_GATE_QUERY_FAILED=1
+        REACHABILITY_ERROR=1
+        echo "⛔ DEPLOY BLOCKED — could not verify PR #${PR_NUM} reachability against the frozen staging branch." >&2
+        break
+      fi
+    fi
+  done
+  [ "$REACHABILITY_ERROR" -eq 0 ] || continue
+
+  if [ "$INCLUDED" -eq 1 ]; then
+    ALL_PR_NUMBERS="${ALL_PR_NUMBERS}${PR_NUM}\n"
+  fi
+done <<< "$BUNDLE_CANDIDATES"
+ALL_PR_NUMBERS=$(printf '%b' "$ALL_PR_NUMBERS" | sort -n -u)
+
+echo "PRs in staging→main bundle (frozen reachability): $(echo "$ALL_PR_NUMBERS" | tr '\n' ' ')"
 
 # Step 2: For each PR in the bundle, check for open review-finding issues and degraded panels
 BLOCKING_FINDINGS=""
 DEGRADED_REVIEWS=""
 for pr_num in $ALL_PR_NUMBERS; do
-  IS_REVIEW_DEGRADED=$(gh pr view "$pr_num" -R {GH_REPO} --json labels \
-    --jq '[.labels[].name] | any(. == "review-degraded")' 2>/dev/null || echo "false")
+  if ! IS_REVIEW_DEGRADED=$(gh pr view "$pr_num" -R "$GH_REPO" --json labels \
+    --jq '[.labels[].name] | any(. == "review-degraded")'); then
+    BUNDLE_GATE_QUERY_FAILED=1
+    continue
+  fi
   if [ "$IS_REVIEW_DEGRADED" = "true" ]; then
     DEGRADED_REVIEWS="${DEGRADED_REVIEWS}
 **PR #${pr_num}** has a \`review-degraded\` label and requires a full fresh-context re-review."
   fi
 
   # Search for open review-finding issues that reference this PR
-  OPEN_FINDINGS=$(gh issue list -R {GH_REPO} \
+  if ! OPEN_FINDINGS=$(gh issue list -R "$GH_REPO" \
     --label "review-finding" \
     --state open \
     --search "PR #${pr_num}" \
     --limit 20 \
     --json number,title \
-    --jq ".[] | \"  - #\(.number): \(.title)\"" 2>/dev/null)
+    --jq ".[] | \"  - #\(.number): \(.title)\""); then
+    BUNDLE_GATE_QUERY_FAILED=1
+    continue
+  fi
 
   if [ -n "$OPEN_FINDINGS" ]; then
     BLOCKING_FINDINGS="${BLOCKING_FINDINGS}
@@ -226,12 +310,31 @@ ${OPEN_FINDINGS}"
   fi
 done
 
+# Any failed bundle-state read is unknown state and blocks deployment.
+if [ "$BUNDLE_GATE_QUERY_FAILED" -eq 1 ]; then
+  echo "⛔ DEPLOY BLOCKED — could not retrieve review-panel or open-finding state for every bundle PR."
+  if [ -n "$PR_NUMBER" ]; then
+    gh pr comment "$PR_NUMBER" -R "$GH_REPO" --body "<!-- FORGE:GATE_FAILURE -->
+## Deploy Gate: BLOCKED
+
+**Gate**: bundle-state-integrity
+**Result**: BLOCK — candidate commit evidence or review-panel/open-finding metadata was unavailable.
+**Bundle PRs**: ${ALL_PR_NUMBERS}
+**Timestamp**: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+Retry after GitHub API recovery; unknown review state is never treated as clean.
+
+<!-- FORGE:GATE_FAILURE:TYPE=bundle-state-integrity -->" 2>/dev/null || true
+  fi
+  exit 1
+fi
+
 # A degraded panel is a review-integrity failure, not a finding that an override may waive.
 if [ -n "$DEGRADED_REVIEWS" ]; then
   echo "⛔ DEPLOY BLOCKED — An included PR has an incomplete isolated review panel."
   echo "$DEGRADED_REVIEWS"
   if [ -n "$PR_NUMBER" ]; then
-    gh pr comment "$PR_NUMBER" -R {GH_REPO} --body "<!-- FORGE:GATE_FAILURE -->
+    gh pr comment "$PR_NUMBER" -R "$GH_REPO" --body "<!-- FORGE:GATE_FAILURE -->
 ## Deploy Gate: BLOCKED
 
 **Gate**: review-panel-integrity
@@ -251,7 +354,7 @@ fi
 if [ -n "$BLOCKING_FINDINGS" ]; then
   # Check for human override comment on the staging→main PR
   if [ -n "$PR_NUMBER" ]; then
-    OVERRIDE=$(gh pr view "$PR_NUMBER" -R {GH_REPO} \
+    OVERRIDE=$(gh pr view "$PR_NUMBER" -R "$GH_REPO" \
       --json comments \
       --jq '[.comments[].body | select(startswith("OVERRIDE: shipping with open findings"))] | length' 2>/dev/null)
   else
@@ -274,7 +377,7 @@ if [ -n "$BLOCKING_FINDINGS" ]; then
     FINDING_COUNT=$(echo "$BLOCKING_FINDINGS" | grep -c '^\s*- #' || echo "unknown")
     GATE_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     if [ -n "$PR_NUMBER" ]; then
-      gh pr comment "$PR_NUMBER" -R {GH_REPO} --body "<!-- FORGE:GATE_FAILURE -->
+      gh pr comment "$PR_NUMBER" -R "$GH_REPO" --body "<!-- FORGE:GATE_FAILURE -->
 ## Deploy Gate: BLOCKED
 
 **Gate**: open-review-finding
@@ -303,7 +406,7 @@ else
   echo "✅ Open review-finding gate: PASSED — no open findings for PRs in this bundle."
   # Post FORGE:GATE_PASS for symmetric observability — bypass is indistinguishable from clean pass without this
   if [ -n "$PR_NUMBER" ]; then
-    gh pr comment "$PR_NUMBER" -R {GH_REPO} --body "<!-- FORGE:GATE_PASS -->
+    gh pr comment "$PR_NUMBER" -R "$GH_REPO" --body "<!-- FORGE:GATE_PASS -->
 ## Deploy Gate: PASSED
 
 **Gate**: open-review-finding check
@@ -325,10 +428,9 @@ If the gate exits with `RESULT: PASS` → a `<!-- FORGE:GATE_PASS -->` structure
 ## Phase 0B: Scope Analysis
 
 ```bash
-git fetch origin $DEFAULT_BRANCH $STAGING_BRANCH
-git diff origin/$DEFAULT_BRANCH...origin/$STAGING_BRANCH --stat | tail -20
-git diff origin/$DEFAULT_BRANCH...origin/$STAGING_BRANCH --numstat | awk '{add+=$1; del+=$2} END {print "Added:", add, "Deleted:", del, "Total:", add+del}'
-git diff origin/$DEFAULT_BRANCH...origin/$STAGING_BRANCH --name-only | sort | uniq
+git diff "$FROZEN_DEFAULT_SHA...$FROZEN_STAGING_SHA" --stat | tail -20
+git diff "$FROZEN_DEFAULT_SHA...$FROZEN_STAGING_SHA" --numstat | awk '{add+=$1; del+=$2} END {print "Added:", add, "Deleted:", del, "Total:", add+del}'
+git diff "$FROZEN_DEFAULT_SHA...$FROZEN_STAGING_SHA" --name-only | sort | uniq
 ```
 
 Categorize by service (API, Worker, Web, Shared, Infra). Identify high-risk files (billing, credits, pricing, auth, security, migration, scraper).
@@ -403,7 +505,7 @@ fi
 
 ### 1D: Secrets Scan
 ```bash
-git diff origin/$DEFAULT_BRANCH...origin/$STAGING_BRANCH | grep -iE "(api[_-]?key|secret|password|token|credential)" | grep -vE "(#|//|\.example|placeholder)" | head -20
+git diff "$FROZEN_DEFAULT_SHA...$FROZEN_STAGING_SHA" | grep -iE "(api[_-]?key|secret|password|token|credential)" | grep -vE "(#|//|\.example|placeholder)" | head -20
 ```
 
 ### 1E: CI Status Gate (BLOCKING)
@@ -591,12 +693,40 @@ echo "Posture: ${GATE_POSTURE}"
 TEST_GATE_VERDICT="SKIP"
 TEST_GATE_REASON="Phase 6.5 not yet run"
 
-# Invoke /test-gate with the bundle PRs already computed in Phase 0A
-# ALL_PR_NUMBERS is the de-duplicated union of both scan methods (commit log + merge subjects)
-GATE_OUTPUT=$(Skill("test-gate", "--prs \"$(echo $ALL_PR_NUMBERS | tr '\n' ' ' | xargs)\" --base $DEFAULT_BRANCH"))
+# Invoke /test-gate with the bundle PRs already computed in Phase 0A.
+# ALL_PR_NUMBERS is the de-duplicated set resolved by frozen commit-graph reachability.
+if ! GATE_OUTPUT=$(Skill("test-gate", "--prs \"$(echo $ALL_PR_NUMBERS | tr '\n' ' ' | xargs)\" --base $DEFAULT_BRANCH")); then
+  TEST_GATE_VERDICT="ERROR"
+  TEST_GATE_REASON="BLOCK — test-gate invocation failed; runtime acceptance is unknown"
+else
+  # Missing or malformed output is an error, not an intentional SKIP. SKIP is reserved
+  # for the test-gate's explicit machine-readable result.
+  TEST_GATE_MARKER=$(echo "$GATE_OUTPUT" | grep -oP '^<!-- FORGE:TEST_GATE:RESULT=(BLOCK|PASS|SKIP) -->$' | tail -1 || true)
+  TEST_GATE_VERDICT="${TEST_GATE_MARKER#*RESULT=}"
+  TEST_GATE_VERDICT="${TEST_GATE_VERDICT% -->}"
+  if [ -z "$TEST_GATE_MARKER" ]; then
+    TEST_GATE_VERDICT="ERROR"
+    TEST_GATE_REASON="BLOCK — test-gate returned no recognized FORGE:TEST_GATE:RESULT marker"
+  fi
+fi
 
-# Extract machine-readable verdict from Skill output
-TEST_GATE_VERDICT=$(echo "$GATE_OUTPUT" | grep -oP '(?<=FORGE:TEST_GATE:RESULT=)(BLOCK|PASS|SKIP)' | tail -1 || echo "SKIP")
+if [ "$TEST_GATE_VERDICT" = "ERROR" ]; then
+  echo "⛔ DEPLOY BLOCKED — ${TEST_GATE_REASON}"
+  if [ -n "$PR_NUMBER" ]; then
+    gh pr comment "$PR_NUMBER" ${GH_FLAG} --body "<!-- FORGE:GATE_FAILURE -->
+## Deploy Gate: BLOCKED
+
+**Gate**: test-gate-integrity
+**Result**: ${TEST_GATE_REASON}
+**Bundle PRs**: ${ALL_PR_NUMBERS}
+**Timestamp**: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+The staging review fails closed when runtime-gate execution or its structured result is unavailable. Retry after the test-gate is healthy.
+
+<!-- FORGE:GATE_FAILURE:TYPE=test-gate-integrity -->" 2>/dev/null || true
+  fi
+  exit 1
+fi
 
 echo "Test-gate verdict: ${TEST_GATE_VERDICT}"
 ```
@@ -767,9 +897,9 @@ Keep ALL findings (CONFIRMED/LIKELY/POSSIBLE). Deduplicate by file:line (keep hi
 ```bash
 # Colors match the canonical ForgeDock label manifest (bin/labels.json).
 # Run `npx forgedock labels setup` to bootstrap all managed labels at once.
-gh label create "review-finding" --color "D93F0B" --description "Defect or improvement found during automated PR review. Managed by ForgeDock." --force -R {GH_REPO} 2>/dev/null
-gh label create "needs-validation" --color "FBCA04" --description "Review finding awaiting human validation. Managed by ForgeDock." --force -R {GH_REPO} 2>/dev/null
-gh label create "staging-review" --color "1D76DB" --description "Finding from a staging branch review before deploy to main. Managed by ForgeDock." --force -R {GH_REPO} 2>/dev/null
+gh label create "review-finding" --color "D93F0B" --description "Defect or improvement found during automated PR review. Managed by ForgeDock." --force -R "$GH_REPO" 2>/dev/null
+gh label create "needs-validation" --color "FBCA04" --description "Review finding awaiting human validation. Managed by ForgeDock." --force -R "$GH_REPO" 2>/dev/null
+gh label create "staging-review" --color "1D76DB" --description "Finding from a staging branch review before deploy to main. Managed by ForgeDock." --force -R "$GH_REPO" 2>/dev/null
 ```
 
 ### 7D: Milestone & Code Branch Detection
@@ -784,7 +914,7 @@ MILESTONE_FLAG=""
 # milestone derivation — commands/review-pr.md and commands/review-pr-staging.md
 # both call it identically so the two specs cannot independently drift.
 # <!-- forge#2443 -->
-MILESTONE_TITLE=$(bash scripts/derive-finding-milestone.sh "${PR_NUMBER}" -R {GH_REPO})
+MILESTONE_TITLE=$(bash scripts/derive-finding-milestone.sh "${PR_NUMBER}" -R "$GH_REPO")
 # Quoted so multi-word milestone titles survive as a single value wherever
 # MILESTONE_FLAG is later interpolated — matches the quoting convention already
 # used for --title/--body-file/--label below.
