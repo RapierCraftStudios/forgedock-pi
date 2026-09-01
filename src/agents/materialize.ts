@@ -4,6 +4,7 @@ import type { FileHandle } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { materializeForgeRuntimeHelpers } from "../runtime/materialize.ts";
 import {
   FORGE_READ_ONLY_NODE_AGENT,
   FORGE_READ_ONLY_NODE_TOOLS,
@@ -28,6 +29,7 @@ import {
 export async function materializeForgeAgents(
   worktreeRoot: string,
 ): Promise<string[]> {
+  await materializeForgeRuntimeHelpers(worktreeRoot);
   const rootDir = await openAnchoredDirectory(worktreeRoot);
   try {
     const piDir = await ensureDirectory(rootDir, ".pi");
