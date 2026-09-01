@@ -201,7 +201,7 @@ FROZEN_STAGING_SHA=$(git rev-parse "origin/$STAGING_BRANCH")
 # frozen main, which handles merge, squash, and rebase merges without subject parsing.
 if ! BUNDLE_CANDIDATES=$(gh api --paginate \
   "repos/${GH_REPO}/pulls?state=all&base=${STAGING_BRANCH}&per_page=100" \
-  --jq '.[] | [(.number | tostring), (.base.ref // ""), (.head.sha // ""), (.merge_commit_sha // "")] | @tsv'); then
+  --jq '.[] | [(.number | tostring), (.base.ref // ""), (.head.sha // ""), (.merge_commit_sha // "")] | join("|")'); then
   echo "⛔ DEPLOY BLOCKED — unable to retrieve GitHub pull-request metadata for bundle resolution."
   if [ -n "${PR_NUMBER:-}" ]; then
     gh pr comment "$PR_NUMBER" -R "$GH_REPO" --body "<!-- FORGE:GATE_FAILURE -->
@@ -220,37 +220,36 @@ fi
 
 ALL_PR_NUMBERS=""
 BUNDLE_GATE_QUERY_FAILED=0
-while IFS=$'\t' read -r PR_NUM CANDIDATE_BASE HEAD_SHA MERGE_SHA; do
+while IFS='|' read -r PR_NUM CANDIDATE_BASE HEAD_SHA MERGE_SHA; do
   [ -n "$PR_NUM" ] || continue
   [ "$CANDIDATE_BASE" = "$STAGING_BRANCH" ] || continue
 
   # A candidate with missing or malformed commit evidence has unknown bundle
   # membership. Never silently omit it and continue as if the bundle were clean.
-  VALID_EVIDENCE=0
-  INVALID_EVIDENCE=0
-  for EVIDENCE_SHA in "$HEAD_SHA" "$MERGE_SHA"; do
-    [ -n "$EVIDENCE_SHA" ] || continue
-    if ! printf '%s' "$EVIDENCE_SHA" | grep -qE '^[0-9a-fA-F]{40}$'; then
-      INVALID_EVIDENCE=1
-      continue
-    fi
-    VALID_EVIDENCE=1
-  done
-  if [ "$INVALID_EVIDENCE" -eq 1 ] || [ "$VALID_EVIDENCE" -eq 0 ]; then
+  if ! printf '%s' "$HEAD_SHA" | grep -qE '^[0-9a-fA-F]{40}$' \
+    || { [ -n "$MERGE_SHA" ] && ! printf '%s' "$MERGE_SHA" | grep -qE '^[0-9a-fA-F]{40}$'; }; then
     BUNDLE_GATE_QUERY_FAILED=1
     echo "⛔ DEPLOY BLOCKED — PR #${PR_NUM} has missing or malformed commit evidence." >&2
     continue
   fi
 
   INCLUDED=0
+  REACHABILITY_ERROR=0
   for EVIDENCE_SHA in "$HEAD_SHA" "$MERGE_SHA"; do
     [ -n "$EVIDENCE_SHA" ] || continue
+    if ! git cat-file -e "${EVIDENCE_SHA}^{commit}" 2>/dev/null; then
+      BUNDLE_GATE_QUERY_FAILED=1
+      REACHABILITY_ERROR=1
+      echo "⛔ DEPLOY BLOCKED — PR #${PR_NUM} commit evidence is unavailable locally." >&2
+      break
+    fi
     if git merge-base --is-ancestor "$EVIDENCE_SHA" "$FROZEN_STAGING_SHA" \
       && ! git merge-base --is-ancestor "$EVIDENCE_SHA" "$FROZEN_DEFAULT_SHA"; then
       INCLUDED=1
       break
     fi
   done
+  [ "$REACHABILITY_ERROR" -eq 0 ] || continue
 
   if [ "$INCLUDED" -eq 1 ]; then
     ALL_PR_NUMBERS="${ALL_PR_NUMBERS}${PR_NUM}\n"
