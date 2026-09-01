@@ -190,14 +190,28 @@ git fetch origin $DEFAULT_BRANCH $STAGING_BRANCH
 # The resolver accepts GitHub PR identity plus head/merge commit evidence. A candidate
 # contributes when one of those commits is reachable from frozen staging but not from
 # frozen main, which handles merge, squash, and rebase merges without subject parsing.
-BUNDLE_CANDIDATES=$(gh api --paginate \
+if ! BUNDLE_CANDIDATES=$(gh api --paginate \
   "repos/${GH_REPO}/pulls?state=all&base=${STAGING_BRANCH}&per_page=100" \
-  --jq '.[] | [(.number | tostring), (.base.ref // ""), (.head.sha // ""), (.merge_commit_sha // ""), (.head.repo.full_name // "")] | @tsv')
+  --jq '.[] | [(.number | tostring), (.base.ref // ""), (.head.sha // ""), (.merge_commit_sha // "")] | @tsv'); then
+  echo "⛔ DEPLOY BLOCKED — unable to retrieve GitHub pull-request metadata for bundle resolution."
+  if [ -n "${PR_NUMBER:-}" ]; then
+    gh pr comment "$PR_NUMBER" -R "$GH_REPO" --body "<!-- FORGE:GATE_FAILURE -->
+## Deploy Gate: BLOCKED
+
+**Gate**: staging-bundle-resolution
+**Result**: BLOCK — GitHub pull-request metadata could not be retrieved; bundle membership is unknown.
+**Timestamp**: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+Retry after GitHub authentication, rate-limit, or network recovery. The gate fails closed and does not treat an empty candidate set as clean.
+
+<!-- FORGE:GATE_FAILURE:TYPE=staging-bundle-resolution -->" 2>/dev/null || true
+  fi
+  exit 1
+fi
 
 ALL_PR_NUMBERS=""
-while IFS=$'\t' read -r PR_NUM CANDIDATE_BASE HEAD_SHA MERGE_SHA HEAD_REPOSITORY; do
+while IFS=$'\t' read -r PR_NUM CANDIDATE_BASE HEAD_SHA MERGE_SHA; do
   [ -n "$PR_NUM" ] || continue
-  [ "$HEAD_REPOSITORY" = "$GH_REPO" ] || continue
   [ "$CANDIDATE_BASE" = "$STAGING_BRANCH" ] || continue
 
   INCLUDED=0
