@@ -6,6 +6,20 @@
 git clone https://github.com/RapierCraftStudios/forgedock-pi.git
 cd forgedock-pi
 npm install
+```
+
+## Verification
+
+For a focused check while working on a small change, run TypeScript checking and then a single test file:
+
+```bash
+npm run typecheck
+npx tsx --test test/workflows/work-on.test.ts
+```
+
+When the focused checks pass, run the complete verification suite before opening a pull request:
+
+```bash
 npm run check
 ```
 
