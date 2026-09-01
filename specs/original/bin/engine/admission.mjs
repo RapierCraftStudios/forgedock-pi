@@ -481,7 +481,11 @@ function leafDirectory(file = "") {
  * findings. The caller executes these groups and preserves unclaimed findings
  * for a later full-queue sweep.
  */
-export function planP3BatchGroups(findings, rules = P3_BATCHING_RULES, { openBatches = [], dangerZones = [] } = {}) {
+export function planP3BatchGroups(
+  findings,
+  rules = P3_BATCHING_RULES,
+  { openBatches = [], dangerZones = [], staleLeafKeys = new Set() } = {},
+) {
   const remaining = new Map(
     findings
       .filter((finding) => finding?.number && finding.affectedFile && !batchExclusionReason(finding, dangerZones))
@@ -512,7 +516,8 @@ export function planP3BatchGroups(findings, rules = P3_BATCHING_RULES, { openBat
       byKey.set(groupKey, members);
     }
     for (const [groupKey, members] of [...byKey].sort(([a], [b]) => a.localeCompare(b))) {
-      while (members.length >= minimum) {
+      const leafMayUseStaleSingleton = kind === "leaf-directory" && staleLeafKeys.has(groupKey);
+      while (members.length >= minimum || (leafMayUseStaleSingleton && members.length > 0)) {
         const chunk = members.splice(0, rules.maxMembers);
         groups.push({ kind, key: groupKey, members: chunk.map((finding) => finding.number) });
         chunk.forEach((finding) => remaining.delete(finding.number));
@@ -536,37 +541,40 @@ export function planP3BatchGroups(findings, rules = P3_BATCHING_RULES, { openBat
  * @returns {string|null}
  */
 function candidateId(candidate) {
-  if (typeof candidate?.id === "string" && candidate.id.trim() !== "") return candidate.id;
-  if (candidate?.repo && candidate?.number !== undefined && candidate?.number !== null) {
-    return `${candidate.repo}:${candidate.number}`;
-  }
-  if (candidate?.number !== undefined && candidate?.number !== null) return String(candidate.number);
+  const repo = typeof candidate?.repo === "string" ? candidate.repo.trim() : "";
+  const number = candidate?.number;
+  if (repo && number !== undefined && number !== null && String(number).trim() !== "") return `${repo}:${number}`;
+  if (typeof candidate?.id === "string" && candidate.id.trim() !== "") return candidate.id.trim();
+  if (number !== undefined && number !== null && String(number).trim() !== "") return String(number);
   return null;
 }
 
 function memberId(member) {
   if (member && typeof member === "object") return candidateId(member);
-  return member === undefined || member === null ? null : String(member);
+  return member === undefined || member === null ? null : String(member).trim() || null;
 }
 
 function repositoryKey(candidate) {
-  if (typeof candidate?.repo === "string" && candidate.repo.trim() !== "") return candidate.repo;
+  if (typeof candidate?.repo === "string" && candidate.repo.trim() !== "") return candidate.repo.trim();
   const id = candidateId(candidate);
   const separator = id?.lastIndexOf(":") ?? -1;
   return separator > 0 ? id.slice(0, separator) : "__unscoped__";
 }
 
 function batchRepositoryKey(batch) {
-  if (typeof batch?.repo === "string" && batch.repo.trim() !== "") return batch.repo;
-  if (typeof batch?.repository === "string" && batch.repository.trim() !== "") return batch.repository;
-  const id = typeof batch?.id === "string" ? batch.id : "";
-  const separator = id.lastIndexOf(":");
-  return separator > 0 ? id.slice(0, separator) : null;
+  for (const value of [batch?.repo, batch?.repository]) {
+    if (typeof value === "string" && value.trim() !== "") return value.trim();
+  }
+  for (const value of [batch?.batchId, batch?.id]) {
+    if (typeof value === "string" && value.includes(":")) return value.slice(0, value.lastIndexOf(":"));
+  }
+  return null;
 }
 
 function batchSafetyKey(batch) {
-  if (typeof batch?.safetyClass === "string" && batch.safetyClass.trim() !== "") return batch.safetyClass;
-  if (typeof batch?.class === "string" && batch.class.trim() !== "") return batch.class;
+  for (const value of [batch?.safetyClass, batch?.class]) {
+    if (typeof value === "string" && value.trim() !== "") return value.trim().toLowerCase();
+  }
   const classes = (batch?.members || [])
     .filter((member) => member && typeof member === "object")
     .map(safetyKey)
@@ -575,50 +583,103 @@ function batchSafetyKey(batch) {
 }
 
 function batchIdentity(batch, repo) {
-  const rawId = typeof batch?.id === "string" ? batch.id.trim() : "";
-  if (rawId !== "") {
-    const suffix = rawId.slice(rawId.lastIndexOf(":") + 1);
-    return `${repo}:${suffix}`;
-  }
-  if (batch?.number !== undefined && batch?.number !== null) return `${repo}:${batch.number}`;
-  return null;
+  if (!batch || !repo) return null;
+  const rawId = typeof batch.batchId === "string" && batch.batchId.trim() !== ""
+    ? batch.batchId.trim()
+    : typeof batch.id === "string" && batch.id.trim() !== ""
+      ? batch.id.trim()
+      : batch.number !== undefined && batch.number !== null ? String(batch.number) : "";
+  if (!rawId) return null;
+  return `${repo}:${rawId.slice(rawId.lastIndexOf(":") + 1)}`;
 }
 
 function safetyKey(candidate) {
-  return classifyBatchSafety(`${candidate?.title || ""}\n${candidate?.body || ""}`) || "routine";
+  return (classifyBatchSafety(`${candidate?.title || ""}\n${candidate?.body || ""}`) || "routine").toLowerCase();
+}
+
+function labelsOf(candidate) {
+  return (candidate?.labels || [])
+    .map((label) => typeof label === "string" ? label : label?.name)
+    .filter((label) => typeof label === "string");
+}
+
+function hasP3Label(candidate) {
+  return labelsOf(candidate).some((label) => /^(?:priority:)?P3$/.test(label));
+}
+
+function isReviewFinding(candidate) {
+  return labelsOf(candidate).includes("review-finding") || candidate?.isReviewFinding === true;
+}
+
+function isHumanGated(candidate) {
+  const labels = new Set(labelsOf(candidate));
+  if (["needs-human", "blocked", "operator-only"].some((label) => labels.has(label))) return true;
+  const title = String(candidate?.title || "");
+  const problem = String(candidate?.body || "").match(/## Problem[\s\S]*?(?=^## |$)/im)?.[0] || "";
+  return /operator-only|manual action required|human action required/i.test(`${title}\n${problem}`);
+}
+
+function candidateEligibilityReason(candidate, dangerZones) {
+  if (!candidate || candidateId(candidate) === null) return "missing stable member identity";
+  if (!isReviewFinding(candidate)) return "not a review-finding";
+  if (!hasP3Label(candidate)) return "not priority P3";
+  if (!candidate.affectedFile) return "missing affected file";
+  if (isHumanGated(candidate)) return "human-gated";
+  return batchExclusionReason(candidate, dangerZones) || null;
+}
+
+const STALE_P3_AGE_MS = 72 * 60 * 60 * 1000;
+
+function candidateCreatedAt(candidate) {
+  const raw = candidate?.createdAt ?? candidate?.created_at;
+  if (raw === undefined || raw === null || raw === "") return null;
+  const timestamp = raw instanceof Date ? raw.getTime() : Date.parse(String(raw));
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function isStaleCandidate(candidate, now) {
+  const createdAt = candidateCreatedAt(candidate);
+  return createdAt !== null && now - createdAt > STALE_P3_AGE_MS;
 }
 
 /**
  * Plan batches using the object-form contract consumed by phase-1-resolve.md.
- * The established array-form planner remains the single source of grouping
- * rules; this adapter partitions the candidate registry at repository and
- * security-class boundaries before translating its actions to stable IDs.
+ * The established array-form planner remains the grouping implementation; this
+ * adapter supplies the admission boundary around it so every action is scoped
+ * to one repository, one safety class, and an eligible P3 review finding.
  *
- * @param {{candidates?: Object[], openBatches?: Object[]}} input
+ * @param {{candidates?: Object[], openBatches?: Object[], now?: number|string|Date, dangerZones?: string[]}} input
  * @returns {{create: Object[], extend: Object[], ungrouped: Object[]}}
  */
-export function planP3Batches({ candidates = [], openBatches = [] } = {}) {
+export function planP3Batches({ candidates = [], openBatches = [], now = Date.now(), dangerZones = [] } = {}) {
   if (!Array.isArray(candidates) || !Array.isArray(openBatches)) {
     throw new TypeError("planP3Batches expects { candidates: [], openBatches: [] }");
   }
-
+  const nowTimestamp = now instanceof Date ? now.getTime() : typeof now === "number" ? now : Date.parse(String(now));
+  const planningNow = Number.isFinite(nowTimestamp) ? nowTimestamp : Date.now();
   const ids = new Map();
-  const normalizedCandidates = candidates
-    .map((candidate) => {
-      const id = candidateId(candidate);
-      if (id === null) return null;
-      ids.set(id, candidate);
-      return { ...candidate, number: id };
-    })
-    .filter(Boolean);
-  const repositoryCount = new Set(normalizedCandidates.map(repositoryKey)).size;
+  const ungrouped = [];
+  const eligible = [];
+  for (const candidate of candidates) {
+    const id = candidateId(candidate);
+    if (id === null) {
+      ungrouped.push({ memberId: null, reason: "missing stable member identity" });
+      continue;
+    }
+    ids.set(id, candidate);
+    const reason = candidateEligibilityReason(candidate, dangerZones);
+    if (reason) ungrouped.push({ memberId: id, reason });
+    else eligible.push({ ...candidate, number: id });
+  }
+
+  const repositoryCount = new Set(eligible.map(repositoryKey)).size;
   const normalizedBatches = openBatches.map((batch) => ({
     ...batch,
     members: (batch.memberIds || batch.members || []).map(memberId).filter(Boolean),
     safetyClass: batchSafetyKey(batch),
   }));
   const partitions = new Map();
-  for (const candidate of normalizedCandidates) {
+  for (const candidate of eligible) {
     const key = `${repositoryKey(candidate)}\u0000${safetyKey(candidate)}`;
     const members = partitions.get(key) || [];
     members.push(candidate);
@@ -630,19 +691,24 @@ export function planP3Batches({ candidates = [], openBatches = [] } = {}) {
   const grouped = new Set();
   for (const members of partitions.values()) {
     const repo = repositoryKey(members[0]);
+    const candidateSafety = safetyKey(members[0]);
     const batches = normalizedBatches.filter((batch) => {
       const batchRepo = batchRepositoryKey(batch);
-      const batchRepoMatches = batchRepo === repo || (batchRepo === null && repositoryCount === 1);
-      const candidateSafety = safetyKey(members[0]);
-      const batchSafety = batch.safetyClass;
-      const safetyMatches = candidateSafety === "routine"
-        ? batchSafety === "routine"
-        : batchSafety === candidateSafety;
-      return batchRepoMatches && safetyMatches;
+      const repoMatches = batchRepo === repo || (batchRepo === null && repositoryCount === 1);
+      return repoMatches && batch.safetyClass === candidateSafety;
     });
-    const securityPartition = safetyKey(members[0]) !== "routine";
+    const securityPartition = candidateSafety !== "routine";
     const rules = securityPartition ? { ...P3_BATCHING_RULES, maxMembers: 3 } : P3_BATCHING_RULES;
-    const partitionPlan = planP3BatchGroups(members, rules, { openBatches: batches });
+    const staleLeafKeys = new Set(
+      members.filter((candidate) => isStaleCandidate(candidate, planningNow))
+        .map((candidate) => leafDirectory(candidate.affectedFile))
+        .filter(Boolean),
+    );
+    const partitionPlan = planP3BatchGroups(members, rules, {
+      openBatches: batches,
+      dangerZones,
+      staleLeafKeys,
+    });
     groups.push(...partitionPlan.groups);
     extensions.push(...partitionPlan.extensions);
     partitionPlan.groups.flatMap((group) => group.members).forEach((id) => grouped.add(id));
@@ -653,24 +719,21 @@ export function planP3Batches({ candidates = [], openBatches = [] } = {}) {
     .sort((left, right) => `${left.key}:${left.members.join(",")}`.localeCompare(`${right.key}:${right.members.join(",")}`))
     .map(({ kind, key, members }) => ({ kind, key, memberIds: members }));
   const extend = extensions.map(({ batch, key, members }) => {
+    const sourceBatch = normalizedBatches.find((candidate) => candidate.number === batch);
     const candidateRepo = repositoryKey(ids.get(members[0]));
-    const sourceBatch = normalizedBatches.find((candidate) =>
-      candidate.number === batch &&
-      (batchRepositoryKey(candidate) === candidateRepo || batchRepositoryKey(candidate) === null),
-    );
-    const repo = sourceBatch ? batchRepositoryKey(sourceBatch) || candidateRepo : candidateRepo;
+    const batchRepo = sourceBatch && batchRepositoryKey(sourceBatch);
+    const repo = batchRepo || candidateRepo;
     return { batch, batchId: batchIdentity(sourceBatch, repo), key, memberIds: members };
   });
-  const ungrouped = candidates
-    .map((candidate) => candidateId(candidate))
-    .filter((id) => id !== null && !grouped.has(id))
-    .map((id) => ({
-      memberId: id,
-      reason: !ids.get(id)?.affectedFile
-        ? "missing affected file"
-        : batchExclusionReason(ids.get(id)) || "no matching batch threshold",
-    }));
 
+  for (const candidate of eligible) {
+    if (!grouped.has(candidate.number)) {
+      ungrouped.push({
+        memberId: candidate.number,
+        reason: "no matching batch threshold",
+      });
+    }
+  }
   return { create, extend, ungrouped };
 }
 
