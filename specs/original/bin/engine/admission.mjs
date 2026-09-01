@@ -527,3 +527,97 @@ export function planP3BatchGroups(findings, rules = P3_BATCHING_RULES, { openBat
 
   return { groups, extensions, ungrouped: [...remaining.keys()] };
 }
+
+/**
+ * Return the stable repository-qualified identifier used at orchestration
+ * boundaries. Existing registries already provide `id`; the repo/number
+ * fallback keeps the adapter convenient for callers constructing candidates.
+ * @param {Object} candidate
+ * @returns {string|null}
+ */
+function candidateId(candidate) {
+  if (typeof candidate?.id === "string" && candidate.id.trim() !== "") return candidate.id;
+  if (candidate?.repo && candidate?.number !== undefined && candidate?.number !== null) {
+    return `${candidate.repo}:${candidate.number}`;
+  }
+  if (candidate?.number !== undefined && candidate?.number !== null) return String(candidate.number);
+  return null;
+}
+
+function memberId(member) {
+  if (member && typeof member === "object") return candidateId(member);
+  return member === undefined || member === null ? null : String(member);
+}
+
+/**
+ * Plan batches using the object-form contract consumed by phase-1-resolve.md.
+ * The established array-form planner remains the single source of grouping
+ * rules; this adapter only translates its actions to stable member IDs.
+ *
+ * @param {{candidates?: Object[], openBatches?: Object[]}} input
+ * @returns {{create: Object[], extend: Object[], ungrouped: Object[]}}
+ */
+export function planP3Batches({ candidates = [], openBatches = [] } = {}) {
+  if (!Array.isArray(candidates) || !Array.isArray(openBatches)) {
+    throw new TypeError("planP3Batches expects { candidates: [], openBatches: [] }");
+  }
+
+  const ids = new Map();
+  const normalizedCandidates = candidates
+    .map((candidate) => {
+      const id = candidateId(candidate);
+      if (id === null) return null;
+      ids.set(id, candidate);
+      return { ...candidate, number: id };
+    })
+    .filter(Boolean);
+  const normalizedBatches = openBatches.map((batch) => ({
+    ...batch,
+    members: (batch.memberIds || batch.members || []).map(memberId).filter(Boolean),
+  }));
+  const legacyPlan = planP3BatchGroups(normalizedCandidates, P3_BATCHING_RULES, {
+    openBatches: normalizedBatches,
+  });
+  const grouped = new Set([
+    ...legacyPlan.groups.flatMap((group) => group.members),
+    ...legacyPlan.extensions.flatMap((extension) => extension.members),
+  ]);
+  const create = legacyPlan.groups.map(({ kind, key, members }) => ({
+    kind,
+    key,
+    memberIds: members,
+  }));
+  const extend = legacyPlan.extensions.map(({ batch, key, members }) => ({
+    batch,
+    key,
+    memberIds: members,
+  }));
+  const ungrouped = candidates
+    .map((candidate) => candidateId(candidate))
+    .filter((id) => id !== null && !grouped.has(id))
+    .map((id) => ({
+      memberId: id,
+      reason: !ids.get(id)?.affectedFile
+        ? "missing affected file"
+        : batchExclusionReason(ids.get(id)) || "no matching batch threshold",
+    }));
+
+  return { create, extend, ungrouped };
+}
+
+/**
+ * Summarize the object-form plan for the per-run orchestration record.
+ * @param {{create?: Object[], extend?: Object[], ungrouped?: Object[]}} plan
+ * @returns {{clustersFormed: number, membersAbsorbed: number, openBatchesExtended: number, ungroupedMembers: Object[]}}
+ */
+export function summarizeP3BatchPlan(plan = {}) {
+  const create = Array.isArray(plan.create) ? plan.create : [];
+  const extend = Array.isArray(plan.extend) ? plan.extend : [];
+  const ungrouped = Array.isArray(plan.ungrouped) ? plan.ungrouped : [];
+  return {
+    clustersFormed: create.length,
+    membersAbsorbed: create.reduce((total, group) => total + (group.memberIds?.length || 0), 0),
+    openBatchesExtended: extend.length,
+    ungroupedMembers: ungrouped,
+  };
+}
