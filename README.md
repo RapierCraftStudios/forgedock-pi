@@ -64,6 +64,14 @@ pi install /absolute/path/to/forgedock-pi
 
 Restart Pi or run `/reload` after installation.
 
+When a workflow prepares a target worktree, ForgeDock materializes the
+self-contained helpers referenced by the original specifications under their
+runtime `bin/` and `scripts/` paths (including `bin/engine/{admission,invariants,orchestrate-canary,resolve}.mjs`,
+`bin/labels.json`, and the packaged resolver scripts). Materialization is
+deterministic: an existing matching file is reused, while a conflicting
+repository file fails closed rather than being overwritten. These generated
+paths are kept out of the worktree diff.
+
 ## Configuration
 
 The prompt-routed workflow uses the original `forge.yaml` contract. Start from the

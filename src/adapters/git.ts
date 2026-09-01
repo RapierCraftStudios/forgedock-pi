@@ -71,6 +71,34 @@ export class GitOperationError extends Error {
   }
 }
 
+const RUNTIME_EXCLUDE_ENTRIES = [
+  ".pi/",
+  "bin/engine/admission.mjs",
+  "bin/engine/invariants.mjs",
+  "bin/engine/orchestrate-canary.mjs",
+  "bin/engine/resolve.mjs",
+  "bin/labels.json",
+  "scripts/classify-lane.sh",
+  "scripts/code-index.sh",
+  "scripts/derive-finding-milestone.sh",
+  "scripts/design-system-lint.mjs",
+  "scripts/doctor-pipeline-state.sh",
+  "scripts/eval-gate-scorecard.mjs",
+  "scripts/extract-affected-files.sh",
+  "scripts/flaky-quarantine.sh",
+  "scripts/graph-query.sh",
+  "scripts/issue-dedup.sh",
+  "scripts/select-fix-targets.sh",
+  "scripts/severity-to-priority.sh",
+  "scripts/transition-label.sh",
+  "scripts/validate-spec-graph.sh",
+  "scripts/verify-env-vars.sh",
+  "scripts/verify-host-headers.sh",
+  "scripts/verify-route-registration.sh",
+  "scripts/verify-sops-chain.sh",
+  "scripts/worktree-lifecycle.sh",
+] as const;
+
 export class GitWorktreeManager {
   readonly #executor: CommandExecutor;
 
@@ -105,17 +133,18 @@ export class GitWorktreeManager {
       } catch (error) {
         if (!isMissingFile(error)) throw error;
       }
-      if (
+      const lines = new Set(
         existing
           .split("\n")
           .map((line) => line.trim())
-          .includes(".pi/")
-      )
-        return;
+          .filter(Boolean),
+      );
+      const missing = RUNTIME_EXCLUDE_ENTRIES.filter((entry) => !lines.has(entry));
+      if (missing.length === 0) return;
       await appendTextFile(
         metadataDir,
         basename(excludePath),
-        `${existing && !existing.endsWith("\n") ? "\n" : ""}.pi/\n`,
+        `${existing && !existing.endsWith("\n") ? "\n" : ""}${missing.join("\n")}\n`,
       );
     } finally {
       await metadataDir.close();

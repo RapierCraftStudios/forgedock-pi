@@ -491,11 +491,41 @@ test("materialized project agents preserve nested work-on hierarchy for async ru
     assert.match(refresh, /forge_refresh_base/);
     assert.match(refresh, /^completionGuard: false$/m);
     assert.match(refresh, /maxSubagentDepth: 2/);
+    for (const helper of [
+      "bin/engine/admission.mjs",
+      "bin/engine/invariants.mjs",
+      "bin/engine/orchestrate-canary.mjs",
+      "bin/engine/resolve.mjs",
+      "bin/labels.json",
+      "scripts/classify-lane.sh",
+      "scripts/issue-dedup.sh",
+      "scripts/transition-label.sh",
+    ]) {
+      assert.equal(
+        await readFile(join(root, helper), "utf8"),
+        await readFile(join("specs", "original", helper), "utf8"),
+        helper,
+      );
+    }
     const settings = JSON.parse(
       await readFile(join(root, ".pi", "settings.json"), "utf8"),
     ) as { retry: { enabled: boolean; maxRetries: number } };
     assert.equal(settings.retry.enabled, true);
     assert.equal(settings.retry.maxRetries, 5);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("runtime helper materialization rejects conflicting repository files", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-runtime-helper-conflict-"));
+  try {
+    await mkdir(join(root, "bin", "engine"), { recursive: true });
+    await writeFile(join(root, "bin", "engine", "resolve.mjs"), "project helper\n");
+    await assert.rejects(
+      materializeForgeAgents(root),
+      /runtime helper conflicts with repository file: bin\/engine\/resolve\.mjs/,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

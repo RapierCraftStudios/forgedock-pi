@@ -171,10 +171,16 @@ test("worktree manager creates an issue branch from integration and cleans it sa
 
     const manager = new GitWorktreeManager(executor);
     await manager.ensureRuntimeIgnored(clone);
-    assert.match(
-      await readFile(join(clone, ".git", "info", "exclude"), "utf8"),
-      /^\.pi\/$/m,
-    );
+    const excludes = await readFile(join(clone, ".git", "info", "exclude"), "utf8");
+    assert.match(excludes, /^\.pi\/$/m);
+    for (const helper of [
+      "bin/engine/admission.mjs",
+      "bin/engine/invariants.mjs",
+      "bin/engine/orchestrate-canary.mjs",
+      "bin/engine/resolve.mjs",
+      "bin/labels.json",
+    ])
+      assert.match(excludes, new RegExp(`^${helper.replaceAll(".", "\\.")}$`, "m"));
     const review = await manager.prepareReview(clone, {
       reviewId: "review-1234",
       headRef: "feature/review",

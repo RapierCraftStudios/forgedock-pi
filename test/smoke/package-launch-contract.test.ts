@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 import { resolveSubagentLaunchContract } from "pi-subagents/preflight";
@@ -38,6 +39,83 @@ async function registerPackedProjectPackage(project: string): Promise<void> {
  * source discovery paths. Preflight is the public pi-subagents launch contract
  * and does not require a model or spawn a child process.
  */
+test("an installed package materializes helpers at target runtime paths", async () => {
+  const root = process.cwd();
+  const temp = await mkdtemp("/tmp/forgedock-runtime-helper-canary-");
+  try {
+    const { stdout } = await execFileAsync(
+      "npm",
+      ["pack", "--json", "--ignore-scripts", "--pack-destination", temp],
+      { cwd: root, env: { ...process.env, PI_OFFLINE: "1" } },
+    );
+    const archivePath = `${temp}/${packedArchive(stdout)}`;
+    const project = `${temp}/project`;
+    await execFileAsync(
+      "npm",
+      [
+        "install",
+        "--prefix",
+        project,
+        "--no-save",
+        "--package-lock=false",
+        "--ignore-scripts",
+        "--legacy-peer-deps",
+        archivePath,
+      ],
+      { cwd: root, env: { ...process.env, PI_OFFLINE: "1" } },
+    );
+    await registerPackedProjectPackage(project);
+    const installed = (await import(
+      pathToFileURL(
+        `${project}/node_modules/forgedock-pi/src/runtime/materialize.ts`,
+
+      ).href
+    )) as { materializeForgeRuntimeHelpers: (target: string) => Promise<void> };
+    await installed.materializeForgeRuntimeHelpers(project);
+
+    for (const helper of [
+      "bin/engine/admission.mjs",
+      "bin/engine/invariants.mjs",
+      "bin/engine/orchestrate-canary.mjs",
+      "bin/engine/resolve.mjs",
+      "bin/labels.json",
+      "scripts/classify-lane.sh",
+      "scripts/code-index.sh",
+      "scripts/derive-finding-milestone.sh",
+      "scripts/design-system-lint.mjs",
+      "scripts/doctor-pipeline-state.sh",
+      "scripts/eval-gate-scorecard.mjs",
+      "scripts/extract-affected-files.sh",
+      "scripts/flaky-quarantine.sh",
+      "scripts/graph-query.sh",
+      "scripts/issue-dedup.sh",
+      "scripts/select-fix-targets.sh",
+      "scripts/severity-to-priority.sh",
+      "scripts/transition-label.sh",
+      "scripts/validate-spec-graph.sh",
+      "scripts/verify-env-vars.sh",
+      "scripts/verify-host-headers.sh",
+      "scripts/verify-route-registration.sh",
+      "scripts/verify-sops-chain.sh",
+      "scripts/worktree-lifecycle.sh",
+    ]) {
+      assert.equal(
+        await readFile(`${project}/${helper}`, "utf8"),
+        await readFile(`${project}/node_modules/forgedock-pi/specs/original/${helper}`, "utf8"),
+        helper,
+      );
+    }
+    const { stdout: canary } = await execFileAsync(
+      "node",
+      ["bin/engine/orchestrate-canary.mjs", "priority", "P1", "true", "3", "0"],
+      { cwd: project },
+    );
+    assert.match(canary, /true/);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
 test("packed coordinator, fresh builder, and reviewer resolve with bounded tools", async () => {
   const root = process.cwd();
   const temp = await mkdtemp("/tmp/forgedock-package-canary-");
