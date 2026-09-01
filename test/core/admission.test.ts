@@ -6,6 +6,21 @@ import test from "node:test";
 const admission = await import("../../specs/original/bin/engine/admission.mjs");
 const { planP3Batches, planP3BatchGroups, summarizeP3BatchPlan } = admission;
 
+const p3 = ["review-finding", "priority:P3"];
+
+function candidate(id: string, overrides: Record<string, unknown> = {}) {
+  const [repo, number] = id.split(":");
+  return {
+    id,
+    repo,
+    number: Number(number),
+    title: "routine maintenance",
+    affectedFile: "src/shared.ts",
+    labels: p3,
+    ...overrides,
+  };
+}
+
 test("exports the documented object-form batching API", () => {
   assert.equal(typeof planP3Batches, "function");
   assert.equal(typeof summarizeP3BatchPlan, "function");
@@ -17,9 +32,9 @@ test("exports the documented object-form batching API", () => {
 test("preserves repository-qualified IDs in create actions and summaries", () => {
   const plan = planP3Batches({
     candidates: [
-      { id: "alpha:12", number: 12, repo: "alpha", title: "first", affectedFile: "src/shared.ts", labels: ["priority:P3"] },
-      { id: "alpha:13", number: 13, repo: "alpha", title: "second", affectedFile: "src/shared.ts", labels: ["priority:P3"] },
-      { id: "alpha:14", number: 14, repo: "alpha", title: "singleton", affectedFile: "src/other.ts", labels: ["priority:P3"] },
+      candidate("alpha:12"),
+      candidate("alpha:13"),
+      candidate("alpha:14", { affectedFile: "src/other.ts" }),
     ],
     openBatches: [],
   });
@@ -38,12 +53,7 @@ test("preserves repository-qualified IDs in create actions and summaries", () =>
 
 test("does not combine same-file candidates across repositories", () => {
   const plan = planP3Batches({
-    candidates: [
-      { id: "alpha:12", number: 12, repo: "alpha", affectedFile: "src/shared.ts", labels: ["priority:P3"] },
-      { id: "alpha:13", number: 13, repo: "alpha", affectedFile: "src/shared.ts", labels: ["priority:P3"] },
-      { id: "beta:12", number: 12, repo: "beta", affectedFile: "src/shared.ts", labels: ["priority:P3"] },
-      { id: "beta:13", number: 13, repo: "beta", affectedFile: "src/shared.ts", labels: ["priority:P3"] },
-    ],
+    candidates: [candidate("alpha:12"), candidate("alpha:13"), candidate("beta:12"), candidate("beta:13")],
     openBatches: [],
   });
 
@@ -56,10 +66,10 @@ test("does not combine same-file candidates across repositories", () => {
 test("keeps security findings in same-class groups", () => {
   const plan = planP3Batches({
     candidates: [
-      { id: "org:31", number: 31, repo: "org", title: "SSRF protection", affectedFile: "src/security.ts", labels: ["priority:P3"] },
-      { id: "org:32", number: 32, repo: "org", title: "SSRF validation", affectedFile: "src/security.ts", labels: ["priority:P3"] },
-      { id: "org:33", number: 33, repo: "org", title: "credential leak", affectedFile: "src/security.ts", labels: ["priority:P3"] },
-      { id: "org:34", number: 34, repo: "org", title: "credential handling", affectedFile: "src/security.ts", labels: ["priority:P3"] },
+      candidate("org:31", { title: "SSRF protection", affectedFile: "src/security.ts" }),
+      candidate("org:32", { title: "SSRF validation", affectedFile: "src/security.ts" }),
+      candidate("org:33", { title: "credential leak", affectedFile: "src/security.ts" }),
+      candidate("org:34", { title: "credential handling", affectedFile: "src/security.ts" }),
     ],
     openBatches: [],
   });
@@ -70,12 +80,61 @@ test("keeps security findings in same-class groups", () => {
   ]);
 });
 
-test("returns stable IDs for open-batch extensions", () => {
+test("caps a same-class security batch at three members", () => {
+  const plan = planP3Batches({
+    candidates: [1, 2, 3, 4].map((number) => candidate(`org:${number}`, { title: "SSRF validation" })),
+    openBatches: [],
+  });
+
+  assert.deepEqual(plan.create, [{
+    kind: "same-file",
+    key: "src/shared.ts",
+    memberIds: ["org:1", "org:2", "org:3"],
+  }]);
+  assert.deepEqual(plan.ungrouped, [{ memberId: "org:4", reason: "no matching batch threshold" }]);
+});
+
+test("applies review-finding P3 eligibility and keeps exclusions observable", () => {
   const plan = planP3Batches({
     candidates: [
-      { id: "org:21", number: 21, repo: "org", affectedFile: "src/shared.ts", labels: ["priority:P3"] },
+      candidate("org:1", { labels: ["priority:P3"] }),
+      candidate("org:2", { labels: ["review-finding", "priority:P2"] }),
+      candidate("org:3", { labels: [...p3, "needs-human"] }),
+      candidate("org:4", { title: "billing correction", affectedFile: "src/billing.ts" }),
+      candidate("org:5", { affectedFile: "" }),
     ],
-    openBatches: [{ number: 99, affectedFile: "src/shared.ts", memberIds: ["org:20"], memberCount: 1, safetyClass: "routine" }],
+    openBatches: [],
+  });
+
+  assert.deepEqual(plan.create, []);
+  assert.deepEqual(plan.ungrouped, [
+    { memberId: "org:1", reason: "not a review-finding" },
+    { memberId: "org:2", reason: "not priority P3" },
+    { memberId: "org:3", reason: "human-gated" },
+    { memberId: "org:4", reason: "domain" },
+    { memberId: "org:5", reason: "missing affected file" },
+  ]);
+});
+
+test("groups a stale leaf-directory singleton but retains a fresh singleton", () => {
+  const now = Date.parse("2026-09-04T00:00:00Z");
+  const plan = planP3Batches({
+    now,
+    candidates: [
+      candidate("org:1", { affectedFile: "src/stale/one.ts", createdAt: "2026-08-31T23:59:59Z" }),
+      candidate("org:2", { affectedFile: "src/fresh/one.ts", createdAt: "2026-09-03T23:59:59Z" }),
+    ],
+    openBatches: [],
+  });
+
+  assert.deepEqual(plan.create, [{ kind: "leaf-directory", key: "src/stale", memberIds: ["org:1"] }]);
+  assert.deepEqual(plan.ungrouped, [{ memberId: "org:2", reason: "no matching batch threshold" }]);
+});
+
+test("returns stable IDs for open-batch extensions", () => {
+  const plan = planP3Batches({
+    candidates: [candidate("org:21")],
+    openBatches: [{ number: 99, repo: "org", affectedFile: "src/shared.ts", memberIds: ["org:20"], memberCount: 1, safetyClass: "routine" }],
   });
 
   assert.deepEqual(plan.extend, [
@@ -91,9 +150,7 @@ test("returns stable IDs for open-batch extensions", () => {
 
 test("does not extend an open batch with unknown safety metadata", () => {
   const plan = planP3Batches({
-    candidates: [
-      { id: "org:22", number: 22, repo: "org", title: "routine maintenance", affectedFile: "src/shared.ts", labels: ["priority:P3"] },
-    ],
+    candidates: [candidate("org:22")],
     openBatches: [{ number: 99, repo: "org", affectedFile: "src/shared.ts", memberIds: ["org:20"] }],
   });
 
@@ -103,10 +160,8 @@ test("does not extend an open batch with unknown safety metadata", () => {
 
 test("does not extend an open batch across safety classes", () => {
   const plan = planP3Batches({
-    candidates: [
-      { id: "org:41", number: 41, repo: "org", title: "SSRF protection", affectedFile: "src/security.ts", labels: ["priority:P3"] },
-    ],
-    openBatches: [{ number: 99, repo: "org", affectedFile: "src/security.ts", memberIds: ["org:40"], safetyClass: "credential" }],
+    candidates: [candidate("org:41", { title: "SSRF protection" })],
+    openBatches: [{ number: 99, repo: "org", affectedFile: "src/shared.ts", memberIds: ["org:40"], safetyClass: "credential" }],
   });
 
   assert.deepEqual(plan.extend, []);
@@ -114,11 +169,9 @@ test("does not extend an open batch across safety classes", () => {
 });
 
 test("keeps the legacy array-form planner available", () => {
-  const plan = planP3BatchGroups(
-    [
-      { number: 1, affectedFile: "src/shared.ts", labels: ["priority:P3"] },
-      { number: 2, affectedFile: "src/shared.ts", labels: ["priority:P3"] },
-    ],
-  );
+  const plan = planP3BatchGroups([
+    { number: 1, affectedFile: "src/shared.ts", labels: ["priority:P3"] },
+    { number: 2, affectedFile: "src/shared.ts", labels: ["priority:P3"] },
+  ]);
   assert.deepEqual(plan.groups, [{ kind: "same-file", key: "src/shared.ts", members: [1, 2] }]);
 });
