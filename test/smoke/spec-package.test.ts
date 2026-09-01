@@ -55,7 +55,7 @@ test("public skills are thin routers over the original specifications", async ()
     const skill = await readFile(skillPath, "utf8");
     assert.ok(await readFile(specPath, "utf8"), `missing authority spec ${specPath}`);
     assert.match(skill, /specs\/pi-adapter\.md/);
-    assert.match(skill, new RegExp(specPath.replace(/\//g, "\\/")));
+    assert.ok(skill.includes(specPath), `${skillPath} must route to ${specPath}`);
     assert.ok(skill.split("\n").length <= 70, `${skillPath} must stay a compact router`);
     for (const banned of [
       /FORGE:BASE_REFRESH/,
