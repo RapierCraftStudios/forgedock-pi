@@ -23,7 +23,7 @@ allowed-tools: Task, Agent, Bash, Read, Grep, Glob, WebFetch, Skill
 
 2. **Post the FORGE:REVIEW verdict regardless of finding severity.** A review that completes but posts no `<!-- FORGE:REVIEW -->` comment is invisible to the pipeline. Even a PASS verdict must be posted.
 
-3. **Review findings do NOT block merge UNLESS they meet the Blocking Criteria in §7B** (a CONFIRMED HIGH/CRITICAL finding, a purpose regression, a merge conflict, or a build/type/test failure) **or the calibration threshold check in §7B.5 sets `CALIBRATION_NEEDS_HUMAN=true`** (HIGH-confidence task type with historical survival < 80%). File every finding as a GitHub issue with the `review-finding` label regardless of severity. Minor/style findings never block; §7B's and §7B.5's blocking conditions always do — including under `--auto-merge`. <!-- forge#1741 -->
+3. **Review findings do NOT block merge UNLESS they meet the Blocking Criteria in §7B** (a CONFIRMED HIGH/CRITICAL finding, a purpose regression, a merge conflict, or a build/type/test failure) **or the calibration threshold check in §7B.5 sets `CALIBRATION_NEEDS_HUMAN=true`** (HIGH-confidence task type with historical survival < 80%). In work-on review, keep blockers on the existing PR/source issue for cohesive remediation and create issues only for valuable independent follow-up work; standalone and staging review retain their finding-publication policy. Minor/style findings never block; §7B's and §7B.5's blocking conditions always do — including under `--auto-merge`. <!-- forge#1741 -->
 
 4. **Route correctly at Phase 0.** If the input is "staging" or the PR targets `main`, invoke `Skill("review-pr-staging", ...)` — do NOT run the standard PR review pipeline against a staging→main PR.
 
@@ -1642,9 +1642,14 @@ If synthesis needed, launch a `general-purpose` Task (model: `"{SUBAGENT_MODEL}"
 
 ---
 
-## Phase 6: Finding Triage & Issue Creation (MANDATORY)
+## Phase 6: Finding Triage & Durable Disposition (MANDATORY)
 
-**STOP. DO NOT skip this phase. DO NOT post summary first.** Every finding MUST become a GitHub issue BEFORE the summary.
+**STOP. DO NOT skip triage or post the summary first.** First deduplicate and classify every finding. Publication then depends on review ownership:
+
+- **Work-on review** (`--issue` / `{MERGE_ISSUE}` is present): blocking findings stay in the synthesized PR review and are copied to the existing source issue for one cohesive remediation pass on the current PR branch. They do **not** create recursive blocker issues. Create a separate issue only for valuable independent follow-up work that should outlive this PR; group findings that share one root cause and implementation, and publish that concern once. Style, optional hardening, and low-value observations remain in the review summary.
+- **Standalone review or staging review**: retain the existing finding-publication contract because no owning work-on issue/branch may exist to carry remediation.
+
+The source PR and linked work-on issue are already durable ownership. Do not multiply one delivery into a backlog of child blocker issues.
 
 ### 6A: Extract Findings
 
@@ -1674,7 +1679,9 @@ If still 0: review is clean — skip to Phase 7.
 - Also dedup by title similarity: if two findings share the same file and 3+ title keywords, keep the higher confidence one
 - Sort: CONFIRMED first, then LIKELY, then POSSIBLE; within group by severity
 
-### 6C: Create Issues
+### 6C: Publish Independent Follow-Up Issues When Required
+
+For work-on review, skip issue creation for every blocking finding and record those blocker IDs, evidence, and invariants on `{MERGE_ISSUE}` before the official verdict. Apply the issue-creation flow below only to deduplicated, genuinely independent follow-up work. For standalone review, apply it to findings under the original contract.
 
 ```bash
 # Colors match the canonical ForgeDock label manifest (bin/labels.json).
@@ -2064,13 +2071,13 @@ TRUST_ANNOTATION="**Intensity tier**: ${INTENSITY_TIER:-SHADOW} | **Cell**: \`${
 gh pr review $ARGUMENTS --comment --body "Review of commit $REVIEW_SHA_SHORT is stale — PR HEAD changed. Re-run /review-pr."
 
 # Clean (no blocking issues):
-gh pr review $ARGUMENTS --comment --body "APPROVED: commit $REVIEW_SHA_SHORT after context-aware review ([N] agents: [names]). [M] findings created as issues. Safe to merge.
+gh pr review $ARGUMENTS --comment --body "APPROVED: commit $REVIEW_SHA_SHORT after context-aware review ([N] agents: [names]). [M] independent follow-up issues created. Safe to merge.
 ${TRUST_ANNOTATION}
 $([ "$MERGE_HEALTH" = "UNKNOWN" ] && echo "
 ⚠ Mergeability: GitHub is still computing merge state (UNKNOWN after retries). Verify manually before merging.")${ATTRIBUTION_FOOTER_LINE}"
 
 # Blocking issues (including merge conflicts and purpose regressions):
-gh pr review $ARGUMENTS --comment --body "CHANGES REQUESTED: commit $REVIEW_SHA_SHORT — [N] blocking issues found. See GitHub issues.
+gh pr review $ARGUMENTS --comment --body "CHANGES REQUESTED: commit $REVIEW_SHA_SHORT — [N] blocking findings require cohesive remediation. See the synthesized review and linked source issue.
 ${TRUST_ANNOTATION}
 $([ "$HAS_MERGE_CONFLICT" = "true" ] && echo "
 🔴 Merge Conflict: ${MERGE_CONFLICT_MSG}")
@@ -2395,7 +2402,7 @@ Hi @${PR_AUTHOR} — this looks like your first merged contribution here. Thanks
 
 ### What just happened
 
-The automated review pipeline (/review-pr) ran against your PR. It spawned domain-specific agents to review security, integration assumptions, and code quality. Any findings were created as separate GitHub issues — not merge blockers unless they are CONFIRMED at HIGH/CRITICAL severity.
+The automated review pipeline (/review-pr) ran against your PR. It spawned domain-specific agents to review security, integration assumptions, and code quality. On work-on PRs, blocking findings remain on the existing PR/source issue for cohesive remediation; only valuable independent follow-up work becomes a separate issue. Findings block only under the Blocking Criteria.
 
 ### Key conventions
 

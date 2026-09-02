@@ -76,15 +76,16 @@ if [ -n "$LAST_VERDICT_SHA" ] && [ "$LAST_VERDICT_SHA" = "$CURRENT_SHA_SHORT" ];
 
 PR #{PR_NUMBER}'s HEAD (${CURRENT_SHA_SHORT}) has not changed since the last CHANGES REQUESTED verdict. Re-running /review-pr would re-review byte-identical code and reproduce the same verdict — this is a pure waste of a full domain-agent fan-out.
 
-The PR is already needs-human (or will be shortly, if this is the first time this guard has fired for it). Progress here now depends on remediation (fix the findings, push a new commit, re-review) rather than another raw review submission. If running under /orchestrate, item 6.4 in phase-4-execution.md auto-dispatches remediation for any needs-human-gated issue, including this one (see forge#2243) — no manual action should be needed. If running standalone, invoke /work-on {PR_NUMBER} --remediate --issue {NUMBER} directly.
+The PR already has a blocking review. Progress now depends on remediation (fix the findings, push a new commit, re-review) rather than another raw review submission. Code-fixable blockers continue into Phase R3.5 in this same coordinator; do not depend on an outer orchestrator or a separate manual invocation.
 
 <!-- FORGE:REREVIEW_SKIPPED -->
 SKIP_EOF
 )
   gh issue comment {NUMBER} {GH_FLAG} --body "$REREVIEW_SKIP_BODY" # <!-- allowlist:check-command-side-effects -->
   gh issue edit {NUMBER} {GH_FLAG} --add-label needs-human 2>/dev/null || true # <!-- allowlist:check-command-side-effects -->
-  # Return REVIEW_RESULT: status: BLOCKED — do not invoke /review-pr again on unchanged HEAD
-  exit 1
+  # Do not invoke /review-pr again on unchanged HEAD and do not return a terminal
+  # BLOCKED result for code-fixable findings. Continue to Phase R3.5.
+  REVIEW_NEEDS_REMEDIATION=true
 fi
 ```
 
@@ -305,7 +306,17 @@ else:
 
 Wait for that task's completed result before Phase R4. Propagate its `REVIEW_RESULT` as this module's child state; do not return `REVIEW_RESULT`, report progress, release an orchestrator slot, or begin close work while the child is running. If the child errors or returns no parseable `REVIEW_RESULT`, return `REVIEW_RESULT: status: BLOCKED` with the child failure as the blocker. The normal `Skill(...)` invocation above remains the non-OpenCode path.
 
-/review-pr handles: full domain-agent review → post findings as separate issues (non-blocking) → merge the PR → close the issue → clean up worktree.
+/review-pr handles the fresh panel, durable finding disposition, official verdict, and guarded merge decision. Work-on retains ownership of remediation and issue closure.
+
+### Phase R3.5: Continue Code-Fixable Blockers
+
+After review returns—or when the unchanged-head guard sets `REVIEW_NEEDS_REMEDIATION=true`—read the current-head official verdict and linked issue state. If the PR has concrete code-fixable blocking findings, do not return a terminal `BLOCKED` result and do not wait for an outer orchestrator. Load and execute `work-on/remediate.md` now for `{PR_NUMBER}` and `{NUMBER}` in this same coordinator, fixing all current blockers cohesively on the existing PR branch before one scoped re-review. Remediation owns its re-review, merge/hold decision, and close handoff; propagate its result and do not duplicate Phase R4 or close work afterward.
+
+Before remediation, compare the blocker evidence with the latest investigation and builder contract. If review proves that the root cause or affected production paths were materially incomplete, post `<!-- FORGE:REINVESTIGATE_REQUIRED -->` on the source issue with the PR head and missing scope, perform one fresh superseding investigation using the current investigation instructions, then remediate from that corrected scope. Do this at most once per PR head; later unresolved blockers follow the bounded remediation limit rather than cycling through investigation.
+
+Only genuine product/policy choices, external operations or credentials, destructive authority, unfixable trust gates, or exhausted bounded remediation may remain `needs-human`. A code defect with a concrete repository fix is not a human-authority decision.
+
+If review is clean or the block is genuinely unfixable, continue to Phase R4 with that result.
 
 ---
 
@@ -333,11 +344,12 @@ gh issue view {NUMBER} {GH_FLAG} --json state --jq '.state'
   \`\`\`"
   ```
 
-- PR NOT MERGED → attempt manual merge:
+- PR OPEN with code-fixable `CHANGES REQUESTED` → Phase R3.5 must remediate it; never attempt to merge and never return it merely for an outer orchestrator to redispatch.
+- PR OPEN with a clean verdict but no completed auto-merge → attempt the same guarded merge requested by this work-on route:
   ```bash
   gh pr merge {PR_NUMBER} {GH_FLAG} --merge --auto
   ```
-  If merge fails: post comment, add `needs-human`, return `REVIEW_RESULT: status: BLOCKED`
+  If merge fails for a mechanical reason, preserve the PR and return an actionable blocked result. Add `needs-human` only when resolving it requires genuine owner authority.
 
 ---
 

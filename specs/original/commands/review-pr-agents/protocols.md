@@ -149,7 +149,7 @@ Every finding must include:
 
 ## Structured Findings Protocol
 
-**All review agents MUST include a machine-readable findings block at the end of their PR comment.** This is NON-OPTIONAL. Without structured findings, the review system cannot create GitHub issues, and findings die as unread PR comments. Every finding that doesn't become a GitHub issue is a finding that will never be addressed.
+**All review agents MUST include a machine-readable findings block at the end of their PR comment.** This is NON-OPTIONAL. Structured findings let the coordinator deduplicate, classify, keep work-on blockers on the owning PR/source issue, and publish genuinely independent follow-up work when warranted. A finding does not need a new issue to remain durable.
 
 ### Persist Before Post
 
@@ -167,7 +167,7 @@ Append this block at the very end of your comment (after the `---` footer line, 
 
 ### Rules
 
-1. **Include ALL findings at CONFIRMED, LIKELY, and POSSIBLE confidence** — every finding becomes a GitHub issue. Nothing stays as just a PR comment. **POSSIBLE findings are informational advisories (P3/non-blocking)** — they are tracked but do not require a fix PR and do not block merge. CONFIRMED and LIKELY findings are blocking at P1/P2 respectively.
+1. **Include evidence-backed findings at CONFIRMED, LIKELY, and POSSIBLE confidence** so the coordinator can disposition them. `POSSIBLE` findings are informational. Confidence or severity alone never makes a blocker: blocking requires the review policy's confirmed patch-caused production-risk standard. On work-on PRs, blockers stay on the existing PR/source issue for cohesive remediation; only valuable independent follow-up work becomes a separate issue.
 2. **One line per finding** — sequential numbering (PREFIX-1, PREFIX-2, ...)
 3. **Confidence**: `CONFIRMED`, `LIKELY`, or `POSSIBLE`
 4. **Severity**: `CRITICAL`, `HIGH`, `MEDIUM`, or `LOW`
