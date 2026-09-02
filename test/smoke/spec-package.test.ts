@@ -168,6 +168,26 @@ test("investigation checks sibling paths for the same broken behavior", async ()
   assert.match(investigate, /\*\*Behavior followed\*\*/);
   assert.match(investigate, /\*\*Other relevant paths checked\*\*/);
   assert.match(investigate, /\*\*Scope result\*\*/);
+
+  assert.ok(
+    investigate.indexOf("7. **Same-Behavior Check**") <
+      investigate.indexOf("8. **Identify affected files**"),
+    "the check must run before affected files are finalized",
+  );
+  assert.ok(
+    investigate.indexOf("### Same-Behavior Check") <
+      investigate.indexOf("### Affected Files"),
+    "the report must record the check before publishing mutation scope",
+  );
+
+  const resumeLogic = investigate.slice(
+    investigate.indexOf("**Resume logic**"),
+    investigate.indexOf("**Set label**"),
+  );
+  assert.match(resumeLogic, /### Same-Behavior Check/);
+  assert.match(resumeLogic, /Behavior followed/);
+  assert.match(resumeLogic, /Other relevant paths checked/);
+  assert.match(resumeLogic, /Scope result/);
 });
 
 test("one canonical issue schema governs every ForgeDock creator", async () => {

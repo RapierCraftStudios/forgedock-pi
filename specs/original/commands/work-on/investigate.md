@@ -263,8 +263,9 @@ gh api repos/{GH_REPO}/issues/{NUMBER}/comments --jq '.[] | {id: .id, body: .bod
 ```
 
 **Resume logic**:
-- If `<!-- FORGE:INVESTIGATOR -->` comment exists AND (`<!-- INVESTIGATION:COMPLETE -->` OR `<!-- INVESTIGATION:INVALID -->`) is present in the SAME comment → investigation already complete, EXIT (return existing verdict to caller). `INVESTIGATION:INVALID` is the terminal sentinel Phase 1C emits for an INVALID verdict (see Phase 1C below) — it is just as much a completion marker as `INVESTIGATION:COMPLETE`, not an "interrupted" state.
-- If `<!-- FORGE:INVESTIGATOR -->` comment exists BUT NEITHER `<!-- INVESTIGATION:COMPLETE -->` NOR `<!-- INVESTIGATION:INVALID -->` is present → investigation was interrupted, delete the partial comment and restart:
+- A comment ending `<!-- INVESTIGATION:INVALID -->` remains terminal and may be reused; no build follows it.
+- Reuse a `<!-- INVESTIGATION:COMPLETE -->` comment only when the same comment contains the current `### Same-Behavior Check` section with `Behavior followed`, `Other relevant paths checked`, and `Scope result`. A legacy completion marker without this section does not authorize build. Preserve legacy/incomplete artifacts as history and post a superseding investigation.
+- If `<!-- FORGE:INVESTIGATOR -->` exists with neither terminal sentinel, investigation was interrupted; delete only that partial comment and restart:
   ```bash
   gh api repos/{GH_REPO}/issues/comments/{COMMENT_ID} -X DELETE
   ```
