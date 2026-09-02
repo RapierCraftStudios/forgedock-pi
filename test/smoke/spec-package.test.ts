@@ -155,6 +155,21 @@ test("canonical dispatch recipe governs wave, successor, and recovery launches",
   assert.match(coordinator, /not a sub-workflow|no sub-workflow|not a sub-workflow of domain lanes|direct read-only children/);
 });
 
+test("investigation checks sibling paths for the same broken behavior", async () => {
+  const investigate = await readFile(
+    "specs/original/commands/work-on/investigate.md",
+    "utf8",
+  );
+
+  assert.match(investigate, /\*\*Same-Behavior Check\*\*/);
+  assert.match(investigate, /callers, readers, writers, serializers, shortcuts, or sibling paths/);
+  assert.match(investigate, /Do not inspect unrelated code/);
+  assert.match(investigate, /### Same-Behavior Check/);
+  assert.match(investigate, /\*\*Behavior followed\*\*/);
+  assert.match(investigate, /\*\*Other relevant paths checked\*\*/);
+  assert.match(investigate, /\*\*Scope result\*\*/);
+});
+
 test("one canonical issue schema governs every ForgeDock creator", async () => {
   const issue = await readFile("specs/original/commands/issue.md", "utf8");
   const review = await readFile("specs/original/commands/review-pr.md", "utf8");
