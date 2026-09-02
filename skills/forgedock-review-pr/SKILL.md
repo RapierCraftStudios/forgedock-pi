@@ -8,8 +8,9 @@ description: Run the authoritative context-aware ForgeDock review for an exact P
 ## Required loading
 
 1. Read `../../specs/pi-adapter.md` completely.
-2. Read `../../specs/original/commands/review-pr.md` completely in bounded chunks.
-3. Parse the arguments appended to this skill invocation.
+2. Parse the arguments appended to this skill invocation.
+3. Read the headings of `../../specs/original/commands/review-pr.md`, then load only the
+   current phase in bounded chunks as review advances; do not preload later phases.
 4. During reviewer selection, read
    `../../specs/original/commands/review-pr-agents/protocols.md` and only the selected
    persona files in that directory.
@@ -48,11 +49,13 @@ panel is never required to verify a blocker closure — re-reviewing everything
 re-introduces the round-count and wall-clock spiral that stalled the previous
 generation of this pipeline. Prepare each reviewer bundle
 deterministically yourself: fetch the full diff once, slice it per reviewer with its
-persona and identity (repository, PR, head SHA; remaining tuple fields optional), and
-pass it inline — reviewers receive a complete bundle and never search for one. Launch
-the fresh-context reviewer panel with Pi subagents and join every selected reviewer.
-Reviewers start from the frozen diff but retain repository read/search access for
-evidence tracing.
+persona and identity, and pass it inline. Use the owning route's retained full child
+model; a standalone review resolves it once from `forge.yaml` (`subagent_model`, then
+`default_model`). Never pass legacy aliases. Launch the complete
+panel concurrently with the adapter's one synchronous `workflowScript`/`runs.all`, not
+separate subagent calls. Each reviewer posts and exact-ID reads back its own role-scoped
+exact-head comment. Join and validate every result/readback before synthesis; never
+proxy-post, accept a rejected/partial child, or use a partial panel as the verdict.
 
 For a PR owned by work-on, keep blocking findings on the existing PR and source issue
 for cohesive remediation; do not create recursive blocker issues. Create or deduplicate

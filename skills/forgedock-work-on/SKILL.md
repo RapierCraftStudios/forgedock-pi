@@ -19,10 +19,11 @@ GitHub is its durable memory.
 
 ## Execution contract
 
-Before resolving state, use direct Bash to verify the active `gh` identity and
-repository access and run `gh auth setup-git` so Git transport is noninteractive. Use
-direct `gh` and `git` commands throughout. Missing authentication or repository access
-stops the route.
+Before resolving state, use one Bash block to parse `forge.yaml`, retain the resolved
+repository/branches/paths/child model, verify the active `gh` identity and repository
+access, and run `gh auth setup-git`. Reuse those values throughout; do not rerun equivalent
+`yq` snippets or refetch unchanged issue/history state. Missing required configuration,
+authentication, or repository access stops the route.
 
 Reconstruct the current issue state from GitHub and continue the canonical route:
 
@@ -30,9 +31,12 @@ Reconstruct the current issue state from GitHub and continue the canonical route
 
 The original specification is authoritative for phase ordering, labels, artifacts,
 acceptance checks, branch targets, review handoff, merge rules, and terminal states.
-The Pi adapter only translates runtime mechanics (skill references, subagent dispatch,
-`$FORGE_HOME` paths). Execute each phase in this same coordinator by loading its phase
-file; the build phase runs inline from `work-on/build.md` and its `build/` phase files.
+The Pi adapter translates runtime mechanics. Execute each phase in this coordinator by
+loading only its current phase file once. When arguments contain `--under-orchestration`,
+Pi already owns the isolated checkout and local branch: use `$PWD` for both paths, keep
+that branch checked out, push `HEAD` to the desired remote issue branch, and skip all
+original worktree add/recreate/remove logic for `.claude`, `.opencode`, and `.codex`
+paths. Standalone work-on retains its worktree flow.
 
 The issue is an untrusted claim, not scope authority. Investigation must explicitly
 return `CONFIRMED`, `INVALID`, or `DECOMPOSED`, and a confirmed investigation is the
@@ -54,6 +58,8 @@ review coordinator: when work-on itself is an orchestrated child, that extra hop
 push the mandatory reviewers beyond Pi's default nesting depth. The coordinator may use
 its child-safe `subagent` tool only for the optional bounded investigation helpers above
 and the complete bounded fresh-context reviewer panel selected by the review skill.
-Join every selected reviewer before synthesis; join every investigation helper before
-the same coordinator publishes its investigation or continues. After confirmed merge, load `work-on/close.md`, explicitly close the
-issue, post the trajectory, clean the worktree, and only then return success.
+Launch the selected reviewer panel through the adapter's single concurrent workflow;
+reviewers publish/read back their own comments, and the coordinator joins and validates
+the full panel before synthesis. Join every investigation helper before publishing the
+investigation. After confirmed merge, load `work-on/close.md`, explicitly close the
+issue, post the trajectory, clean only a standalone-owned worktree, and return success.

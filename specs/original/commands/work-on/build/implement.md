@@ -108,7 +108,7 @@ Extract from contract:
 
 ## Phase I3: Implement
 
-Work in `{WORKTREE_PATH}`. Follow the contract deliverables table exactly — implement each file change listed, in the order that resolves dependencies first.
+Work in `{WORKTREE_PATH}`. Before editing, turn the contract deliverables and every path from the investigation's Same-Behavior Check into one short completion checklist. Follow it in dependency order and account for each production path and its regression coverage before starting expensive validation.
 
 **Implementation rules**:
 - Read the current file before modifying it — never assume its state
@@ -129,7 +129,7 @@ cd {WORKTREE_PATH}
 
 ### Before declaring implementation complete
 
-Compare the finished implementation against every path in the investigation's Same-Behavior Check and the builder contract. Read the complete changed functions and their relevant callers. Confirm every affected path is implemented and the tests exercise the intended behavior plus important unaffected controls. If you find a missing sibling path or a known defect in your implementation, fix it now; do not knowingly hand incomplete work to review. Keep out-of-scope work out of the PR.
+Before the first expensive validation run, compare the finished implementation once against every path in the investigation's Same-Behavior Check and the builder contract. Read the complete changed functions and their relevant callers. Confirm every affected path is implemented and the tests exercise the intended behavior plus important unaffected controls. Inspect `git status --short` and the complete diff, then revert unrelated formatting, generated files, or broad replacement churn. If you find a missing sibling path or a known defect in your implementation, fix it now; do not knowingly hand incomplete work to review. Keep out-of-scope work out of the PR.
 
 ---
 
