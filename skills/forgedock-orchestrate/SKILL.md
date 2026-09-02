@@ -46,9 +46,11 @@ issue validity or duplicates.
 Launch one fresh `forgedock-work-on-coordinator` per issue with task text exactly
 `<issue> --under-orchestration`. Use one async workflow promise graph: roots start
 together, and each dependent starts as soon as its own predecessor promises succeed —
-never after a whole sibling wave. Use bounded `orchestration.max_concurrent`, isolated
-issue worktrees, and no work-on deadline. Each child owns the complete lifecycle.
-
+never after a whole sibling wave. Use bounded `orchestration.max_concurrent` and isolated
+issue worktrees. Give every work-on child Pi's maximum supported runtime as a practical
+no-deadline value; omission silently restores Pi's 30-minute default. Before workflow
+launch, create one clean detached base per configured PR target and set each issue item's
+`cwd` to that base before `worktree: true`; children verify/fast-forward before editing.
 The packaged coordinator is an explicit, depth-bounded fanout child: it may launch only
 the fresh read-only reviewers required by its review phase. Do not use the builtin
 `worker` for a complete work-on lane, and do not give the coordinator a blanket "never
@@ -59,9 +61,9 @@ mechanics): child task text is always exactly `<issue> --under-orchestration`, g
 appear only on workflowScript calls, and recovery relaunches verify GitHub state first
 and reuse the identical first-dispatch shape. Never compose improvised prose task
 texts for coordinators.
-
 Classify GitHub state as DONE, GATED, FAILED, or IN_PROGRESS. GATED is not FAILED.
 Mechanical child failure is resumable: replace stale active labels with
 `workflow:engine-error`, record the run/handoff, and resume or canonically relaunch only
-non-terminal work. Do not poll or abandon a planned issue. After the queue drains or
+non-terminal work. Wrong ancestry or target movement is technical remediation, never a
+human-authority gate. Do not poll or abandon a planned issue. After the queue drains or
 reaches a documented paused state, execute mandatory cleanup and publish the report.

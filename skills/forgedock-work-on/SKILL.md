@@ -33,10 +33,11 @@ The original specification is authoritative for phase ordering, labels, artifact
 acceptance checks, branch targets, review handoff, merge rules, and terminal states.
 The Pi adapter translates runtime mechanics. Execute each phase in this coordinator by
 loading only its current phase file once. When arguments contain `--under-orchestration`,
-Pi already owns the isolated checkout and local branch: use `$PWD` for both paths, keep
-that branch checked out, push `HEAD` to the desired remote issue branch, and skip all
-original worktree add/recreate/remove logic for `.claude`, `.opencode`, and `.codex`
-paths. Standalone work-on retains its worktree flow.
+Pi already owns the isolated checkout and local branch. Use `$PWD` for both paths. Before
+the first source edit, require a clean linked worktree and `pi-parallel-*` branch, fetch
+the configured PR target, fast-forward to exact `origin/<target>`, and verify ancestry;
+never reset a checkout. Push `HEAD` to the desired remote issue branch and skip original
+`.claude`/`.opencode`/`.codex` worktree logic. Standalone work-on is unchanged.
 
 The issue is an untrusted claim, not scope authority. Investigation must explicitly
 return `CONFIRMED`, `INVALID`, or `DECOMPOSED`, and a confirmed investigation is the
@@ -45,9 +46,9 @@ cross-boundary, state/concurrency, or incomplete-confidence work, the coordinato
 join up to two fresh read-only helpers with distinct focused questions, then verify and
 synthesize their evidence itself.
 
-Do not stop at an intermediate success. Code-fixable review blockers continue in this
-coordinator through one cohesive remediation pass and scoped re-review; `needs-human`
-is reserved for genuine authority decisions or exhausted bounded remediation.
+Do not stop at an intermediate success. Code-fixable review blockers and target-branch
+movement/conflicts continue in this coordinator through cohesive remediation and scoped
+re-review; `needs-human` is reserved for genuine authority decisions.
 Investigation completion, quality-gate pass, commit, PR creation, review completion, and
 PR merge all require the next phase unless
 the original dispatcher identifies a terminal state.

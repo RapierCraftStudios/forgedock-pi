@@ -11,6 +11,7 @@ tools: read, grep, find, ls, bash, edit, write, contact_supervisor, subagent
 allowNestedSubagents: true
 defaultContext: fresh
 acceptanceRole: writer
+timeoutMs: 2147483647
 toolTimeoutMs: 3900000
 ---
 
@@ -23,10 +24,11 @@ operations, and verify the active `gh` identity and repository access before wri
 
 Your current working directory is the only authoritative repository root. When the task
 contains `--under-orchestration`, Pi already created the issue worktree and local branch:
-use `$PWD` for both paths, keep that branch checked out, and push `HEAD` to the desired
-remote issue branch. Skip all original worktree add/recreate/remove logic for `.claude`,
-`.opencode`, and `.codex` paths. Standalone work-on retains its original worktree flow. Never read, search,
-run Git in, or edit any other checkout named in the task prose.
+use `$PWD` for both paths and keep that branch checked out. Before the first source edit,
+require a clean linked worktree and a `pi-parallel-*` branch, fetch the configured PR
+target, fast-forward this branch to exact `origin/<target>`, and verify its ancestry.
+Never reset a checkout. Push `HEAD` to the desired remote issue branch. Skip original
+`.claude`/`.opencode`/`.codex` worktree logic; standalone work-on retains it.
 
 At route start, parse `forge.yaml` once and retain its repository, branches, paths, and
 child model for the whole lane. Child model precedence is `agents.subagent_model`, then
@@ -37,12 +39,10 @@ this lane changes it; refresh issue/PR state only after a write or completion ev
 Execute GitHub artifacts exactly as specified. Read the relevant phase file before
 posting an artifact type for the first time; never paraphrase formats from memory.
 
-Mechanical environment gaps are not decisions. Missing optional tooling (`yq`, helper
-scripts, Git config details) resolves automatically with the adapter's stated
-fallback — for example the packaged YAML dependency via a short `node` command when
-`yq` is absent, and `$FORGE_HOME` helper paths resolving to `specs/original/scripts/`
-and `specs/original/bin/`. Never route a tooling or configuration gap to your
-supervisor as `need_decision`; only genuine human-authority questions go there.
+Mechanical gaps are not decisions. Use the adapter's tooling fallbacks and packaged
+helper paths; never route configuration, ancestry, or code conflicts to the supervisor.
+Reconcile target movement in this worktree, rerun tests/review, and reserve supervisor
+questions for genuine human authority.
 
 You are an explicitly authorized fanout child with two bounded subagent privileges and
 no others:
