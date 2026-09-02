@@ -190,6 +190,38 @@ test("investigation checks sibling paths for the same broken behavior", async ()
   assert.match(resumeLogic, /Scope result/);
 });
 
+test("work-on optimizes for first-pass completion without recursive blocker issues", async () => {
+  const coordinator = await readFile("agents/forgedock-work-on-coordinator.md", "utf8");
+  const workOn = await readFile("skills/forgedock-work-on/SKILL.md", "utf8");
+  const reviewSkill = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
+  const investigate = await readFile("specs/original/commands/work-on/investigate.md", "utf8");
+  const implement = await readFile("specs/original/commands/work-on/build/implement.md", "utf8");
+  const review = await readFile("specs/original/commands/work-on/review.md", "utf8");
+  const remediate = await readFile("specs/original/commands/work-on/remediate.md", "utf8");
+  const reviewSpec = await readFile("specs/original/commands/review-pr.md", "utf8");
+  const protocols = await readFile(
+    "specs/original/commands/review-pr-agents/protocols.md",
+    "utf8",
+  );
+
+  for (const contract of [coordinator, workOn, investigate]) {
+    assert.match(contract, /up to two fresh read-only (?:helpers|investigation helpers)/);
+    assert.match(contract, /narrow issues?.*inline/i);
+  }
+  assert.match(implement, /compare the finished implementation against every path/i);
+  assert.match(implement, /fix it now; do not knowingly hand incomplete work to review/i);
+  assert.match(reviewSkill, /do not create recursive blocker issues/i);
+  assert.match(reviewSpec, /blocking findings stay in the synthesized PR review/i);
+  assert.match(protocols, /A finding does not need a new issue to remain durable/i);
+  assert.match(protocols, /Confidence or severity alone never makes a blocker/i);
+  assert.match(review, /Continue Code-Fixable Blockers/);
+  assert.match(review, /do not wait for an outer orchestrator/i);
+  assert.match(review, /FORGE:REINVESTIGATE_REQUIRED/);
+  assert.match(review, /at most once per PR head/);
+  assert.match(remediate, /blocking findings do not need child issues to be durable/i);
+  assert.match(coordinator, /Escalate only product\/policy decisions/);
+});
+
 test("one canonical issue schema governs every ForgeDock creator", async () => {
   const issue = await readFile("specs/original/commands/issue.md", "utf8");
   const review = await readFile("specs/original/commands/review-pr.md", "utf8");

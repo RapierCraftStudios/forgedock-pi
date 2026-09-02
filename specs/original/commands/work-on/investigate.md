@@ -265,6 +265,7 @@ gh api repos/{GH_REPO}/issues/{NUMBER}/comments --jq '.[] | {id: .id, body: .bod
 **Resume logic**:
 - A comment ending `<!-- INVESTIGATION:INVALID -->` remains terminal and may be reused; no build follows it.
 - Reuse a `<!-- INVESTIGATION:COMPLETE -->` comment only when the same comment contains the current `### Same-Behavior Check` section with `Behavior followed`, `Other relevant paths checked`, and `Scope result`. A legacy completion marker without this section does not authorize build. Preserve legacy/incomplete artifacts as history and post a superseding investigation.
+- If a later `<!-- FORGE:REINVESTIGATE_REQUIRED -->` comment records that current-head review proved the original root cause or production-path scope incomplete, do not reuse the older investigation. Post one fresh superseding investigation, then continue from that corrected scope. A later completed investigator comment satisfies the marker; never loop back to investigation twice for the same PR head.
 - If `<!-- FORGE:INVESTIGATOR -->` exists with neither terminal sentinel, investigation was interrupted; delete only that partial comment and restart:
   ```bash
   gh api repos/{GH_REPO}/issues/comments/{COMMENT_ID} -X DELETE
@@ -352,6 +353,10 @@ bash {REPO_PATH}/scripts/code-index.sh query --domain {DOMAIN_LABEL} --repo-path
 7. **Same-Behavior Check** — before finalizing affected files, follow the specific broken value, state, or decision from where it enters the system to where it produces its final effect. Search the actual repository for other relevant callers, readers, writers, serializers, shortcuts, or sibling paths that handle the same behavior. Include any path that must change for the fix to be complete, or record source evidence that it is already safe. Do not inspect unrelated code; stop when the production-reachable paths for this specific behavior are accounted for.
 8. **Identify affected files** — full list of files that need changes, including any added by the Same-Behavior Check
 9. **Fix-approach validation** — if the issue proposes a fix, don't adopt it as spec. Trace through the target system's middleware, auth, routing, config. Cross-domain: if fix in domain A interacts with domain B, read domain B's files too.
+
+### Focused investigation help
+
+Narrow issues stay inline when you can confidently follow the same behavior through every relevant production path. When the behavior crosses independent parts of the system, involves difficult state or concurrency, or you are not confident all relevant paths were found, you may launch up to two fresh read-only helpers. Give each helper one distinct question: for example, one traces the behavior end to end while another challenges the scope for sibling, shortcut, error, retry, cleanup, or existing-protection paths. Helpers never edit, publish, or launch children. Join their answers, verify their claims in the repository, and synthesize one investigation yourself. Do not launch helpers for narrow issues or ask two helpers to repeat the same investigation.
 
 ---
 

@@ -41,7 +41,9 @@ supervisor as `need_decision`; only genuine human-authority questions go there.
 You are an explicitly authorized fanout child with two bounded subagent privileges and
 no others:
 
-1. The mandatory read-only research fanout of an Investigation task type.
+1. During any difficult investigation, up to two fresh read-only helpers with distinct
+   focused questions when they materially improve end-to-end or sibling-path confidence;
+   narrow issues stay inline and the coordinator verifies and synthesizes their evidence.
 2. The complete fresh-context reviewer panel selected by the `forgedock-review-pr`
    skill, launched as `forgedock-reviewer` agents and all joined before synthesis.
 
@@ -51,9 +53,11 @@ lifecycle itself, or sub-workflows inside your own children — the coordinator 
 every phase inline by loading its phase file from `specs/original/commands/work-on/`,
 and the investigation research fanout is direct read-only children.
 
-Route every new public issue — review finding, decomposition child, test failure, or
-follow-up — through the packaged `forgedock-issue` skill.
+Route every genuinely independent new public issue through the packaged
+`forgedock-issue` skill. Blocking findings on a work-on PR stay on its existing PR and
+source issue for cohesive remediation; they do not spawn recursive issues.
 
-Do not stop at an intermediate success: continue through review, remediation when
-required, merge, closure, and cleanup unless the dispatcher named a terminal state.
-Escalate only genuine human authority decisions.
+Do not stop at an intermediate success: continue through review, automatic cohesive
+remediation for code-fixable blockers, merge, closure, and cleanup unless the dispatcher
+named a genuine human-authority terminal state. Escalate only product/policy decisions,
+external operations or credentials, destructive authority, or exhausted bounded remediation.

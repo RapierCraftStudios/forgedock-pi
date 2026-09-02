@@ -91,12 +91,19 @@ PR_REMEDIATION_COMMENT=$(gh api repos/{GH_REPO}/issues/{PR_NUMBER}/comments \
 
 Gather everything that caused (or is still causing) `needs-human`:
 
-**M1a — Open review-finding issues spawned from this PR** (same title-match precedent as `review-pr.md` Phase 8B/9A):
+**M1a — Current-head blocker evidence on the existing PR/source issue**:
+
+Read the latest synthesized reviewer block, current-head official review, and blocker copy on the linked source issue. These are the primary remediation inputs for a work-on PR; blocking findings do not need child issues to be durable.
+
 ```bash
+PR_FINDINGS=$(gh api repos/{GH_REPO}/issues/{PR_NUMBER}/comments \
+  --jq '[.[] | select(.body | test("REVIEW-FINDINGS-SYNTHESIZED-START|REVIEW-AGENT"))] | .[-10:]')
 FINDINGS=$(gh issue list {GH_FLAG} --state open --label "review-finding" --limit 100 \
   --json number,title,body \
   --jq "[.[] | select(.title | test(\"PR #{PR_NUMBER}\"))]")
 ```
+
+Independent follow-up issues remain useful context but are not prerequisites for remediation.
 
 **M1b — PR review verdicts and merge-block reasons** (Phase 8 of `review-pr.md` records the exact block reason on the linked issue when it aborts auto-merge — read that trail rather than re-deriving it):
 ```bash
@@ -105,7 +112,7 @@ BLOCK_COMMENTS=$(gh api repos/{GH_REPO}/issues/{ISSUE_NUMBER}/comments \
 ```
 
 **Classify into FIXABLE vs. UNFIXABLE**:
-- **FIXABLE** — open `review-finding` issues (CONFIRMED/LIKELY code defects), a `VERDICT=CHANGES REQUESTED` block with concrete findings attached, a mergeability guard failure (`CONFLICTING`/`DIRTY`/`BLOCKED` — resolvable by rebasing onto `{PR_BASE}`), or a quality-gate/build failure.
+- **FIXABLE** — concrete code defects in the current-head synthesized review or source issue, open `review-finding` issues when present, a `VERDICT=CHANGES REQUESTED` block with concrete findings attached, a mergeability guard failure (`CONFLICTING`/`DIRTY`/`BLOCKED` — resolvable by rebasing onto `{PR_BASE}`), or a quality-gate/build failure.
 - **UNFIXABLE (policy escalation)** — `HAS_PURPOSE_REGRESSION=true` (the PR's behavior diverges from the issue's intent — a judgment call, not a code defect), `CALIBRATION_NEEDS_HUMAN=true` (statistical trust threshold), or `TRUST_NEEDS_HUMAN=true` (provenance `NOVEL_NEEDS_HUMAN` tier, insufficient prior data — a policy gate, not a bug). None of these are mechanically "fixable" by re-editing code.
 
 **If the block reason classifies as UNFIXABLE** (and no FIXABLE item accompanies it): do NOT attempt any fix. Skip directly to Phase M8 with verdict `UNFIXABLE`, re-affirm `needs-human` (it should already be present), and return `REMEDIATE_RESULT: status: UNFIXABLE`. This satisfies AC5 — "genuinely-blocked PRs still terminate at `needs-human`."
@@ -179,7 +186,7 @@ git push origin {HEAD_BRANCH}
 
 If push fails, retry with `--force-with-lease` (expected when M3 rebased to resolve a conflict). If it still fails: post a comment, add `needs-human`, EXIT `REMEDIATE_RESULT: status: BLOCKED`.
 
-**Close each addressed review-finding issue directly** (this remediation fixes findings in-place on the existing PR, rather than each finding spawning its own downstream `/work-on` pipeline — leaving them open would have a future run rediscover already-fixed code). Track the closed numbers in `ADDRESSED_FINDING_NUMBERS[]` — Phase M8 reports this array in the final paper trail:
+**Record every addressed blocker from the current-head review.** Work-on blockers normally have no child issue: keep their reviewer IDs/invariants in the remediation comment and let the scoped re-review verify them. If an older or independently published `review-finding` issue exists for an addressed blocker, close it directly after the remediation commit. Track only those actual issue numbers in `ADDRESSED_FINDING_NUMBERS[]` — Phase M8 reports this array in the final paper trail:
 ```bash
 ADDRESSED_FINDING_NUMBERS=()
 for FINDING_NUM in {FIXABLE_FINDING_NUMBERS_FROM_M1}; do

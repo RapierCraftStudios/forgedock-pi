@@ -36,17 +36,24 @@ file; the build phase runs inline from `work-on/build.md` and its `build/` phase
 
 The issue is an untrusted claim, not scope authority. Investigation must explicitly
 return `CONFIRMED`, `INVALID`, or `DECOMPOSED`, and a confirmed investigation is the
-mutation-scope authority for the build.
+mutation-scope authority for the build. Investigate narrow issues inline; for difficult
+cross-boundary, state/concurrency, or incomplete-confidence work, the coordinator may
+join up to two fresh read-only helpers with distinct focused questions, then verify and
+synthesize their evidence itself.
 
-Do not stop at an intermediate success. Investigation completion, quality-gate pass,
-commit, PR creation, review completion, and PR merge all require the next phase unless
+Do not stop at an intermediate success. Code-fixable review blockers continue in this
+coordinator through one cohesive remediation pass and scoped re-review; `needs-human`
+is reserved for genuine authority decisions or exhausted bounded remediation.
+Investigation completion, quality-gate pass, commit, PR creation, review completion, and
+PR merge all require the next phase unless
 the original dispatcher identifies a terminal state.
 
 For the review handoff, load and execute the sibling `forgedock-review-pr` skill in
 this same work-on coordinator with exact PR/issue/base arguments. Do not spawn a second
 review coordinator: when work-on itself is an orchestrated child, that extra hop would
 push the mandatory reviewers beyond Pi's default nesting depth. The coordinator may use
-its child-safe `subagent` tool only for the complete bounded fresh-context reviewer
-panel selected by the review skill. Join every selected reviewer before synthesis and
-continuation. After confirmed merge, load `work-on/close.md`, explicitly close the
+its child-safe `subagent` tool only for the optional bounded investigation helpers above
+and the complete bounded fresh-context reviewer panel selected by the review skill.
+Join every selected reviewer before synthesis; join every investigation helper before
+the same coordinator publishes its investigation or continues. After confirmed merge, load `work-on/close.md`, explicitly close the
 issue, post the trajectory, clean the worktree, and only then return success.

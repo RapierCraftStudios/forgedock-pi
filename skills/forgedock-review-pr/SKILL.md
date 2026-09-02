@@ -54,7 +54,10 @@ the fresh-context reviewer panel with Pi subagents and join every selected revie
 Reviewers start from the frozen diff but retain repository read/search access for
 evidence tracing.
 
-Create or deduplicate a GitHub issue for every finding before summary publication
-(via the packaged `forgedock-issue` skill). Post an official PR review tied to the
-frozen SHA. Merge only when `--auto-merge` was explicit and the original blocking
+For a PR owned by work-on, keep blocking findings on the existing PR and source issue
+for cohesive remediation; do not create recursive blocker issues. Create or deduplicate
+an issue through `forgedock-issue` only for valuable independent follow-up work that
+should outlive the PR, grouping one cohesive concern once. Standalone and staging review
+retain the original finding-publication contract. Post exactly one official review tied
+to the frozen SHA. Merge only when `--auto-merge` was explicit and the original blocking
 policy passes. Review never closes the linked issue or cleans the work-on tree.
