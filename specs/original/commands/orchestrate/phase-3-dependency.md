@@ -561,7 +561,7 @@ check_orchestrator_lease() {
   # live competing lease and defeat the entire point of this mechanism.
   local LAST_LEASE_EVENT
   LAST_LEASE_EVENT=$(gh api --paginate "repos/{GH_REPO}/issues/${COORD_NUM}/comments" \
-    --jq '[.[] | select(.body | contains("FORGE:LEASE"))] | last |
+    --jq '[.[] | select(((.body | split("\n")[0]) == "<!-- FORGE:LEASE -->") or ((.body | split("\n")[0]) == "<!-- FORGE:LEASE_RELEASED -->"))] | last |
           {body: .body, created_at: .created_at}' 2>/dev/null || echo "")
 
   if [ -z "$LAST_LEASE_EVENT" ] || [ "$LAST_LEASE_EVENT" = "null" ]; then
@@ -570,7 +570,7 @@ check_orchestrator_lease() {
   fi
 
   local LEASE_IS_RELEASE
-  LEASE_IS_RELEASE=$(echo "$LAST_LEASE_EVENT" | jq -r '.body | contains("FORGE:LEASE_RELEASED")' 2>/dev/null || echo "false")
+  LEASE_IS_RELEASE=$(echo "$LAST_LEASE_EVENT" | jq -r '.body | split("\n")[0] == "<!-- FORGE:LEASE_RELEASED -->"' 2>/dev/null || echo "false")
   if [ "$LEASE_IS_RELEASE" = "true" ]; then
     echo "free"
     return
@@ -1302,11 +1302,11 @@ read_active_claims() {
     | jq -c '
         flatten as $comments |
         [$comments[]
-         | select(.body | contains("<!-- FORGE:CLAIM -->"))
+         | select((.body | split("\n")[0]) == "<!-- FORGE:CLAIM -->")
          | . as $claim
          | ($claim.body | capture("\\*\\*Holder\\*\\*: #(?<holder>[0-9]+)").holder) as $holder
          | select([$comments[]
-                   | select(.body | contains("<!-- FORGE:CLAIM_RELEASED -->"))
+                   | select((.body | split("\n")[0]) == "<!-- FORGE:CLAIM_RELEASED -->")
                    | select((.body | capture("\\*\\*Holder\\*\\*: #(?<holder>[0-9]+)").holder) == $holder)
                    | select(.created_at > $claim.created_at)] | length == 0)
          | {holder: $holder,

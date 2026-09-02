@@ -372,7 +372,7 @@ test("work-on reuses managed orchestration context and closes scope before valid
       assert.ok(text.includes(runtimePath), runtimePath);
   }
   assert.match(adapter, /clean detached base worktree/);
-  assert.match(adapter, /item's `cwd` to the absolute base/);
+  assert.match(adapter, /issue item's\s+`cwd` to its\s+target base/);
   assert.match(adapter, /git merge --ff-only origin\/<target>/);
   assert.match(adapter, /origin\/<target>` to be an ancestor/);
   assert.match(adapter, /Technical conflicts.*not `needs-human`/s);
@@ -386,6 +386,62 @@ test("work-on reuses managed orchestration context and closes scope before valid
   assert.match(implement, /one short completion checklist/);
   assert.match(implement, /Before the first expensive validation run/);
   assert.match(implement, /revert unrelated formatting, generated files, or broad replacement churn/);
+});
+
+test("orchestrate cleanup mutates only current-batch ownership", async () => {
+  const cleanup = await readFile(
+    "specs/original/commands/orchestrate/phase-5-cleanup.md",
+    "utf8",
+  );
+  const dependency = await readFile(
+    "specs/original/commands/orchestrate/phase-3-dependency.md",
+    "utf8",
+  );
+  const execution = await readFile(
+    "specs/original/commands/orchestrate/phase-4-execution.md",
+    "utf8",
+  );
+  const safety = await readFile(
+    "specs/original/commands/orchestrate/safety.md",
+    "utf8",
+  );
+  const adapter = await readFile("specs/pi-adapter.md", "utf8");
+  const skill = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
+
+  assert.doesNotMatch(cleanup, /Skill\(skill="cleanup", args="all"\)/);
+  assert.doesNotMatch(cleanup, /gh issue list|git branch -r|git fetch --prune/);
+  assert.match(cleanup, /strictly batch-owned/);
+  assert.match(cleanup, /BATCH_BASE_WORKTREES/);
+  assert.match(cleanup, /ORCHESTRATOR_BASE_DIR/);
+  assert.doesNotMatch(cleanup, /FORGE:BATCH_BASES|ALL_BATCH_ISSUE_NUMBERS/);
+  assert.match(cleanup, /realpath -e -- "\$ORCHESTRATOR_BASE_DIR"/);
+  assert.match(cleanup, /symbolic-ref -q --short HEAD/);
+  assert.match(cleanup, /if ! BASE_STATUS=\$\(git -C "\$BASE_REAL" status --porcelain\)/);
+  assert.match(cleanup, /SKIP unverifiable base/);
+  assert.match(cleanup, /missing ownership means \*\*skip and report\*\*/i);
+  assert.match(cleanup, /read_active_claims\(\)/);
+  assert.match(cleanup, /COMMENTS=\$\(gh api/);
+  assert.match(cleanup, /\|\| return 1/);
+  assert.match(cleanup, /jq -er 'length'/);
+  assert.match(cleanup, /split\("\\n"\)\[0\]\) == "<!-- FORGE:CLAIM -->"/);
+  assert.match(cleanup, /split\("\\n"\)\[0\]\) == "<!-- FORGE:CLAIM_RELEASED -->"/);
+  assert.match(cleanup, /LEASE_RELEASED=/);
+  assert.match(cleanup, /split\("\\n"\)\[0\].*FORGE:LEASE_RELEASED/s);
+  assert.match(cleanup, /active ownership; leaving it open/);
+  for (const active of [dependency, execution]) {
+    assert.doesNotMatch(active, /contains\("<!-- FORGE:CLAIM(?:_RELEASED)? -->"\)/);
+    assert.match(active, /split\("\\n"\)\[0\].*FORGE:CLAIM/s);
+  }
+  assert.doesNotMatch(dependency, /contains\("FORGE:LEASE(?:_RELEASED)?"\)/);
+  assert.match(dependency, /split\("\\n"\)\[0\].*FORGE:LEASE/s);
+  assert.doesNotMatch(safety, /Never skip `\/cleanup all`/);
+  assert.match(safety, /batch-owned post-batch cleanup/);
+  assert.match(safety, /Recover mechanical failures/);
+  assert.match(adapter, /Cleanup ownership/);
+  assert.doesNotMatch(adapter, /FORGE:BATCH_BASES/);
+  assert.match(adapter, /never reconstruct deletion authority from public text/);
+  assert.match(adapter, /Never invoke `cleanup all`/);
+  assert.match(skill, /clean only\s+handoff-recorded batch identities/);
 });
 
 test("original corpus retains its tested upstream anchors", async () => {

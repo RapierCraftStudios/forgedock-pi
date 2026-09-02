@@ -82,11 +82,13 @@ a practical no-deadline value). Watchdog notices and explicit cancellation remai
 ### Canonical dispatch recipe (authoritative — do not improvise)
 
 Before launch, resolve each issue's configured PR target. Fetch every distinct target and
-create one clean detached base worktree at exact `origin/<target>` under the batch-owned
-orchestrator base directory. Verify each base's `HEAD` and clean status. Set every issue
-item's `cwd` to the absolute base for its target and `worktree: true`; Pi then creates the
-issue worktree from the correct commit. Remove only these batch-owned detached bases after
-all lanes using them are terminal.
+create one clean detached base worktree at exact `origin/<target>` under
+`ORCHESTRATOR_BASE_DIR`. Record every absolute path in the in-memory
+`BATCH_BASE_WORKTREES`, verify its `HEAD` and clean status, and set each issue item's
+`cwd` to its target base before `worktree: true`; Pi creates from the correct commit.
+After all users are terminal in the same uninterrupted session, remove only those exact
+bases. If ownership variables were lost to compaction/resume, skip removal and report the
+paths for later manual cleanup—never reconstruct deletion authority from public text.
 
 Build one visible promise graph from the confirmed issue DAG. Attach the same named
 `normalizeFailure` catch to every `runs.run` promise immediately so a failed child becomes
@@ -144,6 +146,14 @@ corpus. Never load the pi-subagents reference corpus to compose it. Consult orig
 phase files only for ambiguous selectors, cycles, or recovery
 not covered above. Investigation helper calls remain direct children; the one reviewer
 panel workflow described above is the coordinator's only nested workflow.
+
+## Cleanup ownership
+
+Work-on children own issue labels/closure and Pi owns child worktree/branch cleanup;
+Phase 5 never repairs either. It may remove only detached target bases still named by
+this uninterrupted session and close this batch's claims board after verified release.
+Never invoke `cleanup all` or infer mutation authority from searches/public comments.
+Unrelated stale state is advisory only; missing in-memory ownership means skip.
 
 ## Configuration
 
