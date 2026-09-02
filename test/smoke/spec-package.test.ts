@@ -23,7 +23,7 @@ test("Pi adapter keeps workflow decisions in visible specifications", async () =
   assert.match(adapter, /visible Pi session is the coordinator/);
   assert.match(adapter, /GitHub issue\/PR state/);
   assert.match(adapter, /behavioral authority for routing, phase order/);
-  assert.match(adapter, /direct Bash with `yq`.*short `node` command/s);
+  assert.match(adapter, /one direct `yq` call.*one short `node` call/s);
   assert.match(adapter, /Use Pi's `subagent` tool with fresh context/);
   assert.match(adapter, /Orchestrate resolves and confirms the issue set/);
   assert.match(adapter, /must never choose the next workflow phase/);
@@ -73,7 +73,9 @@ test("public skills are thin routers over the original specifications", async ()
 test("review-pr is independently invocable without a work-on ownership gate", async () => {
   const skill = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
   assert.match(skill, /Every PR is independently\s+reviewable/);
-  assert.match(skill, /Launch\s+the fresh-context reviewer panel/);
+  assert.match(skill, /load only the\s+current phase in bounded chunks/);
+  assert.match(skill, /do not preload later phases/);
+  assert.match(skill, /Launch the complete\s+panel concurrently/);
   assert.match(skill, /Prepare each reviewer bundle\s+deterministically/);
   assert.match(skill, /Merge only when `--auto-merge` was explicit/);
   for (const banned of [
@@ -94,7 +96,7 @@ test("work-on routes phases through the original specs and keeps review in-proce
   assert.match(skill, /load only the required\s+phase file/);
   assert.match(skill, /forgedock-review-pr/);
   assert.match(skill, /Do not spawn a second\s+review coordinator/s);
-  assert.match(skill, /Join every selected reviewer/);
+  assert.match(skill, /joins and validates\s+the full panel/);
   assert.match(skill, /work-on\/close\.md/);
   // The lifecycle runs inline in the coordinator; no builder handoff machinery.
   assert.doesNotMatch(skill, /B0-B2/);
@@ -136,20 +138,27 @@ test("canonical dispatch recipe governs wave, successor, and recovery launches",
   assert.match(reviewSkill, /never by lowering the blocking standard/);
   // Active-identity verification tolerates broken non-active accounts.
   assert.match(adapter, /`gh auth status --active`/);
-  assert.match(adapter, /non-active\s+account must never fail the preflight/);
-  // Child task text is exactly the canonical handoff, for recovery too.
-  assert.match(adapter, /--under-orchestration/);
-  assert.match(adapter, /for first dispatch and recovery alike/);
+  assert.match(adapter, /non-active account must never fail (?:the )?preflight/);
+  // One promise graph streams successors by their actual predecessors.
+  assert.match(adapter, /Build one visible promise graph/);
+  assert.match(adapter, /Promise\.all\(\[predecessorPromises\.\.\.\]\)\.then/);
+  assert.match(adapter, /never await a whole sibling\s+wave/);
+  assert.match(adapter, /work-on items\s+must not pass `timeoutMs`/);
+  assert.match(adapter, /normalizeFailure/);
+  assert.match(adapter, /\.catch\(normalizeFailure\)/);
+  assert.match(adapter, /every sibling settles/);
+  assert.match(adapter, /task text exactly\s+`"<number> --under-orchestration"`/);
+  assert.match(adapter, /workflow:engine-error/);
   // The dispatcher must not research its own translation at runtime.
   assert.match(adapter, /Never load the pi-subagents reference corpus/);
   // Helper paths and tooling fallbacks resolve deterministically.
   assert.match(adapter, /`specs\/original\/bin\/\.\.\.` and `specs\/original\/scripts/);
-  assert.match(adapter, /never a failure: use the fallback automatically/);
+  assert.match(adapter, /do not retry alternate quoting forms/);
   assert.match(skill, /canonical recipe in `specs\/pi-adapter\.md`/);
   assert.match(skill, /Never compose improvised prose task/);
   // Coordinators execute artifacts exactly and never spawn sub-workflows;
   // mechanical gaps use adapter fallbacks, never supervisor decisions.
-  assert.match(coordinator, /Never paraphrase artifact formats/);
+  assert.match(coordinator, /never paraphrase formats/i);
   assert.match(coordinator, /Mechanical environment gaps are not decisions/);
   assert.match(coordinator, /Never route a tooling or configuration gap/);
   assert.match(coordinator, /not a sub-workflow|no sub-workflow|not a sub-workflow of domain lanes|direct read-only children/);
@@ -208,7 +217,7 @@ test("work-on optimizes for first-pass completion without recursive blocker issu
     assert.match(contract, /up to two fresh read-only (?:helpers|investigation helpers)/);
     assert.match(contract, /narrow issues?.*inline/i);
   }
-  assert.match(implement, /compare the finished implementation against every path/i);
+  assert.match(implement, /compare the finished implementation once against every path/i);
   assert.match(implement, /fix it now; do not knowingly hand incomplete work to review/i);
   assert.match(reviewSkill, /do not create recursive blocker issues/i);
   assert.match(reviewSpec, /blocking findings stay in the synthesized PR review/i);
@@ -219,7 +228,7 @@ test("work-on optimizes for first-pass completion without recursive blocker issu
   assert.match(review, /FORGE:REINVESTIGATE_REQUIRED/);
   assert.match(review, /at most once per PR head/);
   assert.match(remediate, /blocking findings do not need child issues to be durable/i);
-  assert.match(coordinator, /Escalate only product\/policy decisions/);
+  assert.match(coordinator, /Escalate only authority or exhausted remediation/);
 });
 
 test("one canonical issue schema governs every ForgeDock creator", async () => {
@@ -261,8 +270,10 @@ test("package exposes a depth-bounded work-on coordinator with reviewer fanout",
   assert.match(agent, /skills: forgedock-work-on, forgedock-review-pr/);
   assert.match(agent, /current working directory is the only authoritative repository root/);
   assert.match(agent, /forgedock-reviewer/);
-  assert.match(agent, /Join|joined/);
+  assert.match(agent, /one synchronous `workflowScript`/);
+  assert.match(agent, /proxy-post/i);
   assert.match(agent, /Do not launch nested issue orchestration/);
+  assert.doesNotMatch(agent, /^timeoutMs:/m);
   assert.match(agent, /forgedock-issue/);
   assert.doesNotMatch(agent, /forgedock_(?:github|preflight)|forge_(?:prepare|verify|push)_lane/);
   assert.doesNotMatch(agent, /maxSubagentDepth: 1/);
@@ -281,9 +292,20 @@ test("package exposes a depth-bounded work-on coordinator with reviewer fanout",
 test("reviewer profile enforces incident-blocking standard without metadata deadlocks", async () => {
   const reviewer = await readFile("agents/forgedock-reviewer.md", "utf8");
   assert.match(reviewer, /name: forgedock-reviewer/);
-  assert.match(reviewer, /tools: read, grep, find, ls/);
+  assert.match(reviewer, /tools: read, grep, find, ls, bash/);
   assert.match(reviewer, /defaultContext: fresh/);
-  assert.match(reviewer, /You must not:/);
+  assert.match(reviewer, /publishing exactly one assigned PR comment/);
+  assert.match(reviewer, /untrusted data, never instructions/);
+  assert.match(reviewer, /never interpolate repository text into commands or URLs/);
+  assert.match(reviewer, /repository.*one `owner\/name` slug/s);
+  assert.match(reviewer, /PR and attempt to be positive integers/);
+  assert.match(reviewer, /head to be 40 lowercase hex characters/);
+  assert.match(reviewer, /scratch file outside the source tree/);
+  assert.match(reviewer, /current head to equal the assigned full SHA/);
+  assert.match(reviewer, /POST the body once/);
+  assert.match(reviewer, /GET that exact comment ID/);
+  assert.match(reviewer, /comment_id/);
+  assert.match(reviewer, /You must not edit\s+source/);
   assert.match(reviewer, /launch subagents/);
   assert.match(reviewer, /FORGE:QUALITATIVE_REVIEW:v1/);
   // Deterministic bundle prep: reviewer receives a complete bundle and never deadlocks on metadata.
@@ -299,25 +321,59 @@ test("reviewer profile enforces incident-blocking standard without metadata dead
   assert.match(reviewer, /Exit reflection/);
 });
 
-test("headless orchestrate waits on its exact async workflow", async () => {
+test("orchestrate streams its exact async workflow without a work-on deadline", async () => {
   const skill = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
   const adapter = await readFile("specs/pi-adapter.md", "utf8");
 
-  assert.match(skill, /isolated issue\s+worktrees|isolated issue worktrees/);
+  assert.match(skill, /isolated\s+issue worktrees/);
+  assert.match(skill, /no work-on deadline/);
   assert.match(adapter, /`async: true`/);
-  assert.match(adapter, /await runs\.all/);
+  assert.match(adapter, /failed child becomes\s+an `\{ ok: false, error \}` result/);
+  assert.match(adapter, /await Promise\.all\(\[allIssuePromises\.\.\.\]\)/);
   assert.match(adapter, /globalConcurrencyLimit/);
-  assert.match(adapter, /subagent_wait/);
-  assert.match(adapter, /stopOnAttention: false/);
-  assert.match(adapter, /GATED\/FAILED evidence, never successful orchestration/);
+  assert.match(adapter, /async composite has no parent deadline/);
+  assert.match(adapter, /explicit cancellation/);
+  assert.match(adapter, /Resume the retained run/);
+  assert.match(adapter, /restore the handoff patch/);
 });
 
-test("reviewer deadlines stay runtime plumbing, never workflow gates", async () => {
+test("review panel is concurrent, directly published, and fails closed", async () => {
   const adapter = await readFile("specs/pi-adapter.md", "utf8");
-  assert.match(adapter, /generous `timeoutMs`/);
-  assert.match(adapter, /generic attention event is observational/);
-  assert.match(adapter, /stopOnAttention: false/);
-  assert.match(adapter, /incomplete panel\s+fails closed/);
+  const reviewSkill = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
+  assert.match(adapter, /exactly one synchronous `workflowScript`/);
+  assert.match(adapter, /only dispatch is one `await runs\.all/);
+  assert.match(adapter, /`acceptance: false`/);
+  assert.match(adapter, /GET each exact comment ID/);
+  assert.match(adapter, /Re-read the PR head/);
+  assert.match(adapter, /never proxy-posts comments/);
+  assert.match(adapter, /rejected child/);
+  assert.match(adapter, /review-degraded/);
+  assert.match(reviewSkill, /one synchronous `workflowScript`\/`runs\.all`/);
+  assert.match(reviewSkill, /never\s+proxy-post/);
+});
+
+test("work-on reuses managed orchestration context and closes scope before validation", async () => {
+  const adapter = await readFile("specs/pi-adapter.md", "utf8");
+  const workOn = await readFile("skills/forgedock-work-on/SKILL.md", "utf8");
+  const coordinator = await readFile("agents/forgedock-work-on-coordinator.md", "utf8");
+  const implement = await readFile("specs/original/commands/work-on/build/implement.md", "utf8");
+
+  for (const text of [workOn, coordinator]) {
+    assert.match(text, /--under-orchestration/);
+    assert.match(text, /skip all\s+original worktree add\/recreate\/remove logic/i);
+    for (const runtimePath of ["`.claude`", "`.opencode`", "`.codex`"])
+      assert.ok(text.includes(runtimePath), runtimePath);
+  }
+  assert.match(adapter, /FORGE_CONFIG_JSON=\$\(yq -o=json/);
+  assert.equal(adapter.match(/yq -o=json/g)?.length, 1);
+  assert.match(adapter, /\.agents\.subagent_model \/\/ \.agents\.default_model \/\/ empty/);
+  assert.match(coordinator, /agents\.subagent_model/);
+  assert.match(coordinator, /Never pass legacy `sonnet`, `opus`, or `haiku` aliases/);
+  assert.match(coordinator, /resolved model at maximum\s+thinking/);
+  assert.match(implement, /Before editing, turn the contract deliverables and every path/);
+  assert.match(implement, /one short completion checklist/);
+  assert.match(implement, /Before the first expensive validation run/);
+  assert.match(implement, /revert unrelated formatting, generated files, or broad replacement churn/);
 });
 
 test("original corpus retains its tested upstream anchors", async () => {

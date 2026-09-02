@@ -22,7 +22,7 @@ const COORDINATOR_TOOLS = [
   "contact_supervisor",
   "subagent",
 ] as const;
-const REVIEWER_TOOLS = ["read", "grep", "find", "ls"] as const;
+const REVIEWER_TOOLS = ["read", "grep", "find", "ls", "bash"] as const;
 
 async function registerPackedProjectPackage(project: string): Promise<void> {
   await mkdir(`${project}/.pi`, { recursive: true });
@@ -143,7 +143,11 @@ test("packed coordinator, fresh reviewer, and bounded tools resolve from the pac
     ])
       assert.deepEqual(new Set(actual), new Set(REVIEWER_TOOLS));
     assert.equal(reviewerResult.contract.tools.configuredExtensions.length, 0);
-    for (const forbidden of ["bash", "edit", "write", "subagent"])
+    assert.equal(
+      reviewerResult.contract.tools.effectiveAllowlist.includes("bash"),
+      true,
+    );
+    for (const forbidden of ["edit", "write", "subagent"])
       assert.equal(
         reviewerResult.contract.tools.effectiveAllowlist.includes(forbidden),
         false,

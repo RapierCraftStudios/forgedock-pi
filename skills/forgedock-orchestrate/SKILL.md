@@ -43,11 +43,11 @@ overlap, database/migration serialization, and configured global files. Detect c
 and gate them visibly. Do not inspect or implement product code and never adjudicate
 issue validity or duplicates.
 
-For every ready issue, launch exactly one fresh `forgedock-work-on-coordinator` agent
-with the `forgedock-work-on` skill and `<issue> --under-orchestration`. Use bounded
-concurrency (`orchestration.max_concurrent` from `forge.yaml`) and isolated issue
-worktrees. Each child owns the complete issue lifecycle; orchestrate must not invent a
-second implementation/review path.
+Launch one fresh `forgedock-work-on-coordinator` per issue with task text exactly
+`<issue> --under-orchestration`. Use one async workflow promise graph: roots start
+together, and each dependent starts as soon as its own predecessor promises succeed —
+never after a whole sibling wave. Use bounded `orchestration.max_concurrent`, isolated
+issue worktrees, and no work-on deadline. Each child owns the complete lifecycle.
 
 The packaged coordinator is an explicit, depth-bounded fanout child: it may launch only
 the fresh read-only reviewers required by its review phase. Do not use the builtin
@@ -61,6 +61,7 @@ and reuse the identical first-dispatch shape. Never compose improvised prose tas
 texts for coordinators.
 
 Classify GitHub state as DONE, GATED, FAILED, or IN_PROGRESS. GATED is not FAILED.
-Dispatch successors immediately after successful predecessors complete. Do not poll.
-After the queue drains or reaches a documented paused state, execute mandatory cleanup
-and publish the consolidated report.
+Mechanical child failure is resumable: replace stale active labels with
+`workflow:engine-error`, record the run/handoff, and resume or canonically relaunch only
+non-terminal work. Do not poll or abandon a planned issue. After the queue drains or
+reaches a documented paused state, execute mandatory cleanup and publish the report.

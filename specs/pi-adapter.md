@@ -30,85 +30,119 @@ terminal conditions, review policy, GitHub artifacts, remediation, merge, and cl
 | Mandatory nested `Skill("test-gate", ...)` | Load the packaged `forgedock-test-gate` skill and require its `FORGE:TEST_GATE:RESULT=BLOCK\|PASS\|SKIP` marker. |
 | Any new public issue creation, including mandatory nested `Skill(skill="issue", ...)` | Load packaged `forgedock-issue` and execute `specs/original/commands/issue.md` as the sole global schema/create contract. |
 | Other nested `Skill(...)` references | Resolve the reference to the corresponding file under `specs/original/commands/` and load it directly in the visible coordinator. |
-| `Task(...)` or `Agent(...)` | Use Pi's `subagent` tool with fresh context. Join every dispatched child before synthesis. |
+| `Task(...)` or `Agent(...)` | Use Pi's `subagent` tool with fresh context. A selected review panel is one `workflowScript`/`runs.all` call, never parallel synchronous tool calls. Join every dispatched child before synthesis. |
 | Claude `Read`, `Grep`, `Glob`, `Bash` | Pi `read`, search/navigation tools, and `bash`. |
 | `$FORGE_HOME/commands/...` | `specs/original/commands/...` in this package. |
 | `$FORGE_HOME/bin/...` and `$FORGE_HOME/scripts/...` (including bare `bin/...` and `scripts/...` shorthand inside the specs) | `specs/original/bin/...` and `specs/original/scripts/...` in this package. Resolve against the package root, never the target repository root. |
-| `yq`-based config reads | Use direct Bash with `yq` when installed, or a short `node` command with the package's YAML dependency. Missing/malformed required configuration fails closed. A missing `yq` binary itself is never a failure: use the fallback automatically. |
+| `yq`-based config reads | Resolve required configuration once at route start with one direct `yq` call when installed, or one short `node` call using the package's YAML dependency. Retain those values through the route. Missing/malformed required configuration fails closed; do not retry alternate quoting forms. |
 | GitHub and Git operations | Use direct `gh` and `git` commands. Verify `gh auth status` and repository access, and run `gh auth setup-git` before noninteractive fetch/push. |
 | Missing optional helper script | Follow the prose fallback already described by the specification. Never use an unbounded filesystem search. |
-| Mechanical failure recovery | A mechanical failure (timeout, provider loss, gate mismatch, conflict) is automated `GATED`/`review-degraded` evidence with actionable detail. Reserve `needs-human` for a genuine human authority decision. |
+| Child model selection | On Pi, resolve one full model ID from `forge.yaml` `agents.subagent_model`, then `agents.default_model`. This overrides legacy model prose in the original specs. Never pass `sonnet`, `opus`, or `haiku` aliases; difficult-investigation helpers use maximum thinking and reviewers use the risk-calibrated suffix from the review skill. |
+| Mechanical failure recovery | A mechanical failure (provider loss, gate mismatch, conflict) is durable `workflow:engine-error` or `review-degraded` evidence with the run ID and handoff path, followed by resume/relaunch. Remove stale active-phase labels. Reserve `needs-human` for a genuine human authority decision. |
 
 ## Subagents
 
-Reviewers are read-only fresh-context children (the packaged `forgedock-reviewer`
-profile) launched directly by the coordinator that owns the review. They receive the
-frozen diff as a starting point and keep repository read/search access for evidence
-tracing; a complete panel must be joined before synthesis, and an incomplete panel
-fails closed as review-degraded evidence. Never substitute inline self-review for a
-required reviewer. Nested shapes stay within Pi's default nesting depth:
-`visible orchestrator → work-on coordinator → reviewers`.
+Reviewers are source-read-only fresh-context children using the packaged
+`forgedock-reviewer` profile. Their sole write authority is one assigned exact-head PR
+comment and its exact-ID readback. They never edit source, merge, close, label, create
+issues, or recurse. Give each task the prepared diff bundle, repository, PR, full frozen
+head SHA, domain, attempt, and persona guidance.
 
-Reviewer deadlines are Pi runtime plumbing, not workflow gates: give each reviewer a
-generous `timeoutMs` (the original one-hour reviewer budget is a good default) and make
-the parent join window strictly larger than the reviewer deadline, or omit it. Pi's
-generic attention event is observational, never a timeout — wait with
-`stopOnAttention: false` and do not steer, resume, or duplicate an active reviewer.
+Launch the complete selected panel with exactly one synchronous `workflowScript` whose
+only dispatch is one `await runs.all([...])`. Every item uses the resolved full Pi model,
+`context: "fresh"`, `acceptance: false`, and a stable role/attempt key. Never emit
+multiple synchronous `subagent` calls in one turn and never launch reviewers serially.
+The coordinator must require every ordered result to succeed and contain the expected
+identity plus a comment ID/URL, then GET each exact comment ID and verify its role marker,
+full head SHA, panel attempt, findings block, and integrity token. Re-read the PR head
+after all readbacks and discard the panel if it moved. Only one complete set from the
+same head and attempt may reach synthesis. The coordinator never proxy-posts comments.
+
+A transient provider failure increments the attempt and reruns a fresh complete panel at
+the same frozen head, up to the existing retry bound; earlier partial comments remain
+audit evidence but are never verdict input. A malformed result,
+rejected child, failed publication/readback, or exhausted transient retries records
+`review-degraded` evidence and stops without a verdict, remaining resumable rather than
+becoming `needs-human`. Never substitute inline self-review.
+
+Reviewer deadlines are runtime plumbing, not workflow gates: use the original generous
+reviewer deadline and a strictly larger panel join deadline. Pi attention notices are
+observational; do not steer, resume, or duplicate an active reviewer.
 
 ## Orchestrate dispatch mechanics
 
 Orchestrate resolves and confirms the issue set, then launches exactly one top-level
-`subagent` workflow with `async: true` whose `workflowScript` performs a single
-`await runs.all(...)` — one fresh packaged `forgedock-work-on-coordinator` item per
-ready issue, each with an isolated worktree. Pass `globalConcurrencyLimit` set to
-`orchestration.max_concurrent` from `forge.yaml`, and size `maxSubagentSpawnsPerRun`
-so every coordinator's reviewer panel fits. For run-to-completion execution, wait on
-the exact returned workflow run ID with `subagent_wait` and a generous `timeoutMs`
-rather than ending the parent turn; a wait timeout or failed terminal run is visible
-GATED/FAILED evidence, never successful orchestration.
+`subagent` workflow with `async: true`. Pass `globalConcurrencyLimit` from the resolved
+`orchestration.max_concurrent` and size `maxSubagentSpawnsPerRun` for all issue lanes and
+their reviewer panels. The async composite has no parent deadline, and work-on items
+must not pass `timeoutMs`; watchdog notices and explicit cancellation remain available.
 
 ### Canonical dispatch recipe (authoritative — do not improvise)
 
-All coordinator launches — initial wave, successor, and recovery relaunch — use the
-same shapes. Never load the pi-subagents reference corpus to compose a script; this
-recipe is the whole translation of the original Claude Code `Task()` dispatch.
+Build one visible promise graph from the confirmed issue DAG. Attach the same named
+`normalizeFailure` catch to every `runs.run` promise immediately so a failed child becomes
+an `{ ok: false, error }` result instead of rejecting the graph. For each dependent,
+create a named plain function that launches its canonical normalized `runs.run` only when
+all direct predecessor results are successful, and assign its promise with
+`Promise.all([predecessorPromises...]).then(namedLaunchFunction).catch(normalizeFailure)`.
+Finish with one `await Promise.all([allIssuePromises...])`; because failures are normalized,
+every sibling settles and every launched promise is observed. This starts a successor as
+soon as its own predecessors finish; never await a whole sibling wave or poll.
+The validated shape is:
 
-1. **Wave (two or more ready issues)** — one `subagent({ async: true, workflowScript,
-   globalConcurrencyLimit, maxSubagentSpawnsPerRun })` call. Inside the script, one
-   `await runs.all(ready.map((issue) => ({ key: \`work-on-\${issue.number}\`,
-   agent: "forgedock-work-on-coordinator", task: \`\${issue.number} --under-orchestration\`,
-   context: "fresh", worktree: true })))`, then return the ordered results.
-2. **Single issue** — either a bare `subagent({ agent, task, context: "fresh",
-   worktree: true })` call with **no** `globalConcurrencyLimit`/
-   `maxSubagentSpawnsPerRun` (those are valid only with `workflowScript`), or a
-   workflowScript wrapping one `runs.run`. Successor issues launch inside the
-   original workflowScript (sequential `runs.run` after a completed `runs.all` item)
-   rather than as ad-hoc top-level calls.
-3. **Child task text is always exactly** `"<issue number> --under-orchestration"` —
-   for first dispatch and recovery alike. Never compose prose task descriptions;
-   the coordinator rehydrates its state from GitHub, and improvised task text
-   produces off-spec coordinator behavior.
-4. **Recovery relaunch** — after verifying GitHub state (which lanes reached terminal
-   labels), relaunch only the non-terminal issues through shape 1 or 2 exactly as a
-   first dispatch. A workflow-level failure never fails lanes whose GitHub state is
-   terminal; report them DONE and relaunch the remainder.
-5. **Compact plans run entirely on this recipe.** A supported compact plan — literal
-   issue list, unambiguous eligibility, no cycles, standard fast-lane wave — dispatches
-   without loading the phase-4 corpus; consult the original phase files only for
-   genuinely ambiguous plans (non-literal inputs, deep-plan features) or recovery
-   beyond these shapes.
-6. **Do not launch nested workflows inside a coordinator task.** Investigation
-   research fanout is direct read-only children, not a sub-workflow of domain lanes.
+```js
+function normalizeFailure(error) { return { ok: false, error: String(error) }; }
+const a = runs.run("work-on-A", { agent: "forgedock-work-on-coordinator", task: "A --under-orchestration", context: "fresh", worktree: true }).catch(normalizeFailure);
+const b = runs.run("work-on-B", { agent: "forgedock-work-on-coordinator", task: "B --under-orchestration", context: "fresh", worktree: true }).catch(normalizeFailure);
+function launchC(predecessors) {
+  for (let i = 0; i < predecessors.length; i += 1)
+    if (!predecessors[i].ok) return { ok: false, skipped: true, reason: "predecessor failed" };
+  return runs.run("work-on-C", { agent: "forgedock-work-on-coordinator", task: "C --under-orchestration", context: "fresh", worktree: true }).catch(normalizeFailure);
+}
+const c = Promise.all([a]).then(launchC).catch(normalizeFailure);
+return await Promise.all([a, b, c]);
+```
+
+Generate the same named-function shape from the concrete confirmed DAG; `A`/`B` are
+independent roots and `C` depends only on `A`.
+
+Every issue launch uses a stable `work-on-<number>` key,
+`agent: "forgedock-work-on-coordinator"`, task text exactly
+`"<number> --under-orchestration"`, `context: "fresh"`, and `worktree: true`. A
+predecessor failure returns an explicit unlaunched-dependent result; it does not block
+unrelated promises. A single issue uses the same `runs.run` shape inside the workflow.
+
+After the workflow settles, reconcile each issue from GitHub. Terminal issues stay DONE.
+For each failed non-terminal lane, immediately replace stale active-phase labels with
+`workflow:engine-error`, post one durable recovery comment containing the run ID and
+handoff path. Resume the retained run only while its original worktree ownership remains
+valid; otherwise launch one replacement managed worktree, restore the handoff patch there,
+verify its diff, and continue with the identical canonical task. Never run two writers for
+the same issue. Recovery success re-enters normal label progression. Never report a
+workflow complete while a planned issue is merely abandoned.
+
+A supported compact plan runs entirely on this recipe without loading the large phase-4
+corpus. Never load the pi-subagents reference corpus to compose it. Consult original
+phase files only for ambiguous selectors, cycles, or recovery
+not covered above. Investigation helper calls remain direct children; the one reviewer
+panel workflow described above is the coordinator's only nested workflow.
 
 ## Configuration
 
-The original `forge.yaml` contract is authoritative. At the start of every visible or
-nested work-on/orchestrate/review route, read `forge.yaml` directly and verify the
-selected `gh` identity has repository access. Verify the **active** identity
-(`gh auth status --active`) and repository access; a stored-but-failing non-active
-account must never fail the preflight. Run `gh auth setup-git` before fetch or push.
-If configuration or authentication is missing, stop before GitHub writes or
-implementation.
+The original `forge.yaml` contract is authoritative. The outermost coordinator for a
+lane reads it once as JSON (`FORGE_CONFIG_JSON=$(yq -o=json '.'
+"${FORGE_CONFIG:-forge.yaml}")`) and derives repository, branches, paths, concurrency,
+and `SUBAGENT_MODEL` from that retained value with `jq`; nested skill routes inherit it.
+A standalone route performs the same one-time read. Model precedence is
+`.agents.subagent_model // .agents.default_model // empty`; an empty value or legacy
+`sonnet`/`opus`/`haiku` alias fails before child launch. Do not rerun equivalent `yq`
+snippets, reload a spec already loaded in the
+current phase, or refetch unchanged issue/history data. Refresh GitHub state only after
+this route writes it or receives a completion event.
+
+Verify the **active** identity (`gh auth status --active`) and repository access; a
+stored-but-failing non-active account must never fail preflight. Run `gh auth setup-git`
+before fetch or push. Missing configuration or authentication stops before writes.
 
 ## Safety leaves
 
