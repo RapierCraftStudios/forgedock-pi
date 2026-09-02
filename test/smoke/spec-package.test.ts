@@ -274,6 +274,7 @@ test("package exposes a depth-bounded work-on coordinator with reviewer fanout",
   assert.match(agent, /proxy-post/i);
   assert.match(agent, /Do not launch nested issue orchestration/);
   assert.doesNotMatch(agent, /^timeoutMs:/m);
+  assert.match(agent, /^toolTimeoutMs: 3900000$/m);
   assert.match(agent, /forgedock-issue/);
   assert.doesNotMatch(agent, /forgedock_(?:github|preflight)|forge_(?:prepare|verify|push)_lane/);
   assert.doesNotMatch(agent, /maxSubagentDepth: 1/);
@@ -342,6 +343,7 @@ test("review panel is concurrent, directly published, and fails closed", async (
   const reviewSkill = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
   assert.match(adapter, /exactly one synchronous `workflowScript`/);
   assert.match(adapter, /only dispatch is one `await runs\.all/);
+  assert.match(adapter, /strictly larger panel join deadline/);
   assert.match(adapter, /`acceptance: false`/);
   assert.match(adapter, /GET each exact comment ID/);
   assert.match(adapter, /Re-read the PR head/);

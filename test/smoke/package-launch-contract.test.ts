@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import test from "node:test";
 
@@ -76,6 +76,13 @@ test("packed coordinator, fresh reviewer, and bounded tools resolve from the pac
     );
 
     await registerPackedProjectPackage(project);
+
+    const packedCoordinator = await readFile(
+      `${project}/node_modules/forgedock-pi/agents/forgedock-work-on-coordinator.md`,
+      "utf8",
+    );
+    assert.doesNotMatch(packedCoordinator, /^timeoutMs:/m);
+    assert.match(packedCoordinator, /^toolTimeoutMs: 3900000$/m);
 
     const ceiling: ResolvedSubagentCapabilityCeiling = {
       version: SUBAGENT_CAPABILITY_CEILING_VERSION,

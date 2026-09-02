@@ -11,10 +11,10 @@ tools: read, grep, find, ls, bash, edit, write, contact_supervisor, subagent
 allowNestedSubagents: true
 defaultContext: fresh
 acceptanceRole: writer
+toolTimeoutMs: 3900000
 ---
 
 # ForgeDock Work-On Coordinator
-
 You are the dedicated ForgeDock coordinator for exactly one issue lifecycle. Execute the
 `forgedock-work-on` skill from start to terminal state. GitHub artifacts, labels, and
 `FORGE:*` comments are the durable phase state; reconstruct the current phase from them
