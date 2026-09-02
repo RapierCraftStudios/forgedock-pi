@@ -74,10 +74,19 @@ observational; do not steer, resume, or duplicate an active reviewer.
 Orchestrate resolves and confirms the issue set, then launches exactly one top-level
 `subagent` workflow with `async: true`. Pass `globalConcurrencyLimit` from the resolved
 `orchestration.max_concurrent` and size `maxSubagentSpawnsPerRun` for all issue lanes and
-their reviewer panels. The async composite has no parent deadline, and work-on items
-must not pass `timeoutMs`; watchdog notices and explicit cancellation remain available.
+their reviewer panels. The async composite has no parent deadline, but Pi gives each
+workflow child a 30-minute default when `timeoutMs` is omitted. Set every complete
+work-on item and its packaged profile to `timeoutMs: 2147483647` (Pi's supported maximum,
+a practical no-deadline value). Watchdog notices and explicit cancellation remain.
 
 ### Canonical dispatch recipe (authoritative — do not improvise)
+
+Before launch, resolve each issue's configured PR target. Fetch every distinct target and
+create one clean detached base worktree at exact `origin/<target>` under the batch-owned
+orchestrator base directory. Verify each base's `HEAD` and clean status. Set every issue
+item's `cwd` to the absolute base for its target and `worktree: true`; Pi then creates the
+issue worktree from the correct commit. Remove only these batch-owned detached bases after
+all lanes using them are terminal.
 
 Build one visible promise graph from the confirmed issue DAG. Attach the same named
 `normalizeFailure` catch to every `runs.run` promise immediately so a failed child becomes
@@ -92,12 +101,12 @@ The validated shape is:
 
 ```js
 function normalizeFailure(error) { return { ok: false, error: String(error) }; }
-const a = runs.run("work-on-A", { agent: "forgedock-work-on-coordinator", task: "A --under-orchestration", context: "fresh", worktree: true }).catch(normalizeFailure);
-const b = runs.run("work-on-B", { agent: "forgedock-work-on-coordinator", task: "B --under-orchestration", context: "fresh", worktree: true }).catch(normalizeFailure);
+const a = runs.run("work-on-A", { agent: "forgedock-work-on-coordinator", task: "A --under-orchestration", context: "fresh", cwd: "/absolute/base-for-A-target", worktree: true, timeoutMs: 2147483647 }).catch(normalizeFailure);
+const b = runs.run("work-on-B", { agent: "forgedock-work-on-coordinator", task: "B --under-orchestration", context: "fresh", cwd: "/absolute/base-for-B-target", worktree: true, timeoutMs: 2147483647 }).catch(normalizeFailure);
 function launchC(predecessors) {
   for (let i = 0; i < predecessors.length; i += 1)
     if (!predecessors[i].ok) return { ok: false, skipped: true, reason: "predecessor failed" };
-  return runs.run("work-on-C", { agent: "forgedock-work-on-coordinator", task: "C --under-orchestration", context: "fresh", worktree: true }).catch(normalizeFailure);
+  return runs.run("work-on-C", { agent: "forgedock-work-on-coordinator", task: "C --under-orchestration", context: "fresh", cwd: "/absolute/base-for-C-target", worktree: true, timeoutMs: 2147483647 }).catch(normalizeFailure);
 }
 const c = Promise.all([a]).then(launchC).catch(normalizeFailure);
 return await Promise.all([a, b, c]);
@@ -108,9 +117,18 @@ independent roots and `C` depends only on `A`.
 
 Every issue launch uses a stable `work-on-<number>` key,
 `agent: "forgedock-work-on-coordinator"`, task text exactly
-`"<number> --under-orchestration"`, `context: "fresh"`, and `worktree: true`. A
-predecessor failure returns an explicit unlaunched-dependent result; it does not block
-unrelated promises. A single issue uses the same `runs.run` shape inside the workflow.
+`"<number> --under-orchestration"`, `context: "fresh"`, `worktree: true`, and
+`timeoutMs: 2147483647`. A predecessor failure returns an explicit unlaunched-dependent
+result; it does not block unrelated promises. A single issue uses the same shape.
+
+Before its first source edit, every orchestrated coordinator verifies that `$PWD` is a
+clean linked worktree on a `pi-parallel-*` branch, fetches the configured target, and runs
+`git merge --ff-only origin/<target>`. It then requires `origin/<target>` to be an ancestor
+of `HEAD`. Never reset a checkout. If any guard fails before mutation, return mechanical
+`workflow:engine-error` evidence for canonical relaunch from the correct base. If the
+target moves after mutation, reconcile the issue patch in the same owned worktree—or one
+replacement from its handoff—and rerun verification/review. Technical conflicts and
+already-applied sibling hunks are not `needs-human`.
 
 After the workflow settles, reconcile each issue from GitHub. Terminal issues stay DONE.
 For each failed non-terminal lane, immediately replace stale active-phase labels with

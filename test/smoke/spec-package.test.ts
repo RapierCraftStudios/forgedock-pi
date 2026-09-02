@@ -143,7 +143,8 @@ test("canonical dispatch recipe governs wave, successor, and recovery launches",
   assert.match(adapter, /Build one visible promise graph/);
   assert.match(adapter, /Promise\.all\(\[predecessorPromises\.\.\.\]\)\.then/);
   assert.match(adapter, /never await a whole sibling\s+wave/);
-  assert.match(adapter, /work-on items\s+must not pass `timeoutMs`/);
+  assert.match(adapter, /30-minute default when `timeoutMs` is omitted/);
+  assert.match(adapter, /timeoutMs: 2147483647/);
   assert.match(adapter, /normalizeFailure/);
   assert.match(adapter, /\.catch\(normalizeFailure\)/);
   assert.match(adapter, /every sibling settles/);
@@ -159,8 +160,8 @@ test("canonical dispatch recipe governs wave, successor, and recovery launches",
   // Coordinators execute artifacts exactly and never spawn sub-workflows;
   // mechanical gaps use adapter fallbacks, never supervisor decisions.
   assert.match(coordinator, /never paraphrase formats/i);
-  assert.match(coordinator, /Mechanical environment gaps are not decisions/);
-  assert.match(coordinator, /Never route a tooling or configuration gap/);
+  assert.match(coordinator, /Mechanical gaps are not decisions/);
+  assert.match(coordinator, /never route configuration, ancestry, or code conflicts/);
   assert.match(coordinator, /not a sub-workflow|no sub-workflow|not a sub-workflow of domain lanes|direct read-only children/);
 });
 
@@ -273,7 +274,7 @@ test("package exposes a depth-bounded work-on coordinator with reviewer fanout",
   assert.match(agent, /one synchronous `workflowScript`/);
   assert.match(agent, /proxy-post/i);
   assert.match(agent, /Do not launch nested issue orchestration/);
-  assert.doesNotMatch(agent, /^timeoutMs:/m);
+  assert.match(agent, /^timeoutMs: 2147483647$/m);
   assert.match(agent, /^toolTimeoutMs: 3900000$/m);
   assert.match(agent, /forgedock-issue/);
   assert.doesNotMatch(agent, /forgedock_(?:github|preflight)|forge_(?:prepare|verify|push)_lane/);
@@ -322,12 +323,12 @@ test("reviewer profile enforces incident-blocking standard without metadata dead
   assert.match(reviewer, /Exit reflection/);
 });
 
-test("orchestrate streams its exact async workflow without a work-on deadline", async () => {
+test("orchestrate streams its async workflow without the short child default", async () => {
   const skill = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
   const adapter = await readFile("specs/pi-adapter.md", "utf8");
 
   assert.match(skill, /isolated\s+issue worktrees/);
-  assert.match(skill, /no work-on deadline/);
+  assert.match(skill, /maximum supported runtime as a practical\s+no-deadline value/);
   assert.match(adapter, /`async: true`/);
   assert.match(adapter, /failed child becomes\s+an `\{ ok: false, error \}` result/);
   assert.match(adapter, /await Promise\.all\(\[allIssuePromises\.\.\.\]\)/);
@@ -362,10 +363,19 @@ test("work-on reuses managed orchestration context and closes scope before valid
 
   for (const text of [workOn, coordinator]) {
     assert.match(text, /--under-orchestration/);
-    assert.match(text, /skip all\s+original worktree add\/recreate\/remove logic/i);
+    assert.match(text, /configured PR\s+target/);
+    assert.match(text, /clean linked worktree/);
+    assert.match(text, /`pi-parallel-\*` branch/);
+    assert.match(text, /exact `origin\/<target>`/);
+    assert.match(text, /never reset a checkout/i);
     for (const runtimePath of ["`.claude`", "`.opencode`", "`.codex`"])
       assert.ok(text.includes(runtimePath), runtimePath);
   }
+  assert.match(adapter, /clean detached base worktree/);
+  assert.match(adapter, /item's `cwd` to the absolute base/);
+  assert.match(adapter, /git merge --ff-only origin\/<target>/);
+  assert.match(adapter, /origin\/<target>` to be an ancestor/);
+  assert.match(adapter, /Technical conflicts.*not `needs-human`/s);
   assert.match(adapter, /FORGE_CONFIG_JSON=\$\(yq -o=json/);
   assert.equal(adapter.match(/yq -o=json/g)?.length, 1);
   assert.match(adapter, /\.agents\.subagent_model \/\/ \.agents\.default_model \/\/ empty/);

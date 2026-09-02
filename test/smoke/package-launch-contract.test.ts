@@ -81,7 +81,7 @@ test("packed coordinator, fresh reviewer, and bounded tools resolve from the pac
       `${project}/node_modules/forgedock-pi/agents/forgedock-work-on-coordinator.md`,
       "utf8",
     );
-    assert.doesNotMatch(packedCoordinator, /^timeoutMs:/m);
+    assert.match(packedCoordinator, /^timeoutMs: 2147483647$/m);
     assert.match(packedCoordinator, /^toolTimeoutMs: 3900000$/m);
 
     const ceiling: ResolvedSubagentCapabilityCeiling = {
