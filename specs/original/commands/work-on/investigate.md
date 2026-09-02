@@ -364,8 +364,9 @@ bash {REPO_PATH}/scripts/code-index.sh query --domain {DOMAIN_LABEL} --repo-path
    ```
    Any hit here is a candidate prior fix or reintroduced defect — read the commit body (`git show {hash}`) to confirm before citing it. Feed confirmed hits into the History findings field and let them inform the verdict (e.g. a defect being reintroduced raises severity).
 6. **Determine root cause** — what's actually broken or missing?
-7. **Identify affected files** — full list of files that need changes
-8. **Fix-approach validation** — if the issue proposes a fix, don't adopt it as spec. Trace through the target system's middleware, auth, routing, config. Cross-domain: if fix in domain A interacts with domain B, read domain B's files too.
+7. **Same-Behavior Check** — before finalizing affected files, follow the specific broken value, state, or decision from where it enters the system to where it produces its final effect. Search the actual repository for other relevant callers, readers, writers, serializers, shortcuts, or sibling paths that handle the same behavior. Include any path that must change for the fix to be complete, or record source evidence that it is already safe. Do not inspect unrelated code; stop when the production-reachable paths for this specific behavior are accounted for.
+8. **Identify affected files** — full list of files that need changes, including any added by the Same-Behavior Check
+9. **Fix-approach validation** — if the issue proposes a fix, don't adopt it as spec. Trace through the target system's middleware, auth, routing, config. Cross-domain: if fix in domain A interacts with domain B, read domain B's files too.
 
 ---
 
@@ -434,8 +435,14 @@ gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:INVESTIGATOR -->
 ### Root Cause
 {specific root cause, with file:line references where applicable}
 
+### Same-Behavior Check
+**Behavior followed**: {the specific value, state, or decision traced from entry to final effect}
+**Other relevant paths checked**:
+- `{path or symbol}` — {must change, or already safe with source evidence}
+**Scope result**: {additional affected files found, or "No additional affected paths"}
+
 ### Affected Files
-{numbered list of files that need changes}
+{numbered list of files that need changes, including any added by the Same-Behavior Check}
 
 ### Production Execution Seam (MANDATORY)
 **Observable effect**: {runtime/provider/persistence/API/CLI behavior, or prompt/spec behavior}
