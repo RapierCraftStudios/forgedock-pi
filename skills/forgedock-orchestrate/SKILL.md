@@ -65,5 +65,5 @@ Classify GitHub state as DONE, GATED, FAILED, or IN_PROGRESS. GATED is not FAILE
 Mechanical child failure is resumable: replace stale active labels with
 `workflow:engine-error`, record the run/handoff, and resume or canonically relaunch only
 non-terminal work. Wrong ancestry or target movement is technical remediation, never a
-human-authority gate. Do not poll or abandon a planned issue. After the queue drains or
-reaches a documented paused state, execute mandatory cleanup and publish the report.
+human-authority gate. Do not poll or abandon a planned issue. After drain, clean only
+handoff-recorded batch identities; never mutate historical matches. Report them only.

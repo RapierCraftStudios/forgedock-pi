@@ -712,11 +712,11 @@ read_active_claims() {
     | jq -c '
         flatten as $comments |
         [$comments[]
-         | select(.body | contains("<!-- FORGE:CLAIM -->"))
+         | select((.body | split("\n")[0]) == "<!-- FORGE:CLAIM -->")
          | . as $claim
          | ($claim.body | capture("\\*\\*Holder\\*\\*: #(?<holder>[0-9]+)").holder) as $holder
          | select([$comments[]
-                   | select(.body | contains("<!-- FORGE:CLAIM_RELEASED -->"))
+                   | select((.body | split("\n")[0]) == "<!-- FORGE:CLAIM_RELEASED -->")
                    | select((.body | capture("\\*\\*Holder\\*\\*: #(?<holder>[0-9]+)").holder) == $holder)
                    | select(.created_at > $claim.created_at)] | length == 0)
          | {holder: $holder,
