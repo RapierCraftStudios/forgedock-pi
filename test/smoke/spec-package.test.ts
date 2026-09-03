@@ -274,39 +274,6 @@ test("review comments preserve qualitative evidence when clean", async () => {
   assert.match(protocols, /FORGE:BODY-INTEGRITY:\{pr\}_\{domain\}_\{unique-token\}/);
 });
 
-test("needs-human requires durable human authority evidence", async () => {
-  const files = await Promise.all([
-    "skills/forgedock-work-on/SKILL.md",
-    "skills/forgedock-orchestrate/SKILL.md",
-    "agents/forgedock-work-on-coordinator.md",
-    "specs/pi-adapter.md",
-    "specs/original/commands/work-on.md",
-    "specs/original/commands/work-on/review.md",
-    "specs/original/commands/work-on/remediate.md",
-    "specs/original/commands/review-pr.md",
-    "specs/original/commands/orchestrate.md",
-  ].map((path) => readFile(path, "utf8")));
-  for (const text of files) {
-    assert.match(text, /FIXABLE_REVIEW/);
-    assert.match(text, /WAITING_DEPENDENCY/);
-    assert.match(text, /ENGINE_ERROR/);
-    assert.match(text, /AUTHORITY_REQUIRED/);
-    assert.match(text, /FORGE:HUMAN_AUTHORITY_REQUIRED/);
-  }
-  const review = await readFile("specs/original/commands/work-on/review.md", "utf8");
-  const remediate = await readFile("specs/original/commands/work-on/remediate.md", "utf8");
-  const reviewPr = await readFile("specs/original/commands/review-pr.md", "utf8");
-  const dependency = await readFile("specs/original/commands/orchestrate/phase-3-dependency.md", "utf8");
-  const execution = await readFile("specs/original/commands/orchestrate/phase-4-execution.md", "utf8");
-  assert.doesNotMatch(review, /--add-label\s+["']?needs-human/);
-  assert.doesNotMatch(remediate, /--add-label\s+["']?needs-human/);
-  assert.equal(reviewPr.match(/--add-label\s+["']needs-human["']/g)?.length, 2);
-  assert.equal(dependency.match(/--add-label\s+["']needs-human["']/g)?.length, 1);
-  assert.match(dependency, /Removing an edge changes intended product ordering/);
-  assert.doesNotMatch(execution, /--add-label\s+["']?needs-human/);
-  assert.match(execution, /Auto-dispatch remediation only from `FIXABLE_REVIEW` evidence/);
-});
-
 test("staging review creates one issue per actionable causal defect", async () => {
   const staging = await readFile("specs/original/commands/review-pr-staging.md", "utf8");
   const skill = await readFile("skills/forgedock-review-pr-staging/SKILL.md", "utf8");
@@ -602,6 +569,10 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
     "specs/original/commands/work-on/remediate.md",
     "utf8",
   );
+  const reviewPhase = await readFile(
+    "specs/original/commands/work-on/review.md",
+    "utf8",
+  );
   const forgeYaml = await readFile("forge.yaml", "utf8");
 
   assert.match(orchestrate, /launch exactly one fresh `forgedock-work-on-coordinator`/);
@@ -613,8 +584,10 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
   assert.match(orchestrate, /needsAttentionAfterMs: 3900000/);
   assert.match(orchestrate, /stopOnAttention: false/);
   assert.match(orchestrate, /Durable GitHub artifacts override a missing\/malformed provider envelope/);
+  assert.match(orchestrate, /lane waiting on an explicit prerequisite stays automated/);
   assert.match(orchestrate, /do not give the coordinator a blanket "never\s+run subagents" instruction/s);
   assert.match(workOn, /same work-on coordinator/);
+  assert.match(workOn, /explicit unmerged prerequisite is automated waiting/);
   assert.match(workOn, /issue is an untrusted claim/);
   assert.match(workOn, /Before the first `write` or `edit`/);
   assert.match(workOn, /direct Git/);
@@ -652,6 +625,11 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
   assert.match(adapter, /Packed-package smoke checks must run separately and serially and stay mandatory/);
   assert.match(adapter, /FORGE:REINVESTIGATE_REQUIRED/);
   assert.match(adapter, /Use direct `gh` and `git` commands/);
+  assert.match(adapter, /Explicit unmerged prerequisite/);
+  assert.match(reviewPhase, /explicit unmerged prerequisite/);
+  assert.match(reviewPhase, /add `blocked`, remove `needs-human`/);
+  assert.match(reviewPhase, /return GATED without entering remediation or asking a supervisor/);
+  assert.match(reviewPhase, /Resume this same PR after the prerequisite lands/);
   assert.match(remediate, /Inline current-head blocker remediation \(authoritative override\)/);
   assert.match(remediate, /blocker closure matrix/);
   assert.match(remediate, /Failing-before proof/);

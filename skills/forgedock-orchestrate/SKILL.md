@@ -97,7 +97,7 @@ markers from the coordination issue. If active claims overlap, serialize before 
 writer mutates shared paths: the lower issue number proceeds and the other remains
 deferred until the predecessor reaches terminal success and refreshes its base.
 
-Classify GitHub state as DONE, GATED, FAILED, or IN_PROGRESS. GATED is not FAILED. Never infer authority from a bare `needs-human`: remediate `FIXABLE_REVIEW`, wake `WAITING_DEPENDENCY`, recover `ENGINE_ERROR`, and retain only proven `AUTHORITY_REQUIRED` with exact-ID-read-back `FORGE:HUMAN_AUTHORITY_REQUIRED` evidence.
+Classify GitHub state as DONE, GATED, FAILED, or IN_PROGRESS. GATED is not FAILED. A lane waiting on an explicit prerequisite stays automated: retain its `blocked`/`FORGE:GATED` resume condition and resume work-on when that exact merge/event occurs.
 Durable GitHub artifacts override a missing/malformed provider envelope. Dispatch
 successors immediately after successful predecessors complete. Do not poll. After the
 queue drains or reaches a documented paused state, execute mandatory cleanup. Do not

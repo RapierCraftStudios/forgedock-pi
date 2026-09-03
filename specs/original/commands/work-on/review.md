@@ -76,14 +76,13 @@ if [ -n "$LAST_VERDICT_SHA" ] && [ "$LAST_VERDICT_SHA" = "$CURRENT_SHA_SHORT" ];
 
 PR #{PR_NUMBER}'s HEAD (${CURRENT_SHA_SHORT}) has not changed since the last CHANGES REQUESTED verdict. Re-running /review-pr would re-review byte-identical code and reproduce the same verdict — this is a pure waste of a full domain-agent fan-out.
 
-The PR has a current-head `FIXABLE_REVIEW` block. Progress depends on inline remediation (fix, push a new commit, re-review), not another raw review submission or a human label. Under orchestration, item 6.4 dispatches from this block class; standalone work-on continues in the same coordinator.
+The PR is already needs-human (or will be shortly, if this is the first time this guard has fired for it). Progress here now depends on remediation (fix the findings, push a new commit, re-review) rather than another raw review submission. If running under /orchestrate, item 6.4 in phase-4-execution.md auto-dispatches remediation for any needs-human-gated issue, including this one (see forge#2243) — no manual action should be needed. If running standalone, invoke /work-on {PR_NUMBER} --remediate --issue {NUMBER} directly.
 
 <!-- FORGE:REREVIEW_SKIPPED -->
-<!-- FORGE:BLOCK_CLASS:FIXABLE_REVIEW -->
 SKIP_EOF
 )
   gh issue comment {NUMBER} {GH_FLAG} --body "$REREVIEW_SKIP_BODY" # <!-- allowlist:check-command-side-effects -->
-  gh issue edit {NUMBER} {GH_FLAG} --add-label workflow:in-review --remove-label needs-human 2>/dev/null || true # <!-- allowlist:check-command-side-effects -->
+  gh issue edit {NUMBER} {GH_FLAG} --add-label needs-human 2>/dev/null || true # <!-- allowlist:check-command-side-effects -->
   # Return REVIEW_RESULT: status: BLOCKED — do not invoke /review-pr again on unchanged HEAD
   exit 1
 fi
@@ -113,11 +112,10 @@ Branch \`{BRANCH}\` contains merge commits from branches outside the PR base (\`
 ${MERGE_COMMITS}
 \`\`\`
 
-Do NOT push this branch. Preserve it for automated ancestry reconciliation or a clean replacement lane.
+Do NOT push this branch. Human review required to identify the source of the merge commits and clean the branch history (e.g. via \`git rebase\` to replay only the intended commits onto \`origin/{PR_BASE}\`).
 
-<!-- FORGE:PUSH_BLOCKED -->
-<!-- FORGE:BLOCK_CLASS:ENGINE_ERROR -->"
-    gh issue edit {NUMBER} {GH_FLAG} --add-label "workflow:engine-error" --remove-label "needs-human,workflow:in-review"
+<!-- FORGE:PUSH_BLOCKED -->"
+    gh issue edit {NUMBER} {GH_FLAG} --add-label "needs-human"
     # Return REVIEW_RESULT: status: BLOCKED — do not push
     exit 1
   fi
@@ -141,9 +139,8 @@ Branch \`{BRANCH}\` has 0 commits ahead of \`origin/{PR_BASE}\`. Pushing this br
 
 **Resolution**: Delete this branch, re-run \`/work-on {NUMBER}\` to restart the build phase. The partial FORGE:BUILDER comment (lacking \`FORGE:BUILDER:COMPLETE\`) will be detected and deleted, and the build will restart cleanly.
 
-<!-- FORGE:PUSH_BLOCKED_EMPTY_BRANCH -->
-<!-- FORGE:BLOCK_CLASS:ENGINE_ERROR -->"
-  gh issue edit {NUMBER} {GH_FLAG} --add-label "workflow:engine-error" --remove-label "needs-human,workflow:in-review"
+<!-- FORGE:PUSH_BLOCKED_EMPTY_BRANCH -->"
+  gh issue edit {NUMBER} {GH_FLAG} --add-label "needs-human"
   exit 1
 fi
 echo "Commit count ahead of origin/{PR_BASE}: $COMMIT_COUNT — OK to push"
@@ -169,12 +166,11 @@ Branch \`{BRANCH}\` could not be pushed to origin.
 
 **Error**: {ERROR_OUTPUT}
 
-This may indicate a merge conflict, remote rejection, or transient authentication failure. Preserve a resumable handoff.
+This may indicate a merge conflict or remote rejection. Human review required.
 
-<!-- FORGE:PUSH_FAILED -->
-<!-- FORGE:BLOCK_CLASS:ENGINE_ERROR -->"
+<!-- FORGE:PUSH_FAILED -->"
 
-gh issue edit {NUMBER} {GH_FLAG} --add-label "workflow:engine-error" --remove-label "needs-human,workflow:in-review"
+gh issue edit {NUMBER} {GH_FLAG} --add-label "needs-human"
 ```
 Return `REVIEW_RESULT: status: BLOCKED`, blocker: "git push failed".
 
@@ -309,7 +305,7 @@ else:
 
 Wait for that task's completed result before Phase R4. Propagate its `REVIEW_RESULT` as this module's child state; do not return `REVIEW_RESULT`, report progress, release an orchestrator slot, or begin close work while the child is running. If the child errors or returns no parseable `REVIEW_RESULT`, return `REVIEW_RESULT: status: BLOCKED` with the child failure as the blocker. The normal `Skill(...)` invocation above remains the non-OpenCode path.
 
-/review-pr handles the full panel and guarded merge. Before any terminal label, classify the result. Current-head code findings are `FIXABLE_REVIEW` and enter inline remediation. An identified unmerged issue/PR/ref is `WAITING_DEPENDENCY`: add `blocked`, remove `needs-human`/active labels, post `FORGE:GATED` with the exact prerequisite and automatic wake condition, return GATED, and do not ask a supervisor whether to wait. Provider/tool/push/merge mechanics are `ENGINE_ERROR`. Only proven `AUTHORITY_REQUIRED` evidence may add `needs-human`, after exact-ID readback of `FORGE:HUMAN_AUTHORITY_REQUIRED` with the required human decision/action and authority holder.
+/review-pr handles the full panel and guarded merge. If its blocker is an explicit unmerged prerequisite, add `blocked`, remove `needs-human` and active workflow labels, post `<!-- FORGE:GATED -->` naming the exact prerequisite and merge/event resume condition, and return GATED without entering remediation or asking a supervisor whether to wait. Resume this same PR after the prerequisite lands, reconcile the target, rerun verification, and obtain a fresh exact-head review.
 
 ---
 

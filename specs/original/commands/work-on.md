@@ -27,8 +27,6 @@ Orchestrator for the full issue lifecycle: investigate → decompose (if needed)
 
 4. **PRs NEVER target `main`.** Target `staging` (fast lane) or `milestone/{slug}` (feature lane). A PR to main is a pipeline violation regardless of what the issue description says.
 
-5. **`needs-human` requires durable authority proof.** Before any such label write, classify the block as `FIXABLE_REVIEW`, `WAITING_DEPENDENCY`, `ENGINE_ERROR`, or `AUTHORITY_REQUIRED`. Only the last may add `needs-human`, after posting and exact-ID reading back `<!-- FORGE:HUMAN_AUTHORITY_REQUIRED -->` with the decision/action, authority holder, blocking object, evidence, and why automation cannot act. Dependencies, code/review/test failures, conflicts, missing tools, provider failures, timeouts, stale state, push/merge failures, and exhausted retries use the first three classes. This rule overrides every later legacy instruction that maps those mechanical states to `needs-human`.
-
 ### Compaction Resilience
 
 1. Write state to GitHub after EVERY significant step
@@ -830,8 +828,8 @@ if [ "${INV_MARKER:-0}" -eq 0 ]; then
 
 The router re-invoked \`work-on/investigate\` once but the marker was still not posted.
 Inspect the subcommand output above for errors. <!-- forge#1418 -->"
-    gh issue edit {NUMBER} {GH_FLAG} --add-label "workflow:engine-error" \
-      --remove-label "needs-human,workflow:investigating" 2>/dev/null || true
+    gh issue edit {NUMBER} {GH_FLAG} --add-label "needs-human" \
+      --remove-label "workflow:investigating" 2>/dev/null || true
     exit 1
   fi
 fi
@@ -1350,16 +1348,16 @@ TIER="${RESOLUTION%%:*}"; SCRIPT_PATH="${RESOLUTION#*:}"
 case "$TIER" in
   adaptive|universal)
     if ! PR_BASE=$(bash "$SCRIPT_PATH" {NUMBER} -R {GH_REPO}); then
-      gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:BLOCK_CLASS:ENGINE_ERROR --> classify-lane.sh failed to compute PR target; preserve a resumable handoff."
-      gh issue edit {NUMBER} {GH_FLAG} --add-label "workflow:engine-error" --remove-label "needs-human"
+      gh issue comment {NUMBER} {GH_FLAG} --body "BLOCKER: classify-lane.sh failed to compute PR target — see script error above. Adding needs-human."
+      gh issue edit {NUMBER} {GH_FLAG} --add-label "needs-human"
       exit 1
     fi
     ;;
   prose)
     # classify-lane has no valid prose fallback — the script output is authoritative.
-    # Without it, PR target cannot be determined safely. Record a resumable engine error.
-    gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:BLOCK_CLASS:ENGINE_ERROR --> classify-lane.sh is unavailable; preserve a resumable handoff."
-    gh issue edit {NUMBER} {GH_FLAG} --add-label "workflow:engine-error" --remove-label "needs-human"
+    # Without it, PR target cannot be determined safely. Add needs-human and stop.
+    gh issue comment {NUMBER} {GH_FLAG} --body "BLOCKER: classify-lane.sh not installed (prose tier). Cannot compute PR target deterministically. Adding needs-human."
+    gh issue edit {NUMBER} {GH_FLAG} --add-label "needs-human"
     exit 1
     ;;
 esac
@@ -1822,8 +1820,8 @@ if [ "${BUILD_MARKER:-0}" -eq 0 ]; then
 
 The router re-invoked \`work-on/build\` once but the marker was still not posted.
 Inspect the subcommand output above for errors. <!-- forge#1418 -->"
-    gh issue edit {NUMBER} {GH_FLAG} --add-label "workflow:engine-error" \
-      --remove-label "needs-human,workflow:building" 2>/dev/null || true
+    gh issue edit {NUMBER} {GH_FLAG} --add-label "needs-human" \
+      --remove-label "workflow:building" 2>/dev/null || true
     exit 1
   fi
 fi
@@ -1859,15 +1857,15 @@ TIER="${RESOLUTION%%:*}"; SCRIPT_PATH="${RESOLUTION#*:}"
 case "$TIER" in
   adaptive|universal)
     if ! PR_BASE=$(bash "$SCRIPT_PATH" {NUMBER} -R {GH_REPO}); then
-      gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:BLOCK_CLASS:ENGINE_ERROR --> classify-lane.sh failed to recompute PR target; preserve a resumable handoff."
-      gh issue edit {NUMBER} {GH_FLAG} --add-label "workflow:engine-error" --remove-label "needs-human"
+      gh issue comment {NUMBER} {GH_FLAG} --body "BLOCKER: classify-lane.sh failed to recompute PR target — see script error above. Adding needs-human."
+      gh issue edit {NUMBER} {GH_FLAG} --add-label "needs-human"
       exit 1
     fi
     ;;
   prose)
     # No valid prose fallback — see Phase 3E note.
-    gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:BLOCK_CLASS:ENGINE_ERROR --> classify-lane.sh is unavailable while recomputing the target; preserve a resumable handoff."
-    gh issue edit {NUMBER} {GH_FLAG} --add-label "workflow:engine-error" --remove-label "needs-human"
+    gh issue comment {NUMBER} {GH_FLAG} --body "BLOCKER: classify-lane.sh not installed (prose tier). Cannot recompute PR target. Adding needs-human."
+    gh issue edit {NUMBER} {GH_FLAG} --add-label "needs-human"
     exit 1
     ;;
 esac
@@ -1892,8 +1890,8 @@ esac
 ```
 `{CLASSIFIED_LANE}` is the value returned by `classify-lane.sh` in Phase 4C. `{PR_BASE}` is the branch the PR will target. If exit code is 1 (mismatch):
 ```bash
-gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:BLOCK_CLASS:ENGINE_ERROR --> validate-pr-target.sh found PR base \`{PR_BASE}\` does not match lane \`{CLASSIFIED_LANE}\`; preserve a resumable handoff."
-gh issue edit {NUMBER} {GH_FLAG} --add-label "workflow:engine-error" --remove-label "needs-human"
+gh issue comment {NUMBER} {GH_FLAG} --body "BLOCKING: validate-pr-target.sh — PR base \`{PR_BASE}\` does not match classified lane \`{CLASSIFIED_LANE}\`. Manual intervention required."
+gh issue edit {NUMBER} {GH_FLAG} --add-label "needs-human"
 ```
 → STOP. Do NOT proceed to Phase 4D. <!-- Added: forge#671 -->
 

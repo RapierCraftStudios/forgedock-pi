@@ -43,10 +43,7 @@ exact issue branch, and any coordination issue, verifies B0-B2, and executes B2.
 
 | Missing optional helper script | Follow the prose fallback already described by the specification. Never use an unbounded filesystem search. |
 | `packages/protocol/...` CLI references | The Pi package does not ship that upstream workspace. Do not search for it. Emit the literal marker/body format shown by the current phase, post from a file, and verify the exact returned comment ID. |
-
-## Block classification and human-authority gate
-
-Before terminal labels classify `FIXABLE_REVIEW`, `WAITING_DEPENDENCY`, `ENGINE_ERROR`, or `AUTHORITY_REQUIRED`. Remediate the first, use `blocked` plus an exact prerequisite/wake condition for the second, recover the third through GATED/`workflow:engine-error`/`review-degraded`, and permit `needs-human` only for the fourth after exact-ID readback of `FORGE:HUMAN_AUTHORITY_REQUIRED` evidence naming decision/action, authority holder, blocking object, evidence, and why automation cannot act. Legacy bare labels are read-only and classified once. This overrides mechanical `needs-human` wording in original phase prose.
+| Explicit unmerged prerequisite | Add `blocked`, remove `needs-human` and stale active labels, post `FORGE:GATED` with the exact prerequisite and merge/event resume condition, return without remediation or a supervisor question, and resume the same PR after it lands. |
 
 ## Direct execution discipline
 

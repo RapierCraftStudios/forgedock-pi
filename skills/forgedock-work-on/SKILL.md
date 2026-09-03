@@ -134,7 +134,7 @@ commit; rerun only when evidence is missing or the target/head changed. A missin
 ambiguous, or mismatched result is automated `GATED`, not a reason to improvise or add
 `needs-human`.
 
-Before terminal labels classify `FIXABLE_REVIEW`, `WAITING_DEPENDENCY`, `ENGINE_ERROR`, or `AUTHORITY_REQUIRED`. Dependencies use `blocked` plus an exact wake condition; mechanics stay GATED/review-degraded; only authority may use `needs-human`, after exact-ID-read-back `FORGE:HUMAN_AUTHORITY_REQUIRED` evidence names the decision/action, authority holder, blocking object, evidence, and why automation cannot act. Classify a legacy bare label once.
+An explicit unmerged prerequisite is automated waiting: add `blocked`, remove `needs-human`/active labels, post `FORGE:GATED` with the exact prerequisite and merge/event resume condition, return GATED, and resume after it lands. Never enter remediation or ask a supervisor whether to wait.
 
 Do not stop at an intermediate success. Investigation completion, builder completion,
 quality-gate pass, commit, PR creation, review completion, and PR merge all require the
