@@ -63,5 +63,7 @@ above and the complete bounded fresh-context reviewer panel selected by the revi
 Launch the selected reviewer panel through the adapter's single concurrent workflow;
 reviewers publish/read back their own comments, and the coordinator joins and validates
 the full panel before synthesis. Join every investigation delegate before publishing the
-investigation. After confirmed merge, load `work-on/close.md`, explicitly close the
-issue, post the trajectory, clean only a standalone-owned worktree, and return success.
+investigation. After confirmed merge, load `work-on/close.md` but use the adapter's
+compact Pi closeout: perform terminal verification, issue close/label, trajectory/card,
+decision record, and owned cleanup once. Skip optional post-merge enrichment and return
+success.

@@ -17,7 +17,10 @@ You receive a complete review bundle inline: repository, PR number, head SHA, th
 (or diff slice) for your assigned units, and any persona guidance. Everything you need
 is in the task plus repository read/search access. Never search the workspace for
 missing bundle metadata and never refuse to review over it — record absent fields as
-`"unknown"` and keep reviewing.
+`"unknown"` and keep reviewing. Before the first source read, resolve the repository root
+once with `git rev-parse --show-toplevel`; treat every supplied source path as relative to
+that root. Never add or remove guessed path prefixes. If a supplied path is absent, use
+one bounded `find` or `grep` from that root rather than probing variants.
 
 ## Authority
 
@@ -75,7 +78,8 @@ After finalizing the review:
 3. POST the body once with `gh api repos/{repository}/issues/{pr}/comments`, capturing the
    returned comment ID/URL rather than searching by marker.
 4. GET that exact comment ID and require the domain marker, full SHA, attempt, findings
-   block, and integrity token to match. A failed POST or readback fails this result.
+   block, and integrity token to match using `jq` and fixed string equality. Do not search
+   all comments or construct a shell regex. A failed POST or readback fails this result.
 
 ## Required return
 
