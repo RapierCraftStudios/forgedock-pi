@@ -42,6 +42,11 @@ exact issue branch, and any coordination issue, verifies B0-B2, and executes B2.
 | `$FORGE_HOME/bin/...` and `$FORGE_HOME/scripts/...` (including bare `bin/...` and `scripts/...` shorthand inside the specs) | Resolve the packaged source under `specs/original/bin/...` and `specs/original/scripts/...`; before a target-worktree command invokes a self-contained runtime helper, materialize it at the exact target `bin/...` or `scripts/...` path. Never silently substitute an unrelated target-repository file. |
 
 | Missing optional helper script | Follow the prose fallback already described by the specification. Never use an unbounded filesystem search. |
+| `packages/protocol/...` CLI references | The Pi package does not ship that upstream workspace. Do not search for it. Emit the literal marker/body format shown by the current phase, post from a file, and verify the exact returned comment ID. |
+
+## Direct execution discipline
+
+Retain the target root from `git rev-parse --show-toplevel` and the packaged root from the loaded skill path once. Resolve later paths against those roots; never guess prefixes or probe absent files repeatedly. Use one bounded `find`/`grep` when discovery is needed. Keep Bash short, use `jq` for JSON and file-backed GitHub bodies, and put expected no-match probes in `if` conditions.
 
 ## Subagents
 
@@ -196,6 +201,10 @@ implementation. On reload, reconcile the coordination issue and retained childre
 key; durable GitHub terminal evidence overrides a malformed provider envelope.
 Successors launch after predecessor success; cleanup closes the coordination issue and
 publishes the consolidated report.
+
+For Pi closeout, fetch issue/PR/comments once and run only terminal work: verify merge, finish the issue body when needed, close/label/read back the issue, update an actual parent tracker, post one missing trajectory/card and one missing PR decision record, then clean owned state. Skip optional module-dossier, knowledge-index, cost-prior, memory-Gist, knowledge-ledger, and ADR enrichment (C1.7 and C5.1–C5.4). Never search for the absent protocol workspace.
+
+For orchestrate Phase 5, do not invoke the Claude-only `/audit-agents` command or search `~/.claude`. Use metadata already returned by Pi children or known `_meta.json` paths; report unavailable data plainly. Return one compact terminal issue/PR table with follow-ups, cleanup, and available efficiency totals rather than rebuilding the extended legacy analytics report.
 
 Orchestrate uses exactly one top-level asynchronous workflow launch. For headless or
 otherwise run-to-completion execution, capture that exact workflow run ID and immediately

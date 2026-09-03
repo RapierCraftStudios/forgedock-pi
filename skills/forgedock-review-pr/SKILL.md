@@ -80,6 +80,9 @@ merge. See `specs/qualitative-review-protocol.md` for the shared protocol.
 
 Persist each reviewer result as an exact `head + role + attempt` receipt before joining.
 A completed detached reviewer receipt is reusable verbatim; never rerun its siblings.
+Retry only the missing or invalid role under the same panel attempt. When the coordinator
+publishes it, validate the returned comment ID directly with `jq` and fixed strings—never
+search all comments or build a shell regex.
 On recoverable transport interruption, resume the retained reviewer when supported;
 launch a fresh same-head reviewer only when the prior run is definitively unrecoverable.
 Mixed-head, malformed, or partial panels remain actionable gate failures and can never
