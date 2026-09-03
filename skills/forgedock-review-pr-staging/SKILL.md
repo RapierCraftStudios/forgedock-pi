@@ -24,6 +24,10 @@ Use complete fresh-context reviewer panels and fail closed on any missing review
 Every reviewer comment is a reusable knowledge artifact: require a specific qualitative
 summary, 2–8 concrete verified behaviors with `path:line` evidence, and residual risks even
 when findings are empty. Reject marker-only, file-list-only, and generic clean comments.
+After the complete panel, synthesize by shared root cause and behavioral invariant before
+issue creation. Create one issue per novel actionable causal defect; treat repeated confirmations as evidence in that issue, not separate issues;
+keep POSSIBLE/advisory/pre-existing observations in the report, while preserving every
+confirmed patch-caused HIGH/CRITICAL blocker.
 Translate nested `Skill("issue", ...)` calls to the packaged `forgedock-issue` skill
 and nested `Skill("test-gate", ...)` calls to the packaged `forgedock-test-gate` skill,
 requiring its `FORGE:TEST_GATE:RESULT=BLOCK|PASS|SKIP` marker. Emit exactly one
