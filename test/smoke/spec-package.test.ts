@@ -231,7 +231,7 @@ test("work-on optimizes for first-pass completion without recursive blocker issu
   assert.match(review, /FORGE:REINVESTIGATE_REQUIRED/);
   assert.match(review, /at most once per PR head/);
   assert.match(remediate, /blocking findings do not need child issues to be durable/i);
-  assert.match(coordinator, /Escalate only authority or exhausted remediation/);
+  assert.match(coordinator, /Exhausted remediation stays resumable blocked evidence/);
 });
 
 test("one canonical issue schema governs every ForgeDock creator", async () => {
@@ -472,6 +472,51 @@ test("work-on reuses managed orchestration context and closes scope before valid
   assert.match(implement, /one short completion checklist/);
   assert.match(implement, /Before the first expensive validation run/);
   assert.match(implement, /revert unrelated formatting, generated files, or broad replacement churn/);
+});
+
+test("needs-human requires durable human authority evidence", async () => {
+  const workOnSkill = await readFile("skills/forgedock-work-on/SKILL.md", "utf8");
+  const orchestrateSkill = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
+  const coordinator = await readFile("agents/forgedock-work-on-coordinator.md", "utf8");
+  const adapter = await readFile("specs/pi-adapter.md", "utf8");
+  const workOn = await readFile("specs/original/commands/work-on.md", "utf8");
+  const review = await readFile("specs/original/commands/work-on/review.md", "utf8");
+  const remediate = await readFile("specs/original/commands/work-on/remediate.md", "utf8");
+  const reviewPr = await readFile("specs/original/commands/review-pr.md", "utf8");
+  const orchestrate = await readFile("specs/original/commands/orchestrate.md", "utf8");
+  const dependency = await readFile("specs/original/commands/orchestrate/phase-3-dependency.md", "utf8");
+  const execution = await readFile("specs/original/commands/orchestrate/phase-4-execution.md", "utf8");
+  const build = await readFile("specs/original/commands/work-on/build.md", "utf8");
+  const validate = await readFile("specs/original/commands/work-on/build/validate.md", "utf8");
+
+  for (const text of [workOnSkill, coordinator, adapter, workOn, reviewPr, orchestrate]) {
+    assert.match(text, /FIXABLE_REVIEW/);
+    assert.match(text, /WAITING_DEPENDENCY/);
+    assert.match(text, /ENGINE_ERROR/);
+    assert.match(text, /AUTHORITY_REQUIRED/);
+    assert.match(text, /FORGE:HUMAN_AUTHORITY_REQUIRED/);
+  }
+  assert.match(workOnSkill, /Dependencies, review findings, conflicts.*never authority/s);
+  assert.match(coordinator, /An unmerged prerequisite is\s+`WAITING_DEPENDENCY`/);
+  assert.match(coordinator, /do not add `needs-human` or ask whether to wait/);
+  assert.match(adapter, /legacy behavior and is overridden on\s+Pi/);
+  assert.match(adapter, /Existing `needs-human` without this marker is read-only legacy state/);
+  assert.match(review, /FORGE:BLOCK_CLASS:WAITING_DEPENDENCY/);
+  assert.match(review, /Do not enter remediation, duplicate prerequisite code, poll, or ask a supervisor/);
+  assert.doesNotMatch(review, /--add-label\s+["']?needs-human/);
+  assert.match(remediate, /never uses `needs-human` as an entry ticket/);
+  assert.match(remediate, /status: WAITING/);
+  assert.doesNotMatch(remediate, /--add-label\s+["']?needs-human/);
+  for (const text of [workOn, review, remediate, build, validate, execution])
+    assert.doesNotMatch(text, /--add-label\s+["']?needs-human/);
+  assert.equal(reviewPr.match(/--add-label\s+["']needs-human["']/g)?.length, 2);
+  assert.match(reviewPr, /AUTHORITY_REQUIRED is the only branch allowed to add needs-human/);
+  assert.equal(dependency.match(/--add-label\s+["']needs-human["']/g)?.length, 1);
+  assert.match(dependency, /FORGE:HUMAN_AUTHORITY_REQUIRED/);
+  assert.match(dependency, /Removing an edge changes intended product ordering/);
+  assert.match(execution, /Auto-dispatch remediation only from `FIXABLE_REVIEW` evidence/);
+  assert.doesNotMatch(execution, /Auto-dispatch remediation against a `needs-human`/);
+  assert.match(orchestrateSkill, /Never infer authority from `needs-human` alone/);
 });
 
 test("orchestrate cleanup mutates only current-batch ownership", async () => {

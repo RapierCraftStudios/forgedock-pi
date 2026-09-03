@@ -27,7 +27,9 @@ allowed-tools: Task, Agent, Bash, Read, Grep, Glob, WebFetch, Skill
 
 4. **Route correctly at Phase 0.** If the input is "staging" or the PR targets `main`, invoke `Skill("review-pr-staging", ...)` — do NOT run the standard PR review pipeline against a staging→main PR.
 
-5. **`spec-evolution` PRs are NEVER auto-merged.** When a PR carries the `spec-evolution` label (created by `/spec-doctor`), Phase -1 MUST set `AUTO_MERGE=false` and add `needs-human` before any other processing. This cannot be overridden by the caller — the eval gate plus human review are the only permitted merge path. See Phase -1 `spec-evolution guard` block. <!-- Added: forge#1742 -->
+5. **`spec-evolution` PRs are NEVER auto-merged.** When a PR carries the `spec-evolution` label, Phase -1 sets `AUTO_MERGE=false` and may add `needs-human` only after posting `FORGE:HUMAN_AUTHORITY_REQUIRED` evidence for the mandatory eval/owner approval. See Phase -1 `spec-evolution guard`. <!-- Added: forge#1742 -->
+
+6. **A blocking review is not automatically a human escalation.** Current-head code findings are `FIXABLE_REVIEW`; an unmerged prerequisite is `WAITING_DEPENDENCY`; incomplete panels, conflicts, tool/provider failures, and exhausted retries are `ENGINE_ERROR`. Only proven `AUTHORITY_REQUIRED` evidence may write `needs-human`. This rule overrides legacy mechanical `needs-human` commands later in this specification.
 
 ## Sub-Agent Dispatch Tool Resolution (MANDATORY — run once, before Phase 3C)
 
@@ -160,10 +162,16 @@ if [ "$REVIEW_MODE" = "single-pr" ] && [ -n "$ROUTE_PR_NUMBER" ] && [ "$ROUTE_PR
   if [ "$SPEC_EVOL_CHECK" = "true" ]; then
     IS_SPEC_EVOLUTION=true
     AUTO_MERGE=false
-    # Add needs-human label to the associated issue (if --issue was passed in $ARGUMENTS)
+    # spec-evolution is a real protected policy gate. Persist authority evidence before labeling.
     SPEC_EVOL_ISSUE=$(echo "$ARGUMENTS" | grep -oP '(?<=--issue )\d+' || echo "")
     if [ -n "$SPEC_EVOL_ISSUE" ]; then
       GH_FLAG_SPEC=$(echo "$ARGUMENTS" | grep -oP '(?<=-R )\S+' | head -1 | sed 's/^/-R /' || echo "")
+      gh issue comment "$SPEC_EVOL_ISSUE" $GH_FLAG_SPEC --body "<!-- FORGE:HUMAN_AUTHORITY_REQUIRED -->
+**Decision/action**: Complete the mandatory spec-evolution eval and authorize merge.
+**Authority holder**: Repository owner or designated spec approver.
+**Blocking object**: PR #${ROUTE_PR_NUMBER}.
+**Evidence**: The PR carries the protected spec-evolution label.
+**Why automation cannot perform it**: Repository policy explicitly requires human review."
       gh issue edit "$SPEC_EVOL_ISSUE" $GH_FLAG_SPEC --add-label "needs-human" 2>/dev/null || true
     fi
     echo "SPEC-EVOLUTION GUARD: PR #${ROUTE_PR_NUMBER} carries 'spec-evolution' label."
@@ -1543,7 +1551,7 @@ The `protocols.md` file contains the Evidence-Based Review Protocol, Structured 
 
 **CRITICAL**: Launch ALL selected agents in a SINGLE message using multiple `{DISPATCH_TOOL}` calls. Each agent must persist its finalized body before posting it with `gh pr comment --body-file`, include `<!-- FORGE:REVIEW-AGENT:{lowercase-domain} -->`, and return its verdict and findings to the orchestrator independently of GitHub delivery.
 
-**Dispatch failure and partial-panel guard (MANDATORY):** Count the selected roster before dispatch. If any launch fails, including from pool exhaustion, do not continue with the agents that did launch as a sufficient panel. Immediately create the managed label if necessary, label the PR `review-degraded`, add `needs-human` to the linked issue, post `FORGE:GATE_FAILURE`, and exit without a verdict. After all foreground reviewers return, independently compare their posted `FORGE:REVIEW-AGENT` markers with the selected count; a smaller count is the same hard stop. This catches a reviewer that accepted dispatch but failed before posting.
+**Dispatch failure and partial-panel guard (MANDATORY):** Count the selected roster before dispatch. If any launch fails, including from pool exhaustion, do not continue with a partial panel. Classify `ENGINE_ERROR`, label the PR and linked issue `review-degraded`, remove stale `needs-human`/active labels, post `FORGE:GATE_FAILURE` with resumable role evidence, and exit without a verdict. After all foreground reviewers return, compare their exact role receipts with the selected count; a smaller count is the same resumable hard stop, never human authority.
 
 ```bash
 SELECTED_AGENT_COUNT=$(echo "$SELECTED_AGENTS" | tr ' ' '\n' | grep -c '.')
@@ -1552,7 +1560,7 @@ ACTUAL_AGENT_COUNT=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" \
 
 if [ "$DISPATCH_FAILED" = "true" ] || [ "$ACTUAL_AGENT_COUNT" -lt "$SELECTED_AGENT_COUNT" ]; then
   gh label create "review-degraded" --color "E4E669" --description "PR review panel was incomplete; re-review required before deployment. Managed by ForgeDock." --force -R "$REPO" 2>/dev/null || true
-  gh pr edit "$PR_NUMBER" -R "$REPO" --add-label "review-degraded" --add-label "needs-human" 2>/dev/null || true # allowlist:check-command-side-effects
+  gh pr edit "$PR_NUMBER" -R "$REPO" --add-label "review-degraded" --remove-label "needs-human" 2>/dev/null || true # allowlist:check-command-side-effects
   gh pr comment "$PR_NUMBER" -R "$REPO" --body "<!-- FORGE:GATE_FAILURE:TYPE=review-panel-integrity -->
 ## Review Blocked: Incomplete Isolated Review Panel
 
@@ -1560,7 +1568,7 @@ if [ "$DISPATCH_FAILED" = "true" ] || [ "$ACTUAL_AGENT_COUNT" -lt "$SELECTED_AGE
 **Completed isolated reviewers**: ${ACTUAL_AGENT_COUNT}
 
 At least one reviewer could not be dispatched or complete, commonly because the per-session sub-agent pool was exhausted. No inline substitution was performed. Re-run the full panel in a fresh session before merging."
-  [ -n "${MERGE_ISSUE:-}" ] && gh issue edit "$MERGE_ISSUE" {MERGE_GH_FLAG} --add-label "needs-human" 2>/dev/null || true # allowlist:check-command-side-effects
+  [ -n "${MERGE_ISSUE:-}" ] && gh issue edit "$MERGE_ISSUE" {MERGE_GH_FLAG} --add-label "review-degraded" --remove-label "needs-human,workflow:in-review" 2>/dev/null || true # allowlist:check-command-side-effects
   exit 1
 fi
 ```
@@ -2184,15 +2192,27 @@ fi
 # These vars are set in Phase 7A/7B/7B.5/3B.5 earlier in the same agent session.
 # An unset/empty VERDICT is safe — it evaluates to "" which does not equal "CHANGES REQUESTED".
 # TRUST_NEEDS_HUMAN: set to true by Phase 3B.5 when INTENSITY_TIER=NOVEL_NEEDS_HUMAN AND shadow mode is off.
-if [ "$VERDICT" = "CHANGES REQUESTED" ] || [ "$HAS_PURPOSE_REGRESSION" = "true" ] || [ "$CALIBRATION_NEEDS_HUMAN" = "true" ] || [ "${TRUST_NEEDS_HUMAN:-false}" = "true" ]; then
+if [ "$HAS_PURPOSE_REGRESSION" = "true" ] || [ "$CALIBRATION_NEEDS_HUMAN" = "true" ] || [ "${TRUST_NEEDS_HUMAN:-false}" = "true" ]; then
     BLOCK_REASON=""
-    [ "$VERDICT" = "CHANGES REQUESTED" ] && BLOCK_REASON="review verdict is CHANGES REQUESTED (blocking finding confirmed by Phase 7B)"
-    [ "$HAS_PURPOSE_REGRESSION" = "true" ] && BLOCK_REASON="${BLOCK_REASON:+${BLOCK_REASON}; }purpose regression detected by Phase 7A (\`HAS_PURPOSE_REGRESSION=true\`)"
+    [ "$HAS_PURPOSE_REGRESSION" = "true" ] && BLOCK_REASON="purpose regression detected by Phase 7A"
     [ "$CALIBRATION_NEEDS_HUMAN" = "true" ] && BLOCK_REASON="${BLOCK_REASON:+${BLOCK_REASON}; }calibration threshold: ${CALIBRATION_NOTE}"
-    [ "${TRUST_NEEDS_HUMAN:-false}" = "true" ] && BLOCK_REASON="${BLOCK_REASON:+${BLOCK_REASON}; }provenance trust: NOVEL_NEEDS_HUMAN tier for cell \`${TABLE_CELL_KEY}\` — no sufficient prior data (forge#1745)"
-    gh issue comment {MERGE_ISSUE} {MERGE_GH_FLAG} --body "⛔ Auto-merge aborted for PR #{PR_NUMBER}: ${BLOCK_REASON}. Manual review required before merging."
-    gh issue edit {MERGE_ISSUE} {MERGE_GH_FLAG} --add-label "needs-human" 2>/dev/null || true
-    # STOP — do not attempt gh pr merge when §7B/7B.5 blocking conditions are active
+    [ "${TRUST_NEEDS_HUMAN:-false}" = "true" ] && BLOCK_REASON="${BLOCK_REASON:+${BLOCK_REASON}; }provenance trust: NOVEL_NEEDS_HUMAN tier for cell ${TABLE_CELL_KEY}"
+    # AUTHORITY_REQUIRED is the only branch allowed to add needs-human. Post and
+    # exact-ID read back a FORGE:HUMAN_AUTHORITY_REQUIRED body naming the required
+    # decision/action, authority holder, PR, evidence, and why automation cannot act.
+    gh issue comment {MERGE_ISSUE} {MERGE_GH_FLAG} --body "<!-- FORGE:HUMAN_AUTHORITY_REQUIRED -->
+**Decision/action**: Review and authorize the policy/trust exception before merge.
+**Authority holder**: Repository owner or designated protected-target approver.
+**Blocking object**: PR #{PR_NUMBER} at ${REVIEW_SHA}.
+**Evidence**: ${BLOCK_REASON}.
+**Why automation cannot perform it**: This gate explicitly requires owner judgment or approval."
+    gh issue edit {MERGE_ISSUE} {MERGE_GH_FLAG} --add-label "needs-human" --remove-label "workflow:in-review" 2>/dev/null || true
+    # STOP — proven human authority is required.
+elif [ "$VERDICT" = "CHANGES REQUESTED" ]; then
+    gh issue comment {MERGE_ISSUE} {MERGE_GH_FLAG} --body "<!-- FORGE:BLOCK_CLASS:FIXABLE_REVIEW -->
+PR #{PR_NUMBER} has current-head blocking findings. The owning work-on coordinator must remediate them without human escalation."
+    gh issue edit {MERGE_ISSUE} {MERGE_GH_FLAG} --add-label "workflow:in-review" --remove-label "needs-human" 2>/dev/null || true
+    # STOP merge only; return control to work-on Phase R3.5 remediation.
 else
 
 # Pre-merge mergeability guard — re-fetch fresh state before attempting merge <!-- Added: forge#194 -->
@@ -2203,9 +2223,10 @@ PRE_MERGE_HEALTH=${PRE_MERGE_RESULT%%|*}
 PRE_MERGE_HEALTH_STATE=${PRE_MERGE_RESULT##*|}
 
 if [ "$PRE_MERGE_HEALTH" = "CONFLICTING" ] || [ "$PRE_MERGE_HEALTH_STATE" = "DIRTY" ] || [ "$PRE_MERGE_HEALTH_STATE" = "BLOCKED" ]; then
-    gh issue comment {MERGE_ISSUE} {MERGE_GH_FLAG} --body "⛔ Auto-merge aborted for PR #{PR_NUMBER}: PR is not mergeable (\`mergeable=${PRE_MERGE_HEALTH}\`, \`mergeStateStatus=${PRE_MERGE_HEALTH_STATE}\`). Rebase the branch onto \`{MERGE_BASE}\` and resolve conflicts, then re-run /review-pr."
-    gh issue edit {MERGE_ISSUE} {MERGE_GH_FLAG} --add-label "needs-human" 2>/dev/null || true
-    # STOP — do not attempt gh pr merge on a CONFLICTING/DIRTY PR
+    gh issue comment {MERGE_ISSUE} {MERGE_GH_FLAG} --body "<!-- FORGE:BLOCK_CLASS:ENGINE_ERROR -->
+Auto-merge is blocked for PR #{PR_NUMBER}: mergeable=${PRE_MERGE_HEALTH}, mergeStateStatus=${PRE_MERGE_HEALTH_STATE}. The owning work-on coordinator must reconcile the branch with {MERGE_BASE}, rerun verification, and obtain a fresh review."
+    gh issue edit {MERGE_ISSUE} {MERGE_GH_FLAG} --add-label "workflow:engine-error" --remove-label "needs-human,workflow:in-review" 2>/dev/null || true
+    # STOP merge and preserve a resumable technical handoff.
 else
 
 # Previously-escalated re-review guard <!-- Added: forge#1810; base-scoped: forge#2570 -->

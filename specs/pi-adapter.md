@@ -39,7 +39,35 @@ terminal conditions, review policy, GitHub artifacts, remediation, merge, and cl
 | Missing optional helper script | Follow the prose fallback already described by the specification. Never use an unbounded filesystem search. |
 | `packages/protocol/...` CLI references | The Pi package does not ship that upstream workspace. Do not search for it. Emit the literal marker/body format shown by the current phase, post from a file, and verify the exact returned comment ID. |
 | Child model selection | On Pi, resolve one full model ID from `forge.yaml` `agents.subagent_model`, then `agents.default_model`. This overrides legacy model prose in the original specs. Never pass `sonnet`, `opus`, or `haiku` aliases; investigation delegates use maximum thinking and reviewers use the risk-calibrated suffix from the review skill. |
-| Mechanical failure recovery | A mechanical failure (provider loss, gate mismatch, conflict) is durable `workflow:engine-error` or `review-degraded` evidence with the run ID and handoff path, followed by resume/relaunch. Remove stale active-phase labels. Reserve `needs-human` for a genuine human authority decision. |
+| Mechanical failure recovery | A mechanical failure (provider loss, gate mismatch, conflict) is durable `workflow:engine-error` or `review-degraded` evidence with the run ID and handoff path, followed by resume/relaunch. Remove stale active-phase labels. It is never `needs-human`. |
+
+## Block classification and human-authority gate
+
+Before any terminal label write, classify the block and persist the class in its GitHub
+comment: `FIXABLE_REVIEW`, `WAITING_DEPENDENCY`, `ENGINE_ERROR`, or
+`AUTHORITY_REQUIRED`. Original-spec prose that labels dependencies, conflicts, missing
+helpers, test/quality failures, provider failures, timeouts, stale state, push/merge
+failures, or exhausted retries as `needs-human` is legacy behavior and is overridden on
+Pi by this classification.
+
+- `FIXABLE_REVIEW` stays `workflow:in-review` and proceeds directly to cohesive
+  remediation/re-review.
+- `WAITING_DEPENDENCY` uses `blocked` plus `<!-- FORGE:GATED -->`, names the exact
+  prerequisite issue/PR/ref and merge/event wake condition, removes stale active and
+  `needs-human` labels, returns GATED, and resumes automatically when that condition is
+  true. It never asks a supervisor whether to wait.
+- `ENGINE_ERROR` uses `workflow:engine-error` or `review-degraded` plus a resumable handoff.
+- `AUTHORITY_REQUIRED` is limited to a genuine product/policy choice, credential or
+  permission automation cannot obtain, destructive/external operation requiring consent,
+  legal/compliance decision, or protected-target approval.
+
+Before adding `needs-human`, post and exact-ID read back one
+`<!-- FORGE:HUMAN_AUTHORITY_REQUIRED -->` comment naming the required decision/action,
+authority holder, exact blocking object, evidence, and why automation cannot perform it.
+Without all five fields, the label write is forbidden and the lane stays in the applicable
+non-human block class. Existing `needs-human` without this marker is read-only legacy state:
+classify it once from current evidence, remove it for the first three classes, and retain it
+only for `AUTHORITY_REQUIRED`.
 
 ## Direct execution discipline
 
