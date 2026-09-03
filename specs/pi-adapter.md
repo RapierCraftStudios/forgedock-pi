@@ -75,7 +75,11 @@ coordinator never proxy-posts comments.
 
 A reviewer comment is also reusable knowledge: its summary and verified behaviors must
 state what production behavior was traced and the evidence-based conclusion, including
-when no defect was found. Do not publish hidden reasoning or generic filler.
+when no defect was found. Do not publish hidden reasoning or generic filler. Staging review
+waits for the complete panel, then clusters corroborating reports by shared root cause and
+behavioral invariant, production boundary, cohesive fix, and regression surface before issue creation. Create
+one issue per novel actionable causal defect; keep POSSIBLE/advisory/pre-existing evidence
+in the consolidated report, and never suppress a confirmed patch-caused HIGH/CRITICAL blocker.
 
 A successful exact-head role result is retained for that panel attempt. If a reviewer is a
 rejected child, times out, loses its provider, returns malformed output, or fails publication/readback, retry
