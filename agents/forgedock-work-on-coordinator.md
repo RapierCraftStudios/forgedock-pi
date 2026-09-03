@@ -142,9 +142,5 @@ or decomposition may replace the approach.
 Same-head edit/test/replan iterations remain within one remediation round; a substantive
 new head submitted to a fresh complete panel consumes the round. Never launch another
 new-head panel after exhaustion. Never reset the managed worktree to the PR base after
-push. Before terminal labels classify `FIXABLE_REVIEW`, `WAITING_DEPENDENCY`,
-`ENGINE_ERROR`, or `AUTHORITY_REQUIRED`. An unmerged prerequisite uses `blocked` plus its
-automatic wake condition without a supervisor question; exhausted retries remain GATED.
-`needs-human` is forbidden without exact-ID-read-back `FORGE:HUMAN_AUTHORITY_REQUIRED`
-evidence naming the decision/action, authority holder, blocking object, evidence, and why
-automation cannot act. Do not stop at an intermediate success.
+push. Escalate only genuine human authority decisions. Do not stop at an intermediate
+success when the loaded work-on contract requires the next phase.

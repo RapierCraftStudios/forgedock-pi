@@ -651,8 +651,8 @@ declare -A FINDING_GENERATIONS
 
 for NUM in {ready_issue_numbers}; do
   PR_BASE=$(bash "$CLASSIFY_LANE_SCRIPT" "$NUM" -R {GH_REPO}) || {
-    echo "ERROR: classify-lane.sh failed for #$NUM — recording resumable engine error" >&2
-    gh issue edit "$NUM" -R {GH_REPO} --add-label "workflow:engine-error" --remove-label "needs-human" 2>/dev/null || true
+    echo "ERROR: classify-lane.sh failed for #$NUM — adding needs-human label and skipping" >&2
+    gh issue edit "$NUM" -R {GH_REPO} --add-label "needs-human" 2>/dev/null || true
     continue
   }
   # Derive LANE label from PR_BASE
@@ -1746,15 +1746,56 @@ done
 
    Report every dependent whose skip was avoided this way — e.g. "#{DEP} — predecessor #{PRED} failed but never touched the shared file(s); edge dropped, #{DEP} not skipped." For all remaining dependents (real `EDGE_KIND` overlap confirmed, or a non-`EDGE_KIND` edge type), mark them "skipped — dependency #{X} failed" and report them. Do NOT dispatch them.
 
-6.4. **Auto-dispatch remediation only from `FIXABLE_REVIEW` evidence** — bind this check to the issue that just completed (`PRED="$NUM"`) on every completion, including leaf issues. Read the latest current-head `FORGE:BLOCK_CLASS` marker from the issue/PR. Dispatch the issue's own remediation only when that class is `FIXABLE_REVIEW`; do not use a bare `needs-human` label as the trigger.
+6.4. **Auto-dispatch remediation against a `needs-human`-gated issue's own PR — runs unconditionally per completion, with or without dependents** <!-- Added: forge#1813, fixed: forge#2243 --> — item 6.5 below tracks the *dependents* of a `GATED` predecessor; this item handles the gated issue's own PR, which item 6.5/6.6 never re-drive on their own. **This check is bound directly to the issue that just completed — `PRED="$NUM"` (the same issue number carried from items 1-4 of this Step 4B sequence) — NOT to any `$PRED` produced by walking a dependent's predecessor list (item 5's readiness loop) or by item 6's FAILED-specific dependent-walk.** Run it for every completed agent, every cycle, regardless of whether that issue has any dependents in the DAG at all — a leaf issue (no dependents) is just as eligible as an issue that blocks others. Trigger condition: the completed issue classifies `GATED` **specifically via `needs-human`** — NOT `workflow:awaiting-merge`. That second state already means "remediated and re-reviewed to a clean verdict" (see forge#1810's guard) — dispatching remediation again would be redundant, not just wasteful, since there is nothing left to fix. A PR that reaches `workflow:awaiting-merge` now does so only when it targets `main` / the deploy gate (where `staging → main` is the genuine human gate and a human's merge click is required); a remediated-clean PR targeting a non-`main` base (`staging`, `milestone/*`) auto-lands to `workflow:merged` via remediate.md Phase M7's base-scoped auto-land bar (forge#2570) and never parks here. Either way this item's skip of `workflow:awaiting-merge` is unchanged.
 
-For legacy `needs-human` without structured authority evidence, classify once before dispatch:
-- concrete current-head review finding → `FIXABLE_REVIEW`, remove `needs-human`, keep `workflow:in-review`, and dispatch remediation;
-- explicit unmerged prerequisite → `WAITING_DEPENDENCY`, replace `needs-human` with `blocked`, preserve the exact prerequisite/wake condition, and do not dispatch remediation;
-- provider/tool/marker/publication/configuration/checkout/push/merge failure or exhausted retries → `ENGINE_ERROR`, replace `needs-human` with `workflow:engine-error`/`review-degraded`, and recover mechanically;
-- complete exact-ID-read-back `FORGE:HUMAN_AUTHORITY_REQUIRED` evidence → `AUTHORITY_REQUIRED`, retain `needs-human` and do not dispatch remediation.
+   ```bash
+   # Bind PRED to the issue that just completed — independent of item 5's dependent-walk loop
+   # and item 6's FAILED-specific dependent-walk. This is the fix for forge#2243: a leaf issue
+   # (no dependents) must still reach this check, since it never appears as a loop-bound $PRED
+   # in either of those other contexts.
+   PRED="$NUM"
 
-Resolve the open PR with the anchored `Closes #${PRED}` search. Retain the existing one-attempt `FORGE:REMEDIATION` idempotency guard. The remediation child invokes `work-on/remediate.md`, which accepts `FIXABLE_REVIEW` directly and returns `COMPLETE`, `ALREADY_DONE`, `WAITING`, `AUTHORITY_REQUIRED`, or `BLOCKED`. It must not ask the user questions for technical states.
+   PRED_CURRENT_LABEL=$(gh issue view "$PRED" -R {GH_REPO} --json labels \
+     --jq '[.labels[].name | select(. == "needs-human" or . == "workflow:awaiting-merge")] | .[0] // empty' 2>/dev/null)
+
+   if [ "$PRED_CURRENT_LABEL" = "needs-human" ]; then
+     # Resolve PRED's open PR using the anchored search (forge#1634/#1646 precedent —
+     # never a bare-number search, which would misattribute an unrelated PR).
+     GATING_PR=$(gh pr list -R {GH_REPO} --state open --search "\"Closes #${PRED}\" in:body" \
+       --json number --jq '.[0].number // empty' 2>/dev/null || echo "")
+
+     if [ -n "$GATING_PR" ]; then
+       # Idempotency guard: only one remediation attempt per PR, ever (single-attempt
+       # semantics — remediate.md's own Phase M0 enforces this too, but checking here
+       # avoids spawning a redundant agent that would immediately no-op on entry).
+       ALREADY_REMEDIATED=$(gh api repos/{GH_REPO}/issues/${GATING_PR}/comments \
+         --jq '[.[] | select(.body | contains("FORGE:REMEDIATION"))] | length' 2>/dev/null || echo "0")
+
+       if [ "$ALREADY_REMEDIATED" -eq 0 ]; then
+         echo "Dispatching remediation for #{PRED}'s gating PR #{GATING_PR} (needs-human)"
+         # Same Agent-spawn-fallback style as Step 4A's template — one background agent,
+         # whose sole job is to invoke /work-on in remediation mode and let it run to
+         # completion (AUTO-LANDED, HELD-AWAITING-MERGE, RE-ESCALATED, or UNFIXABLE — all
+         # are terminal-for-this-agent; see work-on/remediate.md Output).
+         Agent(
+           subagent_type="general-purpose",
+           model="{SUBAGENT_MODEL}",
+           description="Remediate PR #{GATING_PR} (needs-human, blocks #{PRED})",
+           run_in_background=true,
+           prompt="You are remediating GitHub PR #{GATING_PR} for the {PROJECT_NAME} project (repo: {GH_REPO}), which is currently held at `needs-human` on its linked issue #{PRED}.
+
+**YOUR MISSION**: Invoke `Skill(skill='work-on', args='{GATING_PR} --remediate --issue {PRED} --repo {GH_REPO} --gh-flag {GH_FLAG}')` and let it run to completion. This is a self-contained flow: it classifies the gate first, replaces `needs-human` with `workflow:in-review` only for fixable remediation, checks out the PR branch, fixes any fixable review findings, re-reviews, and either auto-lands the PR, holds it at `workflow:awaiting-merge` for a human, re-escalates back to `needs-human`, or reports the block as policy-level and unfixable. Do NOT intervene manually — do not run raw git/gh commands yourself.
+
+**DO NOT STOP EARLY**: if the Skill call returns without a terminal `REMEDIATE_RESULT.status`, invoke it again — it re-reads GitHub state and resumes. Terminal statuses are: `COMPLETE`, `ALREADY_DONE`, `UNFIXABLE`, `BLOCKED`.
+
+Do not ask the user questions — you are running autonomously in the background."
+         )
+       fi
+     fi
+   fi
+   ```
+
+   This satisfies #1809 Q2 (the orchestrator auto-dispatches remediation against the gated issue itself — the exact gap forge#1812's item 6.5/6.6 left open, since those items only ever track and wake *dependents*, never the gated PR's own remediation) — and closes forge#2243 (the gap that #1812's fix left open for *leaf* issues with no dependents: because this item's `$PRED` binding was never made explicit and self-contained, it was only ever reached while walking a dependent's predecessor list, so a `needs-human` issue that has no dependents never got remediation dispatched and its CHANGES-REQUESTED PR re-reviewed the same unchanged commit forever). The remediation agent's outcome is picked up on the **next** completion-monitoring cycle of this same Step 4B loop: if it lands (`workflow:merged`), item 6.6 below fires normally and wakes any `blocked-on-human-merge` dependents (if any exist — a leaf issue simply has none to wake); if it holds/re-escalates, the issue simply remains `GATED` and item 6.5 continues tracking its dependents (if any) unchanged.
 
 6.5. **Handle predecessor gating** (`GATED` — `needs-human` or `workflow:awaiting-merge`) <!-- Added: forge#1812 --> — if a completed agent's issue classifies as `GATED`, its direct dependents are neither dispatched nor marked failed/skipped. For each direct dependent `DEP` of the gated predecessor `PRED`:
 
@@ -2043,17 +2084,17 @@ for NUM in {active_issue_numbers}; do
       # STALL_RESUME_LIST is accumulated and launched in parallel after the loop
       STALL_RESUME_LIST="$STALL_RESUME_LIST $NUM"
     else
-      # 2+ prior stalls remain a resumable engine error, not human authority.
-      gh issue edit $NUM -R {GH_REPO} --add-label "workflow:engine-error" --remove-label "needs-human"
+      # 2+ prior stalls — auto-resume exhausted, escalate to needs-human
+      gh issue edit $NUM -R {GH_REPO} --add-label "needs-human"
       gh issue comment $NUM -R {GH_REPO} --body "<!-- FORGE:STALL_DETECTED -->
-## Stall Paused — Resumable Engine Error
+## Stall Escalated — Needs Human Intervention
 
-Issue #${NUM} has been auto-resumed ${STALL_COUNT} times without reaching a terminal state. The automatic attempt budget is exhausted for this run; preserve the handoff for a later automated recovery.
+Issue #${NUM} has been auto-resumed ${STALL_COUNT} times without reaching a terminal state. Auto-resume limit (2) exhausted. Manual intervention required.
 
 **Last workflow state**: ${CURRENT_STATE}
 **Total elapsed since last activity**: ${ELAPSED_MIN} min
 **Timestamp**: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-      echo "STALL PAUSED: #{NUM} → workflow:engine-error (${STALL_COUNT} prior resumes)"
+      echo "STALL ESCALATED: #{NUM} → needs-human (${STALL_COUNT} prior resumes)"
     fi
   fi
 done
@@ -2315,7 +2356,7 @@ for FINDING_NUM in {spawned_finding_numbers}; do
         REPAIR_GOVERNOR_MAX=25
         if [ "$REPAIR_GOVERNOR_COUNT" -ge "$REPAIR_GOVERNOR_MAX" ]; then
           echo "REPAIR: #${FINDING_NUM} skipped — GOVERNOR cap reached (${REPAIR_GOVERNOR_MAX} repairs already attempted this run); flagging instead of repairing"
-          gh issue edit "$FINDING_NUM" -R {GH_REPO} --add-label blocked --remove-label needs-human 2>/dev/null || true  # governor-cap path
+          gh issue edit "$FINDING_NUM" -R {GH_REPO} --add-label needs-human 2>/dev/null || true  # governor-cap path
         else
         REPAIR_GOVERNOR_COUNT=$((REPAIR_GOVERNOR_COUNT + 1))
         echo "REPAIR: #${FINDING_NUM} has no **Code branch** and parent PR #${REPAIR_SOURCE_PR} bases on '${REPAIR_PARENT_BASE}' (non-staging) — attempting repair (${REPAIR_GOVERNOR_COUNT}/${REPAIR_GOVERNOR_MAX} this run)"
@@ -2356,7 +2397,7 @@ Finding #${FINDING_NUM} has no **Code branch** annotation and its parent PR #${R
           gh issue comment "$FINDING_NUM" -R {GH_REPO} --body-file "$GATE_BODY_TMPFILE" 2>/dev/null || true
           gh api "repos/{GH_REPO}/issues/${FINDING_NUM}/comments" --jq '.[].body' | grep -Fqx "<!-- ${GATE_BODY_MARKER} -->" || { echo "ERROR: freshness-gate comment marker missing" >&2; exit 1; }
           rm -f "$GATE_BODY_TMPFILE"
-          gh issue edit "$FINDING_NUM" -R {GH_REPO} --add-label workflow:engine-error --remove-label needs-human 2>/dev/null || true  # freshness-recheck-failure path
+          gh issue edit "$FINDING_NUM" -R {GH_REPO} --add-label needs-human 2>/dev/null || true  # freshness-recheck-failure path
         elif [ "$FINDING_UPDATED_AT_CURRENT" != "$FINDING_UPDATED_AT_SNAPSHOT" ]; then
           echo "REPAIR: #${FINDING_NUM} skipped — concurrent edit detected (updatedAt changed from ${FINDING_UPDATED_AT_SNAPSHOT} to ${FINDING_UPDATED_AT_CURRENT} since this iteration's initial read); flagging instead of repairing"
           CONCURRENT_EDIT_BODY_MARKER="FORGE:BODY-INTEGRITY:${FINDING_NUM}_concurrent-edit_${AGENT_TOKEN}"
@@ -2369,7 +2410,7 @@ Finding #${FINDING_NUM} has no **Code branch** annotation and its parent PR #${R
           gh issue comment "$FINDING_NUM" -R {GH_REPO} --body-file "$CONCURRENT_EDIT_BODY_TMPFILE" 2>/dev/null || true
           gh api "repos/{GH_REPO}/issues/${FINDING_NUM}/comments" --jq '.[].body' | grep -Fqx "<!-- ${CONCURRENT_EDIT_BODY_MARKER} -->" || { echo "ERROR: concurrent-edit comment marker missing" >&2; exit 1; }
           rm -f "$CONCURRENT_EDIT_BODY_TMPFILE"
-          gh issue edit "$FINDING_NUM" -R {GH_REPO} --add-label blocked --remove-label needs-human 2>/dev/null || true  # concurrent-edit path
+          gh issue edit "$FINDING_NUM" -R {GH_REPO} --add-label needs-human 2>/dev/null || true  # concurrent-edit path
         else
         if gh issue edit "$FINDING_NUM" -R {GH_REPO} --body "$REPAIRED_BODY" 2>/dev/null; then
           echo "REPAIR: #${FINDING_NUM} Code branch repaired to '${REPAIR_PARENT_BASE}'"
@@ -2388,7 +2429,7 @@ Finding #${FINDING_NUM} has no **Code branch** annotation and its parent PR #${R
           gh issue comment "$FINDING_NUM" -R {GH_REPO} --body-file "$REPAIR_FAILED_BODY_TMPFILE" 2>/dev/null || true
           gh api "repos/{GH_REPO}/issues/${FINDING_NUM}/comments" --jq '.[].body' | grep -Fqx "<!-- ${REPAIR_FAILED_BODY_MARKER} -->" || { echo "ERROR: repair-failure comment marker missing" >&2; exit 1; }
           rm -f "$REPAIR_FAILED_BODY_TMPFILE"
-          gh issue edit "$FINDING_NUM" -R {GH_REPO} --add-label workflow:engine-error --remove-label needs-human 2>/dev/null || true  # repair-failure path
+          gh issue edit "$FINDING_NUM" -R {GH_REPO} --add-label needs-human 2>/dev/null || true  # repair-failure path
         fi
         fi
         fi
@@ -2756,9 +2797,9 @@ Cascade-dispatched findings inherit NO lane assumption from the parent batch. St
 ```bash
 for FINDING_NUM in "${QUEUED_FINDINGS[@]}"; do
   PR_BASE=$(bash "$CLASSIFY_LANE_SCRIPT" "$FINDING_NUM" -R {GH_REPO}) || {
-    echo "ERROR: classify-lane.sh failed for #$FINDING_NUM — recording resumable engine error and removing from QUEUED_FINDINGS" >&2
+    echo "ERROR: classify-lane.sh failed for #$FINDING_NUM — adding needs-human label and removing from QUEUED_FINDINGS" >&2
     # GOVERNOR-exempt: intentional coordination side-effect (best-effort lease/board/finding post), DRY_RUN-safe — reviewed & accepted for the check-command-side-effects gate. Flagged only by the staging->main full-diff; passes on every feature PR. forge#2627
-    gh issue edit "$FINDING_NUM" -R {GH_REPO} --add-label "workflow:engine-error" --remove-label "needs-human" 2>/dev/null || true
+    gh issue edit "$FINDING_NUM" -R {GH_REPO} --add-label "needs-human" 2>/dev/null || true
     QUEUED_FINDINGS=($(printf '%s\n' "${QUEUED_FINDINGS[@]}" | grep -vxF "$FINDING_NUM" || true))
     continue
   }
@@ -3106,9 +3147,9 @@ declare -A SWEEP_PR_BASE
 
 for FINDING_NUM in "${SWEEP_EXECUTE[@]}"; do
   SWEEP_BASE=$(bash "$CLASSIFY_LANE_SCRIPT" "$FINDING_NUM" -R {GH_REPO}) || {
-    echo "ERROR: classify-lane.sh failed for #$FINDING_NUM — recording resumable engine error and skipping" >&2
+    echo "ERROR: classify-lane.sh failed for #$FINDING_NUM — adding needs-human and skipping" >&2
     # GOVERNOR-exempt: intentional coordination side-effect (best-effort lease/board/finding post), DRY_RUN-safe — reviewed & accepted for the check-command-side-effects gate. Flagged only by the staging->main full-diff; passes on every feature PR. forge#2627
-    gh issue edit "$FINDING_NUM" -R {GH_REPO} --add-label "workflow:engine-error" --remove-label "needs-human" 2>/dev/null || true
+    gh issue edit "$FINDING_NUM" -R {GH_REPO} --add-label "needs-human" 2>/dev/null || true
     continue
   }
   if [ "$SWEEP_BASE" = "staging" ]; then
