@@ -24,7 +24,7 @@ test("Pi adapter keeps workflow decisions in visible specifications", async () =
   assert.match(adapter, /GitHub issue\/PR state/);
   assert.match(adapter, /behavioral authority for routing, phase order/);
   assert.match(adapter, /one direct `yq` call.*one short `node` call/s);
-  assert.match(adapter, /Use Pi's `subagent` tool with fresh context/);
+  assert.match(adapter, /only exception is the selected fresh review\/re-review panel/);
   assert.match(adapter, /Orchestrate resolves and confirms the issue set/);
   assert.match(adapter, /must never choose the next workflow phase/);
   assert.match(adapter, /Use direct `gh` and `git` commands/);
@@ -89,24 +89,26 @@ test("review-pr is independently invocable without a work-on ownership gate", as
     assert.doesNotMatch(skill, banned, `review must not gate on work-on ownership: ${banned}`);
 });
 
-test("work-on routes phases through the original specs and keeps review in-process", async () => {
+test("work-on executes every pre-review phase inline and nests only reviewers", async () => {
   const skill = await readFile("skills/forgedock-work-on/SKILL.md", "utf8");
   assert.match(skill, /resolve → investigate/);
   assert.match(skill, /work-on\.md` in bounded chunks/);
   assert.match(skill, /load only the required\s+phase file/);
   assert.match(skill, /forgedock-review-pr/);
-  assert.match(skill, /Do not spawn a second\s+review coordinator/s);
-  assert.match(skill, /joins and validates\s+the full panel/);
+  assert.match(skill, /Do not spawn a second review\s+coordinator/s);
+  assert.match(skill, /join and validate the full panel/);
   assert.match(skill, /work-on\/close\.md/);
   // The lifecycle runs inline in the coordinator; no builder handoff machinery.
   assert.doesNotMatch(skill, /B0-B2/);
   assert.doesNotMatch(skill, /builder handoff|fresh builder/i);
+  assert.match(skill, /Do not launch delegates, phase agents, quality-gate agents, builders/);
+  assert.doesNotMatch(skill, /optional investigation `delegate`|Join every investigation delegate/);
 });
 
-test("orchestrate dispatches coordinators and reports state without building", async () => {
+test("orchestrate dispatches one work-on agent per issue and reports state without building", async () => {
   const skill = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
   assert.match(skill, /The visible session is a dispatcher, never a builder/);
-  assert.match(skill, /one fresh `forgedock-work-on-coordinator`/);
+  assert.match(skill, /one fresh per-issue work-on agent/);
   assert.match(skill, /orchestration\.max_concurrent/);
   assert.match(skill, /GATED is not FAILED/);
   assert.match(skill, /Do not poll/);
@@ -157,12 +159,14 @@ test("canonical dispatch recipe governs wave, successor, and recovery launches",
   assert.match(adapter, /do not retry alternate quoting forms/);
   assert.match(skill, /canonical recipe in `specs\/pi-adapter\.md`/);
   assert.match(skill, /Never compose improvised prose task/);
-  // Coordinators execute artifacts exactly and never spawn sub-workflows;
+  // Work-on agents execute artifacts exactly and nest only fresh review panels;
   // mechanical gaps use adapter fallbacks, never supervisor decisions.
   assert.match(coordinator, /never paraphrase formats/i);
   assert.match(coordinator, /Mechanical gaps are not decisions/);
   assert.match(coordinator, /never route configuration, ancestry, or code conflicts/);
-  assert.match(coordinator, /not a sub-workflow|no sub-workflow|not a sub-workflow of domain lanes|`delegate` agents are direct children/);
+  assert.match(coordinator, /reviewer panel is its sole nested child workflow/);
+  assert.match(adapter, /must not call `subagent`.*investigation/s);
+  assert.match(adapter, /cache-TTL fork prose never overrides this Pi topology/);
 });
 
 test("investigation checks sibling paths for the same broken behavior", async () => {
@@ -214,12 +218,11 @@ test("work-on optimizes for first-pass completion without recursive blocker issu
     "utf8",
   );
 
-  for (const contract of [coordinator, workOn, investigate]) {
-    assert.match(contract, /builtin\s+`delegate`/);
-    assert.match(contract, /never invent\s+an agent name or fall back/i);
-    assert.match(contract, /investigate inline by default|executes every phase inline/i);
-    assert.doesNotMatch(contract, /read-only (?:helpers|investigation helpers)/);
+  for (const contract of [coordinator, workOn]) {
+    assert.match(contract, /investigation.*inline|executes every phase inline/is);
+    assert.doesNotMatch(contract, /builtin\s+`delegate`|investigation `delegate`/);
   }
+  assert.match(investigate, /Do not inspect unrelated code/);
   assert.match(implement, /compare the finished implementation once against every path/i);
   assert.match(implement, /fix it now; do not knowingly hand incomplete work to review/i);
   assert.match(reviewSkill, /do not create recursive blocker issues/i);
@@ -267,20 +270,24 @@ test("one canonical issue schema governs every ForgeDock creator", async () => {
   }
 });
 
-test("package exposes a depth-bounded work-on coordinator with reviewer fanout", async () => {
+test("package exposes a depth-bounded work-on agent with reviewer-only fanout", async () => {
   const packageJson = JSON.parse(await readFile("package.json", "utf8"));
   assert.deepEqual(packageJson.pi.subagents.agents, ["./agents"]);
   assert.ok(packageJson.files.includes("agents/"));
 
   const agent = await readFile("agents/forgedock-work-on-coordinator.md", "utf8");
   assert.match(agent, /name: forgedock-work-on-coordinator/);
+  assert.match(agent, /# ForgeDock Work-On Agent/);
   assert.match(agent, /allowNestedSubagents: true/);
   assert.match(agent, /tools:.*\bsubagent\b/);
   assert.match(agent, /skills: forgedock-work-on, forgedock-review-pr/);
   assert.match(agent, /current working directory is the only authoritative repository root/);
   assert.match(agent, /forgedock-reviewer/);
-  assert.match(agent, /one synchronous `workflowScript`/);
+  assert.match(agent, /one synchronous\s+`workflowScript`/);
   assert.match(agent, /proxy-post/i);
+  assert.match(agent, /reviewer panel is its sole nested child workflow/);
+  assert.match(agent, /Do not launch delegates,\s+phase agents, quality-gate agents, builders/s);
+  assert.doesNotMatch(agent, /builtin `delegate`|optional investigation/);
   assert.match(agent, /Do not launch nested issue orchestration/);
   assert.match(agent, /^timeoutMs: 2147483647$/m);
   assert.match(agent, /^toolTimeoutMs: 3900000$/m);
@@ -473,7 +480,8 @@ test("work-on reuses managed orchestration context and closes scope before valid
   assert.match(adapter, /\.agents\.subagent_model \/\/ \.agents\.default_model \/\/ empty/);
   assert.match(coordinator, /agents\.subagent_model/);
   assert.match(coordinator, /Never pass legacy `sonnet`, `opus`, or `haiku` aliases/);
-  assert.match(coordinator, /resolved model at maximum\s+thinking/);
+  assert.match(coordinator, /pass the resolved full Pi model ID to every helper and reviewer/);
+  assert.doesNotMatch(coordinator, /resolved model at maximum\s+thinking/);
   assert.match(implement, /Before editing, turn the contract deliverables and every path/);
   assert.match(implement, /one short completion checklist/);
   assert.match(implement, /Before the first expensive validation run/);

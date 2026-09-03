@@ -23,14 +23,14 @@ terminal conditions, review policy, GitHub artifacts, remediation, merge, and cl
 
 | Original construct | Pi behavior |
 | --- | --- |
-| `Skill(skill="work-on/investigate", ...)`, decompose, review, remediation, or close | Read the corresponding file under `specs/original/commands/work-on/` and execute it in the current work-on coordinator. |
-| `Skill(skill="quality-gate", ...)` | Read `specs/original/commands/quality-gate.md` and execute it inline in the current coordinator. |
-| `Skill(skill="review-pr", ...)` | Load and execute the packaged `forgedock-review-pr` skill in the current coordinator. Do not add a second review-coordinator hop. |
+| `Skill(skill="work-on/investigate", ...)`, decompose, review, remediation, or close | Read the corresponding file under `specs/original/commands/work-on/` and execute it in the current work-on agent. |
+| `Skill(skill="quality-gate", ...)` | Read `specs/original/commands/quality-gate.md` and execute it inline in the current work-on agent. |
+| `Skill(skill="review-pr", ...)` | Load and execute the packaged `forgedock-review-pr` skill in the current work-on agent. Do not add a second review-coordinator hop. |
 | `Skill(skill="review-pr-staging", ...)` | Load the packaged `forgedock-review-pr-staging` skill, which executes `specs/original/commands/review-pr-staging.md` directly. |
 | Mandatory nested `Skill("test-gate", ...)` | Load the packaged `forgedock-test-gate` skill and require its `FORGE:TEST_GATE:RESULT=BLOCK\|PASS\|SKIP` marker. |
 | Any new public issue creation, including mandatory nested `Skill(skill="issue", ...)` | Load packaged `forgedock-issue` and execute `specs/original/commands/issue.md` as the sole global schema/create contract. |
 | Other nested `Skill(...)` references | Resolve the reference to the corresponding file under `specs/original/commands/` and load it directly in the visible coordinator. |
-| `Task(...)` or `Agent(...)` | Use Pi's `subagent` tool with fresh context. A selected review panel is one `workflowScript`/`runs.all` call, never parallel synchronous tool calls. Join every dispatched child before synthesis. |
+| `Task(...)` or `Agent(...)` inside a work-on lane | Execute the requested investigation, planning, build, quality-gate, verification, remediation, or close work inline in the current work-on agent. The only exception is the selected fresh review/re-review panel, launched with one `workflowScript`/`runs.all` call and fully joined before synthesis. |
 | Claude `Read`, `Grep`, `Glob`, `Bash` | Pi `read`, search/navigation tools, and `bash`. |
 | `$FORGE_HOME/commands/...` | `specs/original/commands/...` in this package. |
 | `$FORGE_HOME/bin/...` and `$FORGE_HOME/scripts/...` (including bare `bin/...` and `scripts/...` shorthand inside the specs) | `specs/original/bin/...` and `specs/original/scripts/...` in this package. Resolve against the package root, never the target repository root. |
@@ -38,7 +38,7 @@ terminal conditions, review policy, GitHub artifacts, remediation, merge, and cl
 | GitHub and Git operations | Use direct `gh` and `git` commands. Verify `gh auth status` and repository access, and run `gh auth setup-git` before noninteractive fetch/push. |
 | Missing optional helper script | Follow the prose fallback already described by the specification. Never use an unbounded filesystem search. |
 | `packages/protocol/...` CLI references | The Pi package does not ship that upstream workspace. Do not search for it. Emit the literal marker/body format shown by the current phase, post from a file, and verify the exact returned comment ID. |
-| Child model selection | On Pi, resolve one full model ID from `forge.yaml` `agents.subagent_model`, then `agents.default_model`. This overrides legacy model prose in the original specs. Never pass `sonnet`, `opus`, or `haiku` aliases; investigation delegates use maximum thinking and reviewers use the risk-calibrated suffix from the review skill. |
+| Child model selection | On Pi, resolve one full model ID from `forge.yaml` `agents.subagent_model`, then `agents.default_model`. This overrides legacy model prose in the original specs. Never pass `sonnet`, `opus`, or `haiku` aliases; work-on agents retain that model for the complete inline lifecycle and reviewers use the risk-calibrated suffix from the review skill. |
 | Mechanical failure recovery | A mechanical failure (provider loss, gate mismatch, conflict) is durable `workflow:engine-error` or `review-degraded` evidence with the run ID and handoff path, followed by resume/relaunch. Remove stale active-phase labels. Reserve `needs-human` for a genuine human authority decision. |
 | Explicit unmerged prerequisite | Add `blocked`, remove `needs-human` and stale active labels, post `FORGE:GATED` with the exact prerequisite and merge/event resume condition, return without remediation or a supervisor question, and resume the same PR after it lands. |
 
@@ -52,6 +52,12 @@ GitHub bodies, and `if` conditions for expected no-match probes instead of quote
 pipelines whose normal nonzero result becomes a tool failure.
 
 ## Subagents
+
+A work-on agent executes every lifecycle phase inline except fresh review. Before the
+review or re-review phase, it must not call `subagent`: investigation, contract, planning,
+implementation, quality gates, verification, PR preparation, remediation, merge, close,
+and cleanup stay in the same per-issue agent. Original-spec `Task(...)`, `Agent(...)`, or
+cache-TTL fork prose never overrides this Pi topology.
 
 Reviewers are source-read-only fresh-context children using the packaged
 `forgedock-reviewer` profile. Their sole write authority is one assigned exact-head PR
@@ -163,7 +169,7 @@ Every issue launch uses a stable `work-on-<number>` key,
 `timeoutMs: 2147483647`. A predecessor failure returns an explicit unlaunched-dependent
 result; it does not block unrelated promises. A single issue uses the same shape.
 
-Before its first source edit, every orchestrated coordinator verifies that `$PWD` is a
+Before its first source edit, every orchestrated work-on agent verifies that `$PWD` is a
 clean linked worktree on a `pi-parallel-*` branch, fetches the configured target, and runs
 `git merge --ff-only origin/<target>`. It then requires `origin/<target>` to be an ancestor
 of `HEAD`. Never reset a checkout. If any guard fails before mutation, return mechanical
@@ -184,8 +190,8 @@ workflow complete while a planned issue is merely abandoned.
 A supported compact plan runs entirely on this recipe without loading the large phase-4
 corpus. Never load the pi-subagents reference corpus to compose it. Consult original
 phase files only for ambiguous selectors, cycles, or recovery
-not covered above. Investigation `delegate` calls remain direct children; the one
-reviewer panel workflow described above is the coordinator's only nested workflow.
+not covered above. The selected reviewer or re-review panel described above is the
+work-on agent's only nested workflow.
 
 ## Compact Pi closeout and audit
 

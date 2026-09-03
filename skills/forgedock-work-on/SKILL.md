@@ -5,8 +5,8 @@ description: Run or resume one GitHub issue through ForgeDock investigation, imp
 
 # ForgeDock Work On
 
-This is the prompt-routed issue lifecycle. The visible session is the coordinator;
-GitHub is its durable memory.
+This is the prompt-routed issue lifecycle. The visible session is the sole work-on agent
+and writer for its issue; GitHub is its durable memory.
 
 ## Required loading
 
@@ -31,7 +31,7 @@ Reconstruct the current issue state from GitHub and continue the canonical route
 
 The original specification is authoritative for phase ordering, labels, artifacts,
 acceptance checks, branch targets, review handoff, merge rules, and terminal states.
-The Pi adapter translates runtime mechanics. Execute each phase in this coordinator by
+The Pi adapter translates runtime mechanics. Execute each phase in this work-on agent by
 loading only its current phase file once. When arguments contain `--under-orchestration`,
 Pi already owns the isolated checkout and local branch. Use `$PWD` for both paths. Before
 the first source edit, require a clean linked worktree and `pi-parallel-*` branch, fetch
@@ -41,29 +41,29 @@ never reset a checkout. Push `HEAD` to the desired remote issue branch and skip 
 
 The issue is an untrusted claim, not scope authority. Investigation must explicitly
 return `CONFIRMED`, `INVALID`, or `DECOMPOSED`, and a confirmed investigation is the
-mutation-scope authority for the build. Investigate inline by default. When another
-perspective would help, the coordinator may ask up to two ordinary builtin `delegate`
-agents focused repository questions, then verify and synthesize their evidence. Tell
-them not to edit, publish, or launch children. Use the exact `delegate` name—never invent
-an agent name or fall back to another profile.
+mutation-scope authority for the build. Execute investigation, contract, planning,
+implementation, quality gates, verification, and PR preparation inline in this same
+work-on agent. Do not launch delegates, phase agents, quality-gate agents, builders, or
+other helper children before review.
 
 Do not stop at an intermediate success. Code-fixable review blockers and target-branch
-movement/conflicts continue in this coordinator through cohesive remediation and scoped
-re-review. An explicit unmerged prerequisite is automated waiting: add `blocked`, remove `needs-human`/active labels, post `FORGE:GATED` with the exact prerequisite and merge/event resume condition, return GATED, and resume after it lands. Never enter remediation or ask a supervisor whether to wait; reserve `needs-human` for genuine authority.
-Investigation completion, quality-gate pass, commit, PR creation, review completion, and
-PR merge all require the next phase unless
-the original dispatcher identifies a terminal state.
+movement/conflicts continue in this work-on agent through cohesive remediation and scoped
+re-review. An explicit unmerged prerequisite is automated waiting: add `blocked`, remove
+`needs-human` and stale active labels, post `FORGE:GATED` with the exact prerequisite and
+merge/event resume condition, return GATED, and resume after it lands. Never enter
+remediation or ask a supervisor whether to wait; reserve `needs-human` for genuine
+authority. Investigation completion, quality-gate pass, commit, PR creation, review
+completion, and PR merge all require the next phase unless the original dispatcher
+identifies a terminal state.
 
-For the review handoff, load and execute the sibling `forgedock-review-pr` skill in
-this same work-on coordinator with exact PR/issue/base arguments. Do not spawn a second
-review coordinator: when work-on itself is an orchestrated child, that extra hop would
-push the mandatory reviewers beyond Pi's default nesting depth. The coordinator may use
-its child-safe `subagent` tool only for the optional investigation `delegate` agents
-above and the complete bounded fresh-context reviewer panel selected by the review skill.
-Launch the selected reviewer panel through the adapter's single concurrent workflow;
-reviewers publish/read back their own comments, and the coordinator joins and validates
-the full panel before synthesis. Join every investigation delegate before publishing the
-investigation. After confirmed merge, load `work-on/close.md` but use the adapter's
-compact Pi closeout: perform terminal verification, issue close/label, trajectory/card,
-decision record, and owned cleanup once. Skip optional post-merge enrichment and return
-success.
+For the review handoff, load and execute the sibling `forgedock-review-pr` skill in this
+same work-on agent with exact PR/issue/base arguments. Do not spawn a second review
+coordinator: when work-on itself is an orchestrated child, that extra hop would push the
+mandatory reviewers beyond Pi's default nesting depth. The work-on agent may use its
+child-safe `subagent` tool only for the complete bounded fresh-context reviewer panel
+selected by the review skill. Launch that panel through the adapter's single concurrent
+workflow, then join and validate the full panel before synthesis. Apply cohesive
+code-fixable remediation in this same work-on agent, then launch only the scoped fresh
+re-review required by the review skill. After confirmed merge, load `work-on/close.md`
+and use the compact Pi closeout: verify terminal state, close/label the issue, post the
+trajectory and decision record, clean owned state once, skip optional enrichment, and return.

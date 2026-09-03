@@ -15,9 +15,9 @@
 
 ```text
 /orchestrate
-  → one /work-on lane per issue
-      → investigate
-      → contract + implement + verify
+  → one /work-on agent per issue
+      → investigate inline
+      → contract + implement + verify inline
       → PR
       → context-aware /review-pr
       → bounded remediation + fresh re-review when required
@@ -37,8 +37,9 @@ to runtime mechanics in [`specs/pi-adapter.md`](specs/pi-adapter.md).
   hidden workflow state.
 - **GitHub is durable memory.** Labels, issue/PR state, and completed `FORGE:*` artifacts
   determine resume position.
-- **Subagents provide isolation and fan-out.** One writer owns one issue worktree; review
-  panels use fresh repository-capable contexts.
+- **Subagents provide isolation and fan-out.** Orchestrate launches one work-on agent and
+  one isolated worktree per ready issue. Each agent runs its lifecycle inline and only
+  review or re-review fans out to fresh repository-capable children.
 - **Review is load-bearing.** It runs configured checks, derives domain reviewers, files
   every finding, and never approves from a partial panel.
 - **Closure remains explicit.** Review may merge; work-on verifies the merge and closes the
@@ -124,7 +125,9 @@ The underlying native Pi skills remain directly available as:
 
 The package includes:
 
-- a `forgedock-work-on-coordinator` agent authorized only for mandatory nested review fanout;
+- a per-issue work-on agent, packaged under the historical
+  `forgedock-work-on-coordinator` profile name and authorized only for mandatory nested
+  review fanout;
 - 83 original command/phase/persona specifications;
 - 47 original helper scripts;
 - original configuration documentation and templates;
