@@ -234,6 +234,11 @@ test("Pi routes avoid observed orchestration waste", async () => {
   assert.match(adapter, /does not ship that upstream workspace/);
   assert.match(adapter, /C5\.1–C5\.4/);
   assert.match(reviewer, /never add or remove guessed prefixes/i);
+  assert.match(reviewer, /return grammar is literal and self-contained/);
+  assert.match(reviewer, /finding_count/);
+  assert.match(adapter, /`timeoutMs: 900000`/);
+  assert.match(adapter, /`timeoutMs: 1200000`/);
+  assert.match(adapter, /practical no-deadline value belongs only to complete work-on coordinators/);
   assert.match(review, /Retry only the missing or invalid role/);
   assert.match(review, /never\s+search all comments or build a shell regex/i);
   assert.match(workOn, /compact Pi closeout/);
@@ -258,8 +263,15 @@ test("review comments preserve qualitative evidence when clean", async () => {
     assert.match(text, /limitation|residual risk/i);
   }
   assert.match(reviewer, /evidence-free clean output/);
-  assert.match(adapter, /rejects a verdict, marker, file list/);
+  assert.match(adapter, /literal and self-contained/);
+  assert.match(adapter, /Before POST.*fixed-string/s);
+  assert.match(adapter, /write `\.body` with `jq -j`/);
+  assert.match(adapter, /compare exact bytes with `cmp`/);
+  assert.match(adapter, /retry the exact-ID GET once/);
+  assert.match(adapter, /Synthesis,\s+finding creation, verdict publication, and merge remain unreachable/);
   assert.match(protocols, /applies when findings are empty/);
+  assert.match(protocols, /fenced JSON array identical to the `findings` array/);
+  assert.match(protocols, /FORGE:BODY-INTEGRITY:\{pr\}_\{domain\}_\{unique-token\}/);
 });
 
 test("staging review creates one issue per actionable causal defect", async () => {
