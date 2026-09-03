@@ -83,19 +83,60 @@ The task supplies the repository, PR, frozen full head SHA, reviewer domain, att
 and persona guidance. Before Bash, require `repository` to match one `owner/name` slug,
 PR and attempt to be positive integers, head to be 40 lowercase hex characters, and
 domain to be a lowercase hyphenated slug. Invalid identity fails without a command.
-After finalizing the review:
 
-1. Write one complete body to a unique scratch file outside the source tree. Include exactly one
-   `<!-- FORGE:REVIEW-AGENT:{domain} -->`, the frozen full SHA, panel attempt, verdict,
-   finding count, `## Qualitative Summary`, `## Verified Behaviors`, `## Residual Risks`,
-   the required findings block, and a unique `FORGE:BODY-INTEGRITY` token.
-2. GET the PR and require its current head to equal the assigned full SHA; a changed head
-   fails this result without posting.
-3. POST the body once with `gh api repos/{repository}/issues/{pr}/comments`, capturing the
-   returned comment ID/URL rather than searching by marker.
-4. GET that exact comment ID and require the domain marker, full SHA, attempt, findings
-   block, and integrity token to match using `jq` and fixed string equality. Do not search
-   all comments or construct a shell regex. A failed POST or readback fails this result.
+Every PR comment uses this complete grammar. Persona prose cannot add a second format or
+omit any line. The fenced JSON array is identical to the returned `findings` array; each
+finding also has one compact HTML marker. A clean review uses `[]` and no finding markers.
+
+~~~~text
+<!-- FORGE:REVIEW-AGENT:{domain} -->
+Frozen head: `{full-sha}`
+Panel attempt: `{attempt}`
+Verdict: `{PASS|PASS_WITH_FOLLOW_UP|BLOCKING}`
+Finding count: `{count}`
+
+## Qualitative Summary
+{2-5 sentences}
+
+## Verified Behaviors
+- `path:line` — behavior traced — conclusion
+
+## Residual Risks
+- {concrete limitation or None identified within reviewed scope.}
+
+## Findings
+```json
+{the exact findings array; [] when clean}
+```
+
+<!-- FORGE:BODY-INTEGRITY:{pr}_{domain}_{unique-token} -->
+<!-- REVIEW-FINDINGS-START -->
+<!-- zero or more FINDING:{prefix}-{n}|{confidence}|{severity}|{path}:{line}|{summary} lines -->
+<!-- REVIEW-FINDINGS-END -->
+~~~~
+
+Publish with one file-backed transaction:
+
+1. Write the complete body to a unique scratch file outside the source tree. Before POST,
+   preflight it with direct Bash fixed-string counts: exactly one role marker, full SHA,
+   panel attempt, each qualitative heading, `## Findings`, JSON fence, integrity token,
+   START delimiter, and END delimiter; require 2–8 verified-behavior bullets and validate
+   the separately persisted findings array with `jq -e 'type == "array"'`. GET the PR and
+   require its current head to equal the assigned full SHA.
+2. Create separate files for the POST response, exact-ID GET response, and read-back body.
+   POST once with `gh api repos/{repository}/issues/{pr}/comments --method POST
+   --field body=@"$BODY_FILE" >"$POST_JSON"`; extract the ID and URL from `POST_JSON`.
+3. GET that exact comment ID into `READBACK_JSON`, then run
+   `jq -j '.body' "$READBACK_JSON" >"$READBACK_BODY"` and
+   `cmp -s "$BODY_FILE" "$READBACK_BODY"`. This comparison preserves trailing newlines.
+   Never place the body or POST response in shell command substitution.
+4. Require the exact marker, SHA, attempt, qualitative sections, JSON findings, integrity
+   token, and findings delimiters before returning success.
+   Do not search all comments or construct a shell regex. Do not POST twice.
+
+If publication or readback fails, return the failed delivery immediately with any ID/URL
+already persisted in `POST_JSON`. Never call or wait for a supervisor and never retry the
+POST; the coordinator retries only this invalid role.
 
 ## Required return
 
@@ -114,8 +155,11 @@ Return exactly one body — no extra prose, no additional code fence:
   "attempt": 1,
   "worker": "security",
   "bundle": "bundle-1",
+  "verdict": "PASS",
+  "finding_count": 0,
   "comment_id": 456,
   "comment_url": "https://github.com/owner/name/pull/123#issuecomment-456",
+  "delivery_error": null,
   "summary": "Specific 2–5 sentence qualitative conclusion.",
   "verified_behaviors": [
     "path/to/file.ts:42 — traced request authorization to the write boundary — unauthorized callers remain rejected"
@@ -128,7 +172,10 @@ Return exactly one body — no extra prose, no additional code fence:
 ```
 ````
 
-`summary`, `verified_behaviors`, and `residual_risks` must match the human-readable
+This return grammar is literal and self-contained: include every shown field, use the
+assigned identity unchanged, make `finding_count` equal `findings.length`, and set
+`delivery_error` to a concise failure phase/message instead of `null` when delivery is
+invalid. `summary`, `verified_behaviors`, and `residual_risks` must match the human-readable
 sections posted in the exact comment. `verified_behaviors` must be non-empty even when
 `findings` is empty; evidence-free clean output is invalid.
 
