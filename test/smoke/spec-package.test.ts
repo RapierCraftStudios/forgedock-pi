@@ -262,6 +262,23 @@ test("review comments preserve qualitative evidence when clean", async () => {
   assert.match(protocols, /applies when findings are empty/);
 });
 
+test("staging review creates one issue per actionable causal defect", async () => {
+  const staging = await readFile("specs/original/commands/review-pr-staging.md", "utf8");
+  const skill = await readFile("skills/forgedock-review-pr-staging/SKILL.md", "utf8");
+  const adapter = await readFile("specs/pi-adapter.md", "utf8");
+
+  for (const text of [staging, skill, adapter]) {
+    assert.match(text, /(?:same|shared) root cause/);
+    assert.match(text, /behavioral invariant|broken invariant/);
+    assert.match(text, /one issue per novel actionable\s+causal defect/);
+    assert.match(text, /confirmed patch-caused HIGH\/CRITICAL blocker/i);
+  }
+  assert.match(staging, /Corroborating reviewers.*evidence within that issue/);
+  assert.match(staging, /Different line citations.*never justify duplicate issues/);
+  assert.doesNotMatch(staging, /Keep ALL findings/);
+  assert.doesNotMatch(staging, /No pre-filtering.*Every finding becomes an issue/);
+});
+
 test("fresh builder receives the durable build handoff before mutation", async () => {
   const builder = await readFile("agents/forgedock-builder.md", "utf8");
   const coordinator = await readFile("agents/forgedock-work-on-coordinator.md", "utf8");

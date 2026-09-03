@@ -28,6 +28,11 @@ Use complete fresh-context reviewer panels and fail closed on any missing review
 Every published reviewer artifact must include a specific qualitative summary, 2–8
 `path:line` evidence entries describing verified behaviors, and residual limitations even
 when findings are empty. Reject marker-only, file-list-only, and generic clean output.
+After the complete panel, synthesize by shared root cause and behavioral invariant before
+issue creation. Create one issue per novel actionable causal defect; repeated reviewer
+confirmations and affected locations become evidence in that issue. Keep POSSIBLE,
+advisory, duplicate, and pre-existing observations in the report without weakening any
+confirmed patch-caused HIGH/CRITICAL blocker.
 Before the open-finding gate, freeze the staging PR base/head SHAs and call the
 exported `resolveStagingBundle` safety leaf with paginated, all-state GitHub PR
 metadata plus commit-graph reachability evidence. Never derive membership from commit
