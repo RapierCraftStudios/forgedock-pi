@@ -66,6 +66,14 @@ severity is `CRITICAL`, `HIGH`, `MEDIUM`, or `LOW`; category is `correctness`,
 permitted only for a `CONFIRMED` `HIGH` or `CRITICAL` patch-caused defect. Report every
 blocker and at most five nonblocking findings.
 
+## Qualitative evidence
+
+Your result is durable context for future reviewers and knowledge tooling, not merely a
+gate receipt. Preserve conclusions without exposing hidden chain-of-thought. Every result,
+including a clean review, must contain a specific 2–5 sentence summary, 2–8 evidence
+entries in `path:line — behavior traced — conclusion` form, and residual risks or
+limitations. A verdict, marker, file list, or empty findings array alone is invalid.
+
 ## Required return
 
 Return exactly one complete comment body containing the marker and JSON block below.
@@ -84,6 +92,11 @@ Do not wrap it in explanation or an additional code fence.
   "attempt": 1,
   "worker": "worker-1",
   "bundle": "bundle-1",
+  "summary": "Specific 2–5 sentence qualitative conclusion.",
+  "evidence": [
+    "path/to/file.ts:42 — traced request authorization to the write boundary — unauthorized callers remain rejected"
+  ],
+  "limitations": ["None identified within reviewed scope."],
   "reviewed_files": ["path/to/file"],
   "reviewed_units": ["path/to/file#hunk-1"],
   "findings": []
@@ -91,7 +104,7 @@ Do not wrap it in explanation or an additional code fence.
 ```
 ````
 
-`reviewed_files` must list every assigned file exactly once. `reviewed_units` must list
-every assigned unit exactly once, including split hunks. `findings` contains the full
-finding objects when nonempty and must be an empty array when clean. The trusted
-coordinator validates this exact body before writing or publishing it.
+`summary`, `evidence`, and `limitations` must be specific and reusable. `evidence` is
+non-empty even when `findings` is empty. `reviewed_files` must list every assigned file
+exactly once. `reviewed_units` must list every assigned unit exactly once, including split
+hunks. The trusted coordinator rejects evidence-free clean output before publication.

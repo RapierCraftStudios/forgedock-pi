@@ -92,6 +92,12 @@ review protocol. The bounded sibling shapes stay within Pi's default nesting dep
 `visible orchestrator → work-on coordinator → builder`, followed by
 `visible orchestrator → work-on coordinator → reviewers`.
 
+Every reviewer result is reusable knowledge, including a clean result. Require a specific
+qualitative summary, 2–8 non-empty `path:line — behavior — conclusion` evidence entries,
+and residual limitations. The coordinator renders these as `Qualitative Summary`,
+`Verified Behaviors`, and `Residual Risks` and rejects a verdict, marker, file list, or
+empty findings array without that evidence.
+
 Never substitute inline self-review for a required reviewer. An incomplete panel fails
 closed and must leave an actionable `review-degraded`/gate-failure artifact. Before
 launching a nested panel, Pi's resolved launch contract must include the native
