@@ -154,9 +154,9 @@ Extract from contract:
 | Feature (UI/UX) | Invoke `frontend-design` skill + visual verification |
 | Full-Stack | Backend first, then invoke `frontend-design` skill for UI |
 | Refactor / Maintenance | Implement directly following contract deliverables |
-| Investigation | Spawn research agents, create GitHub issues for findings, skip to I5 |
+| Investigation | Use ordinary builtin `delegate` agents when useful, create GitHub issues for findings, skip to I5 |
 
-**Investigation task special case**: Research deeply, create GitHub issues for each finding using the Pipeline Issue Template (see `commands/issue.md` § "Pipeline Issue Template"). Each issue MUST include `## Problem`, `## Affected Files`, and `## Acceptance Criteria`. Create each issue via the `/issue` create-hook's programmatic invocation contract (see `commands/issue.md` § "Programmatic Invocation Contract") — `Skill(skill="issue", args="--title \"...\" --body-file <path> --label ...")` — instead of calling the raw issue-creation command directly; this gets dedup and body validation for free. Post a deliverables comment listing the created issues, close the original issue, return `IMPLEMENT_RESULT: status: INVESTIGATION_COMPLETE`.
+**Investigation task special case**: Investigate inline by default. When another perspective would help, launch ordinary builtin `delegate` agents with focused questions. Tell them not to edit, publish, or launch children; use the exact `delegate` name and never invent an agent name or fall back to another profile. Create GitHub issues for each finding using the Pipeline Issue Template (see `commands/issue.md` § "Pipeline Issue Template"). Each issue MUST include `## Problem`, `## Affected Files`, and `## Acceptance Criteria`. Create each issue via the `/issue` create-hook's programmatic invocation contract (see `commands/issue.md` § "Programmatic Invocation Contract") — `Skill(skill="issue", args="--title \"...\" --body-file <path> --label ...")` — instead of calling the raw issue-creation command directly; this gets dedup and body validation for free. Post a deliverables comment listing the created issues, close the original issue, return `IMPLEMENT_RESULT: status: INVESTIGATION_COMPLETE`.
 
 ---
 

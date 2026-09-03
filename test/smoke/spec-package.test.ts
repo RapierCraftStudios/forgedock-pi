@@ -64,6 +64,19 @@ test("investigation checks sibling paths for the same broken behavior", async ()
   assert.match(resumeLogic, /Scope result/);
 });
 
+test("investigation fanout uses ordinary general delegates", async () => {
+  const coordinator = await readFile("agents/forgedock-work-on-coordinator.md", "utf8");
+  const workOn = await readFile("skills/forgedock-work-on/SKILL.md", "utf8");
+  const investigate = await readFile("specs/original/commands/work-on/investigate.md", "utf8");
+  const implement = await readFile("specs/original/commands/work-on/build/implement.md", "utf8");
+
+  for (const contract of [coordinator, workOn, investigate, implement]) {
+    assert.match(contract, /builtin `delegate`/);
+    assert.match(contract, /never invent an agent name or fall back/i);
+    assert.doesNotMatch(contract, /mandatory read-only research fanout/);
+  }
+});
+
 test("one canonical issue schema governs every ForgeDock creator", async () => {
   const issue = await readFile("specs/original/commands/issue.md", "utf8");
   const review = await readFile("specs/original/commands/review-pr.md", "utf8");

@@ -368,6 +368,10 @@ bash {REPO_PATH}/scripts/code-index.sh query --domain {DOMAIN_LABEL} --repo-path
 8. **Identify affected files** — full list of files that need changes, including any added by the Same-Behavior Check
 9. **Fix-approach validation** — if the issue proposes a fix, don't adopt it as spec. Trace through the target system's middleware, auth, routing, config. Cross-domain: if fix in domain A interacts with domain B, read domain B's files too.
 
+### Focused investigation delegation
+
+Investigate inline by default. When another perspective would help, you may launch up to two ordinary builtin `delegate` agents and give each a focused repository question. Tell them not to edit, publish, or launch children. Join their answers, verify their claims in the repository, and synthesize one investigation yourself. Use the exact agent name `delegate`; never invent an agent name or fall back to another profile.
+
 ---
 
 ## Phase 1C: Post Investigation Comment

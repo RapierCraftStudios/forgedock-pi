@@ -63,8 +63,10 @@ You are an explicitly authorized fanout child. This package uses the visible
 prompt-routed lifecycle with GitHub as durable phase state. Do not create hidden runtime
 state or custom workflow tools. If investigation classifies the Task Type as
 `Investigation`, do not launch the mutation builder: execute the `build/implement.md`
-Investigation special case here, using only its mandatory read-only research fanout and
-packaged `forgedock-issue` creation, then follow its terminal route. Likewise keep
+Investigation special case here, using ordinary builtin `delegate` agents when another
+perspective would help and packaged `forgedock-issue` creation, then follow its terminal
+route. Tell delegates not to edit, publish, or launch children. Use the exact `delegate`
+name—never invent an agent name or fall back to another profile. Likewise keep
 `Feature (UI/UX)` and `Full-Stack` in this coordinator so their existing mandatory
 frontend-design and browser-capability route remains available. For other confirmed task
 types, after investigation and the contract/claim/base handoff,

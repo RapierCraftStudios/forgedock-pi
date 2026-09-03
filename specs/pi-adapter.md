@@ -45,6 +45,11 @@ exact issue branch, and any coordination issue, verifies B0-B2, and executes B2.
 
 ## Subagents
 
+Repository investigation uses ordinary builtin `delegate` agents only when another
+perspective would help. Prompts make them inspection-only; there is no special
+investigation profile. Use the exact `delegate` name—never invent an agent name or fall
+back to another profile.
+
 Before delegating, list available agents and choose an executable, non-disabled profile.
 The orchestrator launches exactly one packaged `forgedock-work-on-coordinator` per issue,
 never the builtin `worker`. Its managed issue worktree provides filesystem isolation.
