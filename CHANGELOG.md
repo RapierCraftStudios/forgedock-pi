@@ -2,6 +2,12 @@
 
 ## Unreleased — Prompt-router simplification
 
+- Clarified that orchestrate launches one sole-writer work-on agent per ready issue; the
+  historical `forgedock-work-on-coordinator` profile name does not add another workflow
+  layer.
+- Restricted nested subagents inside a work-on lane to the fresh review and re-review
+  panels. Investigation, planning, build, quality gates, verification, remediation,
+  merge, close, and cleanup now remain inline in the same per-issue agent.
 - Restored the three lifecycle commands (orchestrate, work-on, review-pr, plus the
   staging strategy) as thin prompt routers over the packaged original specifications.
 - Resynced `specs/original/**` byte-for-byte with the tested upstream ForgeDock command

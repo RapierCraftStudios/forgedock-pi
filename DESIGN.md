@@ -9,7 +9,7 @@ The authoritative product loop is:
 
 ```text
 /orchestrate
-  → one /work-on coordinator per issue
+  → one /work-on agent per issue
       → investigate
       → [decompose | contract → implement → verify → PR]
       → /review-pr
@@ -42,8 +42,8 @@ tool names, skill loading, and subagent fan-out, but it may not alter:
 ## Pi command architecture
 
 Pi skills hold workflow specifications and references. A packaged, depth-bounded
-work-on coordinator agent gives orchestrated issue lanes the one nested capability they
-need for fresh review fanout:
+work-on agent gives each orchestrated issue lane the one nested capability it needs for
+fresh review fanout:
 
 ```text
 agents/
@@ -86,9 +86,10 @@ restarted according to its specification.
 
 ### Work-on
 
-The visible work-on coordinator owns one issue through terminal closure. It loads the
-next phase specification progressively and continues until invalid, decomposed,
-human-gated/awaiting-merge, or fully merged and closed.
+The visible work-on agent owns one issue through terminal closure. It loads the next
+phase specification progressively and executes investigation, contract, implementation,
+verification, PR preparation, remediation, merge, close, and cleanup inline until the
+issue is invalid, decomposed, genuinely human-gated, or fully merged and closed.
 
 Review may merge the PR but never closes the issue. Work-on close verifies the merge,
 closes the issue explicitly, updates labels and parents, cleans the worktree, posts the
@@ -128,22 +129,24 @@ It does not implement a second issue lifecycle.
 
 Fork only for:
 
-- independent parallel issue lanes;
-- fresh-context load-bearing reviews;
-- genuinely long isolated quality-gate work.
+- independent parallel issue lanes; and
+- fresh-context load-bearing review or re-review panels.
 
-Orchestrate launches the packaged `forgedock-work-on-coordinator`, not the generic
-builtin worker. That coordinator owns one issue and is explicitly authorized to launch
-only its mandatory fresh read-only reviewer panel. Review coordination stays in the
-work-on child, producing the bounded nesting shape:
+Orchestrate launches one per-issue work-on agent through the packaged
+`forgedock-work-on-coordinator` profile, not the generic builtin worker. The profile name
+is historical; the child is the sole work-on writer, not another orchestration layer. It
+is explicitly authorized to launch only its mandatory fresh read-only review or
+re-review panel. Review coordination stays in the work-on child, producing the bounded
+nesting shape:
 
 ```text
-visible orchestrator → work-on coordinator → fresh reviewers
+visible orchestrator → work-on agents → fresh reviewers
 ```
 
-It never recursively launches another work-on lifecycle or writer. Every writer owns
-one isolated worktree. Required reviewer panels are complete or fail closed; inline
-self-review never substitutes for a missing reviewer.
+It never launches investigation delegates, quality-gate agents, phase agents, another
+work-on lifecycle, or another writer. Every writer owns one isolated worktree. Required
+reviewer panels are complete or fail closed; inline self-review never substitutes for a
+missing reviewer.
 
 Pi-subagents supplies execution and isolation. It is not the workflow state machine.
 

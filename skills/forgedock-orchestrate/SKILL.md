@@ -43,24 +43,24 @@ overlap, database/migration serialization, and configured global files. Detect c
 and gate them visibly. Do not inspect or implement product code and never adjudicate
 issue validity or duplicates.
 
-Launch one fresh `forgedock-work-on-coordinator` per issue with task text exactly
-`<issue> --under-orchestration`. Use one async workflow promise graph: roots start
-together, and each dependent starts as soon as its own predecessor promises succeed —
+Launch one fresh per-issue work-on agent using the packaged
+`forgedock-work-on-coordinator` profile and exact task `<issue> --under-orchestration`.
+Each child is its issue's sole writer and runs `forgedock-work-on` inline. Use one async
+promise graph: roots start together, and each dependent starts when its predecessors do —
 never after a whole sibling wave. Use bounded `orchestration.max_concurrent` and isolated
 issue worktrees. Give every work-on child Pi's maximum supported runtime as a practical
 no-deadline value; omission silently restores Pi's 30-minute default. Before workflow
 launch, create one clean detached base per configured PR target and set each issue item's
 `cwd` to that base before `worktree: true`; children verify/fast-forward before editing.
-The packaged coordinator is an explicit, depth-bounded fanout child: it may launch only
-the fresh read-only reviewers required by its review phase. Do not use the builtin
-`worker` for a complete work-on lane, and do not give the coordinator a blanket "never
-run subagents" instruction; forbid nested issue/work-on orchestration while preserving
-its mandatory reviewer fanout. All dispatch — wave, successor, and recovery relaunch —
+The work-on agent may launch only fresh read-only review and re-review panels.
+Investigation, planning, build, quality gates, verification, PR, remediation, merge,
+close, and cleanup stay inline. Do not use builtin `worker`; forbid every pre-review
+helper, phase, builder, quality-gate, or nested issue/work-on agent. All dispatch — wave, successor, and recovery relaunch —
 follows the canonical recipe in `specs/pi-adapter.md` (§ Orchestrate dispatch
 mechanics): child task text is always exactly `<issue> --under-orchestration`, globals
 appear only on workflowScript calls, and recovery relaunches verify GitHub state first
 and reuse the identical first-dispatch shape. Never compose improvised prose task
-texts for coordinators.
+texts for work-on agents.
 Classify GitHub state as DONE, GATED, FAILED, or IN_PROGRESS. GATED is not FAILED. A lane waiting on an explicit prerequisite stays automated: retain its `blocked`/`FORGE:GATED` resume condition and resume work-on when that exact merge/event occurs.
 Mechanical child failure is resumable: replace stale labels with `workflow:engine-error`, record
 the run/handoff, and resume only non-terminal work. Wrong ancestry is technical remediation,
