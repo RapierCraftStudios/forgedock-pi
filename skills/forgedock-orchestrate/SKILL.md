@@ -62,8 +62,8 @@ appear only on workflowScript calls, and recovery relaunches verify GitHub state
 and reuse the identical first-dispatch shape. Never compose improvised prose task
 texts for coordinators.
 Classify GitHub state as DONE, GATED, FAILED, or IN_PROGRESS. GATED is not FAILED.
-Mechanical child failure is resumable: replace stale active labels with
-`workflow:engine-error`, record the run/handoff, and resume or canonically relaunch only
-non-terminal work. Wrong ancestry or target movement is technical remediation, never a
-human-authority gate. Do not poll or abandon a planned issue. After drain, clean only
-handoff-recorded batch identities; never mutate historical matches. Report them only.
+Mechanical child failure is resumable: replace stale labels with `workflow:engine-error`, record
+the run/handoff, and resume only non-terminal work. Wrong ancestry is technical remediation,
+never a human gate. Do not poll or abandon work. After drain,
+clean only handoff-recorded batch identities. Do not invoke the Claude-only `/audit-agents`; use Pi child metadata or known
+`_meta.json` artifact paths, never `~/.claude`. Return one compact terminal table with totals.

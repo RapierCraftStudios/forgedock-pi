@@ -54,8 +54,11 @@ model; a standalone review resolves it once from `forge.yaml` (`subagent_model`,
 `default_model`). Never pass legacy aliases. Launch the complete
 panel concurrently with the adapter's one synchronous `workflowScript`/`runs.all`, not
 separate subagent calls. Each reviewer posts and exact-ID reads back its own role-scoped
-exact-head comment. Join and validate every result/readback before synthesis; never
-proxy-post, accept a rejected/partial child, or use a partial panel as the verdict.
+exact-head comment. Validate that returned ID directly with `jq` and fixed strings, not a
+search across comments or a shell regex. Join and validate every result/readback before
+synthesis; never proxy-post or use a partial panel as the verdict. Retain every valid
+same-head role result and retry only a missing or invalid role under the same panel
+attempt with a new workflow key—never relaunch roles that already succeeded.
 
 For a PR owned by work-on, keep blocking findings on the existing PR and source issue
 for cohesive remediation; do not create recursive blocker issues. Create or deduplicate

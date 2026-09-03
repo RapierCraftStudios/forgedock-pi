@@ -357,6 +357,30 @@ test("review panel is concurrent, directly published, and fails closed", async (
   assert.match(reviewSkill, /never\s+proxy-post/);
 });
 
+test("Pi routes avoid observed orchestration waste", async () => {
+  const adapter = await readFile("specs/pi-adapter.md", "utf8");
+  const reviewer = await readFile("agents/forgedock-reviewer.md", "utf8");
+  const review = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
+  const workOn = await readFile("skills/forgedock-work-on/SKILL.md", "utf8");
+  const orchestrate = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
+
+  assert.match(adapter, /retry\s+only that missing or invalid role/i);
+  assert.match(adapter, /never relaunch a valid role/i);
+  assert.doesNotMatch(adapter, /reruns a fresh complete panel/);
+  assert.match(review, /retry only a missing or invalid role/i);
+  assert.match(reviewer, /git rev-parse --show-toplevel/);
+  assert.match(reviewer, /Never add or remove guessed path prefixes/);
+  assert.match(reviewer, /Do not search\s+all comments or construct a shell regex/);
+  assert.match(adapter, /does not ship that upstream workspace/);
+  assert.match(adapter, /C5\.1–C5\.4/);
+  assert.match(workOn, /compact Pi closeout/);
+  for (const text of [adapter, orchestrate]) {
+    assert.match(text, /do not invoke the Claude-only `\/audit-agents`/i);
+    assert.match(text, /known\s+`_meta\.json` artifact paths/);
+    assert.match(text, /compact\s+terminal/i);
+  }
+});
+
 test("work-on reuses managed orchestration context and closes scope before validation", async () => {
   const adapter = await readFile("specs/pi-adapter.md", "utf8");
   const workOn = await readFile("skills/forgedock-work-on/SKILL.md", "utf8");

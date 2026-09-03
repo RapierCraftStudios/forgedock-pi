@@ -37,8 +37,18 @@ terminal conditions, review policy, GitHub artifacts, remediation, merge, and cl
 | `yq`-based config reads | Resolve required configuration once at route start with one direct `yq` call when installed, or one short `node` call using the package's YAML dependency. Retain those values through the route. Missing/malformed required configuration fails closed; do not retry alternate quoting forms. |
 | GitHub and Git operations | Use direct `gh` and `git` commands. Verify `gh auth status` and repository access, and run `gh auth setup-git` before noninteractive fetch/push. |
 | Missing optional helper script | Follow the prose fallback already described by the specification. Never use an unbounded filesystem search. |
+| `packages/protocol/...` CLI references | The Pi package does not ship that upstream workspace. Do not search for it. Emit the literal marker/body format shown by the current phase, post from a file, and verify the exact returned comment ID. |
 | Child model selection | On Pi, resolve one full model ID from `forge.yaml` `agents.subagent_model`, then `agents.default_model`. This overrides legacy model prose in the original specs. Never pass `sonnet`, `opus`, or `haiku` aliases; investigation delegates use maximum thinking and reviewers use the risk-calibrated suffix from the review skill. |
 | Mechanical failure recovery | A mechanical failure (provider loss, gate mismatch, conflict) is durable `workflow:engine-error` or `review-degraded` evidence with the run ID and handoff path, followed by resume/relaunch. Remove stale active-phase labels. Reserve `needs-human` for a genuine human authority decision. |
+
+## Direct execution discipline
+
+Retain the target root from `git rev-parse --show-toplevel` and the packaged root from the
+loaded skill path once. Resolve every later path against those roots. Never guess alternate
+path prefixes or probe absent files repeatedly; use one bounded `find` or `grep` from the
+known root when discovery is needed. Keep Bash commands short. Use `jq` for JSON, file-backed
+GitHub bodies, and `if` conditions for expected no-match probes instead of quote-heavy regex
+pipelines whose normal nonzero result becomes a tool failure.
 
 ## Subagents
 
@@ -54,16 +64,18 @@ only dispatch is one `await runs.all([...])`. Every item uses the resolved full 
 multiple synchronous `subagent` calls in one turn and never launch reviewers serially.
 The coordinator must require every ordered result to succeed and contain the expected
 identity plus a comment ID/URL, then GET each exact comment ID and verify its role marker,
-full head SHA, panel attempt, findings block, and integrity token. Re-read the PR head
-after all readbacks and discard the panel if it moved. Only one complete set from the
-same head and attempt may reach synthesis. The coordinator never proxy-posts comments.
+full head SHA, panel attempt, findings block, and integrity token with direct `jq` and fixed
+string equality. Never enumerate comments or build shell regex validators when the returned
+comment ID is available. Re-read the PR head after all readbacks and discard the panel only
+if it moved. One complete same-head, same-attempt role set is required for synthesis. The
+coordinator never proxy-posts comments.
 
-A transient provider failure increments the attempt and reruns a fresh complete panel at
-the same frozen head, up to the existing retry bound; earlier partial comments remain
-audit evidence but are never verdict input. A malformed result,
-rejected child, failed publication/readback, or exhausted transient retries records
-`review-degraded` evidence and stops without a verdict, remaining resumable rather than
-becoming `needs-human`. Never substitute inline self-review.
+A successful exact-head role result is retained for that panel attempt. If a reviewer is a
+rejected child, times out, loses its provider, returns malformed output, or fails publication/readback, retry
+only that missing or invalid role under the same panel attempt with a new workflow key;
+never relaunch a valid role. Join retained and retried roles, then validate the complete
+set. Exhausted role retries record `review-degraded` evidence and stop without a verdict,
+remaining resumable rather than becoming `needs-human`. Never substitute inline self-review.
 
 Reviewer deadlines are runtime plumbing, not workflow gates: use the original generous
 reviewer deadline and a strictly larger panel join deadline. Pi attention notices are
@@ -146,6 +158,23 @@ corpus. Never load the pi-subagents reference corpus to compose it. Consult orig
 phase files only for ambiguous selectors, cycles, or recovery
 not covered above. Investigation `delegate` calls remain direct children; the one
 reviewer panel workflow described above is the coordinator's only nested workflow.
+
+## Compact Pi closeout and audit
+
+For `work-on/close`, fetch the issue, PR, and relevant comments once and reuse that JSON.
+Run only terminal work: verify the reviewed head and merge, finish the issue body when
+needed, set the terminal label and close/read back the issue, update an actual parent
+tracker when present, post one missing trajectory/card and one missing PR decision record
+from retained values, then perform owned cleanup. Do not run the optional module-dossier,
+knowledge-index, cost-prior, memory-Gist, knowledge-ledger, or ADR enrichment sections
+(C1.7 and C5.1–C5.4) in a Pi work-on run. Do not search for the absent protocol workspace.
+
+For orchestrate Phase 5, do not invoke the Claude-only `/audit-agents` command or search
+`~/.claude`. Summarize model, duration, usage, turns, and tool count only from metadata
+already returned by Pi children or their known `_meta.json` artifact paths; report
+"unavailable" when those references are absent. The final Pi report is one compact
+terminal issue/PR table plus follow-ups, cleanup, and available efficiency totals. Do not
+reconstruct the original extended analytics/card report unless the user explicitly asks.
 
 ## Cleanup ownership
 
