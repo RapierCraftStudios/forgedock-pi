@@ -100,8 +100,10 @@ deferred until the predecessor reaches terminal success and refreshes its base.
 Classify GitHub state as DONE, GATED, FAILED, or IN_PROGRESS. GATED is not FAILED.
 Durable GitHub artifacts override a missing/malformed provider envelope. Dispatch
 successors immediately after successful predecessors complete. Do not poll. After the
-queue drains or reaches a documented paused state, execute mandatory cleanup and
-publish the consolidated report.
+queue drains or reaches a documented paused state, execute mandatory cleanup. Do not
+invoke the Claude-only `/audit-agents`; use Pi child metadata or known `_meta.json` paths,
+never `~/.claude`. Publish one compact terminal table with follow-ups, cleanup, and
+available efficiency totals.
 
 ## Reload and recovery contract
 

@@ -201,8 +201,9 @@ after cap exhaustion.
 
 Never reset, checkout, or rebase the harness-managed worktree to `main` or `staging`
 after pushing. Review the frozen remote PR head without rewriting the child workspace.
-After confirmed merge, load `work-on/close.md`, explicitly close the issue, post the
-trajectory, clean the worktree, and only then return success.
+After confirmed merge, load `work-on/close.md` but use the adapter's compact Pi closeout:
+perform terminal verification, issue close/label, trajectory/card, decision record, and
+owned cleanup once. Skip optional post-merge enrichment and only then return success.
 
 ## Controlled staging refresh
 

@@ -224,6 +224,26 @@ test("package exposes a depth-bounded work-on coordinator with reviewer fanout",
   assert.doesNotMatch(agent, /maxSubagentDepth: 1/);
 });
 
+test("Pi routes avoid observed orchestration waste", async () => {
+  const adapter = await readFile("specs/pi-adapter.md", "utf8");
+  const reviewer = await readFile("agents/forgedock-reviewer.md", "utf8");
+  const review = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
+  const workOn = await readFile("skills/forgedock-work-on/SKILL.md", "utf8");
+  const orchestrate = await readFile("skills/forgedock-orchestrate/SKILL.md", "utf8");
+
+  assert.match(adapter, /does not ship that upstream workspace/);
+  assert.match(adapter, /C5\.1–C5\.4/);
+  assert.match(reviewer, /never add or remove guessed prefixes/i);
+  assert.match(review, /Retry only the missing or invalid role/);
+  assert.match(review, /never\s+search all comments or build a shell regex/i);
+  assert.match(workOn, /compact Pi closeout/);
+  for (const text of [adapter, orchestrate]) {
+    assert.match(text, /do not\s+invoke the Claude-only `\/audit-agents`/i);
+    assert.match(text, /known `_meta\.json`/);
+    assert.match(text, /compact\s+terminal/i);
+  }
+});
+
 test("fresh builder receives the durable build handoff before mutation", async () => {
   const builder = await readFile("agents/forgedock-builder.md", "utf8");
   const coordinator = await readFile("agents/forgedock-work-on-coordinator.md", "utf8");
