@@ -1413,7 +1413,8 @@ function renderReviewerResult(result: ForgeReviewerResult): string {
   const limitations = result.limitations.length
     ? result.limitations.map((value) => `- ${value}`).join("\n")
     : "- None.";
-  return `## ${result.reviewer}\n\n**Verdict**: \`${result.verdict}\`\n**Reviewed head**: \`${result.headSha}\`\n\n### Findings\n\n${findings}\n\n### Limitations\n\n${limitations}`;
+  const evidence = result.evidence.map((value) => `- ${value}`).join("\n");
+  return `## ${result.reviewer}\n\n**Verdict**: \`${result.verdict}\`\n**Reviewed head**: \`${result.headSha}\`\n\n### Qualitative Summary\n\n${result.summary}\n\n### Verified Behaviors\n\n${evidence}\n\n### Findings\n\n${findings}\n\n### Residual Risks\n\n${limitations}`;
 }
 
 function renderStagingGate(

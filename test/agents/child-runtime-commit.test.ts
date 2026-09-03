@@ -290,6 +290,8 @@ test("review result files are schema and identity bound", () => {
     reviewer: "architecture",
     headSha: "abcdef1234567890",
     verdict: "pass",
+    summary: "Reviewed the changed runtime path and found its contract preserved.",
+    evidence: ["src/index.ts:1 — traced the exported entrypoint — behavior remains correct"],
     findings: [],
     filesReviewed: ["src/index.ts"],
     limitations: [],
@@ -310,6 +312,15 @@ test("review result files are schema and identity bound", () => {
         headSha: "abcdef1234567890",
       }),
     /identity does not match/,
+  );
+  assert.throws(
+    () =>
+      parseBoundReviewerResult(JSON.stringify({ ...value, evidence: [] }), {
+        runId: "forge-run",
+        reviewer: "architecture",
+        headSha: "abcdef1234567890",
+      }),
+    /valid JSON|schema/i,
   );
   assert.throws(
     () =>

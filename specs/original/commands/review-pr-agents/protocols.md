@@ -147,6 +147,19 @@ Every finding must include:
 
 ---
 
+## Qualitative Evidence Contract
+
+Every review comment is durable context for future reviewers and knowledge tooling, not
+just a gate marker. Before the structured findings block, include these visible sections:
+
+- `## Qualitative Summary` — 2–5 specific sentences naming the behavior reviewed and why it passed or failed.
+- `## Verified Behaviors` — 2–8 entries in `path:line — behavior traced — conclusion` form.
+- `## Residual Risks` — concrete limitations or `None identified within reviewed scope.`
+
+This contract applies when findings are empty. A verdict, marker, file list, or “no
+findings” statement without this evidence is invalid and must not be accepted as a panel
+receipt. Preserve conclusions and source evidence, not private chain-of-thought.
+
 ## Structured Findings Protocol
 
 **All review agents MUST include a machine-readable findings block at the end of their PR comment.** This is NON-OPTIONAL. Structured findings let the coordinator deduplicate, classify, keep work-on blockers on the owning PR/source issue, and publish genuinely independent follow-up work when warranted. A finding does not need a new issue to remain durable.

@@ -1559,7 +1559,7 @@ export class ForgeWorkOnController {
           headSha: reviewerResult.headSha,
           changedFiles: reviewerResult.filesReviewed,
           verification: [],
-          evidence: reviewerResult.limitations,
+          evidence: [...reviewerResult.evidence, ...reviewerResult.limitations],
           reviewerResult,
           ...(reviewerResult.verdict === "blocked"
             ? { blocker: "Reviewer returned blocked." }
@@ -1836,6 +1836,7 @@ export class ForgeWorkOnController {
           baseSha: nodeResult.baseSha,
           reviewerResult: reviewer,
           evidence: [
+            ...reviewer.evidence,
             ...reviewer.limitations,
             `reviewer-verdict:${reviewer.verdict}`,
           ],
@@ -5781,7 +5782,7 @@ function renderReviewerArtifact(
         `<!-- FINDING:${finding.id}|${finding.confidence.toUpperCase()}|${finding.severity.toUpperCase()}|${finding.file}:${finding.line}|${finding.summary.replaceAll("|", "/")} -->`,
     )
     .join("\n");
-  return `## ${title} Review\n\n**Review mode**: isolated fresh-context pass.  \n**Reviewed head**: \`${reviewer.headSha}\`  \n**Scope**: ${reviewer.filesReviewed.join(", ") || "frozen PR diff"}.\n\n### Findings\n\n${findings}\n\n**Verdict**: ${reviewer.verdict === "pass" ? "PASS" : reviewer.verdict.toUpperCase()}\n\n### Verification\n\n${reviewer.limitations.length ? reviewer.limitations.map((item) => `- Limitation: ${item}`).join("\n") : "- No reviewer limitations reported."}\n\n<!-- REVIEW-FINDINGS-START -->\n${findingMarkers}\n<!-- REVIEW-FINDINGS-END -->`;
+  return `## ${title} Review\n\n**Review mode**: isolated fresh-context pass.  \n**Reviewed head**: \`${reviewer.headSha}\`  \n**Scope**: ${reviewer.filesReviewed.join(", ") || "frozen PR diff"}.\n\n### Qualitative Summary\n\n${reviewer.summary}\n\n### Verified Behaviors\n\n${reviewer.evidence.map((item) => `- ${item}`).join("\n")}\n\n### Findings\n\n${findings}\n\n**Verdict**: ${reviewer.verdict === "pass" ? "PASS" : reviewer.verdict.toUpperCase()}\n\n### Residual Risks\n\n${reviewer.limitations.length ? reviewer.limitations.map((item) => `- ${item}`).join("\n") : "- None identified within reviewed scope."}\n\n<!-- REVIEW-FINDINGS-START -->\n${findingMarkers}\n<!-- REVIEW-FINDINGS-END -->`;
 }
 
 function renderReviewSummary(

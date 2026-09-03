@@ -41,6 +41,8 @@ test("work-on reviewer results are rebound to the shared frozen review identity"
     reviewer: "forge-review-security",
     headSha: "abcdef1234567890",
     verdict: "findings",
+    summary: "Reviewed the changed security behavior through its production call path.",
+    evidence: ["src/example.ts:1 — traced the changed input to its sink — finding remains reachable"],
     findings: [
       {
         id: "SEC-1",

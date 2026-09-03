@@ -64,11 +64,18 @@ only dispatch is one `await runs.all([...])`. Every item uses the resolved full 
 multiple synchronous `subagent` calls in one turn and never launch reviewers serially.
 The coordinator must require every ordered result to succeed and contain the expected
 identity plus a comment ID/URL, then GET each exact comment ID and verify its role marker,
-full head SHA, panel attempt, findings block, and integrity token with direct `jq` and fixed
-string equality. Never enumerate comments or build shell regex validators when the returned
+full head SHA, panel attempt, findings block, integrity token, specific qualitative summary,
+2–8 non-empty `path:line — behavior — conclusion` evidence entries, and residual risks with
+direct `jq` and fixed string equality. Reject a clean result that contains only markers,
+file lists, a verdict, or an empty findings array. Never enumerate comments or build shell
+regex validators when the returned
 comment ID is available. Re-read the PR head after all readbacks and discard the panel only
 if it moved. One complete same-head, same-attempt role set is required for synthesis. The
 coordinator never proxy-posts comments.
+
+A reviewer comment is also reusable knowledge: its summary and verified behaviors must
+state what production behavior was traced and the evidence-based conclusion, including
+when no defect was found. Do not publish hidden reasoning or generic filler.
 
 A successful exact-head role result is retained for that panel attempt. If a reviewer is a
 rejected child, times out, loses its provider, returns malformed output, or fails publication/readback, retry

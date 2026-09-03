@@ -21,6 +21,9 @@ authoritative for bundle discovery, gates, reviewer panels, finding triage, and 
 deployment checklist; follow its phases and hard rules.
 
 Use complete fresh-context reviewer panels and fail closed on any missing reviewer.
+Every reviewer comment is a reusable knowledge artifact: require a specific qualitative
+summary, 2–8 concrete verified behaviors with `path:line` evidence, and residual risks even
+when findings are empty. Reject marker-only, file-list-only, and generic clean comments.
 Translate nested `Skill("issue", ...)` calls to the packaged `forgedock-issue` skill
 and nested `Skill("test-gate", ...)` calls to the packaged `forgedock-test-gate` skill,
 requiring its `FORGE:TEST_GATE:RESULT=BLOCK|PASS|SKIP` marker. Emit exactly one
