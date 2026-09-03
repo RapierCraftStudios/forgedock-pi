@@ -39,7 +39,9 @@ and join every selected reviewer. Every reviewer task must say that blocking fin
 are limited to defects introduced or made reachable by the frozen patch, cite the
 changed hunk or changed-path call chain, and may return a clean approval. Reviewers may
 trace callers for evidence, but pre-existing debt, style, speculative hardening, and
-unrelated redesign are non-blocking follow-up issues.
+unrelated redesign are non-blocking follow-up issues. Every reviewer result must preserve
+a specific qualitative summary, 2–8 `path:line` evidence entries for verified behaviors,
+and residual limitations even when clean; evidence-free verdicts are invalid.
 
 Use `timeoutMs: 3600000` for every max-thinking reviewer and omit the parent deadline or
 set it to at least `3900000`. Never use 120000/180000 ms reviewer deadlines. Active

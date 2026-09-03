@@ -310,6 +310,8 @@ function reviewerResult(
     reviewer,
     headSha: route.headSha,
     verdict: findings.length > 0 ? "findings" : "pass",
+    summary: `Reviewed ${reviewer} behavior through the changed production path.`,
+    evidence: ["src/example.ts:12 — traced the changed behavior — contract remains intact"],
     findings,
     filesReviewed: ["src/example.ts"],
     limitations: [],
@@ -519,6 +521,8 @@ test("clean standalone review posts route, reviewer, and summary and completes r
   assert.match(h.github.artifacts[0]?.marker ?? "", /FORGE:REVIEW_ROUTE/);
   assert.match(h.github.artifacts[1]?.marker ?? "", /FORGE:REVIEW_AGENT/);
   assert.match(h.github.artifacts[1]?.body ?? "", /forge-review-security/);
+  assert.match(h.github.artifacts[1]?.body ?? "", /Qualitative Summary/);
+  assert.match(h.github.artifacts[1]?.body ?? "", /traced the changed behavior/);
   assert.match(h.github.artifacts[2]?.marker ?? "", /REVIEW_FINDING_ISSUES/);
   assert.match(h.github.artifacts[3]?.marker ?? "", /FORGE:REVIEW_SUMMARY/);
 });

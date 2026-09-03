@@ -44,6 +44,8 @@ export interface ForgeReviewerResult {
   reviewer: string;
   headSha: string;
   verdict: "pass" | "findings" | "blocked";
+  summary: string;
+  evidence: readonly string[];
   findings: readonly ForgeReviewFindingResult[];
   filesReviewed: readonly string[];
   limitations: readonly string[];
@@ -172,6 +174,8 @@ export const FORGE_REVIEWER_OUTPUT_SCHEMA = {
     "reviewer",
     "headSha",
     "verdict",
+    "summary",
+    "evidence",
     "findings",
     "filesReviewed",
     "limitations",
@@ -182,6 +186,8 @@ export const FORGE_REVIEWER_OUTPUT_SCHEMA = {
     reviewer: { type: "string", minLength: 1 },
     headSha: { type: "string", minLength: 7 },
     verdict: { type: "string", enum: ["pass", "findings", "blocked"] },
+    summary: { type: "string", minLength: 1 },
+    evidence: { type: "array", minItems: 1, items: { type: "string", minLength: 1 } },
     findings: { type: "array", items: findingSchema },
     filesReviewed: { type: "array", items: { type: "string", minLength: 1 } },
     limitations: { type: "array", items: { type: "string", minLength: 1 } },
@@ -505,6 +511,10 @@ function isReviewerResult(value: unknown): value is ForgeReviewerResult {
     (result.verdict === "pass" ||
       result.verdict === "findings" ||
       result.verdict === "blocked") &&
+    typeof result.summary === "string" &&
+    result.summary.trim().length > 0 &&
+    isStringArray(result.evidence) &&
+    result.evidence.length > 0 &&
     Array.isArray(result.findings) &&
     result.findings.every(isFindingResult) &&
     isStringArray(result.filesReviewed) &&

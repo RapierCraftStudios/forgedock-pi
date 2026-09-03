@@ -25,6 +25,9 @@ material-change analysis, service/domain bug hunting, regression assessment, run
 test gate, finding triage, and deployment checklist.
 
 Use complete fresh-context reviewer panels and fail closed on any missing reviewer.
+Every published reviewer artifact must include a specific qualitative summary, 2–8
+`path:line` evidence entries describing verified behaviors, and residual limitations even
+when findings are empty. Reject marker-only, file-list-only, and generic clean output.
 Before the open-finding gate, freeze the staging PR base/head SHAs and call the
 exported `resolveStagingBundle` safety leaf with paginated, all-state GitHub PR
 metadata plus commit-graph reachability evidence. Never derive membership from commit

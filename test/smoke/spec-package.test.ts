@@ -244,6 +244,24 @@ test("Pi routes avoid observed orchestration waste", async () => {
   }
 });
 
+test("review comments preserve qualitative evidence when clean", async () => {
+  const reviewer = await readFile("agents/forgedock-reviewer.md", "utf8");
+  const adapter = await readFile("specs/pi-adapter.md", "utf8");
+  const review = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
+  const staging = await readFile("skills/forgedock-review-pr-staging/SKILL.md", "utf8");
+  const protocols = await readFile("specs/original/commands/review-pr-agents/protocols.md", "utf8");
+
+  for (const text of [reviewer, adapter, review, staging, protocols]) {
+    assert.match(text, /qualitative\s+(?:summary|evidence)/i);
+    assert.match(text, /path:line/i);
+    assert.match(text, /evidence|verified behavior/i);
+    assert.match(text, /limitation|residual risk/i);
+  }
+  assert.match(reviewer, /evidence-free clean output/);
+  assert.match(adapter, /rejects a verdict, marker, file list/);
+  assert.match(protocols, /applies when findings are empty/);
+});
+
 test("fresh builder receives the durable build handoff before mutation", async () => {
   const builder = await readFile("agents/forgedock-builder.md", "utf8");
   const coordinator = await readFile("agents/forgedock-work-on-coordinator.md", "utf8");
