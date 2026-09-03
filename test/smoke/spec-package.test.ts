@@ -112,8 +112,12 @@ test("review keeps exact-head quality without target-movement starvation", async
   assert.match(review, /clean\s+and mergeable/i);
   assert.match(review, /review loop/i);
   assert.match(adapter, /review-starvation/i);
-  assert.match(reviewSkill, /one\s+additional workflow containing only that role/s);
+  assert.match(reviewSkill, /one\s+additional\s+workflow containing only that role/s);
   assert.match(reviewSkill, /one\s+SHA-bound consolidated panel comment/s);
+  assert.match(reviewSkill, /never use `runs\.host`/);
+  assert.match(adapter, /`runs\.host` is not available/);
+  assert.match(adapter, /Never restart a panel for JSON key casing/);
+  assert.match(reviewSkill, /formatting variance alone never restarts a role or panel/);
 });
 
 test("remediated executable heads retain security review and ordinary issue review stays approving", async () => {
@@ -146,9 +150,9 @@ test("review uses generic delegates without package capability ceilings", async 
   const workOnAgent = await text("agents/forgedock-work-on-coordinator.md");
   await assert.rejects(access("agents/forgedock-reviewer.md"));
   assert.doesNotMatch(workOnAgent, /^tools:/m);
-  assert.match(reviewSkill, /fresh ordinary `delegate` agents with full normal tool availability/);
+  assert.match(reviewSkill, /fresh ordinary `delegate` agents with full normal tool\s+availability/s);
   assert.match(adapter, /does not register a specialized reviewer profile or impose a reviewer capability ceiling/);
-  assert.match(reviewSkill, /2–8 verified `path:line` behaviors/);
+  assert.match(reviewSkill, /verified `path:line` behaviors/);
   assert.match(reviewSkill, /confirmed HIGH\/CRITICAL production-incident standard/);
 });
 

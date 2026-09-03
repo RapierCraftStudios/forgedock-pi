@@ -43,21 +43,22 @@ risk surface.
 
 ## Run one panel
 
-Prepare the full diff once and deterministic role bundles. Launch all selected roles as
-fresh ordinary `delegate` agents with full normal tool availability through the adapter's
-single `runs.all` workflow. Prompts assign review focus without creating specialized agent
-profiles or capability ceilings. Join every role and retain valid same-head roles. If one
-role is missing or invalid, launch one additional workflow containing only that role;
+Prepare the full diff once and deterministic role bundles. Embed the relevant diff in each
+task or give the delegate one stable readable file path; never use `runs.host` to transfer
+it. Launch all selected roles as fresh ordinary `delegate` agents with full normal tool
+availability through the adapter's single `runs.all` workflow. Prompts assign review focus
+without creating specialized agent profiles or capability ceilings. Join every role and
+retain valid same-head roles. If one role is missing or invalid, launch one additional
+workflow containing only that role;
 never restart the whole panel.
 
-Validate each returned JSON result directly:
-
-- exact repository, PR, full head/base, attempt, and role;
-- verdict agrees with findings;
-- 2–5 sentence summary;
-- 2–8 verified `path:line` behaviors;
-- residual risks and reviewed files/units;
-- blocking findings meet the confirmed HIGH/CRITICAL production-incident standard.
+Bind repository, PR, head/base, attempt, and role from the launch key and task rather than
+requiring the delegate to echo them perfectly. Accept JSON or clearly structured Markdown
+when it contains a verdict, substantive summary, verified `path:line` behaviors, residual
+risks, and findings. Normalize harmless key casing, number/string, and list-shape
+differences in the owning agent. Retry only when the child failed or no substantive review
+can be recovered; formatting variance alone never restarts a role or panel. Blocking
+findings still require the confirmed HIGH/CRITICAL production-incident standard.
 
 After complete validation, the owning agent publishes one
 SHA-bound consolidated panel comment containing every role's summary, verified behaviors,

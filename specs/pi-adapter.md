@@ -60,8 +60,10 @@ The owning work-on agent remains responsible for final publication, verdict, rem
 merge, and closure.
 
 Prepare repository, PR, full head/base SHAs, changed files, deterministic diff bundle,
-role/persona, attempt, and invariants once. Launch the complete selected panel with one
-synchronous `workflowScript` whose only dispatch is `await runs.all([...])`.
+role/persona, attempt, and invariants once. Embed the bounded diff in each task or pass one
+stable readable file path; `runs.host` is not available in raw review workflows and must
+not be used for bundle transfer. Launch the complete selected panel with one synchronous
+`workflowScript` whose only dispatch is `await runs.all([...])`.
 
 Each item uses:
 
@@ -76,19 +78,18 @@ Each item uses:
 The panel join deadline is `1200000`. Join all roles before synthesis. A partial panel
 cannot publish a verdict or authorize merge.
 
-Retain each valid same-head role. On provider or invalid-output failure, launch one
-additional workflow containing only the missing or invalid role with a new key under the
-same attempt. The one-workflow rule applies per panel or retry dispatch, not to the entire
-review lifecycle. Do not restart an entire
-valid panel for one role or brittle formatting that can be validated from structured
-result fields.
+Retain each valid same-head role. Retry only when the child failed or the owning agent
+cannot recover a substantive review. Launch one additional workflow containing only that
+missing role with a new key under the same attempt. The one-workflow rule applies per
+panel/retry dispatch, not the whole review. Never restart a panel for JSON key casing,
+number-versus-string identity echoes, equivalent list shapes, or other harmless formatting.
 
 Each delegate may use any normal tool needed for evidence, but its assignment is review,
-not implementation or workflow ownership. Review evidence must include a concrete
-qualitative summary, verified `path:line` behaviors, residual risks, structured findings,
-full head SHA, role, and attempt. The
-owning agent validates those fields directly, then publishes one consolidated panel
-comment and one official verdict with exact-ID readback. Do not require per-role comments,
+not implementation or workflow ownership. Bind repository, PR, head/base, attempt, and
+role from the launch record. Accept JSON or structured Markdown containing verdict,
+qualitative summary, verified `path:line` behaviors, residual risks, and findings; normalize
+harmless representation differences in the owner. Publish one consolidated panel comment
+and one official verdict with exact-ID readback. Do not require per-role comments,
 enumerate all comments, or build shell-regex protocols.
 
 ## Base movement and review reuse

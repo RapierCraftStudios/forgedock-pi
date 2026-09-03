@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import test from "node:test";
 
@@ -65,6 +65,12 @@ test("packed work-on agent resolves without a package tool ceiling", async () =>
     assert.match(packedAgent, /^timeoutMs: 2147483647$/m);
     assert.match(packedAgent, /^toolTimeoutMs: 3900000$/m);
     assert.doesNotMatch(packedAgent, /^tools:/m);
+    const extractorMode = (
+      await stat(
+        `${project}/node_modules/forgedock-pi/specs/original/scripts/extract-affected-files.sh`,
+      )
+    ).mode;
+    assert.notEqual(extractorMode & 0o111, 0, "affected-file helper must be executable");
 
     const result = await resolveSubagentLaunchContract({
       agent: "forgedock-work-on-coordinator",
