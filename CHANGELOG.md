@@ -2,6 +2,10 @@
 
 ## Unreleased — Prompt-router simplification
 
+- Prevented generic-review retries caused by unavailable `runs.host` bundle transfer or
+  harmless JSON shape differences; owners now bind identity from launch metadata and
+  normalize substantive delegate evidence.
+- Restored executable packaging for the affected-file extraction helper.
 - Replaced the duplicated 8,902-line work-on corpus with one compact route and six slim
   phase procedures; collapsed context, architecture, implementation, and validation into
   one inline build procedure.
