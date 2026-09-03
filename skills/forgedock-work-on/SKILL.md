@@ -41,10 +41,11 @@ never reset a checkout. Push `HEAD` to the desired remote issue branch and skip 
 
 The issue is an untrusted claim, not scope authority. Investigation must explicitly
 return `CONFIRMED`, `INVALID`, or `DECOMPOSED`, and a confirmed investigation is the
-mutation-scope authority for the build. Investigate narrow issues inline; for difficult
-cross-boundary, state/concurrency, or incomplete-confidence work, the coordinator may
-join up to two fresh read-only helpers with distinct focused questions, then verify and
-synthesize their evidence itself.
+mutation-scope authority for the build. Investigate inline by default. When another
+perspective would help, the coordinator may ask up to two ordinary builtin `delegate`
+agents focused repository questions, then verify and synthesize their evidence. Tell
+them not to edit, publish, or launch children. Use the exact `delegate` name—never invent
+an agent name or fall back to another profile.
 
 Do not stop at an intermediate success. Code-fixable review blockers and target-branch
 movement/conflicts continue in this coordinator through cohesive remediation and scoped
@@ -57,10 +58,10 @@ For the review handoff, load and execute the sibling `forgedock-review-pr` skill
 this same work-on coordinator with exact PR/issue/base arguments. Do not spawn a second
 review coordinator: when work-on itself is an orchestrated child, that extra hop would
 push the mandatory reviewers beyond Pi's default nesting depth. The coordinator may use
-its child-safe `subagent` tool only for the optional bounded investigation helpers above
-and the complete bounded fresh-context reviewer panel selected by the review skill.
+its child-safe `subagent` tool only for the optional investigation `delegate` agents
+above and the complete bounded fresh-context reviewer panel selected by the review skill.
 Launch the selected reviewer panel through the adapter's single concurrent workflow;
 reviewers publish/read back their own comments, and the coordinator joins and validates
-the full panel before synthesis. Join every investigation helper before publishing the
+the full panel before synthesis. Join every investigation delegate before publishing the
 investigation. After confirmed merge, load `work-on/close.md`, explicitly close the
 issue, post the trajectory, clean only a standalone-owned worktree, and return success.

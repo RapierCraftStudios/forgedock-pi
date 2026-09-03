@@ -162,7 +162,7 @@ test("canonical dispatch recipe governs wave, successor, and recovery launches",
   assert.match(coordinator, /never paraphrase formats/i);
   assert.match(coordinator, /Mechanical gaps are not decisions/);
   assert.match(coordinator, /never route configuration, ancestry, or code conflicts/);
-  assert.match(coordinator, /not a sub-workflow|no sub-workflow|not a sub-workflow of domain lanes|direct read-only children/);
+  assert.match(coordinator, /not a sub-workflow|no sub-workflow|not a sub-workflow of domain lanes|`delegate` agents are direct children/);
 });
 
 test("investigation checks sibling paths for the same broken behavior", async () => {
@@ -215,8 +215,10 @@ test("work-on optimizes for first-pass completion without recursive blocker issu
   );
 
   for (const contract of [coordinator, workOn, investigate]) {
-    assert.match(contract, /up to two fresh read-only (?:helpers|investigation helpers)/);
-    assert.match(contract, /narrow issues?.*inline/i);
+    assert.match(contract, /builtin\s+`delegate`/);
+    assert.match(contract, /never invent\s+an agent name or fall back/i);
+    assert.match(contract, /investigate inline by default|executes every phase inline/i);
+    assert.doesNotMatch(contract, /read-only (?:helpers|investigation helpers)/);
   }
   assert.match(implement, /compare the finished implementation once against every path/i);
   assert.match(implement, /fix it now; do not knowingly hand incomplete work to review/i);

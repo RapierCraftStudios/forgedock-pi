@@ -356,7 +356,7 @@ bash {REPO_PATH}/scripts/code-index.sh query --domain {DOMAIN_LABEL} --repo-path
 
 ### Focused investigation help
 
-Narrow issues stay inline when you can confidently follow the same behavior through every relevant production path. When the behavior crosses independent parts of the system, involves difficult state or concurrency, or you are not confident all relevant paths were found, you may launch up to two fresh read-only helpers. Give each helper one distinct question: for example, one traces the behavior end to end while another challenges the scope for sibling, shortcut, error, retry, cleanup, or existing-protection paths. Helpers never edit, publish, or launch children. Join their answers, verify their claims in the repository, and synthesize one investigation yourself. Do not launch helpers for narrow issues or ask two helpers to repeat the same investigation.
+Investigate inline by default. When another perspective would help, you may launch up to two ordinary builtin `delegate` agents and give each a focused repository question—for example, one traces the behavior end to end while another checks sibling, shortcut, error, retry, cleanup, or existing-protection paths. Tell them not to edit, publish, or launch children. Join their answers, verify their claims in the repository, and synthesize one investigation yourself. Use the exact agent name `delegate`; never invent an agent name or fall back to another profile.
 
 ---
 
