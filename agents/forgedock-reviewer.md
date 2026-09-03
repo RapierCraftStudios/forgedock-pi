@@ -92,6 +92,8 @@ Do not wrap it in explanation or an additional code fence.
   "attempt": 1,
   "worker": "worker-1",
   "bundle": "bundle-1",
+  "verdict": "PASS",
+  "finding_count": 0,
   "summary": "Specific 2–5 sentence qualitative conclusion.",
   "evidence": [
     "path/to/file.ts:42 — traced request authorization to the write boundary — unauthorized callers remain rejected"
@@ -104,7 +106,9 @@ Do not wrap it in explanation or an additional code fence.
 ```
 ````
 
-`summary`, `evidence`, and `limitations` must be specific and reusable. `evidence` is
-non-empty even when `findings` is empty. `reviewed_files` must list every assigned file
-exactly once. `reviewed_units` must list every assigned unit exactly once, including split
-hunks. The trusted coordinator rejects evidence-free clean output before publication.
+This return grammar is literal and self-contained: include every shown field, preserve the
+assigned identity unchanged, and make `finding_count` equal `findings.length`. `summary`,
+`evidence`, and `limitations` must be specific and reusable. `evidence` is non-empty even
+when `findings` is empty. `reviewed_files` must list every assigned file exactly once.
+`reviewed_units` must list every assigned unit exactly once, including split hunks. The
+trusted coordinator rejects malformed or evidence-free clean output before publication.

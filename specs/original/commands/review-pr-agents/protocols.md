@@ -172,11 +172,22 @@ Every agent MUST return its verdict, finding count, and one line per finding to 
 
 ### Format
 
-Append this block at the very end of your comment (after the `---` footer line, still inside the EOF heredoc). It uses HTML comments so it's invisible in rendered markdown:
+Use one literal findings grammar after the qualitative sections. `## Findings` contains a
+fenced JSON array identical to the `findings` array returned to the coordinator. Then add
+one body-integrity marker and append the HTML summary block at the very end of the comment
+(after the `---` footer line when one exists):
 
-`<!-- REVIEW-FINDINGS-START -->`
-`<!-- FINDING:PREFIX-N|CONFIDENCE|SEVERITY|file.py:line|One-line summary -->`
-`<!-- REVIEW-FINDINGS-END -->`
+````text
+## Findings
+```json
+[]
+```
+
+<!-- FORGE:BODY-INTEGRITY:{pr}_{domain}_{unique-token} -->
+<!-- REVIEW-FINDINGS-START -->
+<!-- zero or more FINDING:PREFIX-N|CONFIDENCE|SEVERITY|file.py:line|One-line summary lines -->
+<!-- REVIEW-FINDINGS-END -->
+````
 
 ### Rules
 
@@ -186,9 +197,11 @@ Append this block at the very end of your comment (after the `---` footer line, 
 4. **Severity**: `CRITICAL`, `HIGH`, `MEDIUM`, or `LOW`
 5. **Location**: Exact `file:line` reference
 6. **Summary**: Concise one-line description (no pipe `|` characters in summary)
-7. **Empty block**: If no findings at all, include just the START/END markers
-8. **HTML comments**: The block is invisible in rendered markdown but parseable by the review system
-9. **Agent marker**: Include exactly one `<!-- FORGE:REVIEW-AGENT:{domain} -->` marker in the persisted body, where `{domain}` is the lowercase dispatched domain.
+7. **JSON parity**: The fenced JSON array exactly matches the returned `findings` array; use `[]` when clean.
+8. **Empty block**: If no findings at all, include just the START/END markers after the fenced `[]`.
+9. **HTML comments**: The summary block is invisible in rendered markdown but parseable by the review system.
+10. **Integrity marker**: Include exactly one `<!-- FORGE:BODY-INTEGRITY:{pr}_{domain}_{unique-token} -->` before the summary block.
+11. **Agent marker**: Include exactly one `<!-- FORGE:REVIEW-AGENT:{domain} -->` marker in the persisted body, where `{domain}` is the lowercase dispatched domain.
 
 ### Domain Prefixes
 
@@ -205,6 +218,12 @@ Append this block at the very end of your comment (after the `---` footer line, 
 | Infrastructure | `INFRA` |
 ### Example
 
+The fenced JSON contains the two complete finding objects returned to the coordinator,
+followed by their compact summary markers:
+
+`## Findings`
+
+`<!-- FORGE:BODY-INTEGRITY:123_security_worker-7 -->`
 `<!-- REVIEW-FINDINGS-START -->`
 `<!-- FINDING:SEC-1|CONFIRMED|HIGH|src/api/routers/upload.py:45|SQL injection via unsanitized user input in query parameter -->`
 `<!-- FINDING:SEC-2|LIKELY|MEDIUM|src/worker/jobs/process.py:312|Potential SSRF through user-controlled proxy URL -->`

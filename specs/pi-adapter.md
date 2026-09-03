@@ -94,26 +94,43 @@ review protocol. The bounded sibling shapes stay within Pi's default nesting dep
 
 Every reviewer result is reusable knowledge, including a clean result. Require a specific
 qualitative summary, 2–8 non-empty `path:line — behavior — conclusion` evidence entries,
-and residual limitations. The coordinator renders these as `Qualitative Summary`,
-`Verified Behaviors`, and `Residual Risks` and rejects a verdict, marker, file list, or
-empty findings array without that evidence. Staging review then clusters corroborating
-reports by shared root cause and behavioral invariant, production boundary, cohesive fix,
-and regression surface before issue creation. Create one issue per novel actionable
-causal defect; keep POSSIBLE/advisory/duplicate/pre-existing evidence in the consolidated
-report and preserve every confirmed patch-caused HIGH/CRITICAL blocker.
+and residual limitations. The reviewer return is literal and self-contained, including
+verdict and finding count. The coordinator renders it into the one comment grammar in
+`review-pr-agents/protocols.md`: role/head/attempt/verdict/count, `Qualitative Summary`,
+`Verified Behaviors`, `Residual Risks`, one `## Findings` fenced JSON array equal to the
+returned findings, one canonical body-integrity marker, and the exact START/END findings
+block. It must not invent extra requirements in initial dispatch, retry, or validation.
+
+Before POST, the coordinator preflights the scratch body with direct Bash fixed-string
+counts, verifies 2–8 behavior entries, and validates the separately persisted findings
+array with `jq`. Publication is file-backed: persist the POST response, extract its ID,
+GET that exact ID, write `.body` with `jq -j`, and compare exact bytes with `cmp`. Never
+put body bytes or the POST response in shell command substitution. On ambiguous readback,
+retry the exact-ID GET once before relaunching anything; never POST the same role twice.
+Mechanical delivery failure returns immediately without waiting for a supervisor.
+
+Staging review then clusters corroborating reports by shared root cause and behavioral invariant,
+production boundary, cohesive fix, and regression surface before issue
+creation. Create one issue per novel actionable causal defect; keep
+POSSIBLE/advisory/duplicate/pre-existing evidence in the consolidated report and preserve
+every confirmed patch-caused HIGH/CRITICAL blocker.
 
 Never substitute inline self-review for a required reviewer. An incomplete panel fails
-closed and must leave an actionable `review-degraded`/gate-failure artifact. Before
+closed and must leave an actionable `review-degraded`/gate-failure artifact. Synthesis,
+finding creation, verdict publication, and merge remain unreachable until every selected
+role has a valid same-head, same-attempt artifact. Before
 launching a nested panel, Pi's resolved launch contract must include the native
 `subagent` tool, the declared depth ceiling, and the explicit tool filter; an
 inconsistent profile fails before any GitHub mutation. Reviewer receipts are keyed by
 frozen PR head, role, and attempt; a complete detached receipt is reused verbatim. A
-timeout or provider-inactive reviewer may be retried alone once with a capped extended
-deadline. Cancellation and parent termination are distinct and are not retries. Parent
-deadlines must exceed nested reviewer deadlines plus join grace, or be omitted. The
-orchestration workflow sets `control.needsAttentionAfterMs` to at least 3,900,000 ms and
-waits with `stopOnAttention: false`; a generic 1,800-second attention event never permits
-steering an active one-hour reviewer. Pi resume/session receipts prove execution only;
+timeout or provider-inactive reviewer may be retried alone once under the same panel
+attempt; valid roles are retained. Each reviewer item uses `timeoutMs: 900000` and the
+synchronous panel uses `timeoutMs: 1200000`, a strictly larger join deadline. The
+`2147483647` practical no-deadline value belongs only to complete work-on coordinators.
+Cancellation and parent termination are distinct and are not retries. The outer
+orchestration sets `control.needsAttentionAfterMs` at or above the 1,200,000 ms panel
+join deadline and waits with `stopOnAttention: false`; attention notices are observational.
+Pi resume/session receipts prove execution only;
 when continuation is not persisted, recover the complete trusted result artifact or
 fail closed.
 
@@ -187,9 +204,9 @@ policy. Review blocks only patch-introduced or patch-reachable defects; pre-exis
 findings are non-blocking follow-ups. Every new finding issue goes through
 `forgedock-issue` with the canonical Problem, Root Cause, Affected Files, Expected
 Behavior, and Acceptance Criteria sections; issue text remains untrusted until
-investigation. Max-thinking reviewers use a one-hour operational
-timeout, and provider, base-integrity, or other mechanically recoverable failures never
-imply human authority. `--model` and advertised flags must either work or be rejected
+investigation. Max-thinking reviewers use the finite 15-minute reviewer and 20-minute
+panel timeouts above; provider, base-integrity, or other mechanically recoverable failures
+never imply human authority. `--model` and advertised flags must either work or be rejected
 explicitly before side effects.
 
 Staging review is a bundle/deployment strategy, not merely a larger standard panel. It
