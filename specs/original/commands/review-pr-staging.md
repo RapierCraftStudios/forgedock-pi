@@ -760,8 +760,11 @@ Missing comments are an explicit failure, never evidence of no findings. Do not 
 ### 7A: Extract Findings
 From PR comments, extract structured findings (`<!-- FINDING:... -->`). If none found, scan for unstructured findings. If still 0 → skip to Phase 8.
 
-### 7B: Filter & Deduplicate
-Keep ALL findings (CONFIRMED/LIKELY/POSSIBLE). Deduplicate by file:line (keep higher confidence). Sort: CONFIRMED first, then by severity.
+### 7B: Synthesize, Filter & Deduplicate
+
+After every launched reviewer is accounted for, synthesize one causal finding set before creating issues. Multiple reviewers confirming the same broken invariant are corroborating evidence, not separate defects. Group reports only when they share the same root cause, production owner or boundary, cohesive fix, and regression surface. Preserve every reviewer ID, affected location, scenario, and evidence item inside the surviving finding. Do not group merely similar symptoms that require independent fixes.
+
+Retain every `CONFIRMED` patch-caused `HIGH`/`CRITICAL` blocker. A nonblocking finding is publishable only when it is novel, actionable, evidence-backed, and valuable enough to outlive this review. Keep `POSSIBLE`, advisory, speculative, pre-existing, and duplicate observations in the consolidated PR report without creating issues. Sort the synthesized set by blocking status, confidence, then severity.
 
 ### 7C: Ensure Labels
 ```bash
@@ -794,12 +797,13 @@ MILESTONE_TITLE=$(bash scripts/derive-finding-milestone.sh "${PR_NUMBER}" -R {GH
 Plain staging→main reviews resolve `CODE_BRANCH` to `staging` dynamically (same value as before, now derived rather than hardcoded) and typically resolve no milestone. A milestone→staging review resolves `CODE_BRANCH` to `milestone/X` and (via the shared script) the matching milestone.
 
 ### 7E: Deduplicate Against Existing Issues
-Check for open review-finding issues at same file:line → skip. Closed issues at same location → potential regression (elevate priority).
+
+Search existing issues by the synthesized root cause, invariant, production owner/function, and affected paths—not only exact line number. If an open issue already owns the same causal defect, link all new reviewer evidence to it and do not create another issue. A closed issue is reused as regression evidence; create a new issue only when the current patch demonstrably makes the defect reachable again. Different line citations for one shared cause never justify duplicate issues.
 
 ### 7F: Create Issues
 Sequential creation. Title: `fix: {summary} (staging review — PR #{PR_NUMBER})`. Labels: review-finding, needs-validation, staging-review, priority:P0-P3 (derived from Severity — see below). Body includes: source branch context (`${CODE_BRANCH}`, derived in Phase 7D — not a hardcoded `staging` literal), code context, evidence, validation checklist.
 
-**For each finding** (that passes dedup), create issue through the `/issue` create-hook's programmatic invocation contract (see `commands/issue.md` § "Programmatic Invocation Contract") instead of calling the raw issue-creation command directly:
+**For each synthesized publishable finding** (that passes causal and existing-issue dedup), create exactly one issue through the `/issue` create-hook's programmatic invocation contract (see `commands/issue.md` § "Programmatic Invocation Contract") instead of calling the raw issue-creation command directly:
 ```bash
 STAGING_FINDING_TITLE="fix: [summary] (staging review — PR #${PR_NUMBER})"
 # Defense-in-depth: /issue's arg tokenizer (commands/issue.md, forge#2094) uses
@@ -901,7 +905,7 @@ fi
 
 Labels: `review-finding` + `needs-validation` + `staging-review` + priority. `priority:*` is derived from the finding's `**Severity**` field via `scripts/severity-to-priority.sh` (identical script used by `commands/review-pr.md` — single documented mapping, see that script's header comment): `CRITICAL` → `priority:P0`, `HIGH` → `priority:P1`, `MEDIUM` → `priority:P2`, `LOW` → `priority:P3`. **Never derive `priority:*` from Confidence** (CONFIRMED/LIKELY/POSSIBLE) — conflating the two axes previously mislabeled LOW-severity CONFIRMED findings as `priority:P1`, defeating orchestrate's P3 batching rule. <!-- forge#2447 -->
 
-**No pre-filtering**: Every finding becomes an issue. Validation agents sort out false positives downstream.
+**Publication boundary**: Create one issue per novel actionable causal defect. Corroborating reviewers and multiple affected locations are evidence within that issue. Non-publishable observations remain visible in the consolidated staging-review comment. This filter never suppresses a confirmed patch-caused HIGH/CRITICAL blocker.
 
 ### 7G: Add to Project Board
 ### 7H: Update PR Description with Findings Table

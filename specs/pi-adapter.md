@@ -96,7 +96,11 @@ Every reviewer result is reusable knowledge, including a clean result. Require a
 qualitative summary, 2–8 non-empty `path:line — behavior — conclusion` evidence entries,
 and residual limitations. The coordinator renders these as `Qualitative Summary`,
 `Verified Behaviors`, and `Residual Risks` and rejects a verdict, marker, file list, or
-empty findings array without that evidence.
+empty findings array without that evidence. Staging review then clusters corroborating
+reports by shared root cause and behavioral invariant, production boundary, cohesive fix,
+and regression surface before issue creation. Create one issue per novel actionable
+causal defect; keep POSSIBLE/advisory/duplicate/pre-existing evidence in the consolidated
+report and preserve every confirmed patch-caused HIGH/CRITICAL blocker.
 
 Never substitute inline self-review for a required reviewer. An incomplete panel fails
 closed and must leave an actionable `review-degraded`/gate-failure artifact. Before
