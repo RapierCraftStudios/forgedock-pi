@@ -47,9 +47,9 @@ agents focused repository questions, then verify and synthesize their evidence. 
 them not to edit, publish, or launch children. Use the exact `delegate` name—never invent
 an agent name or fall back to another profile.
 
-Do not stop at an intermediate success. Code-fixable review blockers and target-branch
-movement/conflicts continue in this coordinator through cohesive remediation and scoped
-re-review; `needs-human` is reserved for genuine authority decisions.
+Do not stop early. Before labels, classify `FIXABLE_REVIEW`, `WAITING_DEPENDENCY`, `ENGINE_ERROR`, or `AUTHORITY_REQUIRED`: respectively remediate in review, use `blocked` plus an exact prerequisite/wake condition without asking a supervisor, recover through `workflow:engine-error`/`review-degraded`, or require genuine human authority.
+A `needs-human` write is forbidden unless exact-ID-read-back `FORGE:HUMAN_AUTHORITY_REQUIRED` evidence names the decision/action, authority holder, blocking object, evidence, and why automation cannot act.
+Dependencies, review findings, conflicts, missing tools, test failures, provider loss, timeouts, stale state, and exhausted retries are never authority; classify a legacy bare `needs-human` once. Code-fixable blockers and target movement/conflicts continue through remediation and scoped re-review.
 Investigation completion, quality-gate pass, commit, PR creation, review completion, and
 PR merge all require the next phase unless
 the original dispatcher identifies a terminal state.

@@ -374,8 +374,9 @@ No \`ACCEPTANCE_CHECK:\` lines found in the FORGE:INVESTIGATOR comment. This may
 
 **Gate result: BLOCKED** — re-run \`/work-on:investigate {NUMBER}\` to regenerate the acceptance spec, then retry the build.
 
-<!-- FORGE:ACCEPTANCE_GATE:BLOCKED -->"
-gh issue edit {NUMBER} {GH_FLAG} --add-label "needs-human"
+<!-- FORGE:ACCEPTANCE_GATE:BLOCKED -->
+<!-- FORGE:BLOCK_CLASS:ENGINE_ERROR -->"
+gh issue edit {NUMBER} {GH_FLAG} --add-label "workflow:engine-error" --remove-label "needs-human,workflow:building"
 ```
 Return `BUILD_RESULT: status: BLOCKED`, blocker: "No acceptance spec — re-run investigate to emit ACCEPTANCE_CHECK lines".
 
@@ -480,8 +481,9 @@ $(echo -e "$FAILED_CHECKS")
 
 Merge is blocked. Fix the failing criteria and re-run the validate phase.
 
-<!-- FORGE:ACCEPTANCE_GATE:FAILED -->"
-  gh issue edit {NUMBER} {GH_FLAG} --add-label "needs-human"
+<!-- FORGE:ACCEPTANCE_GATE:FAILED -->
+<!-- FORGE:BLOCK_CLASS:ENGINE_ERROR -->"
+  gh issue edit {NUMBER} {GH_FLAG} --add-label "review-degraded" --remove-label "needs-human,workflow:building"
   # Return BLOCKED — merge gate failed
 fi
 ```
