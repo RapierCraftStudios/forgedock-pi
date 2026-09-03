@@ -305,7 +305,7 @@ else:
 
 Wait for that task's completed result before Phase R4. Propagate its `REVIEW_RESULT` as this module's child state; do not return `REVIEW_RESULT`, report progress, release an orchestrator slot, or begin close work while the child is running. If the child errors or returns no parseable `REVIEW_RESULT`, return `REVIEW_RESULT: status: BLOCKED` with the child failure as the blocker. The normal `Skill(...)` invocation above remains the non-OpenCode path.
 
-/review-pr handles: full domain-agent review → post findings as separate issues (non-blocking) → merge the PR → close the issue → clean up worktree.
+/review-pr handles the full panel and guarded merge. If its blocker is an explicit unmerged prerequisite, add `blocked`, remove `needs-human` and active workflow labels, post `<!-- FORGE:GATED -->` naming the exact prerequisite and merge/event resume condition, and return GATED without entering remediation or asking a supervisor whether to wait. Resume this same PR after the prerequisite lands, reconcile the target, rerun verification, and obtain a fresh exact-head review.
 
 ---
 

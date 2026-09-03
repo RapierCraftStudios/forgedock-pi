@@ -569,6 +569,10 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
     "specs/original/commands/work-on/remediate.md",
     "utf8",
   );
+  const reviewPhase = await readFile(
+    "specs/original/commands/work-on/review.md",
+    "utf8",
+  );
   const forgeYaml = await readFile("forge.yaml", "utf8");
 
   assert.match(orchestrate, /launch exactly one fresh `forgedock-work-on-coordinator`/);
@@ -580,8 +584,10 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
   assert.match(orchestrate, /needsAttentionAfterMs: 3900000/);
   assert.match(orchestrate, /stopOnAttention: false/);
   assert.match(orchestrate, /Durable GitHub artifacts override a missing\/malformed provider envelope/);
+  assert.match(orchestrate, /lane waiting on an explicit prerequisite stays automated/);
   assert.match(orchestrate, /do not give the coordinator a blanket "never\s+run subagents" instruction/s);
   assert.match(workOn, /same work-on coordinator/);
+  assert.match(workOn, /explicit unmerged prerequisite is automated waiting/);
   assert.match(workOn, /issue is an untrusted claim/);
   assert.match(workOn, /Before the first `write` or `edit`/);
   assert.match(workOn, /direct Git/);
@@ -619,6 +625,11 @@ test("orchestrated work-on keeps review coordination in the issue coordinator", 
   assert.match(adapter, /Packed-package smoke checks must run separately and serially and stay mandatory/);
   assert.match(adapter, /FORGE:REINVESTIGATE_REQUIRED/);
   assert.match(adapter, /Use direct `gh` and `git` commands/);
+  assert.match(adapter, /Explicit unmerged prerequisite/);
+  assert.match(reviewPhase, /explicit unmerged prerequisite/);
+  assert.match(reviewPhase, /add `blocked`, remove `needs-human`/);
+  assert.match(reviewPhase, /return GATED without entering remediation or asking a supervisor/);
+  assert.match(reviewPhase, /Resume this same PR after the prerequisite lands/);
   assert.match(remediate, /Inline current-head blocker remediation \(authoritative override\)/);
   assert.match(remediate, /blocker closure matrix/);
   assert.match(remediate, /Failing-before proof/);

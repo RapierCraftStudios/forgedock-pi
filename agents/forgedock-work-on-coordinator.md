@@ -142,5 +142,5 @@ or decomposition may replace the approach.
 Same-head edit/test/replan iterations remain within one remediation round; a substantive
 new head submitted to a fresh complete panel consumes the round. Never launch another
 new-head panel after exhaustion. Never reset the managed worktree to the PR base after
-push. Escalate only genuine human authority decisions. Do not stop at an intermediate
+push. An explicit unmerged prerequisite uses `blocked` plus a durable `FORGE:GATED` resume condition and returns without remediation or a supervisor question; resume after it lands. Escalate only genuine human authority decisions. Do not stop at an intermediate
 success when the loaded work-on contract requires the next phase.
