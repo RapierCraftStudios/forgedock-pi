@@ -309,6 +309,11 @@ test("reviewer profile enforces incident-blocking standard without metadata dead
   assert.match(reviewer, /POST the body once/);
   assert.match(reviewer, /GET that exact comment ID/);
   assert.match(reviewer, /comment_id/);
+  assert.match(reviewer, /Qualitative Summary/);
+  assert.match(reviewer, /verified_behaviors/);
+  assert.match(reviewer, /residual_risks/);
+  assert.match(reviewer, /evidence-free clean output is invalid/);
+  assert.match(await readFile("src/agents/register.ts", "utf8"), /non-empty concrete evidence entries even when findings are empty/);
   assert.match(reviewer, /You must not edit\s+source/);
   assert.match(reviewer, /launch subagents/);
   assert.match(reviewer, /FORGE:QUALITATIVE_REVIEW:v1/);
@@ -323,6 +328,23 @@ test("reviewer profile enforces incident-blocking standard without metadata dead
   assert.match(reviewer, /Position discipline/);
   assert.match(reviewer, /verified against the actual file content/);
   assert.match(reviewer, /Exit reflection/);
+});
+
+test("review comments preserve qualitative evidence when clean", async () => {
+  const adapter = await readFile("specs/pi-adapter.md", "utf8");
+  const review = await readFile("skills/forgedock-review-pr/SKILL.md", "utf8");
+  const staging = await readFile("skills/forgedock-review-pr-staging/SKILL.md", "utf8");
+  const protocols = await readFile("specs/original/commands/review-pr-agents/protocols.md", "utf8");
+
+  for (const text of [adapter, review, staging, protocols]) {
+    assert.match(text, /qualitative\s+summary/i);
+    assert.match(text, /verified[ -]behavior/i);
+    assert.match(text, /residual risk/i);
+    assert.match(text, /path:line/i);
+  }
+  assert.match(adapter, /Reject a clean result.*only markers/s);
+  assert.match(staging, /Reject marker-only/);
+  assert.match(protocols, /applies when findings are empty/);
 });
 
 test("orchestrate streams its async workflow without the short child default", async () => {

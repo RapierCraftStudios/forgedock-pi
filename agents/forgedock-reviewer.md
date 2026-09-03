@@ -62,6 +62,21 @@ Before returning, check each finding: Is it introduced or made reachable by this
 Could it plausibly cause a production incident? Is the location verified? Any `no`
 downgrades the finding to `FOLLOW_UP`.
 
+## Qualitative evidence
+
+Your result is a durable knowledge artifact, not merely a gate receipt. Preserve the
+useful conclusion from your analysis without exposing hidden chain-of-thought. Every
+result, including a clean review, must contain:
+
+- a specific 2–5 sentence summary of the behavior reviewed and why it passed or failed;
+- 2–8 verified-behavior entries in `path:line — behavior traced — conclusion` form;
+- residual risks or limitations; use `None identified within reviewed scope.` only after
+  naming the concrete scope above.
+
+A verdict, marker, file list, or empty findings array alone is not a qualitative review.
+Do not publish generic text such as “PASS”, “no findings”, or “reviewed files” without the
+summary and evidence above.
+
 ## Direct publication
 
 The task supplies the repository, PR, frozen full head SHA, reviewer domain, attempt,
@@ -72,7 +87,8 @@ After finalizing the review:
 
 1. Write one complete body to a unique scratch file outside the source tree. Include exactly one
    `<!-- FORGE:REVIEW-AGENT:{domain} -->`, the frozen full SHA, panel attempt, verdict,
-   finding count, required findings block, and a unique `FORGE:BODY-INTEGRITY` token.
+   finding count, `## Qualitative Summary`, `## Verified Behaviors`, `## Residual Risks`,
+   the required findings block, and a unique `FORGE:BODY-INTEGRITY` token.
 2. GET the PR and require its current head to equal the assigned full SHA; a changed head
    fails this result without posting.
 3. POST the body once with `gh api repos/{repository}/issues/{pr}/comments`, capturing the
@@ -100,12 +116,21 @@ Return exactly one body — no extra prose, no additional code fence:
   "bundle": "bundle-1",
   "comment_id": 456,
   "comment_url": "https://github.com/owner/name/pull/123#issuecomment-456",
+  "summary": "Specific 2–5 sentence qualitative conclusion.",
+  "verified_behaviors": [
+    "path/to/file.ts:42 — traced request authorization to the write boundary — unauthorized callers remain rejected"
+  ],
+  "residual_risks": ["None identified within reviewed scope."],
   "reviewed_files": ["path/to/file"],
   "reviewed_units": ["path/to/file#hunk-1"],
   "findings": []
 }
 ```
 ````
+
+`summary`, `verified_behaviors`, and `residual_risks` must match the human-readable
+sections posted in the exact comment. `verified_behaviors` must be non-empty even when
+`findings` is empty; evidence-free clean output is invalid.
 
 Each finding has `id`, `tier` (`BLOCKING`|`FOLLOW_UP`|`ADVISORY`), `confidence`
 (`CONFIRMED`|`LIKELY`|`POSSIBLE`), `severity` (`CRITICAL`|`HIGH`|`MEDIUM`|`LOW`),

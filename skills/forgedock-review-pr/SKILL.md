@@ -53,8 +53,7 @@ persona and identity, and pass it inline. Use the owning route's retained full c
 model; a standalone review resolves it once from `forge.yaml` (`subagent_model`, then
 `default_model`). Never pass legacy aliases. Launch the complete
 panel concurrently with the adapter's one synchronous `workflowScript`/`runs.all`, not
-separate subagent calls. Each reviewer posts and exact-ID reads back its own role-scoped
-exact-head comment. Validate that returned ID directly with `jq` and fixed strings, not a
+separate subagent calls. Each reviewer posts and exact-ID reads back its own role-scoped exact-head comment with a specific qualitative summary, 2–8 `path:line` verified behaviors, and residual risks even when clean; markers/file lists alone are invalid. Validate that returned ID directly with `jq` and fixed strings, not a
 search across comments or a shell regex. Join and validate every result/readback before
 synthesis; never proxy-post or use a partial panel as the verdict. Retain every valid
 same-head role result and retry only a missing or invalid role under the same panel

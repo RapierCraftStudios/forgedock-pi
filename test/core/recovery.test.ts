@@ -18,6 +18,8 @@ function result(reviewer: string, headSha = "head-1234567"): ForgeReviewerResult
     reviewer,
     headSha,
     verdict: "pass",
+    summary: `Reviewed ${reviewer} behavior on the frozen head.`,
+    evidence: ["src/a.ts:1 — traced the assigned behavior — no regression found"],
     findings: [],
     filesReviewed: ["src/a.ts"],
     limitations: [],
