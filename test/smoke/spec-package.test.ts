@@ -306,9 +306,20 @@ test("reviewer profile enforces incident-blocking standard without metadata dead
   assert.match(reviewer, /head to be 40 lowercase hex characters/);
   assert.match(reviewer, /scratch file outside the source tree/);
   assert.match(reviewer, /current head to equal the assigned full SHA/);
-  assert.match(reviewer, /POST the body once/);
+  assert.match(reviewer, /POST once/);
   assert.match(reviewer, /GET that exact comment ID/);
   assert.match(reviewer, /comment_id/);
+  assert.match(reviewer, /REVIEW-FINDINGS-START/);
+  assert.match(reviewer, /REVIEW-FINDINGS-END/);
+  assert.match(reviewer, /FORGE:BODY-INTEGRITY:\{pr\}_\{domain\}_\{unique-token\}/);
+  assert.match(reviewer, /`jq -j '\.body'/);
+  assert.match(reviewer, /`cmp -s/);
+  assert.match(reviewer, /Never place the body or POST response in shell command substitution/);
+  assert.match(reviewer, /Never call or wait for a supervisor/);
+  assert.match(reviewer, /Before POST,\s+preflight it with direct Bash fixed-string counts/);
+  assert.match(reviewer, /validate\s+the separately persisted findings array with `jq -e/);
+  assert.match(reviewer, /return grammar is literal and self-contained/);
+  assert.match(reviewer, /delivery_error/);
   assert.match(reviewer, /Qualitative Summary/);
   assert.match(reviewer, /verified_behaviors/);
   assert.match(reviewer, /residual_risks/);
@@ -343,8 +354,18 @@ test("review comments preserve qualitative evidence when clean", async () => {
     assert.match(text, /path:line/i);
   }
   assert.match(adapter, /Reject a clean result.*only markers/s);
+  assert.match(adapter, /Do not invent additional comment\s+requirements/);
+  assert.match(adapter, /extract `\.body` with `jq -j`/);
+  assert.match(adapter, /compare files with `cmp`/);
+  assert.match(adapter, /retries that\s+exact-ID GET\/readback once/);
+  assert.match(adapter, /Synthesis, finding issue\s+creation, verdict publication, and merge are unreachable/);
+  assert.match(adapter, /`timeoutMs: 900000`/);
+  assert.match(adapter, /`timeoutMs: 1200000`/);
+  assert.match(adapter, /`2147483647` practical no-deadline value is only\s+for complete work-on coordinators/);
   assert.match(staging, /Reject marker-only/);
   assert.match(protocols, /applies when findings are empty/);
+  assert.match(protocols, /fenced JSON array identical to the `findings` array/);
+  assert.match(protocols, /FORGE:BODY-INTEGRITY:\{pr\}_\{domain\}_\{unique-token\}/);
 });
 
 test("staging review creates one issue per actionable causal defect", async () => {

@@ -63,12 +63,20 @@ only dispatch is one `await runs.all([...])`. Every item uses the resolved full 
 `context: "fresh"`, `acceptance: false`, and a stable role/attempt key. Never emit
 multiple synchronous `subagent` calls in one turn and never launch reviewers serially.
 The coordinator must require every ordered result to succeed and contain the expected
-identity plus a comment ID/URL, then GET each exact comment ID and verify its role marker,
-full head SHA, panel attempt, findings block, integrity token, specific qualitative summary,
-2–8 non-empty `path:line — behavior — conclusion` evidence entries, and residual risks with
-direct `jq` and fixed string equality. Reject a clean result that contains only markers,
-file lists, a verdict, or an empty findings array. Never enumerate comments or build shell
-regex validators when the returned
+identity plus a comment ID/URL, then GET each exact comment ID and verify the literal
+comment grammar from `agents/forgedock-reviewer.md`: role marker, full head SHA, panel
+attempt, specific qualitative summary, 2–8 non-empty
+`path:line — behavior — conclusion` entries, residual risks, one `## Findings` fenced JSON
+array equal to the returned findings, one canonical
+`FORGE:BODY-INTEGRITY:{pr}_{domain}_{unique-token}` marker, and the exact
+`REVIEW-FINDINGS-START`/`REVIEW-FINDINGS-END` block. Do not invent additional comment
+requirements in an initial dispatch, retry, or validator. Reject a clean result that
+contains only markers, file lists, a verdict, or an empty findings array.
+
+Reviewer publication and coordinator readback are file-backed. Persist the POST response,
+GET the returned exact comment ID, extract `.body` with `jq -j` to preserve exact bytes,
+and compare files with `cmp`; never put a body or POST response in shell command
+substitution. Never enumerate comments or build shell regex validators when the returned
 comment ID is available. Re-read the PR head after all readbacks and discard the panel only
 if it moved. One complete same-head, same-attempt role set is required for synthesis. The
 coordinator never proxy-posts comments.
@@ -82,15 +90,23 @@ one issue per novel actionable causal defect; keep POSSIBLE/advisory/pre-existin
 in the consolidated report, and never suppress a confirmed patch-caused HIGH/CRITICAL blocker.
 
 A successful exact-head role result is retained for that panel attempt. If a reviewer is a
-rejected child, times out, loses its provider, returns malformed output, or fails publication/readback, retry
-only that missing or invalid role under the same panel attempt with a new workflow key;
-never relaunch a valid role. Join retained and retried roles, then validate the complete
-set. Exhausted role retries record `review-degraded` evidence and stop without a verdict,
-remaining resumable rather than becoming `needs-human`. Never substitute inline self-review.
+rejected child, times out, loses its provider, returns malformed output, or fails
+publication/readback, it returns immediately without contacting or waiting for a
+supervisor. When a failed delivery returned a comment ID, the coordinator retries that
+exact-ID GET/readback once before deciding the role is invalid; it never relaunches a role
+merely because a post-success readback was ambiguous. Retry only that missing or invalid role
+under the same panel attempt with a new workflow key; never relaunch a valid role.
+Join retained and retried roles, then validate the complete set. Synthesis, finding issue
+creation, verdict publication, and merge are unreachable until every selected role has a
+valid same-head, same-attempt artifact. Exhausted role retries record `review-degraded`
+evidence and stop without a verdict, remaining resumable rather than becoming
+`needs-human`. Never substitute inline self-review.
 
-Reviewer deadlines are runtime plumbing, not workflow gates: use the original generous
-reviewer deadline and a strictly larger panel join deadline. Pi attention notices are
-observational; do not steer, resume, or duplicate an active reviewer.
+Reviewer deadlines are runtime plumbing, not workflow gates. Set each reviewer item to
+`timeoutMs: 900000` and the synchronous panel workflow to `timeoutMs: 1200000`, a
+strictly larger panel join deadline; the `2147483647` practical no-deadline value is only
+for complete work-on coordinators. Pi
+attention notices are observational; do not steer, resume, or duplicate an active reviewer.
 
 ## Orchestrate dispatch mechanics
 
