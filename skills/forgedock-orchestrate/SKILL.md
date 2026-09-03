@@ -1,69 +1,63 @@
 ---
 name: forgedock-orchestrate
-description: Resolve and orchestrate a confirmed set of GitHub issues by dispatching one complete ForgeDock work-on skill per issue with safe dependency ordering and bounded concurrency.
+description: Resolve and dispatch a confirmed issue set as concurrent per-issue work-on agents with only real dependency edges.
 ---
 
 # ForgeDock Orchestrate
 
-The visible session is a dispatcher, never a builder.
+The visible Pi session is the dispatcher, never a builder. Read the orchestrate section of
+`../../specs/pi-adapter.md`, parse `forge.yaml` once, and retain repository, targets,
+concurrency, global files, paths, and child model.
 
-## Required loading
+## Resolve once
 
-1. Parse the arguments appended to this skill invocation.
-2. Read `../../specs/pi-adapter.md` completely.
-3. Read `../../specs/original/commands/orchestrate/config.md` first.
-4. Read `../../specs/original/commands/orchestrate.md` completely.
-5. Load the phase files under `../../specs/original/commands/orchestrate/` only as each
-   phase becomes current.
+Resolve the user's literal issues, milestone/query selector, or next-N request with one
+bounded GitHub fetch. Exclude closed, terminal, duplicate, genuinely human-gated, and
+actively owned issues. Do not inspect product code or adjudicate issue validity.
 
-## Execution contract
+For every candidate, retain title, body, labels, assignees, milestone, explicit dependency
+markers, declared affected paths, target branch, and eligibility. Use the packaged affected-
+file extractor, which accepts backtick, list, table, and plain `path:line` forms and validates
+paths against the repository.
 
-Use direct Bash with `gh` and `git` commands for all orchestration operations; verify
-`gh` authentication and repository access first. The original specification and its
-phase files are authoritative for resolution, triage, dependency analysis, execution,
-cleanup, and reporting.
+## Build the minimum safe DAG
 
-Dispatch through the canonical recipe in `specs/pi-adapter.md` (§ Orchestrate dispatch
-mechanics). For a supported compact plan — a literal issue list with unambiguous
-eligibility, no cycles, and a standard fast-lane wave — the recipe is the primary
-execution path: do not read the full `phase-4-execution.md` corpus or the pi-subagents
-reference corpus; consult the original phase files only when a decision is genuinely
-ambiguous (non-literal inputs such as `milestone`/`all`/`next <N>` queries, deep-plan
-features, recovery beyond the recipe's documented shapes). Consolidate the mechanical
-resolution, triage, and dependency steps (issue fetch, dependency markers, affected
-files via the packaged helpers, lane classification, DAG, claims board, lease) into
-single script blocks instead of one turn per query.
+Add edges only for:
 
-Resolve and filter the requested issue set, show the concrete plan, and obtain the
-original mandatory confirmation before launching any child unless `--auto` or
-`--confirm` was explicitly supplied.
+1. explicit `Depends on`, `Blocked by`, or required parent/child ordering;
+2. exact shared declared mutation files;
+3. database migration sequencing; or
+4. exact configured global/high-fan-in files.
 
-Build the minimum safe dependency graph from explicit dependencies, declared file
-overlap, database/migration serialization, and configured global files. Detect cycles
-and gate them visibly. Do not inspect or implement product code and never adjudicate
-issue validity or duplicates.
+Domain tags influence priority and reviewer selection, never dependency edges. Do not add
+edges from broad directory proximity, missing paths, shared keywords, common filing origin,
+cost scores, historical co-change guesses, or general uncertainty. When scope is unclear,
+show the uncertainty in the plan and prefer isolated parallel work; let the work-on agent's
+investigation establish mutation scope. Detect and report real cycles.
 
-Launch one fresh per-issue work-on agent using the packaged
-`forgedock-work-on-coordinator` profile and exact task `<issue> --under-orchestration`.
-Each child is its issue's sole writer and runs `forgedock-work-on` inline. Use one async
-promise graph: roots start together, and each dependent starts when its predecessors do —
-never after a whole sibling wave. Use bounded `orchestration.max_concurrent` and isolated
-issue worktrees. Give every work-on child Pi's maximum supported runtime as a practical
-no-deadline value; omission silently restores Pi's 30-minute default. Before workflow
-launch, create one clean detached base per configured PR target and set each issue item's
-`cwd` to that base before `worktree: true`; children verify/fast-forward before editing.
-The work-on agent may launch only fresh read-only review and re-review panels.
-Investigation, planning, build, quality gates, verification, PR, remediation, merge,
-close, and cleanup stay inline. Do not use builtin `worker`; forbid every pre-review
-helper, phase, builder, quality-gate, or nested issue/work-on agent. All dispatch — wave, successor, and recovery relaunch —
-follows the canonical recipe in `specs/pi-adapter.md` (§ Orchestrate dispatch
-mechanics): child task text is always exactly `<issue> --under-orchestration`, globals
-appear only on workflowScript calls, and recovery relaunches verify GitHub state first
-and reuse the identical first-dispatch shape. Never compose improvised prose task
-texts for work-on agents.
-Classify GitHub state as DONE, GATED, FAILED, or IN_PROGRESS. GATED is not FAILED. A lane waiting on an explicit prerequisite stays automated: retain its `blocked`/`FORGE:GATED` resume condition and resume work-on when that exact merge/event occurs.
-Mechanical child failure is resumable: replace stale labels with `workflow:engine-error`, record
-the run/handoff, and resume only non-terminal work. Wrong ancestry is technical remediation,
-never a human gate. Do not poll or abandon work. After drain,
-clean only handoff-recorded batch identities. Do not invoke the Claude-only `/audit-agents`; use Pi child metadata or known
-`_meta.json` artifact paths, never `~/.claude`. Return one compact terminal table with totals.
+Show the exact issue set, targets, hard edges with reasons, initial ready set, and concurrency.
+Obtain mandatory confirmation unless explicitly preconfirmed. Do not create a claims-board
+issue, lease, scoring table, Gist, heartbeat, or orchestration checkpoint.
+
+## Dispatch
+
+Launch one fresh `forgedock-work-on-coordinator` per ready issue with exact task
+`<issue> --under-orchestration`, fresh context, one isolated worktree, the issue's clean
+detached target base as `cwd`, and the maximum coordinator timeout. Each child is the sole
+writer and runs `forgedock-work-on` inline; only its review/re-review panel may be nested.
+
+Use one async promise graph with `orchestration.max_concurrent`. Independent roots start
+together. A successor starts only when every actual hard predecessor returns
+`FORGE_WORK_ON_RESULT status=DONE`, never from transport success or after a sibling wave.
+Normalize child failures so unrelated lanes settle normally.
+
+A technical lane failure preserves its handoff and receives one non-competing recovery.
+An explicit prerequisite is GATED with a wake condition; GATED is not FAILED. Never abandon
+a planned non-terminal issue or launch two writers for it.
+
+## Finish
+
+Reconcile each lane from its `FORGE_WORK_ON_RESULT` plus current GitHub state as DONE,
+GATED, FAILED, or IN_PROGRESS. Work-on owns issue closure; Pi owns child worktrees. Remove only
+clean detached target bases retained by this batch. Return one compact issue/PR/result table
+with available duration, turns, usage, recovery, and residual-risk summaries.

@@ -5,24 +5,9 @@ import { promisify } from "node:util";
 import test from "node:test";
 
 import { resolveSubagentLaunchContract } from "pi-subagents/preflight";
-import {
-  SUBAGENT_CAPABILITY_CEILING_VERSION,
-  type ResolvedSubagentCapabilityCeiling,
-} from "pi-subagents/capability-ceiling";
+import { SUBAGENT_CAPABILITY_CEILING_VERSION } from "pi-subagents/capability-ceiling";
 
 const execFileAsync = promisify(execFile);
-const COORDINATOR_TOOLS = [
-  "read",
-  "grep",
-  "find",
-  "ls",
-  "bash",
-  "edit",
-  "write",
-  "contact_supervisor",
-  "subagent",
-] as const;
-const REVIEWER_TOOLS = ["read", "grep", "find", "ls", "bash"] as const;
 
 async function registerPackedProjectPackage(project: string): Promise<void> {
   await mkdir(`${project}/.pi`, { recursive: true });
@@ -32,12 +17,7 @@ async function registerPackedProjectPackage(project: string): Promise<void> {
   );
 }
 
-/**
- * Exercise the tarball that an operator installs, rather than the checkout's
- * source discovery paths. Preflight is the public pi-subagents launch contract
- * and does not require a model or spawn a child process.
- */
-test("packed coordinator, fresh reviewer, and bounded tools resolve from the package", async () => {
+test("packed work-on agent resolves without a package tool ceiling", async () => {
   const root = process.cwd();
   const temp = await mkdtemp("/tmp/forgedock-package-canary-");
   try {
@@ -46,19 +26,21 @@ test("packed coordinator, fresh reviewer, and bounded tools resolve from the pac
       ["pack", "--json", "--ignore-scripts", "--pack-destination", temp],
       { cwd: root, env: { ...process.env, PI_OFFLINE: "1" } },
     );
-    const archive = packedArchive(stdout);
-    assert.ok(archive);
-    const packagedFiles = packedManifest(stdout).files.map((file) => file.path);
+    const manifest = packedManifest(stdout);
     for (const required of [
       "agents/forgedock-work-on-coordinator.md",
-      "agents/forgedock-reviewer.md",
-      "skills/forgedock-test-gate/SKILL.md",
-      "skills/forgedock-issue/SKILL.md",
-      "specs/original/commands/test-gate.md",
-      "specs/original/commands/issue.md",
+      "skills/forgedock-work-on/SKILL.md",
+      "skills/forgedock-orchestrate/SKILL.md",
+      "skills/forgedock-review-pr/SKILL.md",
+      "specs/original/commands/work-on.md",
     ])
-      assert.ok(packagedFiles.includes(required), `missing packed file ${required}`);
-    const archivePath = `${temp}/${archive}`;
+      assert.ok(manifest.files.some((file) => file.path === required), required);
+    assert.equal(
+      manifest.files.some((file) => file.path === "agents/forgedock-reviewer.md"),
+      false,
+      "specialized reviewer profile must not be packaged",
+    );
+
     const project = `${temp}/project`;
     await execFileAsync(
       "npm",
@@ -70,27 +52,20 @@ test("packed coordinator, fresh reviewer, and bounded tools resolve from the pac
         "--package-lock=false",
         "--ignore-scripts",
         "--legacy-peer-deps",
-        archivePath,
+        `${temp}/${manifest.filename}`,
       ],
       { cwd: root, env: { ...process.env, PI_OFFLINE: "1" } },
     );
-
     await registerPackedProjectPackage(project);
 
-    const packedCoordinator = await readFile(
+    const packedAgent = await readFile(
       `${project}/node_modules/forgedock-pi/agents/forgedock-work-on-coordinator.md`,
       "utf8",
     );
-    assert.match(packedCoordinator, /^timeoutMs: 2147483647$/m);
-    assert.match(packedCoordinator, /^toolTimeoutMs: 3900000$/m);
+    assert.match(packedAgent, /^timeoutMs: 2147483647$/m);
+    assert.match(packedAgent, /^toolTimeoutMs: 3900000$/m);
+    assert.doesNotMatch(packedAgent, /^tools:/m);
 
-    const ceiling: ResolvedSubagentCapabilityCeiling = {
-      version: SUBAGENT_CAPABILITY_CEILING_VERSION,
-      allowedAgents: ["forgedock-work-on-coordinator"],
-      allowedTools: [...COORDINATOR_TOOLS],
-      denyExtensions: false,
-      sources: ["package-canary"],
-    };
     const result = await resolveSubagentLaunchContract({
       agent: "forgedock-work-on-coordinator",
       cwd: project,
@@ -98,73 +73,19 @@ test("packed coordinator, fresh reviewer, and bounded tools resolve from the pac
       skill: false,
       output: false,
       artifacts: false,
-      capabilityCeiling: ceiling,
     });
     assert.equal(result.ok, true, result.ok ? "" : result.message);
     if (!result.ok) return;
     assert.equal(result.contract.agent.source, "package");
-    assert.ok(
-      result.contract.agent.filePath.startsWith(`${project}/node_modules/forgedock-pi/`),
-      result.contract.agent.filePath,
-    );
-    assert.equal(result.contract.tools.explicitAllowlist, true);
+    assert.equal(result.contract.tools.explicitAllowlist, false);
     assert.equal(result.contract.tools.fanoutAuthorized, true);
-    assert.ok(result.contract.tools.effectiveAllowlist.includes("subagent"));
-    assert.deepEqual(result.contract.tools.capabilityCeiling?.allowedAgents, [
-      "forgedock-work-on-coordinator",
-    ]);
-    assert.deepEqual(
-      new Set(result.contract.tools.capabilityCeiling?.allowedTools),
-      new Set(COORDINATOR_TOOLS),
-    );
     assert.equal(result.contract.tools.configuredExtensions.length, 0);
-
-    const reviewerResult = await resolveSubagentLaunchContract({
-      agent: "forgedock-reviewer",
-      cwd: project,
-      context: "fresh",
-      skill: false,
-      output: false,
-      artifacts: false,
-      capabilityCeiling: {
-        version: SUBAGENT_CAPABILITY_CEILING_VERSION,
-        allowedAgents: ["forgedock-reviewer"],
-        allowedTools: [...REVIEWER_TOOLS],
-        denyExtensions: false,
-        sources: ["package-canary"],
-      },
-    });
-    assert.equal(
-      reviewerResult.ok,
-      true,
-      reviewerResult.ok ? "" : reviewerResult.message,
-    );
-    if (!reviewerResult.ok) return;
-    assert.equal(reviewerResult.contract.agent.source, "package");
-    assert.equal(reviewerResult.contract.tools.explicitAllowlist, true);
-    assert.equal(reviewerResult.contract.tools.fanoutAuthorized, false);
-    for (const actual of [
-      reviewerResult.contract.tools.requestedBuiltin,
-      reviewerResult.contract.tools.declaredBuiltin,
-      reviewerResult.contract.tools.effectiveAllowlist,
-    ])
-      assert.deepEqual(new Set(actual), new Set(REVIEWER_TOOLS));
-    assert.equal(reviewerResult.contract.tools.configuredExtensions.length, 0);
-    assert.equal(
-      reviewerResult.contract.tools.effectiveAllowlist.includes("bash"),
-      true,
-    );
-    for (const forbidden of ["edit", "write", "subagent"])
-      assert.equal(
-        reviewerResult.contract.tools.effectiveAllowlist.includes(forbidden),
-        false,
-      );
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
 });
 
-test("packed coordinator is rejected by preflight when its capability ceiling excludes it", async () => {
+test("host policy may still reject the packaged agent", async () => {
   const root = process.cwd();
   const temp = await mkdtemp("/tmp/forgedock-package-ceiling-");
   try {
@@ -173,13 +94,11 @@ test("packed coordinator is rejected by preflight when its capability ceiling ex
       ["pack", "--json", "--ignore-scripts", "--pack-destination", temp],
       { cwd: root, env: { ...process.env, PI_OFFLINE: "1" } },
     );
-    const archive = packedArchive(stdout);
-    assert.ok(archive);
-    const archivePath = `${temp}/${archive}`;
+    const manifest = packedManifest(stdout);
     const project = `${temp}/project`;
     await execFileAsync(
       "npm",
-      ["install", "--prefix", project, "--no-save", "--package-lock=false", "--ignore-scripts", "--legacy-peer-deps", archivePath],
+      ["install", "--prefix", project, "--no-save", "--package-lock=false", "--ignore-scripts", "--legacy-peer-deps", `${temp}/${manifest.filename}`],
       { cwd: root, env: { ...process.env, PI_OFFLINE: "1" } },
     );
     await registerPackedProjectPackage(project);
@@ -192,10 +111,10 @@ test("packed coordinator is rejected by preflight when its capability ceiling ex
       artifacts: false,
       capabilityCeiling: {
         version: SUBAGENT_CAPABILITY_CEILING_VERSION,
-        allowedAgents: ["forge-review-security"],
-        allowedTools: [...COORDINATOR_TOOLS],
+        allowedAgents: ["delegate"],
+        allowedTools: ["*"],
         denyExtensions: false,
-        sources: ["package-canary"],
+        sources: ["host-policy-test"],
       },
     });
     assert.equal(result.ok, false);
@@ -217,8 +136,4 @@ function packedManifest(stdout: string): {
   assert.equal(typeof value?.filename, "string");
   assert.ok(value?.files);
   return value as { filename: string; files: Array<{ path: string }> };
-}
-
-function packedArchive(stdout: string): string {
-  return packedManifest(stdout).filename;
 }

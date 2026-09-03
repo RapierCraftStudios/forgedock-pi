@@ -2,6 +2,20 @@
 
 ## Unreleased — Prompt-router simplification
 
+- Replaced the duplicated 8,902-line work-on corpus with one compact route and six slim
+  phase procedures; collapsed context, architecture, implementation, and validation into
+  one inline build procedure.
+- Removed active Gist/index/ledger/dossier/ADR/cost-prior, heartbeat, checkpoint,
+  cache-TTL-fork, alternate-runtime, and duplicate phase-artifact machinery.
+- Simplified orchestration to hard dependency edges only: explicit prerequisites, exact
+  shared mutation files, migrations, and configured global files. Domain, directory,
+  co-change, cost, and low-confidence guesses no longer serialize lanes.
+- Expanded affected-file extraction to Markdown lists/tables and plain `path:line` forms.
+- Prevented review starvation from unrelated target movement: clean mergeable unchanged
+  patches retain valid review; only material effective-diff/risk changes trigger re-review.
+- Removed the specialized `forgedock-reviewer` profile and reviewer tool ceilings. Review
+  roles now use fresh ordinary `delegate` agents with full normal tools; the owner publishes
+  one consolidated panel result and retries only missing/invalid roles.
 - Clarified that orchestrate launches one sole-writer work-on agent per ready issue; the
   historical `forgedock-work-on-coordinator` profile name does not add another workflow
   layer.

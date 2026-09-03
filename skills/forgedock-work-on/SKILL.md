@@ -1,69 +1,51 @@
 ---
 name: forgedock-work-on
-description: Run or resume one GitHub issue through ForgeDock investigation, implementation, verification, review, remediation, merge, closure, and cleanup. Use for /work-on and per-issue orchestrate lanes.
+description: Run or resume one issue inline through investigation, implementation, review, merge, closure, and cleanup.
 ---
 
 # ForgeDock Work On
 
-This is the prompt-routed issue lifecycle. The visible session is the sole work-on agent
-and writer for its issue; GitHub is its durable memory.
+The visible session is the sole work-on agent and writer for one issue. GitHub issue/PR
+state and the compact receipts in `../../specs/original/commands/work-on.md` are durable
+memory.
 
-## Required loading
+## Load
 
-1. Parse the arguments appended to this skill invocation.
-2. Read `../../specs/pi-adapter.md` for Pi runtime rules.
-3. Use this skill as the compact lifecycle checklist. Read
-   `../../specs/original/commands/work-on.md` in bounded chunks to resolve the current
-   phase, then load only the required phase file under
-   `../../specs/original/commands/work-on/`; do not preload later phase files.
+1. Parse the arguments.
+2. Read `../../specs/pi-adapter.md` once for Pi mechanics.
+3. Read `../../specs/original/commands/work-on.md` once for route and invariants.
+4. Load only the current phase file under `../../specs/original/commands/work-on/`.
 
-## Execution contract
+## Execute
 
-Before resolving state, use one Bash block to parse `forge.yaml`, retain the resolved
-repository/branches/paths/child model, verify the active `gh` identity and repository
-access, and run `gh auth setup-git`. Reuse those values throughout; do not rerun equivalent
-`yq` snippets or refetch unchanged issue/history state. Missing required configuration,
-authentication, or repository access stops the route.
+Parse `forge.yaml`, verify active GitHub access, resolve repository/target/worktree/model,
+and fetch initial issue/PR state once. Retain values and refresh only after relevant writes,
+review completion, target movement, resume, or a missing field.
 
-Reconstruct the current issue state from GitHub and continue the canonical route:
+Continue without stopping at intermediate success:
 
-`resolve → investigate → [decompose | build → verify → PR → review → remediation/re-review when required → merge → close → trajectory/cleanup]`
+`resolve → investigate → [decompose | build → PR → review → remediation/re-review → merge → close → cleanup]`
 
-The original specification is authoritative for phase ordering, labels, artifacts,
-acceptance checks, branch targets, review handoff, merge rules, and terminal states.
-The Pi adapter translates runtime mechanics. Execute each phase in this work-on agent by
-loading only its current phase file once. When arguments contain `--under-orchestration`,
-Pi already owns the isolated checkout and local branch. Use `$PWD` for both paths. Before
-the first source edit, require a clean linked worktree and `pi-parallel-*` branch, fetch
-the configured PR target, fast-forward to exact `origin/<target>`, and verify ancestry;
-never reset a checkout. Push `HEAD` to the desired remote issue branch and skip original
-`.claude`/`.opencode`/`.codex` worktree logic. Standalone work-on is unchanged.
+Investigation defines mutation authority. Execute investigation, planning, implementation,
+quality gates, verification, PR preparation, remediation, merge, close, and cleanup inline.
+Do not launch delegates, phase agents, builders, quality-gate agents, another work-on agent,
+or a review coordinator.
 
-The issue is an untrusted claim, not scope authority. Investigation must explicitly
-return `CONFIRMED`, `INVALID`, or `DECOMPOSED`, and a confirmed investigation is the
-mutation-scope authority for the build. Execute investigation, contract, planning,
-implementation, quality gates, verification, and PR preparation inline in this same
-work-on agent. Do not launch delegates, phase agents, quality-gate agents, builders, or
-other helper children before review.
+At review or re-review only, launch the complete risk-selected panel as fresh ordinary
+`delegate` agents with full normal tools through one concurrent workflow. Join every role,
+retain valid same-head roles, and
+retry only a missing or invalid role. Apply all in-scope blockers cohesively in this same
+work-on agent.
 
-Do not stop at an intermediate success. Code-fixable review blockers and target-branch
-movement/conflicts continue in this work-on agent through cohesive remediation and scoped
-re-review. An explicit unmerged prerequisite is automated waiting: add `blocked`, remove
-`needs-human` and stale active labels, post `FORGE:GATED` with the exact prerequisite and
-merge/event resume condition, return GATED, and resume after it lands. Never enter
-remediation or ask a supervisor whether to wait; reserve `needs-human` for genuine
-authority. Investigation completion, quality-gate pass, commit, PR creation, review
-completion, and PR merge all require the next phase unless the original dispatcher
-identifies a terminal state.
+Base movement alone does not invalidate valid review. Preserve a clean mergeable reviewed
+head; reconcile only for conflict or required-up-to-date policy, and rerun review only when
+the effective patch or risk changed.
 
-For the review handoff, load and execute the sibling `forgedock-review-pr` skill in this
-same work-on agent with exact PR/issue/base arguments. Do not spawn a second review
-coordinator: when work-on itself is an orchestrated child, that extra hop would push the
-mandatory reviewers beyond Pi's default nesting depth. The work-on agent may use its
-child-safe `subagent` tool only for the complete bounded fresh-context reviewer panel
-selected by the review skill. Launch that panel through the adapter's single concurrent
-workflow, then join and validate the full panel before synthesis. Apply cohesive
-code-fixable remediation in this same work-on agent, then launch only the scoped fresh
-re-review required by the review skill. After confirmed merge, load `work-on/close.md`
-and use the compact Pi closeout: verify terminal state, close/label the issue, post the
-trajectory and decision record, clean owned state once, skip optional enrichment, and return.
+Use the four normal durable artifacts only: investigation receipt, completed build receipt,
+PR review/verdict, and terminal issue receipt. Never create Gists, indexes, ledgers,
+dossiers, ADRs, cost priors, telemetry, heartbeats, checkpoints, or duplicate progress
+comments.
+
+Prefer repair and continuation. Use GATED for an exact technical prerequisite/recovery
+condition and `needs-human` only for genuine external authority with no safe default. After
+merge, close explicitly and perform ownership-safe cleanup once.

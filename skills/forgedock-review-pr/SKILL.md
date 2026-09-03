@@ -1,68 +1,86 @@
 ---
 name: forgedock-review-pr
-description: Run the authoritative context-aware ForgeDock review for an exact PR, including routing, verification, risk-derived fresh reviewers, finding issues, verdict, and optional guarded merge.
+description: Review one frozen PR with a risk-selected fresh panel, one verdict, and guarded merge.
 ---
 
 # ForgeDock Review PR
 
-## Required loading
+Read the reviewer section of `../../specs/pi-adapter.md`. Resolve `forge.yaml`, active
+GitHub identity, repository, PR, and merge authorization once. A standalone PR and a
+work-on-owned PR use the same review standard.
 
-1. Read `../../specs/pi-adapter.md` completely.
-2. Parse the arguments appended to this skill invocation.
-3. Read the headings of `../../specs/original/commands/review-pr.md`, then load only the
-   current phase in bounded chunks as review advances; do not preload later phases.
-4. During reviewer selection, read
-   `../../specs/original/commands/review-pr-agents/protocols.md` and only the selected
-   persona files in that directory.
+## Freeze
 
-## Execution contract
+Fetch one snapshot containing PR number/title/body/state, full head/base SHAs, merge base,
+changed files, diff, checks, existing exact-head verdict, and linked issue. Stop only for
+closed/merged state, invalid route, or unavailable required authority.
 
-Use direct Bash with `gh` and `git` commands for all review operations; verify `gh`
-authentication and repository access first. The original specification is authoritative
-for phase order, hard rules, automated checks, reviewer selection, findings, verdicts,
-and merge policy. Follow it. The Pi adapter only translates runtime mechanics (skill
-references, subagent dispatch, `$FORGE_HOME` paths).
+Base movement does not invalidate an unchanged clean reviewed head. Reconcile only for an
+actual conflict or required-up-to-date policy. Re-review after reconciliation only when
+the effective patch or risk changed.
 
-Freeze the exact PR head/base from GitHub before review. Every PR is independently
-reviewable: a standalone review requires no work-on pipeline state and runs the same
-checks and reviewer panel as a pipeline review.
-Automatically switch to the staging strategy when the selector or actual route targets
-the protected/default branch as specified; load
-`../../specs/original/commands/review-pr-staging.md` directly rather than emitting a
-nested slash command.
+## Verify
 
-Run configured automated and integration checks. Derive the reviewer roster from the
-actual risk surface, and calibrate reviewer effort to that risk: documentation-only,
-template, or single-file metadata lanes run their panel at medium thinking effort;
-lanes touching executable code paths, security/auth/data/concurrency surfaces, or
-cross-file integration run it at high. Set the effort per reviewer task via the model
-thinking suffix — never by lowering the blocking standard. For a remediation re-review
-of a head with known blockers, the panel is scoped to exactly the remediated change:
-reviewers are the personas that produced the blocking findings plus one general
-reviewer, each receiving the remediated hunks and the blocker's invariant, verifying
-whether the blocker remains reachable on the frozen new head. When a review returns
-multiple blockers plus non-blocking findings, remediation is one cohesive pass on the
-existing PR branch: every blocker is fixed in the same head in the same worktree —
-never one head per blocker — and the scoped blocker-persona re-review verifies all
-blocker invariants on that single new head in one review round. A full-domain union
-panel is never required to verify a blocker closure — re-reviewing everything
-re-introduces the round-count and wall-clock spiral that stalled the previous
-generation of this pipeline. Prepare each reviewer bundle
-deterministically yourself: fetch the full diff once, slice it per reviewer with its
-persona and identity, and pass it inline. Use the owning route's retained full child
-model; a standalone review resolves it once from `forge.yaml` (`subagent_model`, then
-`default_model`). Never pass legacy aliases. Launch the complete
-panel concurrently with the adapter's one synchronous `workflowScript`/`runs.all`, not
-separate subagent calls. Each reviewer posts and exact-ID reads back its own role-scoped exact-head comment with a specific qualitative summary, 2–8 `path:line` verified behaviors, and residual risks even when clean; markers/file lists alone are invalid. Validate that returned ID directly with `jq` and fixed strings, not a
-search across comments or a shell regex. Join and validate every result/readback before
-synthesis; never proxy-post or use a partial panel as the verdict. Retain every valid
-same-head role result and retry only a missing or invalid role under the same panel
-attempt with a new workflow key—never relaunch roles that already succeeded.
+Reuse trusted builder checks bound to the same head. Run only missing, stale, review-
+specific, or independently security-relevant checks. Do not rerun identical deterministic
+commands against an unchanged SHA.
 
-For a PR owned by work-on, keep blocking findings on the existing PR and source issue
-for cohesive remediation; do not create recursive blocker issues. Create or deduplicate
-an issue through `forgedock-issue` only for valuable independent follow-up work that
-should outlive the PR, grouping one cohesive concern once. Standalone and staging review
-retain the original finding-publication contract. Post exactly one official review tied
-to the frozen SHA. Merge only when `--auto-merge` was explicit and the original blocking
-policy passes. Review never closes the linked issue or cleans the work-on tree.
+## Select reviewers
+
+Always cover correctness. Add security for executable code or trust boundaries. Add only
+specialists justified by actual changed behavior: auth, data/migrations, concurrency,
+API/integration, frontend/accessibility, infrastructure/reliability, scraping/browser, or
+test quality. File count and domain keywords alone do not add reviewers.
+
+Use medium thinking for documentation/templates/metadata and high for executable,
+security, auth, data, concurrency, or cross-file behavior. Thinking level never lowers the
+blocking standard.
+
+For remediation, select blocker-producing roles plus one general reviewer. Every new
+executable-code head also receives security review even when security did not produce the
+original blocker. Add another specialist only when remediation changed that specialist's
+risk surface.
+
+## Run one panel
+
+Prepare the full diff once and deterministic role bundles. Launch all selected roles as
+fresh ordinary `delegate` agents with full normal tool availability through the adapter's
+single `runs.all` workflow. Prompts assign review focus without creating specialized agent
+profiles or capability ceilings. Join every role and retain valid same-head roles. If one
+role is missing or invalid, launch one additional workflow containing only that role;
+never restart the whole panel.
+
+Validate each returned JSON result directly:
+
+- exact repository, PR, full head/base, attempt, and role;
+- verdict agrees with findings;
+- 2–5 sentence summary;
+- 2–8 verified `path:line` behaviors;
+- residual risks and reviewed files/units;
+- blocking findings meet the confirmed HIGH/CRITICAL production-incident standard.
+
+After complete validation, the owning agent publishes one
+SHA-bound consolidated panel comment containing every role's summary, verified behaviors,
+residual risks, and findings, then one official review verdict. Read back the exact IDs.
+No per-role POST/readback choreography, shell-regex grammar, body-integrity tokens, or
+review-start/checkpoint comments are required.
+
+## Decide
+
+- Any confirmed patch-caused blocking finding: `CHANGES_REQUESTED`.
+- No blockers and one or more follow-ups: `APPROVE_WITH_FOLLOW_UP`.
+- No findings: `APPROVE`.
+- Missing/invalid role after its bounded retry: `review-degraded`, no verdict.
+
+Keep work-on blockers on the existing PR/source issue for cohesive remediation. Create at
+most one valuable independent follow-up issue per causal concern; advisories may remain in
+the consolidated report.
+
+Merge only when explicitly authorized, the current head equals the accepted reviewed head
+or a proven equivalent patch, required checks pass, the PR is mergeable, and no blocker
+remains. Review never closes the linked issue or cleans its worktree.
+
+Use the staging review strategy only for an explicit integration-to-protected deployment
+or bundle review. An ordinary issue PR targeting the configured integration branch keeps
+this standard approving review even when that integration branch is also the repository
+default. Staging review remains a non-merging deployment gate.
