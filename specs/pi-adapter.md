@@ -37,7 +37,7 @@ terminal conditions, review policy, GitHub artifacts, remediation, merge, and cl
 | `yq`-based config reads | Resolve required configuration once at route start with one direct `yq` call when installed, or one short `node` call using the package's YAML dependency. Retain those values through the route. Missing/malformed required configuration fails closed; do not retry alternate quoting forms. |
 | GitHub and Git operations | Use direct `gh` and `git` commands. Verify `gh auth status` and repository access, and run `gh auth setup-git` before noninteractive fetch/push. |
 | Missing optional helper script | Follow the prose fallback already described by the specification. Never use an unbounded filesystem search. |
-| Child model selection | On Pi, resolve one full model ID from `forge.yaml` `agents.subagent_model`, then `agents.default_model`. This overrides legacy model prose in the original specs. Never pass `sonnet`, `opus`, or `haiku` aliases; difficult-investigation helpers use maximum thinking and reviewers use the risk-calibrated suffix from the review skill. |
+| Child model selection | On Pi, resolve one full model ID from `forge.yaml` `agents.subagent_model`, then `agents.default_model`. This overrides legacy model prose in the original specs. Never pass `sonnet`, `opus`, or `haiku` aliases; investigation delegates use maximum thinking and reviewers use the risk-calibrated suffix from the review skill. |
 | Mechanical failure recovery | A mechanical failure (provider loss, gate mismatch, conflict) is durable `workflow:engine-error` or `review-degraded` evidence with the run ID and handoff path, followed by resume/relaunch. Remove stale active-phase labels. Reserve `needs-human` for a genuine human authority decision. |
 
 ## Subagents
@@ -144,8 +144,8 @@ workflow complete while a planned issue is merely abandoned.
 A supported compact plan runs entirely on this recipe without loading the large phase-4
 corpus. Never load the pi-subagents reference corpus to compose it. Consult original
 phase files only for ambiguous selectors, cycles, or recovery
-not covered above. Investigation helper calls remain direct children; the one reviewer
-panel workflow described above is the coordinator's only nested workflow.
+not covered above. Investigation `delegate` calls remain direct children; the one
+reviewer panel workflow described above is the coordinator's only nested workflow.
 
 ## Cleanup ownership
 
