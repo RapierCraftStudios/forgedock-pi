@@ -44,6 +44,13 @@ Resolve and filter the requested issue set, show the concrete plan, and obtain t
 original mandatory confirmation before launching any child unless `--auto` or
 `--confirm` was explicitly supplied.
 
+For a literal issue list, use the packaged deterministic compact-plan entry
+(`$FORGE_HOME/bin/orchestrate-preflight.mjs`, mapped to
+`specs/original/bin/orchestrate-preflight.mjs` by the Pi adapter). If the helper
+reports `requiresDeepPlan`, ambiguous input, a cycle, or a mechanical failure, fall
+back to the original phase-file resolver and dependency path; never infer a dispatch
+plan from a partial result.
+
 Build the minimum safe dependency graph from explicit dependencies, declared file
 overlap, database/migration serialization, and configured global files. Detect cycles
 and gate them visibly. Do not inspect or implement product code and never adjudicate
