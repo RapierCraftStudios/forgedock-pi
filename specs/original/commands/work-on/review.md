@@ -79,11 +79,10 @@ PR #{PR_NUMBER}'s HEAD (${CURRENT_SHA_SHORT}) has not changed since the last CHA
 The PR already has a blocking review. Progress now depends on remediation (fix the findings, push a new commit, re-review) rather than another raw review submission. Code-fixable blockers continue into Phase R3.5 in this same coordinator; do not depend on an outer orchestrator or a separate manual invocation.
 
 <!-- FORGE:REREVIEW_SKIPPED -->
-<!-- FORGE:BLOCK_CLASS:FIXABLE_REVIEW -->
 SKIP_EOF
 )
   gh issue comment {NUMBER} {GH_FLAG} --body "$REREVIEW_SKIP_BODY" # <!-- allowlist:check-command-side-effects -->
-  gh issue edit {NUMBER} {GH_FLAG} --add-label workflow:in-review --remove-label needs-human 2>/dev/null || true # <!-- allowlist:check-command-side-effects -->
+  gh issue edit {NUMBER} {GH_FLAG} --add-label needs-human 2>/dev/null || true # <!-- allowlist:check-command-side-effects -->
   # Do not invoke /review-pr again on unchanged HEAD and do not return a terminal
   # BLOCKED result for code-fixable findings. Continue to Phase R3.5.
   REVIEW_NEEDS_REMEDIATION=true
@@ -114,11 +113,10 @@ Branch \`{BRANCH}\` contains merge commits from branches outside the PR base (\`
 ${MERGE_COMMITS}
 \`\`\`
 
-Do NOT push this branch. Preserve the branch for automated ancestry reconciliation or a clean replacement lane.
+Do NOT push this branch. Human review required to identify the source of the merge commits and clean the branch history (e.g. via \`git rebase\` to replay only the intended commits onto \`origin/{PR_BASE}\`).
 
-<!-- FORGE:PUSH_BLOCKED -->
-<!-- FORGE:BLOCK_CLASS:ENGINE_ERROR -->"
-    gh issue edit {NUMBER} {GH_FLAG} --add-label "workflow:engine-error" --remove-label "needs-human,workflow:in-review"
+<!-- FORGE:PUSH_BLOCKED -->"
+    gh issue edit {NUMBER} {GH_FLAG} --add-label "needs-human"
     # Return REVIEW_RESULT: status: BLOCKED — do not push
     exit 1
   fi
@@ -142,9 +140,8 @@ Branch \`{BRANCH}\` has 0 commits ahead of \`origin/{PR_BASE}\`. Pushing this br
 
 **Resolution**: Delete this branch, re-run \`/work-on {NUMBER}\` to restart the build phase. The partial FORGE:BUILDER comment (lacking \`FORGE:BUILDER:COMPLETE\`) will be detected and deleted, and the build will restart cleanly.
 
-<!-- FORGE:PUSH_BLOCKED_EMPTY_BRANCH -->
-<!-- FORGE:BLOCK_CLASS:ENGINE_ERROR -->"
-  gh issue edit {NUMBER} {GH_FLAG} --add-label "workflow:engine-error" --remove-label "needs-human,workflow:in-review"
+<!-- FORGE:PUSH_BLOCKED_EMPTY_BRANCH -->"
+  gh issue edit {NUMBER} {GH_FLAG} --add-label "needs-human"
   exit 1
 fi
 echo "Commit count ahead of origin/{PR_BASE}: $COMMIT_COUNT — OK to push"
@@ -170,12 +167,11 @@ Branch \`{BRANCH}\` could not be pushed to origin.
 
 **Error**: {ERROR_OUTPUT}
 
-This may indicate a merge conflict, remote rejection, or transient authentication failure. Preserve a resumable handoff for automated retry.
+This may indicate a merge conflict or remote rejection. Human review required.
 
-<!-- FORGE:PUSH_FAILED -->
-<!-- FORGE:BLOCK_CLASS:ENGINE_ERROR -->"
+<!-- FORGE:PUSH_FAILED -->"
 
-gh issue edit {NUMBER} {GH_FLAG} --add-label "workflow:engine-error" --remove-label "needs-human,workflow:in-review"
+gh issue edit {NUMBER} {GH_FLAG} --add-label "needs-human"
 ```
 Return `REVIEW_RESULT: status: BLOCKED`, blocker: "git push failed".
 
@@ -314,17 +310,13 @@ Wait for that task's completed result before Phase R4. Propagate its `REVIEW_RES
 
 ### Phase R3.5: Continue Code-Fixable Blockers
 
-After review returns—or when the unchanged-head guard sets `REVIEW_NEEDS_REMEDIATION=true`—read the current-head official verdict and linked issue state, then classify the block before changing labels.
+After review returns—or when the unchanged-head guard sets `REVIEW_NEEDS_REMEDIATION=true`—read the current-head official verdict and linked issue state. If the PR has concrete code-fixable blocking findings, do not return a terminal `BLOCKED` result and do not wait for an outer orchestrator. Load and execute `work-on/remediate.md` now for `{PR_NUMBER}` and `{NUMBER}` in this same coordinator, fixing all current blockers cohesively on the existing PR branch before one scoped re-review. Remediation owns its re-review, merge/hold decision, and close handoff; propagate its result and do not duplicate Phase R4 or close work afterward.
 
-- If implementation requires an identified issue, PR, or ref that is not yet present on the target, classify `WAITING_DEPENDENCY`. Add `blocked`, remove `needs-human` and active workflow labels, and post `<!-- FORGE:GATED -->` plus `<!-- FORGE:BLOCK_CLASS:WAITING_DEPENDENCY -->` naming the exact prerequisite and merge/event wake condition. Return a GATED/BLOCKED result immediately. Do not enter remediation, duplicate prerequisite code, poll, or ask a supervisor whether to wait. On resume, when the prerequisite condition is true, reconcile the owned branch with the updated target, rerun verification, and obtain a fresh exact-head review.
-- If the PR has concrete code-fixable blocking findings, classify `FIXABLE_REVIEW`; keep `workflow:in-review` and remove `needs-human`. Do not wait for an outer orchestrator or return a terminal `BLOCKED` result. Load and execute `work-on/remediate.md` now for `{PR_NUMBER}` and `{NUMBER}` in this coordinator, fixing all current blockers cohesively before one scoped re-review. Remediation owns its re-review, merge/hold decision, and close handoff.
-- Provider/tool/marker/publication/checkout/push/merge mechanics classify `ENGINE_ERROR` and use `workflow:engine-error` or `review-degraded` with a resumable handoff.
+Before remediation, compare the blocker evidence with the latest investigation and builder contract. If review proves that the root cause or affected production paths were materially incomplete, post `<!-- FORGE:REINVESTIGATE_REQUIRED -->` on the source issue with the PR head and missing scope, perform one fresh superseding investigation using the current investigation instructions, then remediate from that corrected scope. Do this at most once per PR head; later unresolved blockers follow the bounded remediation limit rather than cycling through investigation.
 
-Before remediation, compare blocker evidence with the latest investigation and builder contract. If review proves the root cause or affected production paths were materially incomplete, post `<!-- FORGE:REINVESTIGATE_REQUIRED -->` with the PR head and missing scope, perform one fresh superseding investigation, then remediate from that corrected scope. Do this at most once per PR head; later unresolved blockers become resumable blocked evidence rather than human authority.
+Only genuine product/policy choices, external operations or credentials, destructive authority, unfixable trust gates, or exhausted bounded remediation may remain `needs-human`. A code defect with a concrete repository fix is not a human-authority decision.
 
-Only a proven product/policy choice, external operation or credential automation cannot perform, destructive authority, legal/compliance decision, or protected-target approval may classify `AUTHORITY_REQUIRED` and add `needs-human`, and only after the required `FORGE:HUMAN_AUTHORITY_REQUIRED` evidence is posted. A dependency, code defect, conflict, failure, or exhausted retry is not a human-authority decision.
-
-If review is clean or carries proven authority evidence, continue to Phase R4 with that result.
+If review is clean or the block is genuinely unfixable, continue to Phase R4 with that result.
 
 ---
 

@@ -49,16 +49,6 @@ execution order below is the fallback path for deep plans, unsupported inputs,
 preflight failures, and task-result recovery; do not read it merely to confirm or
 dispatch a compact plan.
 
-## Human-authority invariant
-
-Never write or propagate `needs-human` from a label alone. Current block classes are
-`FIXABLE_REVIEW`, `WAITING_DEPENDENCY`, `ENGINE_ERROR`, and `AUTHORITY_REQUIRED`.
-Remediate only the first, wake the second from its named prerequisite event, recover the
-third mechanically, and preserve the fourth only with complete exact-ID-read-back
-`FORGE:HUMAN_AUTHORITY_REQUIRED` evidence. This invariant overrides legacy mechanical
-`needs-human` writes in phase files; those remain read-only compatibility signals until
-classified once.
-
 ## Execution Order
 
 Read and execute phases in sequence. Each phase file is self-contained.

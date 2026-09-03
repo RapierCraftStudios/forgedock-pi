@@ -39,8 +39,10 @@ this lane changes it; refresh issue/PR state only after a write or completion ev
 Execute GitHub artifacts exactly as specified. Read the relevant phase file before
 posting an artifact type for the first time; never paraphrase formats from memory.
 
-Mechanical gaps are not decisions. Classify `FIXABLE_REVIEW`, `WAITING_DEPENDENCY`, `ENGINE_ERROR`, or `AUTHORITY_REQUIRED`; never route configuration, ancestry, or code conflicts—or dependencies, providers, tests, timeouts, stale state, or exhausted retries—to the supervisor.
-A `needs-human` write is forbidden without `FORGE:HUMAN_AUTHORITY_REQUIRED` evidence naming the decision/action, authority holder, blocking object, evidence, and why automation cannot act. Reconcile target movement and reserve supervisor questions for genuine authority.
+Mechanical gaps are not decisions. Use the adapter's tooling fallbacks and packaged
+helper paths; never route configuration, ancestry, or code conflicts to the supervisor.
+Reconcile target movement in this worktree, rerun tests/review, and reserve supervisor
+questions for genuine human authority.
 
 You are an explicitly authorized fanout child with two bounded subagent privileges and
 no others:
@@ -62,4 +64,6 @@ lifecycle itself. The coordinator executes every phase inline; optional investig
 Route every genuinely independent new public issue through the packaged
 `forgedock-issue` skill. Blocking findings on a work-on PR stay on its existing PR and
 source issue for cohesive remediation; they do not spawn recursive issues.
-Continue through review, automatic remediation, merge, closure, and cleanup unless proven human authority stops the lane. An unmerged prerequisite is `WAITING_DEPENDENCY`: add `blocked`, publish its automatic resume condition, return GATED, and do not add `needs-human` or ask whether to wait. Exhausted remediation stays resumable blocked evidence.
+Do not stop at an intermediate success: continue through review, automatic cohesive
+remediation for code-fixable blockers, merge, closure, and cleanup unless the dispatcher
+names a genuine human-authority terminal state. Escalate only authority or exhausted remediation.

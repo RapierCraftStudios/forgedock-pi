@@ -717,14 +717,9 @@ if [ "${#CYCLE_ISSUES[@]}" -gt 0 ]; then
   echo "CYCLE DETECTED in dependency graph — the following issues form a circular dependency:"
   for C in "${CYCLE_ISSUES[@]}"; do
     echo "  #${C}: predecessors=[${PREDECESSORS[$C]}]"
-    # A dependency cycle needs an owner to decide which declared edge is wrong.
-    gh issue comment "$C" -R {GH_REPO} --body "<!-- FORGE:HUMAN_AUTHORITY_REQUIRED -->
-**Decision/action**: Choose which declared dependency edge in ${CYCLE_ISSUES[*]/#/#} is incorrect.
-**Authority holder**: Issue owner or product maintainer.
-**Blocking object**: Circular dependency containing #${C}.
-**Evidence**: predecessors=[${PREDECESSORS[$C]}].
-**Why automation cannot perform it**: Removing an edge changes intended product ordering." 2>/dev/null || true
+    # Label each cyclic issue needs-human
     gh issue edit "$C" -R {GH_REPO} --add-label "needs-human" 2>/dev/null || true
+    gh issue comment "$C" -R {GH_REPO} --body "**Cycle detected by /orchestrate**: This issue is part of a circular dependency chain involving issues: ${CYCLE_ISSUES[*]/#/#}. The orchestrator cannot dispatch it automatically. Please fix the \`Depends on\` declarations so that no cycle exists, then re-run /orchestrate." 2>/dev/null || true
     # Remove from DAG — store in EXCLUDED_CYCLE for Step 3E reporting
     EXCLUDED_CYCLE+=("$C")
     # Remove from ISSUES array for all downstream processing

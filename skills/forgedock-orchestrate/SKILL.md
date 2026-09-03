@@ -61,7 +61,7 @@ mechanics): child task text is always exactly `<issue> --under-orchestration`, g
 appear only on workflowScript calls, and recovery relaunches verify GitHub state first
 and reuse the identical first-dispatch shape. Never compose improvised prose task
 texts for coordinators.
-Classify GitHub state as DONE, GATED, FAILED, or IN_PROGRESS—GATED is not FAILED. Never infer authority from `needs-human` alone: classify `FIXABLE_REVIEW`, `WAITING_DEPENDENCY`, `ENGINE_ERROR`, or `AUTHORITY_REQUIRED`; remediate, wake, or recover the first three, and preserve only the fourth with exact-ID-read-back `FORGE:HUMAN_AUTHORITY_REQUIRED` proof. Classify a legacy bare label once.
+Classify GitHub state as DONE, GATED, FAILED, or IN_PROGRESS. GATED is not FAILED.
 Mechanical child failure is resumable: replace stale labels with `workflow:engine-error`, record
 the run/handoff, and resume only non-terminal work. Wrong ancestry is technical remediation,
 never a human gate. Do not poll or abandon work. After drain,

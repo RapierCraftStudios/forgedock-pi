@@ -406,11 +406,10 @@ Branch \`{BRANCH}\` contains merge commits from branches outside the PR base (\`
 ${MERGE_COMMITS}
 \`\`\`
 
-Automated ancestry reconciliation or a clean replacement lane is required before push.
+Human review required before this branch can be pushed.
 
-<!-- FORGE:ANCESTRY_FAILED -->
-<!-- FORGE:BLOCK_CLASS:ENGINE_ERROR -->"
-  gh issue edit {NUMBER} {GH_FLAG} --add-label "workflow:engine-error" --remove-label "needs-human,workflow:building"
+<!-- FORGE:ANCESTRY_FAILED -->"
+  gh issue edit {NUMBER} {GH_FLAG} --add-label "needs-human"
   # Return GATE_PASSED: false — do not push
   exit 1
 fi
