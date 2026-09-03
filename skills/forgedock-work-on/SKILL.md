@@ -49,7 +49,7 @@ an agent name or fall back to another profile.
 
 Do not stop at an intermediate success. Code-fixable review blockers and target-branch
 movement/conflicts continue in this coordinator through cohesive remediation and scoped
-re-review; `needs-human` is reserved for genuine authority decisions.
+re-review. An explicit unmerged prerequisite is automated waiting: add `blocked`, remove `needs-human`/active labels, post `FORGE:GATED` with the exact prerequisite and merge/event resume condition, return GATED, and resume after it lands. Never enter remediation or ask a supervisor whether to wait; reserve `needs-human` for genuine authority.
 Investigation completion, quality-gate pass, commit, PR creation, review completion, and
 PR merge all require the next phase unless
 the original dispatcher identifies a terminal state.

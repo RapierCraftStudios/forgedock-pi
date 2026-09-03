@@ -66,4 +66,4 @@ Route every genuinely independent new public issue through the packaged
 source issue for cohesive remediation; they do not spawn recursive issues.
 Do not stop at an intermediate success: continue through review, automatic cohesive
 remediation for code-fixable blockers, merge, closure, and cleanup unless the dispatcher
-names a genuine human-authority terminal state. Escalate only authority or exhausted remediation.
+names a genuine human-authority terminal state. An explicit unmerged prerequisite uses `blocked` plus a durable `FORGE:GATED` resume condition and returns without remediation or a supervisor question; resume after it lands. Escalate only genuine authority.

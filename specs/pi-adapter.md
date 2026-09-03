@@ -40,6 +40,7 @@ terminal conditions, review policy, GitHub artifacts, remediation, merge, and cl
 | `packages/protocol/...` CLI references | The Pi package does not ship that upstream workspace. Do not search for it. Emit the literal marker/body format shown by the current phase, post from a file, and verify the exact returned comment ID. |
 | Child model selection | On Pi, resolve one full model ID from `forge.yaml` `agents.subagent_model`, then `agents.default_model`. This overrides legacy model prose in the original specs. Never pass `sonnet`, `opus`, or `haiku` aliases; investigation delegates use maximum thinking and reviewers use the risk-calibrated suffix from the review skill. |
 | Mechanical failure recovery | A mechanical failure (provider loss, gate mismatch, conflict) is durable `workflow:engine-error` or `review-degraded` evidence with the run ID and handoff path, followed by resume/relaunch. Remove stale active-phase labels. Reserve `needs-human` for a genuine human authority decision. |
+| Explicit unmerged prerequisite | Add `blocked`, remove `needs-human` and stale active labels, post `FORGE:GATED` with the exact prerequisite and merge/event resume condition, return without remediation or a supervisor question, and resume the same PR after it lands. |
 
 ## Direct execution discipline
 

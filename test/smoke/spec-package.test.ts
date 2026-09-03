@@ -227,11 +227,17 @@ test("work-on optimizes for first-pass completion without recursive blocker issu
   assert.match(protocols, /A finding does not need a new issue to remain durable/i);
   assert.match(protocols, /Confidence or severity alone never makes a blocker/i);
   assert.match(review, /Continue Code-Fixable Blockers/);
+  assert.match(review, /explicit unmerged prerequisite/);
+  assert.match(review, /add `blocked`, remove `needs-human`/);
+  assert.match(review, /return GATED without entering remediation or asking a supervisor/);
+  assert.match(review, /Resume this same PR after the prerequisite lands/);
+  assert.match(workOn, /explicit unmerged prerequisite is automated waiting/);
+  assert.match(coordinator, /explicit unmerged prerequisite uses `blocked`/);
   assert.match(review, /do not wait for an outer orchestrator/i);
   assert.match(review, /FORGE:REINVESTIGATE_REQUIRED/);
   assert.match(review, /at most once per PR head/);
   assert.match(remediate, /blocking findings do not need child issues to be durable/i);
-  assert.match(coordinator, /Escalate only authority or exhausted remediation/);
+  assert.match(coordinator, /Escalate only genuine authority/);
 });
 
 test("one canonical issue schema governs every ForgeDock creator", async () => {
