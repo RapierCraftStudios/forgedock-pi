@@ -19,7 +19,7 @@ argument-hint: "[PR number] [--issue N] [--repo GH_REPO] [--gh-flag GH_FLAG] [--
 **Agent model policy**: Default `model: "sonnet"`. If Sonnet is rate-limited, fall back to `model: "opus"`.
 **NEVER use plan mode (EnterPlanMode).**
 
-**Scope note**: This mode owns exactly one gap — re-driving a `needs-human` PR's own remediation. It does NOT implement the `needs-human` sub-label taxonomy (#1815's scope) and it does NOT edit `review-pr.md`'s Phase 8 guard (forge#1810) — that guard's existing safe-default (`workflow:awaiting-merge` on any clean re-review of a previously-escalated PR) is reused as-is; this file only adds a bar-check *after* that guard has already fired.
+**Forward block-class contract**: remediation never uses `needs-human` as an entry ticket. `FIXABLE_REVIEW` enters this flow; `WAITING_DEPENDENCY` returns `blocked`/GATED with an exact wake condition; `ENGINE_ERROR` stays automatically recoverable; only `AUTHORITY_REQUIRED` may retain `needs-human` after complete `FORGE:HUMAN_AUTHORITY_REQUIRED` evidence. Legacy bare labels are classified once. This contract overrides legacy wording below.
 
 ### Inline current-head blocker remediation (authoritative override)
 
@@ -194,8 +194,8 @@ ISSUE_STATE=$(gh issue view {ISSUE_NUMBER} {GH_FLAG} --json labels,state,body,mi
 ISSUE_LABELS=$(echo "$ISSUE_STATE" | jq -r '[.labels[].name] | join(",")')
 ```
 
-- **Legacy standalone mode:** if `needs-human` is NOT among `ISSUE_LABELS` → EXIT `REMEDIATE_RESULT: status: BLOCKED`, blocker: "issue #{ISSUE_NUMBER} is not `needs-human` — legacy remediation only targets `needs-human`-gated PRs; use the normal `/work-on {ISSUE_NUMBER}` resume path instead."
-- **Inline mode:** require `workflow:in-review` (or the exact non-terminal review state defined by the caller), a matching current PR head, and at least one revalidated current-head blocker. Do not require or add `needs-human`.
+- **Standalone mode:** require current-head `FIXABLE_REVIEW` evidence. If only a legacy `needs-human` label exists, classify it once in M1; the label itself is not remediation authority.
+- **Inline mode:** require `workflow:in-review`, a matching current PR head, and at least one revalidated current-head blocker. Do not require or add `needs-human`.
 
 **Idempotency / resume check** — the paper trail lives on **both** the PR and linked
 issue. Select one exact attempt marker, and retain both object IDs and bodies:
@@ -281,13 +281,15 @@ BLOCK_COMMENTS=$(gh api repos/{GH_REPO}/issues/{ISSUE_NUMBER}/comments \
   --jq '[.[] | select(.body | test("Auto-merge aborted|not mergeable|Pre-Push Ancestry Guard Failed|Push Failed|Quality Gate Failed"; "i"))] | last')
 ```
 
-**Classify into FIXABLE vs. UNFIXABLE**:
-- **FIXABLE** — open `review-finding` issues (CONFIRMED/LIKELY code defects), a `VERDICT=CHANGES REQUESTED` block with concrete findings attached, a mergeability guard failure (`CONFLICTING`/`DIRTY`/`BLOCKED` — resolvable by rebasing onto `{PR_BASE}`), or a quality-gate/build failure.
-- **UNFIXABLE (policy escalation)** — `HAS_PURPOSE_REGRESSION=true` (the PR's behavior diverges from the issue's intent — a judgment call, not a code defect), `CALIBRATION_NEEDS_HUMAN=true` (statistical trust threshold), or `TRUST_NEEDS_HUMAN=true` (provenance `NOVEL_NEEDS_HUMAN` tier, insufficient prior data — a policy gate, not a bug). None of these are mechanically "fixable" by re-editing code.
+**Classify exactly one primary class**:
+- `FIXABLE_REVIEW`: concrete current-head code/test findings, reconcilable conflicts, or repository-fixable quality/build failures.
+- `WAITING_DEPENDENCY`: an identified issue, PR, ref, deployment, or generated artifact must land first.
+- `ENGINE_ERROR`: provider/tool/marker/publication/configuration/checkout/push/merge mechanics, stale state, or exhausted retries.
+- `AUTHORITY_REQUIRED`: product/policy choice, unavailable credential/permission, destructive external operation requiring consent, legal/compliance decision, or protected-target approval.
 
-**If the block reason classifies as UNFIXABLE** (and no FIXABLE item accompanies it): do NOT attempt any fix. Skip directly to Phase M8 with verdict `UNFIXABLE`, re-affirm `needs-human` (it should already be present), and return `REMEDIATE_RESULT: status: UNFIXABLE`. This satisfies AC5 — "genuinely-blocked PRs still terminate at `needs-human`."
+`WAITING_DEPENDENCY` does not remediate or ask a supervisor: add `blocked`, remove `needs-human`/active labels, post `FORGE:GATED` plus `FORGE:BLOCK_CLASS:WAITING_DEPENDENCY` with the exact prerequisite and automatic wake condition, and return `status: WAITING`. `ENGINE_ERROR` uses GATED/`workflow:engine-error`/`review-degraded`. `AUTHORITY_REQUIRED` alone may add `needs-human`, and only after exact-ID readback of complete `FORGE:HUMAN_AUTHORITY_REQUIRED` evidence.
 
-**If at least one FIXABLE item exists**: transition the issue out of its terminal gate before proceeding to Phase M2. `needs-human` represents the prior review result, not an active automated remediation run; retaining it would make the dispatcher and recovery paths stop while remediation is in progress. Keep exactly one active workflow state:
+`FIXABLE_REVIEW` transitions to `workflow:in-review` and continues below:
 
 ```bash
 if [ "${DRY_RUN:-false}" = "true" ]; then
@@ -299,7 +301,7 @@ else
 fi
 ```
 
-Do not perform this transition for an UNFIXABLE policy escalation. Mechanical checkout, quality-gate, push, provider, or publication failures produce automated `GATED`/`review-degraded` evidence and never add `needs-human`. Only a genuine policy or human-authority result may add `needs-human`; after such a re-review, remove `workflow:in-review` whenever that terminal label is present.
+Do not perform this transition for the other classes. Mechanical checkout, quality-gate, push, provider, or publication failures produce automated `GATED`/`review-degraded` evidence; prerequisites remain blocked, and only proven `AUTHORITY_REQUIRED` evidence may add `needs-human`.
 
 ---
 
@@ -426,7 +428,7 @@ Wait for the completed child result and retain its `REVIEW_RESULT` in remediatio
 
 This re-runs the full review (domain agents → verdict → Phase 8 auto-merge gate). The FIXABLE transition above left the issue at the non-terminal `workflow:in-review` state. `review-pr.md` recognizes the in-progress `FORGE:REMEDIATION` marker posted in Phase M5 as evidence of the prior escalation, so one of two things happens inside Phase 8:
 
-- **Re-escalated**: in inline mode, fresh deterministic code blockers remain `workflow:in-review` for the next available configured round, or become automated `GATED`/`review-degraded` after cap exhaustion; they never imply `needs-human`. Purpose, calibration, trust, or other genuine human-authority results may add `needs-human` and remove `workflow:in-review`. Legacy standalone mode retains its historical human-escalation behavior.
+- **Reclassified block**: fresh deterministic code blockers remain `workflow:in-review` under `FIXABLE_REVIEW` for the next round or become `ENGINE_ERROR` after cap exhaustion; prerequisites become `WAITING_DEPENDENCY`; only proven `AUTHORITY_REQUIRED` evidence may add `needs-human`.
 - **Clean re-review**: `VERDICT=APPROVED`-equivalent, mergeable, and the "Previously-escalated re-review guard" (forge#1810) fires — setting `workflow:awaiting-merge` and removing `workflow:in-review`, *without* auto-merging (that guard's own safe default, left untouched by this file).
 
 ```bash
@@ -597,8 +599,9 @@ case "$RE_GATE_OUTCOME" in
     fi
     OUTCOME_DETAIL="to {PR_BASE}" ;;
   HELD-AWAITING-MERGE) AUTO_LAND_BAR_TEXT="NOT MET (${APPROVED_COUNT:-0} APPROVED: reviews)"; OUTCOME_DETAIL="at workflow:awaiting-merge" ;;
-  RE-ESCALATED)        AUTO_LAND_BAR_TEXT="N/A — re-escalated before the bar was evaluated"; OUTCOME_DETAIL="at needs-human" ;;
-  UNFIXABLE)           AUTO_LAND_BAR_TEXT="N/A — unfixable (see Phase M1 classification)"; OUTCOME_DETAIL="at needs-human" ;;
+  WAITING)             AUTO_LAND_BAR_TEXT="N/A — waiting for explicit prerequisite"; OUTCOME_DETAIL="at blocked" ;;
+  ENGINE-ERROR)        AUTO_LAND_BAR_TEXT="N/A — resumable mechanical failure"; OUTCOME_DETAIL="at workflow:engine-error/review-degraded" ;;
+  AUTHORITY-REQUIRED)  AUTO_LAND_BAR_TEXT="N/A — proven human authority required"; OUTCOME_DETAIL="at needs-human" ;;
   *)                   AUTO_LAND_BAR_TEXT="N/A"; OUTCOME_DETAIL="" ;;
 esac
 
@@ -636,7 +639,7 @@ Skill("work-on:close", args="{ISSUE_NUMBER} --repo {GH_REPO} --gh-flag {GH_FLAG}
 
 `work-on:close` handles project board update, final issue body, parent tracker, trajectory log, and worktree cleanup (including the remediation worktree at `{WORKTREE_PATH}`) — do not duplicate any of that here.
 
-**If the outcome was `HELD-AWAITING-MERGE`, `RE-ESCALATED`, `REINVESTIGATE_REQUIRED`, or `UNFIXABLE`**: leave the worktree in place and return the structured result below without invoking close. `REINVESTIGATE_REQUIRED` has already invoked investigation/decomposition; do not close the issue.
+**If the outcome was `HELD-AWAITING-MERGE`, `WAITING`, `ENGINE-ERROR`, `AUTHORITY-REQUIRED`, or `REINVESTIGATE_REQUIRED`**: preserve the resumable worktree when safe and return without close. Do not imply a human is needed except for `AUTHORITY-REQUIRED`.
 
 ---
 
@@ -663,10 +666,10 @@ Return this structured block to the caller:
 
 ```
 REMEDIATE_RESULT:
-  status: COMPLETE | ALREADY_DONE | UNFIXABLE | BLOCKED
+  status: COMPLETE | ALREADY_DONE | WAITING | AUTHORITY_REQUIRED | BLOCKED
   pr_number: {PR_NUMBER}
   issue_number: {ISSUE_NUMBER}
-  re_gate_outcome: AUTO-LANDED | HELD-AWAITING-MERGE | RE-ESCALATED | REINVESTIGATE_REQUIRED | UNFIXABLE | N/A
+  re_gate_outcome: AUTO-LANDED | HELD-AWAITING-MERGE | WAITING | ENGINE-ERROR | AUTHORITY-REQUIRED | REINVESTIGATE_REQUIRED | N/A
   findings_addressed: [{finding_number}, ...]
   blocker: {description if status=BLOCKED}
 ```
