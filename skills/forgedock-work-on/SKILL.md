@@ -93,8 +93,10 @@ Apply the Pi adapter only to translate Claude-specific tool/skill mechanics.
 ## Fresh build handoff
 
 If the authoritative Task Type is `Investigation`, keep it in the coordinator and execute
-the `build/implement.md` Investigation special case with its mandatory read-only research
-fanout and packaged `forgedock-issue` creation; it has no mutation-builder handoff.
+the `build/implement.md` Investigation special case with ordinary builtin `delegate`
+agents when another perspective would help and packaged `forgedock-issue` creation; it
+has no mutation-builder handoff. Tell delegates not to edit, publish, or launch children.
+Use the exact `delegate` name—never invent an agent name or fall back to another profile.
 `Feature (UI/UX)` and `Full-Stack` also remain coordinator-owned so the existing mandatory
 frontend-design skill and browser-capability route is preserved.
 
@@ -146,9 +148,9 @@ Do not spawn a second review coordinator: when work-on itself is an orchestrated
 that extra hop would push the mandatory reviewers beyond Pi's default nesting depth.
 
 The work-on coordinator may use its child-safe `subagent` tool only for the one fresh
-`forgedock-builder` handoff, the complete bounded fresh-context reviewer panel selected
-by the review skill, and the mandatory read-only research fanout of an Investigation task. Builder and reviewers run sequentially as sibling children; neither
-may launch subagents. Join every selected reviewer before synthesis and continuation.
+`forgedock-builder` handoff, ordinary builtin investigation `delegate` agents when useful,
+and the complete bounded fresh-context reviewer panel selected by the review skill.
+Builder and reviewers run sequentially as sibling children; neither may launch subagents. Join every selected reviewer before synthesis and continuation.
 Reviewer operational timeouts for max-thinking models are 3,600,000 ms; parent/join
 windows are omitted or at least
 3,900,000 ms. A generic 1,800-second attention event is not a reviewer timeout: continue
