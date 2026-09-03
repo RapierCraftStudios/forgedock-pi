@@ -7,9 +7,8 @@
 [![Pi Package](https://img.shields.io/badge/Pi-package-7c3aed)](https://github.com/earendil-works/pi-mono)
 
 > [!WARNING]
-> The prompt-routed architecture is being restored from the original ForgeDock
-> specifications. Keep automatic merge disabled in production until the live closed-loop
-> acceptance path has passed repeatedly.
+> Keep automatic merge disabled in production until the simplified prompt-routed lifecycle
+> and exact-head review path have passed repeated live canaries.
 
 ## What it does
 
@@ -25,9 +24,9 @@
       → explicit issue closure + trajectory + cleanup
 ```
 
-The original ForgeDock specifications are packaged under
-[`specs/original/commands`](specs/original/commands). Pi-specific adaptation is limited
-to runtime mechanics in [`specs/pi-adapter.md`](specs/pi-adapter.md).
+The Pi-native lifecycle specifications are packaged under
+[`specs/original/commands`](specs/original/commands); the retained path is compatibility
+naming. Pi runtime mechanics live in [`specs/pi-adapter.md`](specs/pi-adapter.md).
 
 ## Architecture
 
@@ -35,13 +34,14 @@ to runtime mechanics in [`specs/pi-adapter.md`](specs/pi-adapter.md).
   the relevant phase specification.
 - **The visible coordinator owns routing.** TypeScript does not choose phases or maintain
   hidden workflow state.
-- **GitHub is durable memory.** Labels, issue/PR state, and completed `FORGE:*` artifacts
-  determine resume position.
+- **GitHub is durable memory.** Issue/PR state and four compact lifecycle receipts determine
+  resume position; work-on creates no Gists, checkpoints, heartbeats, or telemetry artifacts.
 - **Subagents provide isolation and fan-out.** Orchestrate launches one work-on agent and
   one isolated worktree per ready issue. Each agent runs its lifecycle inline and only
   review or re-review fans out to fresh repository-capable children.
-- **Review is load-bearing.** It runs configured checks, derives domain reviewers, files
-  every finding, and never approves from a partial panel.
+- **Review is load-bearing.** It launches risk-specific prompts on fresh ordinary
+  `delegate` agents with full normal tools, publishes one consolidated panel result, and
+  never approves from a partial panel or repeats review for unrelated clean base movement.
 - **Closure remains explicit.** Review may merge; work-on verifies the merge and closes the
   issue, posts trajectory, and cleans up.
 
@@ -90,6 +90,12 @@ branches:
   default: "main"
   staging: "staging"
   feature_pattern: "milestone/{slug}"
+
+agents:
+  subagent_model: "provider/full-model-id"
+
+orchestration:
+  max_concurrent: 12
 ```
 
 Add project checks under `verification.commands`. Missing checks must be reported as
@@ -128,11 +134,11 @@ The package includes:
 - a per-issue work-on agent, packaged under the historical
   `forgedock-work-on-coordinator` profile name and authorized only for mandatory nested
   review fanout;
-- 83 original command/phase/persona specifications;
-- 47 original helper scripts;
-- original configuration documentation and templates;
-- a SHA-256 manifest checked by the test suite;
-- a Pi runtime adapter that maps skill/subagent mechanics without changing behavior.
+- generic fresh review delegates rather than a specialized restricted reviewer profile;
+- compact Pi-native work-on, orchestration, and review specifications;
+- retained supporting commands, personas, configuration templates, and bounded helpers;
+- a SHA-256 package-integrity manifest checked by the test suite;
+- a Pi runtime adapter for tool, model, worktree, review, and concurrency mechanics.
 
 ## Current migration status
 
@@ -155,8 +161,8 @@ npm install
 npm run check
 ```
 
-The suite validates TypeScript, lexical routing, skill/prompt packaging, the original
-specification hash manifest, and existing lower-level safety modules.
+The suite validates TypeScript, lexical routing, skill/prompt packaging, specification
+integrity, reviewer-only nesting, hard-edge DAG concurrency, and lower-level safety modules.
 
 ## Security
 

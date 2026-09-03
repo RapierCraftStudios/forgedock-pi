@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, normalize, relative, resolve } from "node:path";
 
-/** The five user-facing skills whose original specs are package authority. */
+/** The five user-facing prompt-routed ForgeDock skills. */
 export const FORGE_PUBLIC_SKILLS = Object.freeze([
   "forgedock-work-on",
   "forgedock-orchestrate",
@@ -29,7 +29,7 @@ export interface ForgeSkillResolution {
 
 /**
  * Resolve a nested reference without executing it. This intentionally only
- * checks package discoverability; prompt specs still own routing and behavior.
+ * checks package discoverability; active Pi-native prompt specs own routing and behavior.
  */
 export function resolveForgeSkillReference(
   requested: string,
@@ -62,8 +62,8 @@ export function resolveForgeSkillReference(
 
 /**
  * Walk the references reachable from the five public prompt skills. Every
- * reference must resolve either to a packaged translation or to the immutable
- * original command tree. No phase is selected and no workflow is run here.
+ * reference must resolve either to a packaged translation or to the packaged
+ * command tree. No phase is selected and no workflow is run here.
  */
 export function resolveReachableForgeSkillReferences(
   packageRoot: string,
