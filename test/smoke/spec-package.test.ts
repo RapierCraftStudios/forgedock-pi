@@ -86,6 +86,8 @@ test("investigation defines scope without children or executable comments", asyn
   assert.match(investigate, /Verdict: CONFIRMED \| INVALID/);
   assert.match(investigate, /Route: BUILD \| DECOMPOSE \| TERMINAL/);
   assert.match(investigate, /Never emit shell commands/);
+  assert.match(investigate, /add `workflow:investigating`/);
+  assert.match(investigate, /set `workflow:ready-to-build`/);
 });
 
 test("build is one inline procedure with SHA-keyed verification", async () => {
@@ -95,6 +97,9 @@ test("build is one inline procedure with SHA-keyed verification", async () => {
   assert.match(build, /Verify once per SHA/);
   assert.match(build, /rerun only the\s+failed command and commands affected by the fix/s);
   assert.match(build, /one immutable issue comment/);
+  assert.match(build, /replace `workflow:ready-to-build`.*with `workflow:building`/s);
+  assert.match(build, /persisted state\/schema changes/);
+  assert.match(build, /request and origin scope, cross-request\s+contamination/s);
   assert.match(build, /FORGE:BUILDER:COMPLETE/);
   for (const deleted of ["context", "architect", "implement", "validate"])
     await assert.rejects(access(`specs/original/commands/work-on/build/${deleted}.md`));
@@ -111,6 +116,8 @@ test("review keeps exact-head quality without target-movement starvation", async
   }
   assert.match(review, /clean\s+and mergeable/i);
   assert.match(review, /review loop/i);
+  assert.match(review, /replace `workflow:building`.*with\s+`workflow:in-review`/s);
+  assert.match(review, /replace `workflow:in-review` with\s+`workflow:awaiting-merge`/s);
   assert.match(adapter, /review-starvation/i);
   assert.match(reviewSkill, /one\s+additional\s+workflow containing only that role/s);
   assert.match(reviewSkill, /one\s+SHA-bound consolidated panel comment/s);
@@ -190,7 +197,11 @@ test("orchestrate builds only hard dependency edges and maximizes concurrency", 
   assert.match(adapter, /lifecycleStatus\(result\)/);
   assert.match(adapter, /FORGE_WORK_ON_RESULT status=\(DONE\|GATED\|FAILED\)/);
   assert.match(skill, /FORGE_WORK_ON_RESULT status=DONE/);
-  assert.match(adapter, /use the extension's configured effective limits/);
+  assert.match(adapter, /use and report\s+the extension's effective limit/s);
+  assert.match(adapter, /Do not set `maxSubagentSpawnsPerRun`/);
+  assert.match(adapter, /attention thresholds at or above the 1,200,000 ms panel join/);
+  assert.match(adapter, /at most one concise `contact_supervisor` progress update/);
+  assert.doesNotMatch(skill, /maxSubagentSpawnsPerRun/);
 });
 
 test("affected-file extraction accepts plain path-line forms", async () => {

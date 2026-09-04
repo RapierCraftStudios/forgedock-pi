@@ -18,6 +18,9 @@ is the mutation contract.
 - Under orchestration, `$PWD` is the Pi-managed `pi-parallel-*` worktree.
 - No competing writer owns this issue or worktree.
 
+At phase entry, use one label edit to replace `workflow:ready-to-build` and other stale
+active-phase labels with `workflow:building`.
+
 ## Plan once
 
 Before editing, form one concise in-memory checklist:
@@ -27,7 +30,12 @@ Before editing, form one concise in-memory checklist:
 3. interface/schema/security consistency obligations;
 4. focused regression proving the requested behavior;
 5. applicable configured verification;
-6. explicit non-goals.
+6. explicit non-goals;
+7. for persisted state/schema changes: absent versus empty state, legacy migration/seed,
+   backward compatibility, idempotency, and out-of-order inputs; and
+8. for trust/cache/browser/concurrency changes: request and origin scope, cross-request
+   contamination, cache keys, identity/TLS/engine compatibility, fallback behavior, and
+   reuse of existing sessions/resources.
 
 Read project documentation only when it governs an affected path. Use bounded history only
 to answer a concrete uncertainty. Do not publish separate contract, context, architecture,
@@ -72,7 +80,8 @@ Before commit:
 
 - inspect `git diff --check`, changed paths, and final diff;
 - ensure every changed path belongs to investigation scope;
-- ensure acceptance checks are satisfied;
+- ensure acceptance checks and every applicable item from the concise risk checklist are
+  satisfied;
 - ensure no secrets, temporary files, or unrelated changes remain.
 
 Commit once with the issue number, verify clean status and target ancestry, then push the

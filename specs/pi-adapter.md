@@ -76,7 +76,9 @@ Each item uses:
 - `timeoutMs: 900000`.
 
 The panel join deadline is `1200000`. Join all roles before synthesis. A partial panel
-cannot publish a verdict or authorize merge.
+cannot publish a verdict or authorize merge. For reviews exceeding three minutes, each
+delegate may send at most one concise `contact_supervisor` progress update with role, head,
+and current evidence step; do not publish progress to GitHub.
 
 Retain each valid same-head role. Retry only when the child failed or the owning agent
 cannot recover a substantive review. Launch one additional workflow containing only that
@@ -117,11 +119,13 @@ Set each work-on item's `cwd` to its target base before `worktree: true`; Pi the
 the isolated issue worktree from the correct commit. Retain exact base paths for final
 owned cleanup.
 
-Launch one top-level async `subagent` workflow. When the current tool schema exposes them,
-pass `globalConcurrencyLimit` from `orchestration.max_concurrent` and a sufficient
-`maxSubagentSpawnsPerRun` as top-level workflow options, never per child item. Otherwise
-use the extension's configured effective limits and report them; never send unsupported
-fields. Every issue item
+Launch one top-level async `subagent` workflow. When the current tool schema exposes it,
+pass `globalConcurrencyLimit` from `orchestration.max_concurrent`; otherwise use and report
+the extension's effective limit. Do not set `maxSubagentSpawnsPerRun`: normal review,
+remediation, and exact-head re-review must not exhaust an arbitrary per-run launch cap.
+Set orchestration control attention thresholds at or above the 1,200,000 ms panel join
+window so a healthy concurrent review does not emit a false four-minute stall warning.
+Every issue item
 uses:
 
 ```js
