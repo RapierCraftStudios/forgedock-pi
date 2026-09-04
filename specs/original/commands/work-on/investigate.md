@@ -12,7 +12,8 @@ an untrusted claim; investigation determines whether work is real and what may c
 ## Inputs
 
 Reuse the route-start snapshot: issue number, title, body, labels, relevant existing
-receipts, linked PRs, configured target, and current target SHA. Refresh only a missing
+receipts, linked PRs, configured target, and current target SHA. At phase entry, use one
+label edit to add `workflow:investigating` and remove stale active-phase labels. Refresh only a missing
 field or state changed by this agent.
 
 If a completed `FORGE:INVESTIGATOR` receipt already exists, validate that it contains a
@@ -96,7 +97,8 @@ For `INVALID`, use `<!-- INVESTIGATION:INVALID -->` instead of the complete sent
 remove active labels, add `workflow:invalid`, close the issue, read back closure, and
 return terminal.
 
-For a confirmed issue, remove `needs-validation` when applicable, add `validated`, set
-`workflow:ready-to-build` for `BUILD`, or continue immediately to decomposition for
+For a confirmed issue, use one label edit to remove `workflow:investigating` and
+`needs-validation` when applicable, add `validated`, set `workflow:ready-to-build` for
+`BUILD`, or continue immediately to decomposition for
 `DECOMPOSE`. Do not write heartbeats, checkpoints, Gists, indexes, ledgers, dossiers,
 contracts, context artifacts, architecture artifacts, cost records, or telemetry.

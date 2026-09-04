@@ -47,10 +47,12 @@ Prepare the full diff once and deterministic role bundles. Embed the relevant di
 task or give the delegate one stable readable file path; never use `runs.host` to transfer
 it. Launch all selected roles as fresh ordinary `delegate` agents with full normal tool
 availability through the adapter's single `runs.all` workflow. Prompts assign review focus
-without creating specialized agent profiles or capability ceilings. Join every role and
-retain valid same-head roles. If one role is missing or invalid, launch one additional
-workflow containing only that role;
-never restart the whole panel.
+without creating specialized agent profiles or capability ceilings. If a role runs longer
+than three minutes, its task asks for at most one `contact_supervisor` progress update
+naming the role, head, and current evidence step; this is runtime visibility, never a
+GitHub artifact. Join every role and retain valid same-head roles. If one role is missing
+or invalid, launch one additional workflow containing only that role; never restart the
+whole panel.
 
 Bind repository, PR, head/base, attempt, and role from the launch key and task rather than
 requiring the delegate to echo them perfectly. Accept JSON or clearly structured Markdown

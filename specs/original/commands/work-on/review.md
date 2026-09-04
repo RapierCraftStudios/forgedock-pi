@@ -6,8 +6,10 @@ description: Prepare one PR, run exact-head review, and route its result
 
 # Work On: Review
 
-Execute PR preparation and review coordination in the sole work-on agent. Do not launch a
-second review coordinator. Only the risk-selected fresh reviewer panel may be nested.
+Execute PR preparation and review coordination in the sole work-on agent. At phase entry,
+use one label edit to replace `workflow:building` and other stale active-phase labels with
+`workflow:in-review`. Do not launch a second review coordinator. Only the risk-selected
+fresh reviewer panel may be nested.
 
 ## Prepare or reuse the PR
 
@@ -71,5 +73,6 @@ change.
 ## Merge handoff
 
 Before merge, require current head, target, checks, mergeability, complete panel, and no
-blockers. Return these retained values to the root lifecycle. Review does not independently
+blockers. In the same pre-merge state update, replace `workflow:in-review` with
+`workflow:awaiting-merge`; do not add a comment. Return these retained values to the root lifecycle. Review does not independently
 invoke close or create a second terminal record.

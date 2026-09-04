@@ -2,6 +2,12 @@
 
 ## Unreleased — Prompt-router simplification
 
+- Restored explicit phase-label transitions without adding checkpoints or comments.
+- Removed the arbitrary per-run reviewer spawn cap; remediation and exact-head re-review
+  now use normal session capacity, with healthy panel attention thresholds and bounded
+  runtime progress updates.
+- Added concise conditional pre-commit checks for persisted-state migration and
+  trust/cache/browser/concurrency identity boundaries to improve first-pass quality.
 - Prevented generic-review retries caused by unavailable `runs.host` bundle transfer or
   harmless JSON shape differences; owners now bind identity from launch metadata and
   normalize substantive delegate evidence.
