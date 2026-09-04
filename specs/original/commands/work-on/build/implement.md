@@ -260,6 +260,8 @@ grep -rnE "(api_key|secret|password|token|credential)\s*=\s*(f?['\"]|\`)[^{'\"\`
 
 ---
 
+Before staging, compare the final diff and tests with every Behavior Coverage item from the investigation. Implement and test every `change` item. Recheck every `already safe` item to ensure the patch preserves it. Fix gaps before review.
+
 ## Phase I4: Stage Changes
 
 **Precondition**: Do NOT commit yet — the validate subcommand (validate.md) runs AFTER implement and will make the commit in Phase V5 after the gate passes. Commit will happen in validate.md Phase V5 after the gate passes.

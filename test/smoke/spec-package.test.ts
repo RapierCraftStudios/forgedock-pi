@@ -29,39 +29,56 @@ test("Pi adapter keeps workflow decisions in visible specifications", async () =
   assert.match(adapter, /must not choose the next workflow phase/);
 });
 
-test("investigation checks sibling paths for the same broken behavior", async () => {
+test("investigation and build require behavior coverage before review", async () => {
   const investigate = await readFile(
     "specs/original/commands/work-on/investigate.md",
     "utf8",
   );
+  const implement = await readFile(
+    "specs/original/commands/work-on/build/implement.md",
+    "utf8",
+  );
+  const remediate = await readFile(
+    "specs/original/commands/work-on/remediate.md",
+    "utf8",
+  );
 
-  assert.match(investigate, /\*\*Same-Behavior Check\*\*/);
-  assert.match(investigate, /callers, readers, writers, serializers, shortcuts, or sibling paths/);
-  assert.match(investigate, /Do not inspect unrelated code/);
-  assert.match(investigate, /### Same-Behavior Check/);
-  assert.match(investigate, /\*\*Behavior followed\*\*/);
-  assert.match(investigate, /\*\*Other relevant paths checked\*\*/);
-  assert.match(investigate, /\*\*Scope result\*\*/);
-
+  assert.match(investigate, /7\. \*\*Behavior Coverage\*\*/);
+  assert.match(investigate, /entered, continued, failed, or observed/);
+  assert.match(investigate, /mark `change` or `already safe`/);
+  assert.match(investigate, /Do not declare scope complete while a relevant path has no disposition/);
+  assert.match(investigate, /every listed path is marked `change` or `already safe` with evidence/);
+  assert.match(investigate, /\{change\|already safe\} — \{evidence\}/);
+  assert.match(investigate, /### Behavior Coverage/);
+  assert.match(investigate, /\*\*Required behavior\*\*/);
   assert.ok(
-    investigate.indexOf("7. **Same-Behavior Check**") <
+    investigate.indexOf("7. **Behavior Coverage**") <
       investigate.indexOf("8. **Identify affected files**"),
-    "the check must run before affected files are finalized",
+    "behavior coverage must run before affected files are finalized",
   );
   assert.ok(
-    investigate.indexOf("### Same-Behavior Check") <
+    investigate.indexOf("### Behavior Coverage") <
       investigate.indexOf("### Affected Files"),
-    "the report must record the check before publishing mutation scope",
+    "the report must record behavior coverage before publishing mutation scope",
   );
 
   const resumeLogic = investigate.slice(
     investigate.indexOf("**Resume logic**"),
     investigate.indexOf("**Set label**"),
   );
-  assert.match(resumeLogic, /### Same-Behavior Check/);
-  assert.match(resumeLogic, /Behavior followed/);
-  assert.match(resumeLogic, /Other relevant paths checked/);
-  assert.match(resumeLogic, /Scope result/);
+  assert.match(resumeLogic, /### Behavior Coverage/);
+  assert.match(resumeLogic, /Required behavior/);
+  assert.match(resumeLogic, /every listed path is marked `change` or `already safe` with evidence/);
+
+  assert.match(implement, /compare the final diff and tests with every Behavior Coverage item/);
+  assert.match(implement, /Implement and test every `change` item/);
+  assert.match(implement, /Recheck every `already safe` item/);
+  const coverageCheck = implement.indexOf("Before staging, compare the final diff");
+  assert.ok(coverageCheck > implement.indexOf("hard blocker — do not stage hardcoded secrets or IPs"));
+  assert.ok(coverageCheck < implement.indexOf("## Phase I4"));
+  assert.match(remediate, /do not fix only the reported line/i);
+  assert.match(remediate, /include every reachable occurrence in the same remediation/);
+  assert.match(remediate, /Behavior Coverage was incomplete, update it before editing/);
 });
 
 test("investigation fanout uses ordinary general delegates", async () => {

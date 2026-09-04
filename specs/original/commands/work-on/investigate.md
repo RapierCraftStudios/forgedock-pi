@@ -279,7 +279,7 @@ gh api repos/{GH_REPO}/issues/{NUMBER}/comments --jq '.[] | {id: .id, body: .bod
 
 **Resume logic**:
 - A comment ending `<!-- INVESTIGATION:INVALID -->` remains terminal and may be reused; no build follows it.
-- Reuse a `<!-- INVESTIGATION:COMPLETE -->` comment only when the same comment contains the current `### Same-Behavior Check` section with `Behavior followed`, `Other relevant paths checked`, and `Scope result`; and the current `### Production Execution Seam` section with a concrete public entrypoint, production owner, mutation/no-mutation coverage, acceptance seam, and exact `Irreversible/provider side effect: YES|NO`. When `YES`, the same comment must list every actual provider operation or fallback under `### Provider Operations`. Detailed transaction proof belongs only to builder-owned architecture. A legacy completion marker without this schema does not authorize build. Preserve legacy/incomplete artifacts as history and post a superseding investigation.
+- Reuse a `<!-- INVESTIGATION:COMPLETE -->` comment only when the same comment contains the current `### Behavior Coverage` section with `Required behavior` and every listed path is marked `change` or `already safe` with evidence; and the current `### Production Execution Seam` section with a concrete public entrypoint, production owner, mutation/no-mutation coverage, acceptance seam, and exact `Irreversible/provider side effect: YES|NO`. When `YES`, the same comment must list every actual provider operation or fallback under `### Provider Operations`. Detailed transaction proof belongs only to builder-owned architecture. A legacy completion marker without this schema does not authorize build. Preserve legacy/incomplete artifacts as history and post a superseding investigation.
 - If `<!-- FORGE:INVESTIGATOR -->` exists with neither terminal sentinel, investigation was interrupted; delete only that partial comment and restart:
   ```bash
   gh api repos/{GH_REPO}/issues/comments/{COMMENT_ID} -X DELETE
@@ -364,8 +364,8 @@ bash {REPO_PATH}/scripts/code-index.sh query --domain {DOMAIN_LABEL} --repo-path
    ```
    Any hit here is a candidate prior fix or reintroduced defect — read the commit body (`git show {hash}`) to confirm before citing it. Feed confirmed hits into the History findings field and let them inform the verdict (e.g. a defect being reintroduced raises severity).
 6. **Determine root cause** — what's actually broken or missing?
-7. **Same-Behavior Check** — before finalizing affected files, follow the specific broken value, state, or decision from where it enters the system to where it produces its final effect. Search the actual repository for other relevant callers, readers, writers, serializers, shortcuts, or sibling paths that handle the same behavior. Include any path that must change for the fix to be complete, or record source evidence that it is already safe. Do not inspect unrelated code; stop when the production-reachable paths for this specific behavior are accounted for.
-8. **Identify affected files** — full list of files that need changes, including any added by the Same-Behavior Check
+7. **Behavior Coverage** — state the behavior that must remain true. Check each relevant way that behavior can be entered, continued, failed, or observed. For each path, mark `change` or `already safe` and give code, configuration, or test evidence. Inspect only paths reachable from the changed behavior; do not inspect unrelated code. Do not declare scope complete while a relevant path has no disposition.
+8. **Identify affected files** — full list of files that need changes, including any path marked `change` by Behavior Coverage
 9. **Fix-approach validation** — if the issue proposes a fix, don't adopt it as spec. Trace through the target system's middleware, auth, routing, config. Cross-domain: if fix in domain A interacts with domain B, read domain B's files too.
 
 ### Focused investigation delegation
@@ -439,14 +439,12 @@ gh issue comment {NUMBER} {GH_FLAG} --body "<!-- FORGE:INVESTIGATOR -->
 ### Root Cause
 {specific root cause, with file:line references where applicable}
 
-### Same-Behavior Check
-**Behavior followed**: {the specific value, state, or decision traced from entry to final effect}
-**Other relevant paths checked**:
-- `{path or symbol}` — {must change, or already safe with source evidence}
-**Scope result**: {additional affected files found, or "No additional affected paths"}
+### Behavior Coverage
+**Required behavior**: {one sentence}
+- `{path or component}` — {change|already safe} — {evidence}
 
 ### Affected Files
-{numbered list of files that need changes, including any added by the Same-Behavior Check}
+{numbered list of files that need changes, including every path marked change by Behavior Coverage}
 
 ### Production Execution Seam (MANDATORY)
 **Observable effect**: {runtime/provider/persistence/API/CLI behavior, or prompt/spec behavior}

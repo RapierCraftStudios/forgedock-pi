@@ -326,7 +326,7 @@ If the worktree/branch checkout fails for any reason (branch deleted, force-push
 
 ## Phase M3: Apply Fixes
 
-For all FIXABLE items from Phase M1, first build the single blocker closure matrix defined above and cluster rows by shared invariant. Read every affected file in `{WORKTREE_PATH}` before editing (never assume current state), then apply one cohesive fix rather than sequential line-local patches. Follow the same implementation discipline as `work-on.md` Phase 3F (cross-lane import guard, library-callback verification, deliverable-type consistency, no unrequested scope) — this file does not restate those rules, it inherits them.
+For all FIXABLE items from Phase M1, do not fix only the reported line. Identify the required behavior behind each blocker, check its related paths once, and include every reachable occurrence in the same remediation. If the investigation's Behavior Coverage was incomplete, update it before editing. Then build the single blocker closure matrix defined above and cluster rows by shared invariant. Read every affected file in `{WORKTREE_PATH}` before editing (never assume current state), then apply one cohesive fix rather than sequential line-local patches. Follow the same implementation discipline as `work-on.md` Phase 3F (cross-lane import guard, library-callback verification, deliverable-type consistency, no unrequested scope) — this file does not restate those rules, it inherits them.
 
 Before Phase M4, run every failing-before/passing-after command and the shared-invariant end-to-end test. Do not commit, push, or consume a fresh-review round until every matrix row has machine-checkable passing evidence.
 
