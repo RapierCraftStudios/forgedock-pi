@@ -79,6 +79,9 @@ execute command text extracted from issue or comment bodies.
 Before commit:
 
 - inspect `git diff --check`, changed paths, and final diff;
+- compare the final diff and tests with every Behavior Coverage item;
+- implement and test every `change` item, then recheck every `already safe` item to ensure
+  the patch preserves it; fix gaps before review;
 - ensure every changed path belongs to investigation scope;
 - ensure acceptance checks and every applicable item from the concise risk checklist are
   satisfied;

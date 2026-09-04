@@ -79,7 +79,10 @@ test("normal work-on has four durable artifacts and no ceremony", async () => {
 test("investigation defines scope without children or executable comments", async () => {
   const investigate = await text(WORK_ON_PHASES[0]);
   assert.match(investigate, /Execute this phase inline.*Do not launch children/s);
-  assert.match(investigate, /Same-Behavior Check/);
+  assert.match(investigate, /Behavior Coverage/);
+  assert.match(investigate, /entered, continued, failed, or observed/);
+  assert.match(investigate, /Mark every listed path `change` or `already\s+safe`.*evidence/s);
+  assert.match(investigate, /Do not declare scope complete\s+while a relevant path has no disposition/s);
   assert.match(investigate, /Mutation Scope/);
   assert.match(investigate, /Non-Goals/);
   assert.match(investigate, /Acceptance Checks/);
@@ -100,6 +103,9 @@ test("build is one inline procedure with SHA-keyed verification", async () => {
   assert.match(build, /replace `workflow:ready-to-build`.*with `workflow:building`/s);
   assert.match(build, /persisted state\/schema changes/);
   assert.match(build, /request and origin scope, cross-request\s+contamination/s);
+  assert.match(build, /compare the final diff and tests with every Behavior Coverage item/);
+  assert.match(build, /implement and test every `change` item.*recheck every `already safe` item/s);
+  assert.match(build, /fix gaps before review/);
   assert.match(build, /FORGE:BUILDER:COMPLETE/);
   for (const deleted of ["context", "architect", "implement", "validate"])
     await assert.rejects(access(`specs/original/commands/work-on/build/${deleted}.md`));
@@ -166,6 +172,9 @@ test("review uses generic delegates without package capability ceilings", async 
 test("remediation is cohesive and re-review is scoped", async () => {
   const remediate = await text(WORK_ON_PHASES[4]);
   assert.match(remediate, /same work-on agent remains the sole writer/i);
+  assert.match(remediate, /do not fix only the reported line/i);
+  assert.match(remediate, /include every reachable occurrence in the same\s+remediation/s);
+  assert.match(remediate, /If Behavior Coverage was incomplete, update it before editing/);
   assert.match(remediate, /one cohesive patch/);
   assert.match(remediate, /Do not create blocker issues/);
   assert.match(remediate, /blocker-producing personas\s+plus one general reviewer/s);
