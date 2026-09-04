@@ -183,7 +183,14 @@ test("orchestrate builds only hard dependency edges and maximizes concurrency", 
   assert.match(skill, /Domain tags.*never dependency edges/s);
   assert.match(skill, /prefer isolated parallel work/);
   assert.match(skill, /Independent roots start\s+together/s);
+  assert.match(skill, /minimal GitHub fetch of number, state, labels, assignees, and milestone/);
+  assert.match(skill, /If none\s+remain, return the compact exclusion report now/s);
+  assert.match(skill, /do not fetch bodies\/comments, extract\s+paths, build a DAG, create worktrees, list agents, or call `subagent`/s);
   assert.match(skill, /Do not create a claims-board/);
+  assert.ok(
+    skill.indexOf("Immediately exclude") < skill.indexOf("Only for eligible issues"),
+    "terminal filtering must precede body/path/DAG work",
+  );
   assert.match(adapter, /Domain, broad\s+directory, cost, co-change, and low-confidence heuristics never create edges/s);
   assert.match(adapter, /globalConcurrencyLimit/);
   assert.match(adapter, /Promise\.all\(\[a\]\)\.then\(launchC\)/);

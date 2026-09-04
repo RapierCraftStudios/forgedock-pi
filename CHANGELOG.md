@@ -2,6 +2,8 @@
 
 ## Unreleased — Prompt-router simplification
 
+- Short-circuited all-terminal orchestration requests before body/comment fetches, affected-
+  path extraction, DAG construction, worktree preparation, or agent dispatch.
 - Prevented generic-review retries caused by unavailable `runs.host` bundle transfer or
   harmless JSON shape differences; owners now bind identity from launch metadata and
   normalize substantive delegate evidence.

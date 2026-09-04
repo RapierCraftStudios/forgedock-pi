@@ -12,13 +12,15 @@ concurrency, global files, paths, and child model.
 ## Resolve once
 
 Resolve the user's literal issues, milestone/query selector, or next-N request with one
-bounded GitHub fetch. Exclude closed, terminal, duplicate, genuinely human-gated, and
-actively owned issues. Do not inspect product code or adjudicate issue validity.
+minimal GitHub fetch of number, state, labels, assignees, and milestone. Immediately exclude
+closed, terminal, duplicate, genuinely human-gated, and actively owned issues. If none
+remain, return the compact exclusion report now: do not fetch bodies/comments, extract
+paths, build a DAG, create worktrees, list agents, or call `subagent`.
 
-For every candidate, retain title, body, labels, assignees, milestone, explicit dependency
-markers, declared affected paths, target branch, and eligibility. Use the packaged affected-
-file extractor, which accepts backtick, list, table, and plain `path:line` forms and validates
-paths against the repository.
+Only for eligible issues, fetch title/body once and retain explicit dependency markers,
+declared affected paths, target branch, and eligibility. Use the packaged affected-file
+extractor, which accepts backtick, list, table, and plain `path:line` forms and validates
+paths against the repository. Do not inspect product code or adjudicate issue validity.
 
 ## Build the minimum safe DAG
 
