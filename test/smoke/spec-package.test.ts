@@ -118,6 +118,33 @@ test("build is one inline procedure with SHA-keyed verification", async () => {
     await assert.rejects(access(`specs/original/commands/work-on/build/${deleted}.md`));
 });
 
+test("executable behavior requires behavioral evidence rather than source-shape assertions", async () => {
+  const investigate = await text(WORK_ON_PHASES[0]);
+  const build = await text(WORK_ON_PHASES[2]);
+  const remediate = await text(WORK_ON_PHASES[4]);
+  assert.match(investigate, /production access.*local.*fixture/s);
+  assert.match(build, /String-presence checks and syntax checks.*not.*behavioral PASS/s);
+  assert.match(build, /execute the\s+changed boundary.*observable/s);
+  assert.match(build, /documentation.*structural/s);
+  assert.match(remediate, /Changing a string assertion to match.*not.*regression proof/s);
+  assert.match(remediate, /repeated cause.*executable.*fixture/s);
+  for (const content of [build, remediate]) {
+    assert.match(content, /safe local execution is feasible/);
+    assert.match(content, /exception.*behavior unverified/s);
+  }
+});
+
+test("remediation has one correctness-general role and preserves specialist scrutiny", async () => {
+  const skill = await text("skills/forgedock-review-pr/SKILL.md");
+  const remediate = await text(WORK_ON_PHASES[4]);
+  for (const content of [skill, remediate]) {
+    assert.doesNotMatch(content, /plus one general reviewer/);
+    assert.match(content, /one correctness\/general role/);
+  }
+  assert.match(skill, /Every new\s+executable-code head also receives security review/s);
+  assert.match(skill, /full current diff.*available/s);
+});
+
 test("review keeps exact-head quality without target-movement starvation", async () => {
   const review = await text(WORK_ON_PHASES[3]);
   const reviewSkill = await text("skills/forgedock-review-pr/SKILL.md");
@@ -184,7 +211,8 @@ test("remediation is cohesive and re-review is scoped", async () => {
   assert.match(remediate, /If Behavior Coverage was incomplete, update it before editing/);
   assert.match(remediate, /one cohesive patch/);
   assert.match(remediate, /Do not create blocker issues/);
-  assert.match(remediate, /blocker-producing personas\s+plus one general reviewer/s);
+  assert.match(remediate, /one correctness\/general role/);
+  assert.match(remediate, /blocker-producing specialists/);
   assert.match(remediate, /Never rebase and restart re-review/);
 });
 

@@ -36,10 +36,13 @@ Use medium thinking for documentation/templates/metadata and high for executable
 security, auth, data, concurrency, or cross-file behavior. Thinking level never lowers the
 blocking standard.
 
-For remediation, select blocker-producing roles plus one general reviewer. Every new
-executable-code head also receives security review even when security did not produce the
-original blocker. Add another specialist only when remediation changed that specialist's
-risk surface.
+For remediation, use one correctness/general role and the blocker-producing specialists;
+an existing blocker-producing correctness role satisfies general coverage, not an extra
+seat. Every new executable-code head also receives security review even when security did
+not produce the original blocker. Add another specialist only when remediation changed its
+risk surface. Start from prior findings, their dispositions, the remediation delta, and
+regression evidence; keep the full current diff and relevant callers available for fresh
+review. Do not blindly relaunch the previous panel.
 
 ## Run one panel
 
@@ -49,9 +52,11 @@ it. Launch all selected roles as fresh ordinary `delegate` agents with full norm
 availability through the adapter's single `runs.all` workflow. Prompts assign review focus
 without creating specialized agent profiles or capability ceilings. Each task carries the
 acceptance invariants, test evidence/scope, and bounded ordinary diff/context (start with
-normal diff context, then read relevant callers). Deduplicate roles; a correctness/general
-blocker-producing role already counts as the required general re-review. Correctness must
-check whether the regression catches the original defect, not just that it passes. If a role runs longer than three minutes, its task asks for at most one
+normal diff context, then read relevant callers). Correctness must check whether tests
+exercise the claimed behavior and catch the original defect; source-string assertions do
+not establish runtime correctness. Reproduce disputed blockers when safely feasible and
+resolve conflicting severity claims against the production-impact standard before assigning
+remediation. If a role runs longer than three minutes, its task asks for at most one
 `contact_supervisor` progress update naming the role, head, and current evidence step; this
 is runtime visibility, never a GitHub artifact. Join every role and retain valid same-head
 roles. If one role is missing or invalid, launch one additional workflow containing only that role; never restart the whole panel.

@@ -2,6 +2,11 @@
 
 ## Unreleased — Prompt-router simplification
 
+- Require executable local evidence for runtime behavior; source-string/syntax checks
+  remain valid for structural contracts, not permission, retry, durability, or recovery proof.
+- Remove conflicting extra-general-reviewer instructions and focus re-review on the
+  remediation delta while retaining full-diff access and executable-change security review.
+
 - Added concrete bug baselines, regression-proof review, and tested-tree identity checks.
 - Made bounded dependency recovery preserve native failed-child metadata, explicitly use
   the configured model on every fresh lane, and distinguish closure from dependency delivery.
