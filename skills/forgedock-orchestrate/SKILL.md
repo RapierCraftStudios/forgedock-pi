@@ -7,7 +7,9 @@ description: Resolve and dispatch a confirmed issue set as concurrent per-issue 
 
 The visible Pi session is the dispatcher, never a builder. Read the orchestrate section of
 `../../specs/pi-adapter.md`, parse `forge.yaml` once, and retain repository, targets,
-concurrency, global files, paths, and child model.
+concurrency, global files, paths, and child model. Resolve one full provider/model ID from
+`agents.subagent_model`, falling back to `agents.default_model`; reject missing or legacy
+shorthand models and pass the resolved model explicitly to each fresh child.
 
 ## Resolve once
 
@@ -46,18 +48,26 @@ Launch one fresh `forgedock-work-on-coordinator` per ready issue with exact task
 detached target base as `cwd`, and the maximum coordinator timeout. Each child is the sole
 writer and runs `forgedock-work-on` inline; only its review/re-review panel may be nested.
 
-Use one async promise graph with `orchestration.max_concurrent`. Independent roots start
-together. A successor starts only when every actual hard predecessor returns
-`FORGE_WORK_ON_RESULT status=DONE`, never from transport success or after a sibling wave.
-Normalize child failures so unrelated lanes settle normally.
+Use one visible async promise DAG with the explicitly configured child model and
+`orchestration.max_concurrent`. Independent roots start together. A successor starts only
+when every actual hard predecessor returns `status=DONE` with `dependency=SATISFIED` in
+its `FORGE_WORK_ON_RESULT` line, never from
+transport success or after a sibling aggregate/wave. Normalize child failures so unrelated
+lanes settle normally. Bound each technical lane to one non-competing recovery before
+resolving dependents; recovery resumes the retained child, not a second writer. Unrelated
+lanes neither wait for the aggregate nor retry unrelated failures.
 
-A technical lane failure preserves its handoff and receives one non-competing recovery.
-An explicit prerequisite is GATED with a wake condition; GATED is not FAILED. Never abandon
-a planned non-terminal issue or launch two writers for it.
+An explicit prerequisite is GATED with an exact wake condition; GATED is not FAILED and its
+dependents remain gated until the dependency is truly satisfied. INVALID/DECOMPOSED may
+finish an issue but do not release dependents without evidence of the promised behavior
+on the target. Reconcile and dispatch newly eligible lanes after the wake event. Never abandon a planned
+non-terminal issue or launch two writers for it.
 
 ## Finish
 
 Reconcile each lane from its `FORGE_WORK_ON_RESULT` plus current GitHub state as DONE,
-GATED, FAILED, or IN_PROGRESS. Work-on owns issue closure; Pi owns child worktrees. Remove only
-clean detached target bases retained by this batch. Return one compact issue/PR/result table
-with available duration, turns, usage, recovery, and residual-risk summaries.
+GATED, FAILED, or IN_PROGRESS. Report milestone, real blockers, and final outcome separately:
+merged is not the same as tested, and mocks never prove production/canary behavior. Work-on
+owns issue closure; Pi owns child worktrees. Remove only clean detached target bases retained
+by this batch. Return one compact issue/PR/result table with duration, turns, usage,
+configured model, recovery, tested-content identity, and residual-risk summaries.

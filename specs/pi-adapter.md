@@ -29,6 +29,13 @@ GitHub issue/PR state and compact ForgeDock receipts are resumable state.
   issue/comment text into shell or execute it with `eval`/`bash -c`.
 - Missing optional tooling uses one documented fallback or becomes actionable technical
   evidence; it does not trigger exploratory command variants.
+- Before large tests/review outputs, check writable disk space and, where enforced, the
+  user's temporary-filesystem quota (`df` alone is insufficient). Do not retry ENOSPC or
+  EDQUOT until capacity is restored. Prefer existing disk-backed artifact storage; never
+  prune unrelated sessions, Docker data, or active worktrees.
+- Keep automatic Pi compaction enabled when authorized. Preserve current issue/head,
+  acceptance gaps, tests, reviewer references, and next action in normal context; keep
+  full logs in artifacts. Compaction is not permission to restart a writer or lose scope.
 - Legacy runtime/tool/model prose in archived specifications never overrides this file.
 
 ## Work-on agents
@@ -62,8 +69,16 @@ merge, and closure.
 Prepare repository, PR, full head/base SHAs, changed files, deterministic diff bundle,
 role/persona, attempt, and invariants once. Embed the bounded diff in each task or pass one
 stable readable file path; `runs.host` is not available in raw review workflows and must
-not be used for bundle transfer. Launch the complete selected panel with one synchronous
-`workflowScript` whose only dispatch is `await runs.all([...])`.
+not be used for bundle transfer. Set `output` on each child launch when durable results are
+required and return the installed API's output reference/artifact paths; task text is not a
+storage declaration. Keep context bounded to the frozen diff and required invariants.
+For standalone interactive review, launch with `async: true`, yield, then consume native
+completion and continue synthesis in the same owner. In a headless work-on child, keep the
+panel as one synchronous joined `workflowScript` (`await runs.all([...])`) until a tested
+nested continuation is available: headless auto-drain waits for work but is not by itself
+proof that the owner consumed the results or completed merge/closure. The outer orchestrator
+remains async and all selected reviewers run concurrently; never emit terminal DONE just
+because a panel was dispatched.
 
 Each item uses:
 
@@ -134,35 +149,56 @@ uses:
   agent: "forgedock-work-on-coordinator",
   task: `${issue.number} --under-orchestration`,
   context: "fresh",
+  model: configuredModel,
   cwd: issue.targetBase,
   worktree: true,
   timeoutMs: 2147483647
 }
 ```
 
-Use one visible promise graph:
+Use one visible promise graph. Resolve `configuredModel` once from `forge.yaml`
+(`agents.subagent_model`, then `agents.default_model`); reject missing/legacy shorthand.
+Use one-item `runs.all` for graph launches: unlike `runs.run`, it retains failed-child
+`runId`/`resumability` instead of throwing a plain error. Resume a terminal resumable
+failure once before resolving dependents; never resume a detached/live or stopped writer.
+Keep work-on terminal output inline and compact so dependency checks do not parse file
+references. Retained resume preserves the original model and worktree contract.
 
 ```js
-function normalizeFailure(error) { return { ok: false, error: String(error) }; }
-const a = runs.run("work-on-A", issueA).catch(normalizeFailure);
-const b = runs.run("work-on-B", issueB).catch(normalizeFailure);
-function lifecycleStatus(result) {
-  const text = String(result?.output ?? result?.finalOutput ?? "");
-  const match = text.match(/FORGE_WORK_ON_RESULT status=(DONE|GATED|FAILED)/);
-  return match?.[1] ?? "FAILED";
+function failure(error) { return { ok: false, error: String(error) }; }
+function launch(key, params) {
+  return runs.all([{ ...params, key }]).then(([result]) => result).catch(failure);
 }
+function runIssue(key, issue) {
+  return launch(key, { ...issue, model: configuredModel }).then((result) => {
+    if (result.ok || result.detached || result.stopped || !result.runId ||
+        result.resumability?.state !== "resumable") return result;
+    return launch(`${key}-recovery`, {
+      resume: result.runId,
+      task: "Resume this terminal retained lane once; reconcile GitHub and preserved work, then continue. Never create a competing writer."
+    });
+  });
+}
+function satisfied(result) {
+  return result.ok === true && /^FORGE_WORK_ON_RESULT status=DONE issue=\d+ pr=(?:\d+|none) dependency=SATISFIED$/m.test(String(result.output ?? ""));
+}
+const a = runIssue("work-on-A", issueA);
+const b = runIssue("work-on-B", issueB);
 function launchC(predecessors) {
-  if (predecessors.some((result) => !result.ok || lifecycleStatus(result) !== "DONE"))
-    return { ok: false, skipped: true, reason: "predecessor did not complete successfully" };
-  return runs.run("work-on-C", issueC).catch(normalizeFailure);
+  if (!predecessors.every(satisfied))
+    return { ok: false, status: "GATED", reason: "waiting for satisfied predecessor A" };
+  return runIssue("work-on-C", issueC);
 }
-const c = Promise.all([a]).then(launchC).catch(normalizeFailure);
+const c = Promise.all([a]).then(launchC).catch(failure);
 return await Promise.all([a, b, c]);
 ```
 
-Generate the same shape from the confirmed DAG. Independent roots start together; each
-successor waits only for its actual predecessors, never a whole wave. Normalize every
-promise immediately so unrelated lanes settle.
+Generate the same shape for every lane and its actual hard predecessors. Independent roots
+start together; a successor waits only for its predecessors' bounded recovered outcomes,
+not an unrelated aggregate. A GATED dependent retains its exact wake condition; after an
+external prerequisite lands, reconcile GitHub and dispatch only newly eligible, unowned
+lanes. Never rerun completed unrelated lanes. DONE plus UNSATISFIED (for example a
+replacement decomposition) is terminal for the issue but does not release dependents.
 
 Do not create claims-board issues, leases, scoring passes, standing queries, or polling
 loops. The async completion notification wakes the visible orchestrator.

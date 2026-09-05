@@ -32,12 +32,17 @@ alternate-runtime worktree instructions; standalone work-on uses one canonical o
 
 At route start, parse `forge.yaml` once and retain its repository, branches, paths, and
 child model for the whole lane. Child model precedence is `agents.subagent_model`, then
-`agents.default_model`; pass the resolved full Pi model ID to each reviewer.
+`agents.default_model`; reject missing/legacy shorthand values and pass the resolved full
+Pi model ID explicitly to each child/reviewer. Keep context and durable results compact;
+use the installed native continuation/artifact APIs, never invent storage or tools.
 Never pass legacy `sonnet`, `opus`, or `haiku` aliases. Re-read configuration only if
 this lane changes it; refresh issue/PR state only after a write or completion event.
 
 Keep the four-artifact budget from `work-on.md`. Read the current phase file once and
 publish only its final receipt; never add progress, checkpoint, telemetry, or memory artifacts.
+Emit DONE only after the lifecycle's GitHub merge/closure or invalidation/decomposition
+readback. The parent reconciles native run metadata, the compact terminal result, and
+GitHub evidence; the child does not attest a separate runtime artifact.
 
 Mechanical gaps are not decisions. Use the adapter's tooling fallbacks and packaged
 helper paths; never route configuration, ancestry, or code conflicts to the supervisor.

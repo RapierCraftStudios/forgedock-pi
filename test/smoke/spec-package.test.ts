@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import test from "node:test";
+import vm from "node:vm";
 
 const execFileAsync = promisify(execFile);
 
@@ -80,6 +81,8 @@ test("investigation defines scope without children or executable comments", asyn
   const investigate = await text(WORK_ON_PHASES[0]);
   assert.match(investigate, /Execute this phase inline.*Do not launch children/s);
   assert.match(investigate, /Behavior Coverage/);
+  assert.match(investigate, /Trigger.*Expected.*Observed/s);
+  assert.match(investigate, /inspection-only exception/);
   assert.match(investigate, /entered, continued, failed, or observed/);
   assert.match(investigate, /Mark every listed path `change` or `already\s+safe`.*evidence/s);
   assert.match(investigate, /Do not declare scope complete\s+while a relevant path has no disposition/s);
@@ -98,6 +101,10 @@ test("build is one inline procedure with SHA-keyed verification", async () => {
   assert.match(build, /Do not launch builders, quality-gate\s+agents, context agents, architects/s);
   assert.match(build, /investigation receipt\s+is the mutation contract/s);
   assert.match(build, /Verify once per SHA/);
+  assert.match(build, /fail-before\/pass-after/);
+  assert.match(build, /test environment once and reuse/);
+  assert.match(build, /git write-tree/);
+  assert.match(build, /HEAD\^\{tree\}/);
   assert.match(build, /rerun only the\s+failed command and commands affected by the fix/s);
   assert.match(build, /one immutable issue comment/);
   assert.match(build, /replace `workflow:ready-to-build`.*with `workflow:building`/s);
@@ -203,14 +210,120 @@ test("orchestrate builds only hard dependency edges and maximizes concurrency", 
   assert.match(adapter, /Domain, broad\s+directory, cost, co-change, and low-confidence heuristics never create edges/s);
   assert.match(adapter, /globalConcurrencyLimit/);
   assert.match(adapter, /Promise\.all\(\[a\]\)\.then\(launchC\)/);
-  assert.match(adapter, /lifecycleStatus\(result\)/);
-  assert.match(adapter, /FORGE_WORK_ON_RESULT status=\(DONE\|GATED\|FAILED\)/);
-  assert.match(skill, /FORGE_WORK_ON_RESULT status=DONE/);
+  assert.match(adapter, /configuredModel/);
+  assert.match(adapter, /Retained resume preserves the original model/);
+  assert.match(adapter, /function satisfied\(result\)/);
+  assert.match(adapter, /dependency=SATISFIED/);
+  assert.match(skill, /FORGE_WORK_ON_RESULT/);
+  assert.match(skill, /GATED.*not FAILED/s);
+  assert.match(skill, /merged.*tested.*production/i);
   assert.match(adapter, /use and report\s+the extension's effective limit/s);
   assert.match(adapter, /Do not set `maxSubagentSpawnsPerRun`/);
   assert.match(adapter, /attention thresholds at or above the 1,200,000 ms panel join/);
   assert.match(adapter, /at most one concise `contact_supervisor` progress update/);
   assert.doesNotMatch(skill, /maxSubagentSpawnsPerRun/);
+});
+
+test("documented promise DAG recovers one lane before releasing its dependent", async () => {
+  const adapter = await text("specs/pi-adapter.md");
+  const snippet = adapter
+    .slice(adapter.indexOf("Use one visible promise graph."))
+    .match(/```js\n([\s\S]*?)\n```/)?.[1];
+  assert.ok(snippet, "the adapter must keep one executable promise example");
+  const runGraph = vm.runInNewContext(
+    `(async (runs, issueA, issueB, issueC, configuredModel) => {\n${snippet}\n})`,
+  ) as (
+    runs: { all(items: Array<Record<string, unknown>>): Promise<Array<Record<string, unknown>>> },
+    issueA: Record<string, unknown>,
+    issueB: Record<string, unknown>,
+    issueC: Record<string, unknown>,
+    configuredModel: string,
+  ) => Promise<unknown[]>;
+
+  let releaseB!: (value: Record<string, unknown>) => void;
+  const bPending = new Promise<Record<string, unknown>>((resolve) => {
+    releaseB = resolve;
+  });
+  const calls: Array<{ key: string; input: Record<string, unknown> }> = [];
+  let releaseC!: () => void;
+  const cStarted = new Promise<void>((resolve) => {
+    releaseC = resolve;
+  });
+  function launch(key: string, input: Record<string, unknown>): Promise<Record<string, unknown>> {
+      calls.push({ key, input });
+      if (key === "work-on-A")
+        return Promise.resolve({
+          ok: false,
+          runId: "retained-A",
+          output: "transport interrupted",
+          error: "transport interrupted",
+          resumability: { state: "resumable" },
+        });
+      if (key === "work-on-B") return bPending;
+      if (key === "work-on-A-recovery") return Promise.resolve({ ok: true, output: "FORGE_WORK_ON_RESULT status=DONE issue=1 pr=2 dependency=SATISFIED" });
+      releaseC();
+      return Promise.resolve({ ok: true, output: "DONE" });
+  }
+  const runs = {
+    // Installed runs.run throws plain Errors, while runs.all preserves failed results.
+    run: () => Promise.reject(new Error("runs.run loses failed-child metadata")),
+    all: (items: Array<Record<string, unknown>>) => Promise.all(items.map(({ key, ...input }) => launch(String(key), input))),
+  };
+  const graph = runGraph(
+    runs,
+    { agent: "worker", task: "A" },
+    { agent: "worker", task: "B" },
+    { agent: "worker", task: "C" },
+    "openai-codex/gpt-5.6-luna",
+  );
+  await Promise.race([
+    cStarted,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("dependent did not release")), 250),
+    ),
+  ]);
+  assert.deepEqual(calls.map(({ key }) => key), [
+    "work-on-A",
+    "work-on-B",
+    "work-on-A-recovery",
+    "work-on-C",
+  ]);
+  for (const call of calls.filter(({ input }) => !input.resume))
+    assert.equal(call.input.model, "openai-codex/gpt-5.6-luna");
+  assert.equal(calls[2]?.input.resume, "retained-A");
+  assert.equal(calls[2]?.input.agent, undefined);
+  assert.equal(calls[2]?.input.model, undefined);
+  releaseB({ ok: true, output: "FORGE_WORK_ON_RESULT status=DONE" });
+  const results = await graph;
+  assert.equal(results.length, 3);
+});
+
+test("documented promise DAG does not resolve a dependent from a GATED predecessor", async () => {
+  const adapter = await text("specs/pi-adapter.md");
+  const snippet = adapter
+    .slice(adapter.indexOf("Use one visible promise graph."))
+    .match(/```js\n([\s\S]*?)\n```/)?.[1];
+  assert.ok(snippet);
+  const runGraph = vm.runInNewContext(
+    `(async (runs, issueA, issueB, issueC, configuredModel) => {\n${snippet}\n})`,
+  ) as (runs: { all(items: Array<Record<string, unknown>>): Promise<Array<Record<string, unknown>>> }, issueA: Record<string, unknown>, issueB: Record<string, unknown>, issueC: Record<string, unknown>, configuredModel: string) => Promise<unknown[]>;
+  const calls: string[] = [];
+  const results = await runGraph(
+    {
+      all(items) {
+        return Promise.resolve(items.map(({ key }) => {
+          calls.push(String(key));
+          return { ok: true, output: key === "work-on-A" ? "FORGE_WORK_ON_RESULT status=GATED issue=1 pr=none dependency=UNSATISFIED" : "DONE" };
+        }));
+      },
+    },
+    { agent: "worker", task: "A" },
+    { agent: "worker", task: "B" },
+    { agent: "worker", task: "C" },
+    "openai-codex/gpt-5.6-luna",
+  );
+  assert.deepEqual(calls, ["work-on-A", "work-on-B"]);
+  assert.equal(results.length, 3);
 });
 
 test("affected-file extraction accepts plain path-line forms", async () => {

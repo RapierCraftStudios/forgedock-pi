@@ -26,6 +26,10 @@ receipt owned by this lifecycle.
 1. Restate the claimed observable failure in one sentence.
 2. Locate the active production entrypoint or executable consumer named by the issue.
 3. Reproduce or prove the behavior with the smallest safe read/test/inspection available.
+   For a bug fix, record the concrete **Trigger**, **Expected**, and **Observed**
+   baseline. A read-only inspection is an explicit exception only when execution is
+   unsafe or impossible in the available environment; justify that exception and name
+   the missing observation.
 4. Trace the active path through the suspected boundary to the observable result.
 5. Check bounded history only when it answers a concrete uncertainty about intent or a
    regression. Do not perform general archaeology.
@@ -73,8 +77,13 @@ Publish exactly one issue comment:
 ### Claim
 <observable behavior>
 
+### Baseline (bug fixes)
+- **Trigger**: <specific input/state/command>
+- **Expected**: <required result/invariant>
+- **Observed**: <actual result, or justified inspection-only exception and limitation>
+
 ### Evidence and Root Cause
-<concise path/symbol/test evidence>
+<concise path/symbol/test evidence; distinguish failing-before from inspection-only proof>
 
 ### Behavior Coverage
 **Required behavior**: <one sentence>
@@ -88,6 +97,7 @@ Publish exactly one issue comment:
 
 ### Acceptance Checks
 - <criterion and trusted check; descriptive, never executable GitHub input>
+- Bug fix: focused regression fails against the baseline and passes after the fix, unless the justified inspection-only exception is recorded.
 
 ### Residual Uncertainty
 - <limitations or none>

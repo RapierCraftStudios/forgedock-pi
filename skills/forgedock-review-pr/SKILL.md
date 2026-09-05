@@ -47,26 +47,33 @@ Prepare the full diff once and deterministic role bundles. Embed the relevant di
 task or give the delegate one stable readable file path; never use `runs.host` to transfer
 it. Launch all selected roles as fresh ordinary `delegate` agents with full normal tool
 availability through the adapter's single `runs.all` workflow. Prompts assign review focus
-without creating specialized agent profiles or capability ceilings. If a role runs longer
-than three minutes, its task asks for at most one `contact_supervisor` progress update
-naming the role, head, and current evidence step; this is runtime visibility, never a
-GitHub artifact. Join every role and retain valid same-head roles. If one role is missing
-or invalid, launch one additional workflow containing only that role; never restart the
-whole panel.
+without creating specialized agent profiles or capability ceilings. Each task carries the
+acceptance invariants, test evidence/scope, and bounded ordinary diff/context (start with
+normal diff context, then read relevant callers). Deduplicate roles; a correctness/general
+blocker-producing role already counts as the required general re-review. Correctness must
+check whether the regression catches the original defect, not just that it passes. If a role runs longer than three minutes, its task asks for at most one
+`contact_supervisor` progress update naming the role, head, and current evidence step; this
+is runtime visibility, never a GitHub artifact. Join every role and retain valid same-head
+roles. If one role is missing or invalid, launch one additional workflow containing only that role; never restart the whole panel.
 
 Bind repository, PR, head/base, attempt, and role from the launch key and task rather than
 requiring the delegate to echo them perfectly. Accept JSON or clearly structured Markdown
 when it contains a verdict, substantive summary, verified `path:line` behaviors, residual
-risks, and findings. Normalize harmless key casing, number/string, and list-shape
-differences in the owning agent. Retry only when the child failed or no substantive review
-can be recovered; formatting variance alone never restarts a role or panel. Blocking
-findings still require the confirmed HIGH/CRITICAL production-incident standard.
+risks, and findings. A blocker identifies a reachable trigger, the patch-caused causal
+chain, existing mitigations checked, and concrete production impact; speculation or
+independent pre-existing debt is not a blocker. Normalize harmless key casing, number/string, and list-shape differences in the
+owning agent. Retry only when the child failed or no substantive review can be recovered;
+formatting variance alone never restarts a role or panel. Blocking findings still require
+the confirmed HIGH/CRITICAL production-incident standard.
 
-After complete validation, the owning agent publishes one
-SHA-bound consolidated panel comment containing every role's summary, verified behaviors,
-residual risks, and findings, then one official review verdict. Read back the exact IDs.
-No per-role POST/readback choreography, shell-regex grammar, body-integrity tokens, or
-review-start/checkpoint comments are required.
+After complete validation, the owning agent publishes one SHA-bound consolidated panel comment
+containing every role's summary, acceptance invariants, test evidence/scope,
+verified behaviors, residual risks, and findings, then one official review verdict. Read
+back the exact IDs. Use quoted, file-backed bodies. When the active identity authored the
+PR, record the official verdict with `gh pr review --comment --body-file`; do not attempt
+self-approval or invent `gh pr reviews`. This never replaces a branch-required independent
+approval. No per-role POST/readback choreography, shell-regex grammar, body-integrity tokens,
+or review-start/checkpoint comments are required.
 
 ## Decide
 
