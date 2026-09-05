@@ -2,6 +2,16 @@
 
 ## Unreleased — Prompt-router simplification
 
+- Define the first-pass happy path: complete acceptance/prerequisite evidence before edits,
+  feasible failing tests first, and criterion-level proof before one concurrent review panel.
+- Default to one remediation fallback when unconfigured; preserve explicit limits and count
+  reviewed-head fixes across resumes/renamed rounds. Remove the coordinator's conflicting
+  instruction to continue fixing beyond the lifecycle cap.
+- Report honest request-to-close timing and first-pass outcomes against a sub-30-minute
+  target; no deadline can weaken checks or turn a gate/decomposition into code delivery.
+- Resolve prerequisite/ownership evidence before batch confirmation and avoid archived
+  orchestration routing discovery.
+
 - Require executable local evidence for runtime behavior; source-string/syntax checks
   remain valid for structural contracts, not permission, retry, durability, or recovery proof.
 - Remove conflicting extra-general-reviewer instructions and focus re-review on the

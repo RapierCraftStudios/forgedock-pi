@@ -15,9 +15,13 @@ are fixable inside the investigation scope. The same work-on agent remains the s
 - Each blocker is CONFIRMED HIGH/CRITICAL with a concrete production scenario.
 - The fix does not require product, policy, legal, destructive, credential, or external
   authority.
-- The configured remediation round cap is not exceeded. When it is exhausted, do not
-  re-enter remediation: return to investigation once to reconsider scope/approach, then
-  use GATED with the exact unresolved blocker if no safe automated path exists.
+- Recover used/allowed rounds and any unfinished authorized round from retained work and
+  reviewed-head/receipt evidence. Count the next round before its first blocker-driven edit.
+  A round includes the cohesive fix plus its complete scoped re-review. Complete or resume
+  that round at the limit, including bounded missing-role retries, without charging it twice.
+- After the last authorized re-review still finds blockers, the cap allows no further new
+  round of edits/panels. Return to investigation once for read-only reassessment, then GATED
+  with the unresolved contract and wake condition. Reassessment never resets the budget.
 
 A stale, advisory, possible, low/medium, pre-existing, or unrelated finding does not enter
 remediation. Keep valuable independent findings as non-blocking follow-ups.
@@ -57,6 +61,7 @@ Publish at most one receipt for the new head:
 
 **Prior reviewed head**: `<full SHA>`
 **New head**: `<full SHA>`
+**Remediation round**: `<used>/<configured limit>`
 
 ### Blockers addressed
 - `<finding>` — <fix and regression evidence>
@@ -84,8 +89,10 @@ review. Never rebase and restart re-review merely because unrelated target commi
 
 - Clean exact-head re-review: continue to guarded merge.
 - Remaining in-scope blocker with rounds available: one further cohesive pass.
-- Remaining blocker at the round cap: reinvestigate once; if still unresolved, return
-  GATED with blocker evidence and the condition needed to resume.
+- Unfinished authorized round at the cap: finish/resume its scoped re-review, including
+  bounded missing-role retries; do not start another fix after its completed verdict.
+- Remaining blocker after the last authorized re-review: read-only reassessment, then GATED;
+  no automatic extra round. A new name, head, resume, or receipt cannot reset usage.
 - Explicit prerequisite: `GATED` with wake condition.
 - Genuine external authority: `needs-human` with the exact decision required.
 - Mechanical/provider interruption: preserve current work and valid reviewer roles for

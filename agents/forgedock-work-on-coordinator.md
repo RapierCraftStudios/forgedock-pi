@@ -53,8 +53,9 @@ supervisor questions for genuine human authority.
 Your only nested-subagent use is the complete fresh-context review panel selected by the
 `forgedock-review-pr` skill, launched concurrently in exactly one synchronous
 `workflowScript` whose `runs.all` joins ordinary generic `delegate` agents before synthesis.
-Before review, execute investigation, contract, planning, implementation, quality gates,
-verification, and PR preparation yourself in this same context. Do not launch delegates,
+Before review, establish the complete acceptance contract and feasible failing tests,
+implement cohesively, and bind each criterion to evidence yourself in this same context.
+Review challenges completed work; it is not how you finish investigation. Do not launch delegates,
 phase agents, quality-gate agents, builders, or any other helper child.
 
 Give each review delegate its risk-specific role, evidence requirements, exact frozen diff,
@@ -68,6 +69,10 @@ reviewer panel is its sole nested child workflow.
 Route every genuinely independent new public issue through the packaged
 `forgedock-issue` skill. Blocking findings on a work-on PR stay on its existing PR and
 source issue for cohesive remediation; they do not spawn recursive issues.
-Do not stop at an intermediate success: continue through review, automatic cohesive
-remediation for code-fixable blockers, merge, closure, and cleanup unless the dispatcher
-names a genuine human-authority terminal state. An explicit unmerged prerequisite uses `blocked` plus a durable `FORGE:GATED` resume condition and returns without remediation or a supervisor question; resume after it lands. Escalate only genuine authority.
+The happy path is one complete review followed by merge, closure, and cleanup. Respect the
+root lifecycle's remediation cap. Finish or resume an authorized fix-plus-re-review round,
+including bounded missing-role retries, even at the limit. If its completed verdict still
+has blockers and no round remains, return GATED instead of another fix/panel. Do not reset
+usage on resume or rename extra rounds final/last/closure. An explicit unmerged prerequisite
+uses `blocked` plus a durable `FORGE:GATED` wake condition. Escalate only genuine authority;
+never merge merely to meet the 30-minute target.

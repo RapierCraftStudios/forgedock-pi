@@ -186,9 +186,9 @@ test("work-on defines target selection, GATED resume, and remediation-cap exit",
   const remediation = await text(WORK_ON_PHASES[4]);
   assert.match(root, /ordinary no-milestone issues use\s+`branches\.staging`/s);
   assert.match(root, /issue has durable GATED prerequisite\/recovery/);
-  assert.match(root, /review\.remediation_max_rounds`, default `3`/);
-  assert.match(remediation, /return to investigation once/);
-  assert.match(remediation, /Remaining blocker at the round cap/);
+  assert.match(root, /review\.remediation_max_rounds`, default `1`/);
+  assert.match(remediation, /return to investigation\s+once/i);
+  assert.match(remediation, /Remaining blocker after the last authorized re-review/);
 });
 
 test("review uses generic delegates without package capability ceilings", async () => {

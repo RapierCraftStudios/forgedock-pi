@@ -15,12 +15,16 @@ shorthand models and pass the resolved model explicitly to each fresh child.
 
 Resolve the user's literal issues, milestone/query selector, or next-N request with one
 bounded GitHub fetch. Exclude closed, terminal, duplicate, genuinely human-gated, and
-actively owned issues. Do not inspect product code or adjudicate issue validity.
+actively owned issues. Verify a live owner from native run/session and worktree evidence;
+phase labels alone do not prove ownership. Preserve ambiguous ownership and report it,
+rather than guessing or launching a competing writer. Do not inspect product code or
+adjudicate issue validity.
 
 For every candidate, retain title, body, labels, assignees, milestone, explicit dependency
-markers, declared affected paths, target branch, and eligibility. Use the packaged affected-
-file extractor, which accepts backtick, list, table, and plain `path:line` forms and validates
-paths against the repository.
+markers, declared affected paths, target branch, and eligibility. Invoke
+`../../specs/original/scripts/extract-affected-files.sh` directly; it accepts backtick, list,
+table, and plain `path:line` forms. Do not search retired controllers or archived orchestration
+phase documents for routing already defined by this skill and the adapter.
 
 ## Build the minimum safe DAG
 
@@ -37,7 +41,10 @@ cost scores, historical co-change guesses, or general uncertainty. When scope is
 show the uncertainty in the plan and prefer isolated parallel work; let the work-on agent's
 investigation establish mutation scope. Detect and report real cycles.
 
-Show the exact issue set, targets, hard edges with reasons, initial ready set, and concurrency.
+Before presenting the plan, reconcile explicit prerequisite merge/closure evidence against
+the configured target. A closed issue alone is insufficient, but a verified delivered
+prerequisite must not appear as an unresolved gate. Surface external prerequisites without
+enrolling them. Show the exact issue set, targets, hard edges, ready set, and concurrency.
 Obtain mandatory confirmation unless explicitly preconfirmed. Do not create a claims-board
 issue, lease, scoring table, Gist, heartbeat, or orchestration checkpoint.
 
@@ -70,4 +77,6 @@ GATED, FAILED, or IN_PROGRESS. Report milestone, real blockers, and final outcom
 merged is not the same as tested, and mocks never prove production/canary behavior. Work-on
 owns issue closure; Pi owns child worktrees. Remove only clean detached target bases retained
 by this batch. Return one compact issue/PR/result table with duration, turns, usage,
-configured model, recovery, tested-content identity, and residual-risk summaries.
+configured model, recovery, tested-content identity, and residual-risk summaries. Include
+request-to-close wall time, material waits, first-pass acceptance, panel count, and remediation
+usage from retained evidence; do not count gating/decomposition as a sub-30-minute delivery.
