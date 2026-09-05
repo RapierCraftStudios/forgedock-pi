@@ -29,7 +29,9 @@ receipt owned by this lifecycle.
    For a bug fix, record the concrete **Trigger**, **Expected**, and **Observed**
    baseline. A read-only inspection is an explicit exception only when execution is
    unsafe or impossible in the available environment; justify that exception and name
-   the missing observation.
+   the missing observation. Missing production access does not excuse a safe local test
+   fixture for executable behavior. Identify the boundary that can run locally and the
+   observable result it must assert; reserve inspection-only proof for what cannot run.
 4. Trace the active path through the suspected boundary to the observable result.
 5. Check bounded history only when it answers a concrete uncertainty about intent or a
    regression. Do not perform general archaeology.

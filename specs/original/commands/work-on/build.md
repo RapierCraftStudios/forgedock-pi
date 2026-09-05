@@ -46,7 +46,12 @@ risk-matrix, or plan comments.
 1. Read the smallest relevant code path and existing tests.
 2. Implement one cohesive fix inside investigation-authorized paths.
 3. Prefer existing abstractions and conventions; do not create parallel systems.
-4. Add or update focused tests at the public or production seam when practical.
+4. For executable behavior where safe local execution is feasible, make a test execute the
+   changed boundary and assert an observable result or side effect. Otherwise retain the
+   investigation's justified inspection-only exception and mark that behavior unverified.
+   Controlled dependencies are acceptable, but not a mock
+   that bypasses the behavior being proved. Include relevant retry/failure, valid-input,
+   permission, and fresh/existing-state cases exposed by the investigation.
 5. Check relevant callers and sibling paths for consistent behavior.
 6. Remove debug output, generated files, unrelated formatting, and speculative changes.
 
@@ -55,6 +60,10 @@ receipt with evidence and revised scope before editing it. Optional improvements
 follow-ups and do not widen this PR.
 
 ## Verify once per SHA
+
+String-presence checks and syntax checks are supplemental, not behavioral PASS evidence.
+They can prove documentation or structural contracts, not execution, permissions, durability,
+or recovery. Keep unexecuted behavior explicitly unverified; do not relabel it as tested.
 
 Resolve applicable commands from `forge.yaml` once. Run only checks relevant to the diff:
 

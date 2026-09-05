@@ -34,7 +34,12 @@ remediation. Keep valuable independent findings as non-blocking follow-ups.
 4. Plan one cohesive patch covering all reachable occurrences; do not create one head or
    issue per finding. Reinvestigate repeated same-cause gaps together, within the bounded
    remediation cap, rather than applying serial line-level patches.
-5. Add focused failing-before/passing-after regression evidence for each behavior.
+5. For a repeated cause in executable behavior, establish an executable local fixture before
+   patching again when safe local execution is feasible; otherwise retain the justified
+   investigation exception and mark that behavior unverified. Exercise the invariant across
+   relevant callers, retries, failure paths, and existing state. Add failing-before/passing-after
+   evidence where executable. Changing a string assertion to match
+   the new implementation is not regression proof.
 6. Edit only investigation-authorized paths, expanding the investigation receipt first
    when new required scope is proven.
 7. Run affected verification once, inspect the final diff, commit, and push one new head.
@@ -62,10 +67,11 @@ Publish at most one receipt for the new head:
 
 ## Scoped fresh re-review
 
-Invoke `forgedock-review-pr` with the new exact head. Select the blocker-producing personas
-plus one general reviewer and provide the remediated hunks and blocker invariants. Add
-another specialist only when remediation materially changed that specialist's risk
-surface.
+Invoke `forgedock-review-pr` with the new exact head. Use one correctness/general role
+(count an existing blocker-producing correctness role), the blocker-producing specialists,
+and security for executable changes. Provide prior findings, dispositions, remediated
+hunks, and executable regression evidence; keep the full current diff available. Add another
+specialist only when remediation materially changed that specialist's risk surface.
 
 Retain valid same-head roles and retry only missing/invalid roles. Re-review passes when no
 confirmed patch-caused blocker remains. Non-blocking follow-ups do not trigger another
