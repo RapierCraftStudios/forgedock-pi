@@ -206,7 +206,11 @@ Return one compact result containing issue, PR, target, reviewed head, merge com
 terminal state, changed files, verification summary, reviewer roles, remediation count,
 residual risks, and cleanup ownership. End with exactly one machine-readable line:
 
-`FORGE_WORK_ON_RESULT status=DONE|GATED|FAILED issue=<N> pr=<N|none>`
+`FORGE_WORK_ON_RESULT status=DONE|GATED|FAILED issue=<N> pr=<N|none> dependency=SATISFIED|UNSATISFIED`
 
-Only `status=DONE` satisfies a hard predecessor. Do not produce extended analytics or
-memory artifacts unless the user explicitly requests a separate audit.
+Use SATISFIED only with DONE and evidence that the promised prerequisite behavior is
+present on the configured target (merged implementation or verified already-fixed state).
+Invalidation without that proof, decomposition into unfinished replacements, GATED, and
+FAILED use UNSATISFIED. Closure alone never satisfies a hard dependency. Explain replacement
+or external wake conditions in the compact result; do not auto-enroll out-of-selector work.
+Do not produce extended analytics or memory artifacts unless explicitly requested.

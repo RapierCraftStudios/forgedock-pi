@@ -2,6 +2,12 @@
 
 ## Unreleased — Prompt-router simplification
 
+- Added concrete bug baselines, regression-proof review, and tested-tree identity checks.
+- Made bounded dependency recovery preserve native failed-child metadata, explicitly use
+  the configured model on every fresh lane, and distinguish closure from dependency delivery.
+- Added opt-in installed Pi workflow-executor checks with controlled child results (not
+  live model or production proof); clarified async review ownership and resource preflight.
+
 - Restored explicit phase-label transitions without adding checkpoints or comments.
 - Removed the arbitrary per-run reviewer spawn cap; remediation and exact-head re-review
   now use normal session capacity, with healthy panel attention thresholds and bounded

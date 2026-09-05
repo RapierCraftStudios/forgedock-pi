@@ -24,13 +24,16 @@ remediation. Keep valuable independent findings as non-blocking follow-ups.
 
 ## Cohesive fix
 
-1. Reproduce or verify every blocker against the current head.
+1. Reproduce or verify every blocker against the current head, recording trigger,
+   expected, observed, and fail-before/pass-after evidence (or a justified inspection-only
+   exception carried from investigation).
 2. Do not fix only the reported line. Identify the required behavior behind the blocker,
    check its related paths once, and include every reachable occurrence in the same
    remediation. If Behavior Coverage was incomplete, update it before editing.
 3. Group findings by shared behavior and affected boundary.
 4. Plan one cohesive patch covering all reachable occurrences; do not create one head or
-   issue per finding.
+   issue per finding. Reinvestigate repeated same-cause gaps together, within the bounded
+   remediation cap, rather than applying serial line-level patches.
 5. Add focused failing-before/passing-after regression evidence for each behavior.
 6. Edit only investigation-authorized paths, expanding the investigation receipt first
    when new required scope is proven.

@@ -35,7 +35,9 @@ head, and base arguments. That skill owns:
 - exact-head evidence and comment readback;
 - finding classification and official verdict.
 
-A valid same-head reviewer role is retained. Retry only a missing, failed, or malformed
+Each reviewer task carries acceptance invariants, test evidence/scope, bounded ordinary
+diff/context, and unique role ownership. A blocker must be confirmed patch-caused and
+reachable in the supplied patch. A valid same-head reviewer role is retained. Retry only a missing, failed, or malformed
 role; never restart a valid role or complete panel for publication uncertainty that an
 exact-ID readback can resolve.
 
@@ -74,5 +76,6 @@ change.
 
 Before merge, require current head, target, checks, mergeability, complete panel, and no
 blockers. In the same pre-merge state update, replace `workflow:in-review` with
-`workflow:awaiting-merge`; do not add a comment. Return these retained values to the root lifecycle. Review does not independently
-invoke close or create a second terminal record.
+`workflow:awaiting-merge`; do not add a comment. Return these retained values to the root lifecycle. Review does not independently invoke close or create a second terminal record. Distinguish
+merged, tested, and production-proven outcomes; mocked checks or a review verdict are not
+production/canary proof.
