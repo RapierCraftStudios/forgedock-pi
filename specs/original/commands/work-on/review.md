@@ -13,7 +13,8 @@ fresh reviewer panel may be nested.
 
 ## Prepare or reuse the PR
 
-1. Reuse the retained build head, target, changed files, and verification evidence.
+1. Reuse the retained build head, target, changed files, and verification evidence. Require
+   criterion-to-implementation/test coverage; do not delegate known acceptance gaps to reviewers.
 2. Check once for an existing open PR from the owned branch.
 3. Create one PR when absent; otherwise update the existing PR body only when required.
 4. The PR body states issue, intent, changed behavior, verification, and residual risks.
@@ -44,7 +45,9 @@ exact-ID readback can resolve.
 ## Result routing
 
 - `APPROVE`, no blockers: continue to merge checks.
-- Confirmed patch-caused HIGH/CRITICAL blocker: continue to one cohesive remediation pass.
+- Confirmed patch-caused HIGH/CRITICAL blocker: consolidate all findings, check remaining
+  remediation budget, then one cohesive fallback pass. At the cap, use the root's GATED
+  exit; never launch another panel by calling it final, last, or closure.
 - Explicit unresolved prerequisite: return `GATED` with exact wake condition.
 - Incomplete panel/provider failure: preserve valid roles, record `review-degraded`, and
   resume only missing roles.

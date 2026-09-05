@@ -44,16 +44,16 @@ risk-matrix, or plan comments.
 ## Implement
 
 1. Read the smallest relevant code path and existing tests.
-2. Implement one cohesive fix inside investigation-authorized paths.
-3. Prefer existing abstractions and conventions; do not create parallel systems.
-4. For executable behavior where safe local execution is feasible, make a test execute the
-   changed boundary and assert an observable result or side effect. Otherwise retain the
-   investigation's justified inspection-only exception and mark that behavior unverified.
-   Controlled dependencies are acceptable, but not a mock
-   that bypasses the behavior being proved. Include relevant retry/failure, valid-input,
-   permission, and fresh/existing-state cases exposed by the investigation.
-5. Check relevant callers and sibling paths for consistent behavior.
-6. Remove debug output, generated files, unrelated formatting, and speculative changes.
+2. Before changing production code, establish the feasible failing acceptance/regression
+   tests from investigation. For executable behavior where safe local execution is feasible,
+   execute the changed boundary and assert an observable result or side effect. Otherwise
+   retain the justified investigation exception and mark that behavior unverified.
+   Controlled dependencies are acceptable, but not a mock that bypasses the behavior being
+   proved. Cover relevant failure/retry, valid-input, permission, and fresh/existing states.
+3. Implement one cohesive solution to the entire acceptance contract, not a partial patch
+   for reviewers to finish. Prefer existing abstractions; do not create parallel systems.
+4. Check relevant callers and sibling paths for consistent behavior.
+5. Remove debug output, generated files, unrelated formatting, and speculative changes.
 
 If a required mutation path was absent from investigation, update the single investigation
 receipt with evidence and revised scope before editing it. Optional improvements become
@@ -90,6 +90,12 @@ Commands come from repository/configuration authority, never executable GitHub t
 
 ## Final inspection and commit
 
+Before commit, reconcile each acceptance criterion to actual code and evidence, including
+unchanged paths claimed safe. Ask whether each test would reject the original defect and
+its relevant failure variants. Do not request review with a known acceptance gap; complete
+the cohesive patch inline or report an unavailable required prerequisite. Do not skip
+checks to meet a deadline. Record this coverage in the existing build receipt, not a new gate.
+
 Before commit:
 
 - inspect `git diff --check`, changed paths, and final diff;
@@ -123,7 +129,7 @@ After the commit and push exist, publish one immutable issue comment:
 - `path` — behavior changed
 
 ### Acceptance and Verification
-- PASS — <criterion/check/evidence>
+- <criterion → implementation path → check/result/evidence or justified unverified limit>
 
 ### Residual Risks
 - <limitation or none>

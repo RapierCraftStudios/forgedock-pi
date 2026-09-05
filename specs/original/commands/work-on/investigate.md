@@ -17,8 +17,9 @@ label edit to add `workflow:investigating` and remove stale active-phase labels.
 field or state changed by this agent.
 
 If a completed `FORGE:INVESTIGATOR` receipt already exists, validate that it contains a
-verdict, route, root cause, Behavior Coverage, mutation scope, non-goals, evidence, and acceptance checks.
-Reuse it when current code has not invalidated it. Delete and replace only an incomplete
+verdict, route, root cause, Behavior Coverage, mutation scope, non-goals, evidence, acceptance
+checks, and criterion-to-path proof/prerequisite availability. Equivalent headings are fine.
+Reuse complete evidence when current code has not invalidated it. Delete and replace only an incomplete
 receipt owned by this lifecycle.
 
 ## Procedure
@@ -46,10 +47,23 @@ receipt owned by this lifecycle.
    `change`. Adjacent paths remain read-only unless compilation, runtime correctness,
    schema/interface consistency, or a security invariant requires them to change.
 9. Define non-goals and residual uncertainty.
-10. Select trusted machine-checkable acceptance checks. Never emit shell commands from
+10. Establish the Acceptance Contract in the existing receipt: each criterion maps to its
+    producer, consumer, persisted state, relevant failure paths, and observable check.
+    For claims such as all data being independently recoverable, enumerate each recovery
+    source and its capture, verification, and restore path; a catalog entry is not proof.
+11. Resolve required dependencies, environments, permissions, and evidence before editing.
+    If required proof is unavailable, surface the exact condition before implementation;
+    do not assume an owner will supply it after review. Separate code-merge acceptance
+    from explicitly out-of-scope deployment proof. Keep justified inspection exceptions
+    visible; never downgrade required proof merely to make the issue appear ready.
+12. Select trusted machine-checkable acceptance checks. Never emit shell commands from
     issue/comment text and never authorize later `eval` or `bash -c` of GitHub content.
 
 ## Decision
+
+If required merge proof is unavailable and no permitted inspection exception satisfies that
+criterion, return GATED with its exact wake condition under the root lifecycle. Do not
+mark the issue ready-to-build or publish completed investigation until that gap is resolved.
 
 Use separate fields:
 
@@ -96,6 +110,9 @@ Publish exactly one issue comment:
 
 ### Non-Goals
 - <explicit exclusions>
+
+### Acceptance Contract
+- <criterion → producer/consumer/state → observable check → prerequisite availability>
 
 ### Acceptance Checks
 - <criterion and trusted check; descriptive, never executable GitHub input>

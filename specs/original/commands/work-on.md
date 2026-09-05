@@ -34,6 +34,20 @@ ownership, review requirements, or merge authority.
 - Do not launch investigation helpers, phase agents, builders, quality-gate agents,
   another work-on agent, or a review coordinator.
 
+## First-pass delivery target
+
+For a bounded, ready issue, aim for verified merge and closure in under 30 minutes:
+resolve/prerequisites 2m, investigation 5m, implementation/verification 12m, concurrent
+review 7m, merge/close 3m. These are planning targets, never permission to weaken evidence,
+skip checks, or merge with blockers. Remediation is an exceptional fallback, not a phase
+needed to complete the initial implementation. One complete initial panel is the happy path.
+
+Retain the execution-request start time and existing native run timestamps. Report total
+wall time including queue, CI, external, and user waits; distinguish those waits from
+active work. Do not silently reset the clock on resume or decomposition. GATED, INVALID,
+and DECOMPOSED are not successful code deliveries, even when they terminate the issue.
+Oversized or unready work must be identified before editing, not hidden by the time target.
+
 ## Durable artifact budget
 
 Normal successful work creates only:
@@ -55,7 +69,7 @@ In one bounded shell block:
 
 1. Parse `forge.yaml` once and retain repository, target branches, worktree paths,
    verification commands, reviewer model, concurrency, and remediation round cap
-   (`review.remediation_max_rounds`, default `3` when absent).
+   (`review.remediation_max_rounds`, default `1` when absent; explicit configuration wins).
 2. Verify `gh auth status --active`, repository access, and `gh auth setup-git`.
 3. Resolve the issue selector to exactly one issue.
 4. Fetch issue state, labels, body, relevant ForgeDock receipts, linked PRs, and parent
@@ -93,8 +107,9 @@ Derive exactly one next action from live state:
 | --- | --- |
 | issue closed with merged/invalid/decomposed receipt | report terminal; no-op |
 | merged PR but issue open | close |
+| authorized remediation round unfinished | resume its cohesive fix/scoped re-review; do not charge another round |
 | open PR with current blockers and remediation rounds available | remediate |
-| open PR with blockers after remediation cap | reinvestigate once, then GATED if no safe path exists |
+| blockers remain after last authorized re-review | read-only reassessment once, then GATED with unresolved evidence; no automatic extra round |
 | issue has durable GATED prerequisite/recovery | verify its exact wake condition; resume only when satisfied |
 | open PR awaiting current-head review | review |
 | committed build with no PR | prepare PR |
@@ -104,6 +119,14 @@ Derive exactly one next action from live state:
 
 A completed phase is never repeated. Old checkpoints and legacy comments may be read as
 compatibility evidence but are never written and never outrank live issue/PR/git state.
+Recover remediation usage from reviewed-head transitions and existing receipts, not just
+receipt count. A round includes one cohesive fix plus its complete scoped re-review; reserve
+it before editing. Complete or resume an authorized round even at the limit, including
+bounded missing-role retries; never charge it twice. A completed substantive panel closes
+that round, so its remaining blockers require a new round. Never reset usage on resume,
+reinvestigation, a new head, or names such as `final`, `last`, or `closure`. Fixing code after
+blocking review consumes a round even when called build, polish, or cleanup. Only explicit
+new authority can extend an exhausted budget; do not ask for routine extensions.
 
 ## Lifecycle
 
@@ -111,7 +134,8 @@ compatibility evidence but are never written and never outrank live issue/PR/git
 
 Load `work-on/investigate.md` once. Confirm or invalidate the claim, identify root cause,
 trace relevant same-behavior paths, define the minimal mutation scope and non-goals, and
-select trusted acceptance checks. Publish one investigation receipt.
+select trusted acceptance checks. The receipt is the complete acceptance contract, including
+required proof and prerequisite availability; do not leave those for reviewers to discover.
 
 Use two independent fields:
 
@@ -131,7 +155,8 @@ executable children, update a real parent tracker when present, mark the parent
 
 Load `work-on/build.md` once. Treat the completed investigation receipt as mutation
 scope and the implementation checklist; do not publish separate contract, context, or
-architecture comments.
+architecture comments. Establish feasible executable regressions before production edits
+and reconcile every acceptance criterion to evidence before requesting review.
 
 Inspect the relevant production path, implement one cohesive change, add focused
 regression evidence, run applicable configured verification once per commit SHA, inspect
@@ -185,7 +210,7 @@ cleanup according to ownership.
 
 ## Failure behavior
 
-Prefer repair and continuation over terminal gates:
+Prefer repair and continuation over terminal gates within the remaining remediation budget:
 
 - Code, test, format, lint, type, and safe merge conflicts: fix inline and continue.
 - Provider or transport interruption: resume the same lane and reuse valid exact-head
@@ -204,7 +229,12 @@ review blocker that is safely fixable inside scope.
 
 Return one compact result containing issue, PR, target, reviewed head, merge commit,
 terminal state, changed files, verification summary, reviewer roles, remediation count,
-residual risks, and cleanup ownership. End with exactly one machine-readable line:
+residual risks, and cleanup ownership. In the same compact result report first-pass acceptance,
+review panels, remediation rounds/limit, elapsed wall time, and material waits from available
+native timestamps. First-pass means the initial complete panel accepted the implementation
+without blocker-driven code changes; skipped proof or a terminal gate is not first-pass success.
+Keep the configured model visible; never change routing merely to hit the time target.
+End with exactly one machine-readable line:
 
 `FORGE_WORK_ON_RESULT status=DONE|GATED|FAILED issue=<N> pr=<N|none> dependency=SATISFIED|UNSATISFIED`
 
