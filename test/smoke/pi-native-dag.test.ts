@@ -11,7 +11,13 @@ const done = "FORGE_WORK_ON_RESULT status=DONE issue=1 pr=2 dependency=SATISFIED
 const prelude = `const configuredModel="test/model";
 const issueA={agent:"worker",task:"A"};
 const issueB={agent:"worker",task:"B"};
-const issueC={agent:"worker",task:"C"};\n`;
+const issueC={agent:"worker",task:"C"};
+const ownerConcurrency=2;
+const issueGraph=[
+ {key:"work-on-A",predecessors:[],launch:issueA},
+ {key:"work-on-B",predecessors:[],launch:issueB},
+ {key:"work-on-C",predecessors:["work-on-A"],launch:issueC}
+];\n`;
 
 test("installed Pi executor retains failure metadata and releases C before B", { skip: !source }, async () => {
   const { runWorkflowScript } = await import(pathToFileURL(resolve(source!, "src/workflows/scripted-workflow.ts")).href);
@@ -48,7 +54,7 @@ test("installed Pi executor retains failure metadata and releases C before B", {
   }
 });
 
-for (const scenario of ["gated", "decomposed", "unresumable", "detached", "stopped", "recovery-fails"] as const) {
+for (const scenario of ["gated", "decomposed", "unresumable", "detached", "stopped", "recovery-fails", "ambiguous-result", "missing-result"] as const) {
   test(`installed Pi executor does not release C for ${scenario}`, { skip: !source }, async () => {
     const { runWorkflowScript } = await import(pathToFileURL(resolve(source!, "src/workflows/scripted-workflow.ts")).href);
     const spec = await readFile("specs/pi-adapter.md", "utf8");
@@ -59,6 +65,8 @@ for (const scenario of ["gated", "decomposed", "unresumable", "detached", "stopp
       launch: async (key: string) => {
         calls.push(key);
         if (key === "work-on-B") return { key, ok: true, output: done };
+        if (scenario === "ambiguous-result") return { key, ok: true, output: `${done}\n${done}` };
+        if (scenario === "missing-result") return { key, ok: true, output: "No lifecycle result" };
         if (scenario === "gated" || scenario === "decomposed") return { key, ok: true, output: `FORGE_WORK_ON_RESULT status=${scenario === "gated" ? "GATED" : "DONE"} issue=1 pr=none dependency=UNSATISFIED` };
         return { key, ok: false, output: "interrupted", runId: "retained-A", detached: scenario === "detached", stopped: scenario === "stopped", resumability: { state: scenario === "unresumable" ? "not-resumable" : "resumable" } };
       },

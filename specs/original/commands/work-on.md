@@ -8,8 +8,9 @@ argument-hint: "[issue number | URL | next | PR --remediate --issue N]"
 # ForgeDock Work On
 
 One work-on agent owns one issue and one worktree from resolution to a terminal result.
-GitHub issue/PR state and the small receipt set below are durable state. The agent reasons
-and executes every phase inline; only fresh review and re-review panels may be children.
+GitHub is canonical engineering memory as well as durable state. Follow `../../github-memory.md`
+to retrieve, apply and preserve relevant decisions in the existing receipts. Execute every
+phase inline; only fresh review and re-review panels may be children.
 
 ## Authority
 
@@ -48,30 +49,32 @@ active work. Do not silently reset the clock on resume or decomposition. GATED, 
 and DECOMPOSED are not successful code deliveries, even when they terminate the issue.
 Oversized or unready work must be identified before editing, not hidden by the time target.
 
-## Durable artifact budget
+## Durable knowledge contract
 
-Normal successful work creates only:
-
+Follow `../../knowledge-records.md`; normal code delivery publishes linked named records:
 1. one `FORGE:INVESTIGATOR` issue receipt;
-2. one completed `FORGE:BUILDER` issue receipt;
-3. the PR's reviewer evidence and official review verdict;
-4. one `FORGE:TRAJECTORY` terminal issue receipt.
+2. `FORGE:CLASSIFICATION` — task/risk/cohesion decision;
+3. `FORGE:CONTEXT` — validated historical understanding;
+4. `FORGE:CONTRACT` — promised behavior, scope and acceptance;
+5. `FORGE:ARCHITECT` — chosen approach, ordered plan and material alternatives;
+6. one completed `FORGE:BUILDER` issue receipt;
+7. the PR's reviewer evidence and official review verdict;
+8. one `FORGE:TRAJECTORY` terminal issue receipt.
 
-A decomposed issue creates child issues and one decomposition receipt. A remediated PR may
-add one completed remediation receipt per new reviewed head. Do not create Gists, memory
-indexes, ledgers, dossiers, ADRs, cost priors, heartbeats, progress comments, checkpoints,
-review-start comments, context comments, architecture comments, or partial builder
-comments.
+Classification/context/contract/plan precede repository edits. Material revisions append
+superseding records; the old decision remains auditable. Decomposition/remediation keep
+their conditional receipts. Do not create Gists, memory indexes, ledgers, dossiers, ADRs,
+cost priors, heartbeats, checkpoints, duplicate progress reports or partial builder comments.
 
 ## One-time preflight
 
 In one bounded shell block:
 
-1. Parse `forge.yaml` once and retain repository, target branches, worktree paths,
-   verification commands, reviewer model, concurrency, and remediation round cap
+1. Load the authoritative lane policy via `../../mechanical-execution.md`; standalone work
+   prepares it once from the canonical root. Bind repository, target, model and round cap
    (`review.remediation_max_rounds`, default `1` when absent; explicit configuration wins).
 2. Verify `gh auth status --active`, repository access, and `gh auth setup-git`.
-3. Resolve the issue selector to exactly one issue.
+3. Use the bound issue identity; never infer it from a local child index or neighbouring config.
 4. Fetch issue state, labels, body, relevant ForgeDock receipts, linked PRs, and parent
    relation once.
 5. Resolve the PR target and fetch its exact remote SHA. Under orchestration, require the
@@ -80,6 +83,8 @@ In one bounded shell block:
    `branches.staging`. A protected/default deployment target is selected only by the
    explicit staging/deployment route, never inferred for ordinary work-on.
 6. Retain the repository root and packaged ForgeDock root; never search for either again.
+7. Use `../../verification.md` for learned repository checks and selective execution. Under
+   orchestration use the bound catalog/canonical config reference; never search or update sibling cwds.
 
 Refresh retained state only after this agent writes GitHub state, receives reviewer
 completion, observes target movement, resumes after interruption, or lacks a required
@@ -107,6 +112,7 @@ Derive exactly one next action from live state:
 | --- | --- |
 | issue closed with merged/invalid/decomposed receipt | report terminal; no-op |
 | merged PR but issue open | close |
+| decomposition reassessment with an open PR | preserve the PR/work; require approved handoff/disposition before splitting, otherwise GATED |
 | authorized remediation round unfinished | resume its cohesive fix/scoped re-review; do not charge another round |
 | open PR with current blockers and remediation rounds available | remediate |
 | blockers remain after last authorized re-review | read-only reassessment once, then GATED with unresolved evidence; no automatic extra round |
@@ -134,8 +140,9 @@ new authority can extend an exhausted budget; do not ask for routine extensions.
 
 Load `work-on/investigate.md` once. Confirm or invalidate the claim, identify root cause,
 trace relevant same-behavior paths, define the minimal mutation scope and non-goals, and
-select trusted acceptance checks. The receipt is the complete acceptance contract, including
-required proof and prerequisite availability; do not leave those for reviewers to discover.
+select trusted acceptance checks and proactively validate relevant prior knowledge. The
+receipt records the complete acceptance contract, prerequisite availability and historical
+constraints; do not leave those for reviewers to discover.
 
 Use two independent fields:
 
@@ -147,16 +154,17 @@ verdict; it is the route selected after a confirmed investigation.
 
 ### 2. Decompose when required
 
-Load `work-on/decompose.md` only for `Route: DECOMPOSE`. Create only independently
-executable children, update a real parent tracker when present, mark the parent
-`workflow:decomposed`, and stop. Otherwise skip this phase entirely.
+Load `work-on/decompose.md` for `Route: DECOMPOSE`, including a justified later reassessment.
+An existing PR requires its preserved-work/approved-disposition guard first. Create only
+independently executable children, retain all parent criteria, update a real tracker when
+present, mark `workflow:decomposed`, and stop; a split is not code delivery.
 
 ### 3. Build and verify
 
 Load `work-on/build.md` once. Treat the completed investigation receipt as mutation
-scope and the implementation checklist; do not publish separate contract, context, or
-architecture comments. Establish feasible executable regressions before production edits
-and reconcile every acceptance criterion to evidence before requesting review.
+scope and publish the named pre-build records under `../../knowledge-records.md` before
+repository edits. Establish feasible executable regressions before production changes and
+reconcile every acceptance criterion and decision revision to evidence before review.
 
 Inspect the relevant production path, implement one cohesive change, add focused
 regression evidence, run applicable configured verification once per commit SHA, inspect
@@ -234,6 +242,8 @@ review panels, remediation rounds/limit, elapsed wall time, and material waits f
 native timestamps. First-pass means the initial complete panel accepted the implementation
 without blocker-driven code changes; skipped proof or a terminal gate is not first-pass success.
 Keep the configured model visible; never change routing merely to hit the time target.
+Summarize relevant history applied with representative permalinks and retrieval limitations;
+citation volume is not quality or performance proof.
 End with exactly one machine-readable line:
 
 `FORGE_WORK_ON_RESULT status=DONE|GATED|FAILED issue=<N> pr=<N|none> dependency=SATISFIED|UNSATISFIED`

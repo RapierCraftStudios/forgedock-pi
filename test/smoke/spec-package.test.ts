@@ -7,6 +7,12 @@ import test from "node:test";
 import vm from "node:vm";
 
 const execFileAsync = promisify(execFile);
+const dagInputs = `const ownerConcurrency = 2;
+const issueGraph = [
+  { key: "work-on-A", predecessors: [], launch: issueA },
+  { key: "work-on-B", predecessors: [], launch: issueB },
+  { key: "work-on-C", predecessors: ["work-on-A"], launch: issueC }
+];`;
 
 const WORK_ON_PHASES = [
   "specs/original/commands/work-on/investigate.md",
@@ -38,7 +44,8 @@ test("active work-on authority is compact and Pi-native", async () => {
   const root = await text("specs/original/commands/work-on.md");
   const skill = await text("skills/forgedock-work-on/SKILL.md");
   const adapter = await text("specs/pi-adapter.md");
-  const active = [root, skill, adapter, ...(await Promise.all(WORK_ON_PHASES.map(text)))];
+  const active = [root, skill, adapter, ...(await Promise.all(WORK_ON_PHASES.map(text))),
+    await text("specs/github-memory.md"), await text("specs/verification.md")];
 
   assert.ok(root.split("\n").length <= 260, "root lifecycle must stay routing-only");
   assert.ok(skill.split("\n").length <= 65, "skill must stay a thin entrypoint");
@@ -68,12 +75,13 @@ test("one work-on agent owns every pre-review phase inline", async () => {
   assert.match(adapter, /Before review\/re-review it must\s+not call `subagent`/s);
 });
 
-test("normal work-on has four durable artifacts and no ceremony", async () => {
+test("normal work-on preserves named knowledge records without progress ceremony", async () => {
   const root = await text("specs/original/commands/work-on.md");
   assert.match(root, /one `FORGE:INVESTIGATOR`/);
   assert.match(root, /one completed `FORGE:BUILDER`/);
   assert.match(root, /PR's reviewer evidence and official review verdict/);
   assert.match(root, /one `FORGE:TRAJECTORY`/);
+  for (const kind of ["CLASSIFICATION", "CONTEXT", "CONTRACT", "ARCHITECT"]) assert.ok(root.includes(`FORGE:${kind}`));
   assert.match(root, /Do not create Gists, memory\s+indexes, ledgers, dossiers, ADRs/s);
 });
 
@@ -160,7 +168,7 @@ test("review keeps exact-head quality without target-movement starvation", async
   assert.match(review, /replace `workflow:in-review` with\s+`workflow:awaiting-merge`/s);
   assert.match(adapter, /review-starvation/i);
   assert.match(reviewSkill, /one\s+additional\s+workflow containing only that role/s);
-  assert.match(reviewSkill, /one\s+SHA-bound consolidated panel comment/s);
+  assert.match(reviewSkill, /one SHA-bound `FORGE:REVIEW-PANEL` comment/);
   assert.match(reviewSkill, /never use `runs\.host`/);
   assert.match(adapter, /`runs\.host` is not available/);
   assert.match(adapter, /Never restart a panel for JSON key casing/);
@@ -208,7 +216,7 @@ test("remediation is cohesive and re-review is scoped", async () => {
   assert.match(remediate, /same work-on agent remains the sole writer/i);
   assert.match(remediate, /do not fix only the reported line/i);
   assert.match(remediate, /include every reachable occurrence in the same\s+remediation/s);
-  assert.match(remediate, /If Behavior Coverage was incomplete, update it before editing/);
+  assert.match(remediate, /If Behavior Coverage was incomplete, append a superseding scope record\s+before editing/);
   assert.match(remediate, /one cohesive patch/);
   assert.match(remediate, /Do not create blocker issues/);
   assert.match(remediate, /one correctness\/general role/);
@@ -233,20 +241,21 @@ test("orchestrate builds only hard dependency edges and maximizes concurrency", 
   assert.match(skill, /exact shared declared mutation files/);
   assert.match(skill, /Domain tags.*never dependency edges/s);
   assert.match(skill, /prefer isolated parallel work/);
-  assert.match(skill, /Independent roots start\s+together/s);
+  assert.match(skill, /Admit only ready owners/);
   assert.match(skill, /Do not create a claims-board/);
   assert.match(adapter, /Domain, broad\s+directory, cost, co-change, and low-confidence heuristics never create edges/s);
   assert.match(adapter, /globalConcurrencyLimit/);
-  assert.match(adapter, /Promise\.all\(\[a\]\)\.then\(launchC\)/);
+  assert.match(adapter, /node\.predecessors\.every/);
+  assert.match(adapter, /Promise\.race\(\[\.\.\.active\.values\(\)\]\)/);
   assert.match(adapter, /configuredModel/);
-  assert.match(adapter, /Retained resume preserves the original model/);
+  assert.match(adapter, /Retained resume preserves\s+the original model/);
   assert.match(adapter, /function satisfied\(result\)/);
   assert.match(adapter, /dependency=SATISFIED/);
   assert.match(skill, /FORGE_WORK_ON_RESULT/);
   assert.match(skill, /GATED.*not FAILED/s);
   assert.match(skill, /merged.*tested.*production/i);
   assert.match(adapter, /use and report\s+the extension's effective limit/s);
-  assert.match(adapter, /Do not set `maxSubagentSpawnsPerRun`/);
+  assert.match(adapter, /maxSubagentSpawnsPerRun` to an explicit finite planning allowance/);
   assert.match(adapter, /attention thresholds at or above the 1,200,000 ms panel join/);
   assert.match(adapter, /at most one concise `contact_supervisor` progress update/);
   assert.doesNotMatch(skill, /maxSubagentSpawnsPerRun/);
@@ -259,7 +268,7 @@ test("documented promise DAG recovers one lane before releasing its dependent", 
     .match(/```js\n([\s\S]*?)\n```/)?.[1];
   assert.ok(snippet, "the adapter must keep one executable promise example");
   const runGraph = vm.runInNewContext(
-    `(async (runs, issueA, issueB, issueC, configuredModel) => {\n${snippet}\n})`,
+    `(async (runs, issueA, issueB, issueC, configuredModel) => {\n${dagInputs}\n${snippet}\n})`,
   ) as (
     runs: { all(items: Array<Record<string, unknown>>): Promise<Array<Record<string, unknown>>> },
     issueA: Record<string, unknown>,
@@ -290,7 +299,7 @@ test("documented promise DAG recovers one lane before releasing its dependent", 
       if (key === "work-on-B") return bPending;
       if (key === "work-on-A-recovery") return Promise.resolve({ ok: true, output: "FORGE_WORK_ON_RESULT status=DONE issue=1 pr=2 dependency=SATISFIED" });
       releaseC();
-      return Promise.resolve({ ok: true, output: "DONE" });
+      return Promise.resolve({ ok: true, output: "FORGE_WORK_ON_RESULT status=DONE issue=3 pr=4 dependency=SATISFIED" });
   }
   const runs = {
     // Installed runs.run throws plain Errors, while runs.all preserves failed results.
@@ -321,9 +330,10 @@ test("documented promise DAG recovers one lane before releasing its dependent", 
   assert.equal(calls[2]?.input.resume, "retained-A");
   assert.equal(calls[2]?.input.agent, undefined);
   assert.equal(calls[2]?.input.model, undefined);
-  releaseB({ ok: true, output: "FORGE_WORK_ON_RESULT status=DONE" });
+  releaseB({ ok: true, output: "FORGE_WORK_ON_RESULT status=DONE issue=2 pr=3 dependency=SATISFIED" });
   const results = await graph;
   assert.equal(results.length, 3);
+  assert.ok(results.every((result) => (result as { status: string }).status === "DONE"));
 });
 
 test("documented promise DAG does not resolve a dependent from a GATED predecessor", async () => {
@@ -333,7 +343,7 @@ test("documented promise DAG does not resolve a dependent from a GATED predecess
     .match(/```js\n([\s\S]*?)\n```/)?.[1];
   assert.ok(snippet);
   const runGraph = vm.runInNewContext(
-    `(async (runs, issueA, issueB, issueC, configuredModel) => {\n${snippet}\n})`,
+    `(async (runs, issueA, issueB, issueC, configuredModel) => {\n${dagInputs}\n${snippet}\n})`,
   ) as (runs: { all(items: Array<Record<string, unknown>>): Promise<Array<Record<string, unknown>>> }, issueA: Record<string, unknown>, issueB: Record<string, unknown>, issueC: Record<string, unknown>, configuredModel: string) => Promise<unknown[]>;
   const calls: string[] = [];
   const results = await runGraph(
@@ -341,7 +351,7 @@ test("documented promise DAG does not resolve a dependent from a GATED predecess
       all(items) {
         return Promise.resolve(items.map(({ key }) => {
           calls.push(String(key));
-          return { ok: true, output: key === "work-on-A" ? "FORGE_WORK_ON_RESULT status=GATED issue=1 pr=none dependency=UNSATISFIED" : "DONE" };
+          return { ok: true, output: key === "work-on-A" ? "FORGE_WORK_ON_RESULT status=GATED issue=1 pr=none dependency=UNSATISFIED" : "FORGE_WORK_ON_RESULT status=DONE issue=2 pr=3 dependency=SATISFIED" };
         }));
       },
     },

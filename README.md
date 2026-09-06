@@ -1,6 +1,6 @@
 # ForgeDock Pi
 
-**Prompt-routed GitHub issue orchestration for Pi, from issue to reviewed merge and closure.**
+**GitHub-backed engineering memory and prompt-routed issue delivery for Pi.**
 
 [![CI](https://github.com/RapierCraftStudios/forgedock-pi/actions/workflows/ci.yml/badge.svg)](https://github.com/RapierCraftStudios/forgedock-pi/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
@@ -34,14 +34,19 @@ naming. Pi runtime mechanics live in [`specs/pi-adapter.md`](specs/pi-adapter.md
   the relevant phase specification.
 - **The visible coordinator owns routing.** TypeScript does not choose phases or maintain
   hidden workflow state.
-- **GitHub is durable memory.** Issue/PR state and four compact lifecycle receipts determine
-  resume position; work-on creates no Gists, checkpoints, heartbeats, or telemetry artifacts.
+- **GitHub is the engineering knowledge graph.** Named classification, context, contract
+  and plan records precede implementation; build, review and terminal records preserve
+  outcomes and decision evolution. Records link rather than duplicate their inputs, and
+  superseding decisions retain the old history. Compact context never replaces that graph.
 - **Subagents provide isolation and fan-out.** Orchestrate launches one work-on agent and
   one isolated worktree per ready issue. Each agent runs its lifecycle inline and only
   review or re-review fans out to fresh repository-capable children.
 - **Review is load-bearing.** It launches risk-specific prompts on fresh ordinary
   `delegate` agents with full normal tools, publishes one consolidated panel result, and
   never approves from a partial panel or repeats review for unrelated clean base movement.
+- **Scope decisions are explicit.** Complexity signals require a cohesion assessment, not
+  automatic splitting. A late decomposition proposal preserves partial work and requires
+  an approved handoff/disposition before splitting an existing PR; it never resets retries.
 - **Closure remains explicit.** Review may merge; work-on verifies the merge and closes the
   issue, posts trajectory, and cleans up.
 
@@ -98,8 +103,17 @@ orchestration:
   max_concurrent: 12
 ```
 
-Add project checks under `verification.commands`. Missing checks must be reported as
-skipped; they are never silently represented as passing.
+Learn existing project checks once under `verification.commands`; optional
+`verification.discovery` records component prefixes and defining-file fingerprints. Select
+checks from actual changed behavior, broaden the relevant suite when impact is uncertain,
+and run cheap checks before heavy builds. Preserve explicit overrides and revalidate stale
+sources. Missing required checks trigger discovery or an explicit limitation, never silent
+success. See [`specs/verification.md`](specs/verification.md).
+
+The knowledge contract is [`specs/github-memory.md`](specs/github-memory.md): retrieve prior
+experience, validate/apply it, and build forward knowledge. [`specs/knowledge-records.md`](specs/knowledge-records.md)
+defines the machine-fetchable/human-readable envelopes, links, timing and revision rules.
+Reviewers use this graph independently; historical approval never waives a current defect.
 
 `.forge/config.json` belongs to the retired controller implementation and is not treated
 as equivalent to `forge.yaml`.
@@ -154,12 +168,21 @@ Required proof before declaring the migration complete:
 4. one dependency unblocks and dispatches immediately after predecessor success;
 5. interruption resumes from GitHub without private journal recovery.
 
+The no-model large-batch fixture validates native admission, budgets and dependencies;
+it does not establish live provider throughput, code quality, or host build capacity.
+
 ## Development
 
 ```bash
 npm install
 npm run check
 ```
+
+Native qualification is opt-in against a pinned pi-subagents checkout. Set
+`PI_SUBAGENTS_SOURCE` for the workflow/fanout fixtures; also set
+`PI_SUBAGENTS_ADAPTER_SOURCE` to a checkout with its development/test dependencies installed
+for full adapter/mock-CLI recovery and async-publication tests. These launch no real models.
+Without those inputs the corresponding tests skip; do not report skips as qualification.
 
 The suite validates TypeScript, lexical routing, skill/prompt packaging, specification
 integrity, reviewer-only nesting, hard-edge DAG concurrency, and lower-level safety modules.

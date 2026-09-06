@@ -9,9 +9,15 @@ The visible Pi session is the dispatcher, never a builder. Read the orchestrate 
 `../../specs/pi-adapter.md`, parse `forge.yaml` once, and retain repository, targets,
 concurrency, global files, paths, and child model. Resolve one full provider/model ID from
 `agents.subagent_model`, falling back to `agents.default_model`; reject missing or legacy
-shorthand models and pass the resolved model explicitly to each fresh child.
+shorthand models and pass the resolved model explicitly to each fresh child. Prepare missing
+repository check groups once via `../../specs/verification.md` before dispatch; children
+consume that catalog in their owned worktrees, not competing edits to the canonical config.
 
 ## Resolve once
+
+Retain the original execution-request timestamp before resolution, using native request
+metadata when available; otherwise label the first observed start explicitly. The dispatcher,
+not each child, computes total elapsed time from this anchor and GitHub closure times.
 
 Resolve the user's literal issues, milestone/query selector, or next-N request with one
 bounded GitHub fetch. Exclude closed, terminal, duplicate, genuinely human-gated, and
@@ -44,19 +50,24 @@ investigation establish mutation scope. Detect and report real cycles.
 Before presenting the plan, reconcile explicit prerequisite merge/closure evidence against
 the configured target. A closed issue alone is insufficient, but a verified delivered
 prerequisite must not appear as an unresolved gate. Surface external prerequisites without
-enrolling them. Show the exact issue set, targets, hard edges, ready set, and concurrency.
+enrolling them. Show the exact issue set, targets, hard edges, ready set, approved active-owner
+concurrency and total launch allowance (including review/fallback contingency). The configured
+ceiling is not proof of host/provider capacity; include nested reviewer/build headroom.
 Obtain mandatory confirmation unless explicitly preconfirmed. Do not create a claims-board
 issue, lease, scoring table, Gist, heartbeat, or orchestration checkpoint.
 
 ## Dispatch
 
-Launch one fresh `forgedock-work-on-coordinator` per ready issue with exact task
-`<issue> --under-orchestration`, fresh context, one isolated worktree, the issue's clean
-detached target base as `cwd`, and the maximum coordinator timeout. Each child is the sole
+Use `../../specs/helpers/dispatch.mjs batch` from the canonical repository root with the
+approved data plan and a new output directory, per `../../specs/mechanical-execution.md`.
+Invoke the generated request exactly; do not reconstruct the rolling wrapper or launch shape.
+It binds model/cap/identity/config to each fresh owner and uses one isolated worktree from
+its clean target base. Each child is the sole
 writer and runs `forgedock-work-on` inline; only its review/re-review panel may be nested.
 
-Use one visible async promise DAG with the explicitly configured child model and
-`orchestration.max_concurrent`. Independent roots start together. A successor starts only
+The helper uses the adapter's audited rolling async promise DAG with the configured model and approved
+owner concurrency no higher than `orchestration.max_concurrent`. Admit only ready owners up
+to that limit; remaining issues stay queued without consuming all reviewer allowance upfront. A successor starts only
 when every actual hard predecessor returns `status=DONE` with `dependency=SATISFIED` in
 its `FORGE_WORK_ON_RESULT` line, never from
 transport success or after a sibling aggregate/wave. Normalize child failures so unrelated
@@ -72,6 +83,10 @@ non-terminal issue or launch two writers for it.
 
 ## Finish
 
+Before any supervisor response, continuation or user prompt, resolve the native owner run ID
+with `dispatch.mjs identify` against this batch/status. Never use child index 0, the last
+mentioned issue or a commit string as lane identity. Unknown/ambiguous matches stop action.
+
 Reconcile each lane from its `FORGE_WORK_ON_RESULT` plus current GitHub state as DONE,
 GATED, FAILED, or IN_PROGRESS. Report milestone, real blockers, and final outcome separately:
 merged is not the same as tested, and mocks never prove production/canary behavior. Work-on
@@ -79,4 +94,9 @@ owns issue closure; Pi owns child worktrees. Remove only clean detached target b
 by this batch. Return one compact issue/PR/result table with duration, turns, usage,
 configured model, recovery, tested-content identity, and residual-risk summaries. Include
 request-to-close wall time, material waits, first-pass acceptance, panel count, and remediation
-usage from retained evidence; do not count gating/decomposition as a sub-30-minute delivery.
+usage from retained evidence; never substitute child startup for request start. Do not count
+gating/decomposition as a sub-30-minute delivery. Owner-only usage excludes reviewers;
+use native aggregate evidence for totals or report missing metrics rather than inventing them.
+Use complete compact rows from native persisted workflow state for large batches, not the
+truncated top-level output preview. Fetch individual reports for uncertain reconciliation.
+Total allowance is not spend; report actual usage and limitations.

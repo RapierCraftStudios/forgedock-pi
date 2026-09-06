@@ -19,11 +19,35 @@ Base movement does not invalidate an unchanged clean reviewed head. Reconcile on
 actual conflict or required-up-to-date policy. Re-review after reconciliation only when
 the effective patch or risk changed.
 
+## Knowledge-aware independent review
+
+Fresh means independent judgment, not historically blind review. The owner supplies the
+linked investigation, classification, contract, context and plan plus concise relevant
+constraints. Read the records needed to understand intended behavior, material alternatives
+and prior decisions; follow a specific historical gap instead of guessing that unfamiliar
+code is wrong or repeating the entire graph search in every role. For standalone/legacy
+PRs, use available issue/PR/source history and state missing context; do not fabricate
+pre-build records or replay engineering merely to retrofit the new format.
+
+For each substantive concern distinguish regression/unmet acceptance, a currently valid
+deliberate trade-off, superseded/stale concern, independent debt, or unresolved evidence.
+Cite the decision considered and explain why current evidence preserves or overturns it.
+A past approval is not a waiver of a newly demonstrated failure. Missing rationale is not
+itself proof of a code defect; obtain the relevant evidence without hiding real blockers.
+
+Bind conclusions to the exact head and material graph inputs. New evidence that changes an
+acceptance/risk judgment requires only the affected reassessment; unchanged facts or record
+formatting do not restart review. Preserve root-cause/prevention lessons and dispositions
+in the consolidated PR record for later reviewers, using `../../specs/knowledge-records.md`.
+
 ## Verify
 
 Reuse trusted builder checks bound to the same head. Run only missing, stale, review-
 specific, or independently security-relevant checks. Do not rerun identical deterministic
-commands against an unchanged SHA.
+commands against an unchanged SHA. Use `../../specs/verification.md`; preserve valid
+input-bound evidence instead of repeating heavy builds. Review the historical constraints
+and rationale supplied by the owner against current code; do not blindly trust old comments
+or repeat the entire historical search in every role.
 
 ## Select reviewers
 
@@ -46,12 +70,19 @@ review. Do not blindly relaunch the previous panel.
 
 ## Run one panel
 
+A work-on owner uses the bound policy and `../../specs/helpers/dispatch.mjs review` to prepare
+the request. Supply role tasks/thinking and actual round/head, never a model or cap copied
+from history. Execute the generated request unchanged; out-of-policy preparation fails
+before reviewer admission. Standalone PR review without a bound issue keeps the existing
+direct route and canonical configuration; never invent an issue to satisfy helper inputs.
+
 Prepare the full diff once and deterministic role bundles. Embed the relevant diff in each
 task or give the delegate one stable readable file path; never use `runs.host` to transfer
 it. Launch all selected roles as fresh ordinary `delegate` agents with full normal tool
 availability through the adapter's single `runs.all` workflow. Prompts assign review focus
 without creating specialized agent profiles or capability ceilings. Each task carries the
-acceptance invariants, test evidence/scope, and bounded ordinary diff/context (start with
+acceptance invariants, relevant historical constraints/source links, test evidence/scope,
+and bounded ordinary diff/context (start with
 normal diff context, then read relevant callers). Correctness must check whether tests
 exercise the claimed behavior and catch the original defect; source-string assertions do
 not establish runtime correctness. Reproduce disputed blockers when safely feasible and
@@ -65,15 +96,17 @@ Bind repository, PR, head/base, attempt, and role from the launch key and task r
 requiring the delegate to echo them perfectly. Accept JSON or clearly structured Markdown
 when it contains a verdict, substantive summary, verified `path:line` behaviors, residual
 risks, and findings. A blocker identifies a reachable trigger, the patch-caused causal
-chain, existing mitigations checked, and concrete production impact; speculation or
+chain, existing mitigations checked, and concrete production impact. Preserve a supported
+root-cause/prevention lesson in that same finding, not a new knowledge-only issue; speculation or
 independent pre-existing debt is not a blocker. Normalize harmless key casing, number/string, and list-shape differences in the
 owning agent. Retry only when the child failed or no substantive review can be recovered;
 formatting variance alone never restarts a role or panel. Blocking findings still require
 the confirmed HIGH/CRITICAL production-incident standard.
 
-After complete validation, the owning agent publishes one SHA-bound consolidated panel comment
-containing every role's summary, acceptance invariants, test evidence/scope,
-verified behaviors, residual risks, and findings, then one official review verdict. Read
+After complete validation, the owner publishes one SHA-bound `FORGE:REVIEW-PANEL` comment
+with the knowledge-records metadata envelope and visible graph-input links. Include each
+role's summary, relevant decisions considered, finding dispositions, acceptance/test evidence,
+verified behaviors and residual risks, then one official review verdict. Read
 back the exact IDs. Use quoted, file-backed bodies. When the active identity authored the
 PR, record the official verdict with `gh pr review --comment --body-file`; do not attempt
 self-approval or invent `gh pr reviews`. This never replaces a branch-required independent
@@ -88,8 +121,9 @@ or review-start/checkpoint comments are required.
 - Missing/invalid role after its bounded retry: `review-degraded`, no verdict.
 
 Keep work-on blockers on the existing PR/source issue for cohesive remediation. Create at
-most one valuable independent follow-up issue per causal concern; advisories may remain in
-the consolidated report.
+most one valuable independent follow-up issue per causal concern when separate action is
+needed and authorized. Advisories and reusable lessons remain in the consolidated report
+by default; do not expand the backlog merely to make knowledge searchable.
 
 Merge only when explicitly authorized, the current head equals the accepted reviewed head
 or a proven equivalent patch, required checks pass, the PR is mergeable, and no blocker

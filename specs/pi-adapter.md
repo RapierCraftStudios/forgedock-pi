@@ -37,6 +37,8 @@ GitHub issue/PR state and compact ForgeDock receipts are resumable state.
   acceptance gaps, tests, reviewer references, and next action in normal context; keep
   full logs in artifacts. Compaction is not permission to restart a writer or lose scope.
 - Legacy runtime/tool/model prose in archived specifications never overrides this file.
+  Historical issue/PR/commit evidence remains readable through `github-memory.md`;
+  obsolete execution instructions are not inherited with that knowledge.
 
 ## Work-on agents
 
@@ -80,6 +82,9 @@ proof that the owner consumed the results or completed merge/closure. The outer 
 remains async and all selected reviewers run concurrently; never emit terminal DONE just
 because a panel was dispatched.
 
+Work-on owners prepare panel data with `helpers/dispatch.mjs review`; it applies the bound
+model/cap and emits the request without rewriting workflow code. Standalone PR reviews
+without a bound work-on issue retain their existing direct route; never invent an issue ID.
 Each item uses:
 
 - a stable role/attempt key;
@@ -134,40 +139,58 @@ Set each work-on item's `cwd` to its target base before `worktree: true`; Pi the
 the isolated issue worktree from the correct commit. Retain exact base paths for final
 owned cleanup.
 
-Launch one top-level async `subagent` workflow. When the current tool schema exposes it,
-pass `globalConcurrencyLimit` from `orchestration.max_concurrent`; otherwise use and report
-the extension's effective limit. Do not set `maxSubagentSpawnsPerRun`: normal review,
-remediation, and exact-head re-review must not exhaust an arbitrary per-run launch cap.
-Set orchestration control attention thresholds at or above the 1,200,000 ms panel join
-window so a healthy concurrent review does not emit a false four-minute stall warning.
-Every issue item
-uses:
+Prepare approved plan data through `helpers/dispatch.mjs batch` under
+`mechanical-execution.md`; invoke the generated native request unchanged. The helper reads
+the audited recipe below—agents do not reconstruct its object shape or control loop.
 
-```js
-{
-  key: `work-on-${issue.number}`,
-  agent: "forgedock-work-on-coordinator",
-  task: `${issue.number} --under-orchestration`,
-  context: "fresh",
-  model: configuredModel,
-  cwd: issue.targetBase,
-  worktree: true,
-  timeoutMs: 2147483647
-}
-```
+Launch one top-level async `subagent` workflow. Set `globalConcurrencyLimit` to the batch's
+approved active-owner limit, no higher than `orchestration.max_concurrent`. If unavailable,
+use and report the extension's effective limit. It is not a host-wide limit on reviewers
+or build processes: nested panels have separate local concurrency. Confirm physical/provider
+headroom for owners plus their panels; a configured ceiling is not measured host capacity.
 
-Use one visible promise graph. Resolve `configuredModel` once from `forge.yaml`
+Set top-level `maxSubagentSpawnsPerRun` to an explicit finite planning allowance for the
+whole confirmed batch: owners + risk-selected panels + configured fallback/retry allowance
++ technical recovery contingency. Native default 64 counts nested reviewers too. A larger
+allowance is not a reservation of processes or permission to launch unnecessary reviewers.
+For example, 100 owners, allowance for four roles per panel, one fallback and 20 contingency
+admissions is 920; add bounded missing-role retries to the allowance if not in contingency.
+Check any separate per-session spawn cap too. If the installed API cannot accept the needed
+allowance, report that before dispatch rather than inventing fields or starting a doomed batch.
+This is a planning envelope, not a four-role ceiling or a guarantee of arbitrary future work.
+Never omit necessary review to fit it. On shortage preserve affected owners/queued work and
+report the budget; only a separately authorized top-level continuation can supply a new
+allowance while resuming retained owners. Nested overrides cannot enlarge the inherited pool.
+
+Native admission occurs before the workflow concurrency semaphore. Use rolling admission
+below instead of eagerly admitting every owner and spending the review allowance upfront.
+Do not use `runs.lanes` for 100 issues (32 lanes/64 stages), or claim a complete preflight
+list beyond its 64-lane limit; ordinary Promise composition supports the larger graph.
+Set control attention thresholds at or above the 1,200,000 ms panel join window. The helper
+binds the approved topological issue list and active-owner limit to `issueGraph` and
+`ownerConcurrency`, and attaches validated policy/catalog descriptors to each task. The
+whole secret-bearing config is referenced, not copied into inputs/prose/GitHub. Native bindings carry
+identity/model/cap inputs. Use its generated `request.json`/workflow path, not a hand-built
+launch object. The field shapes are documented in `mechanical-execution.md`.
+
+Use one visible promise graph. The following is the fixed template read by the preparation
+helper, not a loop to rewrite during each orchestration. Resolve `configuredModel` once from `forge.yaml`
 (`agents.subagent_model`, then `agents.default_model`); reject missing/legacy shorthand.
 Use one-item `runs.all` for graph launches: unlike `runs.run`, it retains failed-child
 `runId`/`resumability` instead of throwing a plain error. Resume a terminal resumable
 failure once before resolving dependents; never resume a detached/live or stopped writer.
 Keep work-on terminal output inline and compact so dependency checks do not parse file
-references. Retained resume preserves the original model and worktree contract.
+references. Keep owner `output: false` and no top-level aggregate output override for this
+recipe: native artifacts already preserve evidence, so no extra named output is needed.
+The full adapter tests qualify this default foreground-child recovery path; do not assume
+all other native recovery routes share its output-path rules. Retained resume preserves
+the original model and worktree contract.
 
 ```js
 function failure(error) { return { ok: false, error: String(error) }; }
 function launch(key, params) {
-  return runs.all([{ ...params, key }]).then(([result]) => result).catch(failure);
+  return Promise.resolve().then(() => runs.all([{ ...params, key }]))
+    .then(([result]) => result).catch(failure);
 }
 function runIssue(key, issue) {
   return launch(key, { ...issue, model: configuredModel }).then((result) => {
@@ -176,26 +199,86 @@ function runIssue(key, issue) {
     return launch(`${key}-recovery`, {
       resume: result.runId,
       task: "Resume this terminal retained lane once; reconcile GitHub and preserved work, then continue. Never create a competing writer."
-    });
+    }).then((recovered) => ({ ...recovered, recoverySource: {
+      runId: result.runId, outputReference: result.outputReference ?? null,
+      artifactPaths: result.artifactPaths ?? []
+    } }));
   });
 }
+function resultLine(result) {
+  const lines = String(result.output ?? "").match(/^FORGE_WORK_ON_RESULT status=(DONE|GATED|FAILED) issue=\d+ pr=(?:\d+|none) dependency=(SATISFIED|UNSATISFIED)$/gm) ?? [];
+  return lines.length === 1 ? lines[0] : "";
+}
 function satisfied(result) {
-  return result.ok === true && /^FORGE_WORK_ON_RESULT status=DONE issue=\d+ pr=(?:\d+|none) dependency=SATISFIED$/m.test(String(result.output ?? ""));
+  return result.ok === true && /^FORGE_WORK_ON_RESULT status=DONE .* dependency=SATISFIED$/.test(resultLine(result));
 }
-const a = runIssue("work-on-A", issueA);
-const b = runIssue("work-on-B", issueB);
-function launchC(predecessors) {
-  if (!predecessors.every(satisfied))
-    return { ok: false, status: "GATED", reason: "waiting for satisfied predecessor A" };
-  return runIssue("work-on-C", issueC);
+if (!Number.isSafeInteger(ownerConcurrency) || ownerConcurrency < 1) throw new Error("Invalid owner concurrency");
+const known = new Set();
+for (const node of issueGraph) {
+  if (typeof node.key !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(node.key) || known.has(node.key) ||
+      !Array.isArray(node.predecessors) || node.predecessors.some((key) => !known.has(key)))
+    throw new Error("Issue graph must have unique keys and validated topological predecessors");
+  known.add(node.key);
 }
-const c = Promise.all([a]).then(launchC).catch(failure);
-return await Promise.all([a, b, c]);
+const pending = issueGraph.slice();
+const active = new Map();
+const outcomes = new Map();
+function start(node) {
+  const work = runIssue(node.key, node.launch).catch(failure).then((result) => {
+    outcomes.set(node.key, result);
+    active.delete(node.key);
+  });
+  active.set(node.key, work);
+}
+while (pending.length || active.size) {
+  for (let i = 0; i < pending.length && active.size < ownerConcurrency;) {
+    const node = pending[i];
+    if (!node.predecessors.every((key) => outcomes.has(key))) { i++; continue; }
+    pending.splice(i, 1);
+    const blockedBy = node.predecessors.filter((key) => !satisfied(outcomes.get(key)));
+    if (blockedBy.length) outcomes.set(node.key, { ok: false, status: "GATED", blockedBy });
+    else start(node);
+  }
+  if (active.size) await Promise.race([...active.values()]);
+  else if (pending.length) throw new Error("Unresolved issue graph");
+}
+return issueGraph.map(({ key, issue, repo, target }) => {
+  const result = outcomes.get(key);
+  const output = resultLine(result);
+  const owner = result.results?.[0];
+  return { key, issue: issue ?? null, repo: repo ?? null, target: target ?? null,
+    ok: result.ok === true, runId: result.runId ?? null, output,
+    status: result.ok === true ? (output.match(/status=(\w+)/)?.[1] ?? "FAILED") : (result.status ?? "FAILED"),
+    blockedBy: result.blockedBy ?? [], outputReference: result.outputReference ?? null,
+    artifactPaths: result.artifactPaths ?? [], resumability: result.resumability ?? null,
+    recoverySource: result.recoverySource ?? null,
+    durationMs: owner?.progressSummary?.durationMs ?? null, ownerUsage: owner?.usage ?? null,
+    error: result.ok === false ? String(result.error ?? result.output ?? "").slice(0, 500) : null };
+});
 ```
 
-Generate the same shape for every lane and its actual hard predecessors. Independent roots
-start together; a successor waits only for its predecessors' bounded recovered outcomes,
-not an unrelated aggregate. A GATED dependent retains its exact wake condition; after an
+Only ready owners up to the approved limit are admitted. A completed slot is reused
+immediately; a successor waits only for its predecessors' bounded recovered outcomes,
+not an unrelated aggregate. Return compact rows and references, not all child histories;
+full native child results remain available by run ID for reconciliation. If recovery
+admission creates no replacement run, `recoverySource` preserves the original retained
+identity/evidence. Use the latest actual resumable run when one exists; never fabricate a
+new run ID or infer that lost admission means the old work disappeared.
+
+After a terminal notification, use the actual async directory from the launch receipt or
+native status. Top-level output is a preview (it may truncate the returned value at 1,000
+characters), not the complete report. Read/project complete `.workflow.value` from its
+persisted `status.json` with existing tools, for example:
+
+```bash
+jq -e 'select(.state == "complete") | .workflow.value | arrays' "$STATUS_FILE" > "$REPORT"
+```
+
+`STATUS_FILE` is that exact run's status file, and `REPORT` is new local scratch output.
+Summarize counts and exceptional rows without dumping every child history. A missing value
+or non-complete workflow is not an empty successful batch: use native child/receipt evidence
+to reconcile the confirmed issue set and retain unfinished work.
+A GATED dependent retains its exact wake condition; after an
 external prerequisite lands, reconcile GitHub and dispatch only newly eligible, unowned
 lanes. Never rerun completed unrelated lanes. DONE plus UNSATISFIED (for example a
 replacement decomposition) is terminal for the issue but does not release dependents.

@@ -18,9 +18,11 @@ field or state changed by this agent.
 
 If a completed `FORGE:INVESTIGATOR` receipt already exists, validate that it contains a
 verdict, route, root cause, Behavior Coverage, mutation scope, non-goals, evidence, acceptance
-checks, and criterion-to-path proof/prerequisite availability. Equivalent headings are fine.
-Reuse complete evidence when current code has not invalidated it. Delete and replace only an incomplete
-receipt owned by this lifecycle.
+checks, criterion-to-path proof/prerequisite availability, prior constraints and a cohesion decision.
+Equivalent historical annotations/headings are fine; reuse them rather than restating history.
+Reuse complete evidence when current code has not invalidated it. Preserve completed
+records; append a superseding investigation for material corrections under
+`../../../knowledge-records.md`. Only repair an incomplete draft in place.
 
 ## Procedure
 
@@ -34,8 +36,9 @@ receipt owned by this lifecycle.
    fixture for executable behavior. Identify the boundary that can run locally and the
    observable result it must assert; reserve inspection-only proof for what cannot run.
 4. Trace the active path through the suspected boundary to the observable result.
-5. Check bounded history only when it answers a concrete uncertainty about intent or a
-   regression. Do not perform general archaeology.
+5. Follow `../../../github-memory.md`: proactively retrieve relevant past bugs, decisions
+   and successful examples; validate their current applicability and apply the useful
+   constraints. Reuse retained evidence, keep lookup bounded, and avoid general archaeology.
 6. Identify root cause and distinguish patchable code from configuration, external
    authority, pre-existing debt, or an already-fixed claim.
 7. State the behavior that must remain true. Check each relevant way that behavior can be
@@ -70,25 +73,36 @@ Use separate fields:
 - `Verdict: CONFIRMED | INVALID`
 - `Route: BUILD | DECOMPOSE | TERMINAL`
 
-Choose `DECOMPOSE` only when the confirmed work contains multiple independently
-mergeable concerns whose scopes can be stated without overlap. Do not decompose merely
-because the change spans multiple files.
+Scope signals require an explicit cohesion assessment, not an automatic split: 3+ service groups,
+6+ mutation files across directories, multiple task types, or phased rollout requirements.
+Record the decision even when no signal applies. A shared feature/domain name is not proof
+that all work is atomic; weak initial input is not grounds for refusing investigation.
+
+Choose `DECOMPOSE` for independently safe, testable and mergeable outcomes or rollout phases,
+preserving every parent acceptance criterion. Sequential slices may overlap files when an
+explicit dependency orders them. Keep one BUILD when an atomic shared invariant must land
+together, and explain why; file count alone never forces decomposition. For a post-review
+reassessment with existing work, follow the preserved-handoff rules in `decompose.md`.
 
 Choose `INVALID` when the behavior is not present, already fixed, not owned by this
 repository, or based on a false premise. Close invalid issues with concise evidence.
 
 ## Receipt
 
-Publish exactly one issue comment:
+Publish the completed investigation with the common metadata envelope from
+`../../../knowledge-records.md`. Preserve its links for the pre-build graph:
 
 ```markdown
 <!-- FORGE:INVESTIGATOR -->
+<!-- FORGE:RECORD {"v":1,"source_head":"<actual source commit>","inputs":[],"supersedes":null} -->
 ## Investigation
 
 **Verdict**: CONFIRMED | INVALID
 **Route**: BUILD | DECOMPOSE | TERMINAL
 **Confidence**: HIGH | MEDIUM | LOW
 **Task type**: Bug Fix | Feature | Refactor | Documentation | Investigation
+**Source head**: `<actual source commit>`
+**Inputs / Supersedes**: <actual links matching metadata, or none>
 
 ### Claim
 <observable behavior>
@@ -101,9 +115,18 @@ Publish exactly one issue comment:
 ### Evidence and Root Cause
 <concise path/symbol/test evidence; distinguish failing-before from inspection-only proof>
 
+### Prior Knowledge Applied
+- <source permalink/commit → prior lesson → current applicability/evidence → constraint or justified supersession>
+- <or no relevant history / retrieval unavailable / justified mechanical-change skip>
+
 ### Behavior Coverage
 **Required behavior**: <one sentence>
 - `path or component` — {change|already safe} — <evidence>
+
+### Cohesion and Decomposition
+- <observed scope signals, or none>
+- <why Route is BUILD or DECOMPOSE; atomic invariant or independently safe outcomes/phases>
+- <proposed slices/dependencies when needed; preserve all parent acceptance criteria>
 
 ### Mutation Scope
 - `path` — required behavior change
@@ -131,5 +154,5 @@ return terminal.
 For a confirmed issue, use one label edit to remove `workflow:investigating` and
 `needs-validation` when applicable, add `validated`, set `workflow:ready-to-build` for
 `BUILD`, or continue immediately to decomposition for
-`DECOMPOSE`. Do not write heartbeats, checkpoints, Gists, indexes, ledgers, dossiers,
-contracts, context artifacts, architecture artifacts, cost records, or telemetry.
+`DECOMPOSE`. For BUILD, continue to the named pre-build graph records before editing.
+Do not write heartbeats, checkpoints, Gists, indexes, ledgers, dossiers, cost records or telemetry.

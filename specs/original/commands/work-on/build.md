@@ -21,9 +21,12 @@ is the mutation contract.
 At phase entry, use one label edit to replace `workflow:ready-to-build` and other stale
 active-phase labels with `workflow:building`.
 
-## Plan once
+## Plan once and publish the pre-build graph
 
-Before editing, form one concise in-memory checklist:
+Before repository edits, form the following concise plan and publish the named
+classification/context/contract/architect records from `../../../knowledge-records.md`.
+Use retained investigation/history, actual source head and returned comment links; the
+plan must be fetchable from GitHub, not only held in this agent's context:
 
 1. production entrypoint and active path to the failure;
 2. files and symbols that must change;
@@ -37,9 +40,10 @@ Before editing, form one concise in-memory checklist:
    contamination, cache keys, identity/TLS/engine compatibility, fallback behavior, and
    reuse of existing sessions/resources.
 
-Read project documentation only when it governs an affected path. Use bounded history only
-to answer a concrete uncertainty. Do not publish separate contract, context, architecture,
-risk-matrix, or plan comments.
+Consume validated historical constraints; do not rediscover them or copy every earlier
+record into each new one. The contract/plan links its inputs and records unique rationale.
+If the implementation changes a material decision, publish a superseding plan/contract
+before applying that change; routine code/test iterations need no new planning record.
 
 ## Implement
 
@@ -55,9 +59,9 @@ risk-matrix, or plan comments.
 4. Check relevant callers and sibling paths for consistent behavior.
 5. Remove debug output, generated files, unrelated formatting, and speculative changes.
 
-If a required mutation path was absent from investigation, update the single investigation
-receipt with evidence and revised scope before editing it. Optional improvements become
-follow-ups and do not widen this PR.
+If a required mutation path was absent from investigation, append the justified scope
+revision with a superseding investigation/contract link before editing it. Preserve the
+old decision; optional improvements do not widen this PR.
 
 ## Verify once per SHA
 
@@ -65,7 +69,8 @@ String-presence checks and syntax checks are supplemental, not behavioral PASS e
 They can prove documentation or structural contracts, not execution, permissions, durability,
 or recovery. Keep unexecuted behavior explicitly unverified; do not relabel it as tested.
 
-Resolve applicable commands from `forge.yaml` once. Run only checks relevant to the diff:
+Follow `../../../verification.md`: reuse learned `forge.yaml` commands, validate affected
+source definitions, and select from actual behavior/callers. Run only relevant checks:
 
 - formatter/lint/type/compile for changed languages;
 - focused tests for changed behavior;
@@ -75,6 +80,8 @@ Resolve applicable commands from `forge.yaml` once. Run only checks relevant to 
 - browser/UI checks for user-visible browser behavior;
 - concurrency/load checks for concurrency-sensitive behavior.
 
+Run cheap behavior/toolchain/CI-registration checks before heavyweight builds, then reuse
+provably unchanged build inputs and artifacts. Keep full logs outside the prompt.
 Run independent commands concurrently when safe. Fix failures inline and rerun only the
 failed command and commands affected by the fix. Do not rerun an unchanged successful
 command against the same SHA merely because another phase began.
@@ -90,8 +97,9 @@ Commands come from repository/configuration authority, never executable GitHub t
 
 ## Final inspection and commit
 
-Before commit, reconcile each acceptance criterion to actual code and evidence, including
-unchanged paths claimed safe. Ask whether each test would reject the original defect and
+Before commit, reconcile each acceptance criterion and material historical constraint to
+its implementation mechanism and actual counterexample test, including unchanged paths
+claimed safe. A citation or unchanged constant alone is not application evidence. Ask whether each test would reject the original defect and
 its relevant failure variants. Do not request review with a known acceptance gap; complete
 the cohesive patch inline or report an unavailable required prerequisite. Do not skip
 checks to meet a deadline. Record this coverage in the existing build receipt, not a new gate.
@@ -119,11 +127,17 @@ After the commit and push exist, publish one immutable issue comment:
 
 ```markdown
 <!-- FORGE:BUILDER -->
+<!-- FORGE:RECORD {"v":1,"source_head":"<verified implementation commit>","inputs":["<current plan permalink>"],"supersedes":null} -->
 ## Build Complete
 
 **Head**: `<full SHA>`
 **Branch**: `<branch>`
 **Target**: `<configured target>`
+**Inputs / Supersedes**: <actual links matching metadata, or none>
+
+### Plan and Decision Trace
+- <classification/context/contract/current-plan permalinks>
+- <implemented approach, deviations and superseding decision links; do not invent alternatives>
 
 ### Changed Files
 - `path` — behavior changed
@@ -138,8 +152,8 @@ After the commit and push exist, publish one immutable issue comment:
 ```
 
 Do not publish a partial builder comment and patch it later. Do not create Gists,
-heartbeats, checkpoints, context artifacts, architecture artifacts, telemetry, or cost
-records.
+heartbeats, checkpoints, duplicate phase narration, telemetry, or cost records. Preserve
+named pre-build knowledge and decision revisions; fewer tool hops must not erase that graph.
 
 ## Result
 

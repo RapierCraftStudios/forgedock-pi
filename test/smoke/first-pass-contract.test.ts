@@ -42,7 +42,7 @@ test("remediation is bounded across resumes and review names in every authority"
   assert.match(root, /Never reset.*resume.*final.*last.*closure/s);
   assert.match(remediate, /Count.*before.*edit/s);
   assert.match(remediate, /cap.*no further.*edit.*panel/s);
-  assert.match(review, /remaining\s+remediation budget/);
+  assert.match(review, /remaining\s+remediation\s+budget/);
   assert.match(agent, /remediation cap.*GATED/s);
   for (const content of [root, remediate]) {
     assert.match(content, /A round includes.*fix plus its complete scoped re-review/s);

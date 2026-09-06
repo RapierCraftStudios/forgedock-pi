@@ -13,8 +13,8 @@ fresh reviewer panel may be nested.
 
 ## Prepare or reuse the PR
 
-1. Reuse the retained build head, target, changed files, and verification evidence. Require
-   criterion-to-implementation/test coverage; do not delegate known acceptance gaps to reviewers.
+1. Reuse the retained build head, target, changed files, verification and published decision
+   chain. Require criterion-to-implementation/test coverage; do not delegate known gaps.
 2. Check once for an existing open PR from the owned branch.
 3. Create one PR when absent; otherwise update the existing PR body only when required.
 4. The PR body states issue, intent, changed behavior, verification, and residual risks.
@@ -36,8 +36,9 @@ head, and base arguments. That skill owns:
 - exact-head evidence and comment readback;
 - finding classification and official verdict.
 
-Each reviewer task carries acceptance invariants, test evidence/scope, bounded ordinary
-diff/context, and unique role ownership. A blocker must be confirmed patch-caused and
+Each reviewer task carries acceptance invariants, test evidence/scope, bounded diff/context,
+linked classification/context/contract/plan and decision revisions, and unique role ownership.
+Fresh reviewers validate the history's current applicability rather than review historically blind. A blocker must be confirmed patch-caused and
 reachable in the supplied patch. A valid same-head reviewer role is retained. Retry only a missing, failed, or malformed
 role; never restart a valid role or complete panel for publication uncertainty that an
 exact-ID readback can resolve.
@@ -45,8 +46,10 @@ exact-ID readback can resolve.
 ## Result routing
 
 - `APPROVE`, no blockers: continue to merge checks.
-- Confirmed patch-caused HIGH/CRITICAL blocker: consolidate all findings, check remaining
-  remediation budget, then one cohesive fallback pass. At the cap, use the root's GATED
+- Confirmed patch-caused HIGH/CRITICAL blocker: consolidate findings and perform scope
+  reassessment when the admitted scope was incomplete/non-convergent. A DECOMPOSE proposal
+  uses the preserved-work handoff, not more code fixes. Otherwise check remaining remediation
+  budget, then one cohesive fallback pass. At the cap, use the root's GATED
   exit; never launch another panel by calling it final, last, or closure.
 - Explicit unresolved prerequisite: return `GATED` with exact wake condition.
 - Incomplete panel/provider failure: preserve valid roles, record `review-degraded`, and

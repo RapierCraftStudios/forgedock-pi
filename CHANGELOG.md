@@ -1,5 +1,44 @@
 # Changelog
 
+## Unreleased — Canary control candidate
+
+- Bind per-lane repository/issue/target/model/remediation policy from one canonical config
+  read through existing native extension bindings; never rediscover it in sibling worktrees.
+- Prepare approved dispatch/review data into native requests using the audited workflow
+  template, and resolve supervisor identity by exact native run ID rather than child index.
+- Render/publish knowledge envelopes from bound identity and Git data with literal Markdown,
+  exact-body retry reuse and server readback; preserve all earlier records.
+- Require material historical constraints to reach actual counterexample tests, not merely
+  citations/constants, and keep obsolete test-fake compatibility out of production code.
+- These are candidate mechanics, not a claim of first-pass quality or production speed.
+
+## Unreleased — Forward-knowledge candidate revision
+
+- Replace the fixed four-record limit with named classification/context/contract/plan
+  comments before repository edits, linked build/review/terminal evidence, and preserved
+  decision revisions. Execution remains inline; no new logging or planning agents.
+- Add a small machine-fetchable metadata envelope and tested jq discovery/reachability
+  recipe while retaining human-readable bodies, legacy records and superseded decisions.
+- Require knowledge-aware independent review and evidence-based finding dispositions;
+  past approval is not a waiver, and formatting-only repairs do not restart review.
+
+## Unreleased — GitHub-first candidate
+
+- Restore proactive bounded GitHub history retrieval, validated application of prior lessons,
+  and durable implementation rationale/corrections inside the existing four records.
+- Reuse the existing verification command catalog with optional scope/source provenance;
+  prefer relevant behavioral checks, cheap CI-wiring checks before heavy builds, and
+  identity-safe evidence reuse instead of bespoke CI jobs or repeated full logs.
+- Document separate cumulative launch allowance and active-owner concurrency; use rolling
+  native Promise admission for large confirmed DAGs and return compact result references.
+- Add opt-in no-model 100-issue qualification through the installed workflow and fanout
+  budget engines, including nested reviews, failed/gated dependencies and retained recovery.
+- Pass prepared verification catalogs as read-only path/digest inputs, preserve recovery
+  references on admission failure, and read complete async results from native persisted state.
+- Require explicit cohesion assessment on complexity signals without automatic file-count
+  splitting; allow safe sequential overlap and a preserved-work post-review replan path.
+- This is a candidate for live comparison, not proof of production quality or throughput.
+
 ## Unreleased — Prompt-router simplification
 
 - Define the first-pass happy path: complete acceptance/prerequisite evidence before edits,

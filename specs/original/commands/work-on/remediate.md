@@ -26,6 +26,14 @@ are fixable inside the investigation scope. The same work-on agent remains the s
 A stale, advisory, possible, low/medium, pre-existing, or unrelated finding does not enter
 remediation. Keep valuable independent findings as non-blocking follow-ups.
 
+## Scope reassessment
+
+Before another edit, reassess cohesion if review reveals distinct omitted outcomes, phased
+requirements or repeated cross-boundary non-convergence. Scope reassessment may propose
+decomposition under `investigate.md`/`decompose.md`; it does not reset the budget. Preserve
+partial work and require an approved handoff for an existing PR. If the work remains atomic,
+continue only its authorized round/remaining budget. Do not split merely to evade the cap.
+
 ## Cohesive fix
 
 1. Reproduce or verify every blocker against the current head, recording trigger,
@@ -33,7 +41,8 @@ remediation. Keep valuable independent findings as non-blocking follow-ups.
    exception carried from investigation).
 2. Do not fix only the reported line. Identify the required behavior behind the blocker,
    check its related paths once, and include every reachable occurrence in the same
-   remediation. If Behavior Coverage was incomplete, update it before editing.
+   remediation. If Behavior Coverage was incomplete, append a superseding scope record
+   before editing; preserve the prior decision.
 3. Group findings by shared behavior and affected boundary.
 4. Plan one cohesive patch covering all reachable occurrences; do not create one head or
    issue per finding. Reinvestigate repeated same-cause gaps together, within the bounded
@@ -57,11 +66,13 @@ Publish at most one receipt for the new head:
 
 ```markdown
 <!-- FORGE:REMEDIATION -->
+<!-- FORGE:RECORD {"v":1,"source_head":"<new implementation commit>","inputs":["<prior review permalink>","<current plan/contract permalink>"],"supersedes":null} -->
 ## Remediation Complete
 
 **Prior reviewed head**: `<full SHA>`
 **New head**: `<full SHA>`
 **Remediation round**: `<used>/<configured limit>`
+**Inputs / Supersedes**: <actual links matching metadata, or none>
 
 ### Blockers addressed
 - `<finding>` — <fix and regression evidence>

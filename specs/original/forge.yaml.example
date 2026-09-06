@@ -569,15 +569,16 @@ branches:
 #   #
 #   # Declare your project's actual toolchain here once. Pipeline stages read these
 #   # values and run your commands directly — they never assume poetry/npm/tsc.
-#   # When a key is absent or empty, the stage logs "SKIPPED — not configured in
-#   # verification.commands" and continues without failing. This means you can adopt
-#   # the schema incrementally: add only the steps your project actually uses.
+#   # In the active Pi workflow, absent required commands trigger bounded discovery
+#   # from repository-owned tooling; they never imply PASS. Retain explicit overrides
+#   # and report genuinely unavailable evidence. See specs/verification.md for the
+#   # optional discovery scope/source fingerprints and selective execution contract.
 #   #
 #   # Each command is a shell string run from the repository root (or the worktree
 #   # root). Use relative paths or rely on $PATH. Commands may include flags.
 #   #
-#   # Language keys are arbitrary identifiers — name them after your stack.
-#   # Common keys: python, typescript, go, rust, java, node
+#   # Group keys are arbitrary identifiers: language names or owning components
+#   # such as api, worker, web. Prefer component groups when toolchains differ.
 #   #
 #   # commands:
 #   #   # Python project using ruff + pytest
