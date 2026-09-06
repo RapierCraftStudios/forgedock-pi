@@ -30,7 +30,6 @@ import {
   forgeCommitArguments,
   forgePushArguments,
   isForgeRuntimePath,
-  isDirectGitCommitCommand,
   parseBoundReviewerResult,
   parseGitStatusPaths,
   phaseProjectionLabels,
@@ -67,9 +66,8 @@ test("child process timeout force-terminates an uncooperative child", async () =
 });
 
 test("implementation shell cannot bypass the forge commit boundary", () => {
-  assert.equal(isDirectGitCommitCommand({ command: "git commit -m x" }), true);
-  assert.equal(isDirectGitCommitCommand({ command: "git -c core.hooksPath=/tmp -C repo commit" }), true);
-  assert.equal(isDirectGitCommitCommand({ command: "git status --short" }), false);
+  assert.match(boundedToolDenial("implement", "bash") ?? "", /Shell execution is disabled/);
+  assert.match(boundedToolDenial(undefined, "bash") ?? "", /Shell execution is disabled/);
 });
 
 test("technical phase failures do not project needs-human authority", () => {
@@ -131,7 +129,7 @@ test("read-only nodes deny shell and file mutation tools", () => {
   assert.match(boundedToolDenial("investigate", "write") ?? "", /read-only/);
   assert.match(boundedToolDenial("plan", "edit") ?? "", /read-only/);
   assert.equal(boundedToolDenial("implement", "edit"), undefined);
-  assert.equal(boundedToolDenial("implement", "bash"), undefined);
+  assert.match(boundedToolDenial("implement", "bash") ?? "", /Shell execution is disabled/);
   assert.equal(allowedNodeTools("implement").has("forge_proof_closure"), true);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_proof_closure"), true);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("bash"), false);

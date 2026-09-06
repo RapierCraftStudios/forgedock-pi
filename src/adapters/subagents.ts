@@ -775,7 +775,7 @@ function safeScriptJson(value: unknown): string {
 
 function boundedShellGuidance(node: WorkflowNode): string {
   if (node === "implement")
-    return "Bash is available for implementation and Git inspection inside the assigned worktree. Use forge_commit for the authoritative commit and do not push or write GitHub state directly.";
+    return "Shell execution is unavailable for implementation. Use read/edit and the named Forge tools; forge_commit is the only commit boundary.";
   if (["resolve", "investigate", "plan"].includes(node))
     return "This is a read-only node. Use only read, grep, find, and ls against the assigned worktree plus the supplied issue context. Shell execution, source edits, Git writes, and GitHub writes are unavailable.";
   return "Shell execution is unavailable in this node.";

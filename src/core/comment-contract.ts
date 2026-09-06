@@ -131,7 +131,9 @@ export interface PreparedReviewArtifact extends PhaseArtifactBase {
 }
 
 const schemaString = { type: "string", minLength: 1 } as const;
+const proofString = { type: "string", minLength: 1, pattern: "\\S" } as const;
 const schemaStrings = { type: "array", items: schemaString } as const;
+const proofStrings = { type: "array", items: proofString } as const;
 const schemaNonEmptyStrings = { type: "array", minItems: 1, items: schemaString } as const;
 const acceptanceCheckSchema = {
   type: "object",
@@ -190,8 +192,8 @@ export const FORGE_PHASE_ARTIFACT_SCHEMA = {
         ...artifactIdentity,
         phase: { type: "string", const: "plan" },
         risk: { type: "string", enum: ["low", "high"] },
-        riskSignals: schemaStrings,
-        proofObligations: { type: "array", items: { type: "object", additionalProperties: false, required: ["criterion", "invariant", "counterexample", "boundaryConsumers", "testCommand", "failingBefore", "passingAfter", "state", "required"], properties: { criterion: schemaString, invariant: schemaString, counterexample: schemaString, boundaryConsumers: schemaString, testCommand: schemaString, failingBefore: schemaString, passingAfter: schemaString, state: { type: "string", enum: ["PASS", "FAIL", "MISSING", "SKIPPED", "CONTRADICTED", "UNKNOWN"] }, required: { type: "boolean" } } } },
+        riskSignals: proofStrings,
+        proofObligations: { type: "array", items: { type: "object", additionalProperties: false, required: ["criterion", "invariant", "counterexample", "boundaryConsumers", "testCommand", "failingBefore", "passingAfter", "state", "required"], properties: { criterion: proofString, invariant: proofString, counterexample: proofString, boundaryConsumers: proofString, testCommand: proofString, failingBefore: proofString, passingAfter: proofString, state: { type: "string", enum: ["PASS", "FAIL", "MISSING", "SKIPPED", "CONTRADICTED", "UNKNOWN"] }, required: { type: "boolean" } } } },
         objective: schemaString,
         allowedPaths: schemaNonEmptyStrings,
         forbiddenChanges: schemaNonEmptyStrings,
@@ -379,6 +381,7 @@ function objectValue(value: unknown): value is Record<string, unknown> {
 function validProofObligations(value: unknown): value is ProofObligation[] {
   return Array.isArray(value) && value.every((row) =>
     objectValue(row) &&
+    Object.keys(row).every((key) => ["criterion", "invariant", "counterexample", "boundaryConsumers", "testCommand", "failingBefore", "passingAfter", "state", "required"].includes(key)) &&
     strings(row, ["criterion", "invariant", "counterexample", "boundaryConsumers", "testCommand", "failingBefore", "passingAfter"]) &&
     enumValue(row.state, ["PASS", "FAIL", "MISSING", "SKIPPED", "CONTRADICTED", "UNKNOWN"]) &&
     typeof row.required === "boolean"

@@ -53,7 +53,10 @@ import {
   createProofClosureContract,
   type BuilderPathContract,
 } from "../core/builder-contract.ts";
-import { renderPhaseArtifact } from "../core/comment-contract.ts";
+import {
+  isPhaseArtifact,
+  renderPhaseArtifact,
+} from "../core/comment-contract.ts";
 import {
   chooseNextExecutableNode,
   chooseReadyReviewerNodes,
@@ -142,6 +145,7 @@ export interface ActiveRunLink {
   findingIssueMap: Record<string, number>;
   issueContext: string;
   planContext?: string;
+  proofRisk?: "low" | "high";
   builderContract?: BuilderPathContract;
   activeNodes: Record<string, ActiveNodeRunLink>;
   currentNodeId?: string;
@@ -479,6 +483,36 @@ export class ForgeWorkOnController {
           const { policy } = await loadForgePolicy(
             link.prepared.repositoryRoot,
           );
+          const directArtifacts = directState.events
+            .map((event) => (event.payload as Record<string, unknown>).artifact)
+            .filter(isPhaseArtifact);
+          const directInvestigation = [...directArtifacts]
+            .reverse()
+            .find((artifact) => artifact.phase === "investigate");
+          const directPlan = [...directArtifacts]
+            .reverse()
+            .find((artifact) => artifact.phase === "plan");
+          const directBuilderContract = directPlan?.phase === "plan"
+            ? createBuilderPathContract(
+                directPlan.allowedPaths,
+                1,
+                createProofClosureContract({
+                  repository: link.repository,
+                  issueNumber: link.issueNumber,
+                  target: link.prepared.baseBranch,
+                  baseSha: link.prepared.baseSha,
+                  risk:
+                    directInvestigation?.phase === "investigate" &&
+                    (directInvestigation.severity === "critical" ||
+                      directInvestigation.severity === "high" ||
+                      directInvestigation.complexity === "complex")
+                      ? "high"
+                      : directPlan.risk,
+                  riskSignals: directPlan.riskSignals,
+                  obligations: directPlan.proofObligations,
+                }),
+              )
+            : undefined;
           this.#directBinding = {
             runId: link.forgeRunId,
             resultPath: link.resultPath,
@@ -494,6 +528,7 @@ export class ForgeWorkOnController {
             maxReviewRounds: policy.review.maxRounds,
             reviewerTimeoutMs: policy.subagents.reviewerTimeoutMs,
             verificationCommands: policy.verification.commands,
+            ...(directBuilderContract ? { builderContract: directBuilderContract } : {}),
             refresh: false,
           };
           process.env.PI_SUBAGENT_EXTENSION_BINDINGS = JSON.stringify({
@@ -1666,6 +1701,15 @@ export class ForgeWorkOnController {
       if (!comments.some((comment) => comment.includes(renderedArtifact)))
         throw new Error(`Node ${nodeResult.nodeId} artifact read-back failed.`);
     }
+    if (nodeResult.status === "completed" && nodeResult.artifact?.phase === "investigate") {
+      if (
+        nodeResult.artifact.severity === "critical" ||
+        nodeResult.artifact.severity === "high" ||
+        nodeResult.artifact.complexity === "complex"
+      )
+        link.proofRisk = "high";
+      else if (!link.proofRisk) link.proofRisk = "low";
+    }
     const completedBuilderContract =
       nodeResult.status === "completed" && nodeResult.artifact?.phase === "plan"
         ? createBuilderPathContract(
@@ -1676,7 +1720,7 @@ export class ForgeWorkOnController {
               issueNumber: link.issueNumber,
               target: link.prepared.baseBranch,
               baseSha: link.prepared.baseSha,
-              risk: nodeResult.artifact.risk,
+              risk: link.proofRisk === "high" ? "high" : nodeResult.artifact.risk,
               riskSignals: nodeResult.artifact.riskSignals,
               obligations: nodeResult.artifact.proofObligations,
             }),
@@ -4074,6 +4118,7 @@ export class ForgeWorkOnController {
       leaseOwnerRunId: link.leaseOwnerRunId,
       policy,
       issueContext: link.issueContext,
+      ...(link.builderContract ? { builderContract: link.builderContract } : {}),
       previousResult: result,
       refreshAttempt: link.refreshes,
     });
@@ -6186,6 +6231,7 @@ function normalizeActiveRunLink(value: unknown): ActiveRunLink | undefined {
     ...(typeof link.planContext === "string"
       ? { planContext: link.planContext }
       : {}),
+    ...(link.proofRisk ? { proofRisk: link.proofRisk } : {}),
     ...(link.builderContract ? { builderContract: link.builderContract } : {}),
     activeNodes:
       link.activeNodes && typeof link.activeNodes === "object"

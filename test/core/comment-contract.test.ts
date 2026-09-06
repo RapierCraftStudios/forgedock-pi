@@ -172,6 +172,27 @@ test("investigation rendering is deterministic and never invents routing", () =>
 
 test("high-risk plans require proof obligations while low-risk plans may use the fast path", () => {
   assert.equal(isPhaseArtifact({ ...plan, risk: "high" }), false);
+  const obligation = {
+    criterion: "AC-1",
+    invariant: "No loss",
+    counterexample: "Concurrent mutation",
+    boundaryConsumers: "producer/consumer",
+    testCommand: "npm test",
+    failingBefore: "loses item",
+    passingAfter: "keeps item",
+    state: "PASS",
+    required: true,
+  };
+  assert.equal(
+    Check(FORGE_PHASE_ARTIFACT_SCHEMA, {
+      ...plan,
+      risk: "high",
+      riskSignals: ["concurrency"],
+      proofObligations: [{ ...obligation, invariant: " " }],
+    }),
+    false,
+  );
+  assert.equal(isPhaseArtifact({ ...plan, proofObligations: [{ ...obligation, unknown: true }] }), false);
   assert.equal(
     isPhaseArtifact({
       ...plan,

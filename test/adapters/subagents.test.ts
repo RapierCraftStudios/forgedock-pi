@@ -385,7 +385,7 @@ test("bounded implementation launch binds the durable builder contract", async (
   );
   assert.match(spawn.params.task, new RegExp(builderContract.contractHash));
   assert.match(spawn.params.task, /Allowed paths: src\/\*\*, test\/\*\*/);
-  assert.match(spawn.params.task, /Bash is available for implementation/);
+  assert.match(spawn.params.task, /Shell execution is unavailable for implementation/);
   assert.match(spawn.params.task, /forge_proof_closure/);
 });
 
