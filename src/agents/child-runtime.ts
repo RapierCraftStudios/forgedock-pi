@@ -41,6 +41,8 @@ import { resolveVerificationCommandDirectory } from "../adapters/verification-pr
 import {
   assertBuilderContractPaths,
   assertProofClosure,
+  createBuilderPathContract,
+  createProofClosureContract,
   type BuilderPathContract,
   type ProofClosureContract,
   validateBuilderPathContract,
@@ -311,7 +313,8 @@ export function registerForgeRuntime(
   let caseInsensitivePaths: boolean | undefined;
   let refreshPushLeaseSha: string | undefined;
   let preparedPull: { number: number; headSha: string } | undefined;
-  let proofClosureApproved: ProofClosureContract | undefined;
+  let trustedBuilderContract: BuilderPathContract | undefined;
+  let trustedInvestigationRisk: "low" | "high" = "low";
   let reviewDiffCoverage:
     | { headSha: string; sha256: string; bytes: number; coveredBytes: number }
     | undefined;
@@ -362,6 +365,15 @@ export function registerForgeRuntime(
     }
     const denial = boundedToolDenial(binding.node, event.toolName);
     if (denial) return { block: true, reason: denial };
+    if (
+      event.toolName === "bash" &&
+      (!binding.node || binding.node === "implement") &&
+      isDirectGitCommitCommand(event.input)
+    )
+      return {
+        block: true,
+        reason: "Direct git commit is disabled; admit proof closure and use forge_commit.",
+      };
     if (event.toolName.startsWith("forge_") || event.toolName === "subagent") {
       const allowed = allowedNodeTools(binding.node);
       if (!allowed.has(event.toolName))
@@ -691,13 +703,17 @@ export function registerForgeRuntime(
     async execute(_toolCallId, params) {
       assertWorkOnAuthority(binding);
       const contract = params.contract as ProofClosureContract;
+      const trusted = binding.builderContract?.proofClosure ?? trustedBuilderContract?.proofClosure;
+      if (!trusted)
+        throw new Error("Proof closure requires a completed, typed plan artifact.");
       assertProofClosure(contract, {
         repository: binding.repository,
         issueNumber: binding.issueNumber!,
         target: binding.baseBranch,
         baseSha: binding.baseSha,
       });
-      proofClosureApproved = contract;
+      if (JSON.stringify(contract) !== JSON.stringify(trusted))
+        throw new Error("Proof closure does not match the trusted plan contract.");
       return {
         content: [{ type: "text", text: "Proof closure admitted for this bound run." }],
         details: { schema: contract.schema, risk: contract.risk, obligations: contract.obligations.length },
@@ -758,16 +774,17 @@ export function registerForgeRuntime(
           details,
         };
       }
-      if (params.kind === "implementation" && !binding.builderContract?.proofClosure && !proofClosureApproved)
+      const effectiveBuilderContract = binding.builderContract ?? trustedBuilderContract;
+      if (params.kind === "implementation" && !effectiveBuilderContract?.proofClosure)
         throw new Error(
-          "Implementation commit refused without admitted proof closure.",
+          "Implementation commit refused without a trusted plan proof closure.",
         );
-      if (binding.builderContract)
-        assertBuilderContractPaths(binding.builderContract, changedPaths);
-      if (params.kind === "implementation" || binding.builderContract?.proofClosure) {
-        const proof = binding.builderContract?.proofClosure ?? proofClosureApproved;
+      if (effectiveBuilderContract)
+        assertBuilderContractPaths(effectiveBuilderContract, changedPaths);
+      if (params.kind === "implementation" || effectiveBuilderContract?.proofClosure) {
+        const proof = effectiveBuilderContract?.proofClosure;
         if (!proof)
-          throw new Error("Commit refused without proof closure.");
+          throw new Error("Commit refused without a trusted proof closure.");
         assertProofClosure(proof, {
           repository: binding.repository,
           issueNumber: binding.issueNumber!,
@@ -817,8 +834,8 @@ export function registerForgeRuntime(
         throw new Error(
           "Cannot create a Forge commit with no validated implementation changes.",
         );
-      if (binding.builderContract)
-        assertBuilderContractPaths(binding.builderContract, stagedPaths);
+      if (effectiveBuilderContract)
+        assertBuilderContractPaths(effectiveBuilderContract, stagedPaths);
       const preCommitHead = await gitHead(root, binding.runId, signal);
       const stagedTreeResult = await runProcess(
         "git",
@@ -904,7 +921,7 @@ export function registerForgeRuntime(
         committedPaths,
         ignoreCase,
       });
-      if (binding.builderContract) {
+      if (effectiveBuilderContract) {
         const contractPaths = await runProcess(
           "git",
           [
@@ -934,7 +951,7 @@ export function registerForgeRuntime(
             `Unable to validate committed builder contract paths: ${contractPaths.stderr}`,
           );
         assertBuilderContractPaths(
-          binding.builderContract,
+          effectiveBuilderContract,
           parseChangedGitPaths(contractPaths.stdout),
         );
       }
@@ -1654,6 +1671,30 @@ export function registerForgeRuntime(
       const phaseArtifact = isPhaseArtifact(params.artifact)
         ? params.artifact
         : undefined;
+      if (phaseArtifact?.phase === "investigate") {
+        trustedInvestigationRisk =
+          phaseArtifact.severity === "critical" ||
+          phaseArtifact.severity === "high" ||
+          phaseArtifact.complexity === "complex"
+            ? "high"
+            : "low";
+      }
+      if (phaseArtifact?.phase === "plan" && !binding.builderContract) {
+        const risk = trustedInvestigationRisk === "high" ? "high" : phaseArtifact.risk;
+        trustedBuilderContract = createBuilderPathContract(
+          phaseArtifact.allowedPaths,
+          1,
+          createProofClosureContract({
+            repository: binding.repository,
+            issueNumber: binding.issueNumber!,
+            target: binding.baseBranch,
+            baseSha: binding.baseSha,
+            risk,
+            riskSignals: phaseArtifact.riskSignals,
+            obligations: phaseArtifact.proofObligations,
+          }),
+        );
+      }
       const { artifact: _untrustedArtifact, ...checkpointParams } = params;
       if (binding.refresh)
         throw new Error(
@@ -2431,6 +2472,10 @@ function validatePhaseReport(phase: RunPhase, report: string): void {
 }
 
 const READ_ONLY_NODES = new Set(["resolve", "investigate", "plan"]);
+
+export function isDirectGitCommitCommand(input: unknown): boolean {
+  return /\bgit\b[^\n]*\bcommit(?:-tree)?\b/.test(JSON.stringify(input));
+}
 
 export function boundedToolDenial(
   node: string | undefined,

@@ -120,38 +120,40 @@ export function validateProofClosureContract(
   if (
     contract.schema !== "forgedock.proof-closure/v1" ||
     typeof contract.repository !== "string" ||
-    !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(contract.repository) ||
+    !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(contract.repository.trim()) ||
     typeof contract.issueNumber !== "number" ||
     !Number.isSafeInteger(contract.issueNumber) ||
     contract.issueNumber < 1 ||
     typeof contract.target !== "string" ||
-    !contract.target ||
+    !contract.target.trim() ||
     typeof contract.baseSha !== "string" ||
     !/^[a-f0-9]{40,64}$/.test(contract.baseSha) ||
     (contract.risk !== "low" && contract.risk !== "high") ||
     !Array.isArray(contract.riskSignals) ||
-    contract.riskSignals.some((entry) => typeof entry !== "string" || !entry) ||
-    !Array.isArray(contract.obligations)
+    contract.riskSignals.some((entry) => typeof entry !== "string" || !entry.trim()) ||
+    !Array.isArray(contract.obligations) ||
+    Object.keys(contract).some((key) => !["schema", "repository", "issueNumber", "target", "baseSha", "risk", "riskSignals", "obligations"].includes(key))
   )
     throw new TypeError("Proof closure contract shape is invalid.");
   for (const row of contract.obligations) {
     if (
       !row ||
       typeof row !== "object" ||
+      Object.keys(row).some((key) => !["criterion", "invariant", "counterexample", "boundaryConsumers", "testCommand", "failingBefore", "passingAfter", "state", "required"].includes(key)) ||
       typeof row.criterion !== "string" ||
-      !row.criterion ||
+      !row.criterion.trim() ||
       typeof row.invariant !== "string" ||
-      !row.invariant ||
+      !row.invariant.trim() ||
       typeof row.counterexample !== "string" ||
-      !row.counterexample ||
+      !row.counterexample.trim() ||
       typeof row.boundaryConsumers !== "string" ||
-      !row.boundaryConsumers ||
+      !row.boundaryConsumers.trim() ||
       typeof row.testCommand !== "string" ||
-      !row.testCommand ||
+      !row.testCommand.trim() ||
       typeof row.failingBefore !== "string" ||
-      !row.failingBefore ||
+      !row.failingBefore.trim() ||
       typeof row.passingAfter !== "string" ||
-      !row.passingAfter ||
+      !row.passingAfter.trim() ||
       typeof row.required !== "boolean" ||
       !["PASS", "FAIL", "MISSING", "SKIPPED", "CONTRADICTED", "UNKNOWN"].includes(row.state)
     )

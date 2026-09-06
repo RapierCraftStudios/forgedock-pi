@@ -30,6 +30,7 @@ import {
   forgeCommitArguments,
   forgePushArguments,
   isForgeRuntimePath,
+  isDirectGitCommitCommand,
   parseBoundReviewerResult,
   parseGitStatusPaths,
   phaseProjectionLabels,
@@ -63,6 +64,12 @@ test("child process timeout force-terminates an uncooperative child", async () =
 
   assert.equal(result.timedOut, true);
   assert.ok(Date.now() - started < 2_000);
+});
+
+test("implementation shell cannot bypass the forge commit boundary", () => {
+  assert.equal(isDirectGitCommitCommand({ command: "git commit -m x" }), true);
+  assert.equal(isDirectGitCommitCommand({ command: "git -c core.hooksPath=/tmp -C repo commit" }), true);
+  assert.equal(isDirectGitCommitCommand({ command: "git status --short" }), false);
 });
 
 test("technical phase failures do not project needs-human authority", () => {

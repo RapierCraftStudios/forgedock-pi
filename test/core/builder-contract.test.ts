@@ -87,6 +87,23 @@ test("proof closure binds identity and rejects incomplete required obligations",
     assertProofClosure(contract, { ...contract, issueNumber: 506 }),
     /identity/,
   );
+  assert.throws(() =>
+    validateBuilderPathContract({
+      ...pathContract,
+      proofClosure: { ...contract, unknown: true },
+    }),
+    /shape/,
+  );
+  assert.throws(() =>
+    validateBuilderPathContract({
+      ...pathContract,
+      proofClosure: {
+        ...contract,
+        obligations: [{ ...row, invariant: " " }],
+      },
+    }),
+    /shape/,
+  );
 });
 
 test("contract hashes bind normalized paths and revisions", () => {
