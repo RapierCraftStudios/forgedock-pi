@@ -68,7 +68,33 @@ CHANGED_FILES: file1.py file2.tsx file3.sql
 PR_BASE: staging|milestone/slug
 TASK_TYPE: bug-fix|feature|refactor|investigation
 ISSUE_NUMBER: #123
+PROOF_CONTRACT: <exact FORGE:CONTRACT / FORGE:ARCHITECT identity>
+RISK_SIGNALS: <investigation risk signals, not issue prose>
 ```
+
+## Proof-closure admission (required before commit or PR publication)
+
+This gate consumes the exact `ISSUE_NUMBER`, `PROOF_CONTRACT`, and `RISK_SIGNALS` supplied by
+work-on; it never infers identity from a filename, branch, neighboring issue, or free-form issue
+text. A proof row has these fields: `criterion`, `invariant`, `counterexample`,
+`boundary/consumers`, `test/command`, `failing-before`, `passing-after`, and `state`.
+
+Apply this barrier only when investigation or the staged diff signals `HIGH`/`COMPLEX`, shared
+state, concurrency, data integrity, security boundaries, external side effects, or a
+cross-service protocol. For applicable stateful/concurrent changes, require rows for mutation
+and interleaving, duplicate/reordered data, partial failure/retry/recovery, serialization/type
+contracts, and producer/consumer namespace boundaries when each is relevant. This is generic
+and technology-agnostic; it does not encode an issue, repository, or service rule.
+
+Compare the staged diff and executable evidence to every applicable row. Emit a blocking
+`PROOF-CLOSURE | HIGH` finding when a row is `MISSING`, `UNKNOWN`, `CONTRADICTED`, or `SKIPPED`
+because required-risk capability is unavailable. A row is `PASS` only when its counterexample,
+boundary, exact test/command, and failing-before/passing-after evidence are all accounted for.
+Optional checks retain their existing explicit `SKIPPED` reporting and do not become blockers.
+The gate cannot return `PASS`, and the builder cannot commit or create/update a PR, until every
+required row is closed. Local repairs before publication do not consume a PR remediation round.
+For low-risk work with no trigger, report that proof closure was not applicable and retain the
+current fast path. Final independent exact-head review remains mandatory and unchanged.
 
 ## Step 1: Read the diff
 
