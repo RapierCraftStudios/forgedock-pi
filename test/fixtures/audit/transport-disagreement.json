@@ -1,19 +1,15 @@
 {
   "schemaVersion": 1,
   "auditStatus": "PARTIAL",
-  "runId": "run-disagreement-004",
   "selector": {"kind": "run-id", "value": "run-disagreement-004"},
-  "identity": {"repository": "owner/repo", "owner": "owner-004"},
+  "identity": {"runId": "run-disagreement-004", "repository": "owner/repo", "request": "request-disagreement-004"},
   "sources": ["native:aggregate", "native:child", "github:issue-4"],
-  "terminal": "GATED",
-  "evidence": ["aggregate", "child-handoff", "github-record"],
   "timeline": [{"phase": "transport", "state": "CONTRADICTED"}],
   "evidenceGraph": {"nodes": ["aggregate", "child", "github"], "edges": [{"from": "run", "to": "aggregate", "source": "native", "confidence": "validated"}, {"from": "run", "to": "child", "source": "native", "confidence": "validated"}, {"from": "run", "to": "github", "source": "github", "confidence": "linked"}]},
   "coverage": [{"criterion": "transport-integrity", "invariants": ["preserve source claims"], "failureModes": ["aggregate disagrees with child"], "boundaries": [{"producer": "aggregate", "consumer": "reconciler", "typeOrNamespace": "result"}], "sources": ["native:aggregate", "native:child"], "state": "CONTRADICTED", "reason": "aggregate=FAILED; child=GATED", "capturedAt": null}],
   "causes": {"earliestPreventable": {"state": "UNKNOWN"}, "detection": {"state": "CONTRADICTED"}, "termination": {"state": "PASS"}},
-  "production": {"mode": "normal", "exposure": "UNVERIFIED", "anchor": null},
+  "production": {"mode": "normal", "exposure": "NOT_REQUESTED", "anchor": null},
   "disagreements": ["aggregate=FAILED; child=GATED"],
-  "requiredCapability": {"name": "integration-service", "state": "SKIPPED"},
   "recommendations": ["preserve disagreement"],
   "limitations": ["required capability skipped"]
 }

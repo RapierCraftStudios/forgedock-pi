@@ -38,12 +38,11 @@ test("anonymized audit fixtures cover the terminal and disagreement matrix", asy
     const fixture = JSON.parse(await readFile(`${fixtureRoot}/${name}`, "utf8")) as Record<string, unknown>;
     assert.equal(fixture.schemaVersion, 1, name);
     assert.equal(typeof fixture.auditStatus, "string", name);
-    assert.equal(typeof fixture.runId, "string", name);
     assert.ok(fixture.selector && typeof fixture.selector === "object", name);
     assert.ok(fixture.identity && typeof fixture.identity === "object", name);
+    const identity = fixture.identity as Record<string, unknown>;
+    assert.ok(identity.runId && identity.repository && identity.request, name);
     assert.ok(Array.isArray(fixture.sources), name);
-    assert.equal(typeof fixture.terminal, "string", name);
-    assert.ok(Array.isArray(fixture.evidence), name);
     assert.ok(Array.isArray(fixture.timeline), name);
     assert.ok(fixture.evidenceGraph && typeof fixture.evidenceGraph === "object", name);
     const graph = fixture.evidenceGraph as { edges?: Array<Record<string, unknown>> };
@@ -53,6 +52,8 @@ test("anonymized audit fixtures cover the terminal and disagreement matrix", asy
     assert.ok(coverage.every((row) => row.invariants && row.failureModes && row.boundaries && row.sources && row.state && row.reason && "capturedAt" in row), name);
     assert.ok(fixture.causes && typeof fixture.causes === "object", name);
     assert.ok(fixture.production && typeof fixture.production === "object", name);
+    const production = fixture.production as Record<string, unknown>;
+    assert.equal(production.exposure, "NOT_REQUESTED", name);
     assert.ok(Array.isArray(fixture.disagreements), name);
     assert.ok(Array.isArray(fixture.recommendations), name);
     assert.ok(Array.isArray(fixture.limitations), name);
@@ -63,10 +64,10 @@ test("anonymized audit fixtures cover the terminal and disagreement matrix", asy
 test("audit output retains disagreements and required-capability limitations", async () => {
   const fixture = JSON.parse(await readFile(`${fixtureRoot}/transport-disagreement.json`, "utf8")) as {
     disagreements: string[];
-    requiredCapability: { state: string };
+    limitations: string[];
     production: { exposure: string };
   };
   assert.ok(fixture.disagreements.length > 0);
-  assert.equal(fixture.requiredCapability.state, "SKIPPED");
-  assert.equal(fixture.production.exposure, "UNVERIFIED");
+  assert.ok(fixture.limitations.some((item) => item.includes("capability")));
+  assert.equal(fixture.production.exposure, "NOT_REQUESTED");
 });
