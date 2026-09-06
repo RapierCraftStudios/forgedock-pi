@@ -19,6 +19,7 @@ into one combined comment; preserve each stage's identity and actual publication
 | `FORGE:BUILDER` | Issue, after verified implementation | What actually changed, deviations and their decision links, commits, tests and limitations |
 | `FORGE:REVIEW-PANEL` | PR, after complete review | Exact-head verdict, graph context considered, finding dispositions with causal evidence and justified prevention lessons |
 | `FORGE:TRAJECTORY` | Issue, at terminal reconciliation | Outcome, exact release identity, links to the record chain, important corrections/lessons and remaining limitations |
+| `FORGE:GATED` | Issue, when blocked | Exact bound identity, blocker/wake condition and preserved-work references; never a delivery claim |
 
 For BUILD, publish and read back classification, context, contract and plan before the first
 repository source/test edit. Read-only investigation and disposable reproduction probes may
@@ -36,10 +37,19 @@ checks. No heartbeat, per-tool progress notice or duplicate table is needed.
 
 ## Common envelope
 
-Use the known phase marker on the first line and one JSON metadata line immediately below.
-Generate JSON with normal serialization rather than hand-escaping shell strings. GitHub's
+Use `helpers/record.mjs` under `mechanical-execution.md` to render/publish the envelope.
+Write body sections literally with the native write tool; never interpolate Markdown through
+shell heredocs. The helper derives issue/model/limit from bound input and source head from
+Git (or a validated frozen commit), then generates matching machine and human headers.
+The known phase marker is first, with one JSON metadata line below. Do not hand-type SHAs
+or reconstruct the envelope during each publication. GitHub's
 API supplies the actual comment ID, URL, author and created/updated timestamps; do not invent
 them or duplicate them as claimed execution times.
+
+Exception: standalone PR review without a bound work-on issue retains direct file-backed
+publication. Use the frozen repository/PR/head returned by GitHub, serialize the metadata,
+write literal Markdown with the native write tool and post with `gh --body-file`/`-F body=@file`;
+read back the exact comment. Do not invent an issue or lane policy to use the helper.
 
 ```markdown
 <!-- FORGE:CONTRACT -->
@@ -101,9 +111,9 @@ pagination metadata. The following jq projection discovers named records, preser
 GitHub identities/body, and exposes new metadata without discarding legacy records:
 
 ```jq
-map(select((.body // "") | test("(?m)^<!-- FORGE:(INVESTIGATOR|CLASSIFICATION|FAST_PATH|CONTEXT|CONTRACT|ARCHITECT|BUILDER|REVIEW-PANEL|REVIEW:PANEL|REVIEW|REMEDIATION|DECOMPOSED|TRAJECTORY) -->")))
+map(select((.body // "") | test("(?m)^<!-- FORGE:(INVESTIGATOR|CLASSIFICATION|FAST_PATH|CONTEXT|CONTRACT|ARCHITECT|BUILDER|REVIEW-PANEL|REVIEW:PANEL|REVIEW|REMEDIATION|DECOMPOSED|GATED|TRAJECTORY) -->")))
 | map(. as $c
-  | (($c.body | capture("(?m)^<!-- FORGE:(?<kind>INVESTIGATOR|CLASSIFICATION|FAST_PATH|CONTEXT|CONTRACT|ARCHITECT|BUILDER|REVIEW-PANEL|REVIEW:PANEL|REVIEW|REMEDIATION|DECOMPOSED|TRAJECTORY) -->")).kind) as $kind
+  | (($c.body | capture("(?m)^<!-- FORGE:(?<kind>INVESTIGATOR|CLASSIFICATION|FAST_PATH|CONTEXT|CONTRACT|ARCHITECT|BUILDER|REVIEW-PANEL|REVIEW:PANEL|REVIEW|REMEDIATION|DECOMPOSED|GATED|TRAJECTORY) -->")).kind) as $kind
   | ((try (($c.body | split("\n") | .[1] // "")
       | capture("^<!-- FORGE:RECORD (?<data>.+) -->$").data | fromjson) catch null) // null) as $record
   | {id: $c.id, url: ($c.html_url // $c.url), created_at: ($c.created_at // $c.createdAt),

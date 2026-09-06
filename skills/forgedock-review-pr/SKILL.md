@@ -70,6 +70,12 @@ review. Do not blindly relaunch the previous panel.
 
 ## Run one panel
 
+A work-on owner uses the bound policy and `../../specs/helpers/dispatch.mjs review` to prepare
+the request. Supply role tasks/thinking and actual round/head, never a model or cap copied
+from history. Execute the generated request unchanged; out-of-policy preparation fails
+before reviewer admission. Standalone PR review without a bound issue keeps the existing
+direct route and canonical configuration; never invent an issue to satisfy helper inputs.
+
 Prepare the full diff once and deterministic role bundles. Embed the relevant diff in each
 task or give the delegate one stable readable file path; never use `runs.host` to transfer
 it. Launch all selected roles as fresh ordinary `delegate` agents with full normal tool

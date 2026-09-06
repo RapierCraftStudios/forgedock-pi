@@ -51,7 +51,9 @@ In the existing investigator receipt, record only decision-relevant entries:
 
 The disposition is applied, superseded/contradicted with evidence, or unresolved. State
 how an applied lesson changes scope, implementation, or verification; citation alone is
-not reuse. Unresolved required constraints must not silently disappear. Historical co-change
+not reuse. For each material safety/correctness constraint, name a counterexample that
+would violate it and the planned check. Preserving a constant or guard name is not proof
+that renewal, retries, old state or valid-path progress still satisfy the constraint. Unresolved required constraints must not silently disappear. Historical co-change
 or similarity never creates a scheduling edge by itself; the normal hard-edge rules remain.
 
 Do not replay a completed investigation merely because an old receipt lacks a new heading.

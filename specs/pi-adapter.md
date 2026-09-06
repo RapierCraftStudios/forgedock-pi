@@ -82,6 +82,9 @@ proof that the owner consumed the results or completed merge/closure. The outer 
 remains async and all selected reviewers run concurrently; never emit terminal DONE just
 because a panel was dispatched.
 
+Work-on owners prepare panel data with `helpers/dispatch.mjs review`; it applies the bound
+model/cap and emits the request without rewriting workflow code. Standalone PR reviews
+without a bound work-on issue retain their existing direct route; never invent an issue ID.
 Each item uses:
 
 - a stable role/attempt key;
@@ -136,6 +139,10 @@ Set each work-on item's `cwd` to its target base before `worktree: true`; Pi the
 the isolated issue worktree from the correct commit. Retain exact base paths for final
 owned cleanup.
 
+Prepare approved plan data through `helpers/dispatch.mjs batch` under
+`mechanical-execution.md`; invoke the generated native request unchanged. The helper reads
+the audited recipe below—agents do not reconstruct its object shape or control loop.
+
 Launch one top-level async `subagent` workflow. Set `globalConcurrencyLimit` to the batch's
 approved active-owner limit, no higher than `orchestration.max_concurrent`. If unavailable,
 use and report the extension's effective limit. It is not a host-wide limit on reviewers
@@ -159,29 +166,15 @@ Native admission occurs before the workflow concurrency semaphore. Use rolling a
 below instead of eagerly admitting every owner and spending the review allowance upfront.
 Do not use `runs.lanes` for 100 issues (32 lanes/64 stages), or claim a complete preflight
 list beyond its 64-lane limit; ordinary Promise composition supports the larger graph.
-Set control attention thresholds at or above the 1,200,000 ms panel join window. Bind an
-already-validated topological `issueGraph` of `{key, predecessors, launch}` records and
-`ownerConcurrency` to the approved limit. Prepare the read-only verification JSON input
-before creating clean bases; bind `verificationCatalogPath` and `verificationCatalogSha256`
-from that actual file. Every task carries this same descriptor, not a copied secret-bearing
-forge.yaml. Each `launch` contains:
+Set control attention thresholds at or above the 1,200,000 ms panel join window. The helper
+binds the approved topological issue list and active-owner limit to `issueGraph` and
+`ownerConcurrency`, and attaches validated policy/catalog descriptors to each task. The
+whole secret-bearing config is referenced, not copied into inputs/prose/GitHub. Native bindings carry
+identity/model/cap inputs. Use its generated `request.json`/workflow path, not a hand-built
+launch object. The field shapes are documented in `mechanical-execution.md`.
 
-```js
-{
-  agent: "forgedock-work-on-coordinator",
-  task: `${issue.number} --under-orchestration\n\nPrepared verification catalog: ${JSON.stringify({ path: verificationCatalogPath, sha256: verificationCatalogSha256 })}`,
-  context: "fresh",
-  model: configuredModel,
-  cwd: issue.targetBase,
-  worktree: true,
-  output: false,
-  outputMode: "inline",
-  artifacts: true,
-  timeoutMs: 2147483647
-}
-```
-
-Use one visible promise graph. Resolve `configuredModel` once from `forge.yaml`
+Use one visible promise graph. The following is the fixed template read by the preparation
+helper, not a loop to rewrite during each orchestration. Resolve `configuredModel` once from `forge.yaml`
 (`agents.subagent_model`, then `agents.default_model`); reject missing/legacy shorthand.
 Use one-item `runs.all` for graph launches: unlike `runs.run`, it retains failed-child
 `runId`/`resumability` instead of throwing a plain error. Resume a terminal resumable
@@ -249,11 +242,12 @@ while (pending.length || active.size) {
   if (active.size) await Promise.race([...active.values()]);
   else if (pending.length) throw new Error("Unresolved issue graph");
 }
-return issueGraph.map(({ key }) => {
+return issueGraph.map(({ key, issue, repo, target }) => {
   const result = outcomes.get(key);
   const output = resultLine(result);
   const owner = result.results?.[0];
-  return { key, ok: result.ok === true, runId: result.runId ?? null, output,
+  return { key, issue: issue ?? null, repo: repo ?? null, target: target ?? null,
+    ok: result.ok === true, runId: result.runId ?? null, output,
     status: result.ok === true ? (output.match(/status=(\w+)/)?.[1] ?? "FAILED") : (result.status ?? "FAILED"),
     blockedBy: result.blockedBy ?? [], outputReference: result.outputReference ?? null,
     artifactPaths: result.artifactPaths ?? [], resumability: result.resumability ?? null,

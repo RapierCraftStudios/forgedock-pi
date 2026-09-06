@@ -16,14 +16,15 @@ applicability, and preserve material decisions for the next cold-start agent.
 2. Read `../../specs/pi-adapter.md` once for Pi mechanics.
 3. Read `../../specs/original/commands/work-on.md` once for route and invariants.
 4. Read `../../specs/github-memory.md`, `../../specs/knowledge-records.md` and
-   `../../specs/verification.md` once for knowledge retrieval/publication and selective checks;
+   `../../specs/verification.md` and `../../specs/mechanical-execution.md` once for bound policy,
+   knowledge publication and selective checks;
    reuse them across phases.
 5. Load only the current phase file under `../../specs/original/commands/work-on/`.
 
 ## Execute
 
-Parse `forge.yaml`, verify active GitHub access, resolve repository/target/worktree/model,
-and fetch initial issue/PR state once. Retain values and refresh only after relevant writes,
+Load the authoritative prepared lane policy, verify GitHub access and fetch issue/PR state.
+Standalone work prepares policy from canonical forge.yaml before moving to its worktree. Retain values and refresh only after relevant writes,
 review completion, target movement, resume, or a missing field.
 
 Continue without stopping at intermediate success:

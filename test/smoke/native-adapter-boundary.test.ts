@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, writeFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -36,7 +36,7 @@ async function withAdapter(run: (h: any) => Promise<void>) {
       config: { worktreeBaseDir: join(root, "worktrees") }, asyncByDefault: false,
       tempArtifactsDir: join(root, "artifacts"), getSubagentSessionRoot: () => join(root, "sessions"),
       expandTilde: (value: string) => value,
-      discoverAgents: () => ({ agents: [helpers.makeAgent("echo", { thinking: false })] }),
+      discoverAgents: () => ({ agents: [helpers.makeAgent("echo", { thinking: false }), helpers.makeAgent("forgedock-work-on-coordinator", { thinking: false })] }),
       allowMutatingManagementActions: true,
     });
     await run({ root, repo, mock, executor, context: helpers.makeMinimalCtx(repo) });
@@ -51,7 +51,7 @@ async function withAdapter(run: (h: any) => Promise<void>) {
 }
 
 async function complete(executor: any, context: any, params: Record<string, unknown>) {
-  const receipt = await executor.execute("candidate-boundary", { ...params, async: true, mission: false }, new AbortController().signal, undefined, context);
+  const receipt = await executor.executePublic("candidate-boundary", { ...params, async: true, mission: false }, new AbortController().signal, undefined, context);
   assert.equal(receipt.isError, undefined, receipt.content?.[0]?.text);
   const statusFile = join(receipt.details.asyncDir, "status.json");
   // Bounded fixture wait for native publication, not model/status polling.
@@ -104,6 +104,69 @@ test("full adapter preserves original recovery references when the budget denies
     assert.ok(result.recoverySource?.runId);
     assert.ok(result.recoverySource.artifactPaths.length > 0);
     assert.equal(mock.callCount(), 1);
+  });
+});
+
+test("prepared lane policy reaches the actual native child environment", { skip: !source, timeout: 30000 }, async () => {
+  await withAdapter(async ({ root, repo, mock, executor, context }) => {
+    const dispatch = await import(new URL("../../specs/helpers/dispatch.mjs", import.meta.url).href);
+    execFileSync("git", ["remote", "add", "origin", "https://github.com/example/project.git"], { cwd: repo });
+    await writeFile(join(repo, "forge.yaml"), 'project: {owner: example, repo: project}\nagents: {subagent_model: "test/model"}\n');
+    await writeFile(join(repo, ".git", "info", "exclude"), "forge.yaml\n");
+    const prepared = dispatch.prepareBatch({ activeOwners: 1, launchAllowance: 8, requestStartedAt: "2026-01-01T00:00:00Z",
+      issues: [{ number: 42, target: "staging", baseCwd: repo, predecessors: [] }] }, join(root, "prepared"), repo);
+    const script = await readFile(prepared.request.workflowScriptPath, "utf8");
+    const graph = JSON.parse(script.match(/^const issueGraph=(.+);$/m)![1]!);
+    // Probe the exact generated child descriptor through the full adapter; the
+    // separate 100-lane fixture tests scheduling and admission of the fixed body.
+    const item = { key: graph[0].key, ...graph[0].launch, acceptance: false };
+    mock.onCall({ echoEnv: ["PI_SUBAGENT_EXTENSION_BINDINGS", "PI_SUBAGENT_RUN_ID"] });
+    const { status } = await complete(executor, context, { workflowScript: `return await runs.all(${JSON.stringify([item])});` });
+    assert.equal(status.state, "complete");
+    assert.equal(status.workflow.value[0].ok, true, status.workflow.value[0].error);
+    const received = JSON.parse(status.workflow.value[0].output);
+    const policy = dispatch.loadPolicy(undefined, received);
+    assert.equal(policy.issue, 42); assert.equal(policy.repo, "example/project");
+    assert.equal(policy.model, "test/model"); assert.equal(policy.remediationLimit, 1);
+    assert.ok(received.PI_SUBAGENT_RUN_ID);
+    // Now execute the generated recipe unchanged through failure and retained resume.
+    mock.onCall({ output: "technical owner failure", exitCode: 1 });
+    mock.onCall({ echoEnv: ["PI_SUBAGENT_EXTENSION_BINDINGS", "PI_SUBAGENT_RUN_ID"] });
+    const recovered = await complete(executor, context, prepared.request);
+    assert.equal(recovered.status.state, "complete");
+    const batch = JSON.parse(await readFile(prepared.batchFile, "utf8"));
+    const row = recovered.status.workflow.value[0];
+    assert.ok(row.recoverySource?.runId, JSON.stringify(row));
+    assert.equal(dispatch.identifyLane(batch, recovered.status, row.runId).issue, 42);
+    // Public retained resume can return a tracked async receipt. Resolve its exact
+    // persisted result, rather than assuming progress previews contain final output.
+    let restored: any;
+    function findEnvironment(value: any): any {
+      if (typeof value === "string") {
+        for (const text of [value, ...value.split("\n")]) { try { const found = findEnvironment(JSON.parse(text)); if (found) return found; } catch { /* Prose is not environment JSON. */ } }
+        return undefined;
+      }
+      if (!value || typeof value !== "object") return undefined;
+      if (value.PI_SUBAGENT_EXTENSION_BINDINGS) return value;
+      for (const child of Object.values(value)) { const found = findEnvironment(child); if (found) return found; }
+      return undefined;
+    }
+    for (const artifact of row.artifactPaths) {
+      if (!(await stat(artifact)).isDirectory()) continue;
+      for (let attempt = 0; attempt < 1000; attempt++) {
+        const childStatus = JSON.parse(await readFile(join(artifact, "status.json"), "utf8"));
+        if (["complete", "failed", "stopped"].includes(childStatus.state)) {
+          assert.equal(childStatus.state, "complete", childStatus.error);
+          assert.equal(childStatus.runId, row.runId);
+          restored = findEnvironment(await readFile(childStatus.outputFile, "utf8"));
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+    }
+    assert.ok(restored, `No terminal child environment result for ${row.runId}`);
+    assert.equal(dispatch.loadPolicy(undefined, restored).issue, 42);
+    assert.equal(restored.PI_SUBAGENT_EXTENSION_BINDINGS, received.PI_SUBAGENT_EXTENSION_BINDINGS);
   });
 });
 

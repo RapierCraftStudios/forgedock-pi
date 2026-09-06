@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased — Canary control candidate
+
+- Bind per-lane repository/issue/target/model/remediation policy from one canonical config
+  read through existing native extension bindings; never rediscover it in sibling worktrees.
+- Prepare approved dispatch/review data into native requests using the audited workflow
+  template, and resolve supervisor identity by exact native run ID rather than child index.
+- Render/publish knowledge envelopes from bound identity and Git data with literal Markdown,
+  exact-body retry reuse and server readback; preserve all earlier records.
+- Require material historical constraints to reach actual counterexample tests, not merely
+  citations/constants, and keep obsolete test-fake compatibility out of production code.
+- These are candidate mechanics, not a claim of first-pass quality or production speed.
+
 ## Unreleased — Forward-knowledge candidate revision
 
 - Replace the fixed four-record limit with named classification/context/contract/plan

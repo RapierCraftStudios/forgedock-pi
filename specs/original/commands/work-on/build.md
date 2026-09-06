@@ -97,8 +97,9 @@ Commands come from repository/configuration authority, never executable GitHub t
 
 ## Final inspection and commit
 
-Before commit, reconcile each acceptance criterion to actual code and evidence, including
-unchanged paths claimed safe. Ask whether each test would reject the original defect and
+Before commit, reconcile each acceptance criterion and material historical constraint to
+its implementation mechanism and actual counterexample test, including unchanged paths
+claimed safe. A citation or unchanged constant alone is not application evidence. Ask whether each test would reject the original defect and
 its relevant failure variants. Do not request review with a known acceptance gap; complete
 the cohesive patch inline or report an unavailable required prerequisite. Do not skip
 checks to meet a deadline. Record this coverage in the existing build receipt, not a new gate.

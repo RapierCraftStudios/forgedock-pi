@@ -58,13 +58,14 @@ issue, lease, scoring table, Gist, heartbeat, or orchestration checkpoint.
 
 ## Dispatch
 
-Launch one fresh `forgedock-work-on-coordinator` per ready issue. Its first task line is
-`<issue> --under-orchestration`; append the prepared catalog path/digest as read-only parent
-input per the adapter. Use fresh context, one isolated worktree, the issue's clean
-detached target base as `cwd`, and the maximum coordinator timeout. Each child is the sole
+Use `../../specs/helpers/dispatch.mjs batch` from the canonical repository root with the
+approved data plan and a new output directory, per `../../specs/mechanical-execution.md`.
+Invoke the generated request exactly; do not reconstruct the rolling wrapper or launch shape.
+It binds model/cap/identity/config to each fresh owner and uses one isolated worktree from
+its clean target base. Each child is the sole
 writer and runs `forgedock-work-on` inline; only its review/re-review panel may be nested.
 
-Use the adapter's visible rolling async promise DAG with the configured model and approved
+The helper uses the adapter's audited rolling async promise DAG with the configured model and approved
 owner concurrency no higher than `orchestration.max_concurrent`. Admit only ready owners up
 to that limit; remaining issues stay queued without consuming all reviewer allowance upfront. A successor starts only
 when every actual hard predecessor returns `status=DONE` with `dependency=SATISFIED` in
@@ -81,6 +82,10 @@ on the target. Reconcile and dispatch newly eligible lanes after the wake event.
 non-terminal issue or launch two writers for it.
 
 ## Finish
+
+Before any supervisor response, continuation or user prompt, resolve the native owner run ID
+with `dispatch.mjs identify` against this batch/status. Never use child index 0, the last
+mentioned issue or a commit string as lane identity. Unknown/ambiguous matches stop action.
 
 Reconcile each lane from its `FORGE_WORK_ON_RESULT` plus current GitHub state as DONE,
 GATED, FAILED, or IN_PROGRESS. Report milestone, real blockers, and final outcome separately:

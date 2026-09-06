@@ -70,11 +70,11 @@ cost priors, heartbeats, checkpoints, duplicate progress reports or partial buil
 
 In one bounded shell block:
 
-1. Parse `forge.yaml` once and retain repository, target branches, worktree paths,
-   verification commands, reviewer model, concurrency, and remediation round cap
+1. Load the authoritative lane policy via `../../mechanical-execution.md`; standalone work
+   prepares it once from the canonical root. Bind repository, target, model and round cap
    (`review.remediation_max_rounds`, default `1` when absent; explicit configuration wins).
 2. Verify `gh auth status --active`, repository access, and `gh auth setup-git`.
-3. Resolve the issue selector to exactly one issue.
+3. Use the bound issue identity; never infer it from a local child index or neighbouring config.
 4. Fetch issue state, labels, body, relevant ForgeDock receipts, linked PRs, and parent
    relation once.
 5. Resolve the PR target and fetch its exact remote SHA. Under orchestration, require the
@@ -84,7 +84,7 @@ In one bounded shell block:
    explicit staging/deployment route, never inferred for ordinary work-on.
 6. Retain the repository root and packaged ForgeDock root; never search for either again.
 7. Use `../../verification.md` for learned repository checks and selective execution. Under
-   orchestration consume the dispatcher's prepared catalog; never update another cwd.
+   orchestration use the bound catalog/canonical config reference; never search or update sibling cwds.
 
 Refresh retained state only after this agent writes GitHub state, receives reviewer
 completion, observes target movement, resumes after interruption, or lacks a required

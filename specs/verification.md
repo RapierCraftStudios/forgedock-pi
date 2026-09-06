@@ -55,8 +55,9 @@ artifacts, outside clean target bases; compute its SHA-256 after writing. Pass i
 digest as the adapter's explicit task input to every child. Do not serialize a whole config,
 secrets, credentials, or unrelated fields. Retain this small input while lanes may resume.
 
-The prepared snapshot is authoritative for verification at route start, including preserved
-explicit operator overrides; other forge.yaml settings are unchanged. The child verifies
+The prepared catalog is authoritative for verification at route start, including preserved
+explicit operator overrides. Execution identity/model/cap come from the bound lane policy in
+`mechanical-execution.md`, not a missing or borrowed worktree forge.yaml. The child verifies
 the digest and reads this input without copying it over or modifying its owned forge.yaml.
 A missing input or digest mismatch must be resolved before executing catalog commands;
 request a newly validated input, never silently fall back to stale configuration or history.
@@ -80,6 +81,9 @@ permissions and unrelated values; never print a whole secret-bearing config.
   because another file has the same extension.
 - Check production setup and real caller arguments; a fixture must not initialize state
   that production lacks or omit arguments that change validation behavior.
+- Test doubles must model the real interface. Do not add production branches solely to
+  accommodate obsolete fakes; update the tests unless a real supported caller needs the
+  compatibility behavior and the contract proves it.
 - Add missing regression coverage to the repository's normal tests. Verify test discovery,
   registration/accounting and applicable CI path filters before claiming that CI covers it.
 - Missing required evidence is not PASS. A missing command triggers discovery/clarification,
