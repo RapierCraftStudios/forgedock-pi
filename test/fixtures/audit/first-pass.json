@@ -1,11 +1,18 @@
 {
   "schemaVersion": 1,
+  "auditStatus": "COMPLETE",
   "runId": "run-success-001",
+  "selector": {"kind": "run-id", "value": "run-success-001"},
   "identity": {"repository": "owner/repo", "owner": "owner-001"},
+  "sources": ["native:request", "github:pr-1"],
   "terminal": "MERGED",
   "evidence": ["request", "owner", "review", "merge"],
   "timeline": [{"phase": "merge", "state": "PASS"}],
-  "evidenceGraph": {"nodes": ["request", "owner", "merge"], "edges": ["request>owner", "owner>merge"]},
-  "coverage": [{"criterion": "safe-read", "state": "PASS"}],
-  "production": {"mode": "normal", "exposure": "UNVERIFIED", "anchor": null}
+  "evidenceGraph": {"nodes": ["request", "owner", "merge"], "edges": [{"from": "request", "to": "owner", "source": "native", "confidence": "validated"}, {"from": "owner", "to": "merge", "source": "github", "confidence": "linked"}]},
+  "coverage": [{"criterion": "safe-read", "invariants": ["no mutation"], "failureModes": ["write request"], "boundaries": [{"producer": "audit", "consumer": "report", "typeOrNamespace": "read-only"}], "sources": ["native:request"], "state": "PASS", "reason": "validated read-only run", "capturedAt": null}],
+  "causes": {"earliestPreventable": {"state": "UNKNOWN"}, "detection": {"state": "UNKNOWN"}, "termination": {"state": "PASS"}},
+  "production": {"mode": "normal", "exposure": "UNVERIFIED", "anchor": null},
+  "disagreements": [],
+  "recommendations": [],
+  "limitations": []
 }

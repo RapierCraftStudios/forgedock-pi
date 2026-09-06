@@ -1,6 +1,6 @@
 ---
 description: Reconstruct a ForgeDock workflow run into deterministic evidence-backed findings
-argument-hint: "--run-id <id> | --run-dir <absolute-directory> [--production-escape]"
+argument-hint: "--run-id <id> | --run-dir <absolute-directory> [--production-escape --anchor <artifact-id-or-URL>]"
 ---
 
 # ForgeDock Audit

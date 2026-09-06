@@ -1,11 +1,18 @@
 {
   "schemaVersion": 1,
+  "auditStatus": "COMPLETE",
   "runId": "run-decomposed-002",
+  "selector": {"kind": "run-dir", "value": "/runs/run-decomposed-002"},
   "identity": {"repository": "owner/repo", "owner": "owner-002"},
+  "sources": ["native:request", "github:issue-2"],
   "terminal": "DECOMPOSED",
   "evidence": ["parent", "children", "dependency-graph"],
   "timeline": [{"phase": "decompose", "state": "PASS"}],
-  "evidenceGraph": {"nodes": ["parent", "child-a", "child-b"], "edges": ["parent>child-a", "parent>child-b"]},
-  "coverage": [{"criterion": "preserve-parent", "state": "PASS"}],
-  "production": {"mode": "normal", "exposure": "UNVERIFIED", "anchor": null}
+  "evidenceGraph": {"nodes": ["parent", "child-a", "child-b"], "edges": [{"from": "parent", "to": "child-a", "source": "github", "confidence": "linked"}, {"from": "parent", "to": "child-b", "source": "github", "confidence": "linked"}]},
+  "coverage": [{"criterion": "preserve-parent", "invariants": ["all criteria retained"], "failureModes": ["lost acceptance"], "boundaries": [{"producer": "parent", "consumer": "child", "typeOrNamespace": "issue"}], "sources": ["github:issue-2"], "state": "PASS", "reason": "child graph retains parent criteria", "capturedAt": null}],
+  "causes": {"earliestPreventable": {"state": "UNKNOWN"}, "detection": {"state": "PASS"}, "termination": {"state": "PASS"}},
+  "production": {"mode": "normal", "exposure": "UNVERIFIED", "anchor": null},
+  "disagreements": [],
+  "recommendations": [],
+  "limitations": []
 }

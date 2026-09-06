@@ -37,13 +37,25 @@ test("anonymized audit fixtures cover the terminal and disagreement matrix", asy
   for (const name of names) {
     const fixture = JSON.parse(await readFile(`${fixtureRoot}/${name}`, "utf8")) as Record<string, unknown>;
     assert.equal(fixture.schemaVersion, 1, name);
+    assert.equal(typeof fixture.auditStatus, "string", name);
     assert.equal(typeof fixture.runId, "string", name);
+    assert.ok(fixture.selector && typeof fixture.selector === "object", name);
+    assert.ok(fixture.identity && typeof fixture.identity === "object", name);
+    assert.ok(Array.isArray(fixture.sources), name);
     assert.equal(typeof fixture.terminal, "string", name);
     assert.ok(Array.isArray(fixture.evidence), name);
     assert.ok(Array.isArray(fixture.timeline), name);
     assert.ok(fixture.evidenceGraph && typeof fixture.evidenceGraph === "object", name);
+    const graph = fixture.evidenceGraph as { edges?: Array<Record<string, unknown>> };
+    assert.ok(graph.edges?.every((edge) => edge.source && edge.confidence), name);
     assert.ok(Array.isArray(fixture.coverage), name);
+    const coverage = fixture.coverage as Array<Record<string, unknown>>;
+    assert.ok(coverage.every((row) => row.invariants && row.failureModes && row.boundaries && row.sources && row.state && row.reason && "capturedAt" in row), name);
+    assert.ok(fixture.causes && typeof fixture.causes === "object", name);
     assert.ok(fixture.production && typeof fixture.production === "object", name);
+    assert.ok(Array.isArray(fixture.disagreements), name);
+    assert.ok(Array.isArray(fixture.recommendations), name);
+    assert.ok(Array.isArray(fixture.limitations), name);
     assert.ok(!JSON.stringify(fixture).match(/gho_|github_pat_|Bearer [A-Za-z0-9]/), name);
   }
 });
