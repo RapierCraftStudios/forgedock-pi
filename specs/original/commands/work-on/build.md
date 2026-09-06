@@ -31,10 +31,12 @@ call. Mark each row `PASS`, `FAIL`, `MISSING`, `SKIPPED`, `CONTRADICTED`, or `UN
 
 For `HIGH`/`COMPLEX` work or shared state, concurrency, data integrity, security boundaries,
 external side effects, or cross-service protocols, retain the risk signals and contract identity
-with the staged diff. Before commit, the existing quality gate must compare every applicable row
-and block any missing, unknown, contradicted, or required-risk skipped row; optional skips remain
-explicit. Low-risk documentation, metadata, and simple changes retain the fast path. This
-enriches imperfect intake without becoming a separate qualitative refusal gate.
+with the staged diff. Before commit, invoke the existing quality gate with exact
+`ISSUE_NUMBER`, `PROOF_CONTRACT`, and `RISK_SIGNALS` values from the bound records. It must
+validate identity and compare every applicable row, blocking missing, unknown, contradicted,
+failed, or required-risk skipped proof; optional skips remain explicit. Low-risk documentation,
+metadata, and simple changes retain the fast path. This enriches imperfect intake without
+becoming a separate qualitative refusal gate.
 
 ## Plan once and publish the pre-build graph
 

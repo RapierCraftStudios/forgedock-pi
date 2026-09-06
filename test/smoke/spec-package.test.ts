@@ -131,11 +131,16 @@ test("high-risk proof closure fails closed while low-risk work keeps the fast pa
   const qualityGate = await text("specs/original/commands/quality-gate.md");
   const validate = await text("specs/original/commands/validate.md");
   const workOn = await text("specs/original/commands/work-on.md");
+  const qualitySkill = await text("skills/forgedock-quality-gate/SKILL.md");
+  const monolithic = await text("specs/original/commands/work-on-monolithic.md");
 
   assert.match(build, /adversarial\s+counterexample.*boundary\/consumers.*failing-before.*passing-after/s);
   assert.match(build, /HIGH.*COMPLEX.*shared state.*concurrency.*data integrity.*security boundaries/s);
-  assert.match(build, /missing, unknown, contradicted, or required-risk skipped/s);
+  assert.match(build, /blocking missing, unknown, contradicted,\n?failed, or required-risk skipped/s);
   assert.match(qualityGate, /exact `ISSUE_NUMBER`, `PROOF_CONTRACT`, and `RISK_SIGNALS`/);
+  assert.match(qualityGate, /Missing or malformed handoff fields are blocking/);
+  assert.match(qualitySkill, /exact `ISSUE_NUMBER`, `PROOF_CONTRACT`/);
+  assert.match(monolithic, /--issue \{ISSUE_NUMBER\} --proof-contract \{CONTRACT_ID\} --risk-signals \{RISK_SIGNALS\}/);
   for (const field of ["criterion", "invariant", "counterexample", "boundary/consumers", "test/command", "failing-before", "passing-after", "state"])
     assert.ok(qualityGate.includes(`\`${field}\``), `missing proof field: ${field}`);
   assert.match(qualityGate, /cannot return `PASS`.*until every|required row is closed/s);
@@ -149,9 +154,11 @@ test("high-risk proof closure fails closed while low-risk work keeps the fast pa
     { name: "mutation/interleaving", state: "MISSING", required: true },
     { name: "serialization/type", state: "UNKNOWN", required: true },
     { name: "namespace boundary", state: "CONTRADICTED", required: true },
+    { name: "recovery result", state: "FAIL", required: true },
+    { name: "required integration", state: "SKIPPED", required: true },
     { name: "optional lint", state: "SKIPPED", required: false },
   ];
-  const blockingStates = new Set(["MISSING", "UNKNOWN", "CONTRADICTED"]);
+  const blockingStates = new Set(["FAIL", "MISSING", "UNKNOWN", "CONTRADICTED"]);
   const blocks = (rows: Array<{ state: string; required: boolean }>) => rows.some((row) =>
     row.required && (blockingStates.has(row.state) || row.state === "SKIPPED"));
   assert.equal(blocks(alterLab33745Rows), true);
