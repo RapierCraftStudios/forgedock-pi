@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "auditStatus": "FAILED",
+  "selector": {"kind": "run-dir", "value": "/runs/run-cross-repository-005"},
+  "identity": {"runId": "run-cross-repository-005", "repository": "owner/repo", "request": "request-cross-repository-005"},
+  "sources": ["native:request", "github:external-unverified"],
+  "timeline": [{"phase": "identity", "state": "UNKNOWN"}],
+  "evidenceGraph": {"nodes": ["run", "repository", "external"], "edges": [{"from": "run", "to": "repository", "source": "native", "confidence": "validated"}]},
+  "coverage": [{"criterion": "repository-binding", "invariants": ["canonical repository"], "failureModes": ["external locator disclosure"], "boundaries": [{"producer": "run", "consumer": "github", "typeOrNamespace": "repository"}], "sources": ["native:request"], "state": "UNKNOWN", "reason": "external source is not authorized", "capturedAt": null}],
+  "causes": {"earliestPreventable": {"state": "FAIL"}, "detection": {"state": "PASS"}, "termination": {"state": "PASS"}},
+  "production": {"mode": "normal", "exposure": "NOT_REQUESTED", "anchor": null},
+  "disagreements": [],
+  "recommendations": ["bind external sources explicitly"],
+  "limitations": ["external repository authorization unavailable"]
+}
