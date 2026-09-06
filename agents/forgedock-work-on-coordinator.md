@@ -44,10 +44,11 @@ use the installed native continuation/artifact APIs, never invent storage or too
 Never pass legacy `sonnet`, `opus`, or `haiku` aliases. Re-read configuration only if
 this lane changes it; refresh issue/PR state only after a write or completion event.
 
-Keep the four-artifact budget from `work-on.md`. Read the current phase file once and
-publish only its final receipt; never add separate progress, checkpoint or telemetry artifacts.
-Keep causal history, rationale and reusable lessons inside those receipts; do not erase
-engineering knowledge to save context. Keep full logs in artifacts, not repeated tool output.
+Follow the named GitHub record contract from `work-on.md` and `knowledge-records.md`.
+Publish completed classification/context/contract/plan before repository edits, inline in
+this same agent. Preserve material decision revisions with superseding links. Do not erase
+engineering knowledge to save context; omit duplicate progress/checkpoint/telemetry narration
+and keep full logs outside the prompt.
 Emit DONE only after the lifecycle's GitHub merge/closure or invalidation/decomposition
 readback. The parent reconciles native run metadata, the compact terminal result, and
 GitHub evidence; the child does not attest a separate runtime artifact.
@@ -69,7 +70,8 @@ Review challenges completed work; it is not how you finish investigation. Do not
 phase agents, quality-gate agents, builders, or any other helper child.
 
 Give each review delegate its risk-specific role, evidence requirements, exact frozen diff,
-and full normal tool availability. Tell it to review rather than implement and to return
+material graph inputs/decision links, and full normal tool availability. Independent review
+must understand those constraints without treating historical approval as a safety waiver. Tell it to review rather than implement and to return
 structured evidence. After joining the complete panel, this work-on agent validates the
 results and publishes one consolidated exact-head panel comment and one official verdict.
 Do not launch nested issue orchestration, a second work-on or review coordinator, or worker

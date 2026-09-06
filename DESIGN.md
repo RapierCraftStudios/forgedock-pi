@@ -5,8 +5,9 @@
 GitHub is canonical engineering memory: source-linked prior decisions, failure mechanisms,
 constraints, implementation rationale, evidence and corrections survive individual sessions.
 The task's compact working context is a validated view of that graph, not a replacement.
-Retrieve → apply → preserve runs inline under `specs/github-memory.md`; it needs no new
-graph database, context agent or mandatory comment class.
+Retrieve → apply → preserve runs inline under `specs/github-memory.md`; named records under
+`specs/knowledge-records.md` preserve the actual decision sequence. This needs no new graph
+database or context agent. Reducing handoffs must not erase durable knowledge.
 
 ## Product loop
 
@@ -15,6 +16,7 @@ graph database, context agent or mandatory comment class.
   → resolve a minimum hard-edge DAG
   → one sole-writer /work-on agent per ready issue
       → investigate and apply relevant GitHub knowledge inline
+      → publish classification/context/contract/plan inline
       → implement and selectively verify inline
       → create PR
       → fresh risk-selected review panel
@@ -59,13 +61,17 @@ assumptions authoritative.
 
 ## State
 
-GitHub issue/PR state, labels, commits, and four substantive records are reusable knowledge
-and resumable state:
+GitHub issue/PR state, labels, commits and named records are reusable knowledge and resume state:
 
-1. investigation: corrected cause, acceptance and validated prior constraints;
-2. build: chosen approach/alternatives, implementation and verification evidence;
-3. review: verified behavior, causal findings, prevention lessons and verdict;
-4. terminal issue: exact release identity, links, decisions, corrections and remaining limits.
+- investigation and classification establish cause, scope/cohesion and risk;
+- context, contract and plan record historical constraints, promises and chosen alternatives
+  before repository edits;
+- build records actual implementation, deviations and verification;
+- independent review uses the graph and records evidence-based finding dispositions;
+- terminal reconciliation links the complete chain and records outcome/remaining limits.
+
+Common machine metadata carries source head, input permalinks and supersession links;
+Markdown carries human-readable meaning. Material revisions append rather than erase history.
 
 A completed remediation receipt is conditional. Work-on does not create Gists, memory
 indexes, ledgers, dossiers, ADRs, cost priors, heartbeats, checkpoints, or duplicate phase
@@ -167,7 +173,8 @@ batch. Missing ownership means report and skip. Cleanup is always last.
 A release is acceptable when tests prove:
 
 - inline work-on with reviewer-only fanout;
-- four substantive records preserve retrieval, rationale and learning without extra ceremony;
+- named pre-build and outcome records preserve retrievable decision history without progress noise;
+- mechanical record discovery/traversal preserves superseded decisions and legacy evidence;
 - bounded historical lookup distinguishes no relevant evidence from unavailable retrieval;
 - mutation remains investigation-scoped;
 - configured verification runs once per SHA;

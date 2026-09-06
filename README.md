@@ -34,10 +34,10 @@ naming. Pi runtime mechanics live in [`specs/pi-adapter.md`](specs/pi-adapter.md
   the relevant phase specification.
 - **The visible coordinator owns routing.** TypeScript does not choose phases or maintain
   hidden workflow state.
-- **GitHub is the engineering knowledge graph.** Issues, PRs, commits and four substantive
-  records preserve causes, prior lessons, chosen approaches, evidence and corrections—not
-  just resume position. Owners retrieve selectively and validate history before applying it.
-  Compact working context never replaces durable knowledge. No extra Gists or progress records.
+- **GitHub is the engineering knowledge graph.** Named classification, context, contract
+  and plan records precede implementation; build, review and terminal records preserve
+  outcomes and decision evolution. Records link rather than duplicate their inputs, and
+  superseding decisions retain the old history. Compact context never replaces that graph.
 - **Subagents provide isolation and fan-out.** Orchestrate launches one work-on agent and
   one isolated worktree per ready issue. Each agent runs its lifecycle inline and only
   review or re-review fans out to fresh repository-capable children.
@@ -111,7 +111,9 @@ sources. Missing required checks trigger discovery or an explicit limitation, ne
 success. See [`specs/verification.md`](specs/verification.md).
 
 The knowledge contract is [`specs/github-memory.md`](specs/github-memory.md): retrieve prior
-experience, validate/apply it, then preserve decisions and useful lessons in existing records.
+experience, validate/apply it, and build forward knowledge. [`specs/knowledge-records.md`](specs/knowledge-records.md)
+defines the machine-fetchable/human-readable envelopes, links, timing and revision rules.
+Reviewers use this graph independently; historical approval never waives a current defect.
 
 `.forge/config.json` belongs to the retired controller implementation and is not treated
 as equivalent to `forge.yaml`.

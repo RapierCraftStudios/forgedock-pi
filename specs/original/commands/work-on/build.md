@@ -21,9 +21,12 @@ is the mutation contract.
 At phase entry, use one label edit to replace `workflow:ready-to-build` and other stale
 active-phase labels with `workflow:building`.
 
-## Plan once
+## Plan once and publish the pre-build graph
 
-Before editing, form one concise in-memory checklist:
+Before repository edits, form the following concise plan and publish the named
+classification/context/contract/architect records from `../../../knowledge-records.md`.
+Use retained investigation/history, actual source head and returned comment links; the
+plan must be fetchable from GitHub, not only held in this agent's context:
 
 1. production entrypoint and active path to the failure;
 2. files and symbols that must change;
@@ -37,9 +40,10 @@ Before editing, form one concise in-memory checklist:
    contamination, cache keys, identity/TLS/engine compatibility, fallback behavior, and
    reuse of existing sessions/resources.
 
-Consume the validated historical constraints from investigation; do not rediscover them.
-Read project documentation when it governs an affected path. Preserve material rationale
-in the build receipt rather than separate contract, context, architecture or plan comments.
+Consume validated historical constraints; do not rediscover them or copy every earlier
+record into each new one. The contract/plan links its inputs and records unique rationale.
+If the implementation changes a material decision, publish a superseding plan/contract
+before applying that change; routine code/test iterations need no new planning record.
 
 ## Implement
 
@@ -55,9 +59,9 @@ in the build receipt rather than separate contract, context, architecture or pla
 4. Check relevant callers and sibling paths for consistent behavior.
 5. Remove debug output, generated files, unrelated formatting, and speculative changes.
 
-If a required mutation path was absent from investigation, update the single investigation
-receipt with evidence and revised scope before editing it. Optional improvements become
-follow-ups and do not widen this PR.
+If a required mutation path was absent from investigation, append the justified scope
+revision with a superseding investigation/contract link before editing it. Preserve the
+old decision; optional improvements do not widen this PR.
 
 ## Verify once per SHA
 
@@ -122,15 +126,17 @@ After the commit and push exist, publish one immutable issue comment:
 
 ```markdown
 <!-- FORGE:BUILDER -->
+<!-- FORGE:RECORD {"v":1,"source_head":"<verified implementation commit>","inputs":["<current plan permalink>"],"supersedes":null} -->
 ## Build Complete
 
 **Head**: `<full SHA>`
 **Branch**: `<branch>`
 **Target**: `<configured target>`
+**Inputs / Supersedes**: <actual links matching metadata, or none>
 
-### Approach and Rationale
-- <chosen approach and why; material alternatives actually considered>
-- <prior constraints preserved or changed, with source links; no invented alternatives>
+### Plan and Decision Trace
+- <classification/context/contract/current-plan permalinks>
+- <implemented approach, deviations and superseding decision links; do not invent alternatives>
 
 ### Changed Files
 - `path` — behavior changed
@@ -145,8 +151,8 @@ After the commit and push exist, publish one immutable issue comment:
 ```
 
 Do not publish a partial builder comment and patch it later. Do not create Gists,
-heartbeats, checkpoints, context artifacts, architecture artifacts, telemetry, or cost
-records.
+heartbeats, checkpoints, duplicate phase narration, telemetry, or cost records. Preserve
+named pre-build knowledge and decision revisions; fewer tool hops must not erase that graph.
 
 ## Result
 

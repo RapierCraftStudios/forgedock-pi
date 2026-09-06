@@ -49,20 +49,22 @@ active work. Do not silently reset the clock on resume or decomposition. GATED, 
 and DECOMPOSED are not successful code deliveries, even when they terminate the issue.
 Oversized or unready work must be identified before editing, not hidden by the time target.
 
-## Durable artifact budget
+## Durable knowledge contract
 
-Normal successful work creates only these records, enriched with reusable knowledge:
-
+Follow `../../knowledge-records.md`; normal code delivery publishes linked named records:
 1. one `FORGE:INVESTIGATOR` issue receipt;
-2. one completed `FORGE:BUILDER` issue receipt;
-3. the PR's reviewer evidence and official review verdict;
-4. one `FORGE:TRAJECTORY` terminal issue receipt.
+2. `FORGE:CLASSIFICATION` — task/risk/cohesion decision;
+3. `FORGE:CONTEXT` — validated historical understanding;
+4. `FORGE:CONTRACT` — promised behavior, scope and acceptance;
+5. `FORGE:ARCHITECT` — chosen approach, ordered plan and material alternatives;
+6. one completed `FORGE:BUILDER` issue receipt;
+7. the PR's reviewer evidence and official review verdict;
+8. one `FORGE:TRAJECTORY` terminal issue receipt.
 
-A decomposed issue creates child issues and one decomposition receipt. A remediated PR may
-add one completed remediation receipt per new reviewed head. Do not create Gists, memory
-indexes, ledgers, dossiers, ADRs, cost priors, heartbeats, progress comments, checkpoints,
-review-start comments, context comments, architecture comments, or partial builder
-comments.
+Classification/context/contract/plan precede repository edits. Material revisions append
+superseding records; the old decision remains auditable. Decomposition/remediation keep
+their conditional receipts. Do not create Gists, memory indexes, ledgers, dossiers, ADRs,
+cost priors, heartbeats, checkpoints, duplicate progress reports or partial builder comments.
 
 ## One-time preflight
 
@@ -160,9 +162,9 @@ present, mark `workflow:decomposed`, and stop; a split is not code delivery.
 ### 3. Build and verify
 
 Load `work-on/build.md` once. Treat the completed investigation receipt as mutation
-scope and the implementation checklist; do not publish separate contract, context, or
-architecture comments. Establish feasible executable regressions before production edits
-and reconcile every acceptance criterion to evidence before requesting review.
+scope and publish the named pre-build records under `../../knowledge-records.md` before
+repository edits. Establish feasible executable regressions before production changes and
+reconcile every acceptance criterion and decision revision to evidence before review.
 
 Inspect the relevant production path, implement one cohesive change, add focused
 regression evidence, run applicable configured verification once per commit SHA, inspect

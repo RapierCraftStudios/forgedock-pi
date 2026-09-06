@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — Forward-knowledge candidate revision
+
+- Replace the fixed four-record limit with named classification/context/contract/plan
+  comments before repository edits, linked build/review/terminal evidence, and preserved
+  decision revisions. Execution remains inline; no new logging or planning agents.
+- Add a small machine-fetchable metadata envelope and tested jq discovery/reachability
+  recipe while retaining human-readable bodies, legacy records and superseded decisions.
+- Require knowledge-aware independent review and evidence-based finding dispositions;
+  past approval is not a waiver, and formatting-only repairs do not restart review.
+
 ## Unreleased — GitHub-first candidate
 
 - Restore proactive bounded GitHub history retrieval, validated application of prior lessons,

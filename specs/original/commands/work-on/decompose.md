@@ -24,7 +24,7 @@ Run only when the completed investigation has `Verdict: CONFIRMED` and
 
 A scope reassessment may propose DECOMPOSE after build/review. Preserve the PR, exact head,
 commits, uncommitted-work evidence and owned worktree; do not close the PR or discard work
-as part of deciding. Record the rationale and acceptance-to-slice mapping in the existing
+as part of deciding. Append the rationale and acceptance-to-slice mapping as a superseding
 investigation record, linking prior decisions rather than erasing them.
 
 Require an explicitly approved handoff and PR disposition bound to the preserved head and
@@ -57,12 +57,14 @@ outer orchestrator may enroll the created issues only under its selector/confirm
 
 ```markdown
 <!-- FORGE:DECOMPOSED -->
+<!-- FORGE:RECORD {"v":1,"source_head":"<preserved source commit>","inputs":["<current investigation/handoff permalink>"],"supersedes":null} -->
 ## Decomposition Complete
 
 | Child | Scope | Depends on |
 | --- | --- | --- |
 | #N | <cohesive behavior> | — |
 
+**Inputs / Supersedes**: <actual links matching metadata, or none>
 **Partial work / PR disposition**: <none, or approved disposition with retained head/links>
 **Acceptance coverage**: <remaining parent criteria mapped to created/reused children>
 **Parent result**: DECOMPOSED

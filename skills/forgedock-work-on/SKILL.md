@@ -15,8 +15,9 @@ applicability, and preserve material decisions for the next cold-start agent.
 1. Parse the arguments.
 2. Read `../../specs/pi-adapter.md` once for Pi mechanics.
 3. Read `../../specs/original/commands/work-on.md` once for route and invariants.
-4. Read `../../specs/github-memory.md` and `../../specs/verification.md` once for bounded
-   knowledge reuse and learned selective checks; reuse them across phases.
+4. Read `../../specs/github-memory.md`, `../../specs/knowledge-records.md` and
+   `../../specs/verification.md` once for knowledge retrieval/publication and selective checks;
+   reuse them across phases.
 5. Load only the current phase file under `../../specs/original/commands/work-on/`.
 
 ## Execute
@@ -29,7 +30,7 @@ Continue without stopping at intermediate success:
 
 `resolve → investigate → [decompose | build → PR → review → [remediate → re-review] → merge → close → cleanup]`
 
-Investigation defines the complete acceptance contract before editing, not just file scope.
+Investigation defines acceptance and scope; publish the named pre-build graph before editing.
 For bug fixes, record trigger/expected/observed
 baseline and fail-before/pass-after evidence; use inspection-only proof only with an explicit
 safety/impossibility justification. Execute investigation, planning, implementation, quality
@@ -49,10 +50,10 @@ Base movement alone does not invalidate valid review. Preserve a clean mergeable
 head; reconcile only for conflict or required-up-to-date policy, and rerun review only when
 the effective patch or risk changed.
 
-Use the four normal durable artifacts only: investigation receipt, completed build receipt,
-PR review/verdict, and terminal issue receipt. Never create Gists, indexes, ledgers,
-dossiers, ADRs, cost priors, telemetry, heartbeats, checkpoints, or duplicate progress
-comments.
+Publish the named pre-build records and linked build/review/terminal evidence on GitHub;
+in-memory planning is not a substitute. Preserve changed decisions through superseding
+records. Do not create Gists, indexes, ledgers, dossiers, ADRs, cost priors, telemetry,
+heartbeats, checkpoints, or duplicate progress comments.
 
 Prefer repair and continuation. Use GATED for an exact technical prerequisite/recovery
 condition and `needs-human` only for genuine external authority with no safe default. After

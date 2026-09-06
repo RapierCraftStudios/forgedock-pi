@@ -75,12 +75,13 @@ test("one work-on agent owns every pre-review phase inline", async () => {
   assert.match(adapter, /Before review\/re-review it must\s+not call `subagent`/s);
 });
 
-test("normal work-on has four durable artifacts and no ceremony", async () => {
+test("normal work-on preserves named knowledge records without progress ceremony", async () => {
   const root = await text("specs/original/commands/work-on.md");
   assert.match(root, /one `FORGE:INVESTIGATOR`/);
   assert.match(root, /one completed `FORGE:BUILDER`/);
   assert.match(root, /PR's reviewer evidence and official review verdict/);
   assert.match(root, /one `FORGE:TRAJECTORY`/);
+  for (const kind of ["CLASSIFICATION", "CONTEXT", "CONTRACT", "ARCHITECT"]) assert.ok(root.includes(`FORGE:${kind}`));
   assert.match(root, /Do not create Gists, memory\s+indexes, ledgers, dossiers, ADRs/s);
 });
 
@@ -167,7 +168,7 @@ test("review keeps exact-head quality without target-movement starvation", async
   assert.match(review, /replace `workflow:in-review` with\s+`workflow:awaiting-merge`/s);
   assert.match(adapter, /review-starvation/i);
   assert.match(reviewSkill, /one\s+additional\s+workflow containing only that role/s);
-  assert.match(reviewSkill, /one\s+SHA-bound consolidated panel comment/s);
+  assert.match(reviewSkill, /one SHA-bound `FORGE:REVIEW-PANEL` comment/);
   assert.match(reviewSkill, /never use `runs\.host`/);
   assert.match(adapter, /`runs\.host` is not available/);
   assert.match(adapter, /Never restart a panel for JSON key casing/);
@@ -215,7 +216,7 @@ test("remediation is cohesive and re-review is scoped", async () => {
   assert.match(remediate, /same work-on agent remains the sole writer/i);
   assert.match(remediate, /do not fix only the reported line/i);
   assert.match(remediate, /include every reachable occurrence in the same\s+remediation/s);
-  assert.match(remediate, /If Behavior Coverage was incomplete, update it before editing/);
+  assert.match(remediate, /If Behavior Coverage was incomplete, append a superseding scope record\s+before editing/);
   assert.match(remediate, /one cohesive patch/);
   assert.match(remediate, /Do not create blocker issues/);
   assert.match(remediate, /one correctness\/general role/);

@@ -4,7 +4,8 @@ GitHub is the canonical engineering knowledge graph, not just a queue or resume 
 Issues, PRs, commits and substantive comments preserve what changed, why, evidence,
 constraints and corrections for a cold-start agent. The implementation pack is a small,
 validated working view of that graph. This procedure runs inline in the existing owner;
-it adds no agent, database, index, ledger or mandatory comment.
+it adds no agent, database, index or ledger. `knowledge-records.md` defines the named GitHub
+outputs; reducing execution handoffs must not remove their durable knowledge.
 
 ## Retrieve before deciding
 
@@ -24,7 +25,8 @@ investigation receipt. Reuse already retained evidence rather than repeat the lo
    responses in local scratch artifacts rather than dumping every comment into context.
 
 Default effort: two minutes, at most five candidate records and three useful prior sources.
-These are retrieval defaults, not authority to ignore a known safety constraint. Expand
+These limit additional historical search, not the current issue's required decision chain.
+They are retrieval defaults, not authority to ignore a known safety constraint. Expand
 only to resolve a named acceptance uncertainty, and explain the expansion. No exhaustive
 history crawl. Distinguish `no relevant history found` from `retrieval unavailable`.
 Unavailable history is a limitation, not automatically a blocker; unresolved required
@@ -59,17 +61,16 @@ superseding evidence rather than deleting another run's history.
 
 ## Preserve decisions, not narration
 
-Use the existing four normal records:
+Follow `knowledge-records.md`: publish the named classification, implementation context,
+build contract and implementation plan before repository edits. These complement the
+investigation, build evidence, PR review and terminal record. Keep execution inline; each
+record contributes unique knowledge and links its inputs rather than repeating their bodies.
 
-- **Investigation:** corrected cause, current acceptance contract, and prior knowledge
-  applied/superseded with source links.
-- **Build:** approach and rationale, material alternatives actually considered, prior
-  constraints preserved or changed, and implementation/check evidence. Do not invent
-  alternatives merely to fill a template.
-- **PR review:** verified behavior, substantive findings and their causal mechanism;
-  include a prevention lesson when supported by evidence, not a speculative universal rule.
-- **Terminal issue receipt:** outcome and exact identities, durable links to the other
-  records, important decisions/corrections, and meaningful new knowledge for future work.
+Capture what was understood and intended before coding, not merely an explanation afterward.
+Preserve the chosen approach, material alternatives actually considered, compatibility
+assumptions and historical constraints. Append superseding records for material changes;
+do not erase the old decision. Review conclusions add evidence-based dispositions and
+prevention lessons, not speculative universal rules or automatic new backlog items.
 
 Anchor a reusable lesson to affected files/symbols, a verified head/check, its scope and
 limitations. Reference earlier evidence instead of repeating its whole body. If no new
@@ -82,6 +83,7 @@ needs real separate action, never merely to make a lesson searchable.
 
 ## Cold-start handoff and comparison
 
+Completion includes publishing usable forward knowledge, not just mining older records.
 The next agent should recover the chosen approach, prior pitfalls, rejected directions,
 changed invariants, tests and remaining limitations through these links without needing
 the original conversation. In the normal compact result, summarize whether relevant

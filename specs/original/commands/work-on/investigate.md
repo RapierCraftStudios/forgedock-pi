@@ -20,8 +20,9 @@ If a completed `FORGE:INVESTIGATOR` receipt already exists, validate that it con
 verdict, route, root cause, Behavior Coverage, mutation scope, non-goals, evidence, acceptance
 checks, criterion-to-path proof/prerequisite availability, prior constraints and a cohesion decision.
 Equivalent historical annotations/headings are fine; reuse them rather than restating history.
-Reuse complete evidence when current code has not invalidated it. Delete and replace only an incomplete
-receipt owned by this lifecycle.
+Reuse complete evidence when current code has not invalidated it. Preserve completed
+records; append a superseding investigation for material corrections under
+`../../../knowledge-records.md`. Only repair an incomplete draft in place.
 
 ## Procedure
 
@@ -88,16 +89,20 @@ repository, or based on a false premise. Close invalid issues with concise evide
 
 ## Receipt
 
-Publish exactly one issue comment:
+Publish the completed investigation with the common metadata envelope from
+`../../../knowledge-records.md`. Preserve its links for the pre-build graph:
 
 ```markdown
 <!-- FORGE:INVESTIGATOR -->
+<!-- FORGE:RECORD {"v":1,"source_head":"<actual source commit>","inputs":[],"supersedes":null} -->
 ## Investigation
 
 **Verdict**: CONFIRMED | INVALID
 **Route**: BUILD | DECOMPOSE | TERMINAL
 **Confidence**: HIGH | MEDIUM | LOW
 **Task type**: Bug Fix | Feature | Refactor | Documentation | Investigation
+**Source head**: `<actual source commit>`
+**Inputs / Supersedes**: <actual links matching metadata, or none>
 
 ### Claim
 <observable behavior>
@@ -149,5 +154,5 @@ return terminal.
 For a confirmed issue, use one label edit to remove `workflow:investigating` and
 `needs-validation` when applicable, add `validated`, set `workflow:ready-to-build` for
 `BUILD`, or continue immediately to decomposition for
-`DECOMPOSE`. Do not write heartbeats, checkpoints, Gists, indexes, ledgers, dossiers,
-contracts, context artifacts, architecture artifacts, cost records, or telemetry.
+`DECOMPOSE`. For BUILD, continue to the named pre-build graph records before editing.
+Do not write heartbeats, checkpoints, Gists, indexes, ledgers, dossiers, cost records or telemetry.

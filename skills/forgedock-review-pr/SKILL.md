@@ -19,6 +19,27 @@ Base movement does not invalidate an unchanged clean reviewed head. Reconcile on
 actual conflict or required-up-to-date policy. Re-review after reconciliation only when
 the effective patch or risk changed.
 
+## Knowledge-aware independent review
+
+Fresh means independent judgment, not historically blind review. The owner supplies the
+linked investigation, classification, contract, context and plan plus concise relevant
+constraints. Read the records needed to understand intended behavior, material alternatives
+and prior decisions; follow a specific historical gap instead of guessing that unfamiliar
+code is wrong or repeating the entire graph search in every role. For standalone/legacy
+PRs, use available issue/PR/source history and state missing context; do not fabricate
+pre-build records or replay engineering merely to retrofit the new format.
+
+For each substantive concern distinguish regression/unmet acceptance, a currently valid
+deliberate trade-off, superseded/stale concern, independent debt, or unresolved evidence.
+Cite the decision considered and explain why current evidence preserves or overturns it.
+A past approval is not a waiver of a newly demonstrated failure. Missing rationale is not
+itself proof of a code defect; obtain the relevant evidence without hiding real blockers.
+
+Bind conclusions to the exact head and material graph inputs. New evidence that changes an
+acceptance/risk judgment requires only the affected reassessment; unchanged facts or record
+formatting do not restart review. Preserve root-cause/prevention lessons and dispositions
+in the consolidated PR record for later reviewers, using `../../specs/knowledge-records.md`.
+
 ## Verify
 
 Reuse trusted builder checks bound to the same head. Run only missing, stale, review-
@@ -76,9 +97,10 @@ owning agent. Retry only when the child failed or no substantive review can be r
 formatting variance alone never restarts a role or panel. Blocking findings still require
 the confirmed HIGH/CRITICAL production-incident standard.
 
-After complete validation, the owning agent publishes one SHA-bound consolidated panel comment
-containing every role's summary, acceptance invariants, test evidence/scope,
-verified behaviors, residual risks, and findings, then one official review verdict. Read
+After complete validation, the owner publishes one SHA-bound `FORGE:REVIEW-PANEL` comment
+with the knowledge-records metadata envelope and visible graph-input links. Include each
+role's summary, relevant decisions considered, finding dispositions, acceptance/test evidence,
+verified behaviors and residual risks, then one official review verdict. Read
 back the exact IDs. Use quoted, file-backed bodies. When the active identity authored the
 PR, record the official verdict with `gh pr review --comment --body-file`; do not attempt
 self-approval or invent `gh pr reviews`. This never replaces a branch-required independent

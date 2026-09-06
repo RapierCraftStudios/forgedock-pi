@@ -19,7 +19,7 @@ test("GitHub memory is proactively retrieved, applied and preserved in existing 
   assert.match(investigate, /github-memory\.md/);
   assert.match(investigate, /Prior Knowledge Applied/);
   assert.doesNotMatch(investigate, /history only when it answers/);
-  assert.match(build, /Approach and Rationale/);
+  assert.match(build, /Plan and Decision Trace/);
   assert.match(close, /Decisions and Reusable Knowledge/);
   assert.match(close, /permalink/);
 });
