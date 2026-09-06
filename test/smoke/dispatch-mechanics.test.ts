@@ -18,7 +18,7 @@ async function fixture(run: (f: any) => Promise<void>) {
   execFileSync("git", ["add", "base.txt"], { cwd: repo });
   execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "base"], { cwd: repo });
   await writeFile(join(repo, "forge.yaml"), 'project: {owner: example, repo: project}\nagents: {subagent_model: "openai-codex/gpt-5.6-luna"}\norchestration: {max_concurrent: 3}\nprivate_value: do-not-print-this\n');
-  const plan = { activeOwners: 2, launchAllowance: 24, requestStartedAt: "2026-01-01T00:00:00Z", issues: [
+  const plan = { activeOwners: 2, requestStartedAt: "2026-01-01T00:00:00Z", issues: [
     { number: 33724, target: "staging", baseCwd: repo, predecessors: [] },
     { number: 33745, target: "staging", baseCwd: repo, predecessors: [] },
   ] };
@@ -43,11 +43,12 @@ test("prepared requests bind one canonical model/cap despite absent child config
     assert.ok(script.includes('"launch":{"agent":"forgedock-work-on-coordinator"'));
     assert.equal(script.includes("do-not-print-this"), false);
     assert.equal(prepared.request.globalConcurrencyLimit, 2);
-    assert.equal(prepared.request.maxSubagentSpawnsPerRun, 24);
+    assert.equal(prepared.request.maxSubagentSpawnsPerRun, undefined);
     assert.equal(policy.config.sha256.length, 64);
     const cli = execFileSync(process.execPath, [fileURLToPath(new URL("../../specs/helpers/dispatch.mjs", import.meta.url)), "context"], { cwd: child, env: { ...process.env, ...env }, encoding: "utf8" });
     assert.equal(JSON.parse(cli).remediationLimit, 1);
     assert.equal(cli.includes("do-not-print-this"), false);
+    assert.throws(() => dispatch.prepareBatch({ ...plan, launchAllowance: 1 }, join(root, "budget"), repo), /Unknown plan field/);
   });
 });
 

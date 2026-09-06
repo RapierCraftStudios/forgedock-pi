@@ -255,7 +255,7 @@ test("orchestrate builds only hard dependency edges and maximizes concurrency", 
   assert.match(skill, /GATED.*not FAILED/s);
   assert.match(skill, /merged.*tested.*production/i);
   assert.match(adapter, /use and report\s+the extension's effective limit/s);
-  assert.match(adapter, /maxSubagentSpawnsPerRun` to an explicit finite planning allowance/);
+  assert.match(adapter, /Do not set `maxSubagentSpawnsPerRun`/);
   assert.match(adapter, /attention thresholds at or above the 1,200,000 ms panel join/);
   assert.match(adapter, /at most one concise `contact_supervisor` progress update/);
   assert.doesNotMatch(skill, /maxSubagentSpawnsPerRun/);
