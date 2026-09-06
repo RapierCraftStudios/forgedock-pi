@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "runId": "run-disagreement-004",
+  "terminal": "GATED",
+  "evidence": ["aggregate", "child-handoff", "github-record"],
+  "disagreements": ["aggregate=FAILED; child=GATED"],
+  "requiredCapability": {"name": "integration-service", "state": "SKIPPED"},
+  "productionExposure": "UNVERIFIED"
+}

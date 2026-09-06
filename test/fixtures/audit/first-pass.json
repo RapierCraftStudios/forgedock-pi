@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "runId": "run-success-001",
+  "terminal": "MERGED",
+  "evidence": ["request", "owner", "review", "merge"],
+  "productionExposure": "UNVERIFIED"
+}

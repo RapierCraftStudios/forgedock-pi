@@ -21,6 +21,16 @@ is the mutation contract.
 At phase entry, use one label edit to replace `workflow:ready-to-build` and other stale
 active-phase labels with `workflow:building`.
 
+### Proof map admission
+
+Before editing, compile the contract into rows of criterion → invariant → reachable failure
+mode → producer/consumer boundary → source/test/evidence. Include namespace/type and
+serialization obligations, interleavings, failure injection, retry, recovery, and fresh versus
+existing state for each new key, protocol, state machine, or external call. Mark each row
+`PASS`, `FAIL`, `MISSING`, `SKIPPED`, `CONTRADICTED`, or `UNKNOWN`; required-risk integration
+capability that is unavailable or skipped is insufficient evidence and must gate the row.
+This enriches imperfect intake without becoming a separate qualitative refusal gate.
+
 ## Plan once and publish the pre-build graph
 
 Before repository edits, form the following concise plan and publish the named

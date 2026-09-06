@@ -632,6 +632,18 @@ Report each conflict as **HIGH** — a shadowed native command is a silent user-
 
 **Why this matters**: A recurring defect class ships dead-on-arrival: guards, feature flags, validators, and error branches that are added to the codebase but never actually execute. Examples: #1230 (orchestrate Layer 5 `LAYER1_FILES` never populated — dead code), #1522 (validator pointed at wrong path — permanent no-op), #1244 (guard added to fix Layer 5 itself never fires), #1580 (hook reads wrong transcript schema). Nothing in the quality gate previously asked the one question that kills this class: *prove this new conditional actually runs.*
 
+### Required-risk evidence and proof-map closure
+
+A gate result must bind each applicable acceptance criterion to its invariant, reachable
+failure mode, producer, consumer, source boundary, and executable test/evidence. Use the
+states `PASS`, `FAIL`, `MISSING`, `SKIPPED`, `CONTRADICTED`, and `UNKNOWN`; structural
+presence or a green aggregate row is not behavioral proof. A check marked `SKIPPED` because
+a required-risk integration capability is unavailable is insufficient evidence and must
+remain visible as a gate limitation, not be promoted to PASS. For new protocols, keys,
+state machines, or external calls, verify producer/consumer closure, type/namespace and
+serialization, interleavings, retry, failure injection, and recovery. This supplements
+existing domain checks and never weakens the independent review or remediation cap.
+
 **Scope boundary — newly added lines ONLY**: This check scans lines beginning with `+` in the diff (excluding `+++` file-header lines). Pre-existing conditionals are **never** flagged. A conditional that existed before this diff is outside scope regardless of whether it has tests.
 
 **Acceptance criteria for each new conditional**:

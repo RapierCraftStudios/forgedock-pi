@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "runId": "run-cross-repository-005",
+  "terminal": "FAILED",
+  "evidence": ["validated-repository", "linked-source", "unverified-external"],
+  "productionExposure": "UNVERIFIED"
+}

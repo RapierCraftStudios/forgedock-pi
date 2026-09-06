@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "runId": "run-decomposed-002",
+  "terminal": "DECOMPOSED",
+  "evidence": ["parent", "children", "dependency-graph"],
+  "productionExposure": "UNVERIFIED"
+}

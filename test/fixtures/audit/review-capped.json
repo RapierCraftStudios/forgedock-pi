@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "runId": "run-capped-003",
+  "terminal": "GATED",
+  "evidence": ["review-block", "remediation-round", "cap"],
+  "productionExposure": "UNVERIFIED"
+}

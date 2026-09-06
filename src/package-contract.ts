@@ -1,13 +1,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, normalize, relative, resolve } from "node:path";
 
-/** The five user-facing prompt-routed ForgeDock skills. */
+/** The six user-facing prompt-routed ForgeDock skills. */
 export const FORGE_PUBLIC_SKILLS = Object.freeze([
   "forgedock-work-on",
   "forgedock-orchestrate",
   "forgedock-quality-gate",
   "forgedock-review-pr",
   "forgedock-review-pr-staging",
+  "forgedock-audit",
 ] as const);
 
 export const FORGE_NESTED_SKILL_TRANSLATIONS = Object.freeze({
