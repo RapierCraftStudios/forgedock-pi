@@ -1,3 +1,5 @@
+import type { ProofObligation } from "./builder-contract.ts";
+
 export type PhaseArtifact =
   | ResolveArtifact
   | InvestigationArtifact
@@ -57,6 +59,9 @@ export interface InvestigationArtifact extends PhaseArtifactBase {
 
 export interface PlanArtifact extends PhaseArtifactBase {
   phase: "plan";
+  risk: "low" | "high";
+  riskSignals: string[];
+  proofObligations: ProofObligation[];
   objective: string;
   allowedPaths: string[];
   forbiddenChanges: string[];
@@ -180,10 +185,13 @@ export const FORGE_PHASE_ARTIFACT_SCHEMA = {
     {
       type: "object",
       additionalProperties: false,
-      required: ["schema", "phase", "objective", "allowedPaths", "forbiddenChanges", "invariants", "deliverables", "acceptanceMapping", "context", "steps", "outOfScope"],
+      required: ["schema", "phase", "risk", "riskSignals", "proofObligations", "objective", "allowedPaths", "forbiddenChanges", "invariants", "deliverables", "acceptanceMapping", "context", "steps", "outOfScope"],
       properties: {
         ...artifactIdentity,
         phase: { type: "string", const: "plan" },
+        risk: { type: "string", enum: ["low", "high"] },
+        riskSignals: schemaStrings,
+        proofObligations: { type: "array", items: { type: "object", additionalProperties: false, required: ["criterion", "invariant", "counterexample", "boundaryConsumers", "testCommand", "failingBefore", "passingAfter", "state", "required"], properties: { criterion: schemaString, invariant: schemaString, counterexample: schemaString, boundaryConsumers: schemaString, testCommand: schemaString, failingBefore: schemaString, passingAfter: schemaString, state: { type: "string", enum: ["PASS", "FAIL", "MISSING", "SKIPPED", "CONTRADICTED", "UNKNOWN"] }, required: { type: "boolean" } } } },
         objective: schemaString,
         allowedPaths: schemaNonEmptyStrings,
         forbiddenChanges: schemaNonEmptyStrings,
@@ -246,7 +254,7 @@ export function phaseArtifactValidationError(value: unknown): string {
   const required: Record<string, readonly string[]> = {
     resolve: ["schema", "phase", "issueNumber", "title", "eligible", "baseBranch", "evidence"],
     investigate: ["schema", "phase", "verdict", "confidence", "severity", "taskType", "complexity", "claimed", "observed", "rootCause", "affectedFiles", "evidence", "history", "recommendation", "relatedIssues", "decomposition", "skippedPhases", "acceptanceChecks"],
-    plan: ["schema", "phase", "objective", "allowedPaths", "forbiddenChanges", "invariants", "deliverables", "acceptanceMapping", "context", "steps", "outOfScope"],
+    plan: ["schema", "phase", "risk", "riskSignals", "proofObligations", "objective", "allowedPaths", "forbiddenChanges", "invariants", "deliverables", "acceptanceMapping", "context", "steps", "outOfScope"],
     "prepare-worktree": ["schema", "phase", "branch", "baseBranch", "baseSha", "worktree"],
     implement: ["schema", "phase", "branch", "baseSha", "commitSha", "changedFiles", "acceptanceChecks", "checksRun"],
     verify: ["schema", "phase", "headSha", "checks", "readiness", "reason"],
@@ -288,6 +296,10 @@ export function isPhaseArtifact(value: unknown): value is PhaseArtifact {
       );
     case "plan":
       return (
+        enumValue(artifact.risk, ["low", "high"]) &&
+        stringArray(artifact.riskSignals) &&
+        validProofObligations(artifact.proofObligations) &&
+        (artifact.risk !== "high" || artifact.proofObligations.some((row) => row.required)) &&
         strings(artifact, ["objective"]) &&
         nonEmptyStringArray(artifact.allowedPaths) &&
         nonEmptyStringArray(artifact.forbiddenChanges) &&
@@ -331,7 +343,7 @@ export function renderPhaseArtifact(artifact: PhaseArtifact): string {
     case "investigate":
       return `<!-- FORGE:INVESTIGATOR -->\n## Investigation Report\n\n| Field | Value |\n| --- | --- |\n| Verdict | ${artifact.verdict.toUpperCase()} |\n| Confidence | ${artifact.confidence.toUpperCase()} |\n| Severity | ${artifact.severity.toUpperCase()} |\n| Task type | ${artifact.taskType} |\n| Complexity | ${artifact.complexity.toUpperCase()} |\n\n### Claimed Behavior\n\n${artifact.claimed}\n\n### Observed Behavior\n\n${artifact.observed}\n\n### Root Cause\n\n${artifact.rootCause}\n\n### Affected Files\n\n${table(artifact.affectedFiles.map((file) => [file.path, file.reason]), ["Path", "Reason"])}\n\n### Evidence\n\n${bullets(artifact.evidence)}\n\n### History\n\n${bullets(artifact.history)}\n\n### Recommendation\n\n${artifact.recommendation}\n\n### Related Issues\n\n${artifact.relatedIssues.length ? artifact.relatedIssues.map((issue) => `- #${issue}`).join("\n") : "- None."}\n\n### Decomposition\n\n**Required**: ${artifact.decomposition.required ? "yes" : "no"} — ${artifact.decomposition.reason}\n\n<!-- FORGE:FAST_PATH -->\n### Routing\n\n**Complexity**: ${artifact.complexity.toUpperCase()}  \n**Task type**: ${artifact.taskType}\n\n${artifact.skippedPhases.length ? artifact.skippedPhases.map((entry) => `- ${entry.phase}: skipped — ${entry.reason}`).join("\n") : "- No phases skipped."}\n\n### Acceptance Checks\n\n${renderChecks(artifact.acceptanceChecks)}\n\n<!-- INVESTIGATION:COMPLETE -->`;
     case "plan":
-      return `<!-- FORGE:CONTRACT -->\n## Builder Contract\n\n### Objective\n\n${artifact.objective}\n\n### Allowed Paths\n\n${bullets(artifact.allowedPaths)}\n\n### Forbidden Changes\n\n${bullets(artifact.forbiddenChanges)}\n\n### Invariants\n\n${bullets(artifact.invariants)}\n\n### Deliverables\n\n${bullets(artifact.deliverables)}\n\n### Acceptance Mapping\n\n${table(artifact.acceptanceMapping.map((entry) => [entry.checkId, entry.implementation]), ["Check", "Implementation"])}\n\n### Out of Scope\n\n${bullets(artifact.outOfScope)}\n\n<!-- FORGE:CONTEXT -->\n## Implementation Context\n\n### Relevant History\n\n${bullets(artifact.context.history)}\n\n### Callers and Data Flow\n\n${bullets(artifact.context.callersAndDataFlow)}\n\n### CI Surface\n\n${bullets(artifact.context.ciSurface)}\n\n### Prior Findings\n\n${bullets(artifact.context.priorFindings)}\n\n### Hazards\n\n${bullets(artifact.context.hazards)}\n\n<!-- FORGE:CONTEXT:COMPLETE -->\n\n<!-- FORGE:ARCHITECT -->\n## Architecture Plan\n\n${artifact.steps.map((step) => `${step.order}. ${step.action} (${step.checkIds.join(", ")})`).join("\n")}\n\n<!-- FORGE:ARCHITECT:COMPLETE -->`;
+      return `<!-- FORGE:CONTRACT -->\n## Builder Contract\n\n### Risk and Proof Closure\n\n**Risk**: ${artifact.risk}\n**Signals**: ${artifact.riskSignals.join(", ")}\n\n${table(artifact.proofObligations.map((row) => [row.criterion, row.invariant, row.counterexample, row.boundaryConsumers, row.testCommand, row.failingBefore, row.passingAfter, row.state, row.required ? "required" : "optional"]), ["Criterion", "Invariant", "Counterexample", "Boundary / consumers", "Test / command", "Failing before", "Passing after", "State", "Policy"])}\n\n### Objective\n\n${artifact.objective}\n\n### Allowed Paths\n\n${bullets(artifact.allowedPaths)}\n\n### Forbidden Changes\n\n${bullets(artifact.forbiddenChanges)}\n\n### Invariants\n\n${bullets(artifact.invariants)}\n\n### Deliverables\n\n${bullets(artifact.deliverables)}\n\n### Acceptance Mapping\n\n${table(artifact.acceptanceMapping.map((entry) => [entry.checkId, entry.implementation]), ["Check", "Implementation"])}\n\n### Out of Scope\n\n${bullets(artifact.outOfScope)}\n\n<!-- FORGE:CONTEXT -->\n## Implementation Context\n\n### Relevant History\n\n${bullets(artifact.context.history)}\n\n### Callers and Data Flow\n\n${bullets(artifact.context.callersAndDataFlow)}\n\n### CI Surface\n\n${bullets(artifact.context.ciSurface)}\n\n### Prior Findings\n\n${bullets(artifact.context.priorFindings)}\n\n### Hazards\n\n${bullets(artifact.context.hazards)}\n\n<!-- FORGE:CONTEXT:COMPLETE -->\n\n<!-- FORGE:ARCHITECT -->\n## Architecture Plan\n\n${artifact.steps.map((step) => `${step.order}. ${step.action} (${step.checkIds.join(", ")})`).join("\n")}\n\n<!-- FORGE:ARCHITECT:COMPLETE -->`;
     case "prepare-worktree":
       return `<!-- FORGE:WORKTREE -->\n## Worktree Prepared\n\n| Field | Value |\n| --- | --- |\n| Branch | \`${artifact.branch}\` |\n| Base | \`${artifact.baseBranch}\` at \`${artifact.baseSha}\` |\n| Worktree | \`${artifact.worktree}\` |`;
     case "implement":
@@ -363,6 +375,14 @@ function nonEmptyObjectArray(value: unknown): value is Record<string, unknown>[]
 }
 function objectValue(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+function validProofObligations(value: unknown): value is ProofObligation[] {
+  return Array.isArray(value) && value.every((row) =>
+    objectValue(row) &&
+    strings(row, ["criterion", "invariant", "counterexample", "boundaryConsumers", "testCommand", "failingBefore", "passingAfter"]) &&
+    enumValue(row.state, ["PASS", "FAIL", "MISSING", "SKIPPED", "CONTRADICTED", "UNKNOWN"]) &&
+    typeof row.required === "boolean"
+  );
 }
 function validPlanContext(value: unknown): boolean {
   if (!objectValue(value)) return false;

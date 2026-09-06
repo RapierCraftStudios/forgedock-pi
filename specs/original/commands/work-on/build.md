@@ -31,7 +31,8 @@ call. Mark each row `PASS`, `FAIL`, `MISSING`, `SKIPPED`, `CONTRADICTED`, or `UN
 
 For `HIGH`/`COMPLEX` work or shared state, concurrency, data integrity, security boundaries,
 external side effects, or cross-service protocols, retain the risk signals and contract identity
-with the staged diff. Before commit, invoke the existing quality gate with exact
+with the staged diff. Before commit, invoke the existing quality gate and native
+`forge_proof_closure` admission with exact
 `ISSUE_NUMBER`, `PROOF_CONTRACT`, and `RISK_SIGNALS` values from the bound records. It must
 validate identity and compare every applicable row, blocking missing, unknown, contradicted,
 failed, or required-risk skipped proof; optional skips remain explicit. Low-risk documentation,

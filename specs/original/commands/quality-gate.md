@@ -94,8 +94,9 @@ Compare the staged diff and executable evidence to every applicable row. Emit a 
 `SKIPPED` because required-risk capability is unavailable. A row is `PASS` only when all eight
 fields, its counterexample, boundary, exact test/command, and failing-before/passing-after
 evidence are accounted for. Optional checks retain their explicit `SKIPPED` reporting and do
-not become blockers. The gate cannot return `PASS`, and the builder cannot commit or create/update
-a PR, until every required row is closed. Local repairs before publication do not consume a PR
+not become blockers. The native `forge_proof_closure` check is the commit boundary for this contract; the gate cannot
+return `PASS`, and the builder cannot commit or create/update a PR, until every required row is
+closed. Local repairs before publication do not consume a PR
 remediation round. For validated low-risk work with no trigger, report proof closure as not
 applicable and retain the current fast path. Final independent exact-head review remains
 mandatory and unchanged.

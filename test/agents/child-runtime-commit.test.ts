@@ -125,6 +125,8 @@ test("read-only nodes deny shell and file mutation tools", () => {
   assert.match(boundedToolDenial("plan", "edit") ?? "", /read-only/);
   assert.equal(boundedToolDenial("implement", "edit"), undefined);
   assert.equal(boundedToolDenial("implement", "bash"), undefined);
+  assert.equal(allowedNodeTools("implement").has("forge_proof_closure"), true);
+  assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_proof_closure"), true);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("bash"), false);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("subagent"), true);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_checkpoint"), true);

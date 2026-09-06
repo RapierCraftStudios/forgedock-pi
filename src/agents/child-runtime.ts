@@ -40,7 +40,9 @@ import {
 import { resolveVerificationCommandDirectory } from "../adapters/verification-preflight.ts";
 import {
   assertBuilderContractPaths,
+  assertProofClosure,
   type BuilderPathContract,
+  type ProofClosureContract,
   validateBuilderPathContract,
 } from "../core/builder-contract.ts";
 import { workflowLabelForPhaseBoundary } from "../core/artifact-protocol.ts";
@@ -199,6 +201,10 @@ const CommitParameters = Type.Object({
   kind: StringEnum(["implementation", "review-fixes"] as const),
 });
 
+const ProofClosureParameters = Type.Object({
+  contract: Type.Unsafe({ type: "object" }),
+});
+
 /** Shared details shape for forge_commit outcomes (normal commit or no-change). */
 interface ForgeCommitDetails {
   kind: "implementation" | "review-fixes";
@@ -305,6 +311,7 @@ export function registerForgeRuntime(
   let caseInsensitivePaths: boolean | undefined;
   let refreshPushLeaseSha: string | undefined;
   let preparedPull: { number: number; headSha: string } | undefined;
+  let proofClosureApproved: ProofClosureContract | undefined;
   let reviewDiffCoverage:
     | { headSha: string; sha256: string; bytes: number; coveredBytes: number }
     | undefined;
@@ -676,6 +683,29 @@ export function registerForgeRuntime(
   });
 
   pi.registerTool({
+    name: "forge_proof_closure",
+    label: "Forge Proof Closure",
+    description:
+      "Validate and admit the bound proof-closure contract before implementation commit",
+    parameters: ProofClosureParameters,
+    async execute(_toolCallId, params) {
+      assertWorkOnAuthority(binding);
+      const contract = params.contract as ProofClosureContract;
+      assertProofClosure(contract, {
+        repository: binding.repository,
+        issueNumber: binding.issueNumber!,
+        target: binding.baseBranch,
+        baseSha: binding.baseSha,
+      });
+      proofClosureApproved = contract;
+      return {
+        content: [{ type: "text", text: "Proof closure admitted for this bound run." }],
+        details: { schema: contract.schema, risk: contract.risk, obligations: contract.obligations.length },
+      };
+    },
+  });
+
+  pi.registerTool({
     name: "forge_commit",
     label: "Forge Commit",
     description:
@@ -728,12 +758,23 @@ export function registerForgeRuntime(
           details,
         };
       }
-      if (binding.node === "implement" && !binding.builderContract)
+      if (params.kind === "implementation" && !binding.builderContract?.proofClosure && !proofClosureApproved)
         throw new Error(
-          "Implementation commit refused without an accepted builder contract.",
+          "Implementation commit refused without admitted proof closure.",
         );
       if (binding.builderContract)
         assertBuilderContractPaths(binding.builderContract, changedPaths);
+      if (params.kind === "implementation" || binding.builderContract?.proofClosure) {
+        const proof = binding.builderContract?.proofClosure ?? proofClosureApproved;
+        if (!proof)
+          throw new Error("Commit refused without proof closure.");
+        assertProofClosure(proof, {
+          repository: binding.repository,
+          issueNumber: binding.issueNumber!,
+          target: binding.baseBranch,
+          baseSha: binding.baseSha,
+        });
+      }
       const added = await runProcess(
         "git",
         ["-C", root, "add", "-A", "--", ...changedPaths],
@@ -1950,6 +1991,7 @@ export function allowedNodeTools(
       "forge_verify",
       "forge_diff",
       "forge_commit",
+      "forge_proof_closure",
       "forge_prepare_review",
       "forge_finalize_reviewer",
       "forge_finalize_work_on",
@@ -1957,7 +1999,7 @@ export function allowedNodeTools(
   if (node.startsWith("review-"))
     return new Set(["forge_diff", "forge_finalize_reviewer"]);
   const common = ["forge_diff", "forge_finalize_node"];
-  if (node === "implement") return new Set([...common, "forge_commit"]);
+  if (node === "implement") return new Set([...common, "forge_commit", "forge_proof_closure"]);
   if (node === "verify") return new Set([...common, "forge_verify"]);
   if (node === "prepare-pr")
     return new Set(["forge_prepare_review", "forge_finalize_node"]);

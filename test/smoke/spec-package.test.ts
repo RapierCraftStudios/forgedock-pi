@@ -143,7 +143,8 @@ test("high-risk proof closure fails closed while low-risk work keeps the fast pa
   assert.match(monolithic, /--issue \{ISSUE_NUMBER\} --proof-contract \{CONTRACT_ID\} --risk-signals \{RISK_SIGNALS\}/);
   for (const field of ["criterion", "invariant", "counterexample", "boundary/consumers", "test/command", "failing-before", "passing-after", "state"])
     assert.ok(qualityGate.includes(`\`${field}\``), `missing proof field: ${field}`);
-  assert.match(qualityGate, /cannot return `PASS`.*until every|required row is closed/s);
+  assert.match(qualityGate, /cannot[\s\S]+return `PASS`/);
+  assert.match(qualityGate, /until every required row is\s+closed/s);
   assert.match(qualityGate, /Optional checks retain.*`SKIPPED`/s);
   assert.match(validate, /Publication proof handoff/);
   assert.match(validate, /MISSING.*UNKNOWN.*CONTRADICTED.*required-risk.*SKIPPED/s);
