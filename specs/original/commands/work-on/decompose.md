@@ -14,9 +14,24 @@ Run only when the completed investigation has `Verdict: CONFIRMED` and
 - The investigation identifies more than one independently mergeable concern.
 - Each child can be stated with its own observable behavior, root cause, mutation scope,
   non-goals, and acceptance checks.
-- Child scopes do not overlap. If they must change the same invariant together, keep one
-  issue instead of decomposing.
-- No equivalent open issue already exists.
+- Slices are independently safe and testable at their target. File overlap is allowed only
+  with explicit dependencies that serialize it; an atomic shared invariant stays one issue.
+- Every remaining acceptance criterion is mapped to the children; do not delete requirements
+  or turn each reviewer finding into an issue.
+- Reuse matching open issues; create only genuinely missing independently safe units.
+
+## Existing PR or partial implementation
+
+A scope reassessment may propose DECOMPOSE after build/review. Preserve the PR, exact head,
+commits, uncommitted-work evidence and owned worktree; do not close the PR or discard work
+as part of deciding. Record the rationale and acceptance-to-slice mapping in the existing
+investigation record, linking prior decisions rather than erasing them.
+
+Require an explicitly approved handoff and PR disposition bound to the preserved head and
+remaining criteria before executing this split: which work is reused and how the partial
+PR is retained/superseded. Revalidate the decision if that head or scope changes. Until that approval, return GATED with the concrete proposal; create no
+child issues and close neither parent nor PR. After approval, apply only that disposition
+and the procedure below. Never reset remediation usage or claim the split delivered code.
 
 ## Procedure
 
@@ -29,12 +44,14 @@ Run only when the completed investigation has `Verdict: CONFIRMED` and
 5. Link each child to the parent and record explicit ordering only when real dependency
    or exact mutation overlap requires it.
 6. Update an actual parent project/tracker when configured; otherwise skip it.
-7. Publish one parent receipt listing created/reused children and dependency edges.
+7. Publish one parent receipt listing created/reused children, dependencies, acceptance
+   coverage, and any approved partial-PR handoff.
 8. Add `workflow:decomposed`, remove active workflow labels, close the parent, and read
    back the terminal state.
 
 Do not create Gists, indexes, planning dossiers, checkpoints, cost estimates, heartbeats,
-or child orchestration runs. The outer orchestrator may enroll the created issues later.
+or child orchestration runs. Do not automatically dispatch an unconfirmed child set; the
+outer orchestrator may enroll the created issues only under its selector/confirmation rules.
 
 ## Receipt
 
@@ -46,6 +63,8 @@ or child orchestration runs. The outer orchestrator may enroll the created issue
 | --- | --- | --- |
 | #N | <cohesive behavior> | — |
 
+**Partial work / PR disposition**: <none, or approved disposition with retained head/links>
+**Acceptance coverage**: <remaining parent criteria mapped to created/reused children>
 **Parent result**: DECOMPOSED
 ```
 

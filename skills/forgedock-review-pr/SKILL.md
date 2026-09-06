@@ -23,7 +23,10 @@ the effective patch or risk changed.
 
 Reuse trusted builder checks bound to the same head. Run only missing, stale, review-
 specific, or independently security-relevant checks. Do not rerun identical deterministic
-commands against an unchanged SHA.
+commands against an unchanged SHA. Use `../../specs/verification.md`; preserve valid
+input-bound evidence instead of repeating heavy builds. Review the historical constraints
+and rationale supplied by the owner against current code; do not blindly trust old comments
+or repeat the entire historical search in every role.
 
 ## Select reviewers
 
@@ -51,7 +54,8 @@ task or give the delegate one stable readable file path; never use `runs.host` t
 it. Launch all selected roles as fresh ordinary `delegate` agents with full normal tool
 availability through the adapter's single `runs.all` workflow. Prompts assign review focus
 without creating specialized agent profiles or capability ceilings. Each task carries the
-acceptance invariants, test evidence/scope, and bounded ordinary diff/context (start with
+acceptance invariants, relevant historical constraints/source links, test evidence/scope,
+and bounded ordinary diff/context (start with
 normal diff context, then read relevant callers). Correctness must check whether tests
 exercise the claimed behavior and catch the original defect; source-string assertions do
 not establish runtime correctness. Reproduce disputed blockers when safely feasible and
@@ -65,7 +69,8 @@ Bind repository, PR, head/base, attempt, and role from the launch key and task r
 requiring the delegate to echo them perfectly. Accept JSON or clearly structured Markdown
 when it contains a verdict, substantive summary, verified `path:line` behaviors, residual
 risks, and findings. A blocker identifies a reachable trigger, the patch-caused causal
-chain, existing mitigations checked, and concrete production impact; speculation or
+chain, existing mitigations checked, and concrete production impact. Preserve a supported
+root-cause/prevention lesson in that same finding, not a new knowledge-only issue; speculation or
 independent pre-existing debt is not a blocker. Normalize harmless key casing, number/string, and list-shape differences in the
 owning agent. Retry only when the child failed or no substantive review can be recovered;
 formatting variance alone never restarts a role or panel. Blocking findings still require
@@ -88,8 +93,9 @@ or review-start/checkpoint comments are required.
 - Missing/invalid role after its bounded retry: `review-degraded`, no verdict.
 
 Keep work-on blockers on the existing PR/source issue for cohesive remediation. Create at
-most one valuable independent follow-up issue per causal concern; advisories may remain in
-the consolidated report.
+most one valuable independent follow-up issue per causal concern when separate action is
+needed and authorized. Advisories and reusable lessons remain in the consolidated report
+by default; do not expand the backlog merely to make knowledge searchable.
 
 Merge only when explicitly authorized, the current head equals the accepted reviewed head
 or a proven equivalent patch, required checks pass, the PR is mergeable, and no blocker

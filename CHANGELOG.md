@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased — GitHub-first candidate
+
+- Restore proactive bounded GitHub history retrieval, validated application of prior lessons,
+  and durable implementation rationale/corrections inside the existing four records.
+- Reuse the existing verification command catalog with optional scope/source provenance;
+  prefer relevant behavioral checks, cheap CI-wiring checks before heavy builds, and
+  identity-safe evidence reuse instead of bespoke CI jobs or repeated full logs.
+- Document separate cumulative launch allowance and active-owner concurrency; use rolling
+  native Promise admission for large confirmed DAGs and return compact result references.
+- Add opt-in no-model 100-issue qualification through the installed workflow and fanout
+  budget engines, including nested reviews, failed/gated dependencies and retained recovery.
+- Pass prepared verification catalogs as read-only path/digest inputs, preserve recovery
+  references on admission failure, and read complete async results from native persisted state.
+- Require explicit cohesion assessment on complexity signals without automatic file-count
+  splitting; allow safe sequential overlap and a preserved-work post-review replan path.
+- This is a candidate for live comparison, not proof of production quality or throughput.
+
 ## Unreleased — Prompt-router simplification
 
 - Define the first-pass happy path: complete acceptance/prerequisite evidence before edits,

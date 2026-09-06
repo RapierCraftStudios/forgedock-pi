@@ -13,7 +13,8 @@ not another analysis phase.
 
 Fetch issue, linked PR, current labels, relevant ForgeDock receipts, and parent relation
 once. Reuse the retained reviewed head, target, merge commit, changed files, verification,
-and reviewer results.
+and reviewer results. Reuse the investigation/build decisions and source permalinks; do
+not perform another history search at close.
 
 ## Merged issue
 
@@ -60,12 +61,20 @@ Then:
 ### Verification and Review
 - <checks and reviewer roles>
 
+### Decisions and Reusable Knowledge
+- <material decision or correction → affected files/symbols → verified evidence/commit>
+- <prior constraint preserved/superseded and why; relevant source permalink>
+- <new prevention lesson and its applicability/limits, or no new lesson>
+- <links to investigation, build and consolidated review rather than copied transcripts>
+
 ### Residual Risks
 - <limitations or none>
 ```
 
 Do not create Gists, knowledge indexes, ledgers, dossiers, ADRs, cost priors, calibration
 records, decision-record duplicates, checkpoints, heartbeats, or post-merge source commits.
+The existing receipt preserves engineering knowledge; do not create a new issue merely
+for a lesson or overwrite another run's completed history.
 
 ## Cleanup
 

@@ -45,8 +45,10 @@ exact-ID readback can resolve.
 ## Result routing
 
 - `APPROVE`, no blockers: continue to merge checks.
-- Confirmed patch-caused HIGH/CRITICAL blocker: consolidate all findings, check remaining
-  remediation budget, then one cohesive fallback pass. At the cap, use the root's GATED
+- Confirmed patch-caused HIGH/CRITICAL blocker: consolidate findings and perform scope
+  reassessment when the admitted scope was incomplete/non-convergent. A DECOMPOSE proposal
+  uses the preserved-work handoff, not more code fixes. Otherwise check remaining remediation
+  budget, then one cohesive fallback pass. At the cap, use the root's GATED
   exit; never launch another panel by calling it final, last, or closure.
 - Explicit unresolved prerequisite: return `GATED` with exact wake condition.
 - Incomplete panel/provider failure: preserve valid roles, record `review-degraded`, and

@@ -7,14 +7,17 @@ description: Run or resume one issue inline through investigation, implementatio
 
 The visible session is the sole work-on agent and writer for one issue. GitHub issue/PR
 state and the compact receipts in `../../specs/original/commands/work-on.md` are durable
-memory.
+engineering memory, not only resume position. Retrieve relevant history, validate its
+applicability, and preserve material decisions for the next cold-start agent.
 
 ## Load
 
 1. Parse the arguments.
 2. Read `../../specs/pi-adapter.md` once for Pi mechanics.
 3. Read `../../specs/original/commands/work-on.md` once for route and invariants.
-4. Load only the current phase file under `../../specs/original/commands/work-on/`.
+4. Read `../../specs/github-memory.md` and `../../specs/verification.md` once for bounded
+   knowledge reuse and learned selective checks; reuse them across phases.
+5. Load only the current phase file under `../../specs/original/commands/work-on/`.
 
 ## Execute
 

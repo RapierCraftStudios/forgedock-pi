@@ -1,13 +1,21 @@
 # ForgeDock Pi — prompt-routed architecture
 
+## Core thesis
+
+GitHub is canonical engineering memory: source-linked prior decisions, failure mechanisms,
+constraints, implementation rationale, evidence and corrections survive individual sessions.
+The task's compact working context is a validated view of that graph, not a replacement.
+Retrieve → apply → preserve runs inline under `specs/github-memory.md`; it needs no new
+graph database, context agent or mandatory comment class.
+
 ## Product loop
 
 ```text
 /orchestrate
   → resolve a minimum hard-edge DAG
   → one sole-writer /work-on agent per ready issue
-      → investigate inline
-      → implement and verify inline
+      → investigate and apply relevant GitHub knowledge inline
+      → implement and selectively verify inline
       → create PR
       → fresh risk-selected review panel
       → cohesive inline remediation when required
@@ -51,16 +59,26 @@ assumptions authoritative.
 
 ## State
 
-GitHub issue/PR state, labels, commits, and four normal receipts are resumable state:
+GitHub issue/PR state, labels, commits, and four substantive records are reusable knowledge
+and resumable state:
 
-1. investigation receipt;
-2. completed build receipt;
-3. PR review evidence and verdict;
-4. terminal issue receipt.
+1. investigation: corrected cause, acceptance and validated prior constraints;
+2. build: chosen approach/alternatives, implementation and verification evidence;
+3. review: verified behavior, causal findings, prevention lessons and verdict;
+4. terminal issue: exact release identity, links, decisions, corrections and remaining limits.
 
 A completed remediation receipt is conditional. Work-on does not create Gists, memory
 indexes, ledgers, dossiers, ADRs, cost priors, heartbeats, checkpoints, or duplicate phase
 comments.
+
+## Verification and context
+
+`specs/verification.md` reuses existing `verification.commands` with small optional discovery
+metadata. Check choice follows changed behavior and callers; uncertain impact broadens the
+component suite, not automatically the entire repository. Existing tests remain the home
+for regressions; no bespoke CI jobs or second runner. Run cheap checks before heavyweight
+builds and reuse only provably unchanged inputs. Full logs stay in artifacts; agents consume
+concise evidence. A larger context window is not a reason to ingest the whole graph.
 
 ## Work-on ownership
 
@@ -149,7 +167,8 @@ batch. Missing ownership means report and skip. Cleanup is always last.
 A release is acceptable when tests prove:
 
 - inline work-on with reviewer-only fanout;
-- four-artifact budget and no Gist/checkpoint/heartbeat writes;
+- four substantive records preserve retrieval, rationale and learning without extra ceremony;
+- bounded historical lookup distinguishes no relevant evidence from unavailable retrieval;
 - mutation remains investigation-scoped;
 - configured verification runs once per SHA;
 - exact-head complete generic-delegate review catches seeded defects;

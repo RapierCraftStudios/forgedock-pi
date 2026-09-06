@@ -8,8 +8,9 @@ argument-hint: "[issue number | URL | next | PR --remediate --issue N]"
 # ForgeDock Work On
 
 One work-on agent owns one issue and one worktree from resolution to a terminal result.
-GitHub issue/PR state and the small receipt set below are durable state. The agent reasons
-and executes every phase inline; only fresh review and re-review panels may be children.
+GitHub is canonical engineering memory as well as durable state. Follow `../../github-memory.md`
+to retrieve, apply and preserve relevant decisions in the existing receipts. Execute every
+phase inline; only fresh review and re-review panels may be children.
 
 ## Authority
 
@@ -50,7 +51,7 @@ Oversized or unready work must be identified before editing, not hidden by the t
 
 ## Durable artifact budget
 
-Normal successful work creates only:
+Normal successful work creates only these records, enriched with reusable knowledge:
 
 1. one `FORGE:INVESTIGATOR` issue receipt;
 2. one completed `FORGE:BUILDER` issue receipt;
@@ -80,6 +81,8 @@ In one bounded shell block:
    `branches.staging`. A protected/default deployment target is selected only by the
    explicit staging/deployment route, never inferred for ordinary work-on.
 6. Retain the repository root and packaged ForgeDock root; never search for either again.
+7. Use `../../verification.md` for learned repository checks and selective execution. Under
+   orchestration consume the dispatcher's prepared catalog; never update another cwd.
 
 Refresh retained state only after this agent writes GitHub state, receives reviewer
 completion, observes target movement, resumes after interruption, or lacks a required
@@ -107,6 +110,7 @@ Derive exactly one next action from live state:
 | --- | --- |
 | issue closed with merged/invalid/decomposed receipt | report terminal; no-op |
 | merged PR but issue open | close |
+| decomposition reassessment with an open PR | preserve the PR/work; require approved handoff/disposition before splitting, otherwise GATED |
 | authorized remediation round unfinished | resume its cohesive fix/scoped re-review; do not charge another round |
 | open PR with current blockers and remediation rounds available | remediate |
 | blockers remain after last authorized re-review | read-only reassessment once, then GATED with unresolved evidence; no automatic extra round |
@@ -134,8 +138,9 @@ new authority can extend an exhausted budget; do not ask for routine extensions.
 
 Load `work-on/investigate.md` once. Confirm or invalidate the claim, identify root cause,
 trace relevant same-behavior paths, define the minimal mutation scope and non-goals, and
-select trusted acceptance checks. The receipt is the complete acceptance contract, including
-required proof and prerequisite availability; do not leave those for reviewers to discover.
+select trusted acceptance checks and proactively validate relevant prior knowledge. The
+receipt records the complete acceptance contract, prerequisite availability and historical
+constraints; do not leave those for reviewers to discover.
 
 Use two independent fields:
 
@@ -147,9 +152,10 @@ verdict; it is the route selected after a confirmed investigation.
 
 ### 2. Decompose when required
 
-Load `work-on/decompose.md` only for `Route: DECOMPOSE`. Create only independently
-executable children, update a real parent tracker when present, mark the parent
-`workflow:decomposed`, and stop. Otherwise skip this phase entirely.
+Load `work-on/decompose.md` for `Route: DECOMPOSE`, including a justified later reassessment.
+An existing PR requires its preserved-work/approved-disposition guard first. Create only
+independently executable children, retain all parent criteria, update a real tracker when
+present, mark `workflow:decomposed`, and stop; a split is not code delivery.
 
 ### 3. Build and verify
 
@@ -234,6 +240,8 @@ review panels, remediation rounds/limit, elapsed wall time, and material waits f
 native timestamps. First-pass means the initial complete panel accepted the implementation
 without blocker-driven code changes; skipped proof or a terminal gate is not first-pass success.
 Keep the configured model visible; never change routing merely to hit the time target.
+Summarize relevant history applied with representative permalinks and retrieval limitations;
+citation volume is not quality or performance proof.
 End with exactly one machine-readable line:
 
 `FORGE_WORK_ON_RESULT status=DONE|GATED|FAILED issue=<N> pr=<N|none> dependency=SATISFIED|UNSATISFIED`

@@ -37,9 +37,9 @@ Before editing, form one concise in-memory checklist:
    contamination, cache keys, identity/TLS/engine compatibility, fallback behavior, and
    reuse of existing sessions/resources.
 
-Read project documentation only when it governs an affected path. Use bounded history only
-to answer a concrete uncertainty. Do not publish separate contract, context, architecture,
-risk-matrix, or plan comments.
+Consume the validated historical constraints from investigation; do not rediscover them.
+Read project documentation when it governs an affected path. Preserve material rationale
+in the build receipt rather than separate contract, context, architecture or plan comments.
 
 ## Implement
 
@@ -65,7 +65,8 @@ String-presence checks and syntax checks are supplemental, not behavioral PASS e
 They can prove documentation or structural contracts, not execution, permissions, durability,
 or recovery. Keep unexecuted behavior explicitly unverified; do not relabel it as tested.
 
-Resolve applicable commands from `forge.yaml` once. Run only checks relevant to the diff:
+Follow `../../../verification.md`: reuse learned `forge.yaml` commands, validate affected
+source definitions, and select from actual behavior/callers. Run only relevant checks:
 
 - formatter/lint/type/compile for changed languages;
 - focused tests for changed behavior;
@@ -75,6 +76,8 @@ Resolve applicable commands from `forge.yaml` once. Run only checks relevant to 
 - browser/UI checks for user-visible browser behavior;
 - concurrency/load checks for concurrency-sensitive behavior.
 
+Run cheap behavior/toolchain/CI-registration checks before heavyweight builds, then reuse
+provably unchanged build inputs and artifacts. Keep full logs outside the prompt.
 Run independent commands concurrently when safe. Fix failures inline and rerun only the
 failed command and commands affected by the fix. Do not rerun an unchanged successful
 command against the same SHA merely because another phase began.
@@ -124,6 +127,10 @@ After the commit and push exist, publish one immutable issue comment:
 **Head**: `<full SHA>`
 **Branch**: `<branch>`
 **Target**: `<configured target>`
+
+### Approach and Rationale
+- <chosen approach and why; material alternatives actually considered>
+- <prior constraints preserved or changed, with source links; no invented alternatives>
 
 ### Changed Files
 - `path` — behavior changed
