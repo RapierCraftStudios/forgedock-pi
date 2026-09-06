@@ -1,7 +1,11 @@
 {
   "schemaVersion": 1,
   "runId": "run-cross-repository-005",
+  "identity": {"repository": "owner/repo", "owner": "owner-005"},
   "terminal": "FAILED",
   "evidence": ["validated-repository", "linked-source", "unverified-external"],
-  "productionExposure": "UNVERIFIED"
+  "timeline": [{"phase": "identity", "state": "UNKNOWN"}],
+  "evidenceGraph": {"nodes": ["run", "repository", "external"], "edges": ["run>repository"]},
+  "coverage": [{"criterion": "repository-binding", "state": "UNKNOWN"}],
+  "production": {"mode": "normal", "exposure": "UNVERIFIED", "anchor": null}
 }

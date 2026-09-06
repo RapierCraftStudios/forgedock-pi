@@ -1,7 +1,11 @@
 {
   "schemaVersion": 1,
   "runId": "run-capped-003",
+  "identity": {"repository": "owner/repo", "owner": "owner-003"},
   "terminal": "GATED",
   "evidence": ["review-block", "remediation-round", "cap"],
-  "productionExposure": "UNVERIFIED"
+  "timeline": [{"phase": "review", "state": "FAIL"}, {"phase": "gate", "state": "PASS"}],
+  "evidenceGraph": {"nodes": ["review", "remediation", "gate"], "edges": ["review>remediation", "remediation>gate"]},
+  "coverage": [{"criterion": "adversarial-proof", "state": "MISSING"}],
+  "production": {"mode": "normal", "exposure": "UNVERIFIED", "anchor": null}
 }

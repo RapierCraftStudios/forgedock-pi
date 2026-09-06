@@ -62,7 +62,7 @@ export function resolveForgeSkillReference(
 }
 
 /**
- * Walk the references reachable from the five public prompt skills. Every
+ * Walk the references reachable from the six public prompt skills. Every
  * reference must resolve either to a packaged translation or to the packaged
  * command tree. No phase is selected and no workflow is run here.
  */

@@ -1,9 +1,13 @@
 {
   "schemaVersion": 1,
   "runId": "run-disagreement-004",
+  "identity": {"repository": "owner/repo", "owner": "owner-004"},
   "terminal": "GATED",
   "evidence": ["aggregate", "child-handoff", "github-record"],
+  "timeline": [{"phase": "transport", "state": "CONTRADICTED"}],
+  "evidenceGraph": {"nodes": ["aggregate", "child", "github"], "edges": ["run>aggregate", "run>child", "run>github"]},
+  "coverage": [{"criterion": "transport-integrity", "state": "CONTRADICTED"}],
   "disagreements": ["aggregate=FAILED; child=GATED"],
   "requiredCapability": {"name": "integration-service", "state": "SKIPPED"},
-  "productionExposure": "UNVERIFIED"
+  "production": {"mode": "normal", "exposure": "UNVERIFIED", "anchor": null}
 }

@@ -23,9 +23,10 @@ Accept exactly one primary selector:
   after canonicalizing the path, proving it is a directory, and proving every consumed
   artifact is contained below the selected run root (no symlink escape).
 
-Optional `--production-escape` enables the production-escape postmortem. It still requires
-one primary selector and an explicit incident, deployment, issue, PR, or release artifact
-when available. It does not turn a normal merge into production evidence.
+Optional `--production-escape` enables the production-escape postmortem. It requires one
+primary selector plus exactly one explicit `--anchor <artifact-id-or-URL>` identifying the
+incident, deployment, issue, PR, or release evidence to inspect. It does not turn a normal
+merge into production evidence.
 
 Reject missing, repeated, ambiguous, relative, traversal, symlink-escaping, malformed,
 unknown, or conflicting selectors. A run ID must resolve to exactly one persisted native
@@ -41,7 +42,10 @@ The audit may read:
    reviewer descendants for the selected run;
 2. the repository and target configuration named by trusted run metadata;
 3. GitHub issues, PRs, comments, reviews, checks, commits, labels, and deployment/incident
-   artifacts linked by exact IDs, SHAs, URLs, or run metadata;
+   artifacts linked by exact IDs, SHAs, URLs, or run metadata. Every GitHub locator must
+   match the canonical repository in trusted run metadata and pass the caller's read
+   authorization check; an external repository is evidence-only unless explicitly
+   allowlisted by the operator and may not be fetched with inherited credentials;
 4. the repository's existing verification catalog and named ForgeDock records.
 
 It may not edit any repository, run artifact, issue, PR, label, check, deployment, or
@@ -75,7 +79,7 @@ stable redaction marker and source locator.
 
 A run-directory audit must not search sibling worktrees or scan an ambient temporary tree.
 A native run audit must not replace a missing status file with a similarly named directory.
-If the selected source cannot be validated, return `audit_status: FAILED` with the exact
+If the selected source cannot be validated, return `auditStatus: FAILED` with the exact
 missing/unsafe prerequisite and no causal conclusion that depends on it.
 
 ## 3. Evidence graph
@@ -176,15 +180,15 @@ cap indiscriminately or treating another review round as diagnosis.
 
 ## 6. Production-escape mode
 
-With `--production-escape`, reconstruct this chain when evidence exists:
+With `--production-escape --anchor <artifact-id-or-URL>`, reconstruct this chain when evidence exists:
 
 `issue → work-on run → implementation commit/head → PR exact-head review/checks → target or
 integration merge → protected/default promotion → deployment workflow/environment/release
 SHA → incident or customer-impact evidence`.
 
-Report `production_exposure: VERIFIED` only when the deployed SHA, environment, promotion
+Report `production.exposure: VERIFIED` only when the deployed SHA, environment, promotion
 transition, and incident/customer-impact linkage are each proven. Otherwise report
-`production_exposure: UNVERIFIED` with each missing or contradictory item. Never infer
+`production.exposure: UNVERIFIED` with each missing or contradictory item. Never infer
 exposure from `workflow:merged`, issue closure, a deployment-looking label, or a successful
 staging merge. Keep staging integration, protected-branch promotion, deployment, and
 customer impact as separate states.
@@ -211,7 +215,7 @@ array ordering and has this top-level shape:
   "evidenceGraph": {"nodes":[],"edges":[]},
   "coverage": [],
   "causes": {"earliestPreventable":{},"detection":{},"termination":{}},
-  "production": {"mode":"normal|production-escape","exposure":"NOT_REQUESTED|VERIFIED|UNVERIFIED"},
+  "production": {"mode":"normal|production-escape","exposure":"NOT_REQUESTED|VERIFIED|UNVERIFIED","anchor":"exact-id-or-url|null"},
   "disagreements": [],
   "recommendations": [],
   "limitations": []

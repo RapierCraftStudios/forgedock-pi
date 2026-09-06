@@ -1,7 +1,11 @@
 {
   "schemaVersion": 1,
   "runId": "run-success-001",
+  "identity": {"repository": "owner/repo", "owner": "owner-001"},
   "terminal": "MERGED",
   "evidence": ["request", "owner", "review", "merge"],
-  "productionExposure": "UNVERIFIED"
+  "timeline": [{"phase": "merge", "state": "PASS"}],
+  "evidenceGraph": {"nodes": ["request", "owner", "merge"], "edges": ["request>owner", "owner>merge"]},
+  "coverage": [{"criterion": "safe-read", "state": "PASS"}],
+  "production": {"mode": "normal", "exposure": "UNVERIFIED", "anchor": null}
 }

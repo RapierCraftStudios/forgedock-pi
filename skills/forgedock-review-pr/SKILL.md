@@ -5,8 +5,9 @@ description: Review one frozen PR with a risk-selected fresh panel, one verdict,
 
 # ForgeDock Review PR
 
-Read the reviewer section of `../../specs/pi-adapter.md`. Resolve `forge.yaml`, active
-GitHub identity, repository, PR, and merge authorization once. A standalone PR and a
+Read the reviewer section of `../../specs/pi-adapter.md` and the authoritative
+`../../specs/original/commands/review-pr.md`; the latter defines the active proof-map and
+boundary-closure obligations. Resolve `forge.yaml`, active GitHub identity, repository, PR, and merge authorization once. A standalone PR and a
 work-on-owned PR use the same review standard.
 
 ## Freeze
