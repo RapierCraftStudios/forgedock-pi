@@ -1784,7 +1784,16 @@ export function registerForgeRuntime(
         ? durableArtifactValue
         : undefined;
       // On an idempotent retry, project the journal's original artifact,
-      // never a replacement supplied by the retried caller.
+      // never a replacement supplied by the retried caller. An invalid
+      // historical artifact is not recoverable by accepting new caller data.
+      if (
+        idempotent &&
+        durableArtifactValue !== undefined &&
+        !durableArtifact
+      )
+        throw new Error(
+          "Cannot replay an idempotent checkpoint with an invalid durable artifact.",
+        );
       const projectedArtifact = durableArtifact ?? phaseArtifact;
       if (
         params.action === "complete" &&
