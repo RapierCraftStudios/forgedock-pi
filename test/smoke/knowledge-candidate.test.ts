@@ -33,7 +33,7 @@ test("cold-start knowledge does not add agents, duplicate records or automatic b
   assert.match(root, /GitHub.*engineering memory/s);
   assert.match(agent, /retrieve.*apply.*preserve/s);
   assert.match(review, /historical constraints/);
-  assert.match(root, /subagent.*forbidden before review/is);
+  assert.match(root, /pre-build challenger.*subagent.*forbidden before review/is);
   assert.match(root, /one `FORGE:INVESTIGATOR`/);
   assert.match(root, /one completed `FORGE:BUILDER`/);
   assert.match(root, /one `FORGE:TRAJECTORY`/);

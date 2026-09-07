@@ -34,7 +34,7 @@ test("review can route to scope reassessment without restarting code rounds", as
   assert.match(review, /scope\s+reassessment.*DECOMPOSE/s);
   assert.match(remediate, /scope reassessment.*decomposition/is);
   assert.match(remediate, /does not reset.*budget/s);
-  assert.match(root, /subagent.*forbidden before review/is);
+  assert.match(root, /pre-build challenger.*subagent.*forbidden before review/is);
   const entrypoint = await text("src/index.ts");
   assert.match(entrypoint, /registerForgePromptRouter\(pi\)/);
   assert.doesNotMatch(entrypoint, /registerForgeCommands|child-runtime/);
