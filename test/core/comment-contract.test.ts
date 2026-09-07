@@ -22,6 +22,7 @@ const investigation: InvestigationArtifact = {
   claimed: "The integration auto-merge gate lacks regression coverage.",
   observed: "The implementation exists and the focused test is absent.",
   rootCause: "An existing branch was not covered by the test matrix.",
+  closureRoute: "Trace the review gate through its public caller, add the focused regression, and verify the issue's requested outcome on the target.",
   affectedFiles: [
     { path: "test/core/review.test.ts", reason: "Missing focused assertion" },
   ],
@@ -145,6 +146,11 @@ test("resolve schema rejects investigation-only fields with a field diagnostic",
 
 test("typed phase artifacts reject marker-only Markdown substitutes", () => {
   assert.equal(isPhaseArtifact(investigation), true);
+  const missingClosureRoute = structuredClone(investigation);
+  delete (missingClosureRoute as Partial<InvestigationArtifact>).closureRoute;
+  assert.equal(Check(FORGE_PHASE_ARTIFACT_SCHEMA, missingClosureRoute), false);
+  assert.match(phaseArtifactValidationError(missingClosureRoute), /closureRoute/);
+  assert.equal(isPhaseArtifact(missingClosureRoute), false);
   assert.equal(
     isPhaseArtifact({
       schema: "forgedock.phase-artifact/v1",
@@ -161,6 +167,8 @@ test("investigation rendering is deterministic and never invents routing", () =>
   assert.equal(first, second);
   assert.match(first, /Task type \| focused unit test/);
   assert.match(first, /Complexity \| TRIVIAL/);
+  assert.match(first, /### Closure Route/);
+  assert.match(first, /Trace the review gate through its public caller/);
   assert.match(first, /architecture: skipped — No production design change/);
   assert.match(first, /<!-- FORGE:FAST_PATH -->/);
   assert.doesNotMatch(first, /Legacy Routing Classification|NOT RECORDED/);
