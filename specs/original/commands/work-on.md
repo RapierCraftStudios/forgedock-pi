@@ -170,12 +170,12 @@ loop. A newly discovered required mutation path must be added to the investigati
 receipt before editing.
 
 The Builder Contract is a finite proof map: each criterion names its invariant, reachable
-failure modes, producer/consumer, source boundary, test/evidence, and proof state. New
-protocols/external calls require namespace/type, interleaving, failure, retry, and recovery
-closure. Required-risk skipped capability is insufficient proof; multiple blockers trigger
-bounded re-plan/decomposition, never a silent cap increase. The pre-publication gate is
-identity-bound to the issue and contract and runs before commit/PR creation; final independent
-exact-head review remains mandatory.
+failure modes, producer/consumer, state, source boundary, test/evidence, and
+(`PASS`, `FAIL`, `MISSING`, `SKIPPED`, `CONTRADICTED`, or `UNKNOWN`). New protocols/external
+calls require namespace/type, interleaving, failure, retry, and recovery closure. Skipped
+required-risk capability is insufficient proof; multiple blockers trigger bounded
+re-plan/decomposition, never a silent cap increase.
+
 ### 4. Prepare PR and review
 
 Load `work-on/review.md` once. Reuse or create exactly one PR targeting the configured

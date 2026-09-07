@@ -40,7 +40,6 @@ export const FORGE_WORK_ON_TOOLS = [
   "forge_verify",
   "forge_diff",
   "forge_commit",
-  "forge_proof_closure",
   "forge_prepare_review",
   "forge_finalize_reviewer",
   "forge_finalize_work_on",

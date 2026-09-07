@@ -60,7 +60,6 @@ export interface WorkOnLaunchInput {
   leaseOwnerRunId?: string;
   policy: ForgePolicy;
   issueContext: string;
-  proofRisk?: "low" | "high";
   builderContract?: BuilderPathContract;
 }
 
@@ -423,7 +422,6 @@ export class SubagentsRpcClient {
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
       verificationGithub: input.policy.verification.github,
-      ...(input.proofRisk ? { proofRisk: input.proofRisk } : {}),
       ...(input.builderContract
         ? { builderContract: input.builderContract }
         : {}),
@@ -441,8 +439,8 @@ export class SubagentsRpcClient {
       .filter(([, command]) => command.required)
       .map(([name]) => name);
     const verificationTask = requiredLocalChecks.length
-      ? `During verify, run these required bound checks through forge_verify: ${requiredLocalChecks.join(", ")}. Before implementation commit, call forge_proof_closure with the complete plan proof contract; only after it is admitted create the commit through forge_commit.`
-      : "No local verification commands are configured. This is valid: do not call forge_verify and do not block or ask the supervisor. Before implementation commit, call forge_proof_closure with the complete plan proof contract; then create the implementation commit through forge_commit, prepare the PR, and let the parent enforce GitHub-configured CI on the exact reviewed SHA before merge.";
+      ? `During verify, run these required bound checks through forge_verify: ${requiredLocalChecks.join(", ")}. After they pass, create the implementation commit through forge_commit.`
+      : "No local verification commands are configured. This is valid: do not call forge_verify and do not block or ask the supervisor. Create the implementation commit through forge_commit, prepare the PR, and let the parent enforce GitHub-configured CI on the exact reviewed SHA before merge.";
     const task = [
       `Run ForgeDock work-on for issue #${input.issueNumber} in ${input.repository}.`,
       `Run ID: ${input.runId}`,
@@ -479,7 +477,7 @@ export class SubagentsRpcClient {
           input.node.node === "resolve"
             ? "The resolve artifact contract is exact: { schema: 'forgedock.phase-artifact/v1', phase: 'resolve', issueNumber: positive integer, title: non-empty string, eligible: boolean, baseBranch: non-empty string, evidence: string[] }. Investigation fields are not a substitute for these fields."
             : "Use the phase-specific artifact branch in the supplied output schema.",
-          "For every non-review node, return artifact as a forgedock.phase-artifact/v1 object whose phase matches this node. Supply typed facts only; never author Markdown or markers. Investigation must include actual taskType, complexity, evidence, decomposition, skipped phases, and acceptance checks. Plan must include risk, riskSignals, proofObligations (criterion, invariant, counterexample, boundaryConsumers, testCommand, failingBefore, passingAfter, state, required), allowed paths, forbidden changes, invariants, context, hazards, steps, and criterion mapping. Before implementation commit, call forge_proof_closure with that plan contract. Implementation must include the real commit SHA and changed-file statistics. Verification must name every check and use passed, failed, skipped, pending, unknown, not-configured, or policy-exempt truthfully. For prepare-pr, call forge_prepare_review and return the exact PR/head/domains. The trusted parent validates the object and deterministically renders GitHub Markdown. Review nodes return only the typed reviewer result.",
+          "For every non-review node, return artifact as a forgedock.phase-artifact/v1 object whose phase matches this node. Supply typed facts only; never author Markdown or markers. Investigation must include actual taskType, complexity, evidence, decomposition, skipped phases, and acceptance checks. Plan must include allowed paths, forbidden changes, invariants, context, hazards, steps, and criterion mapping. Implementation must include the real commit SHA and changed-file statistics. Verification must name every check and use passed, failed, skipped, pending, unknown, not-configured, or policy-exempt truthfully. For prepare-pr, call forge_prepare_review and return the exact PR/head/domains. The trusted parent validates the object and deterministically renders GitHub Markdown. Review nodes return only the typed reviewer result.",
           "Before returning, call forge_finalize_node with the complete node result, then call structured_output with the identical value. Never write or edit .pi/forge files directly; the trusted finalizer owns the bound result artifact.",
           input.issueContext,
         ].join("\n\n")
@@ -549,10 +547,6 @@ export class SubagentsRpcClient {
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
       verificationGithub: input.policy.verification.github,
-      ...(input.proofRisk ? { proofRisk: input.proofRisk } : {}),
-      ...(input.builderContract
-        ? { builderContract: input.builderContract }
-        : {}),
       refresh: true,
       leaseOwnerRunId: input.leaseOwnerRunId ?? input.runId,
       previousReviewRounds: input.previousResult.review.rounds,
@@ -571,7 +565,7 @@ export class SubagentsRpcClient {
       `Branch: ${input.branch}`,
       `New integration base: ${input.baseBranch} at ${input.baseSha}`,
       `Previous review rounds: ${input.previousResult.review.rounds}`,
-      "Call forge_refresh_base first. Then run every required forge_verify command. The retained builder/proof contract remains authoritative; do not commit during refresh. Call forge_prepare_review before launching reviewers so the existing PR is updated and the new head is frozen.",
+      "Call forge_refresh_base first. Then run every required forge_verify command. Call forge_prepare_review before launching reviewers so the existing PR is updated and the new head is frozen.",
       reviewWorkflowInstruction(input),
       "Synthesize only the new reviewers. Return ready-for-merge only when rebase, required verification, and both fresh reviewers pass. changedFiles must be measured against the new base SHA. review.rounds must equal the previous rounds plus one.",
       "Before structured_output, call forge_finalize_work_on with the identical complete result. Do not call forge_checkpoint or repeat prior investigation/implementation.",
@@ -781,7 +775,7 @@ function safeScriptJson(value: unknown): string {
 
 function boundedShellGuidance(node: WorkflowNode): string {
   if (node === "implement")
-    return "Shell execution is unavailable for implementation. Use read/edit and the named Forge tools; forge_commit is the only commit boundary.";
+    return "Bash is available for implementation and Git inspection inside the assigned worktree. Use forge_commit for the authoritative commit and do not push or write GitHub state directly.";
   if (["resolve", "investigate", "plan"].includes(node))
     return "This is a read-only node. Use only read, grep, find, and ls against the assigned worktree plus the supplied issue context. Shell execution, source edits, Git writes, and GitHub writes are unavailable.";
   return "Shell execution is unavailable in this node.";
