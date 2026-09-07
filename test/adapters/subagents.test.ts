@@ -151,6 +151,7 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
     spawn.params.task,
     /forgedock\.phase-artifact\/v1 investigate schema/,
   );
+  assert.match(spawn.params.task, /Closure Route/);
   assert.doesNotMatch(spawn.params.task, /Legacy Routing Classification/);
   assert.doesNotMatch(serialized, /gh auth token/);
 });

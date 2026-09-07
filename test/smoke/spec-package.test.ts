@@ -96,7 +96,9 @@ test("investigation defines scope without children or executable comments", asyn
   assert.match(investigate, /Do not declare scope complete\s+while a relevant path has no disposition/s);
   assert.match(investigate, /Mutation Scope/);
   assert.match(investigate, /Non-Goals/);
+  assert.match(investigate, /Closure Route/);
   assert.match(investigate, /Acceptance Checks/);
+  assert.match(investigate, /issue.*intake request.*not an implementation plan or proof/s);
   assert.match(investigate, /Verdict: CONFIRMED \| INVALID/);
   assert.match(investigate, /Route: BUILD \| DECOMPOSE \| TERMINAL/);
   assert.match(investigate, /Never emit shell commands/);

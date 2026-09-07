@@ -16,13 +16,16 @@ test("the happy path targets verified closure without remediation or clock reset
   assert.match(skill, /review → \[remediate → re-review\] → merge/);
 });
 
-test("investigation establishes evidence and prerequisites before implementation", async () => {
+test("investigation independently derives a closure route before implementation", async () => {
   const investigate = await phase("investigate");
-  assert.match(investigate, /Acceptance Contract/);
-  assert.match(investigate, /producer.*consumer.*persisted state/s);
-  assert.match(investigate, /required proof.*unavailable.*before.*implementation/s);
-  assert.match(investigate, /independently.*recoverable|each.*recovery source/s);
-  assert.match(investigate, /return GATED.*Do not.*ready-to-build/s);
+  assert.match(investigate, /intake request.*not an implementation plan or proof/s);
+  assert.match(investigate, /closure pass/);
+  assert.match(investigate, /actual entrypoint.*callers\/consumers/s);
+  assert.match(investigate, /Derive the checks[\s\S]*rather than copying the issue/);
+  assert.match(investigate, /Acceptance Contract.*closure pass/s);
+  assert.match(investigate, /Closure Route/);
+  assert.match(investigate, /If the path is incomplete,[\s\S]*do not complete the phase or route to `BUILD`/);
+  assert.match(investigate, /GATED.*concrete external condition/s);
 });
 
 test("build writes behavioral regressions first and reconciles every acceptance claim", async () => {

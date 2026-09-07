@@ -31,7 +31,7 @@ Continue without stopping at intermediate success:
 
 `resolve → investigate → [decompose | build → PR → review → [remediate → re-review] → merge → close → cleanup]`
 
-Investigation defines acceptance and scope; publish the named pre-build graph before editing.
+Investigation independently derives the closure route, acceptance, and scope from evidence; issue-body criteria remain hypotheses. Publish the named pre-build graph before editing.
 For bug fixes, record trigger/expected/observed
 baseline and fail-before/pass-after evidence; use inspection-only proof only with an explicit
 safety/impossibility justification. Execute investigation, planning, implementation, quality
@@ -56,6 +56,5 @@ in-memory planning is not a substitute. Preserve changed decisions through super
 records. Do not create Gists, indexes, ledgers, dossiers, ADRs, cost priors, telemetry,
 heartbeats, checkpoints, or duplicate progress comments.
 
-Prefer repair and continuation. Use GATED for an exact technical prerequisite/recovery
-condition and `needs-human` only for genuine external authority with no safe default. After
+Prefer repair and continuation. Keep investigation active until its closure route is understood. Use GATED only for an exact external prerequisite/recovery condition and `needs-human` only for genuine external authority with no safe default. After
 merge, close explicitly and perform ownership-safe cleanup once.
