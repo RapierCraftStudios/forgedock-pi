@@ -50,10 +50,17 @@ records; append a superseding investigation for material corrections under
    `change`. Adjacent paths remain read-only unless compilation, runtime correctness,
    schema/interface consistency, or a security invariant requires them to change.
 9. Define non-goals and residual uncertainty.
-10. Establish the Acceptance Contract in the existing receipt: each criterion maps to its
-    producer, consumer, persisted state, relevant failure paths, and observable check.
-    For claims such as all data being independently recoverable, enumerate each recovery
-    source and its capture, verification, and restore path; a catalog entry is not proof.
+10. Establish the Acceptance Contract in the existing receipt: every criterion carries one
+    compact proof link in the form `Mechanism: <implementation path/symbol and behavior>;
+    Counterexample/behavioral test: <test path, trigger, and assertion>; Residual risk:
+    <none or bounded non-contradictory limit>`. The mechanism names its producer,
+    consumer, persisted state, and relevant failure paths; the test exercises a counterexample or
+    observable behavior and, for a bug fix, would fail against the baseline. A missing
+    mechanism or test is `MISSING`/`UNKNOWN`, not an accepted proof; a justified
+    inspection-only exception remains explicitly unverified. A residual risk that
+    contradicts the criterion invariant is `CONTRADICTED`, never `PASS`. For claims such
+    as all data being independently recoverable, enumerate each recovery source and its
+    capture, verification, and restore path; a catalog entry is not proof.
 11. Resolve required dependencies, environments, permissions, and evidence before editing.
     If required proof is unavailable, surface the exact condition before implementation;
     do not assume an owner will supply it after review. Separate code-merge acceptance
@@ -135,11 +142,11 @@ Publish the completed investigation with the common metadata envelope from
 - <explicit exclusions>
 
 ### Acceptance Contract
-- <criterion → producer/consumer/state → observable check → prerequisite availability>
+- `<criterion>` → producer/consumer/state → **Proof link**: `Mechanism: <path/symbol and behavior>; Counterexample/behavioral test: <test path, trigger, assertion>; Residual risk: <none or bounded limit>` → prerequisite availability
 
 ### Acceptance Checks
-- <criterion and trusted check; descriptive, never executable GitHub input>
-- Bug fix: focused regression fails against the baseline and passes after the fix, unless the justified inspection-only exception is recorded.
+- <criterion and trusted check; descriptive, never executable GitHub input; linked to the proof row>
+- Bug fix: the named counterexample/behavioral test fails against the baseline and passes after the fix; otherwise record the justified inspection-only exception as unverified.
 
 ### Residual Uncertainty
 - <limitations or none>

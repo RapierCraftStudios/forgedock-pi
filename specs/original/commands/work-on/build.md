@@ -23,13 +23,10 @@ active-phase labels with `workflow:building`.
 
 ### Proof map admission
 
-Before editing, compile the contract into rows of criterion → invariant → reachable failure
-mode → producer/consumer boundary → source/test/evidence. Include namespace/type and
-serialization obligations, interleavings, failure injection, retry, recovery, and fresh versus
-existing state for each new key, protocol, state machine, or external call. Mark each row
-`PASS`, `FAIL`, `MISSING`, `SKIPPED`, `CONTRADICTED`, or `UNKNOWN`; required-risk integration
-capability that is unavailable or skipped is insufficient evidence and must gate the row.
-This enriches imperfect intake without becoming a separate qualitative refusal gate.
+Before editing, compile each acceptance criterion from the accepted contract into one compact proof-link row:
+`<criterion> | Mechanism: <implementation path/symbol and behavior> | Counterexample/behavioral test: <test path, trigger, assertion> | Residual risk: <none or bounded non-contradictory limit> | Status: PASS|FAIL|MISSING|SKIPPED|CONTRADICTED|UNKNOWN`.
+The mechanism traces the invariant through its producer/consumer boundary and relevant failure paths; the test exercises a counterexample or observable behavior and, for a bug fix, rejects the baseline defect. Include namespace/type, serialization, interleaving, failure-injection, retry, recovery, and fresh/existing-state obligations for each new key, protocol, state machine, or external call.
+PASS requires both concrete proof ends and non-contradictory residual risk. A contradictory risk is `CONTRADICTED`, never `PASS`; missing, skipped, unknown, or contradicted proof cannot be reported as satisfied or sent to review. Required-risk integration capability that is unavailable or skipped must gate the row. This enriches imperfect intake without becoming a separate qualitative refusal gate.
 
 ## Plan once and publish the pre-build graph
 
@@ -107,12 +104,8 @@ Commands come from repository/configuration authority, never executable GitHub t
 
 ## Final inspection and commit
 
-Before commit, reconcile each acceptance criterion and material historical constraint to
-its implementation mechanism and actual counterexample test, including unchanged paths
-claimed safe. A citation or unchanged constant alone is not application evidence. Ask whether each test would reject the original defect and
-its relevant failure variants. Do not request review with a known acceptance gap; complete
-the cohesive patch inline or report an unavailable required prerequisite. Do not skip
-checks to meet a deadline. Record this coverage in the existing build receipt, not a new gate.
+Before commit, emit one compact proof-link row for every accepted contract criterion in the existing builder receipt: criterion, implementation mechanism, counterexample/behavioral test, residual risk, and status. Reconcile each criterion and material historical constraint against the code and actual test, including unchanged paths claimed safe. A citation, unchanged constant, positive-only test, or test that cannot reject the baseline defect is not proof. Do not request review with a known acceptance gap.
+PASS requires concrete mechanism and behavioral-test proof with explicitly non-contradictory residual risk; contradictory risk is `CONTRADICTED`, never `PASS`. Any `MISSING`, `SKIPPED`, `UNKNOWN`, or `CONTRADICTED` row remains an acceptance gap: complete and retest it or report the unavailable required prerequisite before review. Do not skip checks to meet a deadline. Record this coverage in the existing build receipt, not a new gate.
 
 Before commit:
 
@@ -153,7 +146,7 @@ After the commit and push exist, publish one immutable issue comment:
 - `path` — behavior changed
 
 ### Acceptance and Verification
-- <criterion → implementation path → check/result/evidence or justified unverified limit>
+- `<criterion>` — **Proof link**: `Mechanism: <implementation path/symbol and behavior>; Counterexample/behavioral test: <test path, trigger, assertion>; Residual risk: <none or bounded non-contradictory limit>` — **Status**: `PASS|FAIL|MISSING|SKIPPED|CONTRADICTED|UNKNOWN` with actual result/evidence
 
 ### Residual Risks
 - <limitation or none>
