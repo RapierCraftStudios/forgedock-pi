@@ -69,10 +69,13 @@ test("one work-on agent owns every pre-review phase inline", async () => {
     assert.match(content, /sole work-on agent|sole per-issue work-on agent|sole writer/i);
     assert.match(content, /review|re-review/);
   }
-  assert.match(root, /subagent.*forbidden before review/is);
-  assert.match(skill, /Do not launch delegates, phase agents, builders, quality-gate agents/);
-  assert.match(agent, /only nested-subagent use.*review panel/is);
-  assert.match(adapter, /Before review\/re-review it must\s+not call `subagent`/s);
+  assert.match(root, /pre-build challenger.*subagent.*forbidden before review/is);
+  assert.match(root, /Builder Contract is the definitive implementation brief/s);
+  assert.match(skill, /single fresh pre-build challenger.*only pre-review exception/s);
+  assert.match(agent, /one fresh.*pre-build challenger/is);
+  assert.match(agent, /one synchronous workflow.*context: "fresh".*worktree: false/s);
+  assert.match(adapter, /Before the first source edit.*fresh read-only pre-build challenge/s);
+  assert.match(adapter, /acceptance: false.*timeoutMs: 300000/s);
 });
 
 test("normal work-on preserves named knowledge records without progress ceremony", async () => {
@@ -97,8 +100,8 @@ test("investigation defines scope without children or executable comments", asyn
   assert.match(investigate, /Mutation Scope/);
   assert.match(investigate, /Non-Goals/);
   assert.match(investigate, /Closure Route/);
-  assert.match(investigate, /Acceptance Checks/);
   assert.match(investigate, /issue.*intake request.*not an implementation plan or proof/s);
+  assert.match(investigate, /Acceptance Checks/);
   assert.match(investigate, /Verdict: CONFIRMED \| INVALID/);
   assert.match(investigate, /Route: BUILD \| DECOMPOSE \| TERMINAL/);
   assert.match(investigate, /Never emit shell commands/);
@@ -109,7 +112,10 @@ test("investigation defines scope without children or executable comments", asyn
 test("build is one inline procedure with SHA-keyed verification", async () => {
   const build = await text(WORK_ON_PHASES[2]);
   assert.match(build, /Do not launch builders, quality-gate\s+agents, context agents, architects/s);
-  assert.match(build, /investigation receipt\s+is the mutation contract/s);
+  assert.match(build, /existing `FORGE:CONTRACT` is the single definitive Build Brief/s);
+  assert.match(build, /one short, fresh, read-only challenge/);
+  assert.match(build, /do not replace it with a second\s+universal checklist/s);
+  assert.match(build, /investigation receipt.*final Builder Contract.*mutation contract/s);
   assert.match(build, /Verify once per SHA/);
   assert.match(build, /fail-before\/pass-after/);
   assert.match(build, /test environment once and reuse/);

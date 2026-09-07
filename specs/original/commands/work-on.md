@@ -26,10 +26,9 @@ ownership, review requirements, or merge authority.
 - The work-on agent is the sole writer for its issue.
 - Investigation, decomposition decisions, planning, build, verification, PR preparation,
   remediation, merge, close, and cleanup execute in this agent.
-- The `subagent` tool is forbidden before review and outside review/re-review.
+- A non-trivial lane may launch one fresh read-only pre-build challenger before edits; otherwise `subagent` is forbidden before review and outside review/re-review.
 - Reviewers are fresh, read-only, risk-selected, concurrent, and fully joined.
-- Do not launch investigation helpers, phase agents, builders, quality-gate agents,
-  another work-on agent, or a review coordinator.
+- Do not launch investigation helpers, phase agents, builders, quality-gate agents, another work-on agent, or a review coordinator except that challenger.
 
 ## First-pass delivery target
 
@@ -159,8 +158,10 @@ present, mark `workflow:decomposed`, and stop; a split is not code delivery.
 
 Load `work-on/build.md` once. Treat the completed investigation receipt as mutation
 scope and publish the named pre-build records under `../../knowledge-records.md` before
-repository edits. Establish feasible executable regressions before production changes and
-reconcile every acceptance criterion and decision revision to evidence before review.
+repository edits. For non-trivial work, run and resolve the one fresh adaptive pre-build
+challenge into the existing Builder Contract before editing. Establish feasible regressions
+before production changes and reconcile every acceptance criterion and decision revision to
+evidence before review.
 
 Inspect the relevant production path, implement one cohesive change, add focused
 regression evidence, run applicable configured verification once per commit SHA, inspect
@@ -169,12 +170,11 @@ code, formatting, tests, or safe environment problems inline instead of creating
 loop. A newly discovered required mutation path must be added to the investigation
 receipt before editing.
 
-The Builder Contract is a finite proof map: each criterion names its invariant, reachable
-failure modes, producer/consumer, state, source boundary, test/evidence, and
-(`PASS`, `FAIL`, `MISSING`, `SKIPPED`, `CONTRADICTED`, or `UNKNOWN`). New protocols/external
-calls require namespace/type, interleaving, failure, retry, and recovery closure. Skipped
-required-risk capability is insufficient proof; multiple blockers trigger bounded
-re-plan/decomposition, never a silent cap increase.
+The Builder Contract is the definitive implementation brief: it names required behavior,
+exact scope/callers/consumers, constraints, implementation order, and verification. The
+investigator derives it from repository evidence, context, and history; the builder does not
+complete missing requirements. Add protocol, external-call, state, retry, or recovery detail
+only when relevant; correct unresolved requirements upstream, not through remediation.
 
 ### 4. Prepare PR and review
 

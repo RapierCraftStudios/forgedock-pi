@@ -46,8 +46,11 @@ Orchestrate launches the packaged `forgedock-work-on-coordinator`; despite the h
 profile name, it is the sole per-issue work-on agent and writer.
 
 A work-on agent executes investigation, planning, build, quality gates, verification, PR
-preparation, remediation, merge, close, and cleanup inline. Before review/re-review it must
-not call `subagent`. Any legacy phase `Task(...)`, `Agent(...)`, cache-TTL fork, alternate
+preparation, remediation, merge, close, and cleanup inline. Before the first source edit, a
+non-trivial lane may run exactly one short fresh read-only pre-build challenge in one
+synchronous workflow containing one ordinary `delegate`; it must use `context: "fresh"`,
+`worktree: false`, `acceptance: false`, `timeoutMs: 300000`, and no inherited investigator
+session. Before review/re-review it must not call `subagent` for any other purpose. Any legacy phase `Task(...)`, `Agent(...)`, cache-TTL fork, alternate
 runtime, or builder handoff is ignored.
 
 Resolve one full child model from `forge.yaml` `agents.subagent_model`, then
