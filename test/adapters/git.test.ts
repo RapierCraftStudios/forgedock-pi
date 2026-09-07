@@ -19,6 +19,7 @@ import {
   parseChangedGitPaths,
   type CommandExecutor,
 } from "../../src/adapters/git.ts";
+import { materializeForgeAgents } from "../../src/agents/materialize.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -129,6 +130,19 @@ test("worktree manager creates an issue branch from integration and cleans it sa
       baseBranch: "staging",
     });
     assert.equal(prepared.branch, "forge/issue-7-run-1234");
+    const foreignWorktree = join(
+      clone,
+      ".forge",
+      "worktrees",
+      "foreign-repository",
+    );
+    await mkdir(foreignWorktree, { recursive: true });
+    await execFileAsync("git", ["init", "-q", "-b", "main", foreignWorktree]);
+    await assert.rejects(
+      manager.rebind({ ...prepared, worktreePath: foreignWorktree }),
+      /not registered to the repository and branch/,
+    );
+    await rm(foreignWorktree, { recursive: true, force: true });
     assert.equal(
       await readFile(join(prepared.worktreePath, "app.txt"), "utf8"),
       "base\n",
@@ -162,6 +176,10 @@ test("worktree manager creates an issue branch from integration and cleans it sa
     assert.equal(
       await readFile(join(rebound.worktreePath, "app.txt"), "utf8"),
       "base\n",
+    );
+    const runtimeAgents = await materializeForgeAgents(rebound.worktreePath);
+    assert.ok(
+      runtimeAgents.some((path) => path.endsWith("/forge-work-on.md")),
     );
     await manager.cleanup(rebound);
     // Retry after the first cleanup has already removed both owned resources.
@@ -206,6 +224,17 @@ test("failed worktree containment validation removes its branch and worktree", a
     await symlink(external, ownedParent, "dir");
 
     const manager = new GitWorktreeManager(executor);
+    await assert.rejects(
+      manager.rebind({
+        repositoryRoot: clone,
+        worktreePath: join(ownedParent, "escaped1"),
+        branch,
+        baseBranch: "staging",
+        baseSha: "base",
+      }),
+      /Forge worktree binding failure/,
+    );
+    await assert.rejects(access(join(external, "escaped1")));
     await assert.rejects(
       manager.prepare(clone, {
         runId: "escaped1",

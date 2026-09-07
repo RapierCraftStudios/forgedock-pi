@@ -589,6 +589,7 @@ export class ForgeOrchestrationController {
       const active = await this.#workOn.reactivateOrchestrationIssue(
         link.orchestrationId,
         lane.issueNumber,
+        ctx.sessionManager.getSessionId(),
       );
       if (!active) continue;
       const current = await this.#read(link, ctx.signal);

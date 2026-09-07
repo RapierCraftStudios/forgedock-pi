@@ -67,6 +67,31 @@ class FakeEventBus {
   }
 }
 
+class StopBarrierEventBus extends FakeEventBus {
+  statusReads = 0;
+
+  override emit(event: string, payload: unknown): void {
+    if (event === "subagents:rpc:v1:request") {
+      const request = payload as { requestId: string; method: string };
+      if (request.method === "stop" || request.method === "status") {
+        this.requests.push(payload);
+        if (request.method === "status") this.statusReads += 1;
+        this.emit(`subagents:rpc:v1:reply:${request.requestId}`, {
+          version: 1,
+          requestId: request.requestId,
+          success: true,
+          data: {
+            runId: "async-run-1",
+            state: request.method === "stop" ? "stopping" : "stopped",
+          },
+        });
+        return;
+      }
+    }
+    super.emit(event, payload);
+  }
+}
+
 function fakePi(bus = new FakeEventBus()): {
   pi: ExtensionAPI;
   bus: FakeEventBus;
@@ -99,6 +124,15 @@ const policy = parseForgePolicy({
   },
   review: { required: ["correctness", "security"], maxRounds: 3 },
   subagents: { maxConcurrent: 2, maxDepth: 2 },
+});
+
+test("stopAndWait waits for Pi's terminal state before replacement", async () => {
+  const bus = new StopBarrierEventBus();
+  const { pi } = fakePi(bus);
+  const client = new SubagentsRpcClient(pi);
+  await client.ping();
+  await client.stopAndWait("async-run-1", 1_000);
+  assert.equal(bus.statusReads, 1);
 });
 
 test("RPC work-on launch binds the nested-review runtime contract", async () => {

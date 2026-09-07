@@ -773,11 +773,15 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
       });
       const retryable = [...recoveryPlan.retryReviewers];
       if (retryable.length > 0) {
-        await Promise.allSettled(
+        const stopResults = await Promise.allSettled(
           launched
             .filter((entry) => retryable.includes(entry.reviewer))
-            .map((entry) => this.#rpc.stop(entry.receipt.runId)),
+            .map((entry) => this.#rpc.stopAndWait(entry.receipt.runId)),
         );
+        const stopFailure = stopResults.find(
+          (entry): entry is PromiseRejectedResult => entry.status === "rejected",
+        );
+        if (stopFailure) throw stopFailure.reason;
         const retryTimeoutMs = extendedReviewerTimeout(input.reviewerTimeoutMs);
         const retryLaunchSettled = await Promise.allSettled(
           retryable.map((reviewer) => spawn(reviewer, retryTimeoutMs)),

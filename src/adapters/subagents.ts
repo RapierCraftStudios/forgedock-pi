@@ -614,6 +614,40 @@ export class SubagentsRpcClient {
     return this.#request("stop", { id: runId }, 10_000);
   }
 
+  /** Stop a child and wait until Pi confirms that no writer remains active. */
+  async stopAndWait(runId: string, timeoutMs = 30_000): Promise<void> {
+    if (!runId.trim()) throw new TypeError("Subagent run ID is required.");
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1)
+      throw new TypeError("Stop timeout must be a positive integer.");
+    let requested: unknown;
+    try {
+      requested = await this.stop(runId);
+    } catch (error) {
+      if (!terminalStopError(error)) throw error;
+      return;
+    }
+    if (terminalSubagentState(subagentState(requested))) return;
+    const deadline = Date.now() + timeoutMs;
+    let lastState = subagentState(requested) ?? "unknown";
+    while (Date.now() < deadline) {
+      let status: unknown;
+      try {
+        status = await this.status(runId);
+      } catch (error) {
+        if (terminalStopError(error)) return;
+        throw error;
+      }
+      const state = subagentState(status);
+      if (state) lastState = state;
+      if (terminalSubagentState(state)) return;
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
+    }
+    throw new SubagentRpcError(
+      "stop-timeout",
+      `Subagent ${runId} did not reach a terminal state after stop (last state: ${lastState}).`,
+    );
+  }
+
   async resume(runId: string, message: string): Promise<SubagentSpawnReceipt> {
     const data = await this.#request("resume", { id: runId, message }, 15_000);
     const resumedRunId = findRunId(data);
@@ -734,6 +768,25 @@ function findRunId(value: unknown): string | undefined {
   if (details && typeof details === "object" && !Array.isArray(details))
     return findRunId(details);
   return undefined;
+}
+
+function subagentState(value: unknown): string | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return undefined;
+  const state = (value as Record<string, unknown>).state;
+  return typeof state === "string" ? state : undefined;
+}
+
+function terminalSubagentState(state: string | undefined): boolean {
+  return ["complete", "failed", "partial", "paused", "stopped", "rejected"].includes(
+    state ?? "",
+  );
+}
+
+function terminalStopError(error: unknown): boolean {
+  return /not found|already (?:complete|failed|stopped|paused|rejected)|is (?:complete|failed|stopped|paused|rejected)/i.test(
+    error instanceof Error ? error.message : String(error),
+  );
 }
 
 function reviewWorkflowInstruction(

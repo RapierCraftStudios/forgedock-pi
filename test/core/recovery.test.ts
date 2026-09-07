@@ -73,6 +73,18 @@ test("mixed head or partial reviewer panels cannot synthesize", () => {
 test("review failure classes and deadline guard remain distinct", () => {
   assert.equal(classifyReviewerFailure(new Error("reviewer timed out")), "timeout");
   assert.equal(classifyReviewerFailure(new Error("provider inactivity")), "provider-inactivity");
+  assert.equal(
+    classifyReviewerFailure(
+      new Error(
+        "Forge worktree binding failure: runtime cwd /tmp/pi-worktree does not match bound worktree /repo/.forge/worktrees/run-1.",
+      ),
+    ),
+    "provider-inactivity",
+  );
+  assert.equal(
+    classifyReviewerFailure(new Error("cwd '/tmp/worktree' is not a directory.")),
+    "provider-inactivity",
+  );
   const controller = new AbortController();
   controller.abort(new Error("operator cancelled"));
   assert.equal(classifyReviewerFailure(controller.signal.reason, controller.signal), "cancelled");
