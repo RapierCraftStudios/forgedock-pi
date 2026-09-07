@@ -5,10 +5,6 @@ import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promise
 import { promisify } from "node:util";
 import test from "node:test";
 import vm from "node:vm";
-import {
-  assertProofClosure,
-  createProofClosureContract,
-} from "../../src/core/builder-contract.ts";
 
 const execFileAsync = promisify(execFile);
 const dagInputs = `const ownerConcurrency = 2;
@@ -73,10 +69,13 @@ test("one work-on agent owns every pre-review phase inline", async () => {
     assert.match(content, /sole work-on agent|sole per-issue work-on agent|sole writer/i);
     assert.match(content, /review|re-review/);
   }
-  assert.match(root, /subagent.*forbidden before review/is);
-  assert.match(skill, /Do not launch delegates, phase agents, builders, quality-gate agents/);
-  assert.match(agent, /only nested-subagent use.*review panel/is);
-  assert.match(adapter, /Before review\/re-review it must\s+not call `subagent`/s);
+  assert.match(root, /pre-build challenger.*subagent.*forbidden before review/is);
+  assert.match(root, /Builder Contract is the definitive implementation brief/s);
+  assert.match(skill, /single fresh pre-build challenger.*only pre-review exception/s);
+  assert.match(agent, /one fresh.*pre-build challenger/is);
+  assert.match(agent, /one synchronous workflow.*context: "fresh".*worktree: false/s);
+  assert.match(adapter, /Before the first source edit.*fresh read-only pre-build challenge/s);
+  assert.match(adapter, /acceptance: false.*timeoutMs: 300000/s);
 });
 
 test("normal work-on preserves named knowledge records without progress ceremony", async () => {
@@ -113,7 +112,10 @@ test("investigation defines scope without children or executable comments", asyn
 test("build is one inline procedure with SHA-keyed verification", async () => {
   const build = await text(WORK_ON_PHASES[2]);
   assert.match(build, /Do not launch builders, quality-gate\s+agents, context agents, architects/s);
-  assert.match(build, /investigation receipt\s+is the mutation contract/s);
+  assert.match(build, /existing `FORGE:CONTRACT` is the single definitive Build Brief/s);
+  assert.match(build, /one short, fresh, read-only challenge/);
+  assert.match(build, /do not replace it with a second\s+universal checklist/s);
+  assert.match(build, /investigation receipt.*final Builder Contract.*mutation contract/s);
   assert.match(build, /Verify once per SHA/);
   assert.match(build, /fail-before\/pass-after/);
   assert.match(build, /test environment once and reuse/);
@@ -130,71 +132,6 @@ test("build is one inline procedure with SHA-keyed verification", async () => {
   assert.match(build, /FORGE:BUILDER:COMPLETE/);
   for (const deleted of ["context", "architect", "implement", "validate"])
     await assert.rejects(access(`specs/original/commands/work-on/build/${deleted}.md`));
-});
-
-test("high-risk proof closure fails closed while low-risk work keeps the fast path", async () => {
-  const build = await text(WORK_ON_PHASES[2]);
-  const qualityGate = await text("specs/original/commands/quality-gate.md");
-  const validate = await text("specs/original/commands/validate.md");
-  const workOn = await text("specs/original/commands/work-on.md");
-  const qualitySkill = await text("skills/forgedock-quality-gate/SKILL.md");
-  const monolithic = await text("specs/original/commands/work-on-monolithic.md");
-
-  assert.match(build, /adversarial\s+counterexample.*boundary\/consumers.*failing-before.*passing-after/s);
-  assert.match(build, /HIGH.*COMPLEX.*shared state.*concurrency.*data integrity.*security boundaries/s);
-  assert.match(build, /blocking missing, unknown, contradicted,\n?failed, or required-risk skipped/s);
-  assert.match(qualityGate, /exact `ISSUE_NUMBER`, `PROOF_CONTRACT`, and `RISK_SIGNALS`/);
-  assert.match(qualityGate, /Missing or malformed handoff fields are blocking/);
-  assert.match(qualitySkill, /exact `ISSUE_NUMBER`, `PROOF_CONTRACT`/);
-  assert.match(monolithic, /--issue \{ISSUE_NUMBER\} --proof-contract \{CONTRACT_ID\} --risk-signals \{RISK_SIGNALS\}/);
-  for (const field of ["criterion", "invariant", "counterexample", "boundary/consumers", "test/command", "failing-before", "passing-after", "state"])
-    assert.ok(qualityGate.includes(`\`${field}\``), `missing proof field: ${field}`);
-  assert.match(qualityGate, /cannot[\s\S]+return `PASS`/);
-  assert.match(qualityGate, /until every required row is\s+closed/s);
-  assert.match(qualityGate, /Optional checks retain.*`SKIPPED`/s);
-  assert.match(validate, /Publication proof handoff/);
-  assert.match(validate, /MISSING.*UNKNOWN.*CONTRADICTED.*required-risk.*SKIPPED/s);
-  assert.match(workOn, /pre-publication gate.*identity-bound.*before commit\/PR creation/s);
-
-  // An anonymized #33745-shaped fixture must not pass with missing recovery/boundary proof.
-  const alterLab33745Rows = [
-    { name: "mutation/interleaving", state: "MISSING", required: true },
-    { name: "serialization/type", state: "UNKNOWN", required: true },
-    { name: "namespace boundary", state: "CONTRADICTED", required: true },
-    { name: "recovery result", state: "FAIL", required: true },
-    { name: "required integration", state: "SKIPPED", required: true },
-    { name: "optional lint", state: "SKIPPED", required: false },
-  ];
-  const proofBase = createProofClosureContract({
-    repository: "owner/repo",
-    issueNumber: 505,
-    target: "staging",
-    baseSha: "a".repeat(40),
-    risk: "high",
-    riskSignals: ["stateful-recovery"],
-    obligations: alterLab33745Rows.map((row) => ({
-      criterion: row.name,
-      invariant: `${row.name} remains safe`,
-      counterexample: `${row.name} failure`,
-      boundaryConsumers: "producer and consumer",
-      testCommand: "npm test",
-      failingBefore: "baseline demonstrates the defect",
-      passingAfter: "regression demonstrates closure",
-      state: row.state as "FAIL" | "MISSING" | "UNKNOWN" | "CONTRADICTED" | "SKIPPED",
-      required: row.required,
-    })),
-  });
-  assert.throws(
-    () => assertProofClosure(proofBase, proofBase),
-    /not closed/,
-  );
-  assert.doesNotThrow(() => assertProofClosure({
-    ...proofBase,
-    risk: "low",
-    riskSignals: [],
-    obligations: [{ ...proofBase.obligations[0]!, state: "SKIPPED", required: false }],
-  }, proofBase));
-  assert.match(qualityGate, /low-risk work.*current fast path/is);
 });
 
 test("executable behavior requires behavioral evidence rather than source-shape assertions", async () => {

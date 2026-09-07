@@ -28,8 +28,16 @@ test("investigation independently derives a closure route before implementation"
   assert.match(investigate, /GATED.*concrete external condition/s);
 });
 
-test("build writes behavioral regressions first and reconciles every acceptance claim", async () => {
+test("build challenges non-trivial contracts before edits and preserves the fast path", async () => {
   const build = await phase("build");
+  assert.match(build, /one short, fresh, read-only challenge/s);
+  assert.match(build, /one synchronous workflow containing one[\s\S]*delegate/);
+  assert.match(build, /context: "fresh"/);
+  assert.match(build, /worktree: false/);
+  assert.match(build, /timeoutMs: 300000/);
+  assert.match(build, /Do not apply a universal checklist[\s\S]*launch[\s\S]*fallback/);
+  assert.match(build, /do not begin[\s\S]*create a new artifact\/remediation round/s);
+  assert.match(build, /TRIVIAL.*fast path/s);
   assert.match(build, /Before changing production code.*failing/s);
   assert.match(build, /each acceptance criterion.*evidence/s);
   assert.match(build, /Do not request review.*known.*gap/s);

@@ -5,10 +5,10 @@ description: Implement and verify one confirmed issue inline in its owned worktr
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 
 # Work On: Build
-
 The sole work-on agent executes this phase inline. Do not launch builders, quality-gate
-agents, context agents, architects, or other helpers. The completed investigation receipt
-is the mutation contract.
+agents, context agents, architects, or other helpers except the one adaptive pre-build
+challenge defined below. The completed investigation receipt and final Builder Contract
+are the mutation contract.
 
 ## Preconditions
 
@@ -21,30 +21,30 @@ is the mutation contract.
 At phase entry, use one label edit to replace `workflow:ready-to-build` and other stale
 active-phase labels with `workflow:building`.
 
-### Proof map admission and closure
-
-Before editing, compile the contract into rows of criterion → invariant → adversarial
-counterexample → boundary/consumers → exact test or command → failing-before and
-passing-after evidence. Include namespace/type, serialization, interleaving, failure injection,
-retry, recovery, and fresh/existing state for each new key, protocol, state machine, or external
-call. Mark each row `PASS`, `FAIL`, `MISSING`, `SKIPPED`, `CONTRADICTED`, or `UNKNOWN`.
-
-For `HIGH`/`COMPLEX` work or shared state, concurrency, data integrity, security boundaries,
-external side effects, or cross-service protocols, retain the risk signals and contract identity
-with the staged diff. Before commit, invoke the existing quality gate and native
-`forge_proof_closure` admission with exact
-`ISSUE_NUMBER`, `PROOF_CONTRACT`, and `RISK_SIGNALS` values from the bound records. It must
-validate identity and compare every applicable row, blocking missing, unknown, contradicted,
-failed, or required-risk skipped proof; optional skips remain explicit. Low-risk documentation,
-metadata, and simple changes retain the fast path. This enriches imperfect intake without
-becoming a separate qualitative refusal gate.
-
+### Builder Contract (Build Brief)
+The existing `FORGE:CONTRACT` is the single definitive Build Brief derived from the investigation,
+repository context, and architecture; do not replace it with a second universal checklist or ask
+the builder to complete missing requirements.
+### Adaptive pre-build challenge
+Before the first source edit, run exactly one short, fresh, read-only challenge for
+`STANDARD`/`COMPLEX` or materially risky work in one synchronous workflow containing one ordinary `delegate`
+with `context: "fresh"`, `worktree: false`, `acceptance: false`, and `timeoutMs: 300000`. It
+receives the issue, current repository/target context, existing FORGE records, and proposed
+contract independently, with no inherited investigator session and no ability to edit, publish,
+or launch children.
+Ask only change- and history-derived questions about missing constraints, failed approaches,
+contradictions, or uncovered implementation paths. Do not apply a universal checklist or launch a
+fallback. The challenger returns one short `PASS` or corrections; resolve all corrections in the
+existing Builder Contract before editing. If it cannot produce a substantive result, do not begin
+implementation or create a new artifact/remediation round. `TRIVIAL` low-risk work keeps the existing fast path and records the skip in the existing `FORGE:CLASSIFICATION` record.
 ## Plan once and publish the pre-build graph
 
 Before repository edits, form the following concise plan and publish the named
-classification/context/contract/architect records from `../../../knowledge-records.md`.
-Use retained investigation/history, actual source head and returned comment links; the
-plan must be fetchable from GitHub, not only held in this agent's context:
+classification/context/architect records from `../../../knowledge-records.md`. Publish the
+final `FORGE:CONTRACT` Builder Contract after the adaptive challenge above, or publish a
+superseding contract if a proposed brief was already recorded. Use retained
+investigation/history, actual source head and returned comment links; the plan must be
+fetchable from GitHub, not only held in this agent's context:
 
 1. production entrypoint and active path to the failure;
 2. files and symbols that must change;

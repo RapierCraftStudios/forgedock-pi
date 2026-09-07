@@ -151,6 +151,9 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
     spawn.params.task,
     /forgedock\.phase-artifact\/v1 investigate schema/,
   );
+  assert.match(spawn.params.task, /Closure Route/);
+  assert.match(spawn.params.task, /one synchronous workflow.*fresh ordinary delegate/s);
+  assert.match(spawn.params.task, /context=fresh, worktree=false, acceptance=false, timeoutMs=300000/s);
   assert.doesNotMatch(spawn.params.task, /Legacy Routing Classification/);
   assert.doesNotMatch(serialized, /gh auth token/);
 });
@@ -385,8 +388,7 @@ test("bounded implementation launch binds the durable builder contract", async (
   );
   assert.match(spawn.params.task, new RegExp(builderContract.contractHash));
   assert.match(spawn.params.task, /Allowed paths: src\/\*\*, test\/\*\*/);
-  assert.match(spawn.params.task, /Shell execution is unavailable for implementation/);
-  assert.match(spawn.params.task, /forge_proof_closure/);
+  assert.match(spawn.params.task, /Bash is available for implementation/);
 });
 
 test("RPC work-on treats GitHub-only verification as valid", async () => {

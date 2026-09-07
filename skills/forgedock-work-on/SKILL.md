@@ -31,14 +31,13 @@ Continue without stopping at intermediate success:
 
 `resolve → investigate → [decompose | build → PR → review → [remediate → re-review] → merge → close → cleanup]`
 
-Investigation independently derives the closure route, acceptance, and scope from evidence; issue-body criteria remain hypotheses. Publish the named pre-build graph before editing.
+Investigation independently derives the closure route, acceptance, and scope from evidence; issue-body criteria remain hypotheses. For non-trivial work, run exactly one genuinely fresh adaptive pre-build challenge against the proposed Builder Contract before editing, then resolve its corrections in the existing contract. Publish the named pre-build graph before editing.
 For bug fixes, record trigger/expected/observed
 baseline and fail-before/pass-after evidence; use inspection-only proof only with an explicit
-safety/impossibility justification. Execute investigation, planning, implementation, the
-identity-bound quality gate, verification, PR preparation, remediation, merge, close, and
-cleanup inline; pass exact issue, contract, and trusted risk inputs before publication.
+safety/impossibility justification. Execute investigation, planning, implementation, quality
+gates, verification, PR preparation, remediation, merge, close, and cleanup inline.
 Do not launch delegates, phase agents, builders, quality-gate agents, another work-on agent,
-or a review coordinator.
+or a review coordinator; the single fresh pre-build challenger is the only pre-review exception.
 
 At review or re-review only, launch the complete risk-selected panel as fresh ordinary
 `delegate` agents with full normal tools through one concurrent workflow. Every task carries
