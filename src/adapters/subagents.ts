@@ -60,6 +60,7 @@ export interface WorkOnLaunchInput {
   leaseOwnerRunId?: string;
   policy: ForgePolicy;
   issueContext: string;
+  proofRisk?: "low" | "high";
   builderContract?: BuilderPathContract;
 }
 
@@ -422,6 +423,7 @@ export class SubagentsRpcClient {
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
       verificationGithub: input.policy.verification.github,
+      ...(input.proofRisk ? { proofRisk: input.proofRisk } : {}),
       ...(input.builderContract
         ? { builderContract: input.builderContract }
         : {}),
@@ -547,6 +549,7 @@ export class SubagentsRpcClient {
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
       verificationGithub: input.policy.verification.github,
+      ...(input.proofRisk ? { proofRisk: input.proofRisk } : {}),
       ...(input.builderContract
         ? { builderContract: input.builderContract }
         : {}),

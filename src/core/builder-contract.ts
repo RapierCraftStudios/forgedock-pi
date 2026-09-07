@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+import { canonicalJson } from "./events.ts";
+
 export type ProofClosureState =
   | "PASS"
   | "FAIL"
@@ -81,7 +83,7 @@ export function createBuilderPathContract(
   return {
     ...payload,
     contractHash: createHash("sha256")
-      .update(JSON.stringify(payload))
+      .update(canonicalJson(payload))
       .digest("hex"),
   };
 }

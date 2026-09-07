@@ -5,6 +5,10 @@ import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promise
 import { promisify } from "node:util";
 import test from "node:test";
 import vm from "node:vm";
+import {
+  assertProofClosure,
+  createProofClosureContract,
+} from "../../src/core/builder-contract.ts";
 
 const execFileAsync = promisify(execFile);
 const dagInputs = `const ownerConcurrency = 2;
@@ -161,11 +165,35 @@ test("high-risk proof closure fails closed while low-risk work keeps the fast pa
     { name: "required integration", state: "SKIPPED", required: true },
     { name: "optional lint", state: "SKIPPED", required: false },
   ];
-  const blockingStates = new Set(["FAIL", "MISSING", "UNKNOWN", "CONTRADICTED"]);
-  const blocks = (rows: Array<{ state: string; required: boolean }>) => rows.some((row) =>
-    row.required && (blockingStates.has(row.state) || row.state === "SKIPPED"));
-  assert.equal(blocks(alterLab33745Rows), true);
-  assert.equal(blocks([{ state: "SKIPPED", required: false }]), false);
+  const proofBase = createProofClosureContract({
+    repository: "owner/repo",
+    issueNumber: 505,
+    target: "staging",
+    baseSha: "a".repeat(40),
+    risk: "high",
+    riskSignals: ["stateful-recovery"],
+    obligations: alterLab33745Rows.map((row) => ({
+      criterion: row.name,
+      invariant: `${row.name} remains safe`,
+      counterexample: `${row.name} failure`,
+      boundaryConsumers: "producer and consumer",
+      testCommand: "npm test",
+      failingBefore: "baseline demonstrates the defect",
+      passingAfter: "regression demonstrates closure",
+      state: row.state as "FAIL" | "MISSING" | "UNKNOWN" | "CONTRADICTED" | "SKIPPED",
+      required: row.required,
+    })),
+  });
+  assert.throws(
+    () => assertProofClosure(proofBase, proofBase),
+    /not closed/,
+  );
+  assert.doesNotThrow(() => assertProofClosure({
+    ...proofBase,
+    risk: "low",
+    riskSignals: [],
+    obligations: [{ ...proofBase.obligations[0]!, state: "SKIPPED", required: false }],
+  }, proofBase));
   assert.match(qualityGate, /low-risk work.*current fast path/is);
 });
 

@@ -57,6 +57,7 @@ import {
 } from "../core/policy.ts";
 import {
   RUN_PHASES,
+  canonicalJson,
   type RunEvent,
   type RunEventType,
   type RunPhase,
@@ -123,6 +124,7 @@ export interface ForgeChildBinding {
   reviewerTimeoutMs: number;
   verificationCommands: Readonly<Record<string, BoundVerificationCommand>>;
   verificationGithub?: ForgePolicy["verification"]["github"];
+  proofRisk?: "low" | "high";
   builderContract?: BuilderPathContract;
   nodeId?: string;
   node?: string;
@@ -335,7 +337,9 @@ export function registerForgeRuntime(
   let refreshPushLeaseSha: string | undefined;
   let preparedPull: { number: number; headSha: string } | undefined;
   let trustedBuilderContract: BuilderPathContract | undefined;
-  let trustedInvestigationRisk: "low" | "high" = "low";
+  let trustedInvestigationRisk: "low" | "high" =
+    binding.proofRisk ??
+    (binding.builderContract?.proofClosure?.risk === "high" ? "high" : "low");
   let proofClosureAdmitted = false;
   let reviewDiffCoverage:
     | { headSha: string; sha256: string; bytes: number; coveredBytes: number }
@@ -725,7 +729,7 @@ export function registerForgeRuntime(
         target: binding.baseBranch,
         baseSha: binding.baseSha,
       });
-      if (JSON.stringify(contract) !== JSON.stringify(trusted))
+      if (canonicalJson(contract) !== canonicalJson(trusted))
         throw new Error("Proof closure does not match the trusted plan contract.");
       proofClosureAdmitted = true;
       return {
@@ -1779,6 +1783,9 @@ export function registerForgeRuntime(
       )
         ? durableArtifactValue
         : undefined;
+      // On an idempotent retry, project the journal's original artifact,
+      // never a replacement supplied by the retried caller.
+      const projectedArtifact = durableArtifact ?? phaseArtifact;
       if (
         params.action === "complete" &&
         durableArtifact?.phase === "investigate" &&
@@ -1826,7 +1833,7 @@ export function registerForgeRuntime(
               event,
               {
                 ...checkpointParams,
-                ...(phaseArtifact ? { artifact: phaseArtifact } : {}),
+                ...(projectedArtifact ? { artifact: projectedArtifact } : {}),
               },
               binding,
               signal,
@@ -2002,6 +2009,13 @@ function readBinding(): ForgeChildBinding {
   const builderContract = value.builderContract;
   if (builderContract !== undefined)
     validateBuilderPathContract(builderContract);
+  const proofRisk = value.proofRisk;
+  if (
+    proofRisk !== undefined &&
+    proofRisk !== "low" &&
+    proofRisk !== "high"
+  )
+    throw new Error("Forge binding proofRisk must be low or high.");
   const commands = value.verificationCommands;
   if (!commands || typeof commands !== "object" || Array.isArray(commands))
     throw new Error("Forge binding verificationCommands must be an object.");
@@ -2069,6 +2083,7 @@ function readBinding(): ForgeChildBinding {
     reviewerTimeoutMs: value.reviewerTimeoutMs as number,
     verificationCommands,
     ...(builderContract ? { builderContract } : {}),
+    ...(proofRisk ? { proofRisk } : {}),
     ...(node
       ? {
           nodeId: value.nodeId as string,

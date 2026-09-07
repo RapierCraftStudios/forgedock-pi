@@ -493,6 +493,17 @@ export class ForgeWorkOnController {
           const directPlan = [...directArtifacts]
             .reverse()
             .find((artifact) => artifact.phase === "plan");
+          const directProofRisk =
+            directInvestigation?.phase === "investigate" &&
+            (directInvestigation.severity === "critical" ||
+              directInvestigation.severity === "high" ||
+              directInvestigation.complexity === "complex")
+              ? "high"
+              : directPlan?.phase === "plan" &&
+                  (directPlan.risk === "high" ||
+                    directPlan.riskSignals.length > 0)
+                ? "high"
+                : "low";
           const directBuilderContract = directPlan?.phase === "plan"
             ? createBuilderPathContract(
                 directPlan.allowedPaths,
@@ -502,15 +513,7 @@ export class ForgeWorkOnController {
                   issueNumber: link.issueNumber,
                   target: link.prepared.baseBranch,
                   baseSha: link.prepared.baseSha,
-                  risk:
-                    (directInvestigation?.phase === "investigate" &&
-                      (directInvestigation.severity === "critical" ||
-                        directInvestigation.severity === "high" ||
-                        directInvestigation.complexity === "complex")) ||
-                    directPlan.risk === "high" ||
-                    directPlan.riskSignals.length > 0
-                      ? "high"
-                      : "low",
+                  risk: directProofRisk,
                   riskSignals: directPlan.riskSignals,
                   obligations: directPlan.proofObligations,
                 }),
@@ -531,6 +534,7 @@ export class ForgeWorkOnController {
             maxReviewRounds: policy.review.maxRounds,
             reviewerTimeoutMs: policy.subagents.reviewerTimeoutMs,
             verificationCommands: policy.verification.commands,
+            proofRisk: directProofRisk,
             ...(directBuilderContract ? { builderContract: directBuilderContract } : {}),
             refresh: false,
           };
@@ -3296,6 +3300,7 @@ export class ForgeWorkOnController {
       leaseEpoch: link.leaseEpoch,
       leaseOwnerRunId: link.leaseOwnerRunId,
       policy,
+      ...(link.proofRisk ? { proofRisk: link.proofRisk } : {}),
       ...(link.builderContract
         ? { builderContract: link.builderContract }
         : {}),
@@ -4089,6 +4094,14 @@ export class ForgeWorkOnController {
     link.reviewBaseSha = currentBaseSha;
     link.prepared = { ...link.prepared, baseSha: currentBaseSha };
     link.refreshes += 1;
+    if (link.builderContract?.proofClosure) {
+      const proof = link.builderContract.proofClosure;
+      link.builderContract = createBuilderPathContract(
+        link.builderContract.allowedPaths,
+        link.builderContract.revision,
+        createProofClosureContract({ ...proof, baseSha: currentBaseSha }),
+      );
+    }
     link.status = "refreshing";
     this.#persistLink(link);
     if (link.executionMode === "direct") {
@@ -4099,6 +4112,7 @@ export class ForgeWorkOnController {
       this.#directBinding = {
         ...this.#directBinding,
         baseSha: currentBaseSha,
+        ...(link.builderContract ? { builderContract: link.builderContract } : {}),
         refresh: true,
         previousReviewRounds: result.review.rounds,
       };
@@ -4316,6 +4330,7 @@ export class ForgeWorkOnController {
         `Issue: #${input.link.issueNumber}`,
         `Prior reviewed head: ${input.result.review.headSha}`,
         "Read the standalone review-finding issues listed below. Apply every confirmed/likely fix that is inside the accepted builder contract; escalate only product/policy/out-of-contract decisions.",
+        `Re-admit the exact retained proof contract through forge_proof_closure before committing (contract hash: ${input.link.builderContract?.contractHash ?? "none"}); do not replace it with caller-supplied proof.`,
         ...findingLines,
         "Commit with forge_commit kind review-fixes, rerun applicable verification, call forge_prepare_review to update the same PR, and launch a fresh complete correctness/security panel.",
         `Return a schema-valid work-on result with review.rounds=${input.result.review.rounds + 1}, persist it through forge_finalize_work_on, and do not repeat investigation or planning.`,

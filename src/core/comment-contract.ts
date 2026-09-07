@@ -206,6 +206,36 @@ export const FORGE_PHASE_ARTIFACT_SCHEMA = {
         steps: { type: "array", minItems: 1, items: { type: "object", additionalProperties: false, required: ["order", "action", "checkIds"], properties: { order: { type: "integer", minimum: 1 }, action: schemaString, checkIds: schemaNonEmptyStrings } } },
         outOfScope: schemaStrings,
       },
+      anyOf: [
+        {
+          properties: {
+            risk: { const: "low" },
+            riskSignals: { maxItems: 0 },
+            proofObligations: {
+              not: {
+                contains: {
+                  type: "object",
+                  properties: { required: { const: true } },
+                  required: ["required"],
+                },
+              },
+            },
+          },
+        },
+        {
+          properties: {
+            risk: { const: "high" },
+            riskSignals: { minItems: 1 },
+            proofObligations: {
+              contains: {
+                type: "object",
+                properties: { required: { const: true } },
+                required: ["required"],
+              },
+            },
+          },
+        },
+      ],
     },
     {
       type: "object",
@@ -303,7 +333,12 @@ export function isPhaseArtifact(value: unknown): value is PhaseArtifact {
         enumValue(artifact.risk, ["low", "high"]) &&
         stringArray(artifact.riskSignals) &&
         validProofObligations(artifact.proofObligations) &&
-        (artifact.risk !== "high" || artifact.proofObligations.some((row) => row.required)) &&
+        ((artifact.risk === "high" &&
+          artifact.riskSignals.length > 0 &&
+          artifact.proofObligations.some((row) => row.required)) ||
+          (artifact.risk === "low" &&
+            artifact.riskSignals.length === 0 &&
+            artifact.proofObligations.every((row) => !row.required))) &&
         strings(artifact, ["objective"]) &&
         nonEmptyStringArray(artifact.allowedPaths) &&
         nonEmptyStringArray(artifact.forbiddenChanges) &&
@@ -381,13 +416,21 @@ function objectValue(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 function validProofObligations(value: unknown): value is ProofObligation[] {
-  return Array.isArray(value) && value.every((row) =>
-    objectValue(row) &&
-    Object.keys(row).every((key) => ["criterion", "invariant", "counterexample", "boundaryConsumers", "testCommand", "failingBefore", "passingAfter", "state", "required"].includes(key)) &&
-    strings(row, ["criterion", "invariant", "counterexample", "boundaryConsumers", "testCommand", "failingBefore", "passingAfter"]) &&
-    enumValue(row.state, ["PASS", "FAIL", "MISSING", "SKIPPED", "CONTRADICTED", "UNKNOWN"]) &&
-    typeof row.required === "boolean"
-  );
+  if (!Array.isArray(value)) return false;
+  const criteria = new Set<string>();
+  for (const row of value) {
+    if (
+      !objectValue(row) ||
+      Object.keys(row).some((key) => !["criterion", "invariant", "counterexample", "boundaryConsumers", "testCommand", "failingBefore", "passingAfter", "state", "required"].includes(key)) ||
+      !strings(row, ["criterion", "invariant", "counterexample", "boundaryConsumers", "testCommand", "failingBefore", "passingAfter"]) ||
+      typeof row.criterion !== "string" ||
+      !enumValue(row.state, ["PASS", "FAIL", "MISSING", "SKIPPED", "CONTRADICTED", "UNKNOWN"]) ||
+      typeof row.required !== "boolean" ||
+      criteria.has(row.criterion)
+    ) return false;
+    criteria.add(row.criterion);
+  }
+  return true;
 }
 function validPlanContext(value: unknown): boolean {
   if (!objectValue(value)) return false;
