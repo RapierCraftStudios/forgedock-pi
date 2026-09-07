@@ -10,20 +10,18 @@ allowed-tools: Task, Agent, Bash, Read, Grep, Glob, WebFetch, Skill
 
 **Input**: $ARGUMENTS
 
-## Contract-aware review and boundary closure
+## Admitted proof and boundary closure
 
-For work-on PRs, review the exact current diff against the existing investigation-produced
-`FORGE:CONTRACT` Build Brief, not only issue prose or summaries. Trace the relevant live path,
-callers/consumers, invariants, historical constraints, implementation route, and acceptance
-checks named there; inspect additional transitions only when current code or history makes
-them relevant. A criterion is not proven by a source-string assertion, approval, or green
-aggregate row. Preserve the existing independent exact-head panel and fail-closed merge
-behavior, but keep requirements upstream: reviewers classify a material discovery as
-`PATCH_DEFECT` when the contract already required it, or `CONTRACT_GAP` when current code or
-history exposes a missing or contradictory requirement. Contract gaps return to investigation;
-they are not quality-based GATED outcomes and do not become hidden builder scope. Legacy
-provenance, purpose, calibration, and trust sections below are informational only for this
-route and must not add merge authority or a GATED/needs-human outcome.
+For work-on PRs, review the exact current diff against the admitted criterion proof map,
+not only prose summaries. For every changed key, protocol, state machine, external call,
+or persisted boundary, close the reachable producer → consumer path and check type/namespace
+or serialization, valid/invalid input, interleavings, failure injection, retry, and recovery.
+A criterion is not proven by a source-string assertion, approval, or green aggregate row;
+required-risk integration capability marked missing or skipped remains insufficient evidence
+and is surfaced in the verdict. Preserve the existing independent fresh panel, fail-closed
+merge behavior, imperfect-intake investigation, and bounded remediation cap. If multiple
+independent patch-caused blockers remain after a cohesive round, return the evidence to a
+bounded re-plan/decomposition decision rather than normalizing repeated review.
 
 **NEVER use plan mode (EnterPlanMode)** during review — it breaks execution context.
 **Sub-agent dispatch tool: `Task` preferred, `Agent` is the documented fallback.** review-pr dispatches domain review agents via a sub-agent-spawning tool. Resolve which one is available ONCE per invocation, before Phase 3C, per the **Sub-Agent Dispatch Tool Resolution** rule below — do not halt to ask the operator which tool to use. Never fall back to reviewing inline in the orchestrator's own context; inline self-review is a strictly weaker substitute for an isolated fresh-context reviewer and is not a permitted fallback.
@@ -38,7 +36,7 @@ route and must not add merge authority or a GATED/needs-human outcome.
 
 2. **Post the FORGE:REVIEW verdict regardless of finding severity.** A review that completes but posts no `<!-- FORGE:REVIEW -->` comment is invisible to the pipeline. Even a PASS verdict must be posted.
 
-3. **Review findings block merge only when the current review identifies a confirmed blocking behavior, an acceptance failure, a merge conflict, or a required check failure.** Classify each material finding as `PATCH_DEFECT` when the existing contract required the behavior, or `CONTRACT_GAP` when current code/history reveals a missing or contradictory requirement. In work-on review, patch defects stay on the existing PR/source issue for exceptional cohesive remediation; contract gaps return to investigation with a superseding contract. No confidence calibration, purpose heuristic, or quality uncertainty may change that disposition or create a GATED/needs-human outcome. Minor/style findings remain follow-ups; standalone and staging review retain their finding-publication policy.
+3. **Review findings do NOT block merge UNLESS they meet the Blocking Criteria in §7B** (a CONFIRMED HIGH/CRITICAL finding, a purpose regression, a merge conflict, or a build/type/test failure) **or the calibration threshold check in §7B.5 sets `CALIBRATION_NEEDS_HUMAN=true`** (HIGH-confidence task type with historical survival < 80%). In work-on review, keep blockers on the existing PR/source issue for cohesive remediation and create issues only for valuable independent follow-up work; standalone and staging review retain their finding-publication policy. Minor/style findings never block; §7B's and §7B.5's blocking conditions always do — including under `--auto-merge`. <!-- forge#1741 -->
 
 4. **Route correctly at Phase 0.** If the input is "staging" or the PR targets `main`, invoke `Skill("review-pr-staging", ...)` — do NOT run the standard PR review pipeline against a staging→main PR.
 
@@ -1093,19 +1091,12 @@ AGENT_COUNT=$(echo "$SELECTED_AGENTS" | wc -w)
 echo "=== AGENT COUNT: $AGENT_COUNT ==="
 ```
 
-### 3B.5: Provenance-Based Trust Escalation (Retired for the Pi-native route)
+### 3B.5: Provenance-Based Trust Escalation (Conditional)
 
-The Pi-native review route may use relevant source/history to select justified reviewers, but
-provenance novelty never changes merge authority and never adds `needs-human` or `GATED`.
-The legacy calibration block below is retained only as historical reference; do not execute
-its quality-based escalation for work-on or ordinary PR review. <!-- forge#1804 -->
-
-**Skip**: This retired section is not an admission or merge gate.
+**Skip if**: `THOROUGH=true` OR `IS_MILESTONE_TO_STAGING=true` — these modes already run full union dispatch; provenance de-escalation must not narrow an already-thorough review. This skip is enforced in code at the Step 4 application block (not merely relied upon via a downstream overwrite). <!-- forge#1804 -->
 
 
-**Historical purpose only**: Older runtimes adjusted roster breadth from a provenance table.
-That history does not authorize a merge decision, quality pause, `needs-human`, or `GATED`
-in the current investigation-first route.
+**Purpose**: Adjust the agent roster based on the PR's verifiable track record. Proven `(task-type × module-set)` combinations may drop optional judgment agents; novel combinations escalate to full panel plus `needs-human` on merge. The hard floor (Security agent + all Phase 2 automated checks) runs at every intensity tier, unconditionally.
 
 **HARD FLOOR (non-negotiable)**: Security agent always stays in `SELECTED_AGENTS`. Phase 2 automated checks (linting, typecheck, secrets scan, SQL validation) run regardless of intensity tier. Trust only modulates optional LLM judgment breadth.
 
@@ -1256,14 +1247,18 @@ else
       SELECTED_AGENTS="$FLOOR_AGENTS"
       echo "=== TRUST ESCALATION: PROVEN — roster narrowed to floor: ${SELECTED_AGENTS} ==="
       ;;
-    NOVEL)
-      # NOVEL tier: widen only the behavior-justified reviewer panel
+    NOVEL|NOVEL_NEEDS_HUMAN)
+      # NOVEL tier: escalate to full affected-domain panel (add all scored domains)
       for DOMAIN in AUTH BILLING CONCURRENCY DATABASE INFRA FRONTEND API; do
         SCORE_VAR="SCORE_${DOMAIN}"
         [ "${!SCORE_VAR:-0}" -gt 0 ] && add_agent "$DOMAIN"
       done
       SELECTED_AGENTS=$(echo "$SELECTED_AGENTS" | tr ' ' '\n' | sort -u | tr '\n' ' ')
       echo "=== TRUST ESCALATION: ${INTENSITY_TIER} — roster widened to full panel: ${SELECTED_AGENTS} ==="
+      if [ "$INTENSITY_TIER" = "NOVEL_NEEDS_HUMAN" ]; then
+        echo "=== TRUST ESCALATION: NOVEL_NEEDS_HUMAN — needs-human will be added on merge ==="
+        TRUST_NEEDS_HUMAN=true
+      fi
       ;;
     SHADOW|*)
       # SHADOW or unknown: no change
@@ -1272,8 +1267,11 @@ else
   esac
 fi
 
-echo "=== FINAL ROSTER (after retired trust reference): $SELECTED_AGENTS ==="
-echo "=== INTENSITY_TIER: ${INTENSITY_TIER} | TABLE_CELL_KEY: ${TABLE_CELL_KEY} | provenance does not change merge authority ==="
+# Record TRUST_NEEDS_HUMAN default (set to false if not already set by NOVEL_NEEDS_HUMAN branch)
+TRUST_NEEDS_HUMAN="${TRUST_NEEDS_HUMAN:-false}"
+
+echo "=== FINAL ROSTER (after trust escalation): $SELECTED_AGENTS ==="
+echo "=== INTENSITY_TIER: ${INTENSITY_TIER} | TABLE_CELL_KEY: ${TABLE_CELL_KEY} | SHADOW: ${TRUST_SHADOW_MODE} | NEEDS_HUMAN: ${TRUST_NEEDS_HUMAN} ==="
 ```
 
 <!-- Added: forge#1745 -->
@@ -1989,27 +1987,62 @@ Append `## Review Findings` table to PR body with finding summaries and issue li
 
 ## Phase 7: Official Review Action
 
-### 7A: Contract Disposition (Milestone PRs Only)
+### 7A: Purpose Regression Gate (Milestone PRs Only)
 
-**Skip if**: `IS_MILESTONE_TO_STAGING` is false (i.e., HEAD branch does NOT start with `milestone/`).
+**Skip if**: `IS_MILESTONE_TO_STAGING` is false (i.e., HEAD branch does NOT start with `milestone/`). This gate fires ONLY for milestone→staging PRs.
 
-**Purpose**: A milestone-specific concern is not a separate quality gate. If current code or
-history shows that the builder brief omitted a required behavior, classify the finding as
-`CONTRACT_GAP` and return to investigation. If the contract already promised it and the patch
-violates it, classify `PATCH_DEFECT`. Do not infer a blocker from title, purpose, or reviewer
-confidence alone.
+**Why this exists**: For milestone PRs, a CONFIRMED finding can be a functional regression even if it doesn't cause a runtime crash. A stealth milestone shipping a detectable signal is the stealth equivalent of a crash — the milestone's entire purpose is negated. The orchestrator's default heuristic (crash or data corruption = blocking) is insufficient here. This gate adds an explicit purpose-aware blocking criterion.
 
-**Step 1 — Classify each material finding:**
+**Step 1 — Extract milestone purpose:**
+```bash
+# PR title and milestone name were fetched in Phase 1A
+# Examples: "Stealth Engine Overhaul", "Session Intelligence", "Billing Reconciliation"
+# Derive the capability domain from the milestone/PR title:
+#   "stealth" → detection avoidance, fingerprint consistency, proxy signal coherence
+#   "performance" → latency, throughput, resource utilization
+#   "billing" → charge accuracy, credit calculation, subscription state
+#   "auth" → session validity, token correctness, permission enforcement
+#   "session" → session state consistency, persistence, expiry
+```
 
-Use current code, the frozen diff, and relevant GitHub history. Mark `PATCH_DEFECT` only
-when the existing `FORGE:CONTRACT` already promised the behavior and the patch violates it.
-Mark `CONTRACT_GAP` when the evidence exposes a missing or contradictory requirement in the
-investigation brief. Do not create a separate purpose-regression or quality gate.
+**Step 2 — Evaluate each finding for purpose regression:**
 
-**Step 3 — Carry the classification into the final review summary:**
+For each finding that is CONFIRMED or LIKELY at MEDIUM+ severity (already created as a GitHub issue in Phase 6), apply the purpose regression test:
 
-The classification is durable review evidence and determines routing for work-on PRs; it
-must not be inferred from milestone title, confidence, or a generic quality score.
+> **The test**: "If someone described this milestone's goal in one sentence (e.g., 'Improve stealth to avoid bot detection'), would this finding represent the opposite of that goal?"
+>
+> - A **stealth milestone** + a CONFIRMED finding about a detectable signal/fingerprint mismatch → **PURPOSE REGRESSION** → BLOCKING
+> - A **performance milestone** + a CONFIRMED finding about increased latency or higher resource usage → **PURPOSE REGRESSION** → BLOCKING
+> - A **billing milestone** + a CONFIRMED finding about incorrect charge calculation or credit leak → **PURPOSE REGRESSION** → BLOCKING
+> - A **stealth milestone** + a CONFIRMED finding about a formatting inconsistency or a missing log line → **NOT a purpose regression** → advisory only (still gets a GitHub issue, but does not block)
+
+**Step 3 — Set verdict flag:**
+```bash
+HAS_PURPOSE_REGRESSION=false
+
+# For each CONFIRMED/LIKELY finding at MEDIUM+ severity:
+# Read the finding's title/description from the GitHub issue created in Phase 6.
+# Apply the purpose regression test above.
+# If the finding contradicts the milestone's stated capability improvement:
+HAS_PURPOSE_REGRESSION=true
+PURPOSE_REGRESSION_FINDINGS+=("Finding ID: ..., Reason: ...")
+```
+
+**Step 4 — Log result:**
+
+If `HAS_PURPOSE_REGRESSION=true`:
+```
+PURPOSE REGRESSION GATE: BLOCKED
+Reason: [finding] contradicts milestone goal "[milestone name]"
+Verdict escalated to CHANGES REQUESTED.
+```
+
+If no purpose regression found:
+```
+PURPOSE REGRESSION GATE: PASSED
+No findings contradict the milestone's stated purpose.
+Verdict determined by standard blocking criteria.
+```
 
 ---
 
@@ -2020,7 +2053,8 @@ must not be inferred from milestone title, confidence, or a generic quality scor
 **Blocking criteria** — a finding is BLOCKING if ANY of the following are true:
 1. Phase 2 automated checks failed (build error, type error, test failure)
 2. Agent finding is CONFIRMED at HIGH or CRITICAL severity
-3. `MERGE_HEALTH == "CONFLICTING"` OR `MERGE_HEALTH_STATE` in {`DIRTY`, `BLOCKED`} — PR cannot be merged cleanly into its base branch <!-- Added: forge#194 -->
+3. **[Milestone PRs only]** Phase 7A Purpose Regression Gate flagged `HAS_PURPOSE_REGRESSION=true` for this finding — regardless of whether it causes a runtime error
+4. `MERGE_HEALTH == "CONFLICTING"` OR `MERGE_HEALTH_STATE` in {`DIRTY`, `BLOCKED`} — PR cannot be merged cleanly into its base branch <!-- Added: forge#194 -->
    - Verdict: CHANGES REQUESTED. Message: "Merge conflict with `{base}`. Rebase `{head}` onto `origin/{base}`, resolve the conflicting files, then re-run /review-pr."
    - If `MERGE_HEALTH == "UNKNOWN"` after retries: emit a WARNING in the verdict body (do NOT treat as a block — GitHub may still be computing it).
 
@@ -2042,36 +2076,113 @@ if [ "$ATTRIBUTION_PR_FOOTER" = "true" ]; then
 > ⚒️ Orchestrated with [ForgeDock](https://github.com/RapierCraftStudios/ForgeDock) — state, scheduling, review, and memory on GitHub."
 fi
 
-# Contract/patch classification is carried by each structured finding and the review summary;
-# no provenance or confidence trust annotation changes merge authority.
+# Build trust annotation line for verdict body — always included so the decision is auditable.
+# INTENSITY_TIER and TABLE_CELL_KEY are set in Phase 3B.5 (defaults: SHADOW / unavailable).
+TRUST_ANNOTATION="**Intensity tier**: ${INTENSITY_TIER:-SHADOW} | **Cell**: \`${TABLE_CELL_KEY:-(unavailable)}\` | **Shadow mode**: ${TRUST_SHADOW_MODE:-true}"
 
 # Stale review:
 gh pr review $ARGUMENTS --comment --body "Review of commit $REVIEW_SHA_SHORT is stale — PR HEAD changed. Re-run /review-pr."
 
 # Clean (no blocking issues):
 gh pr review $ARGUMENTS --comment --body "APPROVED: commit $REVIEW_SHA_SHORT after context-aware review ([N] agents: [names]). [M] independent follow-up issues created. Safe to merge.
+${TRUST_ANNOTATION}
 $([ "$MERGE_HEALTH" = "UNKNOWN" ] && echo "
 ⚠ Mergeability: GitHub is still computing merge state (UNKNOWN after retries). Verify manually before merging.")${ATTRIBUTION_FOOTER_LINE}"
 
-# Blocking issues (including merge conflicts and contract/patch findings):
-gh pr review $ARGUMENTS --comment --body "CHANGES REQUESTED: commit $REVIEW_SHA_SHORT — [N] blocking findings require cohesive remediation or investigation correction. See the synthesized review and linked source issue.
+# Blocking issues (including merge conflicts and purpose regressions):
+gh pr review $ARGUMENTS --comment --body "CHANGES REQUESTED: commit $REVIEW_SHA_SHORT — [N] blocking findings require cohesive remediation. See the synthesized review and linked source issue.
+${TRUST_ANNOTATION}
 $([ "$HAS_MERGE_CONFLICT" = "true" ] && echo "
-🔴 Merge Conflict: ${MERGE_CONFLICT_MSG}")${ATTRIBUTION_FOOTER_LINE}"
+🔴 Merge Conflict: ${MERGE_CONFLICT_MSG}")
+$([ "$HAS_PURPOSE_REGRESSION" = "true" ] && echo "
+⚠ Purpose Regression: [N] finding(s) contradict the milestone's stated goal and are automatically blocking regardless of runtime impact. See: ${PURPOSE_REGRESSION_FINDINGS[@]}")${ATTRIBUTION_FOOTER_LINE}"
 ```
 
 ---
 
-## Phase 7B.5: Calibration Threshold Consultation (Retired)
+## Phase 7B.5: Calibration Threshold Consultation (Conditional) <!-- Added: forge#1741 -->
 
-Do not consult a calibration table or route to `needs-human`/`GATED` because of confidence
-history or novelty. Review authority comes from the exact current head, the
-investigation-produced contract, confirmed evidence, required checks, mergeability, and
-explicit external authority only. The legacy shell block formerly in this section is
-non-executable historical material.
+**Skip if**: `AUTO_MERGE=false` AND no calibration-based routing is needed (this phase is informational even when not auto-merging — run it to populate `CALIBRATION_NEEDS_HUMAN` for Phase 8).
 
-> **Retired:** do not execute the former calibration/provenance shell block. Confidence history,
-> novelty, and calibration never create a human or GATED outcome. Record only the evidence-based
-> contract/patch classification and the ordinary exact-head review result.
+**Purpose**: Read the confidence calibration table (published to the `forge-knowledge` branch by `scripts/calibration.mjs`) and check whether the current PR's task-type × confidence combination has a survival rate below the overconfidence threshold. If the table says HIGH-confidence in this task type has historically performed poorly (< 80% survival), route to needs-human regardless of the agent verdict.
+
+**Fail-safe**: ANY error reading the calibration table (branch absent, file missing, JSON parse error, git failure) MUST result in `CALIBRATION_NEEDS_HUMAN=false` and the current static blocking criteria (Phase 7B verdict) remaining authoritative. The calibration table can ONLY tighten behavior (add needs-human); it NEVER loosens behavior below the current static baseline.
+
+```bash
+# Phase 7B.5: Calibration threshold consultation
+CALIBRATION_NEEDS_HUMAN=false
+CALIBRATION_CELL=""
+CALIBRATION_NOTE=""
+
+# Read task type from FORGE:INVESTIGATOR on the linked issue
+# (MERGE_ISSUE is the issue number; passed from --auto-merge args)
+ISSUE_NUMBER="${MERGE_ISSUE:-}"
+
+if [ -n "$ISSUE_NUMBER" ]; then
+  INVESTIGATOR_BODY=$(gh api "repos/{GH_REPO}/issues/${ISSUE_NUMBER}/comments" \
+    --jq '[.[] | select(.body | contains("FORGE:INVESTIGATOR"))] | last | .body // ""' 2>/dev/null || echo '')
+  TASK_TYPE=$(echo "$INVESTIGATOR_BODY" | grep -oP '(?<=\*\*Task Type\*\*: )[^\n]+' | head -1 | tr -d ' \r')
+  CONFIDENCE=$(echo "$INVESTIGATOR_BODY" | grep -oP '(?<=\*\*Confidence\*\*: )[^\n]+' | head -1 | tr -d ' \r')
+  echo "Phase 7B.5: task_type=${TASK_TYPE:-unknown} confidence=${CONFIDENCE:-unknown} (from issue #${ISSUE_NUMBER})"
+fi
+
+# Read calibration table from forge-knowledge branch (fail-safe: any error → skip)
+if [ -n "${TASK_TYPE:-}" ] && [ -n "${CONFIDENCE:-}" ]; then
+  CALIB_RAW=$(git show "origin/forge-knowledge:calibration/table.json" 2>/dev/null || echo '')
+
+  if [ -n "$CALIB_RAW" ]; then
+    # Look up the task-type × confidence cell
+    CALIB_CELL=$(echo "$CALIB_RAW" | jq -r --arg tt "$TASK_TYPE" --arg c "$CONFIDENCE" \
+      '.rows[] | select(.taskType == $tt and .confidence == $c and .trusted == true)' 2>/dev/null || echo '')
+
+    if [ -n "$CALIB_CELL" ]; then
+      SURVIVAL_RATE=$(echo "$CALIB_CELL" | jq -r '.survivalRate // "null"' 2>/dev/null || echo 'null')
+      SAMPLE_COUNT=$(echo "$CALIB_CELL" | jq -r '.sampleCount // 0' 2>/dev/null || echo '0')
+      CELL_FLAG=$(echo "$CALIB_CELL" | jq -r '.flag // "null"' 2>/dev/null || echo 'null')
+
+      CALIBRATION_CELL="${TASK_TYPE} × ${CONFIDENCE}: survival=${SURVIVAL_RATE} (n=${SAMPLE_COUNT})"
+      echo "Phase 7B.5: calibration cell found — ${CALIBRATION_CELL} flag=${CELL_FLAG}"
+
+      # Check overconfidence threshold: HIGH confidence with survival < 0.8
+      if [ "$CONFIDENCE" = "HIGH" ] && [ "$CELL_FLAG" = "overconfidence" ]; then
+        CALIBRATION_NEEDS_HUMAN=true
+        CALIBRATION_NOTE="Calibration table: ${TASK_TYPE} × HIGH confidence has ${SURVIVAL_RATE} survival rate (< 0.80 threshold, n=${SAMPLE_COUNT}). Routing to needs-human per forge#1741 policy."
+        echo "Phase 7B.5: CALIBRATION_NEEDS_HUMAN=true — ${CALIBRATION_NOTE}"
+      else
+        CALIBRATION_NOTE="Calibration cell: ${CALIBRATION_CELL} — within acceptable threshold"
+        echo "Phase 7B.5: CALIBRATION_NEEDS_HUMAN=false — ${CALIBRATION_NOTE}"
+      fi
+    else
+      # Cell not found or not trusted (below min-samples) — static behavior applies
+      CALIBRATION_NOTE="Calibration cell for ${TASK_TYPE} × ${CONFIDENCE} is absent or untrusted — using static behavior"
+      echo "Phase 7B.5: no trusted cell — ${CALIBRATION_NOTE}"
+    fi
+  else
+    CALIBRATION_NOTE="forge-knowledge:calibration/table.json not found — using static behavior"
+    echo "Phase 7B.5: calibration table unavailable — ${CALIBRATION_NOTE}"
+  fi
+else
+  CALIBRATION_NOTE="task type or confidence not resolved from FORGE:INVESTIGATOR — using static behavior"
+  echo "Phase 7B.5: could not resolve task type/confidence — ${CALIBRATION_NOTE}"
+fi
+
+# Log threshold decision in TRAJECTORY (append to existing issue comment or note for Phase 6)
+# This satisfies the acceptance criterion: "Threshold adjustments appear in TRAJECTORY with the cell that justified them"
+if [ -n "$ISSUE_NUMBER" ]; then
+  gh issue comment "${ISSUE_NUMBER}" {MERGE_GH_FLAG} --body "<!-- FORGE:CALIBRATION_CHECK -->
+**Phase 7B.5 — Calibration Threshold Check**
+**Cell**: ${CALIBRATION_CELL:-not found}
+**CALIBRATION_NEEDS_HUMAN**: ${CALIBRATION_NEEDS_HUMAN}
+**Note**: ${CALIBRATION_NOTE}
+
+**Phase 3B.5 — Provenance Trust Decision**
+**Intensity tier**: ${INTENSITY_TIER:-SHADOW}
+**Provenance cell**: \`${TABLE_CELL_KEY:-(unavailable)}\`
+**Shadow mode**: ${TRUST_SHADOW_MODE:-true}
+**TRUST_NEEDS_HUMAN**: ${TRUST_NEEDS_HUMAN:-false}
+**Timestamp**: $(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null || true
+fi
+```
 
 ---
 
@@ -2080,13 +2191,21 @@ non-executable historical material.
 **Skip if** `AUTO_MERGE=false`.
 
 ```bash
-# §7B verdict guard — check before any merge attempt.
-# Internal findings are represented by the review verdict and its contract/patch
-# classification. Provenance, purpose, calibration, and novelty never add a human gate.
-if [ "$VERDICT" = "CHANGES REQUESTED" ]; then
-    BLOCK_REASON="review verdict is CHANGES REQUESTED (blocking finding confirmed by Phase 7B)"
-    gh issue comment {MERGE_ISSUE} {MERGE_GH_FLAG} --body "⛔ Auto-merge aborted for PR #{PR_NUMBER}: ${BLOCK_REASON}. Return patch defects to bounded remediation or contract gaps to investigation."
-    # STOP — do not attempt gh pr merge while the review verdict requests changes
+# §7B verdict + purpose-regression + calibration + trust-escalation guard — check before any merge attempt <!-- Added: forge#1601, forge#1741, forge#1745 -->
+# HARD RULE 3 requires that VERDICT=CHANGES REQUESTED, HAS_PURPOSE_REGRESSION=true,
+# CALIBRATION_NEEDS_HUMAN=true, AND TRUST_NEEDS_HUMAN=true all block merge, including under --auto-merge.
+# These vars are set in Phase 7A/7B/7B.5/3B.5 earlier in the same agent session.
+# An unset/empty VERDICT is safe — it evaluates to "" which does not equal "CHANGES REQUESTED".
+# TRUST_NEEDS_HUMAN: set to true by Phase 3B.5 when INTENSITY_TIER=NOVEL_NEEDS_HUMAN AND shadow mode is off.
+if [ "$VERDICT" = "CHANGES REQUESTED" ] || [ "$HAS_PURPOSE_REGRESSION" = "true" ] || [ "$CALIBRATION_NEEDS_HUMAN" = "true" ] || [ "${TRUST_NEEDS_HUMAN:-false}" = "true" ]; then
+    BLOCK_REASON=""
+    [ "$VERDICT" = "CHANGES REQUESTED" ] && BLOCK_REASON="review verdict is CHANGES REQUESTED (blocking finding confirmed by Phase 7B)"
+    [ "$HAS_PURPOSE_REGRESSION" = "true" ] && BLOCK_REASON="${BLOCK_REASON:+${BLOCK_REASON}; }purpose regression detected by Phase 7A (\`HAS_PURPOSE_REGRESSION=true\`)"
+    [ "$CALIBRATION_NEEDS_HUMAN" = "true" ] && BLOCK_REASON="${BLOCK_REASON:+${BLOCK_REASON}; }calibration threshold: ${CALIBRATION_NOTE}"
+    [ "${TRUST_NEEDS_HUMAN:-false}" = "true" ] && BLOCK_REASON="${BLOCK_REASON:+${BLOCK_REASON}; }provenance trust: NOVEL_NEEDS_HUMAN tier for cell \`${TABLE_CELL_KEY}\` — no sufficient prior data (forge#1745)"
+    gh issue comment {MERGE_ISSUE} {MERGE_GH_FLAG} --body "⛔ Auto-merge aborted for PR #{PR_NUMBER}: ${BLOCK_REASON}. Manual review required before merging."
+    gh issue edit {MERGE_ISSUE} {MERGE_GH_FLAG} --add-label "needs-human" 2>/dev/null || true
+    # STOP — do not attempt gh pr merge when §7B/7B.5 blocking conditions are active
 else
 
 # Pre-merge mergeability guard — re-fetch fresh state before attempting merge <!-- Added: forge#194 -->
@@ -2345,7 +2464,7 @@ gh pr comment $ARGUMENTS --body "$(cat <<'EOF'
 ## Integration Checks (Phase 2.5)
 **Code registration**: [pass / N broken activation paths found]
 **SOPS deploy chain**: [pass / not applicable / N warnings found]
-**Finding Disposition**: [PATCH_DEFECT / CONTRACT_GAP / advisory / external prerequisite]
+**Purpose Regression Gate (7A)**: [N/A — non-milestone PR / PASSED — no purpose regressions / BLOCKED — N finding(s) contradict milestone goal]
 
 ## Risk Matrix
 | Category | Risk | Blocking? | Confidence |

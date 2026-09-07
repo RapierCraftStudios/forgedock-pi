@@ -50,8 +50,9 @@ investigation establish mutation scope. Detect and report real cycles.
 Before presenting the plan, reconcile explicit prerequisite merge/closure evidence against
 the configured target. A closed issue alone is insufficient, but a verified delivered
 prerequisite must not appear as an unresolved gate. Surface external prerequisites without
-enrolling them. Show the exact issue set, targets, hard edges, ready set, and approved active-owner
-concurrency. The configured ceiling is not proof of host/provider capacity; include nested reviewer/build headroom.
+enrolling them. Show the exact issue set, targets, hard edges, ready set, approved active-owner
+concurrency and total launch allowance (including review/fallback contingency). The configured
+ceiling is not proof of host/provider capacity; include nested reviewer/build headroom.
 Obtain mandatory confirmation unless explicitly preconfirmed. Do not create a claims-board
 issue, lease, scoring table, Gist, heartbeat, or orchestration checkpoint.
 
@@ -66,7 +67,7 @@ writer and runs `forgedock-work-on` inline; only its review/re-review panel may 
 
 The helper uses the adapter's audited rolling async promise DAG with the configured model and approved
 owner concurrency no higher than `orchestration.max_concurrent`. Admit only ready owners up
-to that limit; remaining issues stay queued, and each owner admits its own required reviewers. A successor starts only
+to that limit; remaining issues stay queued without consuming all reviewer allowance upfront. A successor starts only
 when every actual hard predecessor returns `status=DONE` with `dependency=SATISFIED` in
 its `FORGE_WORK_ON_RESULT` line, never from
 transport success or after a sibling aggregate/wave. Normalize child failures so unrelated
@@ -98,4 +99,4 @@ gating/decomposition as a sub-30-minute delivery. Owner-only usage excludes revi
 use native aggregate evidence for totals or report missing metrics rather than inventing them.
 Use complete compact rows from native persisted workflow state for large batches, not the
 truncated top-level output preview. Fetch individual reports for uncertain reconciliation.
-Report actual native usage and material waits when available.
+Total allowance is not spend; report actual usage and limitations.

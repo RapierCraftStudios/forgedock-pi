@@ -15,7 +15,7 @@ function record(id: number, kind: string, body: string, inputs: string[] = [], s
     body: `<!-- FORGE:${kind} -->\n<!-- FORGE:RECORD ${JSON.stringify({ v: 1, source_head: head, inputs, supersedes })} -->\n## ${kind}\n**Source head**: ${head}\n**Inputs**: ${inputs.join(", ") || "none"}\n**Supersedes**: ${supersedes || "none"}\n${body}` };
 }
 
-test("named pre-build knowledge is published before implementation without duplicate phase agents", async () => {
+test("named pre-build knowledge is published before implementation without extra agents", async () => {
   const spec = await text("specs/knowledge-records.md");
   const root = await text("specs/original/commands/work-on.md");
   const build = await text("specs/original/commands/work-on/build.md");
@@ -23,10 +23,7 @@ test("named pre-build knowledge is published before implementation without dupli
   assert.match(spec, /before.*first.*source.*edit/is);
   assert.match(build, /knowledge-records\.md/);
   assert.doesNotMatch(root, /existing four|four normal|creates only these records/);
-  assert.match(root, /`subagent` tool is forbidden before review/is);
-  assert.doesNotMatch(root, /pre-build challenger|adaptive pre-build challenge/i);
-  assert.match(build, /existing `FORGE:CONTRACT`.*Build Brief/is);
-  assert.match(build, /relevant live path.*callers\/consumers.*invariants/is);
+  assert.match(root, /subagent.*forbidden before review/is);
   assert.match(spec, /not raw.*thought|not.*chain.of.thought/i);
 });
 

@@ -3,7 +3,6 @@ import { createHash, randomUUID } from "node:crypto";
 import { canonicalJson } from "./events.ts";
 import type {
   FindingCategory,
-  FindingClassification,
   FindingConfidence,
   FindingSeverity,
   ReviewDecision,
@@ -1027,11 +1026,6 @@ function validateFinding(value: unknown): ReviewFinding {
     throw new ReviewTransitionError("invalid-finding", "finding.confidence is unsupported.");
   if (!["critical", "high", "medium", "low"].includes(finding.severity as string))
     throw new ReviewTransitionError("invalid-finding", "finding.severity is unsupported.");
-  if (
-    finding.classification !== undefined &&
-    !["patch-defect", "contract-gap"].includes(finding.classification as string)
-  )
-    throw new ReviewTransitionError("invalid-finding", "finding.classification is unsupported.");
   const categories: FindingCategory[] = ["security", "data-loss", "auth", "billing", "production-safety", "correctness", "performance", "maintainability"];
   if (!categories.includes(finding.category as FindingCategory))
     throw new ReviewTransitionError("invalid-finding", "finding.category is unsupported.");
@@ -1043,9 +1037,6 @@ function validateFinding(value: unknown): ReviewFinding {
     headSha: finding.headSha as string,
     confidence: finding.confidence as FindingConfidence,
     severity: finding.severity as FindingSeverity,
-    ...(finding.classification === undefined
-      ? {}
-      : { classification: finding.classification as FindingClassification }),
     category: finding.category as FindingCategory,
     file: finding.file as string,
     line: line as number,

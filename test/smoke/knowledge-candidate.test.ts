@@ -33,9 +33,7 @@ test("cold-start knowledge does not add agents, duplicate records or automatic b
   assert.match(root, /GitHub.*engineering memory/s);
   assert.match(agent, /retrieve.*apply.*preserve/s);
   assert.match(review, /historical constraints/);
-  assert.match(root, /`subagent` tool is forbidden before review/is);
-  assert.doesNotMatch(root, /pre-build challenger|adaptive pre-build challenge/i);
-  assert.match(review, /CONTRACT_GAP|PATCH_DEFECT/);
+  assert.match(root, /subagent.*forbidden before review/is);
   assert.match(root, /one `FORGE:INVESTIGATOR`/);
   assert.match(root, /one completed `FORGE:BUILDER`/);
   assert.match(root, /one `FORGE:TRAJECTORY`/);
@@ -60,10 +58,10 @@ test("selective verification reuses the existing command schema with optional sc
   assert.match(await phase("build"), /verification\.md/);
 });
 
-test("large-batch guidance distinguishes active owners and nested reviewers without a ForgeDock allowance", async () => {
+test("large-batch guidance distinguishes allowance, active owners and nested reviewers", async () => {
   const adapter = await text("specs/pi-adapter.md");
-  assert.match(adapter, /Do not set `maxSubagentSpawnsPerRun`/);
-  assert.doesNotMatch(adapter, /explicit finite planning allowance/);
+  assert.match(adapter, /maxSubagentSpawnsPerRun.*allowance/s);
+  assert.doesNotMatch(adapter, /Do not set `maxSubagentSpawnsPerRun`/);
   assert.match(adapter, /admission.*before.*concurrency/s);
   assert.match(adapter, /not.*host-wide.*reviewers/s);
   assert.match(adapter, /rolling.*admission/s);

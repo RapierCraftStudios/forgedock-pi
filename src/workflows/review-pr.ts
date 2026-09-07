@@ -1176,13 +1176,7 @@ function normalizePanelResults(
         finding.headSha !== headSha
       )
         throw new Error("Review finding does not match its reviewer binding.");
-      return {
-        ...finding,
-        reviewer: findingReviewer,
-        // Older retained reviewer envelopes predate finding classification;
-        // preserve them as patch defects while new reviewers classify explicitly.
-        classification: finding.classification ?? "patch-defect",
-      };
+      return { ...finding, reviewer: findingReviewer };
     });
     byReviewer.set(reviewer, { ...value, reviewer, findings });
   }
@@ -1412,7 +1406,7 @@ function renderReviewerResult(result: ForgeReviewerResult): string {
     ? result.findings
         .map(
           (finding) =>
-            `- **${finding.id}** (${finding.confidence}/${finding.severity}/${finding.classification ?? "patch-defect"}) \`${finding.file}:${finding.line}\` — ${finding.summary}`,
+            `- **${finding.id}** (${finding.confidence}/${finding.severity}) \`${finding.file}:${finding.line}\` — ${finding.summary}`,
         )
         .join("\n")
     : "- No findings.";
@@ -1431,7 +1425,7 @@ function renderStagingGate(
 ): string {
   const passed = decision.decision === "approved" && findings.length === 0;
   const bundleJson = bundle ? JSON.stringify(bundle) : "null";
-  return `## ForgeDock Staging Deployment Gate — ${passed ? "PASS" : "FAILURE"}\n\n**Reviewed head**: \`${decision.headSha}\`\n**Reviewed base**: \`${decision.baseSha}\`\n**Decision**: \`${decision.decision}\`\n**Merge/deploy performed**: no\n\n### Checks\n\n${checks.map((check) => `- ${check.required ? "required" : "optional"} \`${check.name}\`: ${check.status}`).join("\n") || "- No checks recorded."}\n\n### Findings\n\n${findings.length ? findings.map((finding) => `- ${finding.id} [${(finding.classification ?? "patch-defect").toUpperCase()}]: ${finding.summary}`).join("\n") : "- None."}\n\n### Reasons\n\n${decision.reasons.length ? decision.reasons.map((reason) => `- ${reason}`).join("\n") : "- All strict staging gates passed."}\n\n### Machine-readable bundle resolution\n\n\`\`\`json\n${bundleJson}\n\`\`\``;
+  return `## ForgeDock Staging Deployment Gate — ${passed ? "PASS" : "FAILURE"}\n\n**Reviewed head**: \`${decision.headSha}\`\n**Reviewed base**: \`${decision.baseSha}\`\n**Decision**: \`${decision.decision}\`\n**Merge/deploy performed**: no\n\n### Checks\n\n${checks.map((check) => `- ${check.required ? "required" : "optional"} \`${check.name}\`: ${check.status}`).join("\n") || "- No checks recorded."}\n\n### Findings\n\n${findings.length ? findings.map((finding) => `- ${finding.id}: ${finding.summary}`).join("\n") : "- None."}\n\n### Reasons\n\n${decision.reasons.length ? decision.reasons.map((reason) => `- ${reason}`).join("\n") : "- All strict staging gates passed."}\n\n### Machine-readable bundle resolution\n\n\`\`\`json\n${bundleJson}\n\`\`\``;
 }
 
 function hasExactSourcePull(body: string, pullNumber: number): boolean {
@@ -1450,7 +1444,7 @@ function renderReviewSummary(
     ? findings
         .map(
           (finding) =>
-            `- ${issueMap[finding.id] ? `#${issueMap[finding.id]} — ` : ""}${finding.id} [${(finding.classification ?? "patch-defect").toUpperCase()}]: ${finding.summary}`,
+            `- ${issueMap[finding.id] ? `#${issueMap[finding.id]} — ` : ""}${finding.id}: ${finding.summary}`,
         )
         .join("\n")
     : "No findings reported.";

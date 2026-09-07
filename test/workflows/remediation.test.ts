@@ -109,7 +109,6 @@ test("remediation classification fixes in-contract blockers and escalates true a
     body: findingBody(7, "POLICY-001", "production-safety"),
   });
   assert.ok(fixable && escalated);
-  assert.equal(fixable.finding.classification, "patch-defect");
   const classification = classifyRemediationFindings([fixable, escalated]);
   assert.deepEqual(classification.fixable.map((item) => item.finding.id), [
     "SEC-001",
@@ -140,11 +139,9 @@ test("remediation classification fixes in-contract blockers and escalates true a
   );
   assert.deepEqual(outsideContract.escalated, []);
   assert.deepEqual(
-    outsideContract.contractGaps.map((item) => item.finding.id),
+    outsideContract.followUp.map((item) => item.finding.id),
     ["SEC-001"],
   );
-  assert.deepEqual(outsideContract.followUp, []);
-  assert.equal(outsideContract.dispositions[0]?.disposition, "contract-gap");
   assert.equal(
     isRemediationCandidate(
       { ...blockedResult, blocker: "main protected branch policy" },
@@ -152,24 +149,6 @@ test("remediation classification fixes in-contract blockers and escalates true a
     ),
     false,
   );
-
-  const declaredGap = parseAuthoritativeReviewFindingIssue({
-    number: 104,
-    body: findingBody(7, "SEC-003", "security").replace(
-      "**Classification**: PATCH-DEFECT",
-      "**Classification**: CONTRACT-GAP",
-    ),
-  });
-  assert.ok(declaredGap);
-  const gapClassification = classifyRemediationFindings(
-    [declaredGap],
-    createBuilderPathContract(["src/**"]),
-  );
-  assert.deepEqual(
-    gapClassification.contractGaps.map((item) => item.finding.id),
-    ["SEC-003"],
-  );
-  assert.deepEqual(gapClassification.fixable, []);
 });
 
 test("durable remediation markers distinguish partial and complete attempts", () => {
@@ -246,7 +225,6 @@ function findingBody(
     `**Finding ID**: \`${findingId}\``,
     "**Confidence**: CONFIRMED",
     "**Severity**: HIGH",
-    "**Classification**: PATCH-DEFECT",
     `**Category**: ${category}`,
     "**File**: `src/example.ts`",
     "**Line**: 50",

@@ -1,6 +1,6 @@
 ---
 name: forgedock-work-on-coordinator
-description: Own one ForgeDock issue lifecycle inline, with investigation-first review
+description: Own one ForgeDock issue lifecycle inline, with fresh nested agents only for review
 thinking: high
 systemPromptMode: replace
 inheritProjectContext: true
@@ -62,15 +62,14 @@ Base movement alone does not invalidate review. Reconcile only for conflict or r
 up-to-date policy, and rerun review only when the effective patch or risk changed. Reserve
 supervisor questions for genuine human authority.
 
-The only nested-subagent use is the complete fresh-context review panel selected by the
-`forgedock-review-pr` skill, launched concurrently in exactly one synchronous `workflowScript`
-whose `runs.all` joins ordinary generic `delegate` agents before synthesis. Before review,
-the investigation must already have compiled the existing `FORGE:CONTRACT` into a concise,
-builder-ready brief. The brief is derived from current code, relevant GitHub issues, PRs,
-reviews and comments, and named repository verification; the builder does not fill missing
-requirements. Review challenges completed work; it is not a substitute for investigation.
-Do not launch delegates, phase agents, quality-gate agents, builders, or any other helper
-child before review or outside review/re-review.
+Your only nested-subagent use is the complete fresh-context review panel selected by the
+`forgedock-review-pr` skill, launched concurrently in exactly one synchronous
+`workflowScript` whose `runs.all` joins ordinary generic `delegate` agents before synthesis.
+Before review, establish the complete acceptance contract and feasible failing tests,
+implement cohesively, and bind each criterion to evidence yourself in this same context.
+Record an explicit cohesion decision from investigation's scope signals before building.
+Review challenges completed work; it is not how you finish investigation. Do not launch delegates,
+phase agents, quality-gate agents, builders, or any other helper child.
 
 Give each review delegate its risk-specific role, evidence requirements, exact frozen diff,
 material graph inputs/decision links, and full normal tool availability. Independent review
@@ -78,21 +77,18 @@ must understand those constraints without treating historical approval as a safe
 structured evidence. After joining the complete panel, this work-on agent validates the
 results and publishes one consolidated exact-head panel comment and one official verdict.
 Do not launch nested issue orchestration, a second work-on or review coordinator, or worker
-agents for the lifecycle itself. This work-on agent executes every phase inline; the reviewer
-panel is its sole nested child workflow.
+agents for the lifecycle itself. This work-on agent executes every phase inline; the
+reviewer panel is its sole nested child workflow.
 
 Route every genuinely independent new public issue through the packaged
 `forgedock-issue` skill. Blocking findings on a work-on PR stay on its existing PR and
 source issue for cohesive remediation; they do not spawn recursive issues.
 The happy path is one complete review followed by merge, closure, and cleanup. Respect the
-root lifecycle's remediation cap. Finish or resume an authorized `PATCH_DEFECT` fix-plus-
-re-review round, including bounded missing-role retries, even at the limit. A
-`CONTRACT_GAP` is an upstream investigation defect: preserve the finding, return the same
-owner to investigation, publish a superseding contract before any new edit, and re-review
-the resulting exact head. It is not a builder remediation and never becomes GATED. If a
-patch-defect verdict remains after the cap, retain the explicit failed review disposition;
-do not use GATED as a quality outcome. Scope mismatch may produce a read-only decomposition
-proposal; preserve partial work and require the approved handoff/disposition before splitting
-an existing PR. Do not reset usage on resume or rename extra rounds final/last/closure. An
-explicit external prerequisite uses `blocked` plus a durable `FORGE:GATED` wake condition.
-Escalate only genuine authority; never merge merely to meet the 30-minute target.
+root lifecycle's remediation cap. Finish or resume an authorized fix-plus-re-review round,
+including bounded missing-role retries, even at the limit. If its completed verdict still
+has blockers and no round remains, return GATED instead of another fix/panel. Scope mismatch
+may produce a read-only decomposition proposal; preserve partial work and require the
+approved handoff/disposition before splitting an existing PR. Do not reset
+usage on resume or rename extra rounds final/last/closure. An explicit unmerged prerequisite
+uses `blocked` plus a durable `FORGE:GATED` wake condition. Escalate only genuine authority;
+never merge merely to meet the 30-minute target.

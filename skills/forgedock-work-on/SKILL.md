@@ -28,27 +28,24 @@ Standalone work prepares policy from canonical forge.yaml before moving to its w
 review completion, target movement, resume, or a missing field.
 
 Continue without stopping at intermediate success:
+
 `resolve → investigate → [decompose | build → PR → review → [remediate → re-review] → merge → close → cleanup]`
-Investigation derives closure, acceptance and scope from current code and relevant GitHub
-history; issue criteria remain hypotheses. It compiles the existing `FORGE:CONTRACT` into one
-concise builder-ready brief covering live path/callers, invariants, historical constraints,
-implementation route, acceptance and explicit limits; supporting records cannot hide
-requirements. Publish the named pre-build graph before editing.
+
+Investigation defines acceptance and scope; publish the named pre-build graph before editing.
 For bug fixes, record trigger/expected/observed
 baseline and fail-before/pass-after evidence; use inspection-only proof only with an explicit
-safety/impossibility justification. Execute investigation, planning, implementation,
-verification, PR preparation, remediation, merge, close, and cleanup inline.
+safety/impossibility justification. Execute investigation, planning, implementation, quality
+gates, verification, PR preparation, remediation, merge, close, and cleanup inline.
 Do not launch delegates, phase agents, builders, quality-gate agents, another work-on agent,
-or a review coordinator before review or outside review/re-review.
+or a review coordinator.
 
 At review or re-review only, launch the complete risk-selected panel as fresh ordinary
 `delegate` agents with full normal tools through one concurrent workflow. Every task carries
-the contract, relevant history, test scope and bounded diff/context; roles must confirm
-reachable evidence. Classify material discoveries as `PATCH_DEFECT` when the contract
-already required the behavior, or `CONTRACT_GAP` when current code/history reveals a missing
-or contradictory requirement. Join every role, retain valid same-head roles, and retry only
-missing/invalid roles. Remediate only in-contract patch defects; contract gaps return to
-investigation and never become quality-based GATED results. Never reset the counter.
+acceptance invariants, test evidence/scope, and bounded diff/context; roles are unique and
+must confirm reachable patch-caused blocker evidence. Join every role, retain valid same-head
+roles, and retry only a missing or invalid role. Apply all in-scope blockers cohesively in
+this same work-on agent only within the root's remaining round budget; remediation is a
+fallback, not the happy path. Never reset the counter on resume or rename extra rounds.
 
 Base movement alone does not invalidate valid review. Preserve a clean mergeable reviewed
 head; reconcile only for conflict or required-up-to-date policy, and rerun review only when
@@ -59,6 +56,6 @@ in-memory planning is not a substitute. Preserve changed decisions through super
 records. Do not create Gists, indexes, ledgers, dossiers, ADRs, cost priors, telemetry,
 heartbeats, checkpoints, or duplicate progress comments.
 
-Prefer repair and continuation. Keep investigation active until its closure route is understood; use GATED only for an exact external prerequisite/recovery condition and `needs-human` only for
-external authority. A missing/contradictory requirement returns to investigation with a
-superseding contract, never a quality wake condition. After merge, close and clean up once.
+Prefer repair and continuation. Use GATED for an exact technical prerequisite/recovery
+condition and `needs-human` only for genuine external authority with no safe default. After
+merge, close explicitly and perform ownership-safe cleanup once.
