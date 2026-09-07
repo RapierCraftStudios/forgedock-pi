@@ -17,6 +17,8 @@ const cases = [
     "/review-pr-staging 101",
     "/skill:forgedock-review-pr-staging 101",
   ],
+  ["/audit --run-id run-123", "/skill:forgedock-audit --run-id run-123"],
+  ["/forge:audit --run-dir /tmp/run", "/skill:forgedock-audit --run-dir /tmp/run"],
 ] as const;
 
 test("friendly commands rewrite lexically to native Pi skills", () => {
@@ -35,6 +37,7 @@ test("alias rewriting preserves multiline arguments and rejects near matches", (
     "work-on 1",
     "/model",
     "/skill:forgedock-work-on 1",
+    "/audit-log 1",
   ])
     assert.equal(rewriteForgePromptAlias(input), undefined);
 });
@@ -57,6 +60,10 @@ test("input router transforms user/RPC input and never loops extension input", (
   assert.deepEqual(handler({ source: "rpc", text: "/review-pr 7" }), {
     action: "transform",
     text: "/skill:forgedock-review-pr 7",
+  });
+  assert.deepEqual(handler({ source: "interactive", text: "/audit --run-id run-123" }), {
+    action: "transform",
+    text: "/skill:forgedock-audit --run-id run-123",
   });
   assert.deepEqual(handler({ source: "extension", text: "/work-on 42" }), {
     action: "continue",

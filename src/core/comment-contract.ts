@@ -45,6 +45,7 @@ export interface InvestigationArtifact extends PhaseArtifactBase {
   claimed: string;
   observed: string;
   rootCause: string;
+  closureRoute: string;
   affectedFiles: Array<{ path: string; reason: string }>;
   evidence: string[];
   history: string[];
@@ -155,7 +156,7 @@ export const FORGE_PHASE_ARTIFACT_SCHEMA = {
     {
       type: "object",
       additionalProperties: false,
-      required: ["schema", "phase", "verdict", "confidence", "severity", "taskType", "complexity", "claimed", "observed", "rootCause", "affectedFiles", "evidence", "history", "recommendation", "relatedIssues", "decomposition", "skippedPhases", "acceptanceChecks"],
+      required: ["schema", "phase", "verdict", "confidence", "severity", "taskType", "complexity", "claimed", "observed", "rootCause", "closureRoute", "affectedFiles", "evidence", "history", "recommendation", "relatedIssues", "decomposition", "skippedPhases", "acceptanceChecks"],
       properties: {
         ...artifactIdentity,
         phase: { type: "string", const: "investigate" },
@@ -167,6 +168,7 @@ export const FORGE_PHASE_ARTIFACT_SCHEMA = {
         claimed: schemaString,
         observed: schemaString,
         rootCause: schemaString,
+        closureRoute: schemaString,
         affectedFiles: { type: "array", minItems: 1, items: { type: "object", additionalProperties: false, required: ["path", "reason"], properties: { path: schemaString, reason: schemaString } } },
         evidence: schemaNonEmptyStrings,
         history: schemaNonEmptyStrings,
@@ -245,7 +247,7 @@ export function phaseArtifactValidationError(value: unknown): string {
   const phase = typeof artifact.phase === "string" ? artifact.phase : "unknown";
   const required: Record<string, readonly string[]> = {
     resolve: ["schema", "phase", "issueNumber", "title", "eligible", "baseBranch", "evidence"],
-    investigate: ["schema", "phase", "verdict", "confidence", "severity", "taskType", "complexity", "claimed", "observed", "rootCause", "affectedFiles", "evidence", "history", "recommendation", "relatedIssues", "decomposition", "skippedPhases", "acceptanceChecks"],
+    investigate: ["schema", "phase", "verdict", "confidence", "severity", "taskType", "complexity", "claimed", "observed", "rootCause", "closureRoute", "affectedFiles", "evidence", "history", "recommendation", "relatedIssues", "decomposition", "skippedPhases", "acceptanceChecks"],
     plan: ["schema", "phase", "objective", "allowedPaths", "forbiddenChanges", "invariants", "deliverables", "acceptanceMapping", "context", "steps", "outOfScope"],
     "prepare-worktree": ["schema", "phase", "branch", "baseBranch", "baseSha", "worktree"],
     implement: ["schema", "phase", "branch", "baseSha", "commitSha", "changedFiles", "acceptanceChecks", "checksRun"],
@@ -277,7 +279,7 @@ export function isPhaseArtifact(value: unknown): value is PhaseArtifact {
         enumValue(artifact.confidence, ["high", "medium", "low"]) &&
         enumValue(artifact.severity, ["critical", "high", "medium", "low"]) &&
         enumValue(artifact.complexity, ["trivial", "standard", "complex"]) &&
-        strings(artifact, ["taskType", "claimed", "observed", "rootCause", "recommendation"]) &&
+        strings(artifact, ["taskType", "claimed", "observed", "rootCause", "closureRoute", "recommendation"]) &&
         nonEmptyObjectArray(artifact.affectedFiles) &&
         nonEmptyStringArray(artifact.evidence) &&
         nonEmptyStringArray(artifact.history) &&
@@ -329,7 +331,7 @@ export function renderPhaseArtifact(artifact: PhaseArtifact): string {
     case "resolve":
       return `<!-- FORGE:RUN_CLAIM -->\n## Run Claim\n\n| Field | Value |\n| --- | --- |\n| Issue | #${artifact.issueNumber} — ${artifact.title} |\n| Eligible | ${artifact.eligible ? "yes" : "no"} |\n| Integration base | \`${artifact.baseBranch}\` |\n\n### Evidence\n\n${bullets(artifact.evidence)}`;
     case "investigate":
-      return `<!-- FORGE:INVESTIGATOR -->\n## Investigation Report\n\n| Field | Value |\n| --- | --- |\n| Verdict | ${artifact.verdict.toUpperCase()} |\n| Confidence | ${artifact.confidence.toUpperCase()} |\n| Severity | ${artifact.severity.toUpperCase()} |\n| Task type | ${artifact.taskType} |\n| Complexity | ${artifact.complexity.toUpperCase()} |\n\n### Claimed Behavior\n\n${artifact.claimed}\n\n### Observed Behavior\n\n${artifact.observed}\n\n### Root Cause\n\n${artifact.rootCause}\n\n### Affected Files\n\n${table(artifact.affectedFiles.map((file) => [file.path, file.reason]), ["Path", "Reason"])}\n\n### Evidence\n\n${bullets(artifact.evidence)}\n\n### History\n\n${bullets(artifact.history)}\n\n### Recommendation\n\n${artifact.recommendation}\n\n### Related Issues\n\n${artifact.relatedIssues.length ? artifact.relatedIssues.map((issue) => `- #${issue}`).join("\n") : "- None."}\n\n### Decomposition\n\n**Required**: ${artifact.decomposition.required ? "yes" : "no"} — ${artifact.decomposition.reason}\n\n<!-- FORGE:FAST_PATH -->\n### Routing\n\n**Complexity**: ${artifact.complexity.toUpperCase()}  \n**Task type**: ${artifact.taskType}\n\n${artifact.skippedPhases.length ? artifact.skippedPhases.map((entry) => `- ${entry.phase}: skipped — ${entry.reason}`).join("\n") : "- No phases skipped."}\n\n### Acceptance Checks\n\n${renderChecks(artifact.acceptanceChecks)}\n\n<!-- INVESTIGATION:COMPLETE -->`;
+      return `<!-- FORGE:INVESTIGATOR -->\n## Investigation Report\n\n| Field | Value |\n| --- | --- |\n| Verdict | ${artifact.verdict.toUpperCase()} |\n| Confidence | ${artifact.confidence.toUpperCase()} |\n| Severity | ${artifact.severity.toUpperCase()} |\n| Task type | ${artifact.taskType} |\n| Complexity | ${artifact.complexity.toUpperCase()} |\n\n### Claimed Behavior\n\n${artifact.claimed}\n\n### Observed Behavior\n\n${artifact.observed}\n\n### Root Cause\n\n${artifact.rootCause}\n\n### Closure Route\n\n${artifact.closureRoute}\n\n### Affected Files\n\n${table(artifact.affectedFiles.map((file) => [file.path, file.reason]), ["Path", "Reason"])}\n\n### Evidence\n\n${bullets(artifact.evidence)}\n\n### History\n\n${bullets(artifact.history)}\n\n### Recommendation\n\n${artifact.recommendation}\n\n### Related Issues\n\n${artifact.relatedIssues.length ? artifact.relatedIssues.map((issue) => `- #${issue}`).join("\n") : "- None."}\n\n### Decomposition\n\n**Required**: ${artifact.decomposition.required ? "yes" : "no"} — ${artifact.decomposition.reason}\n\n<!-- FORGE:FAST_PATH -->\n### Routing\n\n**Complexity**: ${artifact.complexity.toUpperCase()}  \n**Task type**: ${artifact.taskType}\n\n${artifact.skippedPhases.length ? artifact.skippedPhases.map((entry) => `- ${entry.phase}: skipped — ${entry.reason}`).join("\n") : "- No phases skipped."}\n\n### Acceptance Checks\n\n${renderChecks(artifact.acceptanceChecks)}\n\n<!-- INVESTIGATION:COMPLETE -->`;
     case "plan":
       return `<!-- FORGE:CONTRACT -->\n## Builder Contract\n\n### Objective\n\n${artifact.objective}\n\n### Allowed Paths\n\n${bullets(artifact.allowedPaths)}\n\n### Forbidden Changes\n\n${bullets(artifact.forbiddenChanges)}\n\n### Invariants\n\n${bullets(artifact.invariants)}\n\n### Deliverables\n\n${bullets(artifact.deliverables)}\n\n### Acceptance Mapping\n\n${table(artifact.acceptanceMapping.map((entry) => [entry.checkId, entry.implementation]), ["Check", "Implementation"])}\n\n### Out of Scope\n\n${bullets(artifact.outOfScope)}\n\n<!-- FORGE:CONTEXT -->\n## Implementation Context\n\n### Relevant History\n\n${bullets(artifact.context.history)}\n\n### Callers and Data Flow\n\n${bullets(artifact.context.callersAndDataFlow)}\n\n### CI Surface\n\n${bullets(artifact.context.ciSurface)}\n\n### Prior Findings\n\n${bullets(artifact.context.priorFindings)}\n\n### Hazards\n\n${bullets(artifact.context.hazards)}\n\n<!-- FORGE:CONTEXT:COMPLETE -->\n\n<!-- FORGE:ARCHITECT -->\n## Architecture Plan\n\n${artifact.steps.map((step) => `${step.order}. ${step.action} (${step.checkIds.join(", ")})`).join("\n")}\n\n<!-- FORGE:ARCHITECT:COMPLETE -->`;
     case "prepare-worktree":

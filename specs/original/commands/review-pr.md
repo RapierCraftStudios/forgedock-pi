@@ -10,6 +10,19 @@ allowed-tools: Task, Agent, Bash, Read, Grep, Glob, WebFetch, Skill
 
 **Input**: $ARGUMENTS
 
+## Admitted proof and boundary closure
+
+For work-on PRs, review the exact current diff against the admitted criterion proof map,
+not only prose summaries. For every changed key, protocol, state machine, external call,
+or persisted boundary, close the reachable producer → consumer path and check type/namespace
+or serialization, valid/invalid input, interleavings, failure injection, retry, and recovery.
+A criterion is not proven by a source-string assertion, approval, or green aggregate row;
+required-risk integration capability marked missing or skipped remains insufficient evidence
+and is surfaced in the verdict. Preserve the existing independent fresh panel, fail-closed
+merge behavior, imperfect-intake investigation, and bounded remediation cap. If multiple
+independent patch-caused blockers remain after a cohesive round, return the evidence to a
+bounded re-plan/decomposition decision rather than normalizing repeated review.
+
 **NEVER use plan mode (EnterPlanMode)** during review — it breaks execution context.
 **Sub-agent dispatch tool: `Task` preferred, `Agent` is the documented fallback.** review-pr dispatches domain review agents via a sub-agent-spawning tool. Resolve which one is available ONCE per invocation, before Phase 3C, per the **Sub-Agent Dispatch Tool Resolution** rule below — do not halt to ask the operator which tool to use. Never fall back to reviewing inline in the orchestrator's own context; inline self-review is a strictly weaker substitute for an isolated fresh-context reviewer and is not a permitted fallback.
 

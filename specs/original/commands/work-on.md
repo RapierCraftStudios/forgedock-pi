@@ -4,16 +4,12 @@ argument-hint: "[issue number | URL | next | PR --remediate --issue N]"
 ---
 <!-- SPDX-FileCopyrightText: Copyright (c) RapierCraft Studios -->
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
-
 # ForgeDock Work On
-
 One work-on agent owns one issue and one worktree from resolution to a terminal result.
 GitHub is canonical engineering memory as well as durable state. Follow `../../github-memory.md`
 to retrieve, apply and preserve relevant decisions in the existing receipts. Execute every
 phase inline; only fresh review and re-review panels may be children.
-
 ## Authority
-
 Precedence is:
 
 1. The user's current request and `forge.yaml`.
@@ -172,6 +168,13 @@ the final diff, commit, push, and publish one immutable completed build receipt.
 code, formatting, tests, or safe environment problems inline instead of creating a gate
 loop. A newly discovered required mutation path must be added to the investigation
 receipt before editing.
+
+The Builder Contract is a finite proof map: each criterion names its invariant, reachable
+failure modes, producer/consumer, state, source boundary, test/evidence, and
+(`PASS`, `FAIL`, `MISSING`, `SKIPPED`, `CONTRADICTED`, or `UNKNOWN`). New protocols/external
+calls require namespace/type, interleaving, failure, retry, and recovery closure. Skipped
+required-risk capability is insufficient proof; multiple blockers trigger bounded
+re-plan/decomposition, never a silent cap increase.
 
 ### 4. Prepare PR and review
 

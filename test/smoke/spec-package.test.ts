@@ -96,7 +96,9 @@ test("investigation defines scope without children or executable comments", asyn
   assert.match(investigate, /Do not declare scope complete\s+while a relevant path has no disposition/s);
   assert.match(investigate, /Mutation Scope/);
   assert.match(investigate, /Non-Goals/);
+  assert.match(investigate, /Closure Route/);
   assert.match(investigate, /Acceptance Checks/);
+  assert.match(investigate, /issue.*intake request.*not an implementation plan or proof/s);
   assert.match(investigate, /Verdict: CONFIRMED \| INVALID/);
   assert.match(investigate, /Route: BUILD \| DECOMPOSE \| TERMINAL/);
   assert.match(investigate, /Never emit shell commands/);
@@ -255,7 +257,7 @@ test("orchestrate builds only hard dependency edges and maximizes concurrency", 
   assert.match(skill, /GATED.*not FAILED/s);
   assert.match(skill, /merged.*tested.*production/i);
   assert.match(adapter, /use and report\s+the extension's effective limit/s);
-  assert.match(adapter, /maxSubagentSpawnsPerRun` to an explicit finite planning allowance/);
+  assert.match(adapter, /Do not set `maxSubagentSpawnsPerRun`/);
   assert.match(adapter, /attention thresholds at or above the 1,200,000 ms panel join/);
   assert.match(adapter, /at most one concise `contact_supervisor` progress update/);
   assert.doesNotMatch(skill, /maxSubagentSpawnsPerRun/);

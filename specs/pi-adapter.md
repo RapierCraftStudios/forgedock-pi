@@ -149,21 +149,12 @@ use and report the extension's effective limit. It is not a host-wide limit on r
 or build processes: nested panels have separate local concurrency. Confirm physical/provider
 headroom for owners plus their panels; a configured ceiling is not measured host capacity.
 
-Set top-level `maxSubagentSpawnsPerRun` to an explicit finite planning allowance for the
-whole confirmed batch: owners + risk-selected panels + configured fallback/retry allowance
-+ technical recovery contingency. Native default 64 counts nested reviewers too. A larger
-allowance is not a reservation of processes or permission to launch unnecessary reviewers.
-For example, 100 owners, allowance for four roles per panel, one fallback and 20 contingency
-admissions is 920; add bounded missing-role retries to the allowance if not in contingency.
-Check any separate per-session spawn cap too. If the installed API cannot accept the needed
-allowance, report that before dispatch rather than inventing fields or starting a doomed batch.
-This is a planning envelope, not a four-role ceiling or a guarantee of arbitrary future work.
-Never omit necessary review to fit it. On shortage preserve affected owners/queued work and
-report the budget; only a separately authorized top-level continuation can supply a new
-allowance while resuming retained owners. Nested overrides cannot enlarge the inherited pool.
+Do not set `maxSubagentSpawnsPerRun`: normal review, remediation, and exact-head re-review
+must not exhaust an arbitrary ForgeDock-assigned per-run launch cap. Use the extension's
+effective native capacity and report it when exposed.
 
 Native admission occurs before the workflow concurrency semaphore. Use rolling admission
-below instead of eagerly admitting every owner and spending the review allowance upfront.
+below instead of eagerly admitting every owner.
 Do not use `runs.lanes` for 100 issues (32 lanes/64 stages), or claim a complete preflight
 list beyond its 64-lane limit; ordinary Promise composition supports the larger graph.
 Set control attention thresholds at or above the 1,200,000 ms panel join window. The helper
