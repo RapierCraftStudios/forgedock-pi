@@ -83,7 +83,7 @@ test("standalone review replay freezes identity and roster through terminal auth
     round: 1,
     findings: [{
       id: "F-1", reviewer: "security", headSha: "head-sha", confidence: "possible",
-      severity: "low", category: "security", file: "src/a.ts", line: 1,
+      severity: "low", classification: "contract-gap", category: "security", file: "src/a.ts", line: 1,
       summary: "Consider this", evidence: ["test evidence"],
     }],
   }, "findings");
@@ -124,6 +124,7 @@ test("standalone review replay freezes identity and roster through terminal auth
   assert.equal(state.pullRequest, 9);
   assert.equal(state.headRef, "forge/7");
   assert.deepEqual(state.roster.reviewers, ["correctness", "security"]);
+  assert.equal(state.findings[0]?.classification, "contract-gap");
   assert.deepEqual(replayReviewEvents(events), state);
   assert.match(hashReviewEvent(authorized), /^sha256:[0-9a-f]{64}$/);
 });

@@ -3,6 +3,7 @@ import {
   isPhaseArtifact,
   type PhaseArtifact,
 } from "../core/comment-contract.ts";
+import type { FindingClassification } from "../core/review.ts";
 
 export type ForgeFindingCategory =
   | "security"
@@ -27,6 +28,7 @@ export interface ForgeReviewFindingResult {
   headSha: string;
   confidence: "confirmed" | "likely" | "possible";
   severity: "critical" | "high" | "medium" | "low";
+  classification?: FindingClassification;
   category: ForgeFindingCategory;
   /** Legacy primary location retained for wire compatibility. */
   file: string;
@@ -130,6 +132,7 @@ const findingSchema = {
     headSha: { type: "string", minLength: 7 },
     confidence: { type: "string", enum: ["confirmed", "likely", "possible"] },
     severity: { type: "string", enum: ["critical", "high", "medium", "low"] },
+    classification: { type: "string", enum: ["patch-defect", "contract-gap"] },
     category: {
       type: "string",
       enum: [
@@ -548,6 +551,8 @@ function isFindingResult(value: unknown): value is ForgeReviewFindingResult {
     typeof finding.headSha === "string" &&
     ["confirmed", "likely", "possible"].includes(String(finding.confidence)) &&
     ["critical", "high", "medium", "low"].includes(String(finding.severity)) &&
+    (finding.classification === undefined ||
+      ["patch-defect", "contract-gap"].includes(String(finding.classification))) &&
     [
       "security",
       "data-loss",

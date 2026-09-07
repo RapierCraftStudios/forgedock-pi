@@ -14,18 +14,20 @@ into one combined comment; preserve each stage's identity and actual publication
 | `FORGE:INVESTIGATOR` | Issue, after investigation | Claim versus corrected cause, current evidence, initial scope/route and acceptance needs |
 | `FORGE:CLASSIFICATION` | Issue, before edits | Task type, affected components/risk, cohesion decision and why BUILD/DECOMPOSE; link investigation instead of repeating it |
 | `FORGE:CONTEXT` | Issue, before edits | Relevant historical decisions, pitfalls and successful patterns; source links, current applicability and resulting constraints |
-| `FORGE:CONTRACT` | Issue, before edits | Promised behavior/deliverables, compatibility, non-goals and planned acceptance checks; link classification/context/investigation |
+| `FORGE:CONTRACT` | Issue, before edits | The single concise builder brief: live path/callers, relevant invariants, historical constraints, implementation route, acceptance checks, explicit limits and unverified behavior; link classification/context/investigation |
 | `FORGE:ARCHITECT` | Issue, before edits | Chosen approach, ordered changes, interfaces/invariants, material alternatives actually considered and why rejected; link contract/context |
 | `FORGE:BUILDER` | Issue, after verified implementation | What actually changed, deviations and their decision links, commits, tests and limitations |
 | `FORGE:REVIEW-PANEL` | PR, after complete review | Exact-head verdict, graph context considered, finding dispositions with causal evidence and justified prevention lessons |
 | `FORGE:TRAJECTORY` | Issue, at terminal reconciliation | Outcome, exact release identity, links to the record chain, important corrections/lessons and remaining limitations |
 | `FORGE:GATED` | Issue, when blocked | Exact bound identity, blocker/wake condition and preserved-work references; never a delivery claim |
 
-For BUILD, publish and read back classification, context, contract and plan before the first
-repository source/test edit. Read-only investigation and disposable reproduction probes may
-precede this. Planning and record preparation stay in the same owner; batch the direct GitHub
-calls when practical while wiring actual returned URLs in dependency order. Do not add a
-separate qualitative intake gate: investigation still enriches imperfect input autonomously.
+For BUILD, investigation must compile the final `FORGE:CONTRACT` before the first repository
+source/test edit. Publish and read back the supporting classification/context/plan records
+without allowing them to hide requirements from the contract. Read-only investigation and
+disposable reproduction probes may precede this. Planning and record preparation stay in the
+same owner; batch the direct GitHub calls when practical while wiring actual returned URLs in
+dependency order. Do not add a separate qualitative intake gate, validator, or artifact
+system: investigation enriches imperfect input autonomously.
 
 Conditional `FORGE:REMEDIATION` and `FORGE:DECOMPOSED` records use the same envelope.
 Re-review links the latest implementation evidence (build or remediation) and its prior
@@ -61,10 +63,22 @@ read back the exact comment. Do not invent an issue or lane policy to use the he
 **Supersedes**: none, or <link matching the metadata>
 
 ### Promised Behavior
-<what must work, compatibility and non-goals; reference existing facts>
+<one precise outcome and compatibility promise>
+
+### Live Path and Scope
+<relevant entrypoint, callers/consumers, mutation paths and adjacent safe paths>
+
+### Invariants and Historical Constraints
+<only relevant transitions plus applied prior decisions/findings>
+
+### Implementation Route
+<ordered approach and interface/state obligations>
 
 ### Acceptance
 <criterion → observable check → prerequisite/limitation>
+
+### Explicit Limits
+<non-goals, residual uncertainty and unverified behavior>
 ```
 
 Every new named record uses this envelope plus the relevant content from the table. Keep

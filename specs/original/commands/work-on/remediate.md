@@ -6,8 +6,10 @@ description: Fix current-head blocking review findings cohesively and run scoped
 
 # Work On: Remediate
 
-Run only when the current reviewed head has confirmed patch-caused blocking findings that
-are fixable inside the investigation scope. The same work-on agent remains the sole writer.
+Run only when the current reviewed head has confirmed `PATCH_DEFECT` blocking findings that
+are explicitly covered by the investigation's `FORGE:CONTRACT` and fixable inside its scope.
+The same work-on agent remains the sole writer. A `CONTRACT_GAP` does not enter remediation;
+it returns to investigation for a superseding contract.
 
 ## Preconditions
 
@@ -15,24 +17,29 @@ are fixable inside the investigation scope. The same work-on agent remains the s
 - Each blocker is CONFIRMED HIGH/CRITICAL with a concrete production scenario.
 - The fix does not require product, policy, legal, destructive, credential, or external
   authority.
-- Recover used/allowed rounds and any unfinished authorized round from retained work and
-  reviewed-head/receipt evidence. Count the next round before its first blocker-driven edit.
+- Recover used/allowed rounds from the remaining remediation budget and any unfinished
+  authorized round from retained work and reviewed-head/receipt evidence. Count the next
+  round before its first blocker-driven edit.
   A round includes the cohesive fix plus its complete scoped re-review. Complete or resume
   that round at the limit, including bounded missing-role retries, without charging it twice.
-- After the last authorized re-review still finds blockers, the cap allows no further new
-  round of edits/panels. Return to investigation once for read-only reassessment, then GATED
-  with the unresolved contract and wake condition. Reassessment never resets the budget.
+- After the last authorized re-review still finds patch defects, the cap allows no further
+  new round of edits/panels. Preserve the explicit failed review disposition; quality
+  non-convergence is not a GATED prerequisite and reassessment must not reset the budget.
 
-A stale, advisory, possible, low/medium, pre-existing, or unrelated finding does not enter
+A `CONTRACT_GAP` returns to investigation before any new edit. A stale, advisory, possible,
+low/medium, pre-existing, or unrelated finding does not enter
 remediation. Keep valuable independent findings as non-blocking follow-ups.
 
 ## Scope reassessment
 
-Before another edit, reassess cohesion if review reveals distinct omitted outcomes, phased
-requirements or repeated cross-boundary non-convergence. Scope reassessment may propose
-decomposition under `investigate.md`/`decompose.md`; it does not reset the budget. Preserve
-partial work and require an approved handoff for an existing PR. If the work remains atomic,
-continue only its authorized round/remaining budget. Do not split merely to evade the cap.
+Before another edit, reassess cohesion if a confirmed patch defect reveals distinct omitted
+outcomes or phased requirements. If review instead reveals a requirement absent or
+contradictory in the contract, return to investigation and publish a superseding contract;
+that is an upstream contract correction, not builder remediation. Scope reassessment may
+propose decomposition under `investigate.md`/`decompose.md`; it does not reset the budget.
+Preserve partial work and require an approved handoff for an existing PR. If the work remains
+atomic, continue only its authorized round/remaining budget. Do not split merely to evade the
+cap.
 
 ## Cohesive fix
 
@@ -102,9 +109,12 @@ review. Never rebase and restart re-review merely because unrelated target commi
 - Remaining in-scope blocker with rounds available: one further cohesive pass.
 - Unfinished authorized round at the cap: finish/resume its scoped re-review, including
   bounded missing-role retries; do not start another fix after its completed verdict.
-- Remaining blocker after the last authorized re-review: read-only reassessment, then GATED;
-  no automatic extra round. A new name, head, resume, or receipt cannot reset usage.
-- Explicit prerequisite: `GATED` with wake condition.
+- Remaining `PATCH_DEFECT` after the last authorized re-review: retain the explicit failed
+  review disposition; no automatic extra round. A new name, head, resume, or receipt cannot
+  reset usage.
+- `CONTRACT_GAP`: return to investigation, supersede the contract, and re-review after any
+  resulting change; never use GATED for the quality discovery.
+- Explicit external prerequisite: `GATED` with wake condition.
 - Genuine external authority: `needs-human` with the exact decision required.
 - Mechanical/provider interruption: preserve current work and valid reviewer roles for
   resume; do not create a competing writer.

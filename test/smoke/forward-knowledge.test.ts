@@ -23,8 +23,10 @@ test("named pre-build knowledge is published before implementation without dupli
   assert.match(spec, /before.*first.*source.*edit/is);
   assert.match(build, /knowledge-records\.md/);
   assert.doesNotMatch(root, /existing four|four normal|creates only these records/);
-  assert.match(root, /pre-build challenger.*subagent.*forbidden before review/is);
-  assert.match(build, /one short, fresh, read-only challenge/);
+  assert.match(root, /`subagent` tool is forbidden before review/is);
+  assert.doesNotMatch(root, /pre-build challenger|adaptive pre-build challenge/i);
+  assert.match(build, /existing `FORGE:CONTRACT`.*Build Brief/is);
+  assert.match(build, /relevant live path.*callers\/consumers.*invariants/is);
   assert.match(spec, /not raw.*thought|not.*chain.of.thought/i);
 });
 
