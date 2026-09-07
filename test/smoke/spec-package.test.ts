@@ -69,13 +69,13 @@ test("one work-on agent owns every pre-review phase inline", async () => {
     assert.match(content, /sole work-on agent|sole per-issue work-on agent|sole writer/i);
     assert.match(content, /review|re-review/);
   }
-  assert.match(root, /pre-build challenger.*subagent.*forbidden before review/is);
-  assert.match(root, /Builder Contract is the definitive implementation brief/s);
-  assert.match(skill, /single fresh pre-build challenger.*only pre-review exception/s);
-  assert.match(agent, /one fresh.*pre-build challenger/is);
-  assert.match(agent, /one synchronous workflow.*context: "fresh".*worktree: false/s);
-  assert.match(adapter, /Before the first source edit.*fresh read-only pre-build challenge/s);
-  assert.match(adapter, /acceptance: false.*timeoutMs: 300000/s);
+  assert.match(root, /`subagent` tool is forbidden before review/is);
+  assert.match(root, /existing[\s\S]*`FORGE:CONTRACT` Build Brief as the mutation contract/s);
+  assert.doesNotMatch(root, /pre-build challenger|adaptive pre-build challenge/i);
+  assert.match(skill, /existing[\s\S]*`FORGE:CONTRACT` into one\s+concise builder-ready brief/s);
+  assert.doesNotMatch(skill, /pre-build challenger|adaptive pre-build challenge/i);
+  assert.doesNotMatch(agent, /pre-build challenger|adaptive pre-build challenge/i);
+  assert.doesNotMatch(adapter, /pre-build challenger|adaptive pre-build challenge/i);
 });
 
 test("normal work-on preserves named knowledge records without progress ceremony", async () => {
@@ -96,7 +96,7 @@ test("investigation defines scope without children or executable comments", asyn
   assert.match(investigate, /inspection-only exception/);
   assert.match(investigate, /entered, continued, failed, or observed/);
   assert.match(investigate, /Mark every listed path `change` or `already\s+safe`.*evidence/s);
-  assert.match(investigate, /Do not declare scope complete\s+while a relevant path has no disposition/s);
+  assert.match(investigate, /every relevant path.*disposition/s);
   assert.match(investigate, /Mutation Scope/);
   assert.match(investigate, /Non-Goals/);
   assert.match(investigate, /Closure Route/);
@@ -112,10 +112,10 @@ test("investigation defines scope without children or executable comments", asyn
 test("build is one inline procedure with SHA-keyed verification", async () => {
   const build = await text(WORK_ON_PHASES[2]);
   assert.match(build, /Do not launch builders, quality-gate\s+agents, context agents, architects/s);
-  assert.match(build, /existing `FORGE:CONTRACT` is the single definitive Build Brief/s);
-  assert.match(build, /one short, fresh, read-only challenge/);
-  assert.match(build, /do not replace it with a second\s+universal checklist/s);
-  assert.match(build, /investigation receipt.*final Builder Contract.*mutation contract/s);
+  assert.match(build, /existing `FORGE:CONTRACT` is the single concise, definitive brief/s);
+  assert.match(build, /relevant live path.*callers\/consumers.*historical constraints/s);
+  assert.match(build, /Do not[\s\S]*second checklist or validator/s);
+  assert.match(build, /existing `FORGE:CONTRACT` produced from the completed\s+investigation/s);
   assert.match(build, /Verify once per SHA/);
   assert.match(build, /fail-before\/pass-after/);
   assert.match(build, /test environment once and reuse/);
@@ -125,7 +125,7 @@ test("build is one inline procedure with SHA-keyed verification", async () => {
   assert.match(build, /one immutable issue comment/);
   assert.match(build, /replace `workflow:ready-to-build`.*with `workflow:building`/s);
   assert.match(build, /persisted state\/schema changes/);
-  assert.match(build, /request and origin scope, cross-request\s+contamination/s);
+  assert.match(build, /state\/retry\/recovery\s+transitions relevant to persisted state\/schema changes/s);
   assert.match(build, /compare the final diff and tests with every Behavior Coverage item/);
   assert.match(build, /implement and test every `change` item.*recheck every `already safe` item/s);
   assert.match(build, /fix gaps before review/);
@@ -197,14 +197,17 @@ test("staging review is a compact generic-delegate deployment gate", async () =>
   assert.doesNotMatch(staging, /review-pr-staging\.md|Task\(|Agent\(|allowed-tools|needs-human/);
 });
 
-test("work-on defines target selection, GATED resume, and remediation-cap exit", async () => {
+test("work-on defines target selection, external GATED resume, and review dispositions", async () => {
   const root = await text("specs/original/commands/work-on.md");
   const remediation = await text(WORK_ON_PHASES[4]);
+  const review = await readFile(WORK_ON_PHASES[3], "utf8");
   assert.match(root, /ordinary no-milestone issues use\s+`branches\.staging`/s);
   assert.match(root, /issue has durable GATED prerequisite\/recovery/);
   assert.match(root, /review\.remediation_max_rounds`, default `1`/);
-  assert.match(remediation, /return to investigation\s+once/i);
-  assert.match(remediation, /Remaining blocker after the last authorized re-review/);
+  assert.match(remediation, /CONTRACT_GAP.*return to investigation/i);
+  assert.match(remediation, /Remaining `PATCH_DEFECT` after the last authorized re-review/);
+  assert.match(review, /CONTRACT_GAP.*return.*investigation/);
+  assert.doesNotMatch(review, /CONTRACT_GAP[\s\S]{0,220}quality-based GATED/);
 });
 
 test("review uses generic delegates without package capability ceilings", async () => {

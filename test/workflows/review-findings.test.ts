@@ -118,6 +118,7 @@ const result: ForgeWorkOnResult = {
         headSha: "head-sha",
         confidence: "likely",
         severity: "high",
+        classification: "contract-gap",
         category: "security",
         file: "src/example.ts",
         line: 50,
@@ -178,6 +179,7 @@ test("every structured finding creates one deduplicated standalone issue", async
   ]);
   assert.match(fake.issues[0]?.body ?? "", /Source PR\*\*: #7/);
   assert.match(fake.issues[0]?.body ?? "", /Finding ID\*\*: `SEC-001`/);
+  assert.match(fake.issues[0]?.body ?? "", /Classification\*\*: CONTRACT-GAP/);
   assert.equal(fake.pullArtifacts.length, 2);
   assert.match(fake.pullArtifacts[0]?.body ?? "", /#100/);
 });

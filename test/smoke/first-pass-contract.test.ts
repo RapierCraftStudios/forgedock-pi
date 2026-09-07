@@ -21,23 +21,25 @@ test("investigation independently derives a closure route before implementation"
   assert.match(investigate, /intake request.*not an implementation plan or proof/s);
   assert.match(investigate, /closure pass/);
   assert.match(investigate, /actual entrypoint.*callers\/consumers/s);
-  assert.match(investigate, /Derive the checks[\s\S]*rather than copying the issue/);
-  assert.match(investigate, /Acceptance Contract.*closure pass/s);
+  assert.match(investigate, /Derive checks[\s\S]*rather than copying the issue/);
+  assert.match(investigate, /closure pass[\s\S]*existing `FORGE:CONTRACT`/s);
+  assert.match(investigate, /Acceptance Contract[\s\S]*producer\/consumer/s);
   assert.match(investigate, /Closure Route/);
-  assert.match(investigate, /If the path is incomplete,[\s\S]*do not complete the phase or route to `BUILD`/);
+  assert.match(investigate, /If a material path,[\s\S]*continue investigating[\s\S]*route to `BUILD`/);
   assert.match(investigate, /GATED.*concrete external condition/s);
 });
 
-test("build challenges non-trivial contracts before edits and preserves the fast path", async () => {
+test("investigation compiles the builder-ready contract and build preserves the fast path", async () => {
+  const investigate = await phase("investigate");
   const build = await phase("build");
-  assert.match(build, /one short, fresh, read-only challenge/s);
-  assert.match(build, /one synchronous workflow containing one[\s\S]*delegate/);
-  assert.match(build, /context: "fresh"/);
-  assert.match(build, /worktree: false/);
-  assert.match(build, /timeoutMs: 300000/);
-  assert.match(build, /Do not apply a universal checklist[\s\S]*launch[\s\S]*fallback/);
-  assert.match(build, /do not begin[\s\S]*create a new artifact\/remediation round/s);
-  assert.match(build, /TRIVIAL.*fast path/s);
+  assert.match(investigate, /existing `FORGE:CONTRACT` Build Brief/);
+  for (const requirement of ["live path", "callers\/consumers", "invariants", "historical constraints", "implementation route", "acceptance checks", "explicit non-goals"]) {
+    assert.match(investigate, new RegExp(requirement, "i"));
+  }
+  assert.match(investigate, /If a material path,[\s\S]*continue investigating/);
+  assert.match(investigate, /plan checkpoint only publishes this brief/);
+  assert.match(build, /single concise, definitive brief compiled by[\s\S]*investigation/s);
+  assert.match(build, /Do not[\s\S]*second checklist or validator/s);
   assert.match(build, /Before changing production code.*failing/s);
   assert.match(build, /each acceptance criterion.*evidence/s);
   assert.match(build, /Do not request review.*known.*gap/s);
@@ -54,7 +56,8 @@ test("remediation is bounded across resumes and review names in every authority"
   assert.match(remediate, /Count.*before.*edit/s);
   assert.match(remediate, /cap.*no further.*edit.*panel/s);
   assert.match(review, /remaining\s+remediation\s+budget/);
-  assert.match(agent, /remediation cap.*GATED/s);
+  assert.match(agent, /CONTRACT_GAP.*investigation/s);
+  assert.doesNotMatch(agent, /If its completed verdict.*GATED/s);
   for (const content of [root, remediate]) {
     assert.match(content, /A round includes.*fix plus its complete scoped re-review/s);
     assert.match(content, /Complete or resume.*at the limit/s);

@@ -181,6 +181,10 @@ test("plan rendering deterministically separates contract, context, and architec
   assert.match(markdown, /<!-- FORGE:CONTEXT -->/);
   assert.match(markdown, /<!-- FORGE:ARCHITECT -->/);
   assert.match(markdown, /test\/core\/review\.test\.ts/);
+  assert.match(markdown, /### Live Path and Callers/);
+  assert.match(markdown, /### Historical Constraints/);
+  assert.match(markdown, /### Implementation Route/);
+  assert.match(markdown, /### Explicit Limits \/ Out of Scope/);
   assert.match(markdown, /Assert needs-human/);
 });
 

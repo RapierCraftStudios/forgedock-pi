@@ -191,17 +191,18 @@ one body-integrity marker and append the HTML summary block at the very end of t
 
 ### Rules
 
-1. **Include evidence-backed findings at CONFIRMED, LIKELY, and POSSIBLE confidence** so the coordinator can disposition them. `POSSIBLE` findings are informational. Confidence or severity alone never makes a blocker: blocking requires the review policy's confirmed patch-caused production-risk standard. On work-on PRs, blockers stay on the existing PR/source issue for cohesive remediation; only valuable independent follow-up work becomes a separate issue.
+1. **Include evidence-backed findings at CONFIRMED, LIKELY, and POSSIBLE confidence** so the coordinator can disposition them. `POSSIBLE` findings are informational. Confidence or severity alone never makes a blocker: blocking requires the review policy's confirmed production-risk standard. For every material finding, include `classification`: `patch-defect` when the existing FORGE:CONTRACT already required the behavior and the patch violates it, or `contract-gap` when current code/history reveals a missing or contradictory requirement. A contract gap is an upstream investigation defect, not a builder violation. On work-on PRs, patch defects stay on the existing PR/source issue for cohesive remediation; contract gaps return to investigation; only valuable independent follow-up work becomes a separate issue.
 2. **One line per finding** — sequential numbering (PREFIX-1, PREFIX-2, ...)
 3. **Confidence**: `CONFIRMED`, `LIKELY`, or `POSSIBLE`
 4. **Severity**: `CRITICAL`, `HIGH`, `MEDIUM`, or `LOW`
 5. **Location**: Exact `file:line` reference
-6. **Summary**: Concise one-line description (no pipe `|` characters in summary)
-7. **JSON parity**: The fenced JSON array exactly matches the returned `findings` array; use `[]` when clean.
-8. **Empty block**: If no findings at all, include just the START/END markers after the fenced `[]`.
-9. **HTML comments**: The summary block is invisible in rendered markdown but parseable by the review system.
-10. **Integrity marker**: Include exactly one `<!-- FORGE:BODY-INTEGRITY:{pr}_{domain}_{unique-token} -->` before the summary block.
-11. **Agent marker**: Include exactly one `<!-- FORGE:REVIEW-AGENT:{domain} -->` marker in the persisted body, where `{domain}` is the lowercase dispatched domain.
+6. **Classification**: `patch-defect` or `contract-gap`, with evidence for the choice
+7. **Summary**: Concise one-line description (no pipe `|` characters in summary)
+8. **JSON parity**: The fenced JSON array exactly matches the returned `findings` array; use `[]` when clean.
+9. **Empty block**: If no findings at all, include just the START/END markers after the fenced `[]`.
+10. **HTML comments**: The summary block is invisible in rendered markdown but parseable by the review system.
+11. **Integrity marker**: Include exactly one `<!-- FORGE:BODY-INTEGRITY:{pr}_{domain}_{unique-token} -->` before the summary block.
+12. **Agent marker**: Include exactly one `<!-- FORGE:REVIEW-AGENT:{domain} -->` marker in the persisted body, where `{domain}` is the lowercase dispatched domain.
 
 ### Domain Prefixes
 

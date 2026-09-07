@@ -6,9 +6,10 @@ description: Review one frozen PR with a risk-selected fresh panel, one verdict,
 # ForgeDock Review PR
 
 Read the reviewer section of `../../specs/pi-adapter.md` and the authoritative
-`../../specs/original/commands/review-pr.md`; the latter defines the active proof-map and
-boundary-closure obligations. Resolve `forge.yaml`, active GitHub identity, repository, PR, and merge authorization once. A standalone PR and a
-work-on-owned PR use the same review standard.
+`../../specs/original/commands/review-pr.md`; the latter defines the active review and
+boundary-closure obligations. Resolve `forge.yaml`, active GitHub identity, repository, PR,
+and merge authorization once. A standalone PR and a work-on-owned PR use the same review
+standard.
 
 ## Freeze
 
@@ -30,11 +31,13 @@ code is wrong or repeating the entire graph search in every role. For standalone
 PRs, use available issue/PR/source history and state missing context; do not fabricate
 pre-build records or replay engineering merely to retrofit the new format.
 
-For each substantive concern distinguish regression/unmet acceptance, a currently valid
-deliberate trade-off, superseded/stale concern, independent debt, or unresolved evidence.
-Cite the decision considered and explain why current evidence preserves or overturns it.
-A past approval is not a waiver of a newly demonstrated failure. Missing rationale is not
-itself proof of a code defect; obtain the relevant evidence without hiding real blockers.
+For each substantive concern distinguish a `PATCH_DEFECT` (the existing contract required
+it and the patch violates it), a `CONTRACT_GAP` (current code or history exposes a missing
+or contradictory requirement), a currently valid deliberate trade-off, a superseded/stale
+concern, independent debt, or unresolved evidence. Cite the decision considered and explain
+why current evidence preserves or overturns it. A past approval is not a waiver of a newly
+demonstrated failure. Missing rationale is not itself proof of a code defect; obtain the
+relevant evidence without hiding real blockers.
 
 Bind conclusions to the exact head and material graph inputs. New evidence that changes an
 acceptance/risk judgment requires only the affected reassessment; unchanged facts or record
@@ -96,8 +99,10 @@ roles. If one role is missing or invalid, launch one additional workflow contain
 Bind repository, PR, head/base, attempt, and role from the launch key and task rather than
 requiring the delegate to echo them perfectly. Accept JSON or clearly structured Markdown
 when it contains a verdict, substantive summary, verified `path:line` behaviors, residual
-risks, and findings. A blocker identifies a reachable trigger, the patch-caused causal
-chain, existing mitigations checked, and concrete production impact. Preserve a supported
+risks, and findings. A `PATCH_DEFECT` blocker identifies a reachable trigger, the patch-caused
+causal chain, existing mitigations checked, and concrete production impact. A `CONTRACT_GAP`
+identifies the current-code or historical evidence that the builder brief omitted or
+contradicted the requirement; it must not be presented as a builder violation. Preserve a supported
 root-cause/prevention lesson in that same finding, not a new knowledge-only issue; speculation or
 independent pre-existing debt is not a blocker. Normalize harmless key casing, number/string, and list-shape differences in the
 owning agent. Retry only when the child failed or no substantive review can be recovered;
@@ -121,10 +126,13 @@ or review-start/checkpoint comments are required.
 - No findings: `APPROVE`.
 - Missing/invalid role after its bounded retry: `review-degraded`, no verdict.
 
-Keep work-on blockers on the existing PR/source issue for cohesive remediation. Create at
-most one valuable independent follow-up issue per causal concern when separate action is
-needed and authorized. Advisories and reusable lessons remain in the consolidated report
-by default; do not expand the backlog merely to make knowledge searchable.
+Keep work-on blockers on the existing PR/source issue for cohesive remediation. Route a
+confirmed `PATCH_DEFECT` to the exceptional in-contract remediation path. Route a confirmed
+`CONTRACT_GAP` back to investigation for a superseding `FORGE:CONTRACT`; do not use GATED for
+that quality discovery. Create at most one valuable independent follow-up issue per causal
+concern when separate action is needed and authorized. Advisories and reusable lessons remain
+in the consolidated report by default; do not expand the backlog merely to make knowledge
+searchable.
 
 Merge only when explicitly authorized, the current head equals the accepted reviewed head
 or a proven equivalent patch, required checks pass, the PR is mergeable, and no blocker
