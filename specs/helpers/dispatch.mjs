@@ -80,11 +80,10 @@ function recipe() {
   requireThat(body, "Packaged dispatcher recipe is missing"); return body;
 }
 export function prepareBatch(plan, out, cwd = process.cwd()) {
-  fields(plan, ["issues", "activeOwners", "launchAllowance", "requestStartedAt", "verification"], "plan");
+  fields(plan, ["issues", "activeOwners", "requestStartedAt", "verification"], "plan");
   const source = configAt(cwd);
-  integer(plan.activeOwners, "activeOwners"); integer(plan.launchAllowance, "launchAllowance");
+  integer(plan.activeOwners, "activeOwners");
   requireThat(Array.isArray(plan.issues) && plan.issues.length > 0, "Plan needs issues");
-  requireThat(plan.launchAllowance >= plan.issues.length, "Allowance cannot cover even the issue owners");
   if (source.config.orchestration?.max_concurrent !== undefined) requireThat(plan.activeOwners <= integer(source.config.orchestration.max_concurrent, "configured concurrency"), "Active owners exceed configured ceiling");
   requireThat(typeof plan.requestStartedAt === "string" && Number.isFinite(Date.parse(plan.requestStartedAt)), "Plan needs the original request timestamp");
   const seen = new Set();
@@ -122,7 +121,7 @@ export function prepareBatch(plan, out, cwd = process.cwd()) {
   save(scriptPath, `const configuredModel=${JSON.stringify(source.model)};\nconst ownerConcurrency=${plan.activeOwners};\nconst issueGraph=${JSON.stringify(issueGraph)};\n${recipe()}\n`);
   const batch = { batchNonce, repo: source.repo, requestStartedAt: plan.requestStartedAt, lanes };
   save(path.join(out, "batch.json"), json(batch));
-  const request = { async: true, workflowScriptPath: scriptPath, globalConcurrencyLimit: plan.activeOwners, maxSubagentSpawnsPerRun: plan.launchAllowance,
+  const request = { async: true, workflowScriptPath: scriptPath, globalConcurrencyLimit: plan.activeOwners,
     control: { needsAttentionAfterMs: 1200000, activeNoticeAfterMs: 1200000 } };
   save(path.join(out, "request.json"), json(request));
   return { request, requestFile: path.join(out, "request.json"), batchFile: path.join(out, "batch.json") };

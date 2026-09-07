@@ -113,7 +113,7 @@ test("prepared lane policy reaches the actual native child environment", { skip:
     execFileSync("git", ["remote", "add", "origin", "https://github.com/example/project.git"], { cwd: repo });
     await writeFile(join(repo, "forge.yaml"), 'project: {owner: example, repo: project}\nagents: {subagent_model: "test/model"}\n');
     await writeFile(join(repo, ".git", "info", "exclude"), "forge.yaml\n");
-    const prepared = dispatch.prepareBatch({ activeOwners: 1, launchAllowance: 8, requestStartedAt: "2026-01-01T00:00:00Z",
+    const prepared = dispatch.prepareBatch({ activeOwners: 1, requestStartedAt: "2026-01-01T00:00:00Z",
       issues: [{ number: 42, target: "staging", baseCwd: repo, predecessors: [] }] }, join(root, "prepared"), repo);
     const script = await readFile(prepared.request.workflowScriptPath, "utf8");
     const graph = JSON.parse(script.match(/^const issueGraph=(.+);$/m)![1]!);
