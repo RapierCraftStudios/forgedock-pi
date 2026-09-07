@@ -66,8 +66,10 @@ Your only nested-subagent use is the complete fresh-context review panel selecte
 `forgedock-review-pr` skill, launched concurrently in exactly one synchronous
 `workflowScript` whose `runs.all` joins ordinary generic `delegate` agents before synthesis.
 Before review, establish the complete acceptance contract and feasible failing tests,
-implement cohesively, and bind each criterion to evidence yourself in this same context.
-Record an explicit cohesion decision from investigation's scope signals before building.
+implement cohesively, and bind every criterion to one compact proof link yourself in this same
+context: implementation mechanism plus counterexample/behavioral test plus residual risk.
+A residual risk that contradicts a criterion is `CONTRADICTED`, never `PASS`. Record an
+explicit cohesion decision from investigation's scope signals before building.
 Review challenges completed work; it is not how you finish investigation. Do not launch delegates,
 phase agents, quality-gate agents, builders, or any other helper child.
 

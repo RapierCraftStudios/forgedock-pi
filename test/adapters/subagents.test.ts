@@ -137,6 +137,9 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
   assert.match(spawn.params.task, /reviewHeadSha = REVIEW_HEAD_SHA/);
   assert.match(spawn.params.task, /Call forge_diff in patch mode first/);
   assert.match(spawn.params.task, /call forge_finalize_reviewer/);
+  assert.match(spawn.params.task, /one compact proof link for every accepted criterion/);
+  assert.match(spawn.params.task, /implementation mechanism plus counterexample\/behavioral test plus residual risk/);
+  assert.match(spawn.params.task, /residual risk that contradicts its invariant is CONTRADICTED, never PASS/);
   assert.match(spawn.params.task, /const results = await runs\.all/);
   assert.match(spawn.params.task, /return results/);
   assert.doesNotMatch(spawn.params.task, /forge_run_review_panel exactly once/);
@@ -385,6 +388,9 @@ test("bounded implementation launch binds the durable builder contract", async (
   );
   assert.match(spawn.params.task, new RegExp(builderContract.contractHash));
   assert.match(spawn.params.task, /Allowed paths: src\/\*\*, test\/\*\*/);
+  assert.match(spawn.params.task, /one compact proof link per accepted criterion/);
+  assert.match(spawn.params.task, /implementation mechanism plus counterexample\/behavioral test plus residual risk/);
+  assert.match(spawn.params.task, /PASS requires both proof ends.*CONTRADICTED, never PASS/s);
   assert.match(spawn.params.task, /Bash is available for implementation/);
 });
 
