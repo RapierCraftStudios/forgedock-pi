@@ -65,6 +65,11 @@ test("child process timeout force-terminates an uncooperative child", async () =
   assert.ok(Date.now() - started < 2_000);
 });
 
+test("implementation shell cannot bypass the forge commit boundary", () => {
+  assert.match(boundedToolDenial("implement", "bash") ?? "", /Shell execution is disabled/);
+  assert.match(boundedToolDenial(undefined, "bash") ?? "", /Shell execution is disabled/);
+});
+
 test("technical phase failures do not project needs-human authority", () => {
   assert.deepEqual(phaseProjectionLabels("fail"), []);
   assert.deepEqual(phaseProjectionLabels("block"), []);
@@ -124,7 +129,9 @@ test("read-only nodes deny shell and file mutation tools", () => {
   assert.match(boundedToolDenial("investigate", "write") ?? "", /read-only/);
   assert.match(boundedToolDenial("plan", "edit") ?? "", /read-only/);
   assert.equal(boundedToolDenial("implement", "edit"), undefined);
-  assert.equal(boundedToolDenial("implement", "bash"), undefined);
+  assert.match(boundedToolDenial("implement", "bash") ?? "", /Shell execution is disabled/);
+  assert.equal(allowedNodeTools("implement").has("forge_proof_closure"), true);
+  assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_proof_closure"), true);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("bash"), false);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("subagent"), true);
   assert.equal((FORGE_WORK_ON_TOOLS as readonly string[]).includes("forge_checkpoint"), true);

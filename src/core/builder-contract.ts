@@ -1,10 +1,42 @@
 import { createHash } from "node:crypto";
 
+export type ProofClosureState =
+  | "PASS"
+  | "FAIL"
+  | "MISSING"
+  | "SKIPPED"
+  | "CONTRADICTED"
+  | "UNKNOWN";
+
+export interface ProofObligation {
+  criterion: string;
+  invariant: string;
+  counterexample: string;
+  boundaryConsumers: string;
+  testCommand: string;
+  failingBefore: string;
+  passingAfter: string;
+  state: ProofClosureState;
+  required: boolean;
+}
+
+export interface ProofClosureContract {
+  schema: "forgedock.proof-closure/v1";
+  repository: string;
+  issueNumber: number;
+  target: string;
+  baseSha: string;
+  risk: "low" | "high";
+  riskSignals: readonly string[];
+  obligations: readonly ProofObligation[];
+}
+
 export interface BuilderPathContract {
   schema: "forgedock.builder-path-contract/v1";
   revision: number;
   allowedPaths: readonly string[];
   contractHash: string;
+  proofClosure?: ProofClosureContract;
 }
 
 export class BuilderContractViolationError extends Error {
@@ -18,19 +50,33 @@ export class BuilderContractViolationError extends Error {
 }
 
 /** Freeze the plan's path authority into a stable, hash-addressed contract. */
+export function createProofClosureContract(
+  input: Omit<ProofClosureContract, "schema">,
+): ProofClosureContract {
+  const contract: ProofClosureContract = {
+    schema: "forgedock.proof-closure/v1",
+    ...input,
+  };
+  validateProofClosureContract(contract);
+  return contract;
+}
+
 export function createBuilderPathContract(
   allowedPaths: readonly string[],
   revision = 1,
+  proofClosure?: ProofClosureContract,
 ): BuilderPathContract {
   if (!Number.isSafeInteger(revision) || revision < 1)
     throw new TypeError("Builder contract revision must be positive.");
   const normalized = [...new Set(allowedPaths.map(normalizeRule))].sort();
   if (normalized.length === 0)
     throw new TypeError("Builder contract requires at least one allowed path.");
+  if (proofClosure !== undefined) validateProofClosureContract(proofClosure);
   const payload = {
     schema: "forgedock.builder-path-contract/v1" as const,
     revision,
     allowedPaths: normalized,
+    ...(proofClosure === undefined ? {} : { proofClosure }),
   };
   return {
     ...payload,
@@ -51,15 +97,102 @@ export function validateBuilderPathContract(
     !Number.isSafeInteger(contract.revision) ||
     !Array.isArray(contract.allowedPaths) ||
     contract.allowedPaths.some((path) => typeof path !== "string") ||
-    typeof contract.contractHash !== "string"
+    typeof contract.contractHash !== "string" ||
+    Object.keys(contract).some(
+      (key) =>
+        !["schema", "revision", "allowedPaths", "contractHash", "proofClosure"].includes(key),
+    )
   )
     throw new TypeError("Builder contract shape is invalid.");
+  if (contract.proofClosure !== undefined)
+    validateProofClosureContract(contract.proofClosure);
   const expected = createBuilderPathContract(
     contract.allowedPaths as readonly string[],
     contract.revision as number,
+    contract.proofClosure,
   );
   if (expected.contractHash !== contract.contractHash)
     throw new TypeError("Builder contract hash does not match its contents.");
+}
+
+export function validateProofClosureContract(
+  value: unknown,
+): asserts value is ProofClosureContract {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new TypeError("Proof closure contract must be an object.");
+  const contract = value as Partial<ProofClosureContract>;
+  if (
+    contract.schema !== "forgedock.proof-closure/v1" ||
+    typeof contract.repository !== "string" ||
+    !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(contract.repository.trim()) ||
+    typeof contract.issueNumber !== "number" ||
+    !Number.isSafeInteger(contract.issueNumber) ||
+    contract.issueNumber < 1 ||
+    typeof contract.target !== "string" ||
+    !contract.target.trim() ||
+    typeof contract.baseSha !== "string" ||
+    !/^[a-f0-9]{40,64}$/.test(contract.baseSha) ||
+    (contract.risk !== "low" && contract.risk !== "high") ||
+    !Array.isArray(contract.riskSignals) ||
+    contract.riskSignals.some((entry) => typeof entry !== "string" || !entry.trim()) ||
+    (contract.risk === "low" && contract.riskSignals.length > 0) ||
+    !Array.isArray(contract.obligations) ||
+    Object.keys(contract).some((key) => !["schema", "repository", "issueNumber", "target", "baseSha", "risk", "riskSignals", "obligations"].includes(key))
+  )
+    throw new TypeError("Proof closure contract shape is invalid.");
+  const criteria = new Set<string>();
+  for (const row of contract.obligations) {
+    if (
+      !row ||
+      typeof row !== "object" ||
+      Object.keys(row).some((key) => !["criterion", "invariant", "counterexample", "boundaryConsumers", "testCommand", "failingBefore", "passingAfter", "state", "required"].includes(key)) ||
+      typeof row.criterion !== "string" ||
+      !row.criterion.trim() ||
+      typeof row.invariant !== "string" ||
+      !row.invariant.trim() ||
+      typeof row.counterexample !== "string" ||
+      !row.counterexample.trim() ||
+      typeof row.boundaryConsumers !== "string" ||
+      !row.boundaryConsumers.trim() ||
+      typeof row.testCommand !== "string" ||
+      !row.testCommand.trim() ||
+      typeof row.failingBefore !== "string" ||
+      !row.failingBefore.trim() ||
+      typeof row.passingAfter !== "string" ||
+      !row.passingAfter.trim() ||
+      typeof row.required !== "boolean" ||
+      !["PASS", "FAIL", "MISSING", "SKIPPED", "CONTRADICTED", "UNKNOWN"].includes(row.state)
+    )
+      throw new TypeError("Proof obligation shape is invalid.");
+    if (criteria.has(row.criterion))
+      throw new TypeError("Proof obligation criteria must be unique.");
+    criteria.add(row.criterion);
+  }
+  if (contract.risk === "high" &&
+      (contract.riskSignals.length === 0 ||
+       !contract.obligations.some((row) => row.required)))
+    throw new TypeError("High-risk proof closure needs signals and required obligations.");
+}
+
+export function assertProofClosure(
+  contract: ProofClosureContract,
+  identity: Pick<ProofClosureContract, "repository" | "issueNumber" | "target" | "baseSha">,
+): void {
+  validateProofClosureContract(contract);
+  if (
+    contract.repository !== identity.repository ||
+    contract.issueNumber !== identity.issueNumber ||
+    contract.target !== identity.target ||
+    contract.baseSha !== identity.baseSha
+  )
+    throw new Error("Proof closure identity does not match its bound run.");
+  const blockers = contract.obligations.filter(
+    (row) => row.required && row.state !== "PASS",
+  );
+  if (blockers.length > 0)
+    throw new Error(
+      `Required proof obligations are not closed: ${blockers.map((row) => `${row.criterion}=${row.state}`).join(", ")}.`,
+    );
 }
 
 export function assertBuilderContractPaths(

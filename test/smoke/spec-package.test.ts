@@ -97,8 +97,8 @@ test("investigation defines scope without children or executable comments", asyn
   assert.match(investigate, /Mutation Scope/);
   assert.match(investigate, /Non-Goals/);
   assert.match(investigate, /Closure Route/);
-  assert.match(investigate, /Acceptance Checks/);
   assert.match(investigate, /issue.*intake request.*not an implementation plan or proof/s);
+  assert.match(investigate, /Acceptance Checks/);
   assert.match(investigate, /Verdict: CONFIRMED \| INVALID/);
   assert.match(investigate, /Route: BUILD \| DECOMPOSE \| TERMINAL/);
   assert.match(investigate, /Never emit shell commands/);
@@ -126,6 +126,47 @@ test("build is one inline procedure with SHA-keyed verification", async () => {
   assert.match(build, /FORGE:BUILDER:COMPLETE/);
   for (const deleted of ["context", "architect", "implement", "validate"])
     await assert.rejects(access(`specs/original/commands/work-on/build/${deleted}.md`));
+});
+
+test("high-risk proof closure fails closed while low-risk work keeps the fast path", async () => {
+  const build = await text(WORK_ON_PHASES[2]);
+  const qualityGate = await text("specs/original/commands/quality-gate.md");
+  const validate = await text("specs/original/commands/validate.md");
+  const workOn = await text("specs/original/commands/work-on.md");
+  const qualitySkill = await text("skills/forgedock-quality-gate/SKILL.md");
+  const monolithic = await text("specs/original/commands/work-on-monolithic.md");
+
+  assert.match(build, /adversarial\s+counterexample.*boundary\/consumers.*failing-before.*passing-after/s);
+  assert.match(build, /HIGH.*COMPLEX.*shared state.*concurrency.*data integrity.*security boundaries/s);
+  assert.match(build, /blocking missing, unknown, contradicted,\n?failed, or required-risk skipped/s);
+  assert.match(qualityGate, /exact `ISSUE_NUMBER`, `PROOF_CONTRACT`, and `RISK_SIGNALS`/);
+  assert.match(qualityGate, /Missing or malformed handoff fields are blocking/);
+  assert.match(qualitySkill, /exact `ISSUE_NUMBER`, `PROOF_CONTRACT`/);
+  assert.match(monolithic, /--issue \{ISSUE_NUMBER\} --proof-contract \{CONTRACT_ID\} --risk-signals \{RISK_SIGNALS\}/);
+  for (const field of ["criterion", "invariant", "counterexample", "boundary/consumers", "test/command", "failing-before", "passing-after", "state"])
+    assert.ok(qualityGate.includes(`\`${field}\``), `missing proof field: ${field}`);
+  assert.match(qualityGate, /cannot[\s\S]+return `PASS`/);
+  assert.match(qualityGate, /until every required row is\s+closed/s);
+  assert.match(qualityGate, /Optional checks retain.*`SKIPPED`/s);
+  assert.match(validate, /Publication proof handoff/);
+  assert.match(validate, /MISSING.*UNKNOWN.*CONTRADICTED.*required-risk.*SKIPPED/s);
+  assert.match(workOn, /pre-publication gate.*identity-bound.*before commit\/PR creation/s);
+
+  // An anonymized #33745-shaped fixture must not pass with missing recovery/boundary proof.
+  const alterLab33745Rows = [
+    { name: "mutation/interleaving", state: "MISSING", required: true },
+    { name: "serialization/type", state: "UNKNOWN", required: true },
+    { name: "namespace boundary", state: "CONTRADICTED", required: true },
+    { name: "recovery result", state: "FAIL", required: true },
+    { name: "required integration", state: "SKIPPED", required: true },
+    { name: "optional lint", state: "SKIPPED", required: false },
+  ];
+  const blockingStates = new Set(["FAIL", "MISSING", "UNKNOWN", "CONTRADICTED"]);
+  const blocks = (rows: Array<{ state: string; required: boolean }>) => rows.some((row) =>
+    row.required && (blockingStates.has(row.state) || row.state === "SKIPPED"));
+  assert.equal(blocks(alterLab33745Rows), true);
+  assert.equal(blocks([{ state: "SKIPPED", required: false }]), false);
+  assert.match(qualityGate, /low-risk work.*current fast path/is);
 });
 
 test("executable behavior requires behavioral evidence rather than source-shape assertions", async () => {

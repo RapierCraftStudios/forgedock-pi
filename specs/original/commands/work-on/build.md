@@ -21,15 +21,23 @@ is the mutation contract.
 At phase entry, use one label edit to replace `workflow:ready-to-build` and other stale
 active-phase labels with `workflow:building`.
 
-### Proof map admission
+### Proof map admission and closure
 
-Before editing, compile the contract into rows of criterion → invariant → reachable failure
-mode → producer/consumer boundary → source/test/evidence. Include namespace/type and
-serialization obligations, interleavings, failure injection, retry, recovery, and fresh versus
-existing state for each new key, protocol, state machine, or external call. Mark each row
-`PASS`, `FAIL`, `MISSING`, `SKIPPED`, `CONTRADICTED`, or `UNKNOWN`; required-risk integration
-capability that is unavailable or skipped is insufficient evidence and must gate the row.
-This enriches imperfect intake without becoming a separate qualitative refusal gate.
+Before editing, compile the contract into rows of criterion → invariant → adversarial
+counterexample → boundary/consumers → exact test or command → failing-before and
+passing-after evidence. Include namespace/type, serialization, interleaving, failure injection,
+retry, recovery, and fresh/existing state for each new key, protocol, state machine, or external
+call. Mark each row `PASS`, `FAIL`, `MISSING`, `SKIPPED`, `CONTRADICTED`, or `UNKNOWN`.
+
+For `HIGH`/`COMPLEX` work or shared state, concurrency, data integrity, security boundaries,
+external side effects, or cross-service protocols, retain the risk signals and contract identity
+with the staged diff. Before commit, invoke the existing quality gate and native
+`forge_proof_closure` admission with exact
+`ISSUE_NUMBER`, `PROOF_CONTRACT`, and `RISK_SIGNALS` values from the bound records. It must
+validate identity and compare every applicable row, blocking missing, unknown, contradicted,
+failed, or required-risk skipped proof; optional skips remain explicit. Low-risk documentation,
+metadata, and simple changes retain the fast path. This enriches imperfect intake without
+becoming a separate qualitative refusal gate.
 
 ## Plan once and publish the pre-build graph
 

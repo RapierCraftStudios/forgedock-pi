@@ -207,11 +207,13 @@ git worktree add {WORKTREE_BASE}/{BRANCH} -b {BRANCH} origin/{PR_BASE}
 Route by task type. Read the investigation report and contract. Implement the fix/feature.
 
 ### 3F.5: Quality Gate
-Invoke quality-gate on changed files:
+Invoke quality-gate with the exact issue/contract/risk handoff; never skip by file count:
 ```
-Skill(skill="quality-gate", args="{changed_files} --worktree {WORKTREE_PATH}")
+Skill(skill="quality-gate", args="{changed_files} --worktree {WORKTREE_PATH} --issue {ISSUE_NUMBER} --proof-contract {CONTRACT_ID} --risk-signals {RISK_SIGNALS}")
 ```
-Fix HIGH/MEDIUM findings. Max 2 iterations. Skip for 1-file config/docs edits.
+The gate validates the canonical source identity and blocks incomplete required proof. Fix
+HIGH/MEDIUM findings locally; only a validated low-risk classification may use the fast path.
+Local fixes do not consume a PR remediation round.
 
 ### 3G: Format and verify
 - Python: `black` + `isort` + `py_compile`

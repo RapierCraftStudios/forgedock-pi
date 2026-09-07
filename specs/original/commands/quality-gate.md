@@ -68,7 +68,38 @@ CHANGED_FILES: file1.py file2.tsx file3.sql
 PR_BASE: staging|milestone/slug
 TASK_TYPE: bug-fix|feature|refactor|investigation
 ISSUE_NUMBER: #123
+PROOF_CONTRACT: <exact FORGE:CONTRACT / FORGE:ARCHITECT identity>
+RISK_SIGNALS: <investigation risk signals, not issue prose>
 ```
+
+## Proof-closure admission (required before commit or PR publication)
+
+This gate consumes the exact `ISSUE_NUMBER`, `PROOF_CONTRACT`, and `RISK_SIGNALS` supplied by
+work-on; it never infers identity from a filename, branch, neighboring issue, or free-form issue
+text. Missing or malformed handoff fields are blocking. Validate the repository, issue, target,
+source head/tree, and immutable contract record identity before reading proof rows. A proof row
+has these fields: `criterion`, `invariant`, `counterexample`, `boundary/consumers`,
+`test/command`, `failing-before`, `passing-after`, and `state`.
+
+Apply this barrier only when trusted investigation signals and the staged diff indicate
+`HIGH`/`COMPLEX`, shared state, concurrency, data integrity, security boundaries, external side
+effects, or a cross-service protocol. Missing, understated, or unknown risk classification is
+blocking rather than permission for the fast path. For applicable stateful/concurrent changes,
+require rows for mutation/interleaving, duplicate/reordered data, partial failure/retry/recovery,
+serialization/type contracts, and producer/consumer namespace boundaries when relevant. This is
+generic and technology-agnostic; it does not encode an issue, repository, or service rule.
+
+Compare the staged diff and executable evidence to every applicable row. Emit a blocking
+`PROOF-CLOSURE | HIGH` finding when a row is `FAIL`, `MISSING`, `UNKNOWN`, `CONTRADICTED`, or
+`SKIPPED` because required-risk capability is unavailable. A row is `PASS` only when all eight
+fields, its counterexample, boundary, exact test/command, and failing-before/passing-after
+evidence are accounted for. Optional checks retain their explicit `SKIPPED` reporting and do
+not become blockers. The native `forge_proof_closure` check is the commit boundary for this contract; the gate cannot
+return `PASS`, and the builder cannot commit or create/update a PR, until every required row is
+closed. Local repairs before publication do not consume a PR
+remediation round. For validated low-risk work with no trigger, report proof closure as not
+applicable and retain the current fast path. Final independent exact-head review remains
+mandatory and unchanged.
 
 ## Step 1: Read the diff
 
@@ -634,15 +665,15 @@ Report each conflict as **HIGH** — a shadowed native command is a silent user-
 
 ### Required-risk evidence and proof-map closure
 
-A gate result must bind each applicable acceptance criterion to its invariant, reachable
-failure mode, producer, consumer, source boundary, and executable test/evidence. Use the
-states `PASS`, `FAIL`, `MISSING`, `SKIPPED`, `CONTRADICTED`, and `UNKNOWN`; structural
-presence or a green aggregate row is not behavioral proof. A check marked `SKIPPED` because
-a required-risk integration capability is unavailable is insufficient evidence and must
-remain visible as a gate limitation, not be promoted to PASS. For new protocols, keys,
-state machines, or external calls, verify producer/consumer closure, type/namespace and
-serialization, interleavings, retry, failure injection, and recovery. This supplements
-existing domain checks and never weakens the independent review or remediation cap.
+A gate result must bind each applicable acceptance criterion to its invariant, adversarial
+counterexample, boundary/consumers, exact test/command, failing-before, passing-after, and
+state. Use the states `PASS`, `FAIL`, `MISSING`, `SKIPPED`, `CONTRADICTED`, and `UNKNOWN`;
+structural presence or a green aggregate row is not behavioral proof. `FAIL`, `MISSING`,
+`UNKNOWN`, and `CONTRADICTED` always block; a `SKIPPED` row blocks when required-risk capability
+is unavailable and remains visible as a limitation, never promoted to PASS. For new protocols,
+keys, state machines, or external calls, verify producer/consumer closure, type/namespace and
+serialization, interleavings, retry, failure injection, and recovery. This supplements existing
+domain checks and never weakens independent review or the remediation cap.
 
 **Scope boundary — newly added lines ONLY**: This check scans lines beginning with `+` in the diff (excluding `+++` file-header lines). Pre-existing conditionals are **never** flagged. A conditional that existed before this diff is outside scope regardless of whether it has tests.
 
@@ -1695,7 +1726,8 @@ Format findings as a structured list:
 
 ```
 QUALITY GATE FINDINGS:
-[PASS] No findings — code is clean.
+[PASS] No findings — code is clean, and proof closure is complete or validated not applicable.
+[PROOF-CLOSURE | HIGH] Any required row or handoff field is incomplete, invalid, or unverified.
 
 OR:
 

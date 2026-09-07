@@ -16,6 +16,20 @@ Verify whether a reported issue is real before anyone writes code. This command 
 
 **Output**: A verdict (CONFIRMED / NOT A PROBLEM / NEEDS MORE DATA) with evidence.
 
+### Publication proof handoff
+
+When validation is used by work-on, carry a mandatory handoff with exact issue identity,
+canonical repository/target/source head, and linked `FORGE:CONTRACT`/`FORGE:ARCHITECT` record
+identity. Validate those values before the gate reads proof. For changes whose trusted risk
+signals are `HIGH`/`COMPLEX`, shared state, concurrency, data integrity, security boundary,
+external side effect, or cross-service protocol, publication is blocked unless every applicable
+row has `criterion`, `invariant`, adversarial counterexample, boundary/consumers, exact test or
+command, failing-before, passing-after, and state `PASS`. `FAIL`, `MISSING`, `UNKNOWN`,
+`CONTRADICTED`, or required-risk `SKIPPED` is blocking; optional checks retain explicit
+`SKIPPED` reporting. Missing, malformed, stale, mismatched, or unknown risk/identity is also
+blocking. Low-risk work remains on the existing fast path only after validated classification.
+This handoff does not alter final independent review or remediation limits.
+
 ---
 
 ## Step 1: Parse the claim
