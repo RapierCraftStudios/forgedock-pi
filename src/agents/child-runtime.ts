@@ -40,7 +40,11 @@ import {
 import { resolveVerificationCommandDirectory } from "../adapters/verification-preflight.ts";
 import {
   assertBuilderContractPaths,
+  assertProofClosure,
+  createBuilderPathContract,
+  createProofClosureContract,
   type BuilderPathContract,
+  type ProofClosureContract,
   validateBuilderPathContract,
 } from "../core/builder-contract.ts";
 import { workflowLabelForPhaseBoundary } from "../core/artifact-protocol.ts";
@@ -53,6 +57,7 @@ import {
 } from "../core/policy.ts";
 import {
   RUN_PHASES,
+  canonicalJson,
   type RunEvent,
   type RunEventType,
   type RunPhase,
@@ -119,6 +124,7 @@ export interface ForgeChildBinding {
   reviewerTimeoutMs: number;
   verificationCommands: Readonly<Record<string, BoundVerificationCommand>>;
   verificationGithub?: ForgePolicy["verification"]["github"];
+  proofRisk?: "low" | "high";
   builderContract?: BuilderPathContract;
   nodeId?: string;
   node?: string;
@@ -197,6 +203,31 @@ const DiffParameters = Type.Object({
 
 const CommitParameters = Type.Object({
   kind: StringEnum(["implementation", "review-fixes"] as const),
+});
+
+const ProofClosureParameters = Type.Object({
+  contract: Type.Object({
+    schema: Type.Literal("forgedock.proof-closure/v1"),
+    repository: Type.String({ minLength: 1 }),
+    issueNumber: Type.Integer({ minimum: 1 }),
+    target: Type.String({ minLength: 1 }),
+    baseSha: Type.String({ minLength: 40, maxLength: 64 }),
+    risk: StringEnum(["low", "high"] as const),
+    riskSignals: Type.Array(Type.String({ minLength: 1 })),
+    obligations: Type.Array(
+      Type.Object({
+        criterion: Type.String({ minLength: 1 }),
+        invariant: Type.String({ minLength: 1 }),
+        counterexample: Type.String({ minLength: 1 }),
+        boundaryConsumers: Type.String({ minLength: 1 }),
+        testCommand: Type.String({ minLength: 1 }),
+        failingBefore: Type.String({ minLength: 1 }),
+        passingAfter: Type.String({ minLength: 1 }),
+        state: StringEnum(["PASS", "FAIL", "MISSING", "SKIPPED", "CONTRADICTED", "UNKNOWN"] as const),
+        required: Type.Boolean(),
+      }),
+    ),
+  }),
 });
 
 /** Shared details shape for forge_commit outcomes (normal commit or no-change). */
@@ -305,6 +336,11 @@ export function registerForgeRuntime(
   let caseInsensitivePaths: boolean | undefined;
   let refreshPushLeaseSha: string | undefined;
   let preparedPull: { number: number; headSha: string } | undefined;
+  let trustedBuilderContract: BuilderPathContract | undefined;
+  let trustedInvestigationRisk: "low" | "high" =
+    binding.proofRisk ??
+    (binding.builderContract?.proofClosure?.risk === "high" ? "high" : "low");
+  let proofClosureAdmitted = false;
   let reviewDiffCoverage:
     | { headSha: string; sha256: string; bytes: number; coveredBytes: number }
     | undefined;
@@ -676,6 +712,34 @@ export function registerForgeRuntime(
   });
 
   pi.registerTool({
+    name: "forge_proof_closure",
+    label: "Forge Proof Closure",
+    description:
+      "Validate and admit the bound proof-closure contract before implementation commit",
+    parameters: ProofClosureParameters,
+    async execute(_toolCallId, params) {
+      assertWorkOnAuthority(binding);
+      const contract = params.contract as ProofClosureContract;
+      const trusted = binding.builderContract?.proofClosure ?? trustedBuilderContract?.proofClosure;
+      if (!trusted)
+        throw new Error("Proof closure requires a completed, typed plan artifact.");
+      assertProofClosure(contract, {
+        repository: binding.repository,
+        issueNumber: binding.issueNumber!,
+        target: binding.baseBranch,
+        baseSha: binding.baseSha,
+      });
+      if (canonicalJson(contract) !== canonicalJson(trusted))
+        throw new Error("Proof closure does not match the trusted plan contract.");
+      proofClosureAdmitted = true;
+      return {
+        content: [{ type: "text", text: "Proof closure admitted for this bound run." }],
+        details: { schema: contract.schema, risk: contract.risk, obligations: contract.obligations.length },
+      };
+    },
+  });
+
+  pi.registerTool({
     name: "forge_commit",
     label: "Forge Commit",
     description:
@@ -728,12 +792,18 @@ export function registerForgeRuntime(
           details,
         };
       }
-      if (binding.node === "implement" && !binding.builderContract)
+      const effectiveBuilderContract = binding.builderContract ?? trustedBuilderContract;
+      if (!effectiveBuilderContract?.proofClosure || !proofClosureAdmitted)
         throw new Error(
-          "Implementation commit refused without an accepted builder contract.",
+          "Commit refused without an admitted trusted plan proof closure.",
         );
-      if (binding.builderContract)
-        assertBuilderContractPaths(binding.builderContract, changedPaths);
+      assertBuilderContractPaths(effectiveBuilderContract, changedPaths);
+      assertProofClosure(effectiveBuilderContract.proofClosure, {
+        repository: binding.repository,
+        issueNumber: binding.issueNumber!,
+        target: binding.baseBranch,
+        baseSha: binding.baseSha,
+      });
       const added = await runProcess(
         "git",
         ["-C", root, "add", "-A", "--", ...changedPaths],
@@ -776,8 +846,8 @@ export function registerForgeRuntime(
         throw new Error(
           "Cannot create a Forge commit with no validated implementation changes.",
         );
-      if (binding.builderContract)
-        assertBuilderContractPaths(binding.builderContract, stagedPaths);
+      if (effectiveBuilderContract)
+        assertBuilderContractPaths(effectiveBuilderContract, stagedPaths);
       const preCommitHead = await gitHead(root, binding.runId, signal);
       const stagedTreeResult = await runProcess(
         "git",
@@ -863,7 +933,7 @@ export function registerForgeRuntime(
         committedPaths,
         ignoreCase,
       });
-      if (binding.builderContract) {
+      if (effectiveBuilderContract) {
         const contractPaths = await runProcess(
           "git",
           [
@@ -893,7 +963,7 @@ export function registerForgeRuntime(
             `Unable to validate committed builder contract paths: ${contractPaths.stderr}`,
           );
         assertBuilderContractPaths(
-          binding.builderContract,
+          effectiveBuilderContract,
           parseChangedGitPaths(contractPaths.stdout),
         );
       }
@@ -906,6 +976,9 @@ export function registerForgeRuntime(
         committedPaths,
         hooksDisabled: true,
       };
+      // Admission is single-use: a second commit must re-submit the exact
+      // trusted contract after the worktree has been re-evaluated.
+      proofClosureAdmitted = false;
       return {
         content: [
           { type: "text", text: `Created ${params.kind} commit ${headSha}.` },
@@ -1613,6 +1686,41 @@ export function registerForgeRuntime(
       const phaseArtifact = isPhaseArtifact(params.artifact)
         ? params.artifact
         : undefined;
+      if (params.action === "complete" && phaseArtifact && phaseArtifact.phase !== params.phase)
+        throw new Error(`Checkpoint artifact phase ${phaseArtifact.phase} does not match ${params.phase}.`);
+      if (params.action === "complete" && params.phase === "plan" && phaseArtifact?.phase !== "plan")
+        throw new Error(`Plan completion requires its typed plan artifact: ${phaseArtifactValidationError(params.artifact)}.`);
+      // Validate the proof contract before appending the phase event. Otherwise
+      // a malformed plan (for example duplicate criteria) could consume the
+      // idempotency key and leave an uncommittable durable plan behind.
+      if (
+        params.action === "complete" &&
+        phaseArtifact?.phase === "plan" &&
+        !binding.builderContract
+      ) {
+        createProofClosureContract({
+          repository: binding.repository,
+          issueNumber: binding.issueNumber!,
+          target: binding.baseBranch,
+          baseSha: binding.baseSha,
+          risk:
+            trustedInvestigationRisk === "high" ||
+            phaseArtifact.risk === "high" ||
+            phaseArtifact.riskSignals.length > 0
+              ? "high"
+              : "low",
+          riskSignals: phaseArtifact.riskSignals,
+          obligations: phaseArtifact.proofObligations,
+        });
+      }
+      if (params.action === "complete" && phaseArtifact?.phase === "investigate") {
+        if (
+          phaseArtifact.severity === "critical" ||
+          phaseArtifact.severity === "high" ||
+          phaseArtifact.complexity === "complex"
+        )
+          trustedInvestigationRisk = "high";
+      }
       const { artifact: _untrustedArtifact, ...checkpointParams } = params;
       if (binding.refresh)
         throw new Error(
@@ -1648,7 +1756,10 @@ export function registerForgeRuntime(
       const snapshot = await journal.append({
         runId: binding.runId,
         type: checkpointEventType(params.action),
-        payload: checkpointPayload(params, binding),
+        payload: checkpointPayload(
+          { ...checkpointParams, ...(phaseArtifact ? { artifact: phaseArtifact } : {}) },
+          binding,
+        ),
         idempotencyKey,
         sessionId: ctx.sessionManager.getSessionId(),
         message: `Checkpoint ${binding.runId} ${params.phase} ${params.action}`,
@@ -1665,6 +1776,58 @@ export function registerForgeRuntime(
       const sequence = snapshot.state.sequence;
       const stateTip = snapshot.tip;
       const idempotent = priorEventId !== undefined;
+      const durableArtifactValue = (event.payload as Record<string, unknown>)
+        .artifact;
+      const durableArtifact: PhaseArtifact | undefined = isPhaseArtifact(
+        durableArtifactValue,
+      )
+        ? durableArtifactValue
+        : undefined;
+      // On an idempotent retry, project the journal's original artifact,
+      // never a replacement supplied by the retried caller. An invalid
+      // historical artifact is not recoverable by accepting new caller data.
+      if (
+        idempotent &&
+        durableArtifactValue !== undefined &&
+        !durableArtifact
+      )
+        throw new Error(
+          "Cannot replay an idempotent checkpoint with an invalid durable artifact.",
+        );
+      const projectedArtifact = durableArtifact ?? phaseArtifact;
+      if (
+        params.action === "complete" &&
+        durableArtifact?.phase === "investigate" &&
+        (durableArtifact.severity === "critical" ||
+          durableArtifact.severity === "high" ||
+          durableArtifact.complexity === "complex")
+      )
+        trustedInvestigationRisk = "high";
+      if (
+        params.action === "complete" &&
+        durableArtifact?.phase === "plan" &&
+        !binding.builderContract
+      ) {
+        const risk =
+          trustedInvestigationRisk === "high" ||
+          durableArtifact.risk === "high" ||
+          durableArtifact.riskSignals.length > 0
+            ? "high"
+            : "low";
+        trustedBuilderContract = createBuilderPathContract(
+          durableArtifact.allowedPaths,
+          1,
+          createProofClosureContract({
+            repository: binding.repository,
+            issueNumber: binding.issueNumber!,
+            target: binding.baseBranch,
+            baseSha: binding.baseSha,
+            risk,
+            riskSignals: durableArtifact.riskSignals,
+            obligations: durableArtifact.proofObligations,
+          }),
+        );
+      }
 
       if (params.action !== "queue") {
         const projector = new GitHubIssueProjector(
@@ -1679,7 +1842,7 @@ export function registerForgeRuntime(
               event,
               {
                 ...checkpointParams,
-                ...(phaseArtifact ? { artifact: phaseArtifact } : {}),
+                ...(projectedArtifact ? { artifact: projectedArtifact } : {}),
               },
               binding,
               signal,
@@ -1855,6 +2018,13 @@ function readBinding(): ForgeChildBinding {
   const builderContract = value.builderContract;
   if (builderContract !== undefined)
     validateBuilderPathContract(builderContract);
+  const proofRisk = value.proofRisk;
+  if (
+    proofRisk !== undefined &&
+    proofRisk !== "low" &&
+    proofRisk !== "high"
+  )
+    throw new Error("Forge binding proofRisk must be low or high.");
   const commands = value.verificationCommands;
   if (!commands || typeof commands !== "object" || Array.isArray(commands))
     throw new Error("Forge binding verificationCommands must be an object.");
@@ -1922,6 +2092,7 @@ function readBinding(): ForgeChildBinding {
     reviewerTimeoutMs: value.reviewerTimeoutMs as number,
     verificationCommands,
     ...(builderContract ? { builderContract } : {}),
+    ...(proofRisk ? { proofRisk } : {}),
     ...(node
       ? {
           nodeId: value.nodeId as string,
@@ -1950,6 +2121,7 @@ export function allowedNodeTools(
       "forge_verify",
       "forge_diff",
       "forge_commit",
+      "forge_proof_closure",
       "forge_prepare_review",
       "forge_finalize_reviewer",
       "forge_finalize_work_on",
@@ -1957,7 +2129,7 @@ export function allowedNodeTools(
   if (node.startsWith("review-"))
     return new Set(["forge_diff", "forge_finalize_reviewer"]);
   const common = ["forge_diff", "forge_finalize_node"];
-  if (node === "implement") return new Set([...common, "forge_commit"]);
+  if (node === "implement") return new Set([...common, "forge_commit", "forge_proof_closure"]);
   if (node === "verify") return new Set([...common, "forge_verify"]);
   if (node === "prepare-pr")
     return new Set(["forge_prepare_review", "forge_finalize_node"]);
@@ -2039,6 +2211,7 @@ function checkpointPayload(
     report?: string;
     reason?: string;
     authorityReason?: string;
+    artifact?: PhaseArtifact;
   },
   binding: ForgeChildBinding,
 ): Record<string, unknown> {
@@ -2073,6 +2246,7 @@ function checkpointPayload(
         ? { outputArtifactHash: params.outputArtifactHash }
         : {}),
       ...(params.commitSha ? { commitSha: params.commitSha } : {}),
+      ...(params.artifact ? { artifact: params.artifact } : {}),
     };
   }
   if (params.action === "needs-human") {
@@ -2181,23 +2355,18 @@ async function projectPhaseReport(
   if (
     params.phase === "plan" &&
     params.action === "complete" &&
-    params.report
+    params.artifact?.phase === "plan"
   ) {
-    const blocks = splitPlanReport(params.report);
-    const receipts: GitHubProjectionReceipt[] = [];
-    for (const block of blocks) {
-      receipts.push(
-        await projector.postArtifactWithReceipt({
-          issueNumber: binding.issueNumber,
-          runId: binding.runId,
-          eventId: event.eventId,
-          artifactKey: block.key,
-          markdown: block.body,
-          ...(signal ? { signal } : {}),
-        }),
-      );
-    }
-    return receipts;
+    return [
+      await projector.postArtifactWithReceipt({
+        issueNumber: binding.issueNumber,
+        runId: binding.runId,
+        eventId: event.eventId,
+        artifactKey: "builder-contract",
+        markdown: renderPhaseArtifact(params.artifact),
+        ...(signal ? { signal } : {}),
+      }),
+    ];
   }
   const projection = await projector.projectEventWithReceipt({
     issueNumber: binding.issueNumber,
@@ -2207,27 +2376,6 @@ async function projectPhaseReport(
     ...(signal ? { signal } : {}),
   });
   return [...projection.receipts];
-}
-
-function splitPlanReport(report: string): Array<{ key: string; body: string }> {
-  const markers = [
-    { key: "builder-contract", marker: "<!-- FORGE:CONTRACT -->" },
-    { key: "implementation-context", marker: "<!-- FORGE:CONTEXT -->" },
-    { key: "architecture-plan", marker: "<!-- FORGE:ARCHITECT -->" },
-  ];
-  return markers.map((entry, index) => {
-    const start = report.indexOf(entry.marker);
-    if (start < 0) throw new Error(`Plan report is missing ${entry.marker}.`);
-    const nextMarker = markers[index + 1];
-    const end = nextMarker
-      ? report.indexOf(nextMarker.marker, start + entry.marker.length)
-      : report.length;
-    if (end < 0)
-      throw new Error(
-        `Plan report markers are out of order near ${entry.marker}.`,
-      );
-    return { key: entry.key, body: report.slice(start, end).trim() };
-  });
 }
 
 function checkpointMarkdown(
@@ -2395,6 +2543,8 @@ export function boundedToolDenial(
   node: string | undefined,
   toolName: string,
 ): string | undefined {
+  if (toolName === "bash" && (!node || node === "implement"))
+    return "Shell execution is disabled for implementation; use forge_diff, forge_verify, forge_proof_closure, and forge_commit.";
   if (toolName === "bash" && READ_ONLY_NODES.has(node ?? ""))
     return `Shell execution is disabled for read-only ${node} nodes; use repository read tools and supplied context.`;
   if (

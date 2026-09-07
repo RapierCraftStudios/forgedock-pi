@@ -34,8 +34,9 @@ Continue without stopping at intermediate success:
 Investigation independently derives the closure route, acceptance, and scope from evidence; issue-body criteria remain hypotheses. Publish the named pre-build graph before editing.
 For bug fixes, record trigger/expected/observed
 baseline and fail-before/pass-after evidence; use inspection-only proof only with an explicit
-safety/impossibility justification. Execute investigation, planning, implementation, quality
-gates, verification, PR preparation, remediation, merge, close, and cleanup inline.
+safety/impossibility justification. Execute investigation, planning, implementation, the
+identity-bound quality gate, verification, PR preparation, remediation, merge, close, and
+cleanup inline; pass exact issue, contract, and trusted risk inputs before publication.
 Do not launch delegates, phase agents, builders, quality-gate agents, another work-on agent,
 or a review coordinator.
 
