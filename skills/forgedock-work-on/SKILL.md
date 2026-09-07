@@ -32,7 +32,9 @@ Continue without stopping at intermediate success:
 `resolve → investigate → [decompose | build → PR → review → [remediate → re-review] → merge → close → cleanup]`
 
 Investigation defines acceptance and scope; publish the named pre-build graph before editing.
-For bug fixes, record trigger/expected/observed
+Every accepted criterion must carry a compact proof link naming its implementation mechanism,
+counterexample/behavioral test, and residual risk; a contradictory residual risk is never a
+PASS. For bug fixes, record trigger/expected/observed
 baseline and fail-before/pass-after evidence; use inspection-only proof only with an explicit
 safety/impossibility justification. Execute investigation, planning, implementation, quality
 gates, verification, PR preparation, remediation, merge, close, and cleanup inline.

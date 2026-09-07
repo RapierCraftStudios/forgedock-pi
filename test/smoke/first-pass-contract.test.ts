@@ -22,6 +22,8 @@ test("investigation establishes evidence and prerequisites before implementation
   assert.match(investigate, /producer.*consumer.*persisted state/s);
   assert.match(investigate, /required proof.*unavailable.*before.*implementation/s);
   assert.match(investigate, /independently.*recoverable|each.*recovery source/s);
+  assert.match(investigate, /one\s+compact proof link[\s\S]*implementation path\/symbol[\s\S]*counterexample\/behavioral test[\s\S]*residual risk/is);
+  assert.match(investigate, /residual risk[\s\S]*CONTRADICTED.*never `PASS`/s);
   assert.match(investigate, /return GATED.*Do not.*ready-to-build/s);
 });
 
@@ -29,6 +31,10 @@ test("build writes behavioral regressions first and reconciles every acceptance 
   const build = await phase("build");
   assert.match(build, /Before changing production code.*failing/s);
   assert.match(build, /each acceptance criterion.*evidence/s);
+  assert.match(build, /one compact proof-link row/);
+  assert.match(build, /implementation mechanism.*counterexample\/behavioral\s+test.*residual risk/s);
+  assert.match(build, /PASS requires both concrete proof ends/s);
+  assert.match(build, /CONTRADICTED.*never `PASS`/s);
   assert.match(build, /Do not request review.*known.*gap/s);
   assert.match(build, /skip.*checks.*deadline|deadline.*skip.*checks/s);
 });

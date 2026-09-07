@@ -89,6 +89,8 @@ test("investigation defines scope without children or executable comments", asyn
   const investigate = await text(WORK_ON_PHASES[0]);
   assert.match(investigate, /Execute this phase inline.*Do not launch children/s);
   assert.match(investigate, /Behavior Coverage/);
+  assert.match(investigate, /compact proof link/);
+  assert.match(investigate, /Mechanism:.*Counterexample\/behavioral\s+test:.*Residual risk:/s);
   assert.match(investigate, /Trigger.*Expected.*Observed/s);
   assert.match(investigate, /inspection-only exception/);
   assert.match(investigate, /entered, continued, failed, or observed/);
@@ -109,6 +111,10 @@ test("build is one inline procedure with SHA-keyed verification", async () => {
   assert.match(build, /Do not launch builders, quality-gate\s+agents, context agents, architects/s);
   assert.match(build, /investigation receipt\s+is the mutation contract/s);
   assert.match(build, /Verify once per SHA/);
+  assert.match(build, /one compact proof-link row/);
+  assert.match(build, /implementation mechanism.*counterexample\/behavioral\s+test.*residual risk/s);
+  assert.match(build, /PASS requires both concrete proof ends/);
+  assert.match(build, /CONTRADICTED.*never `PASS`/s);
   assert.match(build, /fail-before\/pass-after/);
   assert.match(build, /test environment once and reuse/);
   assert.match(build, /git write-tree/);

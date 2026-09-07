@@ -169,12 +169,12 @@ code, formatting, tests, or safe environment problems inline instead of creating
 loop. A newly discovered required mutation path must be added to the investigation
 receipt before editing.
 
-The Builder Contract is a finite proof map: each criterion names its invariant, reachable
-failure modes, producer/consumer, state, source boundary, test/evidence, and
-(`PASS`, `FAIL`, `MISSING`, `SKIPPED`, `CONTRADICTED`, or `UNKNOWN`). New protocols/external
-calls require namespace/type, interleaving, failure, retry, and recovery closure. Skipped
-required-risk capability is insufficient proof; multiple blockers trigger bounded
-re-plan/decomposition, never a silent cap increase.
+The Builder Contract is a finite proof map: each criterion names its invariant, reachable failure modes,
+producer/consumer, state, source boundary, test/evidence, and
+(`PASS`, `FAIL`, `MISSING`, `SKIPPED`, `CONTRADICTED`, or `UNKNOWN`). Every criterion also
+carries one compact proof link: mechanism + counterexample/behavioral test + residual risk.
+Contradictory residual risk is `CONTRADICTED`, never `PASS`; retain the acceptance gap. New
+protocols/external calls require namespace/type, interleaving, failure, retry, and recovery closure. Skipped required-risk capability is insufficient proof; multiple blockers trigger bounded re-plan/decomposition, never a silent cap increase.
 
 ### 4. Prepare PR and review
 
