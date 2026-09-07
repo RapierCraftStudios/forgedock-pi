@@ -36,22 +36,30 @@ head, and base arguments. That skill owns:
 - exact-head evidence and comment readback;
 - finding classification and official verdict.
 
-Each reviewer task carries acceptance invariants, test evidence/scope, bounded diff/context,
-linked classification/context/contract/plan and decision revisions, and unique role ownership.
-Fresh reviewers validate the history's current applicability rather than review historically blind. A blocker must be confirmed patch-caused and
-reachable in the supplied patch. A valid same-head reviewer role is retained. Retry only a missing, failed, or malformed
-role; never restart a valid role or complete panel for publication uncertainty that an
-exact-ID readback can resolve.
+Each reviewer task carries the existing contract's acceptance invariants, test evidence/scope,
+relevant GitHub history, bounded diff/context, linked classification/context/plan and decision
+revisions, and unique role ownership. Fresh reviewers validate the history's current
+applicability rather than review historically blind. A blocker must be confirmed and
+reachable in the supplied patch or identify a concrete contract gap in the investigation.
+Classify each material discovery as `PATCH_DEFECT` when the contract already required the
+behavior, or `CONTRACT_GAP` when current code/history reveals a missing or contradictory
+requirement. A valid same-head reviewer role is retained. Retry only a missing, failed, or
+malformed role; never restart a valid role or complete panel for publication uncertainty that
+an exact-ID readback can resolve.
 
 ## Result routing
 
 - `APPROVE`, no blockers: continue to merge checks.
-- Confirmed patch-caused HIGH/CRITICAL blocker: consolidate findings and perform scope
-  reassessment when the admitted scope was incomplete/non-convergent. A DECOMPOSE proposal
-  uses the preserved-work handoff, not more code fixes. Otherwise check remaining remediation
-  budget, then one cohesive fallback pass. At the cap, use the root's GATED
-  exit; never launch another panel by calling it final, last, or closure.
-- Explicit unresolved prerequisite: return `GATED` with exact wake condition.
+- `PATCH_DEFECT`: consolidate confirmed in-contract blockers and perform one cohesive
+  remediation pass when authorized, within the remaining remediation budget; scope
+  reassessment may propose DECOMPOSE when the
+  admitted scope is incomplete/non-convergent; use the preserved-work handoff, not a hidden
+  expansion. Remediation remains exceptional, and exhausting its limit records an explicit
+  failed review outcome rather than a quality-based GATED state.
+- `CONTRACT_GAP`: preserve the exact finding and return the same owner to investigation.
+  Publish a superseding investigation/contract before any new edit; do not treat the builder
+  as having violated a requirement that was never recorded and do not use GATED.
+- Explicit external prerequisite: return `GATED` with the exact wake condition.
 - Incomplete panel/provider failure: preserve valid roles, record `review-degraded`, and
   resume only missing roles.
 - Independent pre-existing/advisory finding: include as residual risk or one valuable

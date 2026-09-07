@@ -22,6 +22,7 @@ export type ReviewDecision = (typeof REVIEW_DECISIONS)[number];
 
 export type FindingConfidence = "confirmed" | "likely" | "possible";
 export type FindingSeverity = "critical" | "high" | "medium" | "low";
+export type FindingClassification = "patch-defect" | "contract-gap";
 export type FindingCategory =
   | "security"
   | "data-loss"
@@ -48,6 +49,7 @@ export interface ReviewFinding {
   headSha: string;
   confidence: FindingConfidence;
   severity: FindingSeverity;
+  classification?: FindingClassification;
   category: FindingCategory;
   file: string;
   line: number;

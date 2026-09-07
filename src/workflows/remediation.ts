@@ -19,7 +19,8 @@ export interface AuthoritativeReviewFinding {
 }
 
 export type FindingDisposition =
-  | "actionable-blocking"
+  | "patch-defect"
+  | "contract-gap"
   | "validated-nonblocking"
   | "authority-ambiguous"
   | "unvalidated";
@@ -31,7 +32,10 @@ export interface DispositionedFinding {
 }
 
 export interface RemediationClassification {
+  /** Confirmed in-contract blockers eligible for exceptional remediation. */
   fixable: AuthoritativeReviewFinding[];
+  /** Confirmed blockers that expose an upstream investigation/contract gap. */
+  contractGaps: AuthoritativeReviewFinding[];
   escalated: AuthoritativeReviewFinding[];
   followUp: AuthoritativeReviewFinding[];
   unvalidated: AuthoritativeReviewFinding[];
@@ -43,6 +47,7 @@ export function classifyRemediationFindings(
   builderContract?: BuilderPathContract,
 ): RemediationClassification {
   const fixable: AuthoritativeReviewFinding[] = [];
+  const contractGaps: AuthoritativeReviewFinding[] = [];
   const escalated: AuthoritativeReviewFinding[] = [];
   const followUp: AuthoritativeReviewFinding[] = [];
   const unvalidated: AuthoritativeReviewFinding[] = [];
@@ -52,10 +57,10 @@ export function classifyRemediationFindings(
     const inContract =
       builderContract === undefined || builderPathAllowed(builderContract, value.file);
     const hasEvidence = value.evidence.some((entry) => entry.trim().length > 0);
-    // A builder-path mismatch is a planning/decomposition problem, not a
-    // human-authority request. Only explicit high-level authority language
-    // can enter the escalated bucket.
     const authorityReason = reviewFindingAuthorityReason(value);
+    const declaredClassification = value.classification;
+    const isContractGap =
+      declaredClassification === "contract-gap" || !inContract;
     let disposition: FindingDisposition;
     let reason: string;
     if (value.confidence === "possible" || !hasEvidence || value.line < 1) {
@@ -67,13 +72,13 @@ export function classifyRemediationFindings(
         disposition = "authority-ambiguous";
         reason = `Blocking fix requires ${authorityReason}; autonomous execution must stop.`;
         escalated.push(finding);
-      } else if (!inContract) {
-        disposition = "validated-nonblocking";
-        reason = "Finding is outside the accepted builder contract; replan or decompose it instead of escalating authority.";
-        followUp.push(finding);
+      } else if (isContractGap) {
+        disposition = "contract-gap";
+        reason = "Finding exposes a required behavior missing or contradictory in the investigation contract; return to investigation before editing.";
+        contractGaps.push(finding);
       } else {
-        disposition = "actionable-blocking";
-        reason = "Blocking finding is validated, deterministic, and in contract.";
+        disposition = "patch-defect";
+        reason = "Blocking finding is validated, deterministic, and explicitly covered by the contract.";
         fixable.push(finding);
       }
     } else {
@@ -83,7 +88,7 @@ export function classifyRemediationFindings(
     }
     dispositions.push({ finding, disposition, reason });
   }
-  return { fixable, escalated, followUp, unvalidated, dispositions };
+  return { fixable, contractGaps, escalated, followUp, unvalidated, dispositions };
 }
 
 export function isRemediationCandidate(
@@ -151,6 +156,13 @@ export function parseAuthoritativeReviewFindingIssue(input: {
     "Severity",
     /(CRITICAL|HIGH|MEDIUM|LOW)/i,
   )?.toLowerCase();
+  const classification = field(
+    input.body,
+    "Classification",
+    /(PATCH[- ]DEFECT|CONTRACT[- ]GAP)/i,
+  )
+    ?.toLowerCase()
+    .replaceAll(" ", "-");
   const category = field(input.body, "Category", /([^\s]+)/)?.toLowerCase();
   const file = field(input.body, "File", /`([^`]+)`/);
   const line = field(input.body, "Line", /(\d+)/);
@@ -182,6 +194,12 @@ export function parseAuthoritativeReviewFindingIssue(input: {
       headSha: marker[3] as string,
       confidence: confidence as ForgeReviewFindingResult["confidence"],
       severity: severity as ForgeReviewFindingResult["severity"],
+      ...(classification
+        ? {
+            classification:
+              classification as ForgeReviewFindingResult["classification"],
+          }
+        : {}),
       category: category as ForgeReviewFindingResult["category"],
       file,
       line: Number(line),

@@ -45,13 +45,12 @@ GitHub issue/PR state and compact ForgeDock receipts are resumable state.
 Orchestrate launches the packaged `forgedock-work-on-coordinator`; despite the historical
 profile name, it is the sole per-issue work-on agent and writer.
 
-A work-on agent executes investigation, planning, build, quality gates, verification, PR
-preparation, remediation, merge, close, and cleanup inline. Before the first source edit, a
-non-trivial lane may run exactly one short fresh read-only pre-build challenge in one
-synchronous workflow containing one ordinary `delegate`; it must use `context: "fresh"`,
-`worktree: false`, `acceptance: false`, `timeoutMs: 300000`, and no inherited investigator
-session. Before review/re-review it must not call `subagent` for any other purpose. Any legacy phase `Task(...)`, `Agent(...)`, cache-TTL fork, alternate
-runtime, or builder handoff is ignored.
+A work-on agent executes investigation, planning, build, verification, PR preparation,
+remediation, merge, close, and cleanup inline. Before review/re-review it must not call
+`subagent`; the complete risk-selected review panel is the only nested work-on fanout. The
+investigation compiles the existing `FORGE:CONTRACT` into the builder-ready brief from
+current code and relevant GitHub history. Any legacy phase `Task(...)`, `Agent(...)`,
+cache-TTL fork, alternate runtime, or builder handoff is ignored.
 
 Resolve one full child model from `forge.yaml` `agents.subagent_model`, then
 `agents.default_model`. Reject empty or legacy shorthand model names before dispatch. The
