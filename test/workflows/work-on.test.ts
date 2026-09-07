@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   ExternalIssueDependencyError,
   discoverIssueDependencies,
+  isRecoverableLaneFailure,
 } from "../../src/workflows/orchestrate.ts";
 import type { ForgeReviewerResult } from "../../src/agents/contracts.ts";
 import {
@@ -17,6 +18,8 @@ import {
   findingPriority,
   isRecoverableWorkOnBlocker,
   isTransientProviderFailure,
+  isWorktreeBindingFailure,
+  launchRecoveryMode,
   parentNodeFromId,
   parseAsyncCompletion,
   reconcileLaunchState,
@@ -540,6 +543,20 @@ test("provider retry classification includes WebSocket failures but excludes quo
     true,
   );
   assert.equal(isTransientProviderFailure("insufficient_quota billing"), false);
+});
+
+test("wrong worktree failures rebind instead of becoming human gates", () => {
+  const failure =
+    "Forge worktree binding failure: runtime cwd /tmp/pi-worktree does not match bound worktree /repo/.forge/worktrees/run-1.";
+  assert.equal(isWorktreeBindingFailure(failure), true);
+  assert.equal(isRecoverableLaneFailure(failure), true);
+  assert.equal(launchRecoveryMode(failure), "fresh-worktree");
+  assert.equal(isTransientProviderFailure(failure), true);
+  assert.equal(isRecoverableWorkOnBlocker(failure), true);
+  assert.equal(launchRecoveryMode("WebSocket error"), "resume");
+  assert.equal(launchRecoveryMode("Product decision requires operator approval."), "none");
+  assert.equal(isRecoverableLaneFailure("Product decision requires operator approval."), false);
+  assert.equal(isWorktreeBindingFailure("Product decision requires operator approval."), false);
 });
 
 test("terminal workflow completion is matched only by top-level run ID", () => {

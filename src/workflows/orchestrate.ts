@@ -38,6 +38,7 @@ import { isProtectedBranch, type ForgePolicy } from "../core/policy.ts";
 import { OrchestrationJournal } from "./orchestration-journal.ts";
 import {
   isTransientProviderFailure,
+  isWorktreeBindingFailure,
   type ForgeWorkOnController,
   type WorkOnLifecycleEvent,
 } from "./work-on.ts";
@@ -582,9 +583,7 @@ export class ForgeOrchestrationController {
       if (
         !["failed", "blocked", "needs-human"].includes(lane.status) ||
         !lane.reason ||
-        !/schema-valid Forge result artifact|State branch changed after|unsupported-continuation|WebSocket|timed? out|timeout|connection (?:lost|reset|error)|\b50[0234]\b|\b429\b|No comment found for marker.*FORGE:BUILDER|checkpoint failed validation|omitted the required canonical|required canonical .* section|Invalid username or token|Bound branch push failed|^forge-work-on:\s*$/i.test(
-          lane.reason,
-        )
+        !isRecoverableLaneFailure(lane.reason)
       )
         continue;
       const active = await this.#workOn.reactivateOrchestrationIssue(
@@ -1312,6 +1311,15 @@ function requiredNumber(value: number | undefined, field: string): number {
   if (!Number.isSafeInteger(value) || (value ?? 0) < 1)
     throw new Error(`Work-on lifecycle event is missing ${field}.`);
   return value as number;
+}
+
+export function isRecoverableLaneFailure(reason: string): boolean {
+  return (
+    isWorktreeBindingFailure(reason) ||
+    /schema-valid Forge result artifact|State branch changed after|unsupported-continuation|WebSocket|timed? out|timeout|connection (?:lost|reset|error)|\b50[0234]\b|\b429\b|No comment found for marker.*FORGE:BUILDER|checkpoint failed validation|omitted the required canonical|required canonical .* section|Invalid username or token|Bound branch push failed|^forge-work-on:\s*$/i.test(
+      reason,
+    )
+  );
 }
 
 function isRetryableSetupError(error: unknown): boolean {

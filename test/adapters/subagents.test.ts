@@ -126,6 +126,8 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
   assert.equal(spawn.method, "spawn");
   assert.equal(spawn.params.agent, FORGE_WORK_ON_AGENT);
   assert.equal(spawn.params.async, true);
+  assert.equal(spawn.params.cwd, "/tmp/worktree");
+  assert.equal(spawn.params.worktree, false);
   assert.equal(spawn.params.workflowScript, undefined);
   const serialized = JSON.stringify(spawn.params);
   assert.match(
@@ -135,6 +137,7 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
   assert.match(spawn.params.task, /up to three times/);
   assert.match(spawn.params.task, /extensionBindings/);
   assert.match(spawn.params.task, /reviewHeadSha = REVIEW_HEAD_SHA/);
+  assert.match(spawn.params.task, /worktree: false/);
   assert.match(spawn.params.task, /Call forge_diff in patch mode first/);
   assert.match(spawn.params.task, /call forge_finalize_reviewer/);
   assert.match(spawn.params.task, /one compact proof link for every accepted criterion/);
@@ -177,6 +180,8 @@ test("RPC standalone reviewer binding has review authority without a fake issue 
   const spawn = bus.requests.at(-1) as {
     params: {
       task: string;
+      cwd: string;
+      worktree: boolean;
       extensionBindings: Record<string, Record<string, unknown>>;
     };
   };
@@ -187,6 +192,8 @@ test("RPC standalone reviewer binding has review authority without a fake issue 
   assert.equal(binding?.leaseEpoch, undefined);
   assert.equal(binding?.leaseOwnerRunId, undefined);
   assert.equal(binding?.stateBranch, undefined);
+  assert.equal(spawn.params.cwd, "/tmp/review-worktree");
+  assert.equal(spawn.params.worktree, false);
   assert.match(spawn.params.task, /pull request #17/);
   assert.match(spawn.params.task, /never edit files/i);
 });
@@ -212,6 +219,8 @@ test("RPC dedicated reviewer launch uses the registered reviewer and reviewer sc
     params: {
       agent: string;
       task: string;
+      cwd: string;
+      worktree: boolean;
       extensionBindings: Record<
         string,
         { nodeId: string; reviewHeadSha: string; reviewerTimeoutMs: number }
@@ -220,6 +229,8 @@ test("RPC dedicated reviewer launch uses the registered reviewer and reviewer sc
     };
   };
   assert.equal(spawn.params.agent, "forge-review-security");
+  assert.equal(spawn.params.cwd, "/tmp/worktree");
+  assert.equal(spawn.params.worktree, false);
   assert.equal(
     spawn.params.outputSchema.properties.schema.const,
     "forgedock.reviewer-result/v1",
@@ -274,6 +285,8 @@ test("RPC domain reviewer must finalize its bound result", async () => {
     params: {
       agent: string;
       task: string;
+      cwd: string;
+      worktree: boolean;
       extensionBindings: Record<
         string,
         { nodeId: string; reviewHeadSha: string; reviewerTimeoutMs: number }
@@ -281,6 +294,8 @@ test("RPC domain reviewer must finalize its bound result", async () => {
     };
   };
   assert.equal(spawn.params.agent, "forge-review-domain");
+  assert.equal(spawn.params.cwd, "/tmp/worktree");
+  assert.equal(spawn.params.worktree, false);
   assert.match(spawn.params.task, /forge_finalize_reviewer/);
   assert.match(spawn.params.task, /structured_output with the identical value/);
   assert.equal(
@@ -309,6 +324,8 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
     params: {
       agent: string;
       task: string;
+      cwd: string;
+      worktree: boolean;
       extensionBindings: Record<
         string,
         { verificationCommands: Record<string, { cwd: string }> }
@@ -317,6 +334,8 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
     };
   };
   assert.equal(spawn.params.agent, FORGE_READ_ONLY_NODE_AGENT);
+  assert.equal(spawn.params.cwd, "/tmp/worktree");
+  assert.equal(spawn.params.worktree, false);
   assert.equal(
     spawn.params.outputSchema.properties.schema.const,
     "forgedock.node-result/v1",
@@ -375,12 +394,16 @@ test("bounded implementation launch binds the durable builder contract", async (
   const spawn = bus.requests.at(-1) as {
     params: {
       task: string;
+      cwd: string;
+      worktree: boolean;
       extensionBindings: Record<
         string,
         { builderContract?: { contractHash: string } }
       >;
     };
   };
+  assert.equal(spawn.params.cwd, "/tmp/worktree");
+  assert.equal(spawn.params.worktree, false);
   assert.equal(
     spawn.params.extensionBindings["forgedock.pi/1"]?.builderContract
       ?.contractHash,

@@ -70,9 +70,15 @@ test("one work-on agent owns every pre-review phase inline", async () => {
     assert.match(content, /review|re-review/);
   }
   assert.match(root, /subagent.*forbidden before review/is);
+  assert.match(root, /exact prepared path as `cwd` with `worktree: false`/s);
+  assert.match(root, /stale, missing, or wrong Pi workspaces.*never `GATED`/s);
   assert.match(skill, /Do not launch delegates, phase agents, builders, quality-gate agents/);
+  assert.match(skill, /exact isolated staging-based worktree[\s\S]*worktree: false/);
   assert.match(agent, /only nested-subagent use.*review panel/is);
+  assert.match(agent, /exact lane path[\s\S]*worktree: false/);
   assert.match(adapter, /Before review\/re-review it must\s+not call `subagent`/s);
+  assert.match(adapter, /exact prepared path[\s\S]*`cwd` with `worktree: false`/s);
+  assert.match(adapter, /stale, missing, or wrong workspace.*internal launch-binding failure.*never a `GATED`/s);
 });
 
 test("normal work-on preserves named knowledge records without progress ceremony", async () => {

@@ -98,7 +98,7 @@ Under `--under-orchestration`, `$PWD` is the Pi-managed issue worktree. Require:
 Standalone work-on creates at most one isolated owned worktree. Retain its exact path.
 Never remove the current working directory. An orchestrated child returns cleanup-ready;
 Pi removes its managed worktree. Standalone cleanup removes only its retained owned path,
-after all GitHub writes and readbacks.
+after all GitHub writes and readbacks. ForgeDock child launches use the exact prepared path as `cwd` with `worktree: false`; stale, missing, or wrong Pi workspaces are internal rebind/retry failures, never `GATED`/`needs-human`.
 
 ## Resume resolver
 

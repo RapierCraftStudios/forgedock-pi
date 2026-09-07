@@ -311,6 +311,114 @@ export class GitWorktreeManager {
     );
   }
 
+  /** Rebind a retained run to its exact Forge worktree without changing its branch. */
+  async rebind(
+    prepared: PreparedWorktree,
+    signal?: AbortSignal,
+  ): Promise<PreparedWorktree> {
+    const root = await realpath(prepared.repositoryRoot);
+    const worktreeBase = join(root, ".forge", "worktrees");
+    const expectedPath = resolve(root, prepared.worktreePath);
+    if (
+      !isPathWithin(worktreeBase, expectedPath) ||
+      expectedPath === resolve(worktreeBase)
+    )
+      throw new Error(
+        `Forge worktree binding failure: retained path ${prepared.worktreePath} is outside the owned worktree directory.`,
+      );
+    assertSafeBranchRef(prepared.branch, "prepared branch");
+
+    if (!(await exists(expectedPath))) {
+      await mkdir(dirname(expectedPath), { recursive: true });
+      try {
+        await this.#git(
+          root,
+          ["worktree", "remove", "--force", expectedPath],
+          120_000,
+          signal,
+        );
+      } catch (error) {
+        if (!isAlreadyAbsent(error)) throw error;
+      }
+      const branch = await this.#executor.exec(
+        "git",
+        ["show-ref", "--verify", "--quiet", `refs/heads/${prepared.branch}`],
+        {
+          cwd: root,
+          timeout: 30_000,
+          ...(signal ? { signal } : {}),
+        },
+      );
+      if (branch.code === 0) {
+        await this.#git(
+          root,
+          ["worktree", "add", expectedPath, prepared.branch],
+          120_000,
+          signal,
+        );
+      } else if (branch.code === 1) {
+        await this.#git(
+          root,
+          ["fetch", "--no-tags", "origin", prepared.branch],
+          120_000,
+          signal,
+        );
+        await this.#git(
+          root,
+          [
+            "worktree",
+            "add",
+            "-b",
+            prepared.branch,
+            expectedPath,
+            `origin/${prepared.branch}`,
+          ],
+          120_000,
+          signal,
+        );
+      } else {
+        throw new GitOperationError(
+          `resolve retained branch ${prepared.branch}`,
+          branch,
+        );
+      }
+    }
+
+    const canonicalWorktree = await realpath(expectedPath);
+    if (
+      canonicalWorktree !== expectedPath ||
+      !isPathWithin(worktreeBase, canonicalWorktree)
+    )
+      throw new Error(
+        `Forge worktree binding failure: retained path ${prepared.worktreePath} is not the exact owned worktree.`,
+      );
+    const topLevel = await this.#git(
+      canonicalWorktree,
+      ["rev-parse", "--show-toplevel"],
+      30_000,
+      signal,
+    );
+    if ((await realpath(topLevel.stdout.trim())) !== canonicalWorktree)
+      throw new Error(
+        `Forge worktree binding failure: Git top-level does not match ${canonicalWorktree}.`,
+      );
+    const currentBranch = await this.#git(
+      canonicalWorktree,
+      ["branch", "--show-current"],
+      30_000,
+      signal,
+    );
+    if (currentBranch.stdout.trim() !== prepared.branch)
+      throw new Error(
+        `Forge worktree binding failure: expected branch ${prepared.branch}, found ${currentBranch.stdout.trim() || "detached"}.`,
+      );
+    return {
+      ...prepared,
+      repositoryRoot: root,
+      worktreePath: canonicalWorktree,
+    };
+  }
+
   /** Fetch refs used by a frozen reachability decision without changing HEAD. */
   async fetchRefs(
     repositoryRoot: string,

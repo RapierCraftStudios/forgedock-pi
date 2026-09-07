@@ -36,6 +36,8 @@ require a clean linked worktree and a `pi-parallel-*` branch, fetch the configur
 target, fast-forward this branch to exact `origin/<target>`, and verify its ancestry.
 Never reset a checkout. Push `HEAD` to the desired remote issue branch. Ignore all
 alternate-runtime worktree instructions; standalone work-on uses one canonical owned tree.
+The adapter must pass this exact lane path as child `cwd` with `worktree: false`; a stale or
+wrong Pi workspace is rebound/retried internally, never projected as `GATED` or `needs-human`.
 
 At route start retain the canonical policy prepared from `agents.subagent_model`, then
 `agents.default_model`; do not re-resolve model or cap from a missing/local/borrowed file.

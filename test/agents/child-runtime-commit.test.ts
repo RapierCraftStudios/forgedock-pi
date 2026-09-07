@@ -17,9 +17,11 @@ import test from "node:test";
 
 import {
   ForgeOutputLimitError,
+  ForgeWorktreeBindingError,
   FORGE_REVIEWER_CAPABILITY_CEILING,
   allowedNodeTools,
   appendBounded,
+  assertBoundWorktreeCwd,
   assertCommittedTree,
   assertCompleteProcessOutput,
   assertCompleteReviewDiff,
@@ -69,6 +71,26 @@ test("technical phase failures do not project needs-human authority", () => {
   assert.deepEqual(phaseProjectionLabels("fail"), []);
   assert.deepEqual(phaseProjectionLabels("block"), []);
   assert.deepEqual(phaseProjectionLabels("needs-human"), ["needs-human"]);
+});
+
+test("wrong Pi workspaces fail as typed internal binding errors", () => {
+  const bound = "/repo/.forge/worktrees/run-1";
+  assert.doesNotThrow(() => assertBoundWorktreeCwd(bound, bound));
+  assert.doesNotThrow(() =>
+    assertBoundWorktreeCwd(bound.toUpperCase(), bound, true),
+  );
+  assert.throws(
+    () => assertBoundWorktreeCwd(bound, "/tmp/pi-worktree/run-1"),
+    (error: unknown) =>
+      error instanceof ForgeWorktreeBindingError &&
+      error.code === "worktree-binding" &&
+      error.expectedCwd === bound &&
+      error.actualCwd === "/tmp/pi-worktree/run-1",
+  );
+  assert.throws(
+    () => assertBoundWorktreeCwd(bound, `${bound}/nested`),
+    /Forge worktree binding failure.*does not match bound worktree/,
+  );
 });
 
 test("every bounded non-review node can persist its trusted result", () => {

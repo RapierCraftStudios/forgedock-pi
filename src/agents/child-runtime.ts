@@ -157,6 +157,37 @@ export class ForgeOutputLimitError extends Error {
   }
 }
 
+export class ForgeWorktreeBindingError extends Error {
+  readonly code = "worktree-binding";
+  readonly expectedCwd: string;
+  readonly actualCwd: string;
+
+  constructor(expectedCwd: string, actualCwd: string) {
+    super(
+      `Forge worktree binding failure: runtime cwd ${actualCwd} does not match bound worktree ${expectedCwd}.`,
+    );
+    this.name = "ForgeWorktreeBindingError";
+    this.expectedCwd = expectedCwd;
+    this.actualCwd = actualCwd;
+  }
+}
+
+/** Require Pi's effective session cwd to be the exact Forge-owned worktree. */
+export function assertBoundWorktreeCwd(
+  boundCwd: string,
+  runtimeCwd: string,
+  caseInsensitive = false,
+): void {
+  if (
+    !isPathWithin(boundCwd, runtimeCwd, caseInsensitive) ||
+    !isPathWithin(runtimeCwd, boundCwd, caseInsensitive)
+  )
+    throw new ForgeWorktreeBindingError(
+      resolve(boundCwd),
+      resolve(runtimeCwd),
+    );
+}
+
 const CheckpointParameters = Type.Object({
   phase: StringEnum(RUN_PHASES),
   attempt: Type.Integer({ minimum: 1 }),
@@ -311,22 +342,22 @@ export function registerForgeRuntime(
 
   pi.on("session_start", async (_event, ctx) => {
     if (options.mainSession) return;
-    canonicalRoot = await realpath(binding.worktreeRoot);
+    try {
+      canonicalRoot = await realpath(binding.worktreeRoot);
+    } catch {
+      throw new ForgeWorktreeBindingError(binding.worktreeRoot, ctx.cwd);
+    }
     caseInsensitivePaths = await checkoutIgnoresCase(
       canonicalRoot,
       binding.runId,
     );
-    if (
-      !isPathWithin(
-        canonicalRoot,
-        await realpath(ctx.cwd),
-        caseInsensitivePaths,
-      )
-    ) {
-      throw new Error(
-        `Forge child cwd ${ctx.cwd} is outside bound worktree ${canonicalRoot}.`,
-      );
+    let runtimeCwd: string;
+    try {
+      runtimeCwd = await realpath(ctx.cwd);
+    } catch {
+      throw new ForgeWorktreeBindingError(canonicalRoot, ctx.cwd);
     }
+    assertBoundWorktreeCwd(canonicalRoot, runtimeCwd, caseInsensitivePaths);
     ceiling?.dispose();
     ceiling = registerSubagentCapabilityCeiling({
       sessionId: ctx.sessionManager.getSessionId(),

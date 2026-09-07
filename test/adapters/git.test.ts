@@ -142,6 +142,13 @@ test("worktree manager creates an issue branch from integration and cleans it sa
     );
     await manager.assertClean(prepared.worktreePath);
     await manager.push(prepared.worktreePath, prepared.branch);
+    await assert.rejects(
+      manager.rebind({
+        ...prepared,
+        worktreePath: join(root, "outside-worktree"),
+      }),
+      /Forge worktree binding failure/,
+    );
     await manager.deleteRemoteBranch(prepared);
     const remoteBranch = await execFileAsync(
       "git",
@@ -149,7 +156,14 @@ test("worktree manager creates an issue branch from integration and cleans it sa
       { encoding: "utf8" },
     );
     assert.equal(remoteBranch.stdout.trim(), "");
-    await manager.cleanup(prepared);
+    await rm(prepared.worktreePath, { recursive: true, force: true });
+    const rebound = await manager.rebind(prepared);
+    assert.equal(rebound.worktreePath, prepared.worktreePath);
+    assert.equal(
+      await readFile(join(rebound.worktreePath, "app.txt"), "utf8"),
+      "base\n",
+    );
+    await manager.cleanup(rebound);
     // Retry after the first cleanup has already removed both owned resources.
     await manager.cleanup(prepared);
     await assert.rejects(

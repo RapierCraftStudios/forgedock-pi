@@ -190,6 +190,7 @@ export class SubagentsRpcClient {
         agent,
         task,
         cwd: input.worktreeRoot,
+        worktree: false,
         context: "fresh",
         extensionBindings: { [BINDING_NAMESPACE]: binding },
         outputSchema: FORGE_REVIEWER_OUTPUT_SCHEMA,
@@ -273,6 +274,7 @@ export class SubagentsRpcClient {
         agent: reviewer,
         task,
         cwd: input.worktreeRoot,
+        worktree: false,
         context: "fresh",
         extensionBindings: { [BINDING_NAMESPACE]: binding },
         outputSchema: FORGE_REVIEWER_OUTPUT_SCHEMA,
@@ -351,6 +353,7 @@ export class SubagentsRpcClient {
           input.issueContext,
         ].join("\n\n"),
         cwd: input.worktreeRoot,
+        worktree: false,
         context: "fresh",
         extensionBindings: { [BINDING_NAMESPACE]: binding },
         outputSchema: FORGE_REVIEWER_OUTPUT_SCHEMA,
@@ -489,6 +492,7 @@ export class SubagentsRpcClient {
           : FORGE_WORK_ON_AGENT,
       task: boundedTask,
       cwd: input.worktreeRoot,
+      worktree: false,
       context: "fresh",
       extensionBindings: { [BINDING_NAMESPACE]: binding },
       outputSchema: input.node
@@ -574,6 +578,7 @@ export class SubagentsRpcClient {
       agent: FORGE_REFRESH_REVIEW_AGENT,
       task,
       cwd: input.worktreeRoot,
+      worktree: false,
       context: "fresh",
       extensionBindings: { [BINDING_NAMESPACE]: binding },
       outputSchema: FORGE_WORK_ON_OUTPUT_SCHEMA,
@@ -764,7 +769,7 @@ function reviewWorkflowInstruction(
     "forge",
     `${input.runId}-review-security.json`,
   );
-  return `At review, use one synchronous workflowScript per complete panel attempt. If any required reviewer has a transient provider failure, rerun a fresh complete panel at the same frozen head up to three times without advancing the review phase. Replace only REVIEW_HEAD_SHA with the quoted frozen head and REVIEW_ROUND with the numeric round; the reviewer prompts and bindings below are authoritative and must not be rewritten. Return the ordered results array; do not call forge_run_review_panel, launch reviewers separately, use a partial panel as the verdict, or continue before all required results return. Use this exact baseline shape:\n\nsubagent({\n  async: false,\n  workflowScript: \`\n    const binding = ${binding};\n    const reviewHeadSha = REVIEW_HEAD_SHA;\n    const reviewRound = REVIEW_ROUND;\n    const correctnessTask = "Review ForgeDock run ${input.runId} as forge-review-correctness at frozen head " + reviewHeadSha + ". Call forge_diff in patch mode first and consume every chunk until coverage.complete is true. Review only defects introduced by the frozen patch. Return forgedock.reviewer-result/v1 with runId exactly ${input.runId}, reviewer exactly forge-review-correctness, and headSha exactly " + reviewHeadSha + ". Before returning, call forge_finalize_reviewer with the complete result, then call structured_output with the identical value. Do not edit files, launch subagents, access GitHub, or make merge decisions.";\n    const securityTask = "Review ForgeDock run ${input.runId} as forge-review-security at frozen head " + reviewHeadSha + ". Call forge_diff in patch mode first and consume every chunk until coverage.complete is true. Review only security and production-safety defects introduced by the frozen patch. Return forgedock.reviewer-result/v1 with runId exactly ${input.runId}, reviewer exactly forge-review-security, and headSha exactly " + reviewHeadSha + ". Before returning, call forge_finalize_reviewer with the complete result, then call structured_output with the identical value. Do not edit files, launch subagents, access GitHub, or make merge decisions.";\n    const results = await runs.all([\n      { key: "correctness", agent: ${JSON.stringify(FORGE_REVIEW_CORRECTNESS_AGENT)}, task: correctnessTask, context: "fresh", cwd: ${JSON.stringify(input.worktreeRoot)}, timeoutMs: ${timeoutMs}, turnBudget: { maxTurns: 16, graceTurns: 4 }, outputSchema: ${reviewerSchema}, extensionBindings: { "forgedock.pi/1": { ...binding, resultPath: ${JSON.stringify(correctnessPath)}, reviewHeadSha, nodeId: "review-correctness-" + reviewRound, node: "review-correctness", nodeAttempt: reviewRound } } },\n      { key: "security", agent: ${JSON.stringify(FORGE_REVIEW_SECURITY_AGENT)}, task: securityTask, context: "fresh", cwd: ${JSON.stringify(input.worktreeRoot)}, timeoutMs: ${timeoutMs}, turnBudget: { maxTurns: 16, graceTurns: 4 }, outputSchema: ${reviewerSchema}, extensionBindings: { "forgedock.pi/1": { ...binding, resultPath: ${JSON.stringify(securityPath)}, reviewHeadSha, nodeId: "review-security-" + reviewRound, node: "review-security", nodeAttempt: reviewRound } } }\n    ]);\n    return results;\n  \`\n});`;
+  return `At review, use one synchronous workflowScript per complete panel attempt. If any required reviewer has a transient provider failure, rerun a fresh complete panel at the same frozen head up to three times without advancing the review phase. Replace only REVIEW_HEAD_SHA with the quoted frozen head and REVIEW_ROUND with the numeric round; the reviewer prompts and bindings below are authoritative and must not be rewritten. Return the ordered results array; do not call forge_run_review_panel, launch reviewers separately, use a partial panel as the verdict, or continue before all required results return. Use this exact baseline shape:\n\nsubagent({\n  async: false,\n  worktree: false,\n  workflowScript: \`\n    const binding = ${binding};\n    const reviewHeadSha = REVIEW_HEAD_SHA;\n    const reviewRound = REVIEW_ROUND;\n    const correctnessTask = "Review ForgeDock run ${input.runId} as forge-review-correctness at frozen head " + reviewHeadSha + ". Call forge_diff in patch mode first and consume every chunk until coverage.complete is true. Review only defects introduced by the frozen patch. Return forgedock.reviewer-result/v1 with runId exactly ${input.runId}, reviewer exactly forge-review-correctness, and headSha exactly " + reviewHeadSha + ". Before returning, call forge_finalize_reviewer with the complete result, then call structured_output with the identical value. Do not edit files, launch subagents, access GitHub, or make merge decisions.";\n    const securityTask = "Review ForgeDock run ${input.runId} as forge-review-security at frozen head " + reviewHeadSha + ". Call forge_diff in patch mode first and consume every chunk until coverage.complete is true. Review only security and production-safety defects introduced by the frozen patch. Return forgedock.reviewer-result/v1 with runId exactly ${input.runId}, reviewer exactly forge-review-security, and headSha exactly " + reviewHeadSha + ". Before returning, call forge_finalize_reviewer with the complete result, then call structured_output with the identical value. Do not edit files, launch subagents, access GitHub, or make merge decisions.";\n    const results = await runs.all([\n      { key: "correctness", agent: ${JSON.stringify(FORGE_REVIEW_CORRECTNESS_AGENT)}, task: correctnessTask, context: "fresh", cwd: ${JSON.stringify(input.worktreeRoot)}, timeoutMs: ${timeoutMs}, turnBudget: { maxTurns: 16, graceTurns: 4 }, outputSchema: ${reviewerSchema}, extensionBindings: { "forgedock.pi/1": { ...binding, resultPath: ${JSON.stringify(correctnessPath)}, reviewHeadSha, nodeId: "review-correctness-" + reviewRound, node: "review-correctness", nodeAttempt: reviewRound } } },\n      { key: "security", agent: ${JSON.stringify(FORGE_REVIEW_SECURITY_AGENT)}, task: securityTask, context: "fresh", cwd: ${JSON.stringify(input.worktreeRoot)}, timeoutMs: ${timeoutMs}, turnBudget: { maxTurns: 16, graceTurns: 4 }, outputSchema: ${reviewerSchema}, extensionBindings: { "forgedock.pi/1": { ...binding, resultPath: ${JSON.stringify(securityPath)}, reviewHeadSha, nodeId: "review-security-" + reviewRound, node: "review-security", nodeAttempt: reviewRound } } }\n    ]);\n    return results;\n  \`\n});`;
 }
 
 function safeScriptJson(value: unknown): string {

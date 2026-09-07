@@ -815,6 +815,23 @@ export class ForgeWorkOnController {
     link.subagentRunId = intent.sentinelRunId;
     link.status = "running";
     this.#persistLink(link);
+    if (isWorktreeBindingFailure(failure) && link.orchestrationId) {
+      try {
+        await this.reactivateOrchestrationIssue(
+          link.orchestrationId,
+          link.issueNumber,
+        );
+      } catch (error) {
+        link.status = "failed";
+        this.#persistLink(link);
+        this.#emitLifecycle(link, {
+          reason: `Exact-worktree launch retry failed after durable binding failure: ${errorMessage(error)}`,
+        });
+      } finally {
+        this.#providerRecovering.delete(link.forgeRunId);
+      }
+      return;
+    }
     try {
       const receipt = await this.#rpc.resume(
         previousRunId,
@@ -847,7 +864,9 @@ export class ForgeWorkOnController {
     activeNode: ActiveNodeRunLink,
   ): Promise<boolean> {
     const nodeId = activeNode.nodeId;
-    if (!nodeId || !isTransientProviderFailure(failure)) return false;
+    const recoveryMode = launchRecoveryMode(failure);
+    const worktreeBindingFailure = recoveryMode === "fresh-worktree";
+    if (!nodeId || recoveryMode === "none") return false;
     const tokenProvider = createGitHubTokenProvider(
       this.#pi,
       link.prepared.repositoryRoot,
@@ -866,7 +885,9 @@ export class ForgeWorkOnController {
     const previousSubagentRunId = activeNode.subagentRunId;
     if (node.subagentRunId !== previousSubagentRunId) return false;
     const retry = transportRetries + 1;
-    const resultPath = node.resultPath ?? activeNode.resultPath;
+    const resultPath = worktreeBindingFailure
+      ? linkResultPath(link.prepared.worktreePath, link.forgeRunId, nodeId)
+      : node.resultPath ?? activeNode.resultPath;
     const intent = createNodeLaunchIntent(
       `${nodeId}-resume-${retry}`,
       resultPath,
@@ -910,18 +931,74 @@ export class ForgeWorkOnController {
 
     let receipt;
     try {
-      receipt = await this.#rpc.resume(
-        previousSubagentRunId,
-        [
-          `Resume the same retained ForgeDock node ${nodeId} after a transient transport interruption.`,
-          "Continue from the existing child transcript and tool history.",
-          "Do not restart investigation, planning, implementation, verification, or review exploration.",
-          "Do not create a fresh replacement node or repeat completed side effects.",
-          `Interrupted transport: ${failure}`,
-        ].join("\n"),
-      );
+      if (worktreeBindingFailure) {
+        // A stale Pi cwd belongs to the failed launch, so resuming its session
+        // would preserve the wrong workspace. Start a fresh child with the
+        // same durable node identity and the exact Forge worktree instead.
+        await this.#rpc.stop(previousSubagentRunId).catch(() => undefined);
+        link.prepared = await this.#git.rebind(link.prepared, ctx.signal);
+        this.#persistLink(link);
+        const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
+        const launchInput = {
+          runId: link.forgeRunId,
+          issueNumber: link.issueNumber,
+          repository: link.repository,
+          worktreeRoot: link.prepared.worktreePath,
+          branch: link.prepared.branch,
+          baseBranch: link.prepared.baseBranch,
+          baseSha: link.prepared.baseSha,
+          leaseEpoch: link.leaseEpoch,
+          leaseOwnerRunId: link.leaseOwnerRunId,
+          policy,
+          ...(link.builderContract
+            ? { builderContract: link.builderContract }
+            : {}),
+          issueContext:
+            node.node === "implement" && node.attempt > 1
+              ? `${link.issueContext}\n\nThis is immutable remediation attempt ${node.attempt}. Read the durable decision/review artifacts and apply only confirmed or likely in-contract findings. Do not repeat investigation or planning.`
+              : link.issueContext,
+          node: {
+            nodeId,
+            node: node.node as WorkflowNode,
+            attempt: node.attempt,
+            ...(node.headSha ? { headSha: node.headSha } : {}),
+          },
+        };
+        if (
+          node.node === "review-correctness" ||
+          node.node === "review-security"
+        ) {
+          const reviewHeadSha =
+            node.headSha ?? link.reviewHeadSha ?? link.prepared.baseSha;
+          receipt = await this.#rpc.spawnReviewNode({
+            ...launchInput,
+            reviewHeadSha,
+            node: {
+              nodeId,
+              node: node.node,
+              attempt: node.attempt,
+              headSha: reviewHeadSha,
+            },
+          });
+        } else {
+          receipt = await this.#rpc.spawnNode(launchInput);
+        }
+      } else {
+        receipt = await this.#rpc.resume(
+          previousSubagentRunId,
+          [
+            `Resume the same retained ForgeDock node ${nodeId} after a transient transport interruption.`,
+            "Continue from the existing child transcript and tool history.",
+            "Do not restart investigation, planning, implementation, verification, or review exploration.",
+            "Do not create a fresh replacement node or repeat completed side effects.",
+            `Interrupted transport: ${failure}`,
+          ].join("\n"),
+        );
+      }
     } catch (error) {
-      const reason = `Provider continuation is ambiguous after durable resume intent; refusing a duplicate: ${errorMessage(error)}`;
+      const reason = worktreeBindingFailure
+        ? `Exact-worktree launch retry failed after durable binding failure: ${errorMessage(error)}`
+        : `Provider continuation is ambiguous after durable resume intent; refusing a duplicate: ${errorMessage(error)}`;
       await journal.append({
         runId: link.forgeRunId,
         type: "node.failed",
@@ -987,7 +1064,9 @@ export class ForgeWorkOnController {
       ctx,
     );
     ctx.ui.notify(
-      `ForgeDock issue #${link.issueNumber} resumed ${nodeId} in-place after a transient transport failure (${retry}/3).`,
+      worktreeBindingFailure
+        ? `ForgeDock issue #${link.issueNumber} rebound ${nodeId} to its exact worktree after a stale Pi workspace (${retry}/3).`
+        : `ForgeDock issue #${link.issueNumber} resumed ${nodeId} in-place after a transient transport failure (${retry}/3).`,
       "warning",
     );
     return true;
@@ -3088,6 +3167,21 @@ export class ForgeWorkOnController {
       await this.#runParentNode(link, node, policy, store, ctx);
       return;
     }
+    try {
+      const rebound = await this.#git.rebind(link.prepared, ctx.signal);
+      if (
+        rebound.repositoryRoot !== link.prepared.repositoryRoot ||
+        rebound.worktreePath !== link.prepared.worktreePath
+      ) {
+        link.prepared = rebound;
+        this.#persistLink(link);
+      }
+    } catch (error) {
+      throw new Error(
+        `Forge worktree binding failure before ${node.node}: ${errorMessage(error)}`,
+        { cause: error },
+      );
+    }
     const journal = new RunJournal(store);
     const resultPath = linkResultPath(
       link.prepared.worktreePath,
@@ -3425,12 +3519,14 @@ export class ForgeWorkOnController {
           state: "paused",
         };
       }
-      const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
       const sentinelRunId = link.subagentRunId;
       link.providerRetries += 1;
       link.status = "running";
       this.#persistLink(link);
       try {
+        link.prepared = await this.#git.rebind(link.prepared);
+        this.#persistLink(link);
+        const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
         const receipt = await this.#rpc.spawnWorkOn({
           runId: link.forgeRunId,
           issueNumber: link.issueNumber,
@@ -3473,6 +3569,30 @@ export class ForgeWorkOnController {
       isRecoverableWorkOnBlocker(durableResult.blocker)
         ? durableResult.blocker
         : undefined;
+    const worktreeBindingFailure =
+      isWorktreeBindingFailure(completion?.error ?? "") ||
+      isWorktreeBindingFailure(recoverableBlocker ?? "");
+    if (
+      worktreeBindingFailure &&
+      !shouldTrustDurableWorkOnResult(durableResult, completion?.state) &&
+      link.providerRetries < 3
+    ) {
+      if (!isLaunchSentinel(link.subagentRunId)) {
+        const previousRunId = link.subagentRunId;
+        await this.#rpc.stop(previousRunId).catch(() => undefined);
+        const intent = createNodeLaunchIntent(
+          `work-on-rebind-${link.providerRetries + 1}`,
+          link.resultPath,
+        );
+        this.#links.delete(previousRunId);
+        link.subagentRunId = intent.sentinelRunId;
+        link.status = "running";
+        this.#persistLink(link);
+      }
+      // Re-enter the existing sentinel recovery path so one fresh launch is
+      // bound to the recorded Forge worktree without rotating the run.
+      return this.reactivateOrchestrationIssue(orchestrationId, issueNumber);
+    }
     if (shouldTrustDurableWorkOnResult(durableResult, completion?.state)) {
       link.status = "running";
       this.#persistLink(link);
@@ -6349,12 +6469,27 @@ export function shouldTrustDurableWorkOnResult(
 
 export function isRecoverableWorkOnBlocker(message: string): boolean {
   if (humanAuthorityReasonFromText(message)) return false;
+  if (isWorktreeBindingFailure(message)) return true;
   return /State branch changed after|stale (?:state|head|base)|rebase|merge conflict|conflict(?:s|ing)?|rounds? (?:exhausted|limit)|remediation rounds|WebSocket|timed? out|timeout|connection (?:lost|reset|error)|\b50[0234]\b|\b429\b|checkpoint failed validation|omitted the required canonical|required canonical .* section|Bound branch push failed|provider|API (?:error|failure)|CI (?:failed|pending|timeout)/i.test(
     message,
   );
 }
 
+export function isWorktreeBindingFailure(message: string): boolean {
+  return /Forge worktree binding failure|outside bound worktree|stale Pi workspace|wrong worktree|(?:cwd|worktree|workspace).*(?:does not exist|not a directory|no such file|missing)/i.test(
+    message,
+  );
+}
+
+export type LaunchRecoveryMode = "fresh-worktree" | "resume" | "none";
+
+export function launchRecoveryMode(message: string): LaunchRecoveryMode {
+  if (isWorktreeBindingFailure(message)) return "fresh-worktree";
+  return isTransientProviderFailure(message) ? "resume" : "none";
+}
+
 export function isTransientProviderFailure(message: string): boolean {
+  if (isWorktreeBindingFailure(message)) return true;
   if (
     /insufficient_quota|quota exceeded|out of budget|billing|authentication|unauthorized|forbidden/i.test(
       message,
