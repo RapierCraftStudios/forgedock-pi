@@ -4203,7 +4203,6 @@ export class ForgeWorkOnController {
       input.link.builderContract,
     );
     if (
-      classification.contractGaps.length > 0 ||
       !isRemediationCandidate(input.result, classification.fixable) ||
       classification.escalated.length > 0 ||
       input.link.remediationAttempts >= input.maxRounds ||
@@ -4630,21 +4629,15 @@ export class ForgeWorkOnController {
       resultFindings,
       link.builderContract,
     );
-    const contractGapReason = findingDisposition.contractGaps.length
-      ? `Review found a contract gap (${findingDisposition.contractGaps
-          .map((entry) => entry.finding.id)
-          .join(", ")}); return to investigation and publish a superseding FORGE:CONTRACT before editing.`
-      : undefined;
-    const publishedFindingIds = new Set([
-      ...findingDisposition.followUp.map((entry) => entry.finding.id),
-      ...findingDisposition.contractGaps.map((entry) => entry.finding.id),
-    ]);
-    const findingPublicationResult: ForgeWorkOnResult = {
+    const followUpIds = new Set(
+      findingDisposition.followUp.map((entry) => entry.finding.id),
+    );
+    const followUpResult: ForgeWorkOnResult = {
       ...result,
       review: {
         ...result.review,
         findings: result.review.findings.filter((finding) =>
-          publishedFindingIds.has(finding.id),
+          followUpIds.has(finding.id),
         ),
       },
     };
@@ -4653,7 +4646,7 @@ export class ForgeWorkOnController {
           github,
           pullNumber: existingPull.number,
           link,
-          result: findingPublicationResult,
+          result: followUpResult,
           signal: ctx.signal,
         })
       : {};
@@ -4701,16 +4694,15 @@ export class ForgeWorkOnController {
       const authorityEscalation =
         result.status === "needs-human" &&
         humanAuthorityReasonFromText(result.blocker ?? "") !== undefined;
-      const reason = contractGapReason ?? result.blocker ?? result.status;
       link.status = authorityEscalation ? "needs-human" : "blocked";
       this.#persistLink(link);
       this.#emitLifecycle(link, {
-        reason,
+        reason: result.blocker ?? result.status,
         headSha: result.headSha,
         baseSha: result.baseSha,
       });
       ctx.ui.notify(
-        `ForgeDock issue #${link.issueNumber} stopped: ${reason}`,
+        `ForgeDock issue #${link.issueNumber} stopped: ${result.blocker ?? result.status}`,
         "warning",
       );
       return;

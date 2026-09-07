@@ -7,8 +7,8 @@ description: Implement and verify one confirmed issue inline in its owned worktr
 # Work On: Build
 
 The sole work-on agent executes this phase inline. Do not launch builders, quality-gate
-agents, context agents, architects, or other helpers. The completed investigation and its
-existing `FORGE:CONTRACT` Build Brief are the mutation contract.
+agents, context agents, architects, or other helpers. The completed investigation receipt
+is the mutation contract.
 
 ## Preconditions
 
@@ -21,36 +21,39 @@ existing `FORGE:CONTRACT` Build Brief are the mutation contract.
 At phase entry, use one label edit to replace `workflow:ready-to-build` and other stale
 active-phase labels with `workflow:building`.
 
-### Builder Contract (Build Brief)
-The existing `FORGE:CONTRACT` is the single concise, definitive brief compiled by
-investigation. It must stand alone for implementation and name the relevant live path and
-callers/consumers, invariants and applicable transitions, historical constraints, ordered
-implementation route, acceptance checks, explicit limits, and unverified behavior. Do not
-replace it with a second checklist or validator, and do not ask the builder to
-complete missing requirements.
+### Proof map admission
 
-## Publish the investigation's brief
+Before editing, compile the contract into rows of criterion → invariant → reachable failure
+mode → producer/consumer boundary → source/test/evidence. Include namespace/type and
+serialization obligations, interleavings, failure injection, retry, recovery, and fresh versus
+existing state for each new key, protocol, state machine, or external call. Mark each row
+`PASS`, `FAIL`, `MISSING`, `SKIPPED`, `CONTRADICTED`, or `UNKNOWN`; required-risk integration
+capability that is unavailable or skipped is insufficient evidence and must gate the row.
+This enriches imperfect intake without becoming a separate qualitative refusal gate.
 
-Before repository edits, publish the named supporting records from
-`../../../knowledge-records.md` and the existing `FORGE:CONTRACT` produced from the completed
-investigation. The plan checkpoint is a durable publication of that brief, not a second
-requirements pass. Use retained investigation/history, actual source head and returned
-comment links; the contract must be fetchable from GitHub, not held only in context:
+## Plan once and publish the pre-build graph
 
-1. the production entrypoint, relevant live path, and affected callers/consumers;
-2. files and symbols that must change, with adjacent paths explicitly safe or out of scope;
-3. invariants, interface/schema/security obligations, and only the state/retry/recovery
-   transitions relevant to persisted state/schema changes when the live path requires them;
-4. focused observable acceptance checks, including fail-before/pass-after evidence for bug
-   fixes or the investigation's justified inspection-only exception;
-5. the applicable test environment and configured verification;
-6. the historical constraints and prior failed approaches that affect implementation; and
-7. explicit non-goals, limits, and unresolved external prerequisites.
+Before repository edits, form the following concise plan and publish the named
+classification/context/contract/architect records from `../../../knowledge-records.md`.
+Use retained investigation/history, actual source head and returned comment links; the
+plan must be fetchable from GitHub, not only held in this agent's context:
 
-Consume validated historical constraints; do not rediscover them or copy every earlier record
-into each new one. If a material requirement is missing or contradictory, return to
-investigation and publish a superseding contract before editing. Routine code/test iterations
-need no new planning record.
+1. production entrypoint and active path to the failure;
+2. files and symbols that must change;
+3. interface/schema/security consistency obligations;
+4. focused regression proving the requested behavior, with fail-before/pass-after evidence for bug fixes (or the investigation's justified inspection-only exception);
+5. one test environment setup for the whole phase and applicable configured verification;
+6. explicit non-goals;
+7. for persisted state/schema changes: absent versus empty state, legacy migration/seed,
+   backward compatibility, idempotency, and out-of-order inputs; and
+8. for trust/cache/browser/concurrency changes: request and origin scope, cross-request
+   contamination, cache keys, identity/TLS/engine compatibility, fallback behavior, and
+   reuse of existing sessions/resources.
+
+Consume validated historical constraints; do not rediscover them or copy every earlier
+record into each new one. The contract/plan links its inputs and records unique rationale.
+If the implementation changes a material decision, publish a superseding plan/contract
+before applying that change; routine code/test iterations need no new planning record.
 
 ## Implement
 

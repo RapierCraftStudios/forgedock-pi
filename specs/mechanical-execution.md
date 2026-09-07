@@ -35,6 +35,7 @@ Write approved data—not JavaScript—to a plan file:
 ```json
 {
   "activeOwners": 2,
+  "launchAllowance": 24,
   "requestStartedAt": "<actual original request timestamp>",
   "issues": [
     {"number": 42, "target": "staging", "baseCwd": "/actual/clean/target/base", "predecessors": []},
@@ -50,9 +51,8 @@ and does not excuse missing required verification.
 
 Run `node <package>/specs/helpers/dispatch.mjs batch <plan.json> <new-empty-output-dir>`.
 Read its `request.json` and invoke `subagent` with those exact fields, including the generated
-`workflowScriptPath` and active-owner limit. The helper deliberately leaves cumulative
-review/spawn capacity to the native extension; do not add an ad hoc per-run allowance or
-rewrite the workflow body. Preparation rejects malformed data before publishing a runnable request;
+`workflowScriptPath`, active limit and cumulative allowance. Do not copy or rewrite the
+workflow body. Preparation rejects malformed data before publishing a runnable request;
 fix the named plan/config field, not the native runner. Keep inputs while lanes may resume.
 
 For standalone work-on, before leaving the canonical root use `single` with a plan containing
@@ -86,8 +86,8 @@ step and original or documented `-recovery` workflow key may resolve. Use the re
 repository/issue/key in the response and operator prompt; never infer it from child index,
 last-mentioned issue or a commit string. Unknown/ambiguous IDs stop action. Native nested
 reviewer requests must first be resolved to their owner through native status. Confirm PR/
-head separately before authorizing any continuation; do not add an ad hoc per-run review
-or spawn cap merely because the child asks.
+head separately before authorizing any continuation, and do not resize a run allowance
+merely because the child asks.
 
 ## Publish knowledge safely
 

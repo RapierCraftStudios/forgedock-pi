@@ -110,9 +110,8 @@ Derive exactly one next action from live state:
 | merged PR but issue open | close |
 | decomposition reassessment with an open PR | preserve the PR/work; require approved handoff/disposition before splitting, otherwise GATED |
 | authorized remediation round unfinished | resume its cohesive fix/scoped re-review; do not charge another round |
-| open PR with current `PATCH_DEFECT` blockers and remediation rounds available | remediate |
-| open PR with a confirmed `CONTRACT_GAP` disposition | return the same owner to investigation; preserve the PR and contract history |
-| `PATCH_DEFECT` blockers remain after the last authorized re-review | retain the explicit failed review disposition; do not use GATED for quality |
+| open PR with current blockers and remediation rounds available | remediate |
+| blockers remain after last authorized re-review | read-only reassessment once, then GATED with unresolved evidence; no automatic extra round |
 | issue has durable GATED prerequisite/recovery | verify its exact wake condition; resume only when satisfied |
 | open PR awaiting current-head review | review |
 | committed build with no PR | prepare PR |
@@ -158,12 +157,9 @@ present, mark `workflow:decomposed`, and stop; a split is not code delivery.
 
 ### 3. Build and verify
 
-Load `work-on/build.md` once. Treat the completed investigation and its existing
-`FORGE:CONTRACT` Build Brief as the mutation contract. Publish the named supporting records
-under `../../knowledge-records.md` before repository edits. The brief must already be
-builder-ready: it names the relevant live path and callers, invariants, historical
-constraints, implementation route, acceptance checks, explicit limits, and any justified
-unverified behavior. Establish feasible regressions before production changes and
+Load `work-on/build.md` once. Treat the completed investigation receipt as mutation
+scope and publish the named pre-build records under `../../knowledge-records.md` before
+repository edits. Establish feasible executable regressions before production changes and
 reconcile every acceptance criterion and decision revision to evidence before review.
 
 Inspect the relevant production path, implement one cohesive change, add focused
@@ -172,6 +168,13 @@ the final diff, commit, push, and publish one immutable completed build receipt.
 code, formatting, tests, or safe environment problems inline instead of creating a gate
 loop. A newly discovered required mutation path must be added to the investigation
 receipt before editing.
+
+The Builder Contract is a finite proof map: each criterion names its invariant, reachable
+failure modes, producer/consumer, state, source boundary, test/evidence, and
+(`PASS`, `FAIL`, `MISSING`, `SKIPPED`, `CONTRADICTED`, or `UNKNOWN`). New protocols/external
+calls require namespace/type, interleaving, failure, retry, and recovery closure. Skipped
+required-risk capability is insufficient proof; multiple blockers trigger bounded
+re-plan/decomposition, never a silent cap increase.
 
 ### 4. Prepare PR and review
 
@@ -218,16 +221,13 @@ cleanup according to ownership.
 
 ## Failure behavior
 
-Prefer repair and continuation over terminal stops within the remaining remediation budget:
+Prefer repair and continuation over terminal gates within the remaining remediation budget:
 
 - Code, test, format, lint, type, and safe merge conflicts: fix inline and continue.
 - Provider or transport interruption: resume the same lane and reuse valid exact-head
   reviewer roles.
-- A confirmed `PATCH_DEFECT`: apply one cohesive in-contract fix and re-review.
-- A `CONTRACT_GAP`: return to investigation, publish a superseding contract before any
-  new edit, and never label the quality discovery GATED.
-- Explicit unresolved external prerequisite: `GATED` with the exact wake condition; resume
-  when it lands.
+- Explicit unresolved prerequisite: `GATED` with the exact wake condition; resume when it
+  lands.
 - Mechanical unrecoverable environment or authority mismatch: durable `GATED` evidence
   with the smallest actionable next step.
 - `needs-human`: only a genuine product, policy, legal, destructive, credential, or

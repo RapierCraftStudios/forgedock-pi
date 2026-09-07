@@ -2353,7 +2353,6 @@ function validatePhaseReport(phase: RunPhase, report: string): void {
       "<!-- FORGE:INVESTIGATOR -->",
       "## Investigation Report",
       "### Root Cause",
-      "### Closure Route",
       "### Evidence",
       "### Acceptance Spec",
       "<!-- INVESTIGATION:COMPLETE -->",
