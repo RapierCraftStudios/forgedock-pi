@@ -688,6 +688,7 @@ export class ForgeWorkOnController {
                     link.orchestrationId,
                     link.issueNumber,
                     ctx.sessionManager.getSessionId(),
+                    ctx,
                   );
                 if (recovered) continue;
               }
@@ -794,6 +795,7 @@ export class ForgeWorkOnController {
                 link.orchestrationId,
                 link.issueNumber,
                 ctx.sessionManager.getSessionId(),
+                ctx,
               )
             : undefined;
           if (recovered?.state === "running") continue;
@@ -1073,6 +1075,7 @@ export class ForgeWorkOnController {
           link.orchestrationId,
           link.issueNumber,
           ctx.sessionManager.getSessionId(),
+          ctx,
         );
       } catch (error) {
         link.status = "failed";
@@ -3941,6 +3944,7 @@ export class ForgeWorkOnController {
     orchestrationId: string,
     issueNumber: number,
     sessionId = "unknown",
+    ctx?: ExtensionContext,
   ): Promise<
     | {
         forgeRunId: string;
@@ -3956,6 +3960,16 @@ export class ForgeWorkOnController {
     );
     if (!link) return undefined;
     if (link.launchFailure === "ambiguous") return undefined;
+    if (link.launchFailure === "binding" && link.refreshLaunch) {
+      if (!ctx) return undefined;
+      await this.#retryRefreshBindingFailure(link, ctx);
+      if (link.status !== "refreshing") return undefined;
+      return {
+        forgeRunId: link.forgeRunId,
+        subagentRunId: link.subagentRunId,
+        state: "running",
+      };
+    }
     if (isLaunchSentinel(link.subagentRunId)) {
       if (link.providerRetries >= 3) {
         link.status = "failed";
@@ -4197,6 +4211,7 @@ export class ForgeWorkOnController {
         orchestrationId,
         issueNumber,
         sessionId,
+        ctx,
       );
     }
     if (shouldTrustDurableWorkOnResult(durableResult, completion?.state)) {
@@ -7124,8 +7139,8 @@ function normalizeActiveRunLink(value: unknown): ActiveRunLink | undefined {
     reviewBaseSha: link.reviewBaseSha ?? link.prepared.baseSha,
     refreshes: link.refreshes ?? 0,
     providerRetries: link.providerRetries ?? 0,
-    ...(link.launchFailure === "ambiguous"
-      ? { launchFailure: "ambiguous" as const }
+    ...(link.launchFailure === "ambiguous" || link.launchFailure === "binding"
+      ? { launchFailure: link.launchFailure }
       : {}),
     remediationAttempts: link.remediationAttempts ?? 0,
     findingIssueMap: link.findingIssueMap ?? {},

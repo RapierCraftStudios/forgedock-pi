@@ -609,6 +609,7 @@ export class ForgeOrchestrationController {
         link.orchestrationId,
         lane.issueNumber,
         ctx.sessionManager.getSessionId(),
+        ctx,
       );
       if (!active) continue;
       const current = await this.#read(link, ctx.signal);
