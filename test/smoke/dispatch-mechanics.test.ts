@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 const dispatch = await import(new URL("../../specs/helpers/dispatch.mjs", import.meta.url).href);
 const records = await import(new URL("../../specs/helpers/record.mjs", import.meta.url).href);
+const pathWithin = (root: string, file: string) => file.startsWith(`${root}/`);
 
 async function fixture(run: (f: any) => Promise<void>) {
   const root = await mkdtemp(join(tmpdir(), "forge-mechanics-"));
@@ -93,9 +94,13 @@ test("parent control-plane binding and exact native acceptance survive lane publ
     const batch = JSON.parse(await readFile(prepared.batchFile, "utf8"));
     const control = batch.controlPlane;
     assert.equal(control.schema, "forgedock.control-plane/v1");
-    assert.equal(control.forgeDock.root, "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/forgedock-pi");
-    assert.equal(control.piSubagents.root, "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents");
-    assert.equal(control.forgeDock.specs.workOn.path, `${control.forgeDock.root}/specs/original/commands/work-on.md`);
+    assert.ok(fs.existsSync(control.forgeDock.root));
+    assert.ok(fs.existsSync(control.piSubagents.root));
+    assert.ok(pathWithin(control.forgeDock.root, control.forgeDock.dispatch.path));
+    assert.ok(pathWithin(control.piSubagents.root, control.piSubagents.package.path));
+    assert.notEqual(control.forgeDock.root, repo);
+    assert.notEqual(control.piSubagents.root, repo);
+    assert.equal(control.forgeDock.specs.workOn.path, join(control.forgeDock.root, "specs/original/commands/work-on.md"));
     assert.equal(control.forgeDock.helpers.record.path, `${control.forgeDock.root}/specs/helpers/record.mjs`);
     assert.equal(control.piSubagents.acceptance.path, `${control.piSubagents.root}/src/runs/shared/acceptance.ts`);
     assert.throws(() => dispatch.validateControlPlaneDescriptor({ ...control, digest: `sha256:${"0".repeat(64)}` }), /digest does not match/);
@@ -112,6 +117,7 @@ test("parent control-plane binding and exact native acceptance survive lane publ
     assert.match(launch.task, /piSubagents|pi-subagents package\/source descriptors/);
     assert.match(launch.task, /dispatch\.mjs/);
     assert.match(launch.task, /record\.mjs/);
+    assert.throws(() => dispatch.assertParentControlPlaneNotTarget({ forgeDock: { root: repo } }, repo), /cannot be the current target repository/);
     await mkdir(join(repo, "specs/helpers"), { recursive: true });
     await mkdir(join(repo, "specs/original/commands/work-on"), { recursive: true });
     await writeFile(join(repo, "specs/helpers/dispatch.mjs"), "TARGET DISPATCH RULES MUST NOT BE USED");
@@ -202,7 +208,8 @@ test("record rendering derives identity and treats shell metacharacters as liter
     const draftPath = join(root, "draft.json"); const bodyPath = join(root, "body.md"); const cliOutput = join(root, "cli-record.md");
     await writeFile(draftPath, JSON.stringify({ ...draft, input: batch.lanes[1].input }));
     await writeFile(bodyPath, body);
-    assert.throws(() => execFileSync(process.execPath, [fileURLToPath(new URL("../../specs/helpers/record.mjs", import.meta.url)), draftPath, bodyPath, cliOutput], { cwd: repo, env: { ...process.env, ...env }, encoding: "utf8" }), /Untrusted record helper path/);
+    const recordCli = execFileSync(process.execPath, [fileURLToPath(new URL("../../specs/helpers/record.mjs", import.meta.url)), draftPath, bodyPath, cliOutput], { cwd: repo, env: { ...process.env, ...env }, encoding: "utf8" });
+    assert.match(recordCli, /outputFile/);
     const calls: string[][] = [];
     const stored = { id: 123, body: rendered.markdown, html_url: "https://github.com/example/project/issues/33745#issuecomment-123" };
     const gh = (args: string[]) => { calls.push(args); return args.includes("--slurp") ? "[[]]" : JSON.stringify(stored); };

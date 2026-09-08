@@ -4,15 +4,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse } from "yaml";
 
 export const BINDING = "forgedock.execution/1";
 export const CONTROL_PLANE_SCHEMA = "forgedock.control-plane/v1";
 export const FORGEDOCK_PARENT_ROOT_ENV = "FORGEDOCK_PARENT_PACKAGE_ROOT";
 export const PI_SUBAGENTS_PARENT_ROOT_ENV = "PI_SUBAGENTS_PARENT_PACKAGE_ROOT";
-const DEFAULT_FORGEDOCK_PARENT_ROOT = "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/forgedock-pi";
-const DEFAULT_PI_SUBAGENTS_PARENT_ROOT = "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents";
+const here = path.dirname(fileURLToPath(import.meta.url));
 const sha = value => createHash("sha256").update(value).digest("hex");
 const digest = value => `sha256:${sha(Buffer.from(canonicalJson(value)))}`;
 const json = value => `${JSON.stringify(value, null, 2)}\n`;
@@ -85,8 +84,25 @@ const PI_SUBAGENTS_CONTROL_FILES = Object.freeze([
   ["launchContract", "src/shared/launch-contract.ts"],
   ["preflight", "src/api/preflight.ts"],
 ]);
+function packageRootFromResolvedModule(specifier) {
+  const resolved = fileURLToPath(import.meta.resolve(specifier));
+  let current = path.dirname(resolved);
+  while (true) {
+    const packageFile = path.join(current, "package.json");
+    if (fs.existsSync(packageFile)) {
+      const packageJson = JSON.parse(fs.readFileSync(packageFile, "utf8"));
+      if (packageJson.name === specifier) return fs.realpathSync(current);
+    }
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  throw new Error(`Unable to resolve installed package root for ${specifier}`);
+}
+function defaultForgeDockRoot() { return fs.realpathSync(path.resolve(here, "../..")); }
+function defaultPiSubagentsRoot() { return packageRootFromResolvedModule("pi-subagents"); }
 function controlRoot(env, name, fallback) {
-  const value = env?.[name] ?? fallback;
+  const value = env?.[name] ?? fallback();
   requireThat(typeof value === "string" && path.isAbsolute(value), `${name} must be an absolute installed package root`);
   return fs.realpathSync(value);
 }
@@ -110,8 +126,8 @@ function validateFileSet(root, files, label, expected) {
   }
 }
 function createControlPlaneDescriptor(env = process.env) {
-  const forgeDockRoot = controlRoot(env, FORGEDOCK_PARENT_ROOT_ENV, DEFAULT_FORGEDOCK_PARENT_ROOT);
-  const piSubagentsRoot = controlRoot(env, PI_SUBAGENTS_PARENT_ROOT_ENV, DEFAULT_PI_SUBAGENTS_PARENT_ROOT);
+  const forgeDockRoot = controlRoot(env, FORGEDOCK_PARENT_ROOT_ENV, defaultForgeDockRoot);
+  const piSubagentsRoot = controlRoot(env, PI_SUBAGENTS_PARENT_ROOT_ENV, defaultPiSubagentsRoot);
   const forgeFiles = FORGEDOCK_CONTROL_FILES.map(([id, relative]) => ({ id, ...fixedFile(forgeDockRoot, relative) }));
   const piFiles = PI_SUBAGENTS_CONTROL_FILES.map(([id, relative]) => ({ id, ...fixedFile(piSubagentsRoot, relative) }));
   const byId = (files, id) => files.find(file => file.id === id);
@@ -215,6 +231,10 @@ function configAt(cwd) {
   const remediationLimit = integer(config.review?.remediation_max_rounds ?? 1, "remediation limit", 0);
   return { raw, config, repo, model, remediationLimit };
 }
+export function assertParentControlPlaneNotTarget(controlPlane, targetRoot) {
+  const target = fs.realpathSync(targetRoot);
+  requireThat(controlPlane.forgeDock.root !== target, "Parent ForgeDock control plane cannot be the current target repository");
+}
 export function loadPolicy(explicit, env = process.env, allowLegacy = false) {
   const bindings = env.PI_SUBAGENT_EXTENSION_BINDINGS ? JSON.parse(env.PI_SUBAGENT_EXTENSION_BINDINGS) : {};
   const bound = bindings[BINDING];
@@ -236,6 +256,7 @@ export function prepareSingle(plan, out, cwd = process.cwd()) {
   integer(plan.number, "issue number");
   const contract = validateIssueContractFile(plan.contract, plan.number);
   const controlPlane = createControlPlaneDescriptor();
+  assertParentControlPlaneNotTarget(controlPlane, cwd);
   requireThat(typeof plan.target === "string" && plan.target.length > 0, "Single policy needs target");
   execFileSync("git", ["check-ref-format", "--branch", plan.target], { cwd, stdio: "pipe" });
   const source = configAt(cwd);
@@ -257,6 +278,7 @@ export function prepareBatch(plan, out, cwd = process.cwd()) {
   fields(plan, ["issues", "activeOwners", "launchAllowance", "requestStartedAt", "verification"], "plan");
   const source = configAt(cwd);
   const controlPlane = createControlPlaneDescriptor();
+  assertParentControlPlaneNotTarget(controlPlane, cwd);
   integer(plan.activeOwners, "activeOwners"); integer(plan.launchAllowance, "launchAllowance");
   requireThat(Array.isArray(plan.issues) && plan.issues.length > 0, "Plan needs issues");
   requireThat(plan.launchAllowance >= plan.issues.length, "Allowance cannot cover even the issue owners");
