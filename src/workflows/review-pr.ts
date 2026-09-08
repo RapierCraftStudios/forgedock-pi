@@ -158,6 +158,17 @@ export interface ReviewPrCoordinatorDependencies {
   materializeAgents?: (worktreePath: string) => Promise<readonly string[]>;
 }
 
+export class ReviewStopBarrierError extends Error {
+  constructor(cause: unknown) {
+    super(
+      `Reviewer stop barrier did not reach a terminal state: ${
+        cause instanceof Error ? cause.message : String(cause)
+      }`,
+    );
+    this.name = "ReviewStopBarrierError";
+  }
+}
+
 /**
  * Shared, parent-owned PR review workflow. Work-on and standalone commands call
  * this typed entrypoint; reviewer children remain read-only and never publish
@@ -334,6 +345,7 @@ export class ReviewPrCoordinator {
             },
           )).worktreePath
         : input.execution.worktreePath;
+    let preservePrepared = false;
     try {
       const localHead = await this.#git.head(worktreePath, input.signal);
       if (localHead !== route.headSha)
@@ -591,10 +603,13 @@ export class ReviewPrCoordinator {
         ...(merge ? { mergeSha: merge.sha } : {}),
         ...(stagingBundle ? { stagingBundle } : {}),
       };
+    } catch (error) {
+      if (error instanceof ReviewStopBarrierError) preservePrepared = true;
+      throw error;
     } finally {
       // Cleanup is compensating work and must continue after the review signal
       // is aborted, otherwise the owned review worktree is retained forever.
-      if (prepared) await this.#git.cleanupReview(prepared);
+      if (prepared && !preservePrepared) await this.#git.cleanupReview(prepared);
     }
   }
 
@@ -877,7 +892,8 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
         const stopFailure = stopResults.find(
           (entry): entry is PromiseRejectedResult => entry.status === "rejected",
         );
-        if (stopFailure) throw stopFailure.reason;
+        if (stopFailure)
+          throw new ReviewStopBarrierError(stopFailure.reason);
         const retryTimeoutMs = extendedReviewerTimeout(input.reviewerTimeoutMs);
         const retryLaunchSettled = await Promise.allSettled(
           retryable.map((reviewer) => spawn(reviewer, retryTimeoutMs)),
@@ -924,7 +940,7 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
       );
       if (stopFailure) {
         retainActiveReceipts = true;
-        throw stopFailure.reason;
+        throw new ReviewStopBarrierError(stopFailure.reason);
       }
       throw input.signal?.aborted ? input.signal.reason ?? error : error;
     } finally {
@@ -940,7 +956,7 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
     const stopFailure = stops.find(
       (entry): entry is PromiseRejectedResult => entry.status === "rejected",
     );
-    if (stopFailure) throw stopFailure.reason;
+    if (stopFailure) throw new ReviewStopBarrierError(stopFailure.reason);
     this.#active.delete(reviewId);
   }
 }

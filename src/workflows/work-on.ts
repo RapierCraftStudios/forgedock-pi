@@ -5324,6 +5324,9 @@ export class ForgeWorkOnController {
     };
     const baseSha = link.prepared.baseSha;
 
+    link.currentNodeId = closeCommon.nodeId;
+    link.status = "running";
+    this.#persistLink(link);
     await journal.append({
       runId: link.forgeRunId,
       type: "node.queued",

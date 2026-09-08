@@ -37,6 +37,7 @@ import { isLeaseExpired } from "../core/lease.ts";
 import { isProtectedBranch, type ForgePolicy } from "../core/policy.ts";
 import { OrchestrationJournal } from "./orchestration-journal.ts";
 import {
+  isLaunchSentinel,
   isTransientProviderFailure,
   isWorktreeBindingFailure,
   type ForgeWorkOnController,
@@ -511,9 +512,13 @@ export class ForgeOrchestrationController {
     const active = [...this.#links.values()].filter(
       (link) => link.status === "running",
     );
-    await Promise.allSettled(
+    const cancellations = await Promise.allSettled(
       active.map((link) => this.cancel(link.orchestrationId, ctx, reason)),
     );
+    const failure = cancellations.find(
+      (entry): entry is PromiseRejectedResult => entry.status === "rejected",
+    );
+    if (failure) throw failure.reason;
   }
 
   async #cancelDurableChildRuns(
@@ -524,7 +529,24 @@ export class ForgeOrchestrationController {
   ): Promise<void> {
     const childRunIds: string[] = [];
     const providerRunIds: string[] = [];
+    const runs = this.#workOn.listRuns();
     for (const lane of state.lanes) {
+      const linked = runs.find(
+        (candidate) =>
+          candidate.orchestrationId === state.orchestrationId &&
+          candidate.issueNumber === lane.issueNumber,
+      );
+      const activeNodeIds = Object.keys(linked?.activeNodes ?? {});
+      const unknownLaunch = Boolean(
+        linked &&
+          isLaunchSentinel(linked.subagentRunId) &&
+          (activeNodeIds.length === 0 ||
+            activeNodeIds.every(isLaunchSentinel)),
+      );
+      if (linked?.launchFailure === "ambiguous" && unknownLaunch)
+        throw new Error(
+          `Cannot cancel issue #${lane.issueNumber} while its provider launch receipt is ambiguous.`,
+        );
       if (!lane.forgeRunId) continue;
       const current = await store.readRun(lane.forgeRunId, ctx.signal);
       if (
@@ -778,6 +800,13 @@ export class ForgeOrchestrationController {
       while (progress && link.status === "running") {
         progress = false;
         let current = await this.#read(link, ctx.signal);
+        if (this.#hasAmbiguousChildLaunch(current.state)) {
+          ctx.ui.notify(
+            `ForgeDock orchestration ${link.orchestrationId} is retained without cleanup while a provider launch receipt remains ambiguous.`,
+            "warning",
+          );
+          return;
+        }
         const dependencyBlocks = blockedOrchestrationLanes(current.state);
         if (dependencyBlocks.length > 0) {
           // Persist one event per dependent lane. Re-reading after each event
@@ -1076,6 +1105,25 @@ export class ForgeOrchestrationController {
       );
       this.#rateBudgets.delete(link.repository);
     }
+  }
+
+  #hasAmbiguousChildLaunch(state: OrchestrationState): boolean {
+    const runs = this.#workOn.listRuns();
+    return state.lanes.some((lane) => {
+      const run = runs.find(
+        (candidate) =>
+          candidate.orchestrationId === state.orchestrationId &&
+          candidate.issueNumber === lane.issueNumber,
+      );
+      const activeNodeIds = Object.keys(run?.activeNodes ?? {});
+      const unknownLaunch = Boolean(
+        run &&
+          isLaunchSentinel(run.subagentRunId) &&
+          (activeNodeIds.length === 0 ||
+            activeNodeIds.every(isLaunchSentinel)),
+      );
+      return Boolean(run?.launchFailure === "ambiguous" && unknownLaunch);
+    });
   }
 
   async #read(
