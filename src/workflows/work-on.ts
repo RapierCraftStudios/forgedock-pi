@@ -154,6 +154,8 @@ export interface ActiveRunLink {
   refreshLaunch?: {
     runId: string;
     resultPath: string;
+    previousResultPath: string;
+    baseSha: string;
     launchNonce: string;
   };
   reviewHeadSha?: string;
@@ -455,6 +457,7 @@ export class ForgeWorkOnController {
         this.#emitLifecycle(link, { reason: failure });
         return;
       }
+      delete link.refreshLaunch;
       link.status = "finalizing";
       this.#persistLink(link);
       void this.#finalize(link, ctx).catch((error) => {
@@ -618,6 +621,7 @@ export class ForgeWorkOnController {
           );
           if (durableResult) {
             delete link.launchFailure;
+            delete link.refreshLaunch;
             link.status = "running";
             this.#persistLink(link);
             await this.#finalize(link, ctx, durableResult);
@@ -986,6 +990,14 @@ export class ForgeWorkOnController {
   ): Promise<void> {
     if (this.#providerRecovering.has(link.forgeRunId)) return;
     this.#providerRecovering.add(link.forgeRunId);
+    if (isWorktreeBindingFailure(failure) && link.refreshLaunch) {
+      try {
+        await this.#retryRefreshBindingFailure(link, ctx);
+      } finally {
+        this.#providerRecovering.delete(link.forgeRunId);
+      }
+      return;
+    }
     const previousRunId = link.subagentRunId;
     const retry = link.providerRetries + 1;
     const intent = createNodeLaunchIntent(
@@ -1041,6 +1053,56 @@ export class ForgeWorkOnController {
       });
     } finally {
       this.#providerRecovering.delete(link.forgeRunId);
+    }
+  }
+
+  async #retryRefreshBindingFailure(
+    link: ActiveRunLink,
+    ctx: ExtensionContext,
+  ): Promise<void> {
+    const refresh = link.refreshLaunch;
+    if (!refresh || isLaunchSentinel(link.subagentRunId)) {
+      link.status = "failed";
+      this.#persistLink(link);
+      return;
+    }
+    const previousResult = findForgeWorkOnResult(
+      await readBoundedForgeResult(
+        link.prepared.worktreePath,
+        refresh.previousResultPath,
+      ),
+    );
+    if (!previousResult) {
+      link.status = "failed";
+      this.#persistLink(link);
+      this.#emitLifecycle(link, {
+        reason:
+          "Refresh worktree binding failed and its prior durable result is unavailable; refusing a duplicate refresh writer.",
+      });
+      return;
+    }
+    try {
+      const { policy } = await loadForgePolicy(
+        link.prepared.repositoryRoot,
+      );
+      link.resultPath = refresh.previousResultPath;
+      delete link.refreshLaunch;
+      delete link.launchFailure;
+      link.status = "refreshing";
+      this.#persistLink(link);
+      await this.#refreshForMovedBase(
+        link,
+        previousResult,
+        policy,
+        refresh.baseSha,
+        ctx,
+      );
+    } catch (error) {
+      link.status = "failed";
+      this.#persistLink(link);
+      this.#emitLifecycle(link, {
+        reason: `Refresh binding recovery failed: ${errorMessage(error)}`,
+      });
     }
   }
 
@@ -1470,6 +1532,17 @@ export class ForgeWorkOnController {
           link.providerRetries = 0;
           delete link.launchFailure;
           this.#persistLink(link);
+          const buffered = this.#earlyCompletions.get(receipt.runId);
+          if (buffered) {
+            this.#earlyCompletions.delete(receipt.runId);
+            void this.#handleTopLevelCompletion(link, ctx, buffered).catch(
+              (error) => {
+                link.status = "failed";
+                this.#persistLink(link);
+                this.#emitLifecycle(link, { reason: errorMessage(error) });
+              },
+            );
+          }
         } else {
           link.status = "failed";
           if (!isWorktreeBindingFailure(errorMessage(launchFailure)))
@@ -1549,6 +1622,39 @@ export class ForgeWorkOnController {
       const oldest = this.#earlyCompletions.keys().next().value;
       if (oldest) this.#earlyCompletions.delete(oldest);
     }
+  }
+
+  async #handleTopLevelCompletion(
+    link: ActiveRunLink,
+    ctx: ExtensionContext,
+    completion: ParsedAsyncCompletion,
+  ): Promise<void> {
+    if (completion.state === "paused" || completion.state === "running") return;
+    if (
+      completion.state === "failed" &&
+      isTransientProviderFailure(completion.error ?? "") &&
+      link.providerRetries < 3
+    ) {
+      await this.#retryProviderFailure(
+        link,
+        ctx,
+        completion.error ?? "Transient provider failure.",
+      );
+      return;
+    }
+    if (completion.state === "complete") {
+      delete link.refreshLaunch;
+      link.status = "finalizing";
+      this.#persistLink(link);
+      await this.#finalize(link, ctx);
+      return;
+    }
+    this.#clearDirectBinding(link.forgeRunId);
+    link.status = "failed";
+    this.#persistLink(link);
+    this.#emitLifecycle(link, {
+      reason: completion.error ?? `Subagent ${completion.state}.`,
+    });
   }
 
   async #reconcileActiveNode(
@@ -4142,6 +4248,11 @@ export class ForgeWorkOnController {
     const { orchestrationId, forgeRunId, subagentRunId, repositoryRoot, ctx } =
       input;
     const { policy } = await loadForgePolicy(repositoryRoot);
+    await this.#git.assertRepositoryRoot(
+      repositoryRoot,
+      policy.repository.name,
+      ctx.signal,
+    );
     const tokenProvider = createGitHubTokenProvider(this.#pi, repositoryRoot);
     const store = new GitHubStateBranchStore(
       new FetchGitHubTransport({ tokenProvider }),
@@ -4619,6 +4730,8 @@ export class ForgeWorkOnController {
     link.refreshLaunch = {
       runId: launchIntent.sentinelRunId,
       resultPath: refreshResultPath,
+      previousResultPath,
+      baseSha: currentBaseSha,
       launchNonce: launchIntent.launchNonce,
     };
     link.launchFailure = "ambiguous";
@@ -4663,10 +4776,23 @@ export class ForgeWorkOnController {
       link.refreshLaunch = {
         runId: receipt.runId,
         resultPath: receipt.resultPath,
+        previousResultPath,
+        baseSha: currentBaseSha,
         launchNonce: launchIntent.launchNonce,
       };
       delete link.launchFailure;
       this.#persistLink(link);
+      const buffered = this.#earlyCompletions.get(receipt.runId);
+      if (buffered) {
+        this.#earlyCompletions.delete(receipt.runId);
+        void this.#handleTopLevelCompletion(link, ctx, buffered).catch(
+          (error) => {
+            link.status = "failed";
+            this.#persistLink(link);
+            this.#emitLifecycle(link, { reason: errorMessage(error) });
+          },
+        );
+      }
       this.#receiptBindings.delete(receipt.runId);
       this.#emitLifecycle(link, {
         baseSha: currentBaseSha,
@@ -5217,6 +5343,19 @@ export class ForgeWorkOnController {
     const result = suppliedResult ?? (await this.#loadResult(link));
     assertResultIdentity(result, link);
     const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
+    const rebound = await this.#git.rebind(
+      link.prepared,
+      ctx.signal,
+      link.repository,
+    );
+    await materializeForgeAgents(rebound.worktreePath);
+    if (
+      rebound.repositoryRoot !== link.prepared.repositoryRoot ||
+      rebound.worktreePath !== link.prepared.worktreePath
+    ) {
+      link.prepared = rebound;
+      this.#persistLink(link);
+    }
     const tokenProvider = createGitHubTokenProvider(
       this.#pi,
       link.prepared.repositoryRoot,
@@ -5341,19 +5480,6 @@ export class ForgeWorkOnController {
     const journal = new RunJournal(store);
     const sessionId = ctx.sessionManager.getSessionId();
 
-    const rebound = await this.#git.rebind(
-      link.prepared,
-      ctx.signal,
-      link.repository,
-    );
-    await materializeForgeAgents(rebound.worktreePath);
-    if (
-      rebound.repositoryRoot !== link.prepared.repositoryRoot ||
-      rebound.worktreePath !== link.prepared.worktreePath
-    ) {
-      link.prepared = rebound;
-      this.#persistLink(link);
-    }
     await this.#git.assertClean(link.prepared.worktreePath, ctx.signal);
     const actualHead = await this.#git.head(
       link.prepared.worktreePath,

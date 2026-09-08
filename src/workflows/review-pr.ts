@@ -195,6 +195,36 @@ export class ReviewPrCoordinator {
     const alreadyMergedOnResume = resumedPull?.merged === true;
     if (!alreadyMergedOnResume)
       await this.#github.revalidatePullRequestRoute(route, input.signal);
+    if (input.execution.kind === "standalone") {
+      await this.#git.assertRepositoryRoot(
+        input.execution.repositoryRoot,
+        input.repository,
+        input.signal,
+      );
+    } else if (input.execution.prepared) {
+      const rebound = await this.#git.rebind(
+        input.execution.prepared,
+        input.signal,
+        input.repository,
+      );
+      if (rebound.worktreePath !== input.execution.worktreePath)
+        throw new Error(
+          "Review work-on execution path does not match its prepared worktree.",
+        );
+    } else if (input.execution.repositoryIdentity) {
+      await this.#git.assertRepositoryIdentity(
+        {
+          repositoryRoot: input.execution.worktreePath,
+          repositoryIdentity: input.execution.repositoryIdentity,
+          worktreePath: input.execution.worktreePath,
+          branch: "review-unbound",
+          baseBranch: "review-unbound",
+          baseSha: route.baseSha,
+        },
+        input.repository,
+        input.signal,
+      );
+    }
 
     let snapshot = await this.#journal.initialize({
       reviewId: input.reviewId,
@@ -288,36 +318,6 @@ export class ReviewPrCoordinator {
             },
           )).worktreePath
         : input.execution.worktreePath;
-    if (
-      input.execution.kind === "work-on" &&
-      input.execution.repositoryIdentity
-    ) {
-      if (input.execution.prepared) {
-        const rebound = await this.#git.rebind(
-          input.execution.prepared,
-          input.signal,
-          input.repository,
-        );
-        if (rebound.worktreePath !== worktreePath)
-          throw new Error(
-            "Review work-on execution path does not match its prepared worktree.",
-          );
-      } else {
-        await this.#git.assertRepositoryIdentity(
-          {
-            repositoryRoot: worktreePath,
-            repositoryIdentity: input.execution.repositoryIdentity,
-            worktreePath,
-            branch: "review-unbound",
-            baseBranch: "review-unbound",
-            baseSha: route.baseSha,
-          },
-          input.repository,
-          input.signal,
-        );
-      }
-    }
-
     try {
       const localHead = await this.#git.head(worktreePath, input.signal);
       if (localHead !== route.headSha)

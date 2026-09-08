@@ -192,6 +192,11 @@ export class ForgeOrchestrationController {
       ctx.signal,
     );
     const { policy } = await loadForgePolicy(repositoryRoot);
+    await this.#git.assertRepositoryRoot(
+      repositoryRoot,
+      policy.repository.name,
+      ctx.signal,
+    );
     const tokenProvider = createGitHubTokenProvider(this.#pi, repositoryRoot);
     const store = new GitHubStateBranchStore(
       new FetchGitHubTransport({ tokenProvider }),
