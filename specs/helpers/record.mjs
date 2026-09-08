@@ -17,7 +17,9 @@ const link = value => {
   try { const url = new URL(value); return url.protocol === "https:" && !url.username && !url.password && !url.search; } catch { return false; }
 };
 export function renderRecord(draft, body, options = {}) {
-  const policy = loadPolicy(draft.input, options.env ?? process.env, true);
+  const legacyHistory = options.legacyHistory === true && draft.kind === "GATED";
+  const policy = loadPolicy(draft.input, options.env ?? process.env, legacyHistory);
+  assertInstalledRecordHelper(policy);
   const cwd = options.cwd ?? process.cwd(); assertRepo(policy.repo, cwd);
   check(Object.hasOwn(titles, draft.kind), "Unsupported record kind");
   check(typeof body === "string" && body.trim(), "Record needs substantive Markdown sections");
@@ -64,13 +66,12 @@ export function publishRecord(record, outputFile, gh = args => execFileSync("gh"
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
   try {
     const [draftFile, bodyFile, outputFile, action] = process.argv.slice(2);
-    check(draftFile && bodyFile && outputFile && (!action || action === "--publish"), "Usage: record.mjs DRAFT_JSON BODY_MD OUTPUT_MD [--publish]");
+    check(draftFile && bodyFile && outputFile && (!action || action === "--publish" || action === "--legacy-history"), "Usage: record.mjs DRAFT_JSON BODY_MD OUTPUT_MD [--publish|--legacy-history]");
     const draft = JSON.parse(fs.readFileSync(draftFile, "utf8"));
-    const policy = loadPolicy(draft.input, process.env, true);
-    assertInstalledRecordHelper(policy);
-    const record = renderRecord(draft, fs.readFileSync(bodyFile, "utf8"));
+    check(action !== "--legacy-history" || draft.kind === "GATED", "--legacy-history is only valid for GATED history rendering");
+    const record = renderRecord(draft, fs.readFileSync(bodyFile, "utf8"), { legacyHistory: action === "--legacy-history" });
     if (fs.existsSync(outputFile)) check(fs.readFileSync(outputFile, "utf8") === record.markdown, "Output exists with different content; use a new scratch path");
     else fs.writeFileSync(outputFile, record.markdown, { flag: "wx", mode: 0o600 });
-    console.log(JSON.stringify(action ? publishRecord(record, outputFile) : { repo: record.policy.repo, issue: record.policy.issue, destination: record.target, source_head: record.head, outputFile: path.resolve(outputFile) }, null, 2));
+    console.log(JSON.stringify(action === "--publish" ? publishRecord(record, outputFile) : { repo: record.policy.repo, issue: record.policy.issue, destination: record.target, source_head: record.head, outputFile: path.resolve(outputFile) }, null, 2));
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }

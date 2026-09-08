@@ -63,6 +63,7 @@ const read = file => JSON.parse(fs.readFileSync(file, "utf8"));
 function requireThat(ok, message) { if (!ok) throw new Error(message); }
 
 const FORGEDOCK_CONTROL_FILES = Object.freeze([
+  ["package", "package.json"],
   ["dispatch", "specs/helpers/dispatch.mjs"],
   ["record", "specs/helpers/record.mjs"],
   ["mechanicalExecution", "specs/mechanical-execution.md"],
@@ -113,6 +114,12 @@ function fixedFile(root, relative) {
   const bytes = fs.readFileSync(actual);
   return { relative, path: actual, sha256: sha(bytes) };
 }
+function validatePackageIdentity(root, packagePath, expectedName, expectedRepository) {
+  requireThat(packagePath === path.resolve(root, "package.json"), `${expectedName} package descriptor escaped its root`);
+  const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
+  const repository = typeof packageJson.repository === "string" ? packageJson.repository : packageJson.repository?.url;
+  requireThat(packageJson.name === expectedName && typeof repository === "string" && repository.replace(/^git\+/, "").replace(/\.git$/, "").replace(/^https?:\/\//, "").toLowerCase() === expectedRepository.toLowerCase(), `${expectedName} package identity is invalid`);
+}
 function validateFileSet(root, files, label, expected) {
   requireThat(fs.realpathSync(root) === root, `${label} root must be canonical`);
   requireThat(Array.isArray(files) && files.length === expected.length, `${label} descriptor file set is incomplete`);
@@ -133,6 +140,7 @@ function createControlPlaneDescriptor(env = process.env) {
   const byId = (files, id) => files.find(file => file.id === id);
   const forgeDock = {
     root: forgeDockRoot,
+    package: byId(forgeFiles, "package"),
     dispatch: byId(forgeFiles, "dispatch"),
     specs: { mechanicalExecution: byId(forgeFiles, "mechanicalExecution"), piAdapter: byId(forgeFiles, "piAdapter"), workOn: byId(forgeFiles, "workOn"), investigate: byId(forgeFiles, "investigate"), build: byId(forgeFiles, "build"), review: byId(forgeFiles, "review") },
     skills: { workOn: byId(forgeFiles, "workOnSkill"), review: byId(forgeFiles, "reviewSkill") },
@@ -148,7 +156,9 @@ function createControlPlaneDescriptor(env = process.env) {
     files: piFiles,
   };
   const content = { v: 1, schema: CONTROL_PLANE_SCHEMA, forgeDock, piSubagents };
-  return { ...content, digest: digest(content) };
+  const descriptor = { ...content, digest: digest(content) };
+  validateControlPlaneDescriptor(descriptor);
+  return descriptor;
 }
 export function validateControlPlaneDescriptor(value) {
   requireThat(value && typeof value === "object" && !Array.isArray(value), "Control-plane descriptor is missing");
@@ -158,7 +168,9 @@ export function validateControlPlaneDescriptor(value) {
   validateFileSet(value.forgeDock.root, value.forgeDock.files, "ForgeDock control-plane", FORGEDOCK_CONTROL_FILES);
   validateFileSet(value.piSubagents.root, value.piSubagents.files, "pi-subagents control-plane", PI_SUBAGENTS_CONTROL_FILES);
   const expectedForge = new Map(value.forgeDock.files.map(file => [file.id, file]));
-  requireThat(value.forgeDock.dispatch?.path === expectedForge.get("dispatch")?.path && value.forgeDock.agent?.path === expectedForge.get("agent")?.path, "ForgeDock control-plane named descriptors are invalid");
+  requireThat(value.forgeDock.package?.path === expectedForge.get("package")?.path && value.forgeDock.dispatch?.path === expectedForge.get("dispatch")?.path && value.forgeDock.agent?.path === expectedForge.get("agent")?.path, "ForgeDock control-plane named descriptors are invalid");
+  validatePackageIdentity(value.forgeDock.root, value.forgeDock.package.path, "forgedock-pi", "github.com/RapierCraftStudios/forgedock-pi");
+  validatePackageIdentity(value.piSubagents.root, value.piSubagents.package.path, "pi-subagents", "github.com/nicobailon/pi-subagents");
   for (const id of ["mechanicalExecution", "piAdapter", "workOn", "investigate", "build", "review"]) requireThat(value.forgeDock.specs?.[id]?.path === expectedForge.get(id)?.path, `ForgeDock control-plane spec descriptor is invalid: ${id}`);
   requireThat(value.forgeDock.helpers?.dispatch?.path === expectedForge.get("dispatch")?.path && value.forgeDock.helpers?.record?.path === expectedForge.get("record")?.path, "ForgeDock control-plane helper descriptors are invalid");
   for (const id of ["workOnSkill", "reviewSkill"]) requireThat(value.forgeDock.skills?.[id === "workOnSkill" ? "workOn" : "review"]?.path === expectedForge.get(id)?.path, `ForgeDock control-plane skill descriptor is invalid: ${id}`);
@@ -271,8 +283,13 @@ export function prepareSingle(plan, out, cwd = process.cwd()) {
 }
 function recipe(controlPlane) {
   const doc = fs.readFileSync(controlFile(controlPlane, "piAdapter"), "utf8");
-  const body = doc.slice(doc.indexOf("Use one visible promise graph.")).match(/```js\n([\s\S]*?)\n```/)?.[1];
-  requireThat(body, "Bound installed dispatcher recipe is missing"); return body;
+  let body = doc.slice(doc.indexOf("Use one visible promise graph.")).match(/```js\n([\s\S]*?)\n```/)?.[1];
+  requireThat(body, "Bound installed dispatcher recipe is missing");
+  const oldSatisfied = `function satisfied(result) {\n  return result.ok === true && /^FORGE_WORK_ON_RESULT status=DONE .* dependency=SATISFIED$/.test(resultLine(result));\n}`;
+  const exactSatisfied = `function exactAcceptanceSatisfied(result, expected) {\n  if (!expected?.criteria) return true;\n  const child = result?.results?.[0] ?? result;\n  const ledger = child?.acceptance;\n  const effective = ledger?.effectiveAcceptance?.criteria;\n  const reported = ledger?.childReport?.criteriaSatisfied;\n  if (!Array.isArray(effective) || !Array.isArray(reported) || effective.length !== expected.criteria.length || reported.length !== expected.criteria.length) return false;\n  for (let index = 0; index < expected.criteria.length; index++) {\n    const expectedCriterion = expected.criteria[index];\n    const actualCriterion = effective[index];\n    const actualReported = reported[index];\n    if (actualCriterion?.id !== expectedCriterion.id || actualCriterion?.must !== expectedCriterion.must || actualReported?.id !== expectedCriterion.id || actualReported?.status !== "satisfied") return false;\n  }\n  return true;\n}\nfunction enforceOwnerAcceptance(result, expected) {\n  if (exactAcceptanceSatisfied(result, expected)) return result;\n  return { ...result, ok: false, status: "FAILED", error: "Bound issue acceptance criteria were missing, reordered, generic, or mismatched." };\n}\nfunction satisfied(result, expected) {\n  return result.ok === true && exactAcceptanceSatisfied(result, expected) && /^FORGE_WORK_ON_RESULT status=DONE .* dependency=SATISFIED$/.test(resultLine(result));\n}`;
+  requireThat(body.includes(oldSatisfied), "Bound installed dispatcher recipe lacks the acceptance boundary");
+  body = body.replace(oldSatisfied, exactSatisfied).replace("return launch(key, { ...issue, model: configuredModel }).then((result) => {", "return launch(key, { ...issue, model: configuredModel }).then((rawResult) => {\n    const result = enforceOwnerAcceptance(rawResult, issue.acceptance);").replace("satisfied(outcomes.get(key))", "satisfied(outcomes.get(key), node.launch.acceptance)");
+  return body;
 }
 export function prepareBatch(plan, out, cwd = process.cwd()) {
   fields(plan, ["issues", "activeOwners", "launchAllowance", "requestStartedAt", "verification"], "plan");
@@ -315,7 +332,7 @@ export function prepareBatch(plan, out, cwd = process.cwd()) {
     issueGraph.push({ key, issue: issue.number, repo: source.repo, target: issue.target,
       predecessors: issue.predecessors.map(n => keys.get(n)),
       launch: { agent: "forgedock-work-on-coordinator", task: `${issue.number} --under-orchestration\n\nPrepared lane input: ${JSON.stringify(input)}\n\n${controlPlaneInstructions(controlPlane)}\n\nBound issue acceptance contract: ${JSON.stringify(acceptanceForContract(contract))}\n\nPrepared verification catalog: ${JSON.stringify(verification)}`,
-        context: "fresh", model: source.model, cwd: issue.baseCwd, worktree: true, output: false, outputMode: "inline", artifacts: true,
+        context: "fresh", model: source.model, agentScope: "user", cwd: issue.baseCwd, worktree: true, output: false, outputMode: "inline", artifacts: true,
         extensionBindings: { [BINDING]: input }, acceptance: acceptanceForContract(contract), timeoutMs: 2147483647 } });
   }
   const scriptPath = path.join(out, "workflow.js");
@@ -348,7 +365,7 @@ export function prepareReview(plan, out, env = process.env) {
     requireThat(["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(role.thinking), "Invalid review thinking level");
     const model = /:(off|minimal|low|medium|high|xhigh|max)$/.test(policy.model) ? policy.model : `${policy.model}:${role.thinking}`;
     return { key: `${name}-${plan.round}-${plan.head.slice(0, 12)}`, agent: "delegate", task: `${controlPlaneInstructions(policy.controlPlane)}\n\nBound review identity: ${policy.repo}#${policy.issue}, target ${policy.target}, head ${plan.head}, contract ${policy.contractDigest}, criteria ${plan.criterionIds.join(",")}.\n${role.task}`,
-      model, context: "fresh", worktree: false, acceptance: false, timeoutMs: 900000 };
+      model, context: "fresh", agentScope: "user", worktree: false, acceptance: false, timeoutMs: 900000 };
   });
   fs.mkdirSync(out, { recursive: true }); out = path.resolve(out);
   const scriptPath = path.join(out, "review.js"); save(scriptPath, `return await runs.all(${JSON.stringify(roles)});\n`);

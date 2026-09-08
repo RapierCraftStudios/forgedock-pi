@@ -7,6 +7,7 @@ inheritProjectContext: true
 inheritGlobalContext: false
 inheritSkills: false
 skills: forgedock-work-on, forgedock-review-pr, forgedock-issue
+skillPath: ../skills/forgedock-work-on/SKILL.md, ../skills/forgedock-review-pr/SKILL.md, ../skills/forgedock-issue/SKILL.md
 allowNestedSubagents: true
 defaultContext: fresh
 acceptanceRole: writer

@@ -90,10 +90,14 @@ test("contract descriptors are exact, immutable, and fail closed before launch",
 
 test("parent control-plane binding and exact native acceptance survive lane publication", async () => {
   await fixture(async ({ root, repo, plan }) => {
+    await mkdir(join(repo, ".pi/agents"), { recursive: true });
+    await writeFile(join(repo, ".pi/agents/forgedock-work-on-coordinator.md"), "name: forgedock-work-on-coordinator\nsystemPrompt: target-agent-must-not-win\n");
     const prepared = dispatch.prepareBatch(plan, join(root, "prepared-control"), repo);
     const batch = JSON.parse(await readFile(prepared.batchFile, "utf8"));
     const control = batch.controlPlane;
     assert.equal(control.schema, "forgedock.control-plane/v1");
+    assert.equal(JSON.parse(await readFile(control.forgeDock.package.path, "utf8")).name, "forgedock-pi");
+    assert.equal(JSON.parse(await readFile(control.piSubagents.package.path, "utf8")).name, "pi-subagents");
     assert.ok(fs.existsSync(control.forgeDock.root));
     assert.ok(fs.existsSync(control.piSubagents.root));
     assert.ok(pathWithin(control.forgeDock.root, control.forgeDock.dispatch.path));
@@ -107,8 +111,12 @@ test("parent control-plane binding and exact native acceptance survive lane publ
     const policy = JSON.parse(await readFile(batch.lanes[0].input.path, "utf8"));
     assert.equal(policy.controlPlane.digest, control.digest);
     const script = await readFile(prepared.request.workflowScriptPath, "utf8");
+    assert.match(script, /effectiveAcceptance.*criteria/);
+    assert.match(script, /childReport.*criteriaSatisfied/);
+    assert.match(script, /enforceOwnerAcceptance/);
     const graph = JSON.parse(script.match(/^const issueGraph=(.+);$/m)![1]!);
     const launch = graph[0].launch;
+    assert.equal(launch.agentScope, "user");
     assert.equal(launch.acceptance.criteria.length, 2);
     assert.deepEqual(launch.acceptance.criteria.map((criterion: { id: string }) => criterion.id), ["source-behavior", "source-safety"]);
     assert.ok(launch.acceptance.criteria.every((criterion: { must: string }) => /textHash=sha256:|proofType=|affectedBoundaries=/.test(criterion.must)));
@@ -132,6 +140,7 @@ test("parent control-plane binding and exact native acceptance survive lane publ
     const review = dispatch.prepareReview({ head: dispatch.gitHead(repo), round: 1, contractDigest: reboundPolicy.contractDigest, criterionIds: contract.criteria.map((criterion: { id: string }) => criterion.id), roles: [{ role: "correctness", thinking: "high", task: "Review only" }] }, join(root, "review-after-target-tamper"), policyEnv);
     const reviewScript = await readFile(review.request.workflowScriptPath, "utf8");
     assert.doesNotMatch(reviewScript, /TARGET (DISPATCH|RECIPE|REVIEW|WORK-ON) RULES/);
+    assert.match(reviewScript, /agentScope":"user/);
     assert.match(reviewScript, /forgedock\.control-plane\/v1/);
   });
 });
@@ -216,6 +225,21 @@ test("record rendering derives identity and treats shell metacharacters as liter
     const receipt = records.publishRecord(rendered, output, gh);
     assert.equal(receipt.issue, 33745);
     assert.ok(calls.some(args => args.includes("repos/example/project/issues/33745/comments") && args.includes(`body=@${output}`)));
+    const legacyPolicy = JSON.parse(await readFile(batch.lanes[1].input.path, "utf8"));
+    delete legacyPolicy.contract;
+    delete legacyPolicy.contractDigest;
+    const legacyPath = join(root, "legacy-lane.json");
+    const legacyBytes = `${JSON.stringify(legacyPolicy)}\n`;
+    await writeFile(legacyPath, legacyBytes);
+    const legacyEnv = { PI_SUBAGENT_EXTENSION_BINDINGS: JSON.stringify({ [dispatch.BINDING]: { path: legacyPath, sha256: createHash("sha256").update(legacyBytes).digest("hex") } }) };
+    assert.throws(() => records.renderRecord({ kind: "BUILDER", input: { path: legacyPath, sha256: createHash("sha256").update(legacyBytes).digest("hex") }, inputs: [] }, body, { cwd: repo, env: legacyEnv }), /contract is missing/i);
+    const legacyInput = { path: legacyPath, sha256: createHash("sha256").update(legacyBytes).digest("hex") };
+    const historical = records.renderRecord({ kind: "GATED", input: legacyInput, inputs: [] }, body, { cwd: repo, env: legacyEnv, legacyHistory: true });
+    assert.equal(historical.target, 33745);
+    const legacyDraftPath = join(root, "legacy-draft.json"); const legacyOutput = join(root, "legacy-record.md");
+    await writeFile(legacyDraftPath, JSON.stringify({ kind: "GATED", input: legacyInput, inputs: [] }));
+    const legacyCli = execFileSync(process.execPath, [fileURLToPath(new URL("../../specs/helpers/record.mjs", import.meta.url)), legacyDraftPath, bodyPath, legacyOutput, "--legacy-history"], { cwd: repo, env: { ...process.env, ...legacyEnv }, encoding: "utf8" });
+    assert.match(legacyCli, /outputFile/);
     const reused = records.publishRecord(rendered, output, (args: string[]) => args.includes("--slurp") ? JSON.stringify([[stored]]) : JSON.stringify(stored));
     assert.equal(reused.reused, true);
     assert.throws(() => records.publishRecord(rendered, output, (args: string[]) => args.includes("--slurp") ? "[[]]" : JSON.stringify({ ...stored, html_url: "https://github.com/example/project/issues/33724#issuecomment-123" })), /destination identity/);
