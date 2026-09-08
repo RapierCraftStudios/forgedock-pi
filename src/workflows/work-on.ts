@@ -1922,7 +1922,11 @@ export class ForgeWorkOnController {
     }
     if (!activeNode)
       throw new Error(`Node ${nodeId} has no active subagent correlation.`);
-    await this.#rebindLink(link, ctx.signal);
+    await this.#git.assertRepositoryIdentity(
+      link.prepared,
+      link.repository,
+      ctx.signal,
+    );
     const recoveryTokenProvider = createGitHubTokenProvider(
       this.#pi,
       link.prepared.repositoryRoot,
@@ -1941,6 +1945,11 @@ export class ForgeWorkOnController {
       throw new Error(
         `Node ${nodeId} has no durable state during reconciliation.`,
       );
+    await this.#rebindLink(
+      link,
+      ctx.signal,
+      durableNode.headSha ?? link.reviewHeadSha,
+    );
     const resultText = await readBoundedForgeResult(
       link.prepared.worktreePath,
       activeNode.resultPath,
@@ -3254,8 +3263,16 @@ export class ForgeWorkOnController {
       const terminalDecision = decisionNode?.finalReviewDecision;
       // Capture all Git-dependent terminal evidence before deleting the owned
       // worktree. Cleanup is destructive, so no later renderer may run git diff.
+      let worktreePresent = true;
+      try {
+        await lstat(link.prepared.worktreePath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT")
+          worktreePresent = false;
+        else throw error;
+      }
       const terminalAggregate =
-        pull && terminalDecision && mergeNode?.headSha
+        worktreePresent && pull && terminalDecision && mergeNode?.headSha
           ? await this.#aggregateFromState(
               link,
               terminalState.state,
@@ -6322,12 +6339,13 @@ export class ForgeWorkOnController {
   async #rebindLink(
     link: ActiveRunLink,
     signal?: AbortSignal,
+    expectedHeadSha?: string,
   ): Promise<void> {
     const rebound = await this.#git.rebind(
       link.prepared,
       signal,
       link.repository,
-      link.reviewHeadSha ?? link.prepared.baseSha,
+      expectedHeadSha ?? link.reviewHeadSha,
     );
     if (
       rebound.repositoryRoot !== link.prepared.repositoryRoot ||
