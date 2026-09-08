@@ -785,8 +785,16 @@ function findRunId(value: unknown): string | undefined {
 function subagentState(value: unknown): string | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
-  const state = (value as Record<string, unknown>).state;
-  return typeof state === "string" ? state : undefined;
+  const record = value as Record<string, unknown>;
+  const state =
+    typeof record.state === "string"
+      ? record.state
+      : typeof record.status === "string"
+        ? record.status
+        : typeof record.text === "string"
+          ? record.text.match(/^State:\s*([^\s]+)\s*$/im)?.[1]
+          : undefined;
+  return state;
 }
 
 function terminalSubagentState(state: string | undefined): boolean {
@@ -796,7 +804,7 @@ function terminalSubagentState(state: string | undefined): boolean {
 }
 
 function terminalStopError(error: unknown): boolean {
-  return /not found|already (?:complete|completed|failed|stopped|cancelled|canceled|rejected|timed[-_ ]?out)|is (?:complete|completed|failed|stopped|cancelled|canceled|rejected|timed[-_ ]?out)/i.test(
+  return /not found|already (?:complete|completed|failed|partial|stopped|cancelled|canceled|rejected|timed[-_ ]?out)|is (?:complete|completed|failed|partial|stopped|cancelled|canceled|rejected|timed[-_ ]?out)/i.test(
     error instanceof Error ? error.message : String(error),
   );
 }

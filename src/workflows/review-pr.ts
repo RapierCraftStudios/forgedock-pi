@@ -995,6 +995,17 @@ export class ForgeReviewController {
         "--gh-flag is not supported by the typed GitHub adapter; no flag was executed.",
       );
     const environment = await this.#environment(ctx);
+    const suppliedWorktree = parsed.worktree
+      ? await this.#git.inspectWorktree(
+          environment.repositoryRoot,
+          await resolveReviewWorktree(
+            environment.repositoryRoot,
+            parsed.worktree,
+          ),
+          environment.policy.repository.name,
+          ctx.signal,
+        )
+      : undefined;
     const pulls = await environment.github.resolveReviewSelector(
       selectorValue(parsed.selector),
       ctx.signal,
@@ -1019,6 +1030,13 @@ export class ForgeReviewController {
           pull.number,
           ctx.signal,
         );
+        if (
+          suppliedWorktree &&
+          suppliedWorktree.headSha !== route.headSha
+        )
+          throw new Error(
+            `Review worktree head ${suppliedWorktree.headSha} does not match frozen PR head ${route.headSha}.`,
+          );
         const reviewId = `review-${randomUUID()}`;
         const stagingBundle =
           effectiveMode === "staging"
@@ -1030,36 +1048,14 @@ export class ForgeReviewController {
                 ctx.signal,
               )
             : undefined;
-        const execution: ReviewExecution = parsed.worktree
-          ? await (async () => {
-              const worktreePath = await resolveReviewWorktree(
-                environment.repositoryRoot,
-                parsed.worktree!,
-              );
-              const repositoryIdentity =
-                await this.#git.repositoryIdentityFor(
-                  worktreePath,
-                  environment.policy.repository.name,
-                  ctx.signal,
-                );
-              const branch = await this.#git.branch(worktreePath, ctx.signal);
-              const canonicalRepositoryIdentity =
-                await this.#git.repositoryIdentityFor(
-                  environment.repositoryRoot,
-                  environment.policy.repository.name,
-                  ctx.signal,
-                );
-              if (repositoryIdentity !== canonicalRepositoryIdentity)
-                throw new Error(
-                  "Review worktree belongs to another repository checkout.",
-                );
-              return {
-                kind: "work-on" as const,
-                worktreePath,
-                repositoryIdentity,
-                ...(branch ? { branch } : { branch: route.headRef, detached: true }),
-              };
-            })()
+        const execution: ReviewExecution = suppliedWorktree
+          ? {
+              kind: "work-on",
+              worktreePath: suppliedWorktree.worktreePath,
+              repositoryIdentity: suppliedWorktree.repositoryIdentity,
+              branch: suppliedWorktree.branch || route.headRef,
+              ...(suppliedWorktree.detached ? { detached: true } : {}),
+            }
           : { kind: "standalone", repositoryRoot: environment.repositoryRoot };
         const coordinator = this.#coordinator(environment);
         this.#linked.set(reviewId, {

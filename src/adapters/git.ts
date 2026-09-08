@@ -64,6 +64,14 @@ export interface PreparedReviewWorktree {
   baseSha: string;
 }
 
+export interface BoundWorktreeInspection {
+  repositoryIdentity: string;
+  worktreePath: string;
+  branch: string;
+  detached: boolean;
+  headSha: string;
+}
+
 export class GitOperationError extends Error {
   readonly operation: string;
   readonly result: ExecResult;
@@ -172,6 +180,70 @@ export class GitWorktreeManager {
     const root = await realpath(repositoryRoot);
     await this.#assertRepositoryOrigin(root, expectedRepository, signal);
     return this.#repositoryIdentity(root, signal);
+  }
+
+  async inspectWorktree(
+    repositoryRoot: string,
+    worktreePath: string,
+    expectedRepository?: string,
+    signal?: AbortSignal,
+  ): Promise<BoundWorktreeInspection> {
+    const root = await realpath(repositoryRoot);
+    const expectedPath = resolve(root, worktreePath);
+    if (!isPathWithin(root, expectedPath) || expectedPath === root)
+      throw new Error(
+        "Forge worktree binding failure: supplied worktree is outside the repository root.",
+      );
+    const candidate = await realpath(expectedPath);
+    if (candidate !== expectedPath)
+      throw new Error(
+        "Forge worktree binding failure: supplied worktree is not the exact path.",
+      );
+    const repositoryIdentity = await this.#repositoryIdentity(root, signal);
+    if (expectedRepository)
+      await this.#assertRepositoryOrigin(root, expectedRepository, signal);
+    if ((await this.#repositoryIdentity(candidate, signal)) !== repositoryIdentity)
+      throw new Error(
+        "Forge worktree binding failure: supplied worktree belongs to another Git repository.",
+      );
+    if (expectedRepository)
+      await this.#assertRepositoryOrigin(candidate, expectedRepository, signal);
+    const registration = await this.#git(
+      root,
+      ["worktree", "list", "--porcelain"],
+      30_000,
+      signal,
+    );
+    const record = worktreeRegistrationRecord(
+      registration.stdout,
+      root,
+      candidate,
+    );
+    if (!record || record.prunable)
+      throw new Error(
+        "Forge worktree binding failure: supplied worktree is not a registered non-prunable worktree.",
+      );
+    const headSha = await this.head(candidate, signal);
+    if (record.head !== headSha)
+      throw new Error(
+        "Forge worktree binding failure: registered worktree head changed during validation.",
+      );
+    const branch = await this.branch(candidate, signal);
+    if (record.detached !== !branch)
+      throw new Error(
+        "Forge worktree binding failure: registered worktree mode changed during validation.",
+      );
+    if (!record.detached && record.branch !== `refs/heads/${branch}`)
+      throw new Error(
+        "Forge worktree binding failure: registered worktree branch changed during validation.",
+      );
+    return {
+      repositoryIdentity,
+      worktreePath: candidate,
+      branch,
+      detached: record.detached,
+      headSha,
+    };
   }
 
   async adoptPreparedWorktree(
@@ -1019,6 +1091,47 @@ function repositoryRemoteMatches(
     .replace(/\/$/, "")
     .toLowerCase();
   return normalized === `https://github.com/${repository.toLowerCase()}`;
+}
+
+interface WorktreeRegistrationRecord {
+  branch?: string;
+  head?: string;
+  detached: boolean;
+  prunable: boolean;
+}
+
+function worktreeRegistrationRecord(
+  output: string,
+  repositoryRoot: string,
+  expectedPath: string,
+): WorktreeRegistrationRecord | undefined {
+  let path: string | undefined;
+  let branch: string | undefined;
+  let head: string | undefined;
+  let detached = false;
+  let prunable = false;
+  const finish = (): WorktreeRegistrationRecord | undefined =>
+    path !== undefined && resolve(repositoryRoot, path) === expectedPath
+      ? { branch, head, detached, prunable }
+      : undefined;
+  for (const line of output.split("\n")) {
+    if (!line.trim()) {
+      const found = finish();
+      if (found) return found;
+      path = undefined;
+      branch = undefined;
+      head = undefined;
+      detached = false;
+      prunable = false;
+      continue;
+    }
+    if (line.startsWith("worktree ")) path = line.slice("worktree ".length);
+    else if (line.startsWith("branch ")) branch = line.slice("branch ".length);
+    else if (line.startsWith("HEAD ")) head = line.slice("HEAD ".length);
+    else if (line === "detached") detached = true;
+    else if (line.startsWith("prunable")) prunable = true;
+  }
+  return finish();
 }
 
 function reviewWorktreeRegistrationMatches(

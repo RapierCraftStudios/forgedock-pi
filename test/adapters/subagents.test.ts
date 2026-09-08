@@ -99,10 +99,15 @@ class StopBarrierEventBus extends FakeEventBus {
 
 class ImmediateTerminalEventBus extends FakeEventBus {
   readonly terminalState: string;
+  readonly field: "state" | "status" | "text";
 
-  constructor(terminalState: string) {
+  constructor(
+    terminalState: string,
+    field: "state" | "status" | "text" = "state",
+  ) {
     super();
     this.terminalState = terminalState;
+    this.field = field;
   }
 
   override emit(event: string, payload: unknown): void {
@@ -114,7 +119,10 @@ class ImmediateTerminalEventBus extends FakeEventBus {
           version: 1,
           requestId: request.requestId,
           success: true,
-          data: { runId: "async-run-1", state: this.terminalState },
+          data:
+            this.field === "text"
+              ? { runId: "async-run-1", text: `State: ${this.terminalState}` }
+              : { runId: "async-run-1", [this.field]: this.terminalState },
         });
         return;
       }
@@ -169,6 +177,18 @@ test("stopAndWait waits for Pi's terminal state before replacement", async () =>
 test("stopAndWait accepts provider terminal state aliases", async () => {
   for (const terminalState of ["completed", "cancelled", "canceled", "timed-out"]) {
     const { pi, bus } = fakePi(new ImmediateTerminalEventBus(terminalState));
+    const client = new SubagentsRpcClient(pi);
+    await client.ping();
+    await client.stopAndWait("async-run-1", 1_000);
+    assert.equal(bus.requests.length, 2);
+  }
+  for (const [terminalState, field] of [
+    ["partial", "status"],
+    ["stopped", "text"],
+  ] as const) {
+    const { pi, bus } = fakePi(
+      new ImmediateTerminalEventBus(terminalState, field),
+    );
     const client = new SubagentsRpcClient(pi);
     await client.ping();
     await client.stopAndWait("async-run-1", 1_000);
