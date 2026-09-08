@@ -208,6 +208,7 @@ export class ReviewPrCoordinator {
         input.execution.prepared,
         input.signal,
         input.repository,
+        input.route?.headSha ?? input.execution.prepared.baseSha,
       );
       if (rebound.worktreePath !== input.execution.worktreePath)
         throw new Error(

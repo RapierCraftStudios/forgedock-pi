@@ -250,6 +250,7 @@ export class GitWorktreeManager {
     prepared: PreparedWorktree,
     expectedRepository: string,
     signal?: AbortSignal,
+    expectedHeadSha?: string,
   ): Promise<PreparedWorktree> {
     const root = await realpath(prepared.repositoryRoot);
     await this.#assertRepositoryOrigin(root, expectedRepository, signal);
@@ -258,7 +259,12 @@ export class GitWorktreeManager {
       repository: expectedRepository,
       repositoryIdentity: await this.#repositoryIdentity(root, signal),
     };
-    return this.rebind(adopted, signal, expectedRepository);
+    return this.rebind(
+      adopted,
+      signal,
+      expectedRepository,
+      expectedHeadSha,
+    );
   }
 
   async prepare(
@@ -545,6 +551,7 @@ export class GitWorktreeManager {
     prepared: PreparedWorktree,
     signal?: AbortSignal,
     expectedRepository?: string,
+    expectedHeadSha?: string,
   ): Promise<PreparedWorktree> {
     const root = await this.#assertPreparedRepository(
       prepared,
@@ -699,6 +706,20 @@ export class GitWorktreeManager {
       if (currentBranch.stdout.trim() !== prepared.branch)
         throw new Error(
           `Forge worktree binding failure: expected branch ${prepared.branch}, found ${currentBranch.stdout.trim() || "detached"}.`,
+        );
+      const currentHead = await this.#git(
+        canonicalWorktree,
+        ["rev-parse", "HEAD"],
+        30_000,
+        signal,
+      );
+      const expectedRecreatedHead = expectedHeadSha ?? (created ? prepared.baseSha : undefined);
+      if (
+        expectedRecreatedHead &&
+        currentHead.stdout.trim() !== expectedRecreatedHead
+      )
+        throw new Error(
+          `Forge worktree binding failure: expected head ${expectedRecreatedHead}, found ${currentHead.stdout.trim() || "unknown"}.`,
         );
       return {
         ...prepared,
@@ -858,11 +879,13 @@ export class GitWorktreeManager {
     prepared: PreparedWorktree,
     signal?: AbortSignal,
     expectedRepository?: string,
+    expectedHeadSha?: string,
   ): Promise<void> {
     const rebound = await this.rebind(
       prepared,
       signal,
       expectedRepository,
+      expectedHeadSha,
     );
     await this.assertClean(rebound.worktreePath, signal);
     await this.#git(

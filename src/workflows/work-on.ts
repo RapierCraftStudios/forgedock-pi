@@ -327,6 +327,7 @@ export class ForgeWorkOnController {
             link.prepared,
             link.repository,
             ctx.signal,
+            link.reviewHeadSha ?? link.prepared.baseSha,
           );
         if (needsRepositoryAdoption) this.#persistLink(link);
         await this.#git.assertRepositoryIdentity(
@@ -555,6 +556,7 @@ export class ForgeWorkOnController {
               link.prepared,
               ctx.signal,
               link.repository,
+              link.reviewHeadSha ?? link.prepared.baseSha,
             );
             await materializeForgeAgents(link.prepared.worktreePath);
             this.#persistLink(link);
@@ -1263,6 +1265,7 @@ export class ForgeWorkOnController {
           link.prepared,
           ctx.signal,
           link.repository,
+          link.reviewHeadSha ?? link.prepared.baseSha,
         );
         await materializeForgeAgents(link.prepared.worktreePath);
         this.#persistLink(link);
@@ -1562,6 +1565,7 @@ export class ForgeWorkOnController {
               link.prepared,
               ctx.signal,
               policy.repository.name,
+              link.reviewHeadSha ?? link.prepared.baseSha,
             );
             await materializeForgeAgents(rebound.worktreePath);
             link.prepared = rebound;
@@ -1593,6 +1597,7 @@ export class ForgeWorkOnController {
                 link.prepared,
                 ctx.signal,
                 policy.repository.name,
+                link.reviewHeadSha ?? link.prepared.baseSha,
               );
               await materializeForgeAgents(rebound.worktreePath);
               link.prepared = rebound;
@@ -3782,6 +3787,7 @@ export class ForgeWorkOnController {
         link.prepared,
         ctx.signal,
         link.repository,
+        node.headSha ?? link.reviewHeadSha ?? link.prepared.baseSha,
       );
       await materializeForgeAgents(rebound.worktreePath);
       if (
@@ -4026,6 +4032,7 @@ export class ForgeWorkOnController {
           link.prepared,
           undefined,
           link.repository,
+          link.reviewHeadSha ?? link.prepared.baseSha,
         );
         await materializeForgeAgents(link.prepared.worktreePath);
         this.#persistLink(link);
@@ -4447,6 +4454,7 @@ export class ForgeWorkOnController {
           },
           state.repository,
           ctx.signal,
+          this.#adoptedHeadSha(state),
         );
       } catch (error) {
         if (!isLaunchSentinel(subagentRunId))
@@ -4489,6 +4497,14 @@ export class ForgeWorkOnController {
       state.issueNumber,
       ctx,
     );
+  }
+
+  #adoptedHeadSha(
+    state: import("../core/state.ts").RunState,
+  ): string | undefined {
+    return Object.values(state.nodes)
+      .filter((node) => node.status === "completed" && node.headSha)
+      .sort((left, right) => right.attempt - left.attempt)[0]?.headSha;
   }
 
   /** Frozen base SHA recorded by prepare-worktree, when reconstructable. */
@@ -4900,6 +4916,7 @@ export class ForgeWorkOnController {
         link.prepared,
         ctx.signal,
         link.repository,
+        link.reviewHeadSha ?? link.prepared.baseSha,
       );
       await materializeForgeAgents(rebound.worktreePath);
       if (
@@ -5741,6 +5758,7 @@ export class ForgeWorkOnController {
         link.prepared,
         ctx.signal,
         link.repository,
+        result.headSha,
       );
     await appendEffect(
       journal,
@@ -6309,6 +6327,7 @@ export class ForgeWorkOnController {
       link.prepared,
       signal,
       link.repository,
+      link.reviewHeadSha ?? link.prepared.baseSha,
     );
     if (
       rebound.repositoryRoot !== link.prepared.repositoryRoot ||
