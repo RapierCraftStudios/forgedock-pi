@@ -154,6 +154,31 @@ export class GitWorktreeManager {
     );
   }
 
+  async assertRepositoryRoot(
+    repositoryRoot: string,
+    expectedRepository: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const root = await realpath(repositoryRoot);
+    await this.#assertRepositoryOrigin(root, expectedRepository, signal);
+    await this.#repositoryIdentity(root, signal);
+  }
+
+  async adoptPreparedWorktree(
+    prepared: PreparedWorktree,
+    expectedRepository: string,
+    signal?: AbortSignal,
+  ): Promise<PreparedWorktree> {
+    const root = await realpath(prepared.repositoryRoot);
+    await this.#assertRepositoryOrigin(root, expectedRepository, signal);
+    const adopted = {
+      ...prepared,
+      repository: expectedRepository,
+      repositoryIdentity: await this.#repositoryIdentity(root, signal),
+    };
+    return this.rebind(adopted, signal, expectedRepository);
+  }
+
   async prepare(
     repositoryRoot: string,
     input: {

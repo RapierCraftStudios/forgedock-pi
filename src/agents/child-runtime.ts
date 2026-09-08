@@ -1430,7 +1430,7 @@ export function registerForgeRuntime(
               if (signal?.aborted)
                 throw signal.reason ?? new Error("Reviewer panel was aborted.");
               if (launch.required) throw error;
-              await rpc.stop(launch.receipt.runId).catch(() => undefined);
+              await rpc.stopAndWait(launch.receipt.runId).catch(() => undefined);
               return {
                 optionalFailure: {
                   reviewer: launch.reviewer,
@@ -1467,7 +1467,7 @@ export function registerForgeRuntime(
         };
       } catch (error) {
         await Promise.allSettled(
-          launchedReceipts.map((receipt) => rpc.stop(receipt.runId)),
+          launchedReceipts.map((receipt) => rpc.stopAndWait(receipt.runId)),
         );
         throw error;
       }

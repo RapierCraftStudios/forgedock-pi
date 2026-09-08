@@ -822,7 +822,7 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
     } catch (error) {
       if (input.signal?.aborted) throw input.signal.reason ?? error;
       await Promise.allSettled(
-        receipts.map(({ receipt }) => this.#rpc.stop(receipt.runId)),
+        receipts.map(({ receipt }) => this.#rpc.stopAndWait(receipt.runId)),
       );
       throw error;
     } finally {
@@ -833,7 +833,7 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
   async cancel(reviewId: string): Promise<void> {
     const receipts = this.#active.get(reviewId) ?? [];
     await Promise.allSettled(
-      receipts.map((receipt) => this.#rpc.stop(receipt.runId)),
+      receipts.map((receipt) => this.#rpc.stopAndWait(receipt.runId)),
     );
     this.#active.delete(reviewId);
   }
@@ -1119,8 +1119,13 @@ export class ForgeReviewController {
       ctx.cwd,
       ctx.signal,
     );
-    await this.#git.ensureRuntimeIgnored(repositoryRoot, ctx.signal);
     const { policy } = await loadForgePolicy(repositoryRoot);
+    await this.#git.assertRepositoryRoot(
+      repositoryRoot,
+      policy.repository.name,
+      ctx.signal,
+    );
+    await this.#git.ensureRuntimeIgnored(repositoryRoot, ctx.signal);
     const tokenProvider = createGitHubTokenProvider(this.#pi, repositoryRoot);
     const transport = new FetchGitHubTransport({ tokenProvider });
     const github = new GitHubWorkflowAdapter(

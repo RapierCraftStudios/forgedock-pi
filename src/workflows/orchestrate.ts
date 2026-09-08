@@ -373,6 +373,11 @@ export class ForgeOrchestrationController {
     const integrationBranch = chooseIntegrationBranch(policy);
     if (isProtectedBranch(policy, integrationBranch))
       throw new Error(`Integration branch ${integrationBranch} is protected.`);
+    await this.#git.assertRepositoryRoot(
+      repositoryRoot,
+      policy.repository.name,
+      ctx.signal,
+    );
     await this.#git.remoteBaseSha(
       repositoryRoot,
       integrationBranch,

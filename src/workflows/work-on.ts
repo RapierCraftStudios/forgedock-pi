@@ -316,6 +316,14 @@ export class ForgeWorkOnController {
     const validRoots = new Set<string>();
     for (const link of new Set(this.#links.values())) {
       try {
+        const needsRepositoryAdoption = !link.prepared.repositoryIdentity;
+        if (needsRepositoryAdoption)
+          link.prepared = await this.#git.adoptPreparedWorktree(
+            link.prepared,
+            link.repository,
+            ctx.signal,
+          );
+        if (needsRepositoryAdoption) this.#persistLink(link);
         await this.#git.assertRepositoryIdentity(
           link.prepared,
           link.repository,
@@ -323,6 +331,17 @@ export class ForgeWorkOnController {
         );
         validRoots.add(link.prepared.repositoryRoot);
       } catch (error) {
+        if (link.executionMode === "orchestrated")
+          await Promise.allSettled(
+            [
+              link.subagentRunId,
+              ...Object.keys(link.activeNodes),
+            ]
+              .filter(
+                (runId) => runId && !isLaunchSentinel(runId),
+              )
+              .map((runId) => this.#rpc.stopAndWait(runId)),
+          );
         link.status = "failed";
         this.#persistLink(link);
         this.#emitLifecycle(link, {
@@ -467,7 +486,9 @@ export class ForgeWorkOnController {
         let directState:
           | import("../adapters/github-state.ts").ReadRunStateResult
           | undefined;
+        let directRefreshRecovery = false;
         if (link.executionMode === "direct") {
+          directRefreshRecovery = link.status === "refreshing";
           directState = await projectionStore.readRun(
             link.forgeRunId,
             ctx.signal,
@@ -534,14 +555,20 @@ export class ForgeWorkOnController {
             maxReviewRounds: policy.review.maxRounds,
             reviewerTimeoutMs: policy.subagents.reviewerTimeoutMs,
             verificationCommands: policy.verification.commands,
-            refresh: false,
+            refresh: directRefreshRecovery,
           };
           process.env.PI_SUBAGENT_EXTENSION_BINDINGS = JSON.stringify({
             "forgedock.pi/1": this.#directBinding,
           });
-          this.#pi.sendUserMessage(
-            directRunResumeTask(link, directState.state),
-          );
+          const resumeTask = directRefreshRecovery
+            ? [
+                "Resume the existing ForgeDock direct run after its integration base moved during refresh.",
+                `Run ID: ${link.forgeRunId}`,
+                `New integration base: ${link.prepared.baseBranch} at ${link.prepared.baseSha}`,
+                "Call forge_refresh_base first. Then run every required forge_verify command, update the existing PR with forge_prepare_review, launch the fresh review panel for the new frozen head, and continue through the existing finalization path. Do not create another run, worktree, branch, commit, or PR.",
+              ].join("\n\n")
+            : directRunResumeTask(link, directState.state);
+          this.#pi.sendUserMessage(resumeTask);
           continue;
         }
         const activeNodes = Object.values(link.activeNodes);
@@ -557,6 +584,27 @@ export class ForgeWorkOnController {
               isLaunchSentinel(activeNode.subagentRunId),
             ))
         ) {
+          const nodeArtifacts = await Promise.all(
+            activeNodes.map(async (activeNode) => ({
+              activeNode,
+              result: findForgeNodeResult(
+                // Node artifacts are independently typed from top-level work-on results.
+                await readFile(activeNode.resultPath, "utf8").catch(() => ""),
+              ),
+            })),
+          );
+          const boundedArtifact = nodeArtifacts.find(
+            (candidate) => candidate.result,
+          );
+          if (boundedArtifact) {
+            await this.#reconcileActiveNode(
+              link,
+              ctx,
+              undefined,
+              boundedArtifact.activeNode,
+            );
+            continue;
+          }
           const durableResult = findForgeWorkOnResult(
             await readFile(link.resultPath, "utf8").catch(() => ""),
           );
@@ -1205,8 +1253,13 @@ export class ForgeWorkOnController {
       ctx.cwd,
       ctx.signal,
     );
-    await this.#git.ensureRuntimeIgnored(repositoryRoot, ctx.signal);
     const { policy } = await loadForgePolicy(repositoryRoot);
+    await this.#git.assertRepositoryRoot(
+      repositoryRoot,
+      policy.repository.name,
+      ctx.signal,
+    );
+    await this.#git.ensureRuntimeIgnored(repositoryRoot, ctx.signal);
     const integrationBranch = chooseIntegrationBranch(policy);
     if (isProtectedBranch(policy, integrationBranch))
       throw new Error(`Integration branch ${integrationBranch} is protected.`);
@@ -2050,6 +2103,7 @@ export class ForgeWorkOnController {
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
     }
+    delete link.launchFailure;
     delete link.activeNodes[activeNode.subagentRunId];
     this.#links.delete(activeNode.subagentRunId);
     if (link.currentNodeId === nodeId) link.currentNodeId = undefined;
@@ -4098,6 +4152,24 @@ export class ForgeWorkOnController {
       );
       const branch = `forge/issue-${state.issueNumber}-${forgeRunId.slice(0, 8)}`;
       const baseSha = this.#adoptedBaseSha(state) ?? "";
+      let prepared: PreparedWorktree;
+      try {
+        prepared = await this.#git.adoptPreparedWorktree(
+          {
+            repositoryRoot,
+            worktreePath,
+            branch,
+            baseBranch: state.integrationBranch,
+            baseSha,
+          },
+          state.repository,
+          ctx.signal,
+        );
+      } catch (error) {
+        if (!isLaunchSentinel(subagentRunId))
+          await this.#rpc.stopAndWait(subagentRunId).catch(() => undefined);
+        throw error;
+      }
       link = {
         forgeRunId,
         subagentRunId,
@@ -4105,18 +4177,12 @@ export class ForgeWorkOnController {
         repository: state.repository,
         stateBranch: policy.state.branch,
         resultPath: join(
-          worktreePath,
+          prepared.worktreePath,
           ".pi",
           "forge",
           `${forgeRunId}-work-on.json`,
         ),
-        prepared: {
-          repositoryRoot,
-          worktreePath,
-          branch,
-          baseBranch: state.integrationBranch,
-          baseSha,
-        },
+        prepared,
         status: "running",
         executionMode: "orchestrated",
         orchestrationId,
@@ -5060,10 +5126,8 @@ export class ForgeWorkOnController {
       message: `Start parent node cleanup-1 (no-change closure)`,
       ...(signal ? { signal } : {}),
     });
-    await this.#git
-      .deleteRemoteBranch(link.prepared, signal)
-      .catch(() => undefined);
-    await this.#git.cleanup(link.prepared, signal).catch(() => undefined);
+    await this.#git.deleteRemoteBranch(link.prepared, signal);
+    await this.#git.cleanup(link.prepared, signal);
     await journal.append({
       runId: link.forgeRunId,
       type: "effect.recorded",
@@ -5243,6 +5307,19 @@ export class ForgeWorkOnController {
     const journal = new RunJournal(store);
     const sessionId = ctx.sessionManager.getSessionId();
 
+    const rebound = await this.#git.rebind(
+      link.prepared,
+      ctx.signal,
+      link.repository,
+    );
+    await materializeForgeAgents(rebound.worktreePath);
+    if (
+      rebound.repositoryRoot !== link.prepared.repositoryRoot ||
+      rebound.worktreePath !== link.prepared.worktreePath
+    ) {
+      link.prepared = rebound;
+      this.#persistLink(link);
+    }
     await this.#git.assertClean(link.prepared.worktreePath, ctx.signal);
     const actualHead = await this.#git.head(
       link.prepared.worktreePath,
