@@ -570,12 +570,9 @@ export class ForgeWorkOnController {
             link.prepared.repositoryRoot,
           );
           const previousReviewRounds = latestReviewRound(directState.state);
-          if (
-            directRefreshRecovery &&
-            previousReviewRounds >= policy.review.maxRounds
-          )
+          if (directRefreshRecovery && previousReviewRounds >= 5)
             throw new Error(
-              "Direct refresh cannot start after the configured review-round cap.",
+              "Direct refresh cannot start after the five-round result cap.",
             );
           this.#directBinding = {
             runId: link.forgeRunId,
@@ -1352,6 +1349,17 @@ export class ForgeWorkOnController {
       message: `Bind resume receipt for ForgeDock node ${nodeId}`,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
+    const resumedActiveNode = link.activeNodes[receipt.runId];
+    if (
+      resumedActiveNode &&
+      (await this.#drainReceiptCompletion(
+        link,
+        ctx,
+        receipt,
+        resumedActiveNode,
+      ))
+    )
+      return true;
     await this.#projectWorkflowStage(
       link,
       workflowStageForNodeTransition(node.node, "resumed"),
@@ -1608,17 +1616,13 @@ export class ForgeWorkOnController {
           link.providerRetries = 0;
           delete link.launchFailure;
           this.#persistLink(link);
-          const buffered = this.#earlyCompletions.get(receipt.runId);
-          if (buffered) {
-            this.#earlyCompletions.delete(receipt.runId);
-            void this.#handleTopLevelCompletion(link, ctx, buffered).catch(
-              (error) => {
-                link.status = "failed";
-                this.#persistLink(link);
-                this.#emitLifecycle(link, { reason: errorMessage(error) });
-              },
-            );
-          }
+          void this.#drainReceiptCompletion(link, ctx, receipt).catch(
+            (error) => {
+              link.status = "failed";
+              this.#persistLink(link);
+              this.#emitLifecycle(link, { reason: errorMessage(error) });
+            },
+          );
         } else {
           link.status = "failed";
           if (!isWorktreeBindingFailure(errorMessage(launchFailure)))
@@ -1731,6 +1735,27 @@ export class ForgeWorkOnController {
     this.#emitLifecycle(link, {
       reason: completion.error ?? `Subagent ${completion.state}.`,
     });
+  }
+
+  async #drainReceiptCompletion(
+    link: ActiveRunLink,
+    ctx: ExtensionContext,
+    receipt: Pick<SubagentSpawnReceipt, "runId">,
+    activeNode?: ActiveNodeRunLink,
+  ): Promise<boolean> {
+    const buffered = this.#earlyCompletions.get(receipt.runId);
+    const observed =
+      buffered ??
+      parseAsyncCompletion(
+        await this.#rpc.status(receipt.runId).catch(() => undefined),
+      );
+    if (buffered) this.#earlyCompletions.delete(receipt.runId);
+    if (!observed || observed.state === "running" || observed.state === "paused")
+      return false;
+    if (activeNode)
+      await this.#reconcileActiveNode(link, ctx, observed.error, activeNode);
+    else await this.#handleTopLevelCompletion(link, ctx, observed);
+    return true;
   }
 
   async #reconcileActiveNode(
@@ -4147,6 +4172,17 @@ export class ForgeWorkOnController {
         delete link.launchFailure;
         link.status = "running";
         this.#persistLink(link);
+        if (ctx) {
+          const activeNode = boundedNode
+            ? link.activeNodes[receipt.runId]
+            : undefined;
+          await this.#drainReceiptCompletion(
+            link,
+            ctx,
+            receipt,
+            activeNode,
+          );
+        }
         return {
           forgeRunId: link.forgeRunId,
           subagentRunId: link.subagentRunId,
@@ -4786,6 +4822,10 @@ export class ForgeWorkOnController {
     ctx: ExtensionContext,
     refreshAttempt?: number,
   ): Promise<void> {
+    if (result.review.rounds >= 5)
+      throw new Error(
+        "Refresh cannot start after the five-round result cap.",
+      );
     link.reviewBaseSha = currentBaseSha;
     link.prepared = { ...link.prepared, baseSha: currentBaseSha };
     link.refreshes = refreshAttempt ?? link.refreshes + 1;
@@ -4891,17 +4931,13 @@ export class ForgeWorkOnController {
       };
       delete link.launchFailure;
       this.#persistLink(link);
-      const buffered = this.#earlyCompletions.get(receipt.runId);
-      if (buffered) {
-        this.#earlyCompletions.delete(receipt.runId);
-        void this.#handleTopLevelCompletion(link, ctx, buffered).catch(
-          (error) => {
-            link.status = "failed";
-            this.#persistLink(link);
-            this.#emitLifecycle(link, { reason: errorMessage(error) });
-          },
-        );
-      }
+      void this.#drainReceiptCompletion(link, ctx, receipt).catch(
+        (error) => {
+          link.status = "failed";
+          this.#persistLink(link);
+          this.#emitLifecycle(link, { reason: errorMessage(error) });
+        },
+      );
       this.#receiptBindings.delete(receipt.runId);
       this.#emitLifecycle(link, {
         baseSha: currentBaseSha,

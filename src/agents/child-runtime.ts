@@ -2119,11 +2119,12 @@ function readBinding(): ForgeChildBinding {
     refresh &&
     (!Number.isSafeInteger(previousReviewRounds) ||
       (previousReviewRounds as number) < 1 ||
-      (previousReviewRounds as number) >= (value.maxReviewRounds as number))
+      (previousReviewRounds as number) > (value.maxReviewRounds as number) ||
+      (previousReviewRounds as number) >= 5)
   ) {
-    // The refreshed review must remain inside the configured round cap.
+    // The refreshed review must remain inside both the configured and schema caps.
     throw new Error(
-      "Refresh binding previousReviewRounds must leave room for one verification review round within maxReviewRounds.",
+      "Refresh binding previousReviewRounds must leave room for one verification review round within maxReviewRounds and the result schema cap.",
     );
   }
   return {
