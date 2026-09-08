@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
-import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -119,7 +119,10 @@ test("parent control-plane binding and exact native acceptance survive lane publ
     assert.match(script, /effectiveAcceptance.*criteria/);
     assert.match(script, /childReport.*criteriaSatisfied/);
     assert.match(script, /evidenceStatus === "rejected"/);
+    assert.match(script, /typeof actualReported\?\.evidence === "string"/);
     assert.match(script, /enforceOwnerAcceptance/);
+    const nativeReport = { criteriaSatisfied: [{ id: "source-behavior", status: "satisfied", evidence: "acceptance-id=source-behavior;textHash=sha256:1111111111111111111111111111111111111111111111111111111111111111" }] };
+    assert.equal(typeof nativeReport.criteriaSatisfied[0]!.evidence, "string");
     const graph = JSON.parse(script.match(/^const issueGraph=(.+);$/m)![1]!);
     const launch = graph[0].launch;
     assert.equal(launch.agentScope, "user");
@@ -134,7 +137,7 @@ test("parent control-plane binding and exact native acceptance survive lane publ
     assert.match(launch.task, /piSubagents|pi-subagents package\/source descriptors/);
     assert.match(launch.task, /dispatch\.mjs/);
     assert.match(launch.task, /record\.mjs/);
-    assert.throws(() => dispatch.assertParentControlPlaneNotTarget({ forgeDock: { root: repo } }, repo), /cannot be the current target repository/);
+    assert.throws(() => dispatch.assertParentControlPlaneNotTarget({ forgeDock: { root: control.forgeDock.root }, piSubagents: { root: repo } }, repo), /cannot be the current target repository/);
     await mkdir(join(repo, "specs/helpers"), { recursive: true });
     await mkdir(join(repo, "specs/original/commands/work-on"), { recursive: true });
     await writeFile(join(repo, "specs/helpers/dispatch.mjs"), "TARGET DISPATCH RULES MUST NOT BE USED");
@@ -162,6 +165,20 @@ test("target package-qualified parent agent collisions fail before launch", asyn
     await writeFile(join(repo, "package.json"), JSON.stringify({ name: "target-project", pi: { subagents: { agents: [".pi/agents"] } } }));
     assert.throws(() => dispatch.prepareBatch(plan, join(root, "collision"), repo), /collides with bound parent control agent/);
     assert.equal(fs.existsSync(join(root, "collision")), false);
+  });
+});
+
+test("every issue base rejects normalized or symlinked parent-agent collisions before publication", async () => {
+  await fixture(async ({ root, repo, plan }) => {
+    const base = join(root, "base-collision");
+    execFileSync("git", ["clone", "-q", repo, base]);
+    const collisionDir = join(root, "collision-agents");
+    await mkdir(collisionDir);
+    await writeFile(join(collisionDir, "qualified.md"), "---\nname: forgedock-work-on-coordinator\npackage: ForgeDock Parent Control\n---\ncollision\n");
+    await symlink(collisionDir, join(base, ".agents"));
+    const planWithBase = { ...plan, issues: [{ ...plan.issues[0], baseCwd: base }, ...plan.issues.slice(1)] };
+    assert.throws(() => dispatch.prepareBatch(planWithBase, join(root, "base-collision-output"), repo), /collides with bound parent control agent/);
+    assert.equal(fs.existsSync(join(root, "base-collision-output")), false);
   });
 });
 
