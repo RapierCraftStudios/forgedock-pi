@@ -68,6 +68,7 @@ test("contract descriptors are exact, immutable, and fail closed before launch",
       () => dispatch.prepareBatch({ ...plan, issues: [{ ...plan.issues[0], contract: undefined }] }, join(root, "missing"), repo),
       /contract descriptor/,
     );
+    assert.equal(fs.existsSync(join(root, "missing")), false);
     const original = plan.issues[0].contract;
     await writeFile(original.path, `${JSON.stringify(dispatch.createIssueContract(33724, [{ id: "changed", textHash: `sha256:${"4".repeat(64)}`, proofType: "behavioral", affectedBoundaries: ["src/example.ts"] }]) )}\n`);
     assert.throws(
@@ -95,6 +96,7 @@ test("parent control-plane binding and exact native acceptance survive lane publ
     assert.equal(control.forgeDock.root, "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/forgedock-pi");
     assert.equal(control.piSubagents.root, "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents");
     assert.equal(control.forgeDock.specs.workOn.path, `${control.forgeDock.root}/specs/original/commands/work-on.md`);
+    assert.equal(control.forgeDock.helpers.record.path, `${control.forgeDock.root}/specs/helpers/record.mjs`);
     assert.equal(control.piSubagents.acceptance.path, `${control.piSubagents.root}/src/runs/shared/acceptance.ts`);
     assert.throws(() => dispatch.validateControlPlaneDescriptor({ ...control, digest: `sha256:${"0".repeat(64)}` }), /digest does not match/);
     const policy = JSON.parse(await readFile(batch.lanes[0].input.path, "utf8"));
@@ -109,6 +111,22 @@ test("parent control-plane binding and exact native acceptance survive lane publ
     assert.match(launch.task, /forgedock\.control-plane\/v1/);
     assert.match(launch.task, /piSubagents|pi-subagents package\/source descriptors/);
     assert.match(launch.task, /dispatch\.mjs/);
+    assert.match(launch.task, /record\.mjs/);
+    await mkdir(join(repo, "specs/helpers"), { recursive: true });
+    await mkdir(join(repo, "specs/original/commands/work-on"), { recursive: true });
+    await writeFile(join(repo, "specs/helpers/dispatch.mjs"), "TARGET DISPATCH RULES MUST NOT BE USED");
+    await writeFile(join(repo, "specs/pi-adapter.md"), "TARGET RECIPE MUST NOT BE USED");
+    await writeFile(join(repo, "specs/original/commands/work-on/review.md"), "TARGET REVIEW RULES MUST NOT BE USED");
+    await writeFile(join(repo, "specs/original/commands/work-on.md"), "TARGET WORK-ON RULES MUST NOT BE USED");
+    const regenerated = await readFile(prepared.request.workflowScriptPath, "utf8");
+    assert.doesNotMatch(regenerated, /TARGET (DISPATCH|RECIPE|REVIEW|WORK-ON) RULES/);
+    const policyEnv = { PI_SUBAGENT_EXTENSION_BINDINGS: JSON.stringify({ [dispatch.BINDING]: batch.lanes[0].input }) };
+    const reboundPolicy = dispatch.loadPolicy(undefined, policyEnv);
+    const contract = JSON.parse(await readFile(reboundPolicy.contract.path, "utf8"));
+    const review = dispatch.prepareReview({ head: dispatch.gitHead(repo), round: 1, contractDigest: reboundPolicy.contractDigest, criterionIds: contract.criteria.map((criterion: { id: string }) => criterion.id), roles: [{ role: "correctness", thinking: "high", task: "Review only" }] }, join(root, "review-after-target-tamper"), policyEnv);
+    const reviewScript = await readFile(review.request.workflowScriptPath, "utf8");
+    assert.doesNotMatch(reviewScript, /TARGET (DISPATCH|RECIPE|REVIEW|WORK-ON) RULES/);
+    assert.match(reviewScript, /forgedock\.control-plane\/v1/);
   });
 });
 
@@ -155,6 +173,14 @@ test("supervisor identity resolves the exact run ID, never the shared child inde
     assert.throws(() => dispatch.identifyLane(JSON.parse(fs.readFileSync(other.batchFile, "utf8")), status, "owner-b"), /exact prepared batch/);
     const stale = structuredClone(batch); stale.lanes[1].target = "main";
     assert.throws(() => dispatch.identifyLane(stale, status, "owner-b"), /digest-bound prepared batch/);
+    const substitutedPolicy = JSON.parse(await readFile(batch.lanes[0].input.path, "utf8"));
+    substitutedPolicy.controlPlane = { ...substitutedPolicy.controlPlane, digest: `sha256:${"0".repeat(64)}` };
+    const substitutedPath = join(root, "substituted-lane.json");
+    const substitutedBytes = `${JSON.stringify(substitutedPolicy)}\n`;
+    await writeFile(substitutedPath, substitutedBytes);
+    const substituted = structuredClone(batch);
+    substituted.lanes[0] = { ...substituted.lanes[0], key: `${substitutedPolicy.key}-${createHash("sha256").update(substitutedBytes).digest("hex")}`, input: { path: substitutedPath, sha256: createHash("sha256").update(substitutedBytes).digest("hex") } };
+    assert.throws(() => dispatch.identifyLane(substituted, { ...status, steps: [{ runId: "owner-substituted", workflowKey: substituted.lanes[0].key }] }, "owner-substituted"), /Control-plane descriptor digest does not match/);
   });
 });
 
@@ -173,6 +199,10 @@ test("record rendering derives identity and treats shell metacharacters as liter
     assert.throws(() => records.renderRecord({ ...draft, round: 4 }, body, { cwd: repo, env }), /bound policy/);
     assert.throws(() => records.renderRecord(draft, "**Head**: invented", { cwd: repo, env }), /generated/);
     const output = join(root, "record.md"); await writeFile(output, rendered.markdown);
+    const draftPath = join(root, "draft.json"); const bodyPath = join(root, "body.md"); const cliOutput = join(root, "cli-record.md");
+    await writeFile(draftPath, JSON.stringify({ ...draft, input: batch.lanes[1].input }));
+    await writeFile(bodyPath, body);
+    assert.throws(() => execFileSync(process.execPath, [fileURLToPath(new URL("../../specs/helpers/record.mjs", import.meta.url)), draftPath, bodyPath, cliOutput], { cwd: repo, env: { ...process.env, ...env }, encoding: "utf8" }), /Untrusted record helper path/);
     const calls: string[][] = [];
     const stored = { id: 123, body: rendered.markdown, html_url: "https://github.com/example/project/issues/33745#issuecomment-123" };
     const gh = (args: string[]) => { calls.push(args); return args.includes("--slurp") ? "[[]]" : JSON.stringify(stored); };

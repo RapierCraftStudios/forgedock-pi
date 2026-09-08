@@ -3,11 +3,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { pathToFileURL } from "node:url";
-import { loadPolicy, assertRepo, gitHead } from "./dispatch.mjs";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { loadPolicy, assertRepo, controlFile, gitHead } from "./dispatch.mjs";
 
 const titles = { INVESTIGATOR: "Investigation", CLASSIFICATION: "Classification", CONTEXT: "Implementation Context", CONTRACT: "Build Contract", ARCHITECT: "Implementation Plan", BUILDER: "Build Complete", "REVIEW-PANEL": "Review Panel", REMEDIATION: "Remediation Complete", DECOMPOSED: "Decomposition Complete", GATED: "Work-On Gated", TRAJECTORY: "Work-On Outcome" };
 function check(ok, message) { if (!ok) throw new Error(message); }
+function assertInstalledRecordHelper(policy) {
+  const current = fs.realpathSync(fileURLToPath(import.meta.url));
+  check(current === controlFile(policy.controlPlane, "record"), `Untrusted record helper path; invoke the installed helper at ${controlFile(policy.controlPlane, "record")}`);
+}
 const link = value => {
   if (typeof value !== "string" || /[\s<>]/.test(value)) return false;
   try { const url = new URL(value); return url.protocol === "https:" && !url.username && !url.password && !url.search; } catch { return false; }
@@ -62,6 +66,8 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
     const [draftFile, bodyFile, outputFile, action] = process.argv.slice(2);
     check(draftFile && bodyFile && outputFile && (!action || action === "--publish"), "Usage: record.mjs DRAFT_JSON BODY_MD OUTPUT_MD [--publish]");
     const draft = JSON.parse(fs.readFileSync(draftFile, "utf8"));
+    const policy = loadPolicy(draft.input, process.env, true);
+    assertInstalledRecordHelper(policy);
     const record = renderRecord(draft, fs.readFileSync(bodyFile, "utf8"));
     if (fs.existsSync(outputFile)) check(fs.readFileSync(outputFile, "utf8") === record.markdown, "Output exists with different content; use a new scratch path");
     else fs.writeFileSync(outputFile, record.markdown, { flag: "wx", mode: 0o600 });
