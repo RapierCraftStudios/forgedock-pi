@@ -531,13 +531,19 @@ export class ForgeWorkOnController {
         const retryableCleanup =
           link.status === "failed" &&
           parentNodeFromId(link.currentNodeId) === "cleanup";
+        const retryableRefresh = Boolean(
+          link.refreshLaunch &&
+            link.refreshLaunch.runId === link.subagentRunId &&
+            isLaunchSentinel(link.refreshLaunch.runId),
+        );
         if (
           link.status !== "running" &&
           link.status !== "refreshing" &&
-          !retryableCleanup
+          !retryableCleanup &&
+          !retryableRefresh
         )
           continue;
-        if (retryableCleanup) {
+        if (retryableCleanup || retryableRefresh) {
           link.status = "running";
           this.#persistLink(link);
         }
@@ -618,6 +624,10 @@ export class ForgeWorkOnController {
               isLaunchSentinel(activeNode.subagentRunId),
             ))
         ) {
+          if (ambiguousRefresh && link.orchestrationId) {
+            await this.#retryRefreshBindingFailure(link, ctx);
+            continue;
+          }
           await this.#rebindLink(link, ctx.signal);
           const nodeArtifacts = await Promise.all(
             activeNodes.map(async (activeNode) => ({
@@ -934,17 +944,20 @@ export class ForgeWorkOnController {
       });
       receipts.push(...projection.receipts);
     }
-    if (
-      latest.state.outcome === "merged" &&
-      !latest.state.effects[ids.workflow]
-    ) {
+    if (!latest.state.effects[ids.workflow]) {
       receipts.push(
-        await projector.setWorkflowLabelWithReceipt(
-          link.issueNumber,
-          WORKFLOW_LABEL_BY_STAGE.merged,
-          ctx.signal,
-          `${completed.eventId}:workflow`,
-        ),
+        latest.state.outcome === "merged"
+          ? await projector.setWorkflowLabelWithReceipt(
+              link.issueNumber,
+              WORKFLOW_LABEL_BY_STAGE.merged,
+              ctx.signal,
+              `${completed.eventId}:workflow`,
+            )
+          : await projector.clearWorkflowLabelWithReceipt(
+              link.issueNumber,
+              ctx.signal,
+              `${completed.eventId}:workflow`,
+            ),
       );
     }
     await recordProjectionReceipts(
@@ -1083,6 +1096,17 @@ export class ForgeWorkOnController {
         `ForgeDock issue #${link.issueNumber} resumed after transient provider failure (${retry}/3).`,
         "warning",
       );
+      const buffered = this.#earlyCompletions.get(receipt.runId);
+      const observed =
+        buffered ??
+        parseAsyncCompletion(
+          await this.#rpc.status(receipt.runId).catch(() => undefined),
+        );
+      if (buffered) this.#earlyCompletions.delete(receipt.runId);
+      if (observed && observed.state !== "running" && observed.state !== "paused") {
+        this.#providerRecovering.delete(link.forgeRunId);
+        await this.#handleTopLevelCompletion(link, ctx, observed);
+      }
     } catch (error) {
       link.status = "failed";
       this.#persistLink(link);
@@ -1099,7 +1123,7 @@ export class ForgeWorkOnController {
     ctx: ExtensionContext,
   ): Promise<void> {
     const refresh = link.refreshLaunch;
-    if (!refresh || isLaunchSentinel(link.subagentRunId)) {
+    if (!refresh) {
       link.status = "failed";
       this.#persistLink(link);
       return;
@@ -1996,7 +2020,7 @@ export class ForgeWorkOnController {
         }
       : await this.#loadNodeResult(link, activeNode);
     if (!nodeResult) {
-      if (!failure) return;
+      failure ??= `Bounded node ${nodeId} ended without a schema-valid result artifact.`;
       try {
         if (await this.#resumeInterruptedNode(link, ctx, failure, activeNode))
           return;
@@ -4799,7 +4823,8 @@ export class ForgeWorkOnController {
     let providerLaunchAttempted = false;
     let receipt: SubagentSpawnReceipt | undefined;
     try {
-      await this.#rpc.stopAndWait(previousRunId);
+      if (!isLaunchSentinel(previousRunId))
+        await this.#rpc.stopAndWait(previousRunId);
       const rebound = await this.#git.rebind(
         link.prepared,
         ctx.signal,
@@ -4864,11 +4889,10 @@ export class ForgeWorkOnController {
         await this.#rpc.stopAndWait(receipt.runId);
         link.launchFailure = "ambiguous";
       } else if (!providerLaunchAttempted) {
-        this.#links.delete(launchIntent.sentinelRunId);
-        link.subagentRunId = previousRunId;
-        link.resultPath = previousResultPath;
-        delete link.refreshLaunch;
-        delete link.launchFailure;
+        // Keep the durable refresh sentinel and metadata. A later attach can
+        // rebind and retry this same refresh attempt without guessing whether
+        // a provider launch occurred.
+        link.resultPath = refreshResultPath;
       }
       this.#persistLink(link);
       throw error;
