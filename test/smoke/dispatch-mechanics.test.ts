@@ -86,6 +86,32 @@ test("contract descriptors are exact, immutable, and fail closed before launch",
   });
 });
 
+test("parent control-plane binding and exact native acceptance survive lane publication", async () => {
+  await fixture(async ({ root, repo, plan }) => {
+    const prepared = dispatch.prepareBatch(plan, join(root, "prepared-control"), repo);
+    const batch = JSON.parse(await readFile(prepared.batchFile, "utf8"));
+    const control = batch.controlPlane;
+    assert.equal(control.schema, "forgedock.control-plane/v1");
+    assert.equal(control.forgeDock.root, "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/forgedock-pi");
+    assert.equal(control.piSubagents.root, "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents");
+    assert.equal(control.forgeDock.specs.workOn.path, `${control.forgeDock.root}/specs/original/commands/work-on.md`);
+    assert.equal(control.piSubagents.acceptance.path, `${control.piSubagents.root}/src/runs/shared/acceptance.ts`);
+    assert.throws(() => dispatch.validateControlPlaneDescriptor({ ...control, digest: `sha256:${"0".repeat(64)}` }), /digest does not match/);
+    const policy = JSON.parse(await readFile(batch.lanes[0].input.path, "utf8"));
+    assert.equal(policy.controlPlane.digest, control.digest);
+    const script = await readFile(prepared.request.workflowScriptPath, "utf8");
+    const graph = JSON.parse(script.match(/^const issueGraph=(.+);$/m)![1]!);
+    const launch = graph[0].launch;
+    assert.equal(launch.acceptance.criteria.length, 2);
+    assert.deepEqual(launch.acceptance.criteria.map((criterion: { id: string }) => criterion.id), ["source-behavior", "source-safety"]);
+    assert.ok(launch.acceptance.criteria.every((criterion: { must: string }) => /textHash=sha256:|proofType=|affectedBoundaries=/.test(criterion.must)));
+    assert.deepEqual(launch.acceptance.criteria.map((criterion: { id: string }) => criterion.id).filter((id: string) => /^criterion-[12]$/.test(id)), []);
+    assert.match(launch.task, /forgedock\.control-plane\/v1/);
+    assert.match(launch.task, /piSubagents|pi-subagents package\/source descriptors/);
+    assert.match(launch.task, /dispatch\.mjs/);
+  });
+});
+
 test("bad launch shape fails before request publication, not inside native dispatch", async () => {
   await fixture(async ({ root, repo, plan }) => {
     const out = join(root, "bad");
