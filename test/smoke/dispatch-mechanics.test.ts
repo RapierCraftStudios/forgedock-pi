@@ -119,8 +119,10 @@ test("parent control-plane binding and exact native acceptance survive lane publ
     assert.match(script, /effectiveAcceptance.*criteria/);
     assert.match(script, /childReport.*criteriaSatisfied/);
     assert.match(script, /evidenceStatus === "rejected"/);
-    assert.match(script, /typeof actualReported\?\.evidence === "string"/);
+    assert.match(script, /evidenceValid/);
+    assert.match(await readFile("specs/helpers/dispatch.mjs", "utf8"), /typeof actualReported\?\.evidence === "string"/);
     assert.match(script, /enforceOwnerAcceptance/);
+    assert.match(script, /rawResult[\s\S]{0,120}enforceOwnerAcceptance/);
     const nativeReport = { criteriaSatisfied: [{ id: "source-behavior", status: "satisfied", evidence: "acceptance-id=source-behavior;textHash=sha256:1111111111111111111111111111111111111111111111111111111111111111" }] };
     assert.equal(typeof nativeReport.criteriaSatisfied[0]!.evidence, "string");
     const graph = JSON.parse(script.match(/^const issueGraph=(.+);$/m)![1]!);
@@ -137,6 +139,7 @@ test("parent control-plane binding and exact native acceptance survive lane publ
     assert.match(launch.task, /piSubagents|pi-subagents package\/source descriptors/);
     assert.match(launch.task, /dispatch\.mjs/);
     assert.match(launch.task, /record\.mjs/);
+    assert.throws(() => dispatch.assertInstalledDispatcherNotTarget(process.cwd()), /current target repository/);
     assert.throws(() => dispatch.assertParentControlPlaneNotTarget({ forgeDock: { root: control.forgeDock.root }, piSubagents: { root: repo } }, repo), /cannot be the current target repository/);
     await mkdir(join(repo, "specs/helpers"), { recursive: true });
     await mkdir(join(repo, "specs/original/commands/work-on"), { recursive: true });
@@ -176,6 +179,9 @@ test("every issue base rejects normalized or symlinked parent-agent collisions b
     await mkdir(collisionDir);
     await writeFile(join(collisionDir, "qualified.md"), "---\nname: forgedock-work-on-coordinator\npackage: ForgeDock Parent Control\n---\ncollision\n");
     await symlink(collisionDir, join(base, ".agents"));
+    const nestedAgents = join(base, "nested-agents"); await mkdir(nestedAgents);
+    await writeFile(join(nestedAgents, "ancestor-qualified.md"), "---\nname: delegate\npackage: forgedock-parent-control\n---\ncollision\n");
+    await writeFile(join(root, "package.json"), JSON.stringify({ name: "ancestor-project", pi: { subagents: { agents: ["base-collision/nested-agents"] } } }));
     const planWithBase = { ...plan, issues: [{ ...plan.issues[0], baseCwd: base }, ...plan.issues.slice(1)] };
     assert.throws(() => dispatch.prepareBatch(planWithBase, join(root, "base-collision-output"), repo), /collides with bound parent control agent/);
     assert.equal(fs.existsSync(join(root, "base-collision-output")), false);
@@ -273,6 +279,8 @@ test("record rendering derives identity and treats shell metacharacters as liter
     const legacyInput = { path: legacyPath, sha256: createHash("sha256").update(legacyBytes).digest("hex") };
     const historical = records.renderRecord({ kind: "GATED", input: legacyInput, inputs: [] }, body, { cwd: repo, env: legacyEnv, legacyHistory: true });
     assert.equal(historical.target, 33745);
+    const historicalOutput = join(root, "historical-record.md"); await writeFile(historicalOutput, historical.markdown);
+    assert.throws(() => records.publishRecord(historical, historicalOutput, () => ""), /render-only/);
     const legacyDraftPath = join(root, "legacy-draft.json"); const legacyOutput = join(root, "legacy-record.md");
     await writeFile(legacyDraftPath, JSON.stringify({ kind: "GATED", input: legacyInput, inputs: [] }));
     const legacyCli = execFileSync(process.execPath, [fileURLToPath(new URL("../../specs/helpers/record.mjs", import.meta.url)), legacyDraftPath, bodyPath, legacyOutput, "--legacy-history"], { cwd: repo, env: { ...process.env, ...legacyEnv }, encoding: "utf8" });

@@ -162,14 +162,14 @@ function listAgentFiles(root) {
 }
 function assertNoTargetAgentCollision(cwd) {
   const roots = new Set();
-  const packageFile = path.join(cwd, "package.json");
-  if (fs.existsSync(packageFile)) {
-    const packageJson = JSON.parse(fs.readFileSync(packageFile, "utf8"));
-    const declarations = [packageJson["pi-subagents"], packageJson.pi?.subagents].filter(value => value && typeof value === "object" && !Array.isArray(value));
-    for (const declaration of declarations) for (const directory of Array.isArray(declaration.agents) ? declaration.agents : []) if (typeof directory === "string") roots.add(path.resolve(cwd, directory));
-  }
   let current = path.resolve(cwd);
   while (true) {
+    const packageFile = path.join(current, "package.json");
+    if (fs.existsSync(packageFile)) {
+      const packageJson = JSON.parse(fs.readFileSync(packageFile, "utf8"));
+      const declarations = [packageJson["pi-subagents"], packageJson.pi?.subagents].filter(value => value && typeof value === "object" && !Array.isArray(value));
+      for (const declaration of declarations) for (const directory of Array.isArray(declaration.agents) ? declaration.agents : []) if (typeof directory === "string") roots.add(path.resolve(current, directory));
+    }
     roots.add(path.join(current, ".pi", "agents"));
     roots.add(path.join(current, ".agents"));
     const parent = path.dirname(current);
@@ -305,6 +305,20 @@ function configAt(cwd) {
   const remediationLimit = integer(config.review?.remediation_max_rounds ?? 1, "remediation limit", 0);
   return { raw, config, repo, model, remediationLimit };
 }
+function gitValue(root, args) {
+  try { return execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim(); } catch { return undefined; }
+}
+export function assertInstalledDispatcherNotTarget(targetRoot) {
+  const moduleRoot = fs.realpathSync(path.resolve(here, "../.."));
+  const target = fs.realpathSync(targetRoot);
+  requireThat(moduleRoot !== target, "Dispatcher module cannot execute from the current target repository");
+  const moduleCommon = gitValue(moduleRoot, ["rev-parse", "--git-common-dir"]);
+  const targetCommon = gitValue(target, ["rev-parse", "--git-common-dir"]);
+  requireThat(!moduleCommon || !targetCommon || path.resolve(moduleRoot, moduleCommon) !== path.resolve(target, targetCommon), "Dispatcher module cannot execute from a sibling worktree of the target repository");
+  const moduleRemote = gitValue(moduleRoot, ["remote", "get-url", "origin"]);
+  const targetRemote = gitValue(target, ["remote", "get-url", "origin"]);
+  requireThat(!moduleRemote || !targetRemote || moduleRemote.replace(/\.git$/, "").toLowerCase() !== targetRemote.replace(/\.git$/, "").toLowerCase(), "Dispatcher module repository identity matches the target repository");
+}
 export function assertParentControlPlaneNotTarget(controlPlane, targetRoot) {
   const target = fs.realpathSync(targetRoot);
   requireThat(controlPlane.forgeDock.root !== target && controlPlane.piSubagents.root !== target, "Parent control plane cannot be the current target repository");
@@ -334,6 +348,7 @@ export function prepareSingle(plan, out, cwd = process.cwd()) {
   requireThat(typeof plan.target === "string" && plan.target.length > 0, "Single policy needs target");
   execFileSync("git", ["check-ref-format", "--branch", plan.target], { cwd, stdio: "pipe" });
   const source = configAt(cwd);
+  assertInstalledDispatcherNotTarget(cwd);
   assertNoTargetAgentCollision(cwd);
   if (plan.verification) readInput(plan.verification);
   fs.mkdirSync(out, { recursive: true }); out = path.resolve(out);
@@ -357,6 +372,7 @@ function recipe(controlPlane) {
 export function prepareBatch(plan, out, cwd = process.cwd()) {
   fields(plan, ["issues", "activeOwners", "launchAllowance", "requestStartedAt", "verification"], "plan");
   const source = configAt(cwd);
+  assertInstalledDispatcherNotTarget(cwd);
   assertNoTargetAgentCollision(cwd);
   const controlPlane = createControlPlaneDescriptor();
   assertParentControlPlaneNotTarget(controlPlane, cwd);
@@ -374,6 +390,7 @@ export function prepareBatch(plan, out, cwd = process.cwd()) {
     requireThat(typeof issue.target === "string" && issue.target.length > 0 && !issue.target.startsWith("-"), "Issue needs target branch");
     execFileSync("git", ["check-ref-format", "--branch", issue.target], { cwd, stdio: "pipe" });
     requireThat(path.isAbsolute(issue.baseCwd ?? "") && fs.statSync(issue.baseCwd).isDirectory(), "Issue needs an existing absolute baseCwd");
+    assertInstalledDispatcherNotTarget(issue.baseCwd);
     assertParentControlPlaneNotTarget(controlPlane, issue.baseCwd);
     assertNoTargetAgentCollision(issue.baseCwd);
     assertRepo(source.repo, issue.baseCwd);

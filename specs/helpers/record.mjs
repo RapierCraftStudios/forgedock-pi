@@ -41,10 +41,11 @@ export function renderRecord(draft, body, options = {}) {
     + (draft.kind === "REMEDIATION" ? `**Remediation round**: ${draft.round}/${policy.remediationLimit}\n` : "")
     + `**Inputs**: ${draft.inputs.length ? draft.inputs.map((url, i) => `[source ${i + 1}](${url})`).join(", ") : "none"}\n`
     + `**Supersedes**: ${draft.supersedes ? `[previous record](${draft.supersedes})` : "none"}\n\n${body.trim()}\n`;
-  return { policy, target, head, markdown };
+  return { policy, target, head, markdown, legacyHistory };
 }
 export function publishRecord(record, outputFile, gh = args => execFileSync("gh", args, { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 })) {
   const { policy, target, head, markdown } = record;
+  check(record.legacyHistory !== true, "Legacy history records are render-only and cannot be published");
   check(fs.readFileSync(outputFile, "utf8") === markdown, "Publication file does not match rendered identity/body");
   if (markdown.startsWith("<!-- FORGE:REVIEW-PANEL -->")) {
     const pr = JSON.parse(gh(["pr", "view", String(target), "-R", policy.repo, "--json", "headRefOid,baseRefName"]));
