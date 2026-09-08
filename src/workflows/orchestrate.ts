@@ -1315,7 +1315,11 @@ function requiredNumber(value: number | undefined, field: string): number {
 }
 
 export function isRecoverableLaneFailure(reason: string): boolean {
-  if (/Ambiguous Forge provider launch after durable intent/i.test(reason))
+  if (
+    /Ambiguous Forge provider launch (?:after durable intent|remains unbound)/i.test(
+      reason,
+    )
+  )
     return false;
   return (
     isWorktreeBindingFailure(reason) ||

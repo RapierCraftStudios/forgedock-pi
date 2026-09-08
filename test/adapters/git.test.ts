@@ -132,6 +132,18 @@ test("worktree manager creates an issue branch from integration and cleans it sa
     await manager.cleanupReview(review);
     await manager.cleanupReview(review);
     await assert.rejects(readFile(join(review.worktreePath, "app.txt"), "utf8"));
+    await mkdir(review.worktreePath, { recursive: true });
+    await execFileAsync("git", ["init", "-q", "-b", "foreign", review.worktreePath]);
+    await writeFile(join(review.worktreePath, "foreign-review.txt"), "keep\n");
+    await assert.rejects(
+      manager.cleanupReview(review),
+      /Forge worktree binding failure/,
+    );
+    assert.equal(
+      await readFile(join(review.worktreePath, "foreign-review.txt"), "utf8"),
+      "keep\n",
+    );
+    await rm(review.worktreePath, { recursive: true, force: true });
 
     const prepared = await manager.prepare(clone, {
       runId: "run-1234",

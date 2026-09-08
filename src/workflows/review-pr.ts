@@ -276,6 +276,7 @@ export class ReviewPrCoordinator {
               headSha: route.headSha,
               baseRef: route.baseRef,
               baseSha: route.baseSha,
+              expectedRepository: input.repository,
               ...(input.signal ? { signal: input.signal } : {}),
             },
           )).worktreePath

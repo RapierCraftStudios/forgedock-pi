@@ -150,6 +150,11 @@ export interface ActiveRunLink {
   activeNodes: Record<string, ActiveNodeRunLink>;
   currentNodeId?: string;
   nodeResultPath?: string;
+  refreshLaunch?: {
+    runId: string;
+    resultPath: string;
+    launchNonce: string;
+  };
   reviewHeadSha?: string;
   terminalOutcome?: "merged" | "closed";
 }
@@ -308,9 +313,24 @@ export class ForgeWorkOnController {
 
   async attach(ctx: ExtensionContext): Promise<void> {
     this.#restoreLinks(ctx);
-    for (const repositoryRoot of new Set(
-      [...this.#links.values()].map((link) => link.prepared.repositoryRoot),
-    ))
+    const validRoots = new Set<string>();
+    for (const link of new Set(this.#links.values())) {
+      try {
+        await this.#git.assertRepositoryIdentity(
+          link.prepared,
+          link.repository,
+          ctx.signal,
+        );
+        validRoots.add(link.prepared.repositoryRoot);
+      } catch (error) {
+        link.status = "failed";
+        this.#persistLink(link);
+        this.#emitLifecycle(link, {
+          reason: `Exact-worktree repository validation failed before attach: ${errorMessage(error)}`,
+        });
+      }
+    }
+    for (const repositoryRoot of validRoots)
       await this.#git.ensureRuntimeIgnored(repositoryRoot);
     await this.#rpc.ping();
     this.#directFinalizeUnsubscribe?.();
@@ -525,6 +545,38 @@ export class ForgeWorkOnController {
           continue;
         }
         const activeNodes = Object.values(link.activeNodes);
+        const ambiguousRefresh = Boolean(
+          link.refreshLaunch &&
+            link.refreshLaunch.runId === link.subagentRunId &&
+            isLaunchSentinel(link.refreshLaunch.runId),
+        );
+        if (
+          (link.launchFailure === "ambiguous" || ambiguousRefresh) &&
+          (activeNodes.length === 0 ||
+            activeNodes.every((activeNode) =>
+              isLaunchSentinel(activeNode.subagentRunId),
+            ))
+        ) {
+          const durableResult = findForgeWorkOnResult(
+            await readFile(link.resultPath, "utf8").catch(() => ""),
+          );
+          if (durableResult) {
+            delete link.launchFailure;
+            link.status = "running";
+            this.#persistLink(link);
+            await this.#finalize(link, ctx, durableResult);
+            continue;
+          }
+          // There is no provider run ID to stop. A technical terminal
+          // failure is safer than guessing and creating a second writer.
+          link.status = "failed";
+          this.#persistLink(link);
+          this.#emitLifecycle(link, {
+            reason:
+              "Ambiguous Forge provider launch remains unbound; refusing a replacement writer.",
+          });
+          continue;
+        }
         if (activeNodes.length > 0) {
           for (const activeNode of activeNodes) {
             if (isLaunchSentinel(activeNode.subagentRunId)) {
@@ -562,6 +614,47 @@ export class ForgeWorkOnController {
             );
           }
           continue;
+        }
+        if (
+          link.orchestrationId &&
+          activeNodes.length === 0 &&
+          !link.currentNodeId
+        ) {
+          const queuedSnapshot = await projectionStore.readRun(
+            link.forgeRunId,
+            ctx.signal,
+          );
+          const queuedNode = Object.values(queuedSnapshot.state?.nodes ?? {}).find(
+            (candidate) => candidate.status === "queued",
+          );
+          if (queuedNode) {
+            const { policy } = await loadForgePolicy(
+              link.prepared.repositoryRoot,
+            );
+            await this.#dispatchNode(
+              link,
+              {
+                nodeId: queuedNode.nodeId,
+                node: queuedNode.node as WorkflowNode,
+                attempt: queuedNode.attempt,
+                ...(queuedNode.round ? { round: queuedNode.round } : {}),
+                ...(queuedNode.headSha
+                  ? { headSha: queuedNode.headSha }
+                  : {}),
+              },
+              policy,
+              projectionStore,
+              ctx,
+              [
+                link.issueContext,
+                link.planContext,
+                "Continue from the durable queued node after restart.",
+              ]
+                .filter(Boolean)
+                .join("\n\n"),
+            );
+            continue;
+          }
         }
         const parentNode = parentNodeFromId(link.currentNodeId);
         if (parentNode && link.currentNodeId) {
@@ -1644,6 +1737,7 @@ export class ForgeWorkOnController {
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
       }
+      delete link.launchFailure;
     }
     const reviewerResult = nodeId.startsWith("review-")
       ? await this.#loadReviewerResult(link, activeNode)
@@ -3255,24 +3349,27 @@ export class ForgeWorkOnController {
       link.forgeRunId,
       node.nodeId,
     );
-    await journal.append({
-      runId: link.forgeRunId,
-      type: "node.queued",
-      payload: {
-        nodeId: node.nodeId,
-        node: node.node,
-        attempt: node.attempt,
-        ...(node.round ? { round: node.round } : {}),
-        ...(node.headSha ? { headSha: node.headSha } : {}),
-        baseSha: link.prepared.baseSha,
-        resultPath,
-      },
-      idempotencyKey: `node:${node.nodeId}:queued`,
-      sessionId: ctx.sessionManager.getSessionId(),
-      message: `Queue ForgeDock node ${node.nodeId}`,
-      ...(ctx.signal ? { signal: ctx.signal } : {}),
-    });
-    const queuedState = await store.readRun(link.forgeRunId, ctx.signal);
+    let queuedState = await store.readRun(link.forgeRunId, ctx.signal);
+    if (!queuedState.state?.nodes[node.nodeId]) {
+      await journal.append({
+        runId: link.forgeRunId,
+        type: "node.queued",
+        payload: {
+          nodeId: node.nodeId,
+          node: node.node,
+          attempt: node.attempt,
+          ...(node.round ? { round: node.round } : {}),
+          ...(node.headSha ? { headSha: node.headSha } : {}),
+          baseSha: link.prepared.baseSha,
+          resultPath,
+        },
+        idempotencyKey: `node:${node.nodeId}:queued`,
+        sessionId: ctx.sessionManager.getSessionId(),
+        message: `Queue ForgeDock node ${node.nodeId}`,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      queuedState = await store.readRun(link.forgeRunId, ctx.signal);
+    }
     if (!link.builderContract && queuedState.state) {
       const durablePlan = Object.values(queuedState.state.nodes)
         .filter(
@@ -4380,6 +4477,7 @@ export class ForgeWorkOnController {
     link.reviewBaseSha = currentBaseSha;
     link.prepared = { ...link.prepared, baseSha: currentBaseSha };
     link.refreshes += 1;
+    link.currentNodeId = undefined;
     link.status = "refreshing";
     this.#persistLink(link);
     if (link.executionMode === "direct") {
@@ -4420,6 +4518,11 @@ export class ForgeWorkOnController {
     this.#links.delete(previousRunId);
     link.subagentRunId = launchIntent.sentinelRunId;
     link.resultPath = refreshResultPath;
+    link.refreshLaunch = {
+      runId: launchIntent.sentinelRunId,
+      resultPath: refreshResultPath,
+      launchNonce: launchIntent.launchNonce,
+    };
     link.launchFailure = "ambiguous";
     this.#persistLink(link);
     let providerLaunchAttempted = false;
@@ -4458,6 +4561,11 @@ export class ForgeWorkOnController {
       this.#links.delete(launchIntent.sentinelRunId);
       link.subagentRunId = receipt.runId;
       link.resultPath = receipt.resultPath;
+      link.refreshLaunch = {
+        runId: receipt.runId,
+        resultPath: receipt.resultPath,
+        launchNonce: launchIntent.launchNonce,
+      };
       delete link.launchFailure;
       this.#persistLink(link);
       this.#receiptBindings.delete(receipt.runId);
@@ -4473,6 +4581,7 @@ export class ForgeWorkOnController {
         this.#links.delete(launchIntent.sentinelRunId);
         link.subagentRunId = previousRunId;
         link.resultPath = previousResultPath;
+        delete link.refreshLaunch;
         delete link.launchFailure;
       }
       this.#persistLink(link);
