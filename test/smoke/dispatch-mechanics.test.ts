@@ -123,6 +123,7 @@ test("parent control-plane binding and exact native acceptance survive lane publ
     assert.match(await readFile("specs/helpers/dispatch.mjs", "utf8"), /typeof actualReported\?\.evidence === "string"/);
     assert.match(script, /enforceOwnerAcceptance/);
     assert.match(script, /rawResult[\s\S]{0,120}enforceOwnerAcceptance/);
+    assert.match(script, /checkedRecovered[\s\S]{0,120}enforceOwnerAcceptance/);
     const nativeReport = { criteriaSatisfied: [{ id: "source-behavior", status: "satisfied", evidence: "acceptance-id=source-behavior;textHash=sha256:1111111111111111111111111111111111111111111111111111111111111111" }] };
     assert.equal(typeof nativeReport.criteriaSatisfied[0]!.evidence, "string");
     const graph = JSON.parse(script.match(/^const issueGraph=(.+);$/m)![1]!);
@@ -180,7 +181,7 @@ test("every issue base rejects normalized or symlinked parent-agent collisions b
     await writeFile(join(collisionDir, "qualified.md"), "---\nname: forgedock-work-on-coordinator\npackage: ForgeDock Parent Control\n---\ncollision\n");
     await symlink(collisionDir, join(base, ".agents"));
     const nestedAgents = join(base, "nested-agents"); await mkdir(nestedAgents);
-    await writeFile(join(nestedAgents, "ancestor-qualified.md"), "---\nname: delegate\npackage: forgedock-parent-control\n---\ncollision\n");
+    await writeFile(join(nestedAgents, "ancestor-qualified.md"), "---\nname: neutral\naliases: forgedock-parent-control.delegate\n---\ncollision\n");
     await writeFile(join(root, "package.json"), JSON.stringify({ name: "ancestor-project", pi: { subagents: { agents: ["base-collision/nested-agents"] } } }));
     const planWithBase = { ...plan, issues: [{ ...plan.issues[0], baseCwd: base }, ...plan.issues.slice(1)] };
     assert.throws(() => dispatch.prepareBatch(planWithBase, join(root, "base-collision-output"), repo), /collides with bound parent control agent/);

@@ -129,15 +129,18 @@ function validatePackageIdentity(root, packagePath, expectedName, expectedReposi
 function normalizeAgentPackageName(value) {
   return String(value ?? "").trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9.-]/g, "").replace(/-+/g, "-").replace(/\.+/g, ".").replace(/(^[-.]+|[-.]+$)/g, "");
 }
-function agentRuntimeName(file) {
+function agentRuntimeNames(file) {
   const text = fs.readFileSync(file, "utf8");
   const match = text.match(/^---\n([\s\S]*?)\n---(?:\n|$)/);
-  if (!match) return undefined;
+  if (!match) return [];
   const frontmatter = parse(match[1]);
-  if (!frontmatter || typeof frontmatter.name !== "string") return undefined;
+  if (!frontmatter || typeof frontmatter.name !== "string") return [];
   const local = frontmatter.name.trim();
   const packageName = typeof frontmatter.package === "string" ? normalizeAgentPackageName(frontmatter.package) : "";
-  return packageName ? `${packageName}.${local}` : local;
+  const runtime = packageName ? `${packageName}.${local}` : local;
+  const rawAliases = frontmatter.aliases ?? frontmatter.alias;
+  const aliases = Array.isArray(rawAliases) ? rawAliases : typeof rawAliases === "string" ? rawAliases.split(",") : [];
+  return [runtime, ...aliases.map(alias => normalizeAgentPackageName(alias)).filter(Boolean)];
 }
 function listAgentFiles(root) {
   const files = [];
@@ -162,7 +165,7 @@ function listAgentFiles(root) {
 }
 function assertNoTargetAgentCollision(cwd) {
   const roots = new Set();
-  let current = path.resolve(cwd);
+  let current = fs.realpathSync(cwd);
   while (true) {
     const packageFile = path.join(current, "package.json");
     if (fs.existsSync(packageFile)) {
@@ -177,8 +180,8 @@ function assertNoTargetAgentCollision(cwd) {
     current = parent;
   }
   for (const root of roots) for (const file of listAgentFiles(root)) {
-    const name = agentRuntimeName(file);
-    requireThat(name !== FORGEDOCK_OWNER_AGENT && name !== FORGEDOCK_REVIEW_AGENT, `Target agent definition collides with bound parent control agent: ${file}`);
+    const names = agentRuntimeNames(file);
+    requireThat(!names.includes(FORGEDOCK_OWNER_AGENT) && !names.includes(FORGEDOCK_REVIEW_AGENT), `Target agent definition collides with bound parent control agent: ${file}`);
   }
 }
 function validateFileSet(root, files, label, expected) {
@@ -287,10 +290,22 @@ export function readInput(input) {
   return JSON.parse(bytes.toString("utf8"));
 }
 export function gitHead(cwd = process.cwd()) { return execFileSync("git", ["rev-parse", "HEAD"], { cwd, encoding: "utf8" }).trim(); }
+export function canonicalRepositoryIdentity(remote) {
+  let value = String(remote ?? "").trim().replace(/^git\+/, "").replace(/\/+$/, "");
+  let pathPart = value;
+  if (value.includes("://")) {
+    try { pathPart = new URL(value).pathname; } catch { pathPart = value; }
+  } else {
+    const scp = value.match(/^[^@]+@[^:]+:(.+)$/);
+    if (scp) pathPart = scp[1];
+  }
+  const parts = pathPart.split(/[\\/]/).filter(Boolean).map(part => part.replace(/\.git$/, ""));
+  requireThat(parts.length >= 2, "Git origin does not identify an owner/repository pair");
+  return parts.slice(-2).join("/").toLowerCase();
+}
 export function assertRepo(repo, cwd = process.cwd()) {
-  const remote = execFileSync("git", ["remote", "get-url", "origin"], { cwd, encoding: "utf8" }).trim().replace(/\/$/, "");
-  const match = remote.match(/[:/]([^/:]+\/[^/]+?)(?:\.git)?$/);
-  requireThat(match?.[1]?.toLowerCase() === repo.toLowerCase(), "Current origin does not match the bound repository");
+  const remote = execFileSync("git", ["remote", "get-url", "origin"], { cwd, encoding: "utf8" });
+  requireThat(canonicalRepositoryIdentity(remote) === repo.toLowerCase(), "Current origin does not match the bound repository");
 }
 function sourceRoot(config, cwd) { return config.paths?.root ? fs.realpathSync(path.resolve(cwd, config.paths.root)) : fs.realpathSync(cwd); }
 function configAt(cwd) {
@@ -317,7 +332,7 @@ export function assertInstalledDispatcherNotTarget(targetRoot) {
   requireThat(!moduleCommon || !targetCommon || path.resolve(moduleRoot, moduleCommon) !== path.resolve(target, targetCommon), "Dispatcher module cannot execute from a sibling worktree of the target repository");
   const moduleRemote = gitValue(moduleRoot, ["remote", "get-url", "origin"]);
   const targetRemote = gitValue(target, ["remote", "get-url", "origin"]);
-  requireThat(!moduleRemote || !targetRemote || moduleRemote.replace(/\.git$/, "").toLowerCase() !== targetRemote.replace(/\.git$/, "").toLowerCase(), "Dispatcher module repository identity matches the target repository");
+  requireThat(!moduleRemote || !targetRemote || canonicalRepositoryIdentity(moduleRemote) !== canonicalRepositoryIdentity(targetRemote), "Dispatcher module repository identity matches the target repository");
 }
 export function assertParentControlPlaneNotTarget(controlPlane, targetRoot) {
   const target = fs.realpathSync(targetRoot);
@@ -366,7 +381,7 @@ function recipe(controlPlane) {
   const oldSatisfied = `function satisfied(result) {\n  return result.ok === true && /^FORGE_WORK_ON_RESULT status=DONE .* dependency=SATISFIED$/.test(resultLine(result));\n}`;
   const exactSatisfied = `function exactAcceptanceSatisfied(result, expected) {\n  if (!expected?.criteria) return true;\n  const child = result?.results?.[0] ?? result;\n  const ledger = child?.acceptance;\n  if (!ledger || ledger.status === "rejected" || ledger.evidenceStatus === "rejected") return false;\n  const effective = ledger?.effectiveAcceptance?.criteria;\n  const reported = ledger?.childReport?.criteriaSatisfied;\n  if (!Array.isArray(effective) || !Array.isArray(reported) || effective.length !== expected.criteria.length || reported.length !== expected.criteria.length) return false;\n  for (let index = 0; index < expected.criteria.length; index++) {\n    const expectedCriterion = expected.criteria[index];\n    const actualCriterion = effective[index];\n    const actualReported = reported[index];\n    const exactToken = "acceptance-id=" + expectedCriterion.id + ";textHash=" + expectedCriterion.textHash;\n    const evidenceValid = typeof actualReported?.evidence === "string" && actualReported.evidence.includes(exactToken);\n    if (actualCriterion?.id !== expectedCriterion.id || actualCriterion?.must !== expectedCriterion.must || actualReported?.id !== expectedCriterion.id || actualReported?.status !== "satisfied" || !evidenceValid) return false;\n  }\n  return true;\n}\nfunction enforceOwnerAcceptance(result, expected) {\n  if (exactAcceptanceSatisfied(result, expected)) return result;\n  return { ...result, ok: false, status: "FAILED", error: "Bound issue acceptance criteria were missing, reordered, generic, or mismatched." };\n}\nfunction satisfied(result, expected) {\n  return result.ok === true && exactAcceptanceSatisfied(result, expected) && /^FORGE_WORK_ON_RESULT status=DONE .* dependency=SATISFIED$/.test(resultLine(result));\n}`;
   requireThat(body.includes(oldSatisfied), "Bound installed dispatcher recipe lacks the acceptance boundary");
-  body = body.replace(oldSatisfied, exactSatisfied).replace("return launch(key, { ...issue, model: configuredModel }).then((result) => {", "return launch(key, { ...issue, model: configuredModel }).then((rawResult) => {\n    const result = enforceOwnerAcceptance(rawResult, issue.acceptance);").replace("satisfied(outcomes.get(key))", "satisfied(outcomes.get(key), node.launch.acceptance)");
+  body = body.replace(oldSatisfied, exactSatisfied).replace("return launch(key, { ...issue, model: configuredModel }).then((result) => {", "return launch(key, { ...issue, model: configuredModel }).then((rawResult) => {\n    const result = enforceOwnerAcceptance(rawResult, issue.acceptance);").replace("}).then((recovered) => ({ ...recovered, recoverySource: {", "}).then((recovered) => {\n      const checkedRecovered = enforceOwnerAcceptance(recovered, issue.acceptance);\n      return { ...checkedRecovered, recoverySource: {").replace("artifactPaths: result.artifactPaths ?? []\n    } }));", "artifactPaths: result.artifactPaths ?? []\n    } };\n    });").replace("satisfied(outcomes.get(key))", "satisfied(outcomes.get(key), node.launch.acceptance)");
   return body;
 }
 export function prepareBatch(plan, out, cwd = process.cwd()) {
