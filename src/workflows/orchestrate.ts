@@ -1315,6 +1315,8 @@ function requiredNumber(value: number | undefined, field: string): number {
 }
 
 export function isRecoverableLaneFailure(reason: string): boolean {
+  if (/Ambiguous Forge provider launch after durable intent/i.test(reason))
+    return false;
   return (
     isWorktreeBindingFailure(reason) ||
     /schema-valid Forge result artifact|State branch changed after|unsupported-continuation|WebSocket|timed? out|timeout|connection (?:lost|reset|error)|\b50[0234]\b|\b429\b|No comment found for marker.*FORGE:BUILDER|checkpoint failed validation|omitted the required canonical|required canonical .* section|Invalid username or token|Bound branch push failed|^forge-work-on:\s*$/i.test(

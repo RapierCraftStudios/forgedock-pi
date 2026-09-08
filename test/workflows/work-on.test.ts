@@ -557,6 +557,12 @@ test("wrong worktree failures rebind instead of becoming human gates", () => {
   assert.equal(launchRecoveryMode("Product decision requires operator approval."), "none");
   assert.equal(isRecoverableLaneFailure("Product decision requires operator approval."), false);
   assert.equal(isWorktreeBindingFailure("Product decision requires operator approval."), false);
+  assert.equal(
+    isRecoverableLaneFailure(
+      "Ambiguous Forge provider launch after durable intent: RPC spawn timed out.",
+    ),
+    false,
+  );
 });
 
 test("terminal workflow completion is matched only by top-level run ID", () => {

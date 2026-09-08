@@ -193,6 +193,12 @@ test("worktree manager creates an issue branch from integration and cleans it sa
       { encoding: "utf8" },
     );
     assert.equal(localBranch.stdout.trim(), "");
+    await rm(clone, { recursive: true, force: true });
+    await execFileAsync("git", ["clone", origin, clone]);
+    await assert.rejects(
+      manager.rebind(prepared),
+      /Forge worktree binding failure/,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

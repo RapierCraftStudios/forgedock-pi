@@ -43,6 +43,8 @@ export interface CommandExecutor {
 
 export interface PreparedWorktree {
   repositoryRoot: string;
+  /** Stable local identity used to reject a replaced repository at the same path. */
+  repositoryIdentity?: string;
   worktreePath: string;
   branch: string;
   baseBranch: string;
@@ -151,6 +153,10 @@ export class GitWorktreeManager {
     if (!input.baseBranch.trim() || input.baseBranch.startsWith("-"))
       throw new TypeError("Base branch is invalid.");
     const root = await realpath(repositoryRoot);
+    const repositoryIdentity = await this.#repositoryIdentity(
+      root,
+      input.signal,
+    );
     await this.#git(
       root,
       ["fetch", "--no-tags", "origin", input.baseBranch],
@@ -171,6 +177,7 @@ export class GitWorktreeManager {
       throw new Error(`Owned worktree path already exists: ${worktreePath}`);
     const prepared = {
       repositoryRoot: root,
+      repositoryIdentity,
       worktreePath,
       branch,
       baseBranch: input.baseBranch,
@@ -316,8 +323,41 @@ export class GitWorktreeManager {
   async rebind(
     prepared: PreparedWorktree,
     signal?: AbortSignal,
+    expectedRepository?: string,
   ): Promise<PreparedWorktree> {
     const root = await realpath(prepared.repositoryRoot);
+    const currentRepositoryIdentity = await this.#repositoryIdentity(
+      root,
+      signal,
+    );
+    // Older retained links have no trustworthy origin identity. Refuse them
+    // rather than allowing a replacement repository to trigger branch fetches.
+    if (
+      !prepared.repositoryIdentity ||
+      prepared.repositoryIdentity !== currentRepositoryIdentity
+    )
+      throw new Error(
+        "Forge worktree binding failure: retained repository identity is missing or has been replaced.",
+      );
+    if (expectedRepository) {
+      let remote: ExecResult;
+      try {
+        remote = await this.#git(
+          root,
+          ["config", "--get", "remote.origin.url"],
+          30_000,
+          signal,
+        );
+      } catch {
+        throw new Error(
+          `Forge worktree binding failure: repository origin does not match ${expectedRepository}.`,
+        );
+      }
+      if (!repositoryRemoteMatches(remote.stdout, expectedRepository))
+        throw new Error(
+          `Forge worktree binding failure: repository origin does not match ${expectedRepository}.`,
+        );
+    }
     const worktreeBase = join(root, ".forge", "worktrees");
     const expectedPath = resolve(root, prepared.worktreePath);
     if (
@@ -440,6 +480,22 @@ export class GitWorktreeManager {
       )
         throw new Error(
           `Forge worktree binding failure: ${canonicalWorktree} is not registered to the repository and branch.`,
+        );
+      const [rootCommon, worktreeCommon] = await Promise.all([
+        this.#git(root, ["rev-parse", "--git-common-dir"], 30_000, signal),
+        this.#git(
+          canonicalWorktree,
+          ["rev-parse", "--git-common-dir"],
+          30_000,
+          signal,
+        ),
+      ]);
+      if (
+        (await realpath(resolve(root, rootCommon.stdout.trim()))) !==
+        (await realpath(resolve(canonicalWorktree, worktreeCommon.stdout.trim())))
+      )
+        throw new Error(
+          `Forge worktree binding failure: ${canonicalWorktree} belongs to another Git repository.`,
         );
       const currentBranch = await this.#git(
         canonicalWorktree,
@@ -714,6 +770,23 @@ export class GitWorktreeManager {
       await rm(worktreePath, { recursive: true, force: true });
   }
 
+  async #repositoryIdentity(
+    repositoryRoot: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const commonDirResult = await this.#git(
+      repositoryRoot,
+      ["rev-parse", "--git-common-dir"],
+      30_000,
+      signal,
+    );
+    const commonDir = await realpath(
+      resolve(repositoryRoot, commonDirResult.stdout.trim()),
+    );
+    const stat = await lstat(commonDir);
+    return `${commonDir}:${String(stat.dev)}:${String(stat.ino)}`;
+  }
+
   async #git(
     cwd: string,
     args: readonly string[],
@@ -731,6 +804,20 @@ export class GitWorktreeManager {
   }
 }
 
+function repositoryRemoteMatches(
+  remote: string,
+  repository: string,
+): boolean {
+  const normalized = remote
+    .trim()
+    .replace(/^git@github\.com:/i, "https://github.com/")
+    .replace(/^ssh:\/\/git@github\.com\//i, "https://github.com/")
+    .replace(/\.git$/i, "")
+    .replace(/\/$/, "")
+    .toLowerCase();
+  return normalized === `https://github.com/${repository.toLowerCase()}`;
+}
+
 function worktreeRegistrationMatches(
   output: string,
   repositoryRoot: string,
@@ -739,19 +826,23 @@ function worktreeRegistrationMatches(
 ): boolean {
   let path: string | undefined;
   let branch: string | undefined;
+  let prunable = false;
   const matches = (): boolean =>
     path !== undefined &&
     resolve(repositoryRoot, path) === expectedPath &&
-    branch === `refs/heads/${expectedBranch}`;
+    branch === `refs/heads/${expectedBranch}` &&
+    !prunable;
   for (const line of output.split("\n")) {
     if (!line.trim()) {
       if (matches()) return true;
       path = undefined;
       branch = undefined;
+      prunable = false;
       continue;
     }
     if (line.startsWith("worktree ")) path = line.slice("worktree ".length);
     else if (line.startsWith("branch ")) branch = line.slice("branch ".length);
+    else if (line.startsWith("prunable")) prunable = true;
   }
   return matches();
 }
