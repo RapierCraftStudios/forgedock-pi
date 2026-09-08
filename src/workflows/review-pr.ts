@@ -11,6 +11,7 @@ import { loadForgePolicy } from "../adapters/config.ts";
 import {
   GitWorktreeManager,
   type PreparedReviewWorktree,
+  type PreparedWorktree,
 } from "../adapters/git.ts";
 import { FetchGitHubTransport } from "../adapters/github-api.ts";
 import { createGitHubTokenProvider } from "../adapters/github-auth.ts";
@@ -70,7 +71,12 @@ import { testGateVerification } from "./test-gate.ts";
 
 export type ReviewExecution =
   | { kind: "standalone"; repositoryRoot: string }
-  | { kind: "work-on"; worktreePath: string };
+  | {
+      kind: "work-on";
+      worktreePath: string;
+      repositoryIdentity?: string;
+      prepared?: PreparedWorktree;
+    };
 
 export interface ReviewPrRequest {
   reviewId: string;
@@ -124,6 +130,7 @@ export interface ReviewPanelRunInput {
   pullNumber: number;
   issueNumber?: number;
   worktreePath: string;
+  repositoryIdentity?: string;
   route: GitHubPullRequestRouteSnapshot;
   reviewers: readonly string[];
   round: number;
@@ -266,7 +273,7 @@ export class ReviewPrCoordinator {
       );
     const stagingBundle = mode === "staging" ? input.stagingBundle : undefined;
     let prepared: PreparedReviewWorktree | undefined;
-    const worktreePath =
+    let worktreePath =
       input.execution.kind === "standalone"
         ? (prepared = await this.#git.prepareReview(
             input.execution.repositoryRoot,
@@ -281,6 +288,35 @@ export class ReviewPrCoordinator {
             },
           )).worktreePath
         : input.execution.worktreePath;
+    if (
+      input.execution.kind === "work-on" &&
+      input.execution.repositoryIdentity
+    ) {
+      if (input.execution.prepared) {
+        const rebound = await this.#git.rebind(
+          input.execution.prepared,
+          input.signal,
+          input.repository,
+        );
+        if (rebound.worktreePath !== worktreePath)
+          throw new Error(
+            "Review work-on execution path does not match its prepared worktree.",
+          );
+      } else {
+        await this.#git.assertRepositoryIdentity(
+          {
+            repositoryRoot: worktreePath,
+            repositoryIdentity: input.execution.repositoryIdentity,
+            worktreePath,
+            branch: "review-unbound",
+            baseBranch: "review-unbound",
+            baseSha: route.baseSha,
+          },
+          input.repository,
+          input.signal,
+        );
+      }
+    }
 
     try {
       const localHead = await this.#git.head(worktreePath, input.signal);
@@ -289,11 +325,17 @@ export class ReviewPrCoordinator {
           `Review worktree head ${localHead} does not match frozen PR head ${route.headSha}.`,
         );
       await this.#materializeAgents(worktreePath);
+      const repositoryIdentity =
+        prepared?.repositoryIdentity ??
+        (input.execution.kind === "work-on"
+          ? input.execution.repositoryIdentity
+          : undefined);
       snapshot = await this.#runPanelIfNeeded(
         snapshot.state,
         input,
         route,
         worktreePath,
+        repositoryIdentity,
       );
       if (snapshot.state.panel?.status === "running") {
         const additionalChecks: readonly VerificationResult[] = [
@@ -563,6 +605,7 @@ export class ReviewPrCoordinator {
     input: ReviewPrRequest,
     route: GitHubPullRequestRouteSnapshot,
     worktreePath: string,
+    repositoryIdentity?: string,
   ): Promise<Awaited<ReturnType<ReviewJournal["append"]>>> {
     let state = initial;
     const requestedRound = input.round ?? state.panel?.round ?? 1;
@@ -595,6 +638,7 @@ export class ReviewPrCoordinator {
           ? {}
           : { issueNumber: input.issueNumber }),
         worktreePath,
+        ...(repositoryIdentity ? { repositoryIdentity } : {}),
         route,
         reviewers: input.roster.reviewers,
         round: requestedRound,
@@ -690,6 +734,11 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
     input: ReviewPanelRunInput,
   ): Promise<readonly ForgeReviewerResult[]> {
     validateReviewDeadlines({ reviewerTimeoutMs: input.reviewerTimeoutMs });
+    if (!input.repositoryIdentity)
+      throw new Error(
+        "Review panel requires an immutable prepared repository identity.",
+      );
+    const repositoryIdentity = input.repositoryIdentity;
     await this.#rpc.ping();
     const receipts: Array<{
       receipt: SubagentSpawnReceipt;
@@ -701,6 +750,7 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
       const receipt = await this.#rpc.spawnStandaloneReviewNode({
         reviewId: input.reviewId,
         repository: input.repository,
+        repositoryIdentity,
         pullNumber: input.pullNumber,
         ...(input.issueNumber === undefined ? {} : { issueNumber: input.issueNumber }),
         worktreeRoot: input.worktreePath,

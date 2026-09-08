@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { lstat, open, realpath } from "node:fs/promises";
+import { join, resolve } from "node:path";
 
 import type {
   ExtensionAPI,
@@ -38,6 +38,7 @@ import {
   DIRECT_WORK_ON_FINALIZED_EVENT,
   type ForgeChildBinding,
 } from "../agents/child-runtime.ts";
+import { isPathWithin } from "../agents/child-containment.ts";
 import { materializeForgeAgents } from "../agents/materialize.ts";
 import { FORGE_WORK_ON_PROMPT } from "../agents/register.ts";
 import {
@@ -544,6 +545,7 @@ export class ForgeWorkOnController {
             runId: link.forgeRunId,
             resultPath: link.resultPath,
             repository: link.repository,
+            repositoryIdentity: requirePreparedRepositoryIdentity(link.prepared),
             issueNumber: link.issueNumber,
             leaseEpoch: link.leaseEpoch,
             leaseOwnerRunId: link.forgeRunId,
@@ -589,7 +591,10 @@ export class ForgeWorkOnController {
               activeNode,
               result: findForgeNodeResult(
                 // Node artifacts are independently typed from top-level work-on results.
-                await readFile(activeNode.resultPath, "utf8").catch(() => ""),
+                await readBoundedForgeResult(
+                  link.prepared.worktreePath,
+                  activeNode.resultPath,
+                ),
               ),
             })),
           );
@@ -606,7 +611,10 @@ export class ForgeWorkOnController {
             continue;
           }
           const durableResult = findForgeWorkOnResult(
-            await readFile(link.resultPath, "utf8").catch(() => ""),
+            await readBoundedForgeResult(
+              link.prepared.worktreePath,
+              link.resultPath,
+            ),
           );
           if (durableResult) {
             delete link.launchFailure;
@@ -1404,14 +1412,25 @@ export class ForgeWorkOnController {
         let launchFailure: unknown;
         for (let attempt = 0; attempt <= 3; attempt += 1) {
           try {
+            const rebound = await this.#git.rebind(
+              link.prepared,
+              ctx.signal,
+              policy.repository.name,
+            );
+            await materializeForgeAgents(rebound.worktreePath);
+            link.prepared = rebound;
+            this.#persistLink(link);
             receipt = await this.#rpc.spawnWorkOn({
               runId,
               issueNumber,
               repository: policy.repository.name,
-              worktreeRoot: prepared.worktreePath,
-              branch: prepared.branch,
-              baseBranch: prepared.baseBranch,
-              baseSha: prepared.baseSha,
+              repositoryIdentity: requirePreparedRepositoryIdentity(
+                link.prepared,
+              ),
+              worktreeRoot: link.prepared.worktreePath,
+              branch: link.prepared.branch,
+              baseBranch: link.prepared.baseBranch,
+              baseSha: link.prepared.baseSha,
               leaseEpoch: link.leaseEpoch,
               leaseOwnerRunId: link.leaseOwnerRunId,
               policy,
@@ -1424,12 +1443,13 @@ export class ForgeWorkOnController {
             delete link.launchFailure;
             if (attempt >= 3) break;
             try {
-              await this.#git.rebind(
-                prepared,
+              const rebound = await this.#git.rebind(
+                link.prepared,
                 ctx.signal,
                 policy.repository.name,
               );
-              await materializeForgeAgents(prepared.worktreePath);
+              await materializeForgeAgents(rebound.worktreePath);
+              link.prepared = rebound;
             } catch (rebindError) {
               launchFailure = rebindError;
               break;
@@ -1464,6 +1484,7 @@ export class ForgeWorkOnController {
           runId,
           resultPath,
           repository: policy.repository.name,
+          repositoryIdentity: requirePreparedRepositoryIdentity(prepared),
           issueNumber,
           leaseEpoch: link.leaseEpoch,
           leaseOwnerRunId: runId,
@@ -1570,7 +1591,7 @@ export class ForgeWorkOnController {
     reason: string,
   ): Promise<void> {
     if (!isLaunchSentinel(activeNode.subagentRunId))
-      await this.#rpc.stop(activeNode.subagentRunId).catch(() => undefined);
+      await this.#rpc.stopAndWait(activeNode.subagentRunId).catch(() => undefined);
     const tokenProvider = createGitHubTokenProvider(
       this.#pi,
       link.prepared.repositoryRoot,
@@ -1704,8 +1725,9 @@ export class ForgeWorkOnController {
       throw new Error(
         `Node ${nodeId} has no durable state during reconciliation.`,
       );
-    const resultText = await readFile(activeNode.resultPath, "utf8").catch(
-      () => "",
+    const resultText = await readBoundedForgeResult(
+      link.prepared.worktreePath,
+      activeNode.resultPath,
     );
     const recoveryAction = reconcileLaunchState({
       durableStatus: durableNode.status,
@@ -2199,8 +2221,9 @@ export class ForgeWorkOnController {
       .catch(() => undefined);
     let result = findForgeReviewerResult(payload);
     if (!result) {
-      const resultText = await readFile(activeNode.resultPath, "utf8").catch(
-        () => "",
+      const resultText = await readBoundedForgeResult(
+        link.prepared.worktreePath,
+        activeNode.resultPath,
       );
       result =
         findForgeReviewerResult(resultText) ??
@@ -2243,8 +2266,9 @@ export class ForgeWorkOnController {
       .catch(() => undefined);
     let result = findForgeNodeResult(payload);
     if (!result) {
-      const resultText = await readFile(activeNode.resultPath, "utf8").catch(
-        () => "",
+      const resultText = await readBoundedForgeResult(
+        _link.prepared.worktreePath,
+        activeNode.resultPath,
       );
       result =
         findForgeNodeResult(resultText) ??
@@ -2644,6 +2668,8 @@ export class ForgeWorkOnController {
         execution: {
           kind: "work-on",
           worktreePath: link.prepared.worktreePath,
+          repositoryIdentity: requirePreparedRepositoryIdentity(link.prepared),
+          prepared: link.prepared,
         },
         // Each synthetic work-on review ID owns one fresh journal, so its
         // internal panel sequence always starts at round 1. The external work-on
@@ -3333,6 +3359,7 @@ export class ForgeWorkOnController {
       runId: link.forgeRunId,
       issueNumber: link.issueNumber,
       repository: link.repository,
+      repositoryIdentity: requirePreparedRepositoryIdentity(link.prepared),
       worktreeRoot: link.prepared.worktreePath,
       branch: link.prepared.branch,
       baseBranch: link.prepared.baseBranch,
@@ -3862,6 +3889,7 @@ export class ForgeWorkOnController {
             runId: link.forgeRunId,
             issueNumber: link.issueNumber,
             repository: link.repository,
+            repositoryIdentity: requirePreparedRepositoryIdentity(link.prepared),
             worktreeRoot: link.prepared.worktreePath,
             branch: link.prepared.branch,
             baseBranch: link.prepared.baseBranch,
@@ -3945,7 +3973,10 @@ export class ForgeWorkOnController {
     }
     const payload = await this.#rpc.status(link.subagentRunId);
     const completion = findAsyncCompletionForRun(payload, link.subagentRunId);
-    const resultText = await readFile(link.resultPath, "utf8").catch(() => "");
+    const resultText = await readBoundedForgeResult(
+      link.prepared.worktreePath,
+      link.resultPath,
+    );
     const durableResult = findForgeWorkOnResult(resultText);
     const recoverableBlocker =
       durableResult?.blocker &&
@@ -4338,7 +4369,7 @@ export class ForgeWorkOnController {
     await Promise.allSettled(
       [...new Set(runIds)]
         .filter((runId) => !isLaunchSentinel(runId))
-        .map((runId) => this.#rpc.stop(runId)),
+        .map((runId) => this.#rpc.stopAndWait(runId)),
     );
   }
 
@@ -4385,7 +4416,8 @@ export class ForgeWorkOnController {
         )
           providerRunIds.add(link.subagentRunId);
         for (const runId of providerRunIds) {
-          if (!isLaunchSentinel(runId)) await this.#rpc.stop(runId);
+          if (!isLaunchSentinel(runId))
+            await this.#rpc.stopAndWait(runId);
         }
         await new RunJournal(store).append({
           runId: link.forgeRunId,
@@ -4612,6 +4644,7 @@ export class ForgeWorkOnController {
         runId: link.forgeRunId,
         issueNumber: link.issueNumber,
         repository: link.repository,
+        repositoryIdentity: requirePreparedRepositoryIdentity(link.prepared),
         worktreeRoot: link.prepared.worktreePath,
         branch: link.prepared.branch,
         baseBranch: link.prepared.baseBranch,
@@ -4670,8 +4703,9 @@ export class ForgeWorkOnController {
         result = findForgeWorkOnResult(statusPayload);
     }
     if (!result) {
-      const resultText = await readFile(link.resultPath, "utf8").catch(
-        () => "",
+      const resultText = await readBoundedForgeResult(
+        link.prepared.worktreePath,
+        link.resultPath,
       );
       result =
         findForgeWorkOnResult(resultText) ??
@@ -4716,10 +4750,10 @@ export class ForgeWorkOnController {
       "forge-review-correctness",
       "forge-review-security",
     ]) {
-      const text = await readFile(
+      const text = await readBoundedForgeResult(
+        worktree,
         join(forgeDir, `${link.forgeRunId}-${reviewer}.json`),
-        "utf8",
-      ).catch(() => "");
+      );
       const parsed = findForgeReviewerResult(text);
       if (!parsed || parsed.headSha !== headSha)
         throw new Error(
@@ -5373,9 +5407,9 @@ export class ForgeWorkOnController {
     );
     if (!existingPull || existingPull.headSha !== actualHead)
       await this.#git.push(
-        link.prepared.worktreePath,
-        link.prepared.branch,
+        link.prepared,
         ctx.signal,
+        link.repository,
       );
     await appendEffect(
       journal,
@@ -5586,6 +5620,8 @@ export class ForgeWorkOnController {
       execution: {
         kind: "work-on",
         worktreePath: link.prepared.worktreePath,
+        repositoryIdentity: requirePreparedRepositoryIdentity(link.prepared),
+        prepared: link.prepared,
       },
       // A refreshed work-on round uses a new review ID and therefore a fresh
       // internal panel sequence beginning at round 1.
@@ -6976,6 +7012,61 @@ export function isTransientProviderFailure(message: string): boolean {
   return /websocket\s*(?:closed|closure|error)|connection\s*(?:error|refused|lost|reset)|socket hang up|socket connection was closed|network error|fetch failed|EAI_AGAIN|ENOTFOUND|terminated|timed? out|timeout|rate.?limit|too many requests|\b429\b|\b50[0234]\b|\b524\b|service unavailable|server error|internal error|provider returned error|stream ended/i.test(
     message,
   );
+}
+
+const MAX_FORGE_RESULT_BYTES = 1_048_576;
+
+async function readBoundedForgeResult(
+  worktreeRoot: string,
+  resultPath: string,
+): Promise<string> {
+  let root: string;
+  let forgeRoot: string;
+  try {
+    root = await realpath(worktreeRoot);
+    forgeRoot = resolve(root, ".pi", "forge");
+    if ((await realpath(forgeRoot)) !== forgeRoot) return "";
+  } catch {
+    return "";
+  }
+  const candidate = resolve(root, resultPath);
+  if (!isPathWithin(forgeRoot, candidate) || candidate === forgeRoot) return "";
+  let stat: Awaited<ReturnType<typeof lstat>>;
+  try {
+    stat = await lstat(candidate);
+    if (
+      stat.isSymbolicLink() ||
+      !stat.isFile() ||
+      stat.size > MAX_FORGE_RESULT_BYTES ||
+      (await realpath(candidate)) !== candidate
+    )
+      return "";
+  } catch {
+    return "";
+  }
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    handle = await open(candidate, "r");
+    const current = await handle.stat();
+    if (current.size > MAX_FORGE_RESULT_BYTES) return "";
+    const buffer = Buffer.alloc(current.size);
+    const { bytesRead } = await handle.read(buffer, 0, current.size, 0);
+    return buffer.subarray(0, bytesRead).toString("utf8");
+  } catch {
+    return "";
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
+
+function requirePreparedRepositoryIdentity(
+  prepared: PreparedWorktree,
+): string {
+  if (!prepared.repositoryIdentity)
+    throw new Error(
+      "Forge worktree binding failure: prepared repository identity is missing.",
+    );
+  return prepared.repositoryIdentity;
 }
 
 function errorMessage(error: unknown): string {

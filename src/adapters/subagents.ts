@@ -51,6 +51,7 @@ export interface WorkOnLaunchInput {
   };
   issueNumber: number;
   repository: string;
+  repositoryIdentity: string;
   worktreeRoot: string;
   branch: string;
   baseBranch: string;
@@ -66,6 +67,7 @@ export interface WorkOnLaunchInput {
 export interface StandaloneReviewerLaunchInput {
   reviewId: string;
   repository: string;
+  repositoryIdentity: string;
   pullNumber: number;
   issueNumber?: number;
   worktreeRoot: string;
@@ -159,6 +161,7 @@ export class SubagentsRpcClient {
       runId: input.reviewId,
       resultPath,
       repository: input.repository,
+      repositoryIdentity: input.repositoryIdentity,
       ...(input.issueNumber === undefined
         ? {}
         : { issueNumber: input.issueNumber }),
@@ -259,6 +262,7 @@ export class SubagentsRpcClient {
       node: input.node.node,
       nodeAttempt: input.node.attempt,
       reviewHeadSha,
+      repositoryIdentity: input.repositoryIdentity,
     };
     const task = [
       `Review ForgeDock issue #${input.issueNumber} as the ${input.node.node === "review-correctness" ? "correctness" : "security"} reviewer.`,
@@ -339,6 +343,7 @@ export class SubagentsRpcClient {
       node: `review-${domain}`,
       nodeAttempt: input.node.attempt,
       reviewHeadSha,
+      repositoryIdentity: input.repositoryIdentity,
     };
     const data = await this.#request(
       "spawn",
@@ -435,6 +440,7 @@ export class SubagentsRpcClient {
             nodeAttempt: input.node.attempt,
           }
         : {}),
+      repositoryIdentity: input.repositoryIdentity,
     };
     const requiredLocalChecks = Object.entries(
       input.policy.verification.commands,
@@ -561,6 +567,7 @@ export class SubagentsRpcClient {
             nodeAttempt: input.node.attempt,
           }
         : {}),
+      repositoryIdentity: input.repositoryIdentity,
     };
     const task = [
       `Refresh ForgeDock issue #${input.issueNumber} after its integration base moved.`,
@@ -778,13 +785,13 @@ function subagentState(value: unknown): string | undefined {
 }
 
 function terminalSubagentState(state: string | undefined): boolean {
-  return ["complete", "failed", "partial", "stopped", "rejected"].includes(
+  return /^(?:complete|completed|failed|partial|stopped|cancelled|canceled|rejected|timed[-_ ]?out)$/i.test(
     state ?? "",
   );
 }
 
 function terminalStopError(error: unknown): boolean {
-  return /not found|already (?:complete|failed|stopped|rejected)|is (?:complete|failed|stopped|rejected)/i.test(
+  return /not found|already (?:complete|completed|failed|stopped|cancelled|canceled|rejected|timed[-_ ]?out)|is (?:complete|completed|failed|stopped|cancelled|canceled|rejected|timed[-_ ]?out)/i.test(
     error instanceof Error ? error.message : String(error),
   );
 }
@@ -797,6 +804,7 @@ function reviewWorkflowInstruction(
   const binding = safeScriptJson({
     runId: input.runId,
     repository: input.repository,
+    repositoryIdentity: input.repositoryIdentity,
     issueNumber: input.issueNumber,
     leaseEpoch: input.leaseEpoch,
     leaseOwnerRunId: input.leaseOwnerRunId ?? input.runId,

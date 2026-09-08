@@ -748,14 +748,19 @@ export class GitWorktreeManager {
   }
 
   async push(
-    worktreePath: string,
-    branch: string,
+    prepared: PreparedWorktree,
     signal?: AbortSignal,
+    expectedRepository?: string,
   ): Promise<void> {
-    await this.assertClean(worktreePath, signal);
+    const rebound = await this.rebind(
+      prepared,
+      signal,
+      expectedRepository,
+    );
+    await this.assertClean(rebound.worktreePath, signal);
     await this.#git(
-      worktreePath,
-      ["push", "--set-upstream", "origin", branch],
+      rebound.worktreePath,
+      ["push", "--set-upstream", "origin", rebound.branch],
       120_000,
       signal,
     );

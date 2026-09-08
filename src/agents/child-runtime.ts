@@ -107,6 +107,7 @@ export interface ForgeChildBinding {
   reviewId?: string;
   resultPath: string;
   repository: string;
+  repositoryIdentity: string;
   issueNumber?: number;
   leaseEpoch?: number;
   leaseOwnerRunId?: string;
@@ -186,6 +187,72 @@ export function assertBoundWorktreeCwd(
       resolve(boundCwd),
       resolve(runtimeCwd),
     );
+}
+
+async function assertBoundRepository(
+  binding: Pick<
+    ForgeChildBinding,
+    "repository" | "repositoryIdentity" | "worktreeRoot" | "branch" | "reviewId"
+  >,
+  root: string,
+  env: NodeJS.ProcessEnv,
+  signal?: AbortSignal,
+): Promise<void> {
+  const common = await runProcess(
+    "git",
+    ["-C", root, "rev-parse", "--git-common-dir"],
+    { cwd: root, timeoutMs: 30_000, env, ...(signal ? { signal } : {}) },
+  );
+  assertCompleteProcessOutput(common, "Forge repository identity");
+  if (common.exitCode !== 0 || !common.stdout.trim())
+    throw new Error(
+      "Forge worktree binding failure: unable to resolve the repository common directory.",
+    );
+  const commonDir = await realpath(
+    resolve(root, common.stdout.trim()),
+  );
+  const stat = await lstat(commonDir);
+  const identity = `${commonDir}:${String(stat.dev)}:${String(stat.ino)}`;
+  if (identity !== binding.repositoryIdentity)
+    throw new Error(
+      "Forge worktree binding failure: the bound repository was replaced.",
+    );
+  const remote = await runProcess(
+    "git",
+    ["-C", root, "config", "--get", "remote.origin.url"],
+    { cwd: root, timeoutMs: 30_000, env, ...(signal ? { signal } : {}) },
+  );
+  assertCompleteProcessOutput(remote, "Forge repository origin");
+  if (
+    remote.exitCode !== 0 ||
+    !repositoryRemoteMatches(remote.stdout, binding.repository)
+  )
+    throw new Error(
+      "Forge worktree binding failure: repository origin changed.",
+    );
+  if (!binding.reviewId) {
+    const branch = await runProcess(
+      "git",
+      ["-C", root, "branch", "--show-current"],
+      { cwd: root, timeoutMs: 30_000, env, ...(signal ? { signal } : {}) },
+    );
+    assertCompleteProcessOutput(branch, "Forge worktree branch");
+    if (branch.exitCode !== 0 || branch.stdout.trim() !== binding.branch)
+      throw new Error(
+        `Forge worktree binding failure: expected branch ${binding.branch}, found ${branch.stdout.trim() || "detached"}.`,
+      );
+  }
+}
+
+function repositoryRemoteMatches(remote: string, repository: string): boolean {
+  const normalized = remote
+    .trim()
+    .replace(/^git@github\.com:/i, "https://github.com/")
+    .replace(/^ssh:\/\/git@github\.com\//i, "https://github.com/")
+    .replace(/\.git$/i, "")
+    .replace(/\/$/, "")
+    .toLowerCase();
+  return normalized === `https://github.com/${repository.toLowerCase()}`;
 }
 
 const CheckpointParameters = Type.Object({
@@ -329,6 +396,22 @@ export function registerForgeRuntime(
       return Reflect.get(currentBinding(), property);
     },
   });
+  const assertCurrentBinding = async (signal?: AbortSignal): Promise<string> => {
+    const root = await realpath(binding.worktreeRoot);
+    if (canonicalRoot)
+      assertBoundWorktreeCwd(
+        canonicalRoot,
+        root,
+        caseInsensitivePaths ?? false,
+      );
+    await assertBoundRepository(
+      binding,
+      root,
+      safeEnvironment(binding.runId),
+      signal,
+    );
+    return root;
+  };
   const agentRegistrations =
     options.registerAgents === false ? [] : registerForgeAgents(pi);
   let ceiling: SubagentCapabilityCeilingHandle | undefined;
@@ -358,6 +441,12 @@ export function registerForgeRuntime(
       throw new ForgeWorktreeBindingError(canonicalRoot, ctx.cwd);
     }
     assertBoundWorktreeCwd(canonicalRoot, runtimeCwd, caseInsensitivePaths);
+    await assertBoundRepository(
+      binding,
+      canonicalRoot,
+      safeEnvironment(binding.runId),
+      ctx.signal,
+    );
     ceiling?.dispose();
     ceiling = registerSubagentCapabilityCeiling({
       sessionId: ctx.sessionManager.getSessionId(),
@@ -432,7 +521,7 @@ export function registerForgeRuntime(
         throw new Error(
           "forge_refresh_base is only available to a bound refresh-review run.",
         );
-      const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const root = await assertCurrentBinding(signal);
       const env = safeEnvironment(binding.runId);
       const status = await runProcess(
         "git",
@@ -454,6 +543,7 @@ export function registerForgeRuntime(
         throw new Error(
           `Base refresh requires a clean worktree: ${status.stderr || refreshStatus}`,
         );
+      await assertCurrentBinding(signal);
       const fetched = await (async () => {
         // Fetching origin requires credentials on private repositories, and
         // the scrubbed environment strips every ambient GitHub credential
@@ -461,6 +551,7 @@ export function registerForgeRuntime(
         // so the guarded refresh never depends on ambient identity.
         const tokenProvider = createGitHubTokenProvider(pi, binding.worktreeRoot);
         const token = await tokenProvider.get(signal);
+        await assertCurrentBinding(signal);
         return runGitWithGitHubToken(
           root,
           [
@@ -510,6 +601,7 @@ export function registerForgeRuntime(
           "Cannot refresh a lane without the existing owned remote branch.",
         );
       refreshPushLeaseSha = remote.stdout.trim();
+      await assertCurrentBinding(signal);
       const rebased = await runProcess(
         "git",
         ["-C", root, "rebase", binding.baseSha],
@@ -561,7 +653,7 @@ export function registerForgeRuntime(
       "Read the assigned diff in bounded chunks; follow nextCursor until coverage.complete is true",
     parameters: DiffParameters,
     async execute(_toolCallId, params, signal) {
-      const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const root = await assertCurrentBinding(signal);
       const modeArgs =
         params.mode === "name-only"
           ? ["--name-only"]
@@ -713,7 +805,7 @@ export function registerForgeRuntime(
       "Create an owned local commit from the assigned worktree without pushing",
     parameters: CommitParameters,
     async execute(_toolCallId, params, signal) {
-      const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const root = await assertCurrentBinding(signal);
       const env = safeEnvironment(binding.runId);
       const ignoreCase =
         caseInsensitivePaths ??
@@ -833,6 +925,7 @@ export function registerForgeRuntime(
         params.kind === "implementation"
           ? `forge: implement issue #${binding.issueNumber}`
           : `forge: address review for issue #${binding.issueNumber}`;
+      await assertCurrentBinding(signal);
       const hooksPath = mkdtempSync(join(tmpdir(), "forgedock-empty-hooks-"));
       let committed: ProcessResult;
       try {
@@ -963,7 +1056,7 @@ export function registerForgeRuntime(
         throw new Error(
           `Verification command '${params.name}' has an empty argv.`,
         );
-      const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const root = await assertCurrentBinding(signal);
       const commandCwd = await resolveVerificationCommandDirectory(
         root,
         command.cwd,
@@ -1018,7 +1111,7 @@ export function registerForgeRuntime(
     parameters: PrepareReviewParameters,
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       assertWorkOnAuthority(binding);
-      const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const root = await assertCurrentBinding(signal);
       const status = await runProcess(
         "git",
         ["-C", root, "status", "--porcelain"],
@@ -1099,8 +1192,10 @@ export function registerForgeRuntime(
         "origin",
         binding.branch,
       ];
+      await assertCurrentBinding(signal);
       const tokenProvider = createGitHubTokenProvider(pi, binding.worktreeRoot);
       const token = await tokenProvider.get(signal);
+      await assertCurrentBinding(signal);
       const push = await pushWithGitHubToken(
         root,
         pushArgs,
@@ -1249,6 +1344,7 @@ export function registerForgeRuntime(
     parameters: ReviewPanelParameters,
     async execute(_toolCallId, params, signal) {
       assertWorkOnAuthority(binding);
+      await assertCurrentBinding(signal);
       if (binding.node)
         throw new Error(
           "Review panels can only be launched by the work-on coordinator.",
@@ -1301,6 +1397,7 @@ export function registerForgeRuntime(
         runId: binding.runId,
         issueNumber: binding.issueNumber,
         repository: binding.repository,
+        repositoryIdentity: binding.repositoryIdentity,
         worktreeRoot: binding.worktreeRoot,
         branch: binding.branch,
         baseBranch: binding.baseBranch,
@@ -1480,7 +1577,7 @@ export function registerForgeRuntime(
     description:
       "Persist one schema-valid read-only reviewer result at the trusted bound result path",
     parameters: FinalizeReviewerParameters,
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId, params, signal) {
       if (!binding.nodeId || !binding.node?.startsWith("review-"))
         throw new Error(
           "forge_finalize_reviewer requires a bounded reviewer binding.",
@@ -1498,7 +1595,7 @@ export function registerForgeRuntime(
         throw new Error(
           "Final reviewer result identity does not match its binding.",
         );
-      const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const root = await assertCurrentBinding(signal);
       const resultPath = await writeTrustedResultFile(
         root,
         binding.resultPath,
@@ -1522,7 +1619,7 @@ export function registerForgeRuntime(
     description:
       "Persist one schema-valid bounded node result at the trusted bound result path",
     parameters: FinalizeNodeParameters,
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId, params, signal) {
       if (!binding.nodeId || !binding.node || !binding.nodeAttempt)
         throw new Error("forge_finalize_node requires a bounded node binding.");
       if (!isForgeNodeResult(params.value)) {
@@ -1547,7 +1644,7 @@ export function registerForgeRuntime(
         throw new Error(
           "Final node result identity does not match its binding.",
         );
-      const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const root = await assertCurrentBinding(signal);
       const resultPath = await writeTrustedResultFile(
         root,
         binding.resultPath,
@@ -1571,7 +1668,7 @@ export function registerForgeRuntime(
     description:
       "Persist the schema-valid final work-on result for deterministic parent reconciliation",
     parameters: FinalizeWorkOnParameters,
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId, params, signal) {
       if (!isForgeWorkOnResult(params.value))
         throw new Error("Final work-on result failed schema validation.");
       if (
@@ -1594,7 +1691,7 @@ export function registerForgeRuntime(
         throw new Error(
           "Final work-on result base SHA does not match the bound base.",
         );
-      const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const root = await assertCurrentBinding(signal);
       const resultPath = await writeTrustedResultFile(
         root,
         binding.resultPath,
@@ -1624,6 +1721,7 @@ export function registerForgeRuntime(
     parameters: CheckpointParameters,
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       assertWorkOnAuthority(binding);
+      await assertCurrentBinding(signal);
       if (
         params.action === "complete" &&
         params.phase === "investigate" &&
@@ -1831,6 +1929,7 @@ function readBinding(): ForgeChildBinding {
     "runId",
     "resultPath",
     "repository",
+    "repositoryIdentity",
     "worktreeRoot",
     "branch",
     "baseBranch",
@@ -1933,6 +2032,7 @@ function readBinding(): ForgeChildBinding {
       : {}),
     resultPath: value.resultPath as string,
     repository: value.repository as string,
+    repositoryIdentity: value.repositoryIdentity as string,
     ...(value.issueNumber === undefined
       ? {}
       : { issueNumber: value.issueNumber as number }),

@@ -97,6 +97,32 @@ class StopBarrierEventBus extends FakeEventBus {
   }
 }
 
+class ImmediateTerminalEventBus extends FakeEventBus {
+  readonly terminalState: string;
+
+  constructor(terminalState: string) {
+    super();
+    this.terminalState = terminalState;
+  }
+
+  override emit(event: string, payload: unknown): void {
+    if (event === "subagents:rpc:v1:request") {
+      const request = payload as { requestId: string; method: string };
+      if (request.method === "stop" || request.method === "status") {
+        this.requests.push(payload);
+        this.emit(`subagents:rpc:v1:reply:${request.requestId}`, {
+          version: 1,
+          requestId: request.requestId,
+          success: true,
+          data: { runId: "async-run-1", state: this.terminalState },
+        });
+        return;
+      }
+    }
+    super.emit(event, payload);
+  }
+}
+
 function fakePi(bus = new FakeEventBus()): {
   pi: ExtensionAPI;
   bus: FakeEventBus;
@@ -140,6 +166,16 @@ test("stopAndWait waits for Pi's terminal state before replacement", async () =>
   assert.equal(bus.statusReads, 2);
 });
 
+test("stopAndWait accepts provider terminal state aliases", async () => {
+  for (const terminalState of ["completed", "cancelled", "canceled", "timed-out"]) {
+    const { pi, bus } = fakePi(new ImmediateTerminalEventBus(terminalState));
+    const client = new SubagentsRpcClient(pi);
+    await client.ping();
+    await client.stopAndWait("async-run-1", 1_000);
+    assert.equal(bus.requests.length, 2);
+  }
+});
+
 test("RPC work-on launch binds the nested-review runtime contract", async () => {
   const { pi, bus } = fakePi();
   const client = new SubagentsRpcClient(pi);
@@ -149,6 +185,7 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
     runId: "run-1",
     issueNumber: 42,
     repository: "owner/repo",
+    repositoryIdentity: "repo-identity",
     worktreeRoot: "/tmp/worktree",
     branch: "forge/42",
     baseBranch: "staging",
@@ -210,6 +247,7 @@ test("RPC standalone reviewer binding has review authority without a fake issue 
   await client.spawnStandaloneReviewNode({
     reviewId: "review-standalone-1",
     repository: "owner/repo",
+    repositoryIdentity: "repo-identity",
     pullNumber: 17,
     worktreeRoot: "/tmp/review-worktree",
     headRef: "feature/review",
@@ -231,6 +269,7 @@ test("RPC standalone reviewer binding has review authority without a fake issue 
   const binding = spawn.params.extensionBindings["forgedock.pi/1"];
   assert.equal(binding?.authorityMode, "review");
   assert.equal(binding?.reviewId, "review-standalone-1");
+  assert.equal(binding?.repositoryIdentity, "repo-identity");
   assert.equal(binding?.issueNumber, undefined);
   assert.equal(binding?.leaseEpoch, undefined);
   assert.equal(binding?.leaseOwnerRunId, undefined);
@@ -248,6 +287,7 @@ test("RPC dedicated reviewer launch uses the registered reviewer and reviewer sc
     runId: "run-review",
     issueNumber: 10,
     repository: "owner/repo",
+    repositoryIdentity: "repo-identity",
     worktreeRoot: "/tmp/worktree",
     branch: "forge/10",
     baseBranch: "staging",
@@ -308,6 +348,7 @@ test("RPC domain reviewer must finalize its bound result", async () => {
       runId: "run-domain-review",
       issueNumber: 10,
       repository: "owner/repo",
+      repositoryIdentity: "repo-identity",
       worktreeRoot: "/tmp/worktree",
       branch: "forge/10",
       baseBranch: "staging",
@@ -354,6 +395,7 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
     runId: "run-node",
     issueNumber: 9,
     repository: "owner/repo",
+    repositoryIdentity: "repo-identity",
     worktreeRoot: "/tmp/worktree",
     branch: "forge/9",
     baseBranch: "staging",
@@ -402,6 +444,7 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
     runId: "run-resolve",
     issueNumber: 9,
     repository: "owner/repo",
+    repositoryIdentity: "repo-identity",
     worktreeRoot: "/tmp/worktree",
     branch: "forge/9",
     baseBranch: "staging",
@@ -424,6 +467,7 @@ test("bounded implementation launch binds the durable builder contract", async (
     runId: "run-implement",
     issueNumber: 9,
     repository: "owner/repo",
+    repositoryIdentity: "repo-identity",
     worktreeRoot: "/tmp/worktree",
     branch: "forge/9",
     baseBranch: "staging",
@@ -487,6 +531,7 @@ test("RPC work-on treats GitHub-only verification as valid", async () => {
     runId: "run-github-ci",
     issueNumber: 7,
     repository: "owner/repo",
+    repositoryIdentity: "repo-identity",
     worktreeRoot: "/tmp/worktree",
     branch: "forge/7",
     baseBranch: "staging",

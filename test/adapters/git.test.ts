@@ -176,7 +176,7 @@ test("worktree manager creates an issue branch from integration and cleans it sa
       "generated runtime\n",
     );
     await manager.assertClean(prepared.worktreePath);
-    await manager.push(prepared.worktreePath, prepared.branch);
+    await manager.push(prepared);
     await assert.rejects(
       manager.rebind({
         ...prepared,
