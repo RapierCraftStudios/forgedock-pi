@@ -204,8 +204,15 @@ export class ForgeOrchestrationController {
           state.issueNumber === issueNumber &&
           state.status === "completed" &&
           state.outcome === "closed" &&
-          Object.values(state.nodes).some((node) =>
-            node.evidence?.includes("FORGE:COMMIT:NO-CHANGE"),
+          Object.values(state.nodes).some(
+            (node) =>
+              node.node === "close" &&
+              node.status === "completed" &&
+              node.outcome === "closed" &&
+              node.evidence?.includes("FORGE:COMMIT:NO-CHANGE"),
+          ) &&
+          Object.values(state.nodes).some(
+            (node) => node.node === "cleanup" && node.status === "completed",
           )
         ) {
           verdict = true;

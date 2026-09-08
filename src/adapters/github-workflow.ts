@@ -1092,6 +1092,26 @@ export class GitHubWorkflowAdapter {
       });
   }
 
+  async closePullRequest(
+    pullNumber: number,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    assertNumber(pullNumber, "pull request");
+    const path = `${this.#apiRoot}/issues/${pullNumber}`;
+    const response = await this.#transport.request<IssueApiResponse>({
+      method: "PATCH",
+      path,
+      body: { state: "closed", state_reason: "completed" },
+      ...(signal ? { signal } : {}),
+    });
+    requireGitHubSuccess(response, path, [200]);
+    const readBack = await this.getPullRequest(pullNumber, signal);
+    if (readBack.state !== "closed")
+      throw new GitHubApiError(422, path, {
+        message: "Pull request close read-back failed",
+      });
+  }
+
   async #requiredStatusContexts(
     baseBranch: string,
     signal?: AbortSignal,

@@ -204,16 +204,11 @@ export class ReviewPrCoordinator {
         input.signal,
       );
     } else if (input.execution.prepared) {
-      const rebound = await this.#git.rebind(
+      await this.#git.assertRepositoryIdentity(
         input.execution.prepared,
-        input.signal,
         input.repository,
-        input.route?.headSha ?? input.execution.prepared.baseSha,
+        input.signal,
       );
-      if (rebound.worktreePath !== input.execution.worktreePath)
-        throw new Error(
-          "Review work-on execution path does not match its prepared worktree.",
-        );
     } else if (input.execution.repositoryIdentity) {
       await this.#git.assertRepositoryIdentity(
         {
@@ -243,6 +238,18 @@ export class ReviewPrCoordinator {
     const alreadyMergedOnResume = resumedPull?.merged === true;
     if (!alreadyMergedOnResume)
       await this.#github.revalidatePullRequestRoute(route, input.signal);
+    if (input.execution.kind === "work-on" && input.execution.prepared) {
+      const rebound = await this.#git.rebind(
+        input.execution.prepared,
+        input.signal,
+        input.repository,
+        route.headSha,
+      );
+      if (rebound.worktreePath !== input.execution.worktreePath)
+        throw new Error(
+          "Review work-on execution path does not match its prepared worktree.",
+        );
+    }
     if (input.execution.kind === "work-on") {
       const actualHead = await this.#git.head(
         input.execution.worktreePath,

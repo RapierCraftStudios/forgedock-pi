@@ -1615,19 +1615,21 @@ export class ForgeWorkOnController {
           }
         }
         if (receipt) {
+          const boundReceipt = receipt;
           this.#links.delete(link.subagentRunId);
-          link.subagentRunId = receipt.runId;
-          link.resultPath = receipt.resultPath;
+          link.subagentRunId = boundReceipt.runId;
+          link.resultPath = boundReceipt.resultPath;
           link.providerRetries = 0;
           delete link.launchFailure;
+          this.#receiptBindings.add(boundReceipt.runId);
           this.#persistLink(link);
-          void this.#drainReceiptCompletion(link, ctx, receipt).catch(
-            (error) => {
+          void this.#drainReceiptCompletion(link, ctx, boundReceipt)
+            .catch((error) => {
               link.status = "failed";
               this.#persistLink(link);
               this.#emitLifecycle(link, { reason: errorMessage(error) });
-            },
-          );
+            })
+            .finally(() => this.#receiptBindings.delete(boundReceipt.runId));
         } else {
           link.status = "failed";
           if (!isWorktreeBindingFailure(errorMessage(launchFailure)))
@@ -2190,14 +2192,19 @@ export class ForgeWorkOnController {
       });
       delete link.activeNodes[activeNode.subagentRunId];
       this.#links.delete(activeNode.subagentRunId);
-      if (link.currentNodeId === nodeId) link.currentNodeId = undefined;
-      link.status = "finalizing";
+      link.currentNodeId = "close-1";
+      link.status = "running";
       this.#persistLink(link);
+      const noChangePull = await github.findPullRequest(
+        link.prepared.branch,
+        ctx.signal,
+      );
       await this.#finalizeNoChangeClosure({
         link,
         journal,
         github,
         projector,
+        pullNumber: noChangePull?.number,
         sessionId: ctx.sessionManager.getSessionId(),
         ctx,
       });
@@ -3284,12 +3291,19 @@ export class ForgeWorkOnController {
         signal: ctx.signal,
       });
     } else if (node.node === "close") {
+      if (isNoChangeClosure(current.state) && pull && !pull.merged && pull.state === "open")
+        await github.closePullRequest(pull.number, ctx.signal);
       await github.closeIssue(link.issueNumber, ctx.signal);
       const closed = await github.getIssue(link.issueNumber, ctx.signal);
       if (closed.state !== "closed")
         throw new Error("Issue close read-back failed.");
       outcome = "closed";
-      evidence = ["issue close read-back passed"];
+      evidence = [
+        "issue close read-back passed",
+        ...(isNoChangeClosure(current.state)
+          ? ["FORGE:COMMIT:NO-CHANGE"]
+          : []),
+      ];
       await journal.append({
         runId: link.forgeRunId,
         type: "effect.recorded",
@@ -5018,13 +5032,14 @@ export class ForgeWorkOnController {
         previousResult: result,
         refreshAttempt: link.refreshes,
       });
-      this.#receiptBindings.add(receipt.runId);
+      const boundReceipt = receipt;
+      this.#receiptBindings.add(boundReceipt.runId);
       this.#links.delete(launchIntent.sentinelRunId);
-      link.subagentRunId = receipt.runId;
-      link.resultPath = receipt.resultPath;
+      link.subagentRunId = boundReceipt.runId;
+      link.resultPath = boundReceipt.resultPath;
       link.refreshLaunch = {
-        runId: receipt.runId,
-        resultPath: receipt.resultPath,
+        runId: boundReceipt.runId,
+        resultPath: boundReceipt.resultPath,
         previousResultPath,
         baseSha: currentBaseSha,
         refreshAttempt: link.refreshes,
@@ -5032,14 +5047,13 @@ export class ForgeWorkOnController {
       };
       delete link.launchFailure;
       this.#persistLink(link);
-      void this.#drainReceiptCompletion(link, ctx, receipt).catch(
-        (error) => {
+      void this.#drainReceiptCompletion(link, ctx, boundReceipt)
+        .catch((error) => {
           link.status = "failed";
           this.#persistLink(link);
           this.#emitLifecycle(link, { reason: errorMessage(error) });
-        },
-      );
-      this.#receiptBindings.delete(receipt.runId);
+        })
+        .finally(() => this.#receiptBindings.delete(boundReceipt.runId));
       this.#emitLifecycle(link, {
         baseSha: currentBaseSha,
         reason: `Integration base moved from ${result.baseSha}.`,
@@ -5446,10 +5460,11 @@ export class ForgeWorkOnController {
     journal: RunJournal;
     github: GitHubWorkflowAdapter;
     projector: GitHubIssueProjector;
+    pullNumber?: number;
     sessionId: string;
     ctx: ExtensionContext;
   }): Promise<void> {
-    const { link, journal, github, projector, sessionId, ctx } = deps;
+    const { link, journal, github, projector, pullNumber, sessionId, ctx } = deps;
     const signal = ctx.signal;
     const closeCommon = {
       nodeId: "close-1",
@@ -5486,6 +5501,7 @@ export class ForgeWorkOnController {
       message: `Start parent node close-1 (no-change closure)`,
       ...(signal ? { signal } : {}),
     });
+    if (pullNumber) await github.closePullRequest(pullNumber, signal);
     await github.closeIssue(link.issueNumber, signal);
     const closed = await github.getIssue(link.issueNumber, signal);
     if (closed.state !== "closed")
@@ -5814,6 +5830,7 @@ export class ForgeWorkOnController {
         journal,
         github,
         projector,
+        pullNumber: existingPull?.number,
         sessionId,
         ctx,
       });
@@ -6557,10 +6574,8 @@ function terminalRunMarkdown(
 }
 
 function isNoChangeClosure(state: Pick<RunState, "nodes">): boolean {
-  return Object.values(state.nodes).some(
-    (node) =>
-      node.node === "close" &&
-      node.evidence?.includes("FORGE:COMMIT:NO-CHANGE"),
+  return Object.values(state.nodes).some((node) =>
+    node.evidence?.includes("FORGE:COMMIT:NO-CHANGE"),
   );
 }
 
