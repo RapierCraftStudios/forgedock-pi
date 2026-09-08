@@ -174,9 +174,47 @@ export class ForgeOrchestrationController {
     const key = `${link.orchestrationId}:${issueNumber}`;
     const cached = this.#priorInvalidVerdicts.get(key);
     if (cached !== undefined) return cached;
-    const verdict = await this.#githubFor(link)
-      .hasInvalidVerdictMarker(issueNumber, signal)
-      .catch(() => false);
+    const comments = await this.#githubFor(link)
+      .getComments(issueNumber, signal)
+      .catch(() => []);
+    const runIds = new Set<string>();
+    for (const comment of comments) {
+      const invalid = /<!-- FORGE:INVALID run=([A-Za-z0-9:_-]+) -->/.exec(
+        comment,
+      );
+      const noChange =
+        /<!-- FORGE:COMMIT:NO-CHANGE run=([A-Za-z0-9:_-]+) -->/.exec(comment);
+      if (invalid?.[1] && invalid[1] === noChange?.[1])
+        runIds.add(invalid[1]);
+    }
+    let verdict = false;
+    if (runIds.size > 0) {
+      const tokenProvider = createGitHubTokenProvider(
+        this.#pi,
+        link.repositoryRoot,
+      );
+      const store = new GitHubStateBranchStore(
+        new FetchGitHubTransport({ tokenProvider }),
+        link.repository,
+        link.stateBranch,
+      );
+      for (const runId of runIds) {
+        const candidate = await store.readRun(runId, signal).catch(() => undefined);
+        const state = candidate?.state;
+        if (
+          state?.repository === link.repository &&
+          state.issueNumber === issueNumber &&
+          state.status === "completed" &&
+          state.outcome === "closed" &&
+          Object.values(state.nodes).some((node) =>
+            node.evidence?.includes("FORGE:COMMIT:NO-CHANGE"),
+          )
+        ) {
+          verdict = true;
+          break;
+        }
+      }
+    }
     this.#priorInvalidVerdicts.set(key, verdict);
     return verdict;
   }

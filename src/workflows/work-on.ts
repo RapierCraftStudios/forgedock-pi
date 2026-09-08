@@ -2143,6 +2143,49 @@ export class ForgeWorkOnController {
     const reviewerNode =
       nodeResult.node === "review-correctness" ||
       nodeResult.node === "review-security";
+    const journal = new RunJournal(store);
+    if (nodeResult.node === "implement" && nodeResult.noChange === true) {
+      if (nodeResult.status !== "completed" || nodeResult.changedFiles.length > 0)
+        throw new Error(
+          "No-change implement result must be completed with zero changed files.",
+        );
+      await journal.append({
+        runId: link.forgeRunId,
+        type: "node.completed",
+        payload: {
+          nodeId: nodeResult.nodeId,
+          node: nodeResult.node,
+          attempt: nodeAttempt(nodeResult.nodeId),
+          round: nodeAttempt(nodeResult.nodeId),
+          headSha: nodeResult.headSha,
+          baseSha: nodeResult.baseSha,
+          outcome: "invalid",
+          evidence: [
+            ...nodeResult.evidence,
+            "FORGE:COMMIT:NO-CHANGE",
+          ],
+          verificationResults: nodeResult.verification,
+        },
+        idempotencyKey: `node:${nodeResult.nodeId}:completed`,
+        sessionId: ctx.sessionManager.getSessionId(),
+        message: `Complete no-change ForgeDock node ${nodeResult.nodeId}`,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      delete link.activeNodes[activeNode.subagentRunId];
+      this.#links.delete(activeNode.subagentRunId);
+      if (link.currentNodeId === nodeId) link.currentNodeId = undefined;
+      link.status = "finalizing";
+      this.#persistLink(link);
+      await this.#finalizeNoChangeClosure({
+        link,
+        journal,
+        github,
+        projector,
+        sessionId: ctx.sessionManager.getSessionId(),
+        ctx,
+      });
+      return;
+    }
     if (nodeResult.status === "completed" && !reviewerNode) {
       if (!nodeResult.artifact)
         throw new Error(
@@ -2174,7 +2217,6 @@ export class ForgeWorkOnController {
       link.planContext = JSON.stringify(nodeResult.artifact, null, 2);
       link.builderContract = completedBuilderContract;
     }
-    const journal = new RunJournal(store);
     const reportedVerification = new Map(
       nodeResult.verification.map((result) => [result.name, result]),
     );
@@ -5004,7 +5046,10 @@ export class ForgeWorkOnController {
   }
 
   async #loadResult(link: ActiveRunLink): Promise<ForgeWorkOnResult> {
-    await this.#rebindLink(link);
+    await this.#git.assertRepositoryIdentity(
+      link.prepared,
+      link.repository,
+    );
     let result: ForgeWorkOnResult | undefined;
     if (link.executionMode !== "direct") {
       // An adopting session has no rpc knowledge of the original child; a
@@ -5038,6 +5083,7 @@ export class ForgeWorkOnController {
       throw new Error(
         "Completed work-on subagent did not return a schema-valid Forge result artifact.",
       );
+    await this.#rebindLink(link, undefined, result.headSha);
     return result;
   }
 
@@ -5589,10 +5635,15 @@ export class ForgeWorkOnController {
     suppliedResult?: ForgeWorkOnResult,
     integrate = false,
   ): Promise<void> {
-    await this.#rebindLink(link, ctx.signal);
-    await materializeForgeAgents(link.prepared.worktreePath);
+    await this.#git.assertRepositoryIdentity(
+      link.prepared,
+      link.repository,
+      ctx.signal,
+    );
     const result = suppliedResult ?? (await this.#loadResult(link));
     assertResultIdentity(result, link);
+    await this.#rebindLink(link, ctx.signal, result.headSha);
+    await materializeForgeAgents(link.prepared.worktreePath);
     const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
     const tokenProvider = createGitHubTokenProvider(
       this.#pi,
@@ -6500,7 +6551,7 @@ function noChangeClosureMarkdown(
   link: Pick<ActiveRunLink, "forgeRunId" | "prepared" | "reviewHeadSha">,
   state: Pick<RunState, "outcome" | "pullNumber" | "nodes">,
 ): string {
-  return `${terminalRunMarkdown(link, state)}\n\n<!-- FORGE:INVALID -->\n<!-- FORGE:COMMIT:NO-CHANGE -->`;
+  return `${terminalRunMarkdown(link, state)}\n\n<!-- FORGE:INVALID run=${link.forgeRunId} -->\n<!-- FORGE:COMMIT:NO-CHANGE run=${link.forgeRunId} -->`;
 }
 
 async function recordProjectionReceipts(
