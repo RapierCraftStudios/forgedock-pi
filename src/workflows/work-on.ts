@@ -369,7 +369,11 @@ export class ForgeWorkOnController {
             candidate.forgeRunId === runId &&
             candidate.executionMode === "direct",
         );
-        if (!link || link.status !== "running") return;
+        if (
+          !link ||
+          (link.status !== "running" && link.status !== "refreshing")
+        )
+          return;
         link.status = "finalizing";
         this.#persistLink(link);
         void this.#finalize(link, ctx).catch((error) => {
@@ -545,6 +549,14 @@ export class ForgeWorkOnController {
           const { policy } = await loadForgePolicy(
             link.prepared.repositoryRoot,
           );
+          const previousReviewRounds = latestReviewRound(directState.state);
+          if (
+            directRefreshRecovery &&
+            previousReviewRounds >= policy.review.maxRounds
+          )
+            throw new Error(
+              "Direct refresh cannot start after the configured review-round cap.",
+            );
           this.#directBinding = {
             runId: link.forgeRunId,
             resultPath: link.resultPath,
@@ -562,6 +574,9 @@ export class ForgeWorkOnController {
             reviewerTimeoutMs: policy.subagents.reviewerTimeoutMs,
             verificationCommands: policy.verification.commands,
             refresh: directRefreshRecovery,
+            ...(directRefreshRecovery
+              ? { previousReviewRounds }
+              : {}),
           };
           process.env.PI_SUBAGENT_EXTENSION_BINDINGS = JSON.stringify({
             "forgedock.pi/1": this.#directBinding,
@@ -7212,6 +7227,19 @@ async function readBoundedForgeResult(
   } finally {
     await handle?.close().catch(() => undefined);
   }
+}
+
+function latestReviewRound(state: RunState): number {
+  return Math.max(
+    1,
+    ...Object.values(state.nodes)
+      .filter(
+        (node) =>
+          node.node === "review-correctness" ||
+          node.node === "review-security",
+      )
+      .map((node) => node.round ?? node.attempt),
+  );
 }
 
 function requirePreparedRepositoryIdentity(

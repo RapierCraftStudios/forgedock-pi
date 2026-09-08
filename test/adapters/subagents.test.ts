@@ -257,6 +257,7 @@ test("RPC standalone reviewer binding has review authority without a fake issue 
     reviewer: "forge-review-security",
     round: 1,
     reviewerTimeoutMs: 900_000,
+    detached: true,
   });
   const spawn = bus.requests.at(-1) as {
     params: {

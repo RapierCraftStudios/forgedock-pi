@@ -133,6 +133,7 @@ export interface ForgeChildBinding {
   reviewHeadSha?: string;
   refresh: boolean;
   previousReviewRounds?: number;
+  detached?: boolean;
 }
 
 export type WorkOnForgeChildBinding = ForgeChildBinding & {
@@ -202,6 +203,7 @@ export interface ForgeRepositoryBinding {
   worktreeRoot: string;
   branch: string;
   reviewId?: string;
+  detached?: boolean;
   headSha?: string;
 }
 
@@ -215,6 +217,7 @@ function childRepositoryBinding(
     worktreeRoot: binding.worktreeRoot,
     branch: binding.branch,
     ...(binding.reviewId ? { reviewId: binding.reviewId } : {}),
+    ...(binding.detached ? { detached: true } : {}),
     ...(binding.node?.startsWith("review-") || binding.reviewId
       ? { headSha: binding.reviewHeadSha }
       : {}),
@@ -272,7 +275,7 @@ async function assertBoundRepository(
     throw new Error(
       "Forge worktree binding failure: current path is not the registered bound worktree.",
     );
-  if (!binding.reviewId) {
+  if (!binding.detached) {
     const branch = await runProcess(
       "git",
       ["-C", root, "branch", "--show-current"],
@@ -300,7 +303,7 @@ export function boundWorktreeRegistrationMatches(
     path !== undefined &&
     resolve(root, path) === root &&
     !prunable &&
-    (binding.reviewId
+    (binding.detached
       ? detached && (!binding.headSha || head === binding.headSha)
       : branch === `refs/heads/${binding.branch}` &&
         (!binding.headSha || head === binding.headSha));
@@ -2108,13 +2111,11 @@ function readBinding(): ForgeChildBinding {
     refresh &&
     (!Number.isSafeInteger(previousReviewRounds) ||
       (previousReviewRounds as number) < 1 ||
-      (previousReviewRounds as number) > (value.maxReviewRounds as number))
+      (previousReviewRounds as number) >= (value.maxReviewRounds as number))
   ) {
-    // A remediated head always receives its verification review: the cap
-    // bounds remediation cycles, so previous == maxReviewRounds is allowed
-    // exactly once more (the verification panel); beyond that, block.
+    // The refreshed review must remain inside the configured round cap.
     throw new Error(
-      "Refresh binding previousReviewRounds must leave room for exactly one verification review round (maxReviewRounds + 1).",
+      "Refresh binding previousReviewRounds must leave room for one verification review round within maxReviewRounds.",
     );
   }
   return {
@@ -2160,6 +2161,7 @@ function readBinding(): ForgeChildBinding {
     ...(refresh
       ? { previousReviewRounds: previousReviewRounds as number }
       : {}),
+    ...(value.detached === true ? { detached: true } : {}),
   };
 }
 

@@ -592,7 +592,9 @@ export class ReviewPrCoordinator {
         ...(stagingBundle ? { stagingBundle } : {}),
       };
     } finally {
-      if (prepared) await this.#git.cleanupReview(prepared, input.signal);
+      // Cleanup is compensating work and must continue after the review signal
+      // is aborted, otherwise the owned review worktree is retained forever.
+      if (prepared) await this.#git.cleanupReview(prepared);
     }
   }
 
@@ -773,7 +775,9 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
       repositoryIdentity,
       worktreeRoot: input.worktreePath,
       branch: input.branch ?? input.route.headRef,
-      ...(input.detached ? { reviewId: input.reviewId } : {}),
+      ...(input.detached
+        ? { reviewId: input.reviewId, detached: true }
+        : {}),
       headSha: input.route.headSha,
     };
     await this.#rpc.ping();
@@ -783,6 +787,7 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
       reviewer: string;
     }> = [];
     this.#active.set(input.reviewId, []);
+    let retainActiveReceipts = false;
     const spawn = async (reviewer: string, reviewerTimeoutMs = input.reviewerTimeoutMs): Promise<(typeof receipts)[number]> => {
       const receipt = await this.#rpc.spawnStandaloneReviewNode({
         reviewId: input.reviewId,
@@ -793,11 +798,13 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
         worktreeRoot: input.worktreePath,
         headRef: input.route.headRef,
         headSha: input.route.headSha,
+        ...(input.branch ? { branch: input.branch } : {}),
         baseRef: input.route.baseRef,
         baseSha: input.route.baseSha,
         reviewer,
         round: input.round,
         reviewerTimeoutMs,
+        detached: input.detached === true,
         ...(input.context ? { context: input.context } : {}),
       });
       const entry = {
@@ -909,17 +916,19 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
         attempt: input.round,
       });
     } catch (error) {
-      if (input.signal?.aborted) throw input.signal.reason ?? error;
       const stops = await Promise.allSettled(
         receipts.map(({ receipt }) => this.#rpc.stopAndWait(receipt.runId)),
       );
       const stopFailure = stops.find(
         (entry): entry is PromiseRejectedResult => entry.status === "rejected",
       );
-      if (stopFailure) throw stopFailure.reason;
-      throw error;
+      if (stopFailure) {
+        retainActiveReceipts = true;
+        throw stopFailure.reason;
+      }
+      throw input.signal?.aborted ? input.signal.reason ?? error : error;
     } finally {
-      this.#active.delete(input.reviewId);
+      if (!retainActiveReceipts) this.#active.delete(input.reviewId);
     }
   }
 

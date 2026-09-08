@@ -73,11 +73,13 @@ export interface StandaloneReviewerLaunchInput {
   worktreeRoot: string;
   headRef: string;
   headSha: string;
+  branch?: string;
   baseRef: string;
   baseSha: string;
   reviewer: string;
   round: number;
   reviewerTimeoutMs: number;
+  detached: boolean;
   context?: string;
 }
 
@@ -132,6 +134,8 @@ export class SubagentsRpcClient {
       input.round > 5
     )
       throw new TypeError("Review round must be from 1 through 5.");
+    if (typeof input.detached !== "boolean")
+      throw new TypeError("Review worktree detached mode must be explicit.");
     if (
       !Number.isSafeInteger(input.pullNumber) ||
       input.pullNumber < 1 ||
@@ -158,6 +162,7 @@ export class SubagentsRpcClient {
     const binding = {
       authorityMode: "review",
       reviewId: input.reviewId,
+      detached: input.detached,
       runId: input.reviewId,
       resultPath,
       repository: input.repository,
@@ -166,7 +171,7 @@ export class SubagentsRpcClient {
         ? {}
         : { issueNumber: input.issueNumber }),
       worktreeRoot: input.worktreeRoot,
-      branch: input.headRef,
+      branch: input.branch ?? input.headRef,
       baseBranch: input.baseRef,
       baseSha: input.baseSha,
       maxReviewRounds: 5,
