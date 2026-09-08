@@ -94,7 +94,7 @@ function configAt(cwd) {
   const remediationLimit = integer(config.review?.remediation_max_rounds ?? 1, "remediation limit", 0);
   return { raw, config, repo, model, remediationLimit };
 }
-export function loadPolicy(explicit, env = process.env) {
+export function loadPolicy(explicit, env = process.env, allowLegacy = false) {
   const bindings = env.PI_SUBAGENT_EXTENSION_BINDINGS ? JSON.parse(env.PI_SUBAGENT_EXTENSION_BINDINGS) : {};
   const bound = bindings[BINDING];
   if (bound && explicit) requireThat(bound.path === explicit.path && bound.sha256 === explicit.sha256, "Explicit input disagrees with native lane binding");
@@ -103,9 +103,9 @@ export function loadPolicy(explicit, env = process.env) {
   requireThat(policy.v === 1 && typeof policy.repo === "string" && typeof policy.key === "string", "Invalid lane input");
   integer(policy.issue, "issue"); integer(policy.remediationLimit, "remediation limit", 0);
   requireThat(typeof policy.model === "string" && /^[^\s/]+\/[^\s]+$/.test(policy.model), "Invalid bound model");
-  // Existing orchestration inputs may predate contract admission; preparation rejects
-  // that shape, while record rendering can still read the immutable historical lane.
-  if (policy.contract !== undefined || policy.contractDigest !== undefined)
+  if (policy.contract === undefined && policy.contractDigest === undefined)
+    requireThat(allowLegacy, "Bound lane contract is missing; obtain a contract-admitted input");
+  else
     requireThat(policy.contract && typeof policy.contractDigest === "string" && policy.contractDigest === validateIssueContractFile(policy.contract, policy.issue).digest, "Bound lane contract is missing or stale");
   return policy;
 }
