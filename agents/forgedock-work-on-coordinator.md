@@ -1,5 +1,6 @@
 ---
 name: forgedock-work-on-coordinator
+package: forgedock-parent-control
 description: Own one ForgeDock issue lifecycle inline, with fresh nested agents only for review
 thinking: high
 systemPromptMode: replace

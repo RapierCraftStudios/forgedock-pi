@@ -52,7 +52,7 @@ test("prepared requests bind one canonical model/cap despite absent child config
     assert.throws(() => dispatch.loadPolicy(batch.lanes[0].input, env), /disagrees/);
     assert.equal(JSON.stringify(prepared.request).includes("do-not-print-this"), false);
     const script = await readFile(prepared.request.workflowScriptPath, "utf8");
-    assert.ok(script.includes('"launch":{"agent":"forgedock-work-on-coordinator"'));
+    assert.ok(script.includes('"launch":{"agent":"forgedock-parent-control.forgedock-work-on-coordinator"'));
     assert.equal(script.includes("do-not-print-this"), false);
     assert.equal(prepared.request.globalConcurrencyLimit, 2);
     assert.equal(prepared.request.maxSubagentSpawnsPerRun, 24);
@@ -92,6 +92,7 @@ test("parent control-plane binding and exact native acceptance survive lane publ
   await fixture(async ({ root, repo, plan }) => {
     await mkdir(join(repo, ".pi/agents"), { recursive: true });
     await writeFile(join(repo, ".pi/agents/forgedock-work-on-coordinator.md"), "name: forgedock-work-on-coordinator\nsystemPrompt: target-agent-must-not-win\n");
+    await writeFile(join(repo, "package.json"), JSON.stringify({ name: "target-project", pi: { subagents: { agents: [".pi/agents"] } } }));
     const prepared = dispatch.prepareBatch(plan, join(root, "prepared-control"), repo);
     const batch = JSON.parse(await readFile(prepared.batchFile, "utf8"));
     const control = batch.controlPlane;
@@ -106,6 +107,7 @@ test("parent control-plane binding and exact native acceptance survive lane publ
     assert.notEqual(control.piSubagents.root, repo);
     assert.equal(control.forgeDock.specs.workOn.path, join(control.forgeDock.root, "specs/original/commands/work-on.md"));
     assert.equal(control.forgeDock.helpers.record.path, `${control.forgeDock.root}/specs/helpers/record.mjs`);
+    assert.equal(control.forgeDock.reviewAgent.path, join(control.forgeDock.root, "agents/forgedock-review-delegate.md"));
     assert.equal(control.piSubagents.acceptance.path, `${control.piSubagents.root}/src/runs/shared/acceptance.ts`);
     assert.throws(() => dispatch.validateControlPlaneDescriptor({ ...control, digest: `sha256:${"0".repeat(64)}` }), /digest does not match/);
     const policy = JSON.parse(await readFile(batch.lanes[0].input.path, "utf8"));
@@ -117,9 +119,10 @@ test("parent control-plane binding and exact native acceptance survive lane publ
     const graph = JSON.parse(script.match(/^const issueGraph=(.+);$/m)![1]!);
     const launch = graph[0].launch;
     assert.equal(launch.agentScope, "user");
+    assert.equal(launch.agent, "forgedock-parent-control.forgedock-work-on-coordinator");
     assert.equal(launch.acceptance.criteria.length, 2);
     assert.deepEqual(launch.acceptance.criteria.map((criterion: { id: string }) => criterion.id), ["source-behavior", "source-safety"]);
-    assert.ok(launch.acceptance.criteria.every((criterion: { must: string }) => /textHash=sha256:|proofType=|affectedBoundaries=/.test(criterion.must)));
+    assert.ok(launch.acceptance.criteria.every((criterion: { must: string }) => /acceptance-id=.*;textHash=sha256:|proofType=|affectedBoundaries=/.test(criterion.must)));
     assert.deepEqual(launch.acceptance.criteria.map((criterion: { id: string }) => criterion.id).filter((id: string) => /^criterion-[12]$/.test(id)), []);
     assert.match(launch.task, /forgedock\.control-plane\/v1/);
     assert.match(launch.task, /piSubagents|pi-subagents package\/source descriptors/);
@@ -141,6 +144,7 @@ test("parent control-plane binding and exact native acceptance survive lane publ
     const reviewScript = await readFile(review.request.workflowScriptPath, "utf8");
     assert.doesNotMatch(reviewScript, /TARGET (DISPATCH|RECIPE|REVIEW|WORK-ON) RULES/);
     assert.match(reviewScript, /agentScope":"user/);
+    assert.match(reviewScript, /forgedock-parent-control\.delegate/);
     assert.match(reviewScript, /forgedock\.control-plane\/v1/);
   });
 });

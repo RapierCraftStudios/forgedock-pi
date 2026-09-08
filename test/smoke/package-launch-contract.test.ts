@@ -73,7 +73,7 @@ test("packed work-on agent resolves without a package tool ceiling", async () =>
     assert.notEqual(extractorMode & 0o111, 0, "affected-file helper must be executable");
 
     const result = await resolveSubagentLaunchContract({
-      agent: "forgedock-work-on-coordinator",
+      agent: "forgedock-parent-control.forgedock-work-on-coordinator",
       cwd: project,
       context: "fresh",
       skill: false,
@@ -109,7 +109,7 @@ test("host policy may still reject the packaged agent", async () => {
     );
     await registerPackedProjectPackage(project);
     const result = await resolveSubagentLaunchContract({
-      agent: "forgedock-work-on-coordinator",
+      agent: "forgedock-parent-control.forgedock-work-on-coordinator",
       cwd: project,
       context: "fresh",
       skill: false,
