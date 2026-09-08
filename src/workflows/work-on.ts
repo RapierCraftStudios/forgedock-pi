@@ -157,6 +157,7 @@ export interface ActiveRunLink {
     resultPath: string;
     previousResultPath: string;
     baseSha: string;
+    refreshAttempt: number;
     launchNonce: string;
   };
   reviewHeadSha?: string;
@@ -1134,6 +1135,7 @@ export class ForgeWorkOnController {
         policy,
         refresh.baseSha,
         ctx,
+        refresh.refreshAttempt,
       );
     } catch (error) {
       link.status = "failed";
@@ -4738,10 +4740,11 @@ export class ForgeWorkOnController {
     policy: ForgePolicy,
     currentBaseSha: string,
     ctx: ExtensionContext,
+    refreshAttempt?: number,
   ): Promise<void> {
     link.reviewBaseSha = currentBaseSha;
     link.prepared = { ...link.prepared, baseSha: currentBaseSha };
-    link.refreshes += 1;
+    link.refreshes = refreshAttempt ?? link.refreshes + 1;
     link.currentNodeId = undefined;
     link.status = "refreshing";
     this.#persistLink(link);
@@ -4788,6 +4791,7 @@ export class ForgeWorkOnController {
       resultPath: refreshResultPath,
       previousResultPath,
       baseSha: currentBaseSha,
+      refreshAttempt: link.refreshes,
       launchNonce: launchIntent.launchNonce,
     };
     link.launchFailure = "ambiguous";
@@ -4834,6 +4838,7 @@ export class ForgeWorkOnController {
         resultPath: receipt.resultPath,
         previousResultPath,
         baseSha: currentBaseSha,
+        refreshAttempt: link.refreshes,
         launchNonce: launchIntent.launchNonce,
       };
       delete link.launchFailure;
@@ -5251,10 +5256,11 @@ export class ForgeWorkOnController {
     link: ActiveRunLink;
     journal: RunJournal;
     github: GitHubWorkflowAdapter;
+    projector: GitHubIssueProjector;
     sessionId: string;
     ctx: ExtensionContext;
   }): Promise<void> {
-    const { link, journal, github, sessionId, ctx } = deps;
+    const { link, journal, github, projector, sessionId, ctx } = deps;
     const signal = ctx.signal;
     const closeCommon = {
       nodeId: "close-1",
@@ -5378,7 +5384,7 @@ export class ForgeWorkOnController {
       ...(signal ? { signal } : {}),
     });
 
-    await journal.append({
+    const terminal = await journal.append({
       runId: link.forgeRunId,
       type: "run.completed",
       payload: { outcome: "closed" },
@@ -5392,6 +5398,60 @@ export class ForgeWorkOnController {
     link.activeNodes = {};
     link.currentNodeId = undefined;
     this.#persistLink(link);
+    let terminalProjectionComplete = false;
+    try {
+      const event = terminal.events.find(
+        (candidate) => candidate.type === "run.completed",
+      );
+      if (!event) throw new Error("No-change completion event is missing.");
+      const projection = await projector.projectEventWithReceipt({
+        issueNumber: link.issueNumber,
+        event,
+        markdown: terminalRunMarkdown(link, terminal.state),
+        ...(signal ? { signal } : {}),
+      });
+      const labelReceipt = await projector.clearWorkflowLabelWithReceipt(
+        link.issueNumber,
+        signal,
+        `${event.eventId}:workflow`,
+      );
+      await recordProjectionReceipts(
+        journal,
+        link.forgeRunId,
+        [...projection.receipts, labelReceipt],
+        sessionId,
+        signal,
+      );
+      terminalProjectionComplete = true;
+    } catch (error) {
+      ctx.ui.notify(
+        `ForgeDock run ${link.forgeRunId} is durably completed; terminal projection will replay: ${errorMessage(error)}`,
+        "warning",
+      );
+    }
+    if (
+      !link.orchestrationId &&
+      terminal.state.lease &&
+      terminalProjectionComplete
+    )
+      await journal.append({
+        runId: link.forgeRunId,
+        type: "lease.released",
+        payload: {
+          ownerRunId: link.leaseOwnerRunId,
+          epoch: terminal.state.lease.epoch,
+        },
+        idempotencyKey: "lease:release",
+        sessionId,
+        message: `Release ForgeDock lease ${link.forgeRunId}`,
+        ...(signal ? { signal } : {}),
+      });
+    this.#clearDirectBinding(link.forgeRunId);
+    this.#emitLifecycle(link, {
+      nodeId: "cleanup-1",
+      outcome: "closed",
+    });
+    ctx.ui.setStatus("forgedock", undefined);
   }
 
   async #finalize(
@@ -5556,6 +5616,7 @@ export class ForgeWorkOnController {
         link,
         journal,
         github,
+        projector,
         sessionId,
         ctx,
       });
