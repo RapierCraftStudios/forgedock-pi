@@ -929,7 +929,7 @@ export class GitWorktreeManager {
   ): Promise<void> {
     // Validate ownership before cleanup can touch the retained path. A crash
     // or external replacement must never turn cleanup into foreign deletion.
-    await this.#assertPreparedRepository(prepared, signal);
+    const root = await this.#assertPreparedRepository(prepared, signal);
     if (await exists(prepared.worktreePath))
       prepared = await this.rebind(prepared, signal, prepared.repository);
     // Cleanup is a retryable owned effect. A crash may happen after Git has
@@ -939,6 +939,13 @@ export class GitWorktreeManager {
       prepared.worktreePath,
       signal,
     );
+    if (!(await exists(prepared.worktreePath)))
+      await this.#git(
+        root,
+        ["worktree", "prune", "--expire", "now"],
+        30_000,
+        signal,
+      );
     try {
       await this.#git(
         prepared.repositoryRoot,

@@ -2149,6 +2149,23 @@ export class ForgeWorkOnController {
         throw new Error(
           "No-change implement result must be completed with zero changed files.",
         );
+      if (nodeResult.baseSha !== link.prepared.baseSha)
+        throw new Error("No-change implement result base SHA is not bound.");
+      await this.#rebindLink(link, ctx.signal, nodeResult.headSha);
+      await this.#git.assertClean(link.prepared.worktreePath, ctx.signal);
+      const actualHead = await this.#git.head(
+        link.prepared.worktreePath,
+        ctx.signal,
+      );
+      const actualFiles = await this.#git.changedFiles(
+        link.prepared.worktreePath,
+        nodeResult.baseSha,
+        ctx.signal,
+      );
+      if (actualHead !== nodeResult.baseSha || actualFiles.length > 0)
+        throw new Error(
+          "No-change implement result does not match the clean base worktree.",
+        );
       await journal.append({
         runId: link.forgeRunId,
         type: "node.completed",

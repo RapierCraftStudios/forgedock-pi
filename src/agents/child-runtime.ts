@@ -516,6 +516,7 @@ export function registerForgeRuntime(
   let ceiling: SubagentCapabilityCeilingHandle | undefined;
   let canonicalRoot: string | undefined;
   let caseInsensitivePaths: boolean | undefined;
+  let noChangeCommitObserved = false;
   let refreshPushLeaseSha: string | undefined;
   let preparedPull: { number: number; headSha: string } | undefined;
   let reviewDiffCoverage:
@@ -931,6 +932,26 @@ export function registerForgeRuntime(
           `Refusing to commit Forge runtime paths: ${runtimePaths.join(", ")}.`,
         );
       if (changedPaths.length === 0) {
+        const committedDiff = await runProcess(
+          "git",
+          ["-C", root, "diff", "--name-only", binding.baseSha, "HEAD", "--"],
+          {
+            cwd: root,
+            timeoutMs: 30_000,
+            env,
+            ...(signal ? { signal } : {}),
+          },
+        );
+        assertCompleteProcessOutput(committedDiff, "Base-to-head diff");
+        if (committedDiff.exitCode !== 0)
+          throw new Error(
+            `Unable to verify the base-to-head diff: ${committedDiff.stderr}`,
+          );
+        if (committedDiff.stdout.trim())
+          throw new Error(
+            "The worktree has no uncommitted changes but already contains a base-to-head diff; do not classify it as no-change.",
+          );
+        noChangeCommitObserved = true;
         // A zero-diff worktree is a legitimate outcome when the cited finding
         // is stale or already renders clean on the frozen base. Fail soft
         // with a typed marker so the run can finalize the node as invalid
@@ -1737,6 +1758,13 @@ export function registerForgeRuntime(
           `Final node result failed schema validation: ${phaseArtifactValidationError(artifact)}.`,
         );
       }
+      if (
+        params.value.noChange === true &&
+        !noChangeCommitObserved
+      )
+        throw new Error(
+          "No-change node result requires the current forge_commit no-change observation.",
+        );
       if (
         params.value.runId !== binding.runId ||
         params.value.issueNumber !== binding.issueNumber ||

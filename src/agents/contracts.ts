@@ -280,7 +280,11 @@ export function isForgeNodeResult(value: unknown): value is ForgeNodeResult {
     typeof result.headSha === "string" &&
     isStringArray(result.changedFiles) &&
     isStringArray(result.evidence) &&
-    (result.noChange === undefined || result.noChange === true) &&
+    (result.noChange === undefined ||
+      (result.noChange === true &&
+        result.node === "implement" &&
+        result.outcome === "invalid" &&
+        result.changedFiles.length === 0)) &&
     Array.isArray(result.verification) &&
     result.verification.every(isVerificationResult) &&
     (result.status !== "completed" ||

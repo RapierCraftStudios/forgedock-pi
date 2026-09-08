@@ -174,9 +174,7 @@ export class ForgeOrchestrationController {
     const key = `${link.orchestrationId}:${issueNumber}`;
     const cached = this.#priorInvalidVerdicts.get(key);
     if (cached !== undefined) return cached;
-    const comments = await this.#githubFor(link)
-      .getComments(issueNumber, signal)
-      .catch(() => []);
+    const comments = await this.#githubFor(link).getComments(issueNumber, signal);
     const runIds = new Set<string>();
     for (const comment of comments) {
       const invalid = /<!-- FORGE:INVALID run=([A-Za-z0-9:_-]+) -->/.exec(
@@ -199,8 +197,8 @@ export class ForgeOrchestrationController {
         link.stateBranch,
       );
       for (const runId of runIds) {
-        const candidate = await store.readRun(runId, signal).catch(() => undefined);
-        const state = candidate?.state;
+        const candidate = await store.readRun(runId, signal);
+        const state = candidate.state;
         if (
           state?.repository === link.repository &&
           state.issueNumber === issueNumber &&
