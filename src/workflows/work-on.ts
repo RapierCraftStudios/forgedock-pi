@@ -527,7 +527,19 @@ export class ForgeWorkOnController {
           link.status = "running";
           this.#persistLink(link);
         }
-        if (link.status !== "running" && link.status !== "refreshing") continue;
+        const retryableCleanup =
+          link.status === "failed" &&
+          parentNodeFromId(link.currentNodeId) === "cleanup";
+        if (
+          link.status !== "running" &&
+          link.status !== "refreshing" &&
+          !retryableCleanup
+        )
+          continue;
+        if (retryableCleanup) {
+          link.status = "running";
+          this.#persistLink(link);
+        }
         if (link.executionMode === "direct") {
           if (!directState?.state) continue;
           try {
@@ -735,6 +747,8 @@ export class ForgeWorkOnController {
         }
         const parentNode = parentNodeFromId(link.currentNodeId);
         if (parentNode && link.currentNodeId) {
+          await this.#rebindLink(link, ctx.signal);
+          await materializeForgeAgents(link.prepared.worktreePath);
           const { policy } = await loadForgePolicy(
             link.prepared.repositoryRoot,
           );
@@ -1815,6 +1829,7 @@ export class ForgeWorkOnController {
     if (!nodeId)
       throw new Error("Node reconciliation has no active node identity.");
     const parentNode = parentNodeFromId(nodeId);
+    await this.#rebindLink(link, ctx.signal);
     if (parentNode) {
       const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
       const tokenProvider = createGitHubTokenProvider(
@@ -3553,6 +3568,8 @@ export class ForgeWorkOnController {
         node.node,
       )
     ) {
+      await this.#rebindLink(link, ctx.signal);
+      await materializeForgeAgents(link.prepared.worktreePath);
       link.currentNodeId = node.nodeId;
       link.reviewHeadSha = node.headSha ?? link.reviewHeadSha;
       delete link.launchFailure;
@@ -5308,6 +5325,9 @@ export class ForgeWorkOnController {
       ...(signal ? { signal } : {}),
     });
 
+    link.currentNodeId = cleanupCommon.nodeId;
+    link.status = "running";
+    this.#persistLink(link);
     await journal.append({
       runId: link.forgeRunId,
       type: "node.queued",

@@ -488,7 +488,15 @@ export function registerForgeRuntime(
     },
   });
   const assertCurrentBinding = async (signal?: AbortSignal): Promise<string> => {
-    const root = await realpath(binding.worktreeRoot);
+    let root: string;
+    try {
+      root = await realpath(binding.worktreeRoot);
+    } catch {
+      throw new ForgeWorktreeBindingError(
+        binding.worktreeRoot,
+        binding.worktreeRoot,
+      );
+    }
     if (canonicalRoot)
       assertBoundWorktreeCwd(
         canonicalRoot,
@@ -2818,6 +2826,8 @@ export async function writeTrustedResultFile(
   inputPath: string,
   content: string,
 ): Promise<string> {
+  if (Buffer.byteLength(content, "utf8") > 1024 * 1024)
+    throw new Error("Bound Forge result exceeds the 1 MiB limit.");
   const resultPath = await trustedResultPath(root, inputPath, true);
   const temporaryPath = join(
     dirname(resultPath),
