@@ -3387,19 +3387,27 @@ export class ForgeWorkOnController {
           const projection = await projector.projectEventWithReceipt({
             issueNumber: link.issueNumber,
             event,
-            markdown: terminalRunMarkdown(link, terminal.state),
+            markdown:
+              isNoChangeClosure(terminal.state)
+                ? noChangeClosureMarkdown(link, terminal.state)
+                : terminalRunMarkdown(link, terminal.state),
             ...(ctx.signal ? { signal: ctx.signal } : {}),
           });
           const receipts: GitHubProjectionReceipt[] = [...projection.receipts];
-          if (link.terminalOutcome === "merged")
-            receipts.push(
-              await projector.setWorkflowLabelWithReceipt(
-                link.issueNumber,
-                WORKFLOW_LABEL_BY_STAGE.merged,
-                ctx.signal,
-                `${event.eventId}:workflow`,
-              ),
-            );
+          receipts.push(
+            link.terminalOutcome === "merged"
+              ? await projector.setWorkflowLabelWithReceipt(
+                  link.issueNumber,
+                  WORKFLOW_LABEL_BY_STAGE.merged,
+                  ctx.signal,
+                  `${event.eventId}:workflow`,
+                )
+              : await projector.clearWorkflowLabelWithReceipt(
+                  link.issueNumber,
+                  ctx.signal,
+                  `${event.eventId}:workflow`,
+                ),
+          );
           await recordProjectionReceipts(
             journal,
             link.forgeRunId,
