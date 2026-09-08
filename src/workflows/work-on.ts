@@ -376,6 +376,11 @@ export class ForgeWorkOnController {
           (link.status !== "running" && link.status !== "refreshing")
         )
           return;
+        const headSha =
+          payload && typeof payload === "object" && "headSha" in payload
+            ? String((payload as { headSha: unknown }).headSha)
+            : "";
+        if (headSha) link.reviewHeadSha = headSha;
         link.status = "finalizing";
         this.#persistLink(link);
         void this.#finalize(link, ctx).catch((error) => {
@@ -589,6 +594,8 @@ export class ForgeWorkOnController {
             branch: link.prepared.branch,
             baseBranch: link.prepared.baseBranch,
             baseSha: link.prepared.baseSha,
+            expectedHeadSha:
+              link.reviewHeadSha ?? link.prepared.baseSha,
             maxReviewRounds: policy.review.maxRounds,
             reviewerTimeoutMs: policy.subagents.reviewerTimeoutMs,
             verificationCommands: policy.verification.commands,
@@ -629,9 +636,22 @@ export class ForgeWorkOnController {
             await this.#retryRefreshBindingFailure(link, ctx);
             continue;
           }
-          await this.#rebindLink(link, ctx.signal);
-          const nodeArtifacts = await Promise.all(
-            activeNodes.map(async (activeNode) => ({
+          const recoverySnapshot = await projectionStore.readRun(
+            link.forgeRunId,
+            ctx.signal,
+          );
+          const nodeArtifacts: Array<{
+            activeNode: ActiveNodeRunLink;
+            result: ForgeNodeResult | undefined;
+          }> = [];
+          for (const activeNode of activeNodes) {
+            const expectedHeadSha = expectedNodeArtifactHead(
+              link,
+              recoverySnapshot.state,
+              recoverySnapshot.state?.nodes[activeNode.nodeId],
+            );
+            await this.#rebindLink(link, ctx.signal, expectedHeadSha);
+            nodeArtifacts.push({
               activeNode,
               result: findForgeNodeResult(
                 // Node artifacts are independently typed from top-level work-on results.
@@ -640,8 +660,14 @@ export class ForgeWorkOnController {
                   activeNode.resultPath,
                 ),
               ),
-            })),
-          );
+            });
+          }
+          if (activeNodes.length === 0)
+            await this.#rebindLink(
+              link,
+              ctx.signal,
+              expectedNodeArtifactHead(link, recoverySnapshot.state),
+            );
           const boundedArtifact = nodeArtifacts.find(
             (candidate) => candidate.result,
           );
@@ -654,6 +680,11 @@ export class ForgeWorkOnController {
             );
             continue;
           }
+          await this.#rebindLink(
+            link,
+            ctx.signal,
+            expectedNodeArtifactHead(link, recoverySnapshot.state),
+          );
           const durableResult = findForgeWorkOnResult(
             await readBoundedForgeResult(
               link.prepared.worktreePath,
@@ -1134,7 +1165,11 @@ export class ForgeWorkOnController {
       this.#persistLink(link);
       return;
     }
-    await this.#rebindLink(link, ctx.signal);
+    await this.#rebindLink(
+      link,
+      ctx.signal,
+      link.reviewHeadSha ?? link.prepared.baseSha,
+    );
     const previousResult = findForgeWorkOnResult(
       await readBoundedForgeResult(
         link.prepared.worktreePath,
@@ -1581,6 +1616,8 @@ export class ForgeWorkOnController {
               branch: link.prepared.branch,
               baseBranch: link.prepared.baseBranch,
               baseSha: link.prepared.baseSha,
+              expectedHeadSha:
+                link.reviewHeadSha ?? link.prepared.baseSha,
               leaseEpoch: link.leaseEpoch,
               leaseOwnerRunId: link.leaseOwnerRunId,
               policy,
@@ -1653,6 +1690,7 @@ export class ForgeWorkOnController {
           branch: prepared.branch,
           baseBranch: prepared.baseBranch,
           baseSha: prepared.baseSha,
+          expectedHeadSha: prepared.baseSha,
           maxReviewRounds: policy.review.maxRounds,
           reviewerTimeoutMs: policy.subagents.reviewerTimeoutMs,
           verificationCommands: policy.verification.commands,
@@ -1697,7 +1735,9 @@ export class ForgeWorkOnController {
         // Preparation cleanup is compensating work; do not let a cancelled
         // launch leave its owned worktree or branch behind. Once run creation
         // is durable, its persisted link owns recovery and cleanup instead.
-        await this.#git.cleanup(prepared).catch(() => undefined);
+        await this.#git
+          .cleanup(prepared, undefined, prepared.baseSha)
+          .catch(() => undefined);
       this.#clearDirectBinding(runId);
       throw error;
     }
@@ -1896,7 +1936,6 @@ export class ForgeWorkOnController {
     const parentNode = parentNodeFromId(nodeId);
     if (parentNode)
       await this.#rebindParentWorktree(link, ctx, parentNode);
-    else await this.#rebindLink(link, ctx.signal);
     if (parentNode) {
       const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
       const tokenProvider = createGitHubTokenProvider(
@@ -1947,11 +1986,12 @@ export class ForgeWorkOnController {
       throw new Error(
         `Node ${nodeId} has no durable state during reconciliation.`,
       );
-    await this.#rebindLink(
+    const expectedHeadSha = expectedNodeArtifactHead(
       link,
-      ctx.signal,
-      durableNode.headSha ?? link.reviewHeadSha,
+      recoverySnapshot.state,
+      durableNode,
     );
+    await this.#rebindLink(link, ctx.signal, expectedHeadSha);
     const resultText = await readBoundedForgeResult(
       link.prepared.worktreePath,
       activeNode.resultPath,
@@ -2042,7 +2082,7 @@ export class ForgeWorkOnController {
       delete link.launchFailure;
     }
     const reviewerResult = nodeId.startsWith("review-")
-      ? await this.#loadReviewerResult(link, activeNode)
+      ? await this.#loadReviewerResult(link, activeNode, expectedHeadSha)
       : undefined;
     const nodeResult = reviewerResult
       ? {
@@ -2068,7 +2108,7 @@ export class ForgeWorkOnController {
             ? { blocker: "Reviewer returned blocked." }
             : {}),
         }
-      : await this.#loadNodeResult(link, activeNode);
+      : await this.#loadNodeResult(link, activeNode, expectedHeadSha);
     if (!nodeResult) {
       failure ??= `Bounded node ${nodeId} ended without a schema-valid result artifact.`;
       try {
@@ -2506,10 +2546,12 @@ export class ForgeWorkOnController {
   async #loadReviewerResult(
     link: ActiveRunLink,
     activeNode: ActiveNodeRunLink,
+    expectedHeadSha = link.reviewHeadSha ?? link.prepared.baseSha,
   ): Promise<ForgeReviewerResult | undefined> {
     const payload = await this.#rpc
       .status(activeNode.subagentRunId)
       .catch(() => undefined);
+    await this.#rebindLink(link, undefined, expectedHeadSha);
     let result = findForgeReviewerResult(payload);
     if (!result) {
       const resultText = await readBoundedForgeResult(
@@ -2533,7 +2575,7 @@ export class ForgeWorkOnController {
       throw new Error(
         `Reviewer identity mismatch: expected ${expectedReviewer}.`,
       );
-    if (result.headSha !== (link.reviewHeadSha ?? result.headSha))
+    if (result.headSha !== expectedHeadSha)
       throw new Error("Reviewer result head SHA mismatch.");
     if (
       result.findings.some(
@@ -2549,22 +2591,30 @@ export class ForgeWorkOnController {
   }
 
   async #loadNodeResult(
-    _link: ActiveRunLink,
+    link: ActiveRunLink,
     activeNode: ActiveNodeRunLink,
+    expectedHeadSha = link.reviewHeadSha ?? link.prepared.baseSha,
   ): Promise<ForgeNodeResult | undefined> {
     const payload = await this.#rpc
       .status(activeNode.subagentRunId)
       .catch(() => undefined);
-    let result = findForgeNodeResult(payload);
+    const statusResult = findForgeNodeResult(payload);
+    await this.#rebindLink(
+      link,
+      undefined,
+      statusResult?.headSha ?? expectedHeadSha,
+    );
+    let result = statusResult;
     if (!result) {
       const resultText = await readBoundedForgeResult(
-        _link.prepared.worktreePath,
+        link.prepared.worktreePath,
         activeNode.resultPath,
       );
       result =
         findForgeNodeResult(resultText) ??
         findForgeNodeResult(extractJsonObject(resultText));
     }
+    if (result) await this.#rebindLink(link, undefined, result.headSha);
     return result;
   }
 
@@ -3334,6 +3384,10 @@ export class ForgeWorkOnController {
         )
         .sort((left, right) => right.attempt - left.attempt)[0];
       const terminalDecision = decisionNode?.finalReviewDecision;
+      const expectedCleanupHeadSha =
+        terminalDecision?.headSha ??
+        link.reviewHeadSha ??
+        link.prepared.baseSha;
       // Capture all Git-dependent terminal evidence before deleting the owned
       // worktree. Cleanup is destructive, so no later renderer may run git diff.
       let worktreePresent = true;
@@ -3355,8 +3409,17 @@ export class ForgeWorkOnController {
       const cleanupEffect =
         terminalState.state.effects[`cleanup:${link.forgeRunId}`];
       if (!cleanupEffect) {
-        await this.#git.deleteRemoteBranch(link.prepared, ctx.signal);
-        await this.#git.cleanup(link.prepared, ctx.signal);
+        await this.#git.deleteRemoteBranch(
+          link.prepared,
+          ctx.signal,
+          link.repository,
+          expectedCleanupHeadSha,
+        );
+        await this.#git.cleanup(
+          link.prepared,
+          ctx.signal,
+          expectedCleanupHeadSha,
+        );
         await journal.append({
           runId: link.forgeRunId,
           type: "effect.recorded",
@@ -3678,6 +3741,8 @@ export class ForgeWorkOnController {
       branch: link.prepared.branch,
       baseBranch: link.prepared.baseBranch,
       baseSha: link.prepared.baseSha,
+      expectedHeadSha:
+        node.headSha ?? link.reviewHeadSha ?? link.prepared.baseSha,
       leaseEpoch: link.leaseEpoch,
       leaseOwnerRunId: link.leaseOwnerRunId,
       policy,
@@ -3731,7 +3796,12 @@ export class ForgeWorkOnController {
         node.node,
       )
     ) {
-      await this.#rebindParentWorktree(link, ctx, node.node);
+      await this.#rebindParentWorktree(
+        link,
+        ctx,
+        node.node,
+        node.headSha ?? link.reviewHeadSha ?? link.prepared.baseSha,
+      );
       link.currentNodeId = node.nodeId;
       link.reviewHeadSha = node.headSha ?? link.reviewHeadSha;
       delete link.launchFailure;
@@ -4226,6 +4296,8 @@ export class ForgeWorkOnController {
             branch: link.prepared.branch,
             baseBranch: link.prepared.baseBranch,
             baseSha: link.prepared.baseSha,
+            expectedHeadSha:
+              link.reviewHeadSha ?? link.prepared.baseSha,
             leaseEpoch: link.leaseEpoch,
             leaseOwnerRunId: link.leaseOwnerRunId,
             policy,
@@ -4316,11 +4388,17 @@ export class ForgeWorkOnController {
     }
     const payload = await this.#rpc.status(link.subagentRunId);
     const completion = findAsyncCompletionForRun(payload, link.subagentRunId);
-    const resultText = await readBoundedForgeResult(
-      link.prepared.worktreePath,
-      link.resultPath,
-    );
-    const durableResult = findForgeWorkOnResult(resultText);
+    const statusResult = findForgeWorkOnResult(payload);
+    const expectedHeadSha =
+      statusResult?.headSha ?? (await this.#expectedHeadForResult(link));
+    await this.#rebindLink(link, undefined, expectedHeadSha);
+    const resultText = statusResult
+      ? ""
+      : await readBoundedForgeResult(
+          link.prepared.worktreePath,
+          link.resultPath,
+        );
+    const durableResult = statusResult ?? findForgeWorkOnResult(resultText);
     const recoverableBlocker =
       durableResult?.blocker &&
       isRecoverableWorkOnBlocker(durableResult.blocker)
@@ -4532,6 +4610,7 @@ export class ForgeWorkOnController {
       );
       const branch = `forge/issue-${state.issueNumber}-${forgeRunId.slice(0, 8)}`;
       const baseSha = this.#adoptedBaseSha(state) ?? "";
+      const adoptedHeadSha = this.#adoptedHeadSha(state) ?? baseSha;
       let prepared: PreparedWorktree;
       try {
         prepared = await this.#git.adoptPreparedWorktree(
@@ -4544,7 +4623,7 @@ export class ForgeWorkOnController {
           },
           state.repository,
           ctx.signal,
-          this.#adoptedHeadSha(state),
+          adoptedHeadSha,
         );
       } catch (error) {
         if (!isLaunchSentinel(subagentRunId))
@@ -4573,6 +4652,7 @@ export class ForgeWorkOnController {
         heartbeatSeconds: policy.state.heartbeatSeconds,
         lastHeartbeatAt: newLease.lastHeartbeatAt,
         reviewBaseSha: baseSha,
+        reviewHeadSha: adoptedHeadSha,
         refreshes: 0,
         providerRetries: 0,
         remediationAttempts: 0,
@@ -4696,6 +4776,8 @@ export class ForgeWorkOnController {
         current.state.status,
         link.prepared,
         this.#git,
+        expectedNodeArtifactHead(link, current.state),
+        link.repository,
       );
       const authority =
         current.state.authorityMode === "run-scoped"
@@ -4800,6 +4882,8 @@ export class ForgeWorkOnController {
         current.state.status,
         link.prepared,
         this.#git,
+        expectedNodeArtifactHead(link, current.state),
+        link.repository,
       );
       link.status = "failed";
       link.activeNodes = {};
@@ -4954,6 +5038,7 @@ export class ForgeWorkOnController {
       this.#directBinding = {
         ...this.#directBinding,
         baseSha: currentBaseSha,
+        expectedHeadSha: result.headSha,
         refresh: true,
         previousReviewRounds: result.review.rounds,
       };
@@ -5025,6 +5110,7 @@ export class ForgeWorkOnController {
         branch: link.prepared.branch,
         baseBranch: link.prepared.baseBranch,
         baseSha: currentBaseSha,
+        expectedHeadSha: result.headSha,
         leaseEpoch: link.leaseEpoch,
         leaseOwnerRunId: link.leaseOwnerRunId,
         policy,
@@ -5076,22 +5162,42 @@ export class ForgeWorkOnController {
     }
   }
 
+  async #expectedHeadForResult(link: ActiveRunLink): Promise<string> {
+    let state: RunState | undefined;
+    try {
+      const tokenProvider = createGitHubTokenProvider(
+        this.#pi,
+        link.prepared.repositoryRoot,
+      );
+      const store = new GitHubStateBranchStore(
+        new FetchGitHubTransport({ tokenProvider }),
+        link.repository,
+        link.stateBranch,
+      );
+      state = (await store.readRun(link.forgeRunId)).state;
+    } catch {
+      // A missing durable snapshot leaves the caller with the conservative
+      // recorded binding; rebind will fail closed if it is stale.
+    }
+    return expectedNodeArtifactHead(link, state);
+  }
+
   async #loadResult(link: ActiveRunLink): Promise<ForgeWorkOnResult> {
-    await this.#git.assertRepositoryIdentity(
-      link.prepared,
-      link.repository,
-    );
     let result: ForgeWorkOnResult | undefined;
+    let statusPayload: unknown;
     if (link.executionMode !== "direct") {
       // An adopting session has no rpc knowledge of the original child; a
       // dead/unreachable child must fall through to the durable result file
       // and worktree reconstruction instead of failing the load.
-      const statusPayload = await this.#rpc
+      statusPayload = await this.#rpc
         .status(link.subagentRunId)
         .catch(() => undefined);
       if (statusPayload !== undefined)
         result = findForgeWorkOnResult(statusPayload);
     }
+    const expectedHeadSha =
+      result?.headSha ?? (await this.#expectedHeadForResult(link));
+    await this.#rebindLink(link, undefined, expectedHeadSha);
     if (!result) {
       const resultText = await readBoundedForgeResult(
         link.prepared.worktreePath,
@@ -5106,9 +5212,10 @@ export class ForgeWorkOnController {
       // result write leaves an empty result file. The durable reviewer
       // artifacts plus Git facts are sufficient to reconstruct the identical
       // result; requiring the child's file would burn the completed lane.
-      result = await this.#reconstructResultFromWorktree(link).catch(
-        () => undefined,
-      );
+      result = await this.#reconstructResultFromWorktree(
+        link,
+        expectedHeadSha,
+      ).catch(() => undefined);
     }
     if (!result)
       throw new Error(
@@ -5121,12 +5228,14 @@ export class ForgeWorkOnController {
   /** Rebuild the final result from trusted reviewer artifacts and Git facts. */
   async #reconstructResultFromWorktree(
     link: ActiveRunLink,
+    expectedHeadSha: string,
   ): Promise<ForgeWorkOnResult> {
     if (link.executionMode === "direct" || link.refreshes > 0) {
       throw new Error(
         "Result reconstruction is not supported for this run binding.",
       );
     }
+    await this.#rebindLink(link, undefined, expectedHeadSha);
     const worktree = link.prepared.worktreePath;
     const headSha = (await this.#git.head(worktree)).trim();
     const baseSha = link.reviewBaseSha || link.prepared.baseSha;
@@ -5375,8 +5484,15 @@ export class ForgeWorkOnController {
         ctx.signal,
       );
     }
-    await github.deleteBranch(link.prepared.branch, ctx.signal);
-    await this.#git.cleanup(link.prepared, ctx.signal);
+    const expectedHeadSha =
+      link.reviewHeadSha ?? link.prepared.baseSha;
+    await this.#git.deleteRemoteBranch(
+      link.prepared,
+      ctx.signal,
+      link.repository,
+      expectedHeadSha,
+    );
+    await this.#git.cleanup(link.prepared, ctx.signal, expectedHeadSha);
 
     if (action === "terminal-cleanup") {
       await appendEffect(
@@ -5560,8 +5676,13 @@ export class ForgeWorkOnController {
       message: `Start parent node cleanup-1 (no-change closure)`,
       ...(signal ? { signal } : {}),
     });
-    await this.#git.deleteRemoteBranch(link.prepared, signal);
-    await this.#git.cleanup(link.prepared, signal);
+    await this.#git.deleteRemoteBranch(
+      link.prepared,
+      signal,
+      link.repository,
+      baseSha,
+    );
+    await this.#git.cleanup(link.prepared, signal, baseSha);
     await journal.append({
       runId: link.forgeRunId,
       type: "effect.recorded",
@@ -6260,8 +6381,14 @@ export class ForgeWorkOnController {
       sessionId,
       ctx.signal,
     );
-    await github.deleteBranch(link.prepared.branch, ctx.signal);
-    await this.#git.cleanup(link.prepared, ctx.signal);
+    const expectedHeadSha = result.review.headSha;
+    await this.#git.deleteRemoteBranch(
+      link.prepared,
+      ctx.signal,
+      link.repository,
+      expectedHeadSha,
+    );
+    await this.#git.cleanup(link.prepared, ctx.signal, expectedHeadSha);
     await appendEffect(
       journal,
       link.forgeRunId,
@@ -6424,13 +6551,13 @@ export class ForgeWorkOnController {
   async #rebindLink(
     link: ActiveRunLink,
     signal?: AbortSignal,
-    expectedHeadSha?: string,
+    expectedHeadSha = link.reviewHeadSha ?? link.prepared.baseSha,
   ): Promise<void> {
     const rebound = await this.#git.rebind(
       link.prepared,
       signal,
       link.repository,
-      expectedHeadSha ?? link.reviewHeadSha,
+      expectedHeadSha,
     );
     if (
       rebound.repositoryRoot !== link.prepared.repositoryRoot ||
@@ -6445,6 +6572,7 @@ export class ForgeWorkOnController {
     link: ActiveRunLink,
     ctx: ExtensionContext,
     node: WorkflowNode,
+    expectedHeadSha = link.reviewHeadSha ?? link.prepared.baseSha,
   ): Promise<void> {
     let missing = false;
     try {
@@ -6461,7 +6589,7 @@ export class ForgeWorkOnController {
       );
       return;
     }
-    await this.#rebindLink(link, ctx.signal);
+    await this.#rebindLink(link, ctx.signal, expectedHeadSha);
     await materializeForgeAgents(link.prepared.worktreePath);
   }
 
@@ -6549,6 +6677,8 @@ export async function cleanupDurablyCancelledWorktree(
   status: string,
   prepared: PreparedWorktree,
   git: Pick<GitWorktreeManager, "deleteRemoteBranch" | "cleanup">,
+  expectedHeadSha = prepared.baseSha,
+  expectedRepository = prepared.repository,
 ): Promise<void> {
   if (status !== "cancelled")
     throw new Error(
@@ -6556,8 +6686,13 @@ export async function cleanupDurablyCancelledWorktree(
     );
   // Do not forward an aborted operation signal: compensating cleanup must be
   // retryable after the cancellation transition commits.
-  await git.deleteRemoteBranch(prepared);
-  await git.cleanup(prepared);
+  await git.deleteRemoteBranch(
+    prepared,
+    undefined,
+    expectedRepository,
+    expectedHeadSha,
+  );
+  await git.cleanup(prepared, undefined, expectedHeadSha);
 }
 
 function startupRunMarkdown(runId: string, integrationBranch: string): string {
@@ -7574,6 +7709,28 @@ async function readBoundedForgeResult(
   } finally {
     await handle?.close().catch(() => undefined);
   }
+}
+
+function expectedNodeArtifactHead(
+  link: Pick<ActiveRunLink, "reviewHeadSha" | "prepared">,
+  state: RunState | undefined,
+  node?: { node?: string; attempt?: number; headSha?: string },
+): string {
+  if (node?.node?.startsWith("review-"))
+    return node.headSha ?? link.reviewHeadSha ?? link.prepared.baseSha;
+  const phase = node?.node
+    ? state?.phases[node.node as keyof RunState["phases"]]
+    : undefined;
+  const phaseCommit = phase?.attempts.find(
+    (attempt) => attempt.attempt === node?.attempt,
+  )?.commitSha;
+  if (phaseCommit) return phaseCommit;
+  if (node?.headSha) return node.headSha;
+  let latestCommit: string | undefined;
+  for (const phaseState of Object.values(state?.phases ?? {}))
+    for (const attempt of phaseState.attempts)
+      if (attempt.commitSha) latestCommit = attempt.commitSha;
+  return latestCommit ?? link.reviewHeadSha ?? link.prepared.baseSha;
 }
 
 function latestReviewRound(state: RunState): number {

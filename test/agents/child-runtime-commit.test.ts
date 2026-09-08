@@ -85,9 +85,25 @@ test("bound repository registration parses porcelain records line by line", () =
         repositoryIdentity: "repo-id",
         worktreeRoot: "/repo/.forge/worktrees/run-1",
         branch: "forge/run-1",
+        headSha: "abcdef",
       },
     ),
     true,
+  );
+  assert.equal(
+    boundWorktreeRegistrationMatches(
+      "worktree /repo/.forge/worktrees/run-1\nHEAD fedcba\nbranch refs/heads/forge/run-1\n\n",
+      "/repo/.forge/worktrees/run-1",
+      {
+        runId: "run-1",
+        repository: "owner/repo",
+        repositoryIdentity: "repo-id",
+        worktreeRoot: "/repo/.forge/worktrees/run-1",
+        branch: "forge/run-1",
+        headSha: "abcdef",
+      },
+    ),
+    false,
   );
 });
 

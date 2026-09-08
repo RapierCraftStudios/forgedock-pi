@@ -163,11 +163,20 @@ test("owned cancellation cleanup runs only after durable cancellation and delete
     baseSha: "a".repeat(40),
   };
   const git = {
-    async deleteRemoteBranch(): Promise<void> {
-      calls.push("delete-remote");
+    async deleteRemoteBranch(
+      _prepared: typeof prepared,
+      _signal: AbortSignal | undefined,
+      _repository: string | undefined,
+      expectedHeadSha: string,
+    ): Promise<void> {
+      calls.push(`delete-remote:${expectedHeadSha}`);
     },
-    async cleanup(): Promise<void> {
-      calls.push("cleanup-worktree");
+    async cleanup(
+      _prepared: typeof prepared,
+      _signal: AbortSignal | undefined,
+      expectedHeadSha: string,
+    ): Promise<void> {
+      calls.push(`cleanup-worktree:${expectedHeadSha}`);
     },
   };
 
@@ -176,8 +185,17 @@ test("owned cancellation cleanup runs only after durable cancellation and delete
     /requires durable cancelled state/,
   );
   assert.deepEqual(calls, []);
-  await cleanupDurablyCancelledWorktree("cancelled", prepared, git);
-  assert.deepEqual(calls, ["delete-remote", "cleanup-worktree"]);
+  await cleanupDurablyCancelledWorktree(
+    "cancelled",
+    prepared,
+    git,
+    prepared.baseSha,
+    "owner/repo",
+  );
+  assert.deepEqual(calls, [
+    `delete-remote:${prepared.baseSha}`,
+    `cleanup-worktree:${prepared.baseSha}`,
+  ]);
 });
 
 test("direct restart selects terminal cleanup and authority release windows", () => {

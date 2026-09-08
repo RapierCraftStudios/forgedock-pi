@@ -122,6 +122,8 @@ export interface ForgeChildBinding {
   branch: string;
   baseBranch: string;
   baseSha: string;
+  /** Expected branch head before the child performs its next write. */
+  expectedHeadSha: string;
   maxReviewRounds: number;
   reviewerTimeoutMs: number;
   verificationCommands: Readonly<Record<string, BoundVerificationCommand>>;
@@ -204,11 +206,12 @@ export interface ForgeRepositoryBinding {
   branch: string;
   reviewId?: string;
   detached?: boolean;
-  headSha?: string;
+  headSha: string;
 }
 
 function childRepositoryBinding(
   binding: ForgeChildBinding,
+  expectedHeadSha = binding.expectedHeadSha,
 ): ForgeRepositoryBinding {
   return {
     runId: binding.runId,
@@ -216,11 +219,9 @@ function childRepositoryBinding(
     repositoryIdentity: binding.repositoryIdentity,
     worktreeRoot: binding.worktreeRoot,
     branch: binding.branch,
+    headSha: expectedHeadSha,
     ...(binding.reviewId ? { reviewId: binding.reviewId } : {}),
     ...(binding.detached ? { detached: true } : {}),
-    ...(binding.node?.startsWith("review-") || binding.reviewId
-      ? { headSha: binding.reviewHeadSha }
-      : {}),
   };
 }
 
@@ -275,6 +276,16 @@ async function assertBoundRepository(
     throw new Error(
       "Forge worktree binding failure: current path is not the registered bound worktree.",
     );
+  const head = await runProcess(
+    "git",
+    ["-C", root, "rev-parse", "HEAD"],
+    { cwd: root, timeoutMs: 30_000, env, ...(signal ? { signal } : {}) },
+  );
+  assertCompleteProcessOutput(head, "Forge worktree head");
+  if (head.exitCode !== 0 || head.stdout.trim() !== binding.headSha)
+    throw new Error(
+      `Forge worktree binding failure: expected head ${binding.headSha}, found ${head.stdout.trim() || "unknown"}.`,
+    );
   if (!binding.detached) {
     const branch = await runProcess(
       "git",
@@ -304,9 +315,8 @@ export function boundWorktreeRegistrationMatches(
     resolve(root, path) === root &&
     !prunable &&
     (binding.detached
-      ? detached && (!binding.headSha || head === binding.headSha)
-      : branch === `refs/heads/${binding.branch}` &&
-        (!binding.headSha || head === binding.headSha));
+      ? detached && head === binding.headSha
+      : branch === `refs/heads/${binding.branch}` && head === binding.headSha);
   for (const line of output.split("\n")) {
     if (!line.trim()) {
       if (matches()) return true;
@@ -504,7 +514,7 @@ export function registerForgeRuntime(
         caseInsensitivePaths ?? false,
       );
     await assertBoundRepository(
-      childRepositoryBinding(binding),
+      childRepositoryBinding(binding, expectedHeadSha),
       root,
       safeEnvironment(binding.runId),
       signal,
@@ -516,6 +526,7 @@ export function registerForgeRuntime(
   let ceiling: SubagentCapabilityCeilingHandle | undefined;
   let canonicalRoot: string | undefined;
   let caseInsensitivePaths: boolean | undefined;
+  let expectedHeadSha = binding.expectedHeadSha;
   let noChangeCommitObserved = false;
   let refreshPushLeaseSha: string | undefined;
   let preparedPull: { number: number; headSha: string } | undefined;
@@ -542,7 +553,7 @@ export function registerForgeRuntime(
     }
     assertBoundWorktreeCwd(canonicalRoot, runtimeCwd, caseInsensitivePaths);
     await assertBoundRepository(
-      childRepositoryBinding(binding),
+      childRepositoryBinding(binding, expectedHeadSha),
       canonicalRoot,
       safeEnvironment(binding.runId),
       ctx.signal,
@@ -587,6 +598,8 @@ export function registerForgeRuntime(
       !["read", "write", "edit", "grep", "find", "ls"].includes(event.toolName)
     )
       return;
+    if (event.toolName === "write" || event.toolName === "edit")
+      await assertCurrentBinding(ctx.signal);
     const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
     const pathValue = toolPath(event.input);
     if (!pathValue) return;
@@ -730,6 +743,7 @@ export function registerForgeRuntime(
       });
       if (head.exitCode !== 0 || !head.stdout.trim())
         throw new Error(`Unable to resolve refreshed HEAD: ${head.stderr}`);
+      expectedHeadSha = head.stdout.trim();
       return {
         content: [
           {
@@ -1022,6 +1036,10 @@ export function registerForgeRuntime(
       if (binding.builderContract)
         assertBuilderContractPaths(binding.builderContract, stagedPaths);
       const preCommitHead = await gitHead(root, binding.runId, signal);
+      if (preCommitHead !== expectedHeadSha)
+        throw new Error(
+          `Forge worktree binding failure: expected head ${expectedHeadSha}, found ${preCommitHead}.`,
+        );
       const stagedTreeResult = await runProcess(
         "git",
         ["-C", root, "write-tree"],
@@ -1141,6 +1159,7 @@ export function registerForgeRuntime(
           parseChangedGitPaths(contractPaths.stdout),
         );
       }
+      expectedHeadSha = headSha;
       const details: ForgeCommitDetails = {
         kind: params.kind,
         noChange: false,
@@ -1522,6 +1541,7 @@ export function registerForgeRuntime(
         branch: binding.branch,
         baseBranch: binding.baseBranch,
         baseSha: binding.baseSha,
+        expectedHeadSha: params.headSha,
         reviewHeadSha: params.headSha,
         leaseEpoch: binding.leaseEpoch,
         leaseOwnerRunId: binding.leaseOwnerRunId,
@@ -1641,7 +1661,7 @@ export function registerForgeRuntime(
                 },
                 binding.worktreeRoot,
                 signal,
-                childRepositoryBinding(binding),
+                childRepositoryBinding(binding, expectedHeadSha),
               );
               return { result };
             } catch (error) {
@@ -1832,6 +1852,7 @@ export function registerForgeRuntime(
       if (options.mainSession)
         pi.events.emit(DIRECT_WORK_ON_FINALIZED_EVENT, {
           runId: binding.runId,
+          headSha: params.value.headSha,
         });
       return {
         content: [
@@ -2066,6 +2087,7 @@ function readBinding(): ForgeChildBinding {
     "branch",
     "baseBranch",
     "baseSha",
+    "expectedHeadSha",
   ] as const;
   for (const field of requiredStrings) {
     if (typeof value[field] !== "string" || !(value[field] as string).trim())
@@ -2180,6 +2202,7 @@ function readBinding(): ForgeChildBinding {
     branch: value.branch as string,
     baseBranch: value.baseBranch as string,
     baseSha: value.baseSha as string,
+    expectedHeadSha: value.expectedHeadSha as string,
     maxReviewRounds: value.maxReviewRounds as number,
     reviewerTimeoutMs: value.reviewerTimeoutMs as number,
     verificationCommands,

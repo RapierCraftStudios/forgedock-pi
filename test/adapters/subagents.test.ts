@@ -210,6 +210,7 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
     branch: "forge/42",
     baseBranch: "staging",
     baseSha: "abcdef1234567890",
+    expectedHeadSha: "abcdef1234567890",
     leaseEpoch: 1,
     policy,
     issueContext: "Issue body as untrusted data",
@@ -224,6 +225,11 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
   assert.equal(spawn.params.async, true);
   assert.equal(spawn.params.cwd, "/tmp/worktree");
   assert.equal(spawn.params.worktree, false);
+  assert.equal(
+    (spawn.params.extensionBindings as Record<string, { expectedHeadSha?: string }>)
+      ["forgedock.pi/1"]?.expectedHeadSha,
+    "abcdef1234567890",
+  );
   assert.equal(spawn.params.workflowScript, undefined);
   const serialized = JSON.stringify(spawn.params);
   assert.match(
@@ -259,6 +265,28 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
   );
   assert.doesNotMatch(spawn.params.task, /Legacy Routing Classification/);
   assert.doesNotMatch(serialized, /gh auth token/);
+});
+
+test("RPC work-on launch refuses an empty expected head", async () => {
+  const { pi } = fakePi();
+  const client = new SubagentsRpcClient(pi);
+  await assert.rejects(
+    client.spawnWorkOn({
+      runId: "run-missing-head",
+      issueNumber: 42,
+      repository: "owner/repo",
+      repositoryIdentity: "repo-identity",
+      worktreeRoot: "/tmp/worktree",
+      branch: "forge/42",
+      baseBranch: "staging",
+      baseSha: "abcdef1234567890",
+      expectedHeadSha: "",
+      leaseEpoch: 1,
+      policy,
+      issueContext: "Issue body",
+    }),
+    /expected head SHA/,
+  );
 });
 
 test("RPC standalone reviewer binding has review authority without a fake issue lease", async () => {
@@ -313,6 +341,7 @@ test("RPC dedicated reviewer launch uses the registered reviewer and reviewer sc
     branch: "forge/10",
     baseBranch: "staging",
     baseSha: "abcdef1234567890",
+    expectedHeadSha: "fedcba9876543210",
     reviewHeadSha: "fedcba9876543210",
     leaseEpoch: 1,
     policy,
@@ -327,7 +356,12 @@ test("RPC dedicated reviewer launch uses the registered reviewer and reviewer sc
       worktree: boolean;
       extensionBindings: Record<
         string,
-        { nodeId: string; reviewHeadSha: string; reviewerTimeoutMs: number }
+        {
+          nodeId: string;
+          reviewHeadSha: string;
+          expectedHeadSha: string;
+          reviewerTimeoutMs: number;
+        }
       >;
       outputSchema: { properties: { schema: { const: string } } };
     };
@@ -355,6 +389,10 @@ test("RPC dedicated reviewer launch uses the registered reviewer and reviewer sc
     "fedcba9876543210",
   );
   assert.equal(
+    spawn.params.extensionBindings["forgedock.pi/1"]?.expectedHeadSha,
+    "fedcba9876543210",
+  );
+  assert.equal(
     spawn.params.extensionBindings["forgedock.pi/1"]?.reviewerTimeoutMs,
     900_000,
   );
@@ -374,6 +412,7 @@ test("RPC domain reviewer must finalize its bound result", async () => {
       branch: "forge/10",
       baseBranch: "staging",
       baseSha: "abcdef1234567890",
+      expectedHeadSha: "fedcba9876543210",
       reviewHeadSha: "fedcba9876543210",
       leaseEpoch: 1,
       policy,
@@ -394,7 +433,12 @@ test("RPC domain reviewer must finalize its bound result", async () => {
       worktree: boolean;
       extensionBindings: Record<
         string,
-        { nodeId: string; reviewHeadSha: string; reviewerTimeoutMs: number }
+        {
+          nodeId: string;
+          reviewHeadSha: string;
+          expectedHeadSha: string;
+          reviewerTimeoutMs: number;
+        }
       >;
     };
   };
@@ -421,6 +465,7 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
     branch: "forge/9",
     baseBranch: "staging",
     baseSha: "abcdef1234567890",
+    expectedHeadSha: "abcdef1234567890",
     leaseEpoch: 1,
     policy,
     issueContext: "untrusted issue text",
@@ -470,6 +515,7 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
     branch: "forge/9",
     baseBranch: "staging",
     baseSha: "abcdef1234567890",
+    expectedHeadSha: "abcdef1234567890",
     leaseEpoch: 1,
     policy,
     issueContext: "untrusted issue text",
@@ -493,6 +539,7 @@ test("bounded implementation launch binds the durable builder contract", async (
     branch: "forge/9",
     baseBranch: "staging",
     baseSha: "abcdef1234567890",
+    expectedHeadSha: "abcdef1234567890",
     leaseEpoch: 1,
     policy,
     issueContext: "untrusted issue text",
@@ -557,6 +604,7 @@ test("RPC work-on treats GitHub-only verification as valid", async () => {
     branch: "forge/7",
     baseBranch: "staging",
     baseSha: "abcdef1234567890",
+    expectedHeadSha: "abcdef1234567890",
     leaseEpoch: 1,
     policy: githubOnlyPolicy,
     issueContext: "Issue body",
