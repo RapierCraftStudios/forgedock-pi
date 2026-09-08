@@ -189,11 +189,34 @@ export function assertBoundWorktreeCwd(
     );
 }
 
+export interface ForgeRepositoryBinding {
+  runId: string;
+  repository: string;
+  repositoryIdentity: string;
+  worktreeRoot: string;
+  branch: string;
+  reviewId?: string;
+  headSha?: string;
+}
+
+function childRepositoryBinding(
+  binding: ForgeChildBinding,
+): ForgeRepositoryBinding {
+  return {
+    runId: binding.runId,
+    repository: binding.repository,
+    repositoryIdentity: binding.repositoryIdentity,
+    worktreeRoot: binding.worktreeRoot,
+    branch: binding.branch,
+    ...(binding.reviewId ? { reviewId: binding.reviewId } : {}),
+    ...(binding.node?.startsWith("review-") || binding.reviewId
+      ? { headSha: binding.reviewHeadSha }
+      : {}),
+  };
+}
+
 async function assertBoundRepository(
-  binding: Pick<
-    ForgeChildBinding,
-    "repository" | "repositoryIdentity" | "worktreeRoot" | "branch" | "reviewId"
-  >,
+  binding: ForgeRepositoryBinding,
   root: string,
   env: NodeJS.ProcessEnv,
   signal?: AbortSignal,
@@ -230,6 +253,19 @@ async function assertBoundRepository(
     throw new Error(
       "Forge worktree binding failure: repository origin changed.",
     );
+  const registration = await runProcess(
+    "git",
+    ["-C", root, "worktree", "list", "--porcelain"],
+    { cwd: root, timeoutMs: 30_000, env, ...(signal ? { signal } : {}) },
+  );
+  assertCompleteProcessOutput(registration, "Forge worktree registration");
+  if (
+    registration.exitCode !== 0 ||
+    !boundWorktreeRegistrationMatches(registration.stdout, root, binding)
+  )
+    throw new Error(
+      "Forge worktree binding failure: current path is not the registered bound worktree.",
+    );
   if (!binding.reviewId) {
     const branch = await runProcess(
       "git",
@@ -242,6 +278,52 @@ async function assertBoundRepository(
         `Forge worktree binding failure: expected branch ${binding.branch}, found ${branch.stdout.trim() || "detached"}.`,
       );
   }
+}
+
+function boundWorktreeRegistrationMatches(
+  output: string,
+  root: string,
+  binding: ForgeRepositoryBinding,
+): boolean {
+  let path: string | undefined;
+  let branch: string | undefined;
+  let head: string | undefined;
+  let detached = false;
+  let prunable = false;
+  const matches = (): boolean =>
+    path !== undefined &&
+    resolve(root, path) === root &&
+    !prunable &&
+    (binding.reviewId
+      ? detached && (!binding.headSha || head === binding.headSha)
+      : branch === `refs/heads/${binding.branch}` &&
+        (!binding.headSha || head === binding.headSha));
+  for (const line of output.split("\\n")) {
+    if (!line.trim()) {
+      if (matches()) return true;
+      path = undefined;
+      branch = undefined;
+      head = undefined;
+      detached = false;
+      prunable = false;
+      continue;
+    }
+    if (line.startsWith("worktree ")) path = line.slice("worktree ".length);
+    else if (line.startsWith("branch ")) branch = line.slice("branch ".length);
+    else if (line.startsWith("HEAD ")) head = line.slice("HEAD ".length);
+    else if (line === "detached") detached = true;
+    else if (line.startsWith("prunable")) prunable = true;
+  }
+  return matches();
+}
+
+export async function assertBoundRepositoryIdentity(
+  binding: ForgeRepositoryBinding,
+  signal?: AbortSignal,
+): Promise<string> {
+  const root = await realpath(binding.worktreeRoot);
+  await assertBoundRepository(binding, root, safeEnvironment(binding.runId), signal);
+  return root;
 }
 
 function repositoryRemoteMatches(remote: string, repository: string): boolean {
@@ -405,7 +487,7 @@ export function registerForgeRuntime(
         caseInsensitivePaths ?? false,
       );
     await assertBoundRepository(
-      binding,
+      childRepositoryBinding(binding),
       root,
       safeEnvironment(binding.runId),
       signal,
@@ -442,7 +524,7 @@ export function registerForgeRuntime(
     }
     assertBoundWorktreeCwd(canonicalRoot, runtimeCwd, caseInsensitivePaths);
     await assertBoundRepository(
-      binding,
+      childRepositoryBinding(binding),
       canonicalRoot,
       safeEnvironment(binding.runId),
       ctx.signal,
@@ -1521,13 +1603,14 @@ export function registerForgeRuntime(
                 },
                 binding.worktreeRoot,
                 signal,
+                childRepositoryBinding(binding),
               );
               return { result };
             } catch (error) {
               if (signal?.aborted)
                 throw signal.reason ?? new Error("Reviewer panel was aborted.");
               if (launch.required) throw error;
-              await rpc.stopAndWait(launch.receipt.runId).catch(() => undefined);
+              await rpc.stopAndWait(launch.receipt.runId);
               return {
                 optionalFailure: {
                   reviewer: launch.reviewer,
@@ -1563,9 +1646,13 @@ export function registerForgeRuntime(
           },
         };
       } catch (error) {
-        await Promise.allSettled(
+        const stops = await Promise.allSettled(
           launchedReceipts.map((receipt) => rpc.stopAndWait(receipt.runId)),
         );
+        const stopFailure = stops.find(
+          (entry): entry is PromiseRejectedResult => entry.status === "rejected",
+        );
+        if (stopFailure) throw stopFailure.reason;
         throw error;
       }
     },
@@ -2828,6 +2915,7 @@ export async function waitForReviewerResult(
   expected: ExpectedReviewerResult,
   worktreeRoot: string,
   signal?: AbortSignal,
+  repositoryBinding?: ForgeRepositoryBinding,
 ): Promise<ForgeReviewerResult> {
   const deadline = Date.now() + timeoutMs;
   const root = await realpath(worktreeRoot);
@@ -2835,6 +2923,16 @@ export async function waitForReviewerResult(
   const loadBoundResult = async (): Promise<
     ForgeReviewerResult | undefined
   > => {
+    if (repositoryBinding) {
+      const currentRoot = await assertBoundRepositoryIdentity(
+        repositoryBinding,
+        signal,
+      );
+      if (currentRoot !== root)
+        throw new Error(
+          "Forge worktree binding failure: reviewer result root changed during polling.",
+        );
+    }
     try {
       const text = await readTrustedResultFile(root, receipt.resultPath);
       if (!text?.trim()) return undefined;

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { constants as fsConstants } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
@@ -335,7 +336,7 @@ export class ForgeWorkOnController {
         validRoots.add(link.prepared.repositoryRoot);
       } catch (error) {
         if (link.executionMode === "orchestrated")
-          await Promise.allSettled(
+          await Promise.all(
             [
               link.subagentRunId,
               ...Object.keys(link.activeNodes),
@@ -589,6 +590,7 @@ export class ForgeWorkOnController {
               isLaunchSentinel(activeNode.subagentRunId),
             ))
         ) {
+          await this.#rebindLink(link, ctx.signal);
           const nodeArtifacts = await Promise.all(
             activeNodes.map(async (activeNode) => ({
               activeNode,
@@ -1209,7 +1211,7 @@ export class ForgeWorkOnController {
       }
     } catch (error) {
       if (receipt) {
-        await this.#rpc.stopAndWait(receipt.runId).catch(() => undefined);
+        await this.#rpc.stopAndWait(receipt.runId);
         link.launchFailure = "ambiguous";
       }
       if (worktreeBindingFailure && !receipt) delete link.launchFailure;
@@ -1697,7 +1699,7 @@ export class ForgeWorkOnController {
     reason: string,
   ): Promise<void> {
     if (!isLaunchSentinel(activeNode.subagentRunId))
-      await this.#rpc.stopAndWait(activeNode.subagentRunId).catch(() => undefined);
+      await this.#rpc.stopAndWait(activeNode.subagentRunId);
     const tokenProvider = createGitHubTokenProvider(
       this.#pi,
       link.prepared.repositoryRoot,
@@ -1813,6 +1815,7 @@ export class ForgeWorkOnController {
     }
     if (!activeNode)
       throw new Error(`Node ${nodeId} has no active subagent correlation.`);
+    await this.#rebindLink(link, ctx.signal);
     const recoveryTokenProvider = createGitHubTokenProvider(
       this.#pi,
       link.prepared.repositoryRoot,
@@ -3792,7 +3795,11 @@ export class ForgeWorkOnController {
         ctx,
       );
     } catch (error) {
-      await this.#rpc.stopAndWait(receipt.runId).catch(() => undefined);
+      try {
+        await this.#rpc.stopAndWait(receipt.runId);
+      } finally {
+        this.#receiptBindings.delete(receipt.runId);
+      }
       link.launchFailure = "ambiguous";
       const reason = `launch-receipt-bind-failed: ${errorMessage(error)}`;
       let recorded = false;
@@ -4058,7 +4065,7 @@ export class ForgeWorkOnController {
         };
       } catch (error) {
         if (receipt) {
-          await this.#rpc.stopAndWait(receipt.runId).catch(() => undefined);
+          await this.#rpc.stopAndWait(receipt.runId);
           link.launchFailure = "ambiguous";
         } else if (
           !providerLaunchAttempted ||
@@ -4309,7 +4316,7 @@ export class ForgeWorkOnController {
         );
       } catch (error) {
         if (!isLaunchSentinel(subagentRunId))
-          await this.#rpc.stopAndWait(subagentRunId).catch(() => undefined);
+          await this.#rpc.stopAndWait(subagentRunId);
         throw error;
       }
       link = {
@@ -4477,11 +4484,15 @@ export class ForgeWorkOnController {
   }
 
   async stopProviderRuns(runIds: readonly string[]): Promise<void> {
-    await Promise.allSettled(
+    const stops = await Promise.allSettled(
       [...new Set(runIds)]
         .filter((runId) => !isLaunchSentinel(runId))
         .map((runId) => this.#rpc.stopAndWait(runId)),
     );
+    const failure = stops.find(
+      (entry): entry is PromiseRejectedResult => entry.status === "rejected",
+    );
+    if (failure) throw failure.reason;
   }
 
   async stopOrchestration(
@@ -4800,7 +4811,7 @@ export class ForgeWorkOnController {
       });
     } catch (error) {
       if (receipt) {
-        await this.#rpc.stopAndWait(receipt.runId).catch(() => undefined);
+        await this.#rpc.stopAndWait(receipt.runId);
         link.launchFailure = "ambiguous";
       } else if (!providerLaunchAttempted) {
         this.#links.delete(launchIntent.sentinelRunId);
@@ -4817,6 +4828,7 @@ export class ForgeWorkOnController {
   }
 
   async #loadResult(link: ActiveRunLink): Promise<ForgeWorkOnResult> {
+    await this.#rebindLink(link);
     let result: ForgeWorkOnResult | undefined;
     if (link.executionMode !== "direct") {
       // An adopting session has no rpc knowledge of the original child; a
@@ -5340,22 +5352,11 @@ export class ForgeWorkOnController {
     suppliedResult?: ForgeWorkOnResult,
     integrate = false,
   ): Promise<void> {
+    await this.#rebindLink(link, ctx.signal);
+    await materializeForgeAgents(link.prepared.worktreePath);
     const result = suppliedResult ?? (await this.#loadResult(link));
     assertResultIdentity(result, link);
     const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
-    const rebound = await this.#git.rebind(
-      link.prepared,
-      ctx.signal,
-      link.repository,
-    );
-    await materializeForgeAgents(rebound.worktreePath);
-    if (
-      rebound.repositoryRoot !== link.prepared.repositoryRoot ||
-      rebound.worktreePath !== link.prepared.worktreePath
-    ) {
-      link.prepared = rebound;
-      this.#persistLink(link);
-    }
     const tokenProvider = createGitHubTokenProvider(
       this.#pi,
       link.prepared.repositoryRoot,
@@ -6092,6 +6093,24 @@ export class ForgeWorkOnController {
       this.#links.set(link.subagentRunId, link);
       for (const runId of Object.keys(link.activeNodes))
         this.#links.set(runId, link);
+    }
+  }
+
+  async #rebindLink(
+    link: ActiveRunLink,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const rebound = await this.#git.rebind(
+      link.prepared,
+      signal,
+      link.repository,
+    );
+    if (
+      rebound.repositoryRoot !== link.prepared.repositoryRoot ||
+      rebound.worktreePath !== link.prepared.worktreePath
+    ) {
+      link.prepared = rebound;
+      this.#persistLink(link);
     }
   }
 
@@ -7172,9 +7191,17 @@ async function readBoundedForgeResult(
   }
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
-    handle = await open(candidate, "r");
+    handle = await open(
+      candidate,
+      fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0),
+    );
     const current = await handle.stat();
-    if (current.size > MAX_FORGE_RESULT_BYTES) return "";
+    if (
+      current.dev !== stat.dev ||
+      current.ino !== stat.ino ||
+      current.size > MAX_FORGE_RESULT_BYTES
+    )
+      return "";
     const buffer = Buffer.alloc(current.size);
     const { bytesRead } = await handle.read(buffer, 0, current.size, 0);
     return buffer.subarray(0, bytesRead).toString("utf8");

@@ -28,8 +28,10 @@ import {
 } from "../adapters/subagents.ts";
 import { isPathWithin } from "../agents/child-containment.ts";
 import {
+  assertBoundRepositoryIdentity,
   waitForReviewerResult,
   type ExpectedReviewerResult,
+  type ForgeRepositoryBinding,
 } from "../agents/child-runtime.ts";
 import type {
   ForgeReviewFindingResult,
@@ -75,6 +77,8 @@ export type ReviewExecution =
       kind: "work-on";
       worktreePath: string;
       repositoryIdentity?: string;
+      branch?: string;
+      detached?: boolean;
       prepared?: PreparedWorktree;
     };
 
@@ -131,6 +135,8 @@ export interface ReviewPanelRunInput {
   issueNumber?: number;
   worktreePath: string;
   repositoryIdentity?: string;
+  branch?: string;
+  detached?: boolean;
   route: GitHubPullRequestRouteSnapshot;
   reviewers: readonly string[];
   round: number;
@@ -211,6 +217,14 @@ export class ReviewPrCoordinator {
         throw new Error(
           "Review work-on execution path does not match its prepared worktree.",
         );
+      const actualHead = await this.#git.head(
+        rebound.worktreePath,
+        input.signal,
+      );
+      if (actualHead !== route.headSha)
+        throw new Error(
+          `Review work-on execution head ${actualHead} does not match frozen PR head ${route.headSha}.`,
+        );
     } else if (input.execution.repositoryIdentity) {
       await this.#git.assertRepositoryIdentity(
         {
@@ -224,6 +238,14 @@ export class ReviewPrCoordinator {
         input.repository,
         input.signal,
       );
+      const actualHead = await this.#git.head(
+        input.execution.worktreePath,
+        input.signal,
+      );
+      if (actualHead !== route.headSha)
+        throw new Error(
+          `Review work-on execution head ${actualHead} does not match frozen PR head ${route.headSha}.`,
+        );
     }
 
     let snapshot = await this.#journal.initialize({
@@ -639,6 +661,18 @@ export class ReviewPrCoordinator {
           : { issueNumber: input.issueNumber }),
         worktreePath,
         ...(repositoryIdentity ? { repositoryIdentity } : {}),
+        ...(input.execution.kind === "standalone"
+          ? { branch: route.headRef, detached: true }
+          : input.execution.prepared
+            ? { branch: input.execution.prepared.branch }
+            : input.execution.branch
+              ? {
+                  branch: input.execution.branch,
+                  ...(input.execution.detached ? { detached: true } : {}),
+                }
+              : input.execution.detached
+                ? { branch: route.headRef, detached: true }
+                : {}),
         route,
         reviewers: input.roster.reviewers,
         round: requestedRound,
@@ -739,6 +773,15 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
         "Review panel requires an immutable prepared repository identity.",
       );
     const repositoryIdentity = input.repositoryIdentity;
+    const repositoryBinding: ForgeRepositoryBinding = {
+      runId: input.reviewId,
+      repository: input.repository,
+      repositoryIdentity,
+      worktreeRoot: input.worktreePath,
+      branch: input.branch ?? input.route.headRef,
+      ...(input.detached ? { reviewId: input.reviewId } : {}),
+      headSha: input.route.headSha,
+    };
     await this.#rpc.ping();
     const receipts: Array<{
       receipt: SubagentSpawnReceipt;
@@ -798,6 +841,7 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
             entry.expected,
             input.worktreePath,
             input.signal,
+            repositoryBinding,
           ),
         ),
       );
@@ -853,6 +897,7 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
               entry.expected,
               input.worktreePath,
               input.signal,
+              repositoryBinding,
             ),
           ),
         );
@@ -871,9 +916,13 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
       });
     } catch (error) {
       if (input.signal?.aborted) throw input.signal.reason ?? error;
-      await Promise.allSettled(
+      const stops = await Promise.allSettled(
         receipts.map(({ receipt }) => this.#rpc.stopAndWait(receipt.runId)),
       );
+      const stopFailure = stops.find(
+        (entry): entry is PromiseRejectedResult => entry.status === "rejected",
+      );
+      if (stopFailure) throw stopFailure.reason;
       throw error;
     } finally {
       this.#active.delete(input.reviewId);
@@ -882,9 +931,13 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
 
   async cancel(reviewId: string): Promise<void> {
     const receipts = this.#active.get(reviewId) ?? [];
-    await Promise.allSettled(
+    const stops = await Promise.allSettled(
       receipts.map((receipt) => this.#rpc.stopAndWait(receipt.runId)),
     );
+    const stopFailure = stops.find(
+      (entry): entry is PromiseRejectedResult => entry.status === "rejected",
+    );
+    if (stopFailure) throw stopFailure.reason;
     this.#active.delete(reviewId);
   }
 }
@@ -974,13 +1027,35 @@ export class ForgeReviewController {
               )
             : undefined;
         const execution: ReviewExecution = parsed.worktree
-          ? {
-              kind: "work-on",
-              worktreePath: await resolveReviewWorktree(
+          ? await (async () => {
+              const worktreePath = await resolveReviewWorktree(
                 environment.repositoryRoot,
-                parsed.worktree,
-              ),
-            }
+                parsed.worktree!,
+              );
+              const repositoryIdentity =
+                await this.#git.repositoryIdentityFor(
+                  worktreePath,
+                  environment.policy.repository.name,
+                  ctx.signal,
+                );
+              const branch = await this.#git.branch(worktreePath, ctx.signal);
+              const canonicalRepositoryIdentity =
+                await this.#git.repositoryIdentityFor(
+                  environment.repositoryRoot,
+                  environment.policy.repository.name,
+                  ctx.signal,
+                );
+              if (repositoryIdentity !== canonicalRepositoryIdentity)
+                throw new Error(
+                  "Review worktree belongs to another repository checkout.",
+                );
+              return {
+                kind: "work-on" as const,
+                worktreePath,
+                repositoryIdentity,
+                ...(branch ? { branch } : { branch: route.headRef, detached: true }),
+              };
+            })()
           : { kind: "standalone", repositoryRoot: environment.repositoryRoot };
         const coordinator = this.#coordinator(environment);
         this.#linked.set(reviewId, {

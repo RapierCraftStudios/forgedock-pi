@@ -164,6 +164,16 @@ export class GitWorktreeManager {
     await this.#repositoryIdentity(root, signal);
   }
 
+  async repositoryIdentityFor(
+    repositoryRoot: string,
+    expectedRepository: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const root = await realpath(repositoryRoot);
+    await this.#assertRepositoryOrigin(root, expectedRepository, signal);
+    return this.#repositoryIdentity(root, signal);
+  }
+
   async adoptPreparedWorktree(
     prepared: PreparedWorktree,
     expectedRepository: string,
@@ -701,6 +711,17 @@ export class GitWorktreeManager {
   async head(worktreePath: string, signal?: AbortSignal): Promise<string> {
     return (
       await this.#git(worktreePath, ["rev-parse", "HEAD"], 30_000, signal)
+    ).stdout.trim();
+  }
+
+  async branch(worktreePath: string, signal?: AbortSignal): Promise<string> {
+    return (
+      await this.#git(
+        worktreePath,
+        ["branch", "--show-current"],
+        30_000,
+        signal,
+      )
     ).stdout.trim();
   }
 
