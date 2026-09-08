@@ -82,7 +82,12 @@ class StopBarrierEventBus extends FakeEventBus {
           success: true,
           data: {
             runId: "async-run-1",
-            state: request.method === "stop" ? "stopping" : "stopped",
+            state:
+              request.method === "stop"
+                ? "paused"
+                : this.statusReads === 1
+                  ? "paused"
+                  : "stopped",
           },
         });
         return;
@@ -132,7 +137,7 @@ test("stopAndWait waits for Pi's terminal state before replacement", async () =>
   const client = new SubagentsRpcClient(pi);
   await client.ping();
   await client.stopAndWait("async-run-1", 1_000);
-  assert.equal(bus.statusReads, 1);
+  assert.equal(bus.statusReads, 2);
 });
 
 test("RPC work-on launch binds the nested-review runtime contract", async () => {
@@ -172,6 +177,10 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
   assert.match(spawn.params.task, /extensionBindings/);
   assert.match(spawn.params.task, /reviewHeadSha = REVIEW_HEAD_SHA/);
   assert.match(spawn.params.task, /worktree: false/);
+  assert.equal(
+    (spawn.params.task.match(/worktree: false/g) ?? []).length,
+    3,
+  );
   assert.match(spawn.params.task, /Call forge_diff in patch mode first/);
   assert.match(spawn.params.task, /call forge_finalize_reviewer/);
   assert.match(spawn.params.task, /one compact proof link for every accepted criterion/);

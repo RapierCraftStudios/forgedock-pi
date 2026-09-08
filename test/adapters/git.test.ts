@@ -99,6 +99,15 @@ test("worktree manager creates an issue branch from integration and cleans it sa
     await execFileAsync("git", ["clone", origin, clone]);
 
     const manager = new GitWorktreeManager(executor);
+    await assert.rejects(
+      manager.prepare(clone, {
+        runId: "wrong-origin",
+        issueNumber: 6,
+        baseBranch: "staging",
+        expectedRepository: "owner/repo",
+      }),
+      /repository origin does not match owner\/repo/,
+    );
     await manager.ensureRuntimeIgnored(clone);
     assert.match(
       await readFile(join(clone, ".git", "info", "exclude"), "utf8"),
@@ -193,6 +202,18 @@ test("worktree manager creates an issue branch from integration and cleans it sa
       { encoding: "utf8" },
     );
     assert.equal(localBranch.stdout.trim(), "");
+    await mkdir(prepared.worktreePath, { recursive: true });
+    await execFileAsync("git", ["init", "-q", "-b", "foreign", prepared.worktreePath]);
+    await writeFile(join(prepared.worktreePath, "foreign.txt"), "keep\n");
+    await assert.rejects(
+      manager.cleanup(prepared),
+      /Forge worktree binding failure/,
+    );
+    assert.equal(
+      await readFile(join(prepared.worktreePath, "foreign.txt"), "utf8"),
+      "keep\n",
+    );
+    await rm(prepared.worktreePath, { recursive: true, force: true });
     await rm(clone, { recursive: true, force: true });
     await execFileAsync("git", ["clone", origin, clone]);
     await assert.rejects(

@@ -43,6 +43,7 @@ export interface CommandExecutor {
 
 export interface PreparedWorktree {
   repositoryRoot: string;
+  repository?: string;
   /** Stable local identity used to reject a replaced repository at the same path. */
   repositoryIdentity?: string;
   worktreePath: string;
@@ -144,6 +145,7 @@ export class GitWorktreeManager {
       runId: string;
       issueNumber: number;
       baseBranch: string;
+      expectedRepository?: string;
       signal?: AbortSignal;
     },
   ): Promise<PreparedWorktree> {
@@ -153,6 +155,12 @@ export class GitWorktreeManager {
     if (!input.baseBranch.trim() || input.baseBranch.startsWith("-"))
       throw new TypeError("Base branch is invalid.");
     const root = await realpath(repositoryRoot);
+    if (input.expectedRepository)
+      await this.#assertRepositoryOrigin(
+        root,
+        input.expectedRepository,
+        input.signal,
+      );
     const repositoryIdentity = await this.#repositoryIdentity(
       root,
       input.signal,
@@ -177,6 +185,9 @@ export class GitWorktreeManager {
       throw new Error(`Owned worktree path already exists: ${worktreePath}`);
     const prepared = {
       repositoryRoot: root,
+      ...(input.expectedRepository
+        ? { repository: input.expectedRepository }
+        : {}),
       repositoryIdentity,
       worktreePath,
       branch,
@@ -339,25 +350,8 @@ export class GitWorktreeManager {
       throw new Error(
         "Forge worktree binding failure: retained repository identity is missing or has been replaced.",
       );
-    if (expectedRepository) {
-      let remote: ExecResult;
-      try {
-        remote = await this.#git(
-          root,
-          ["config", "--get", "remote.origin.url"],
-          30_000,
-          signal,
-        );
-      } catch {
-        throw new Error(
-          `Forge worktree binding failure: repository origin does not match ${expectedRepository}.`,
-        );
-      }
-      if (!repositoryRemoteMatches(remote.stdout, expectedRepository))
-        throw new Error(
-          `Forge worktree binding failure: repository origin does not match ${expectedRepository}.`,
-        );
-    }
+    if (expectedRepository)
+      await this.#assertRepositoryOrigin(root, expectedRepository, signal);
     const worktreeBase = join(root, ".forge", "worktrees");
     const expectedPath = resolve(root, prepared.worktreePath);
     if (
@@ -654,6 +648,7 @@ export class GitWorktreeManager {
     prepared: PreparedWorktree,
     signal?: AbortSignal,
   ): Promise<void> {
+    await this.#assertPreparedRepository(prepared, signal);
     const result = await this.#executor.exec(
       "git",
       ["push", "origin", "--delete", prepared.branch],
@@ -680,6 +675,11 @@ export class GitWorktreeManager {
     prepared: PreparedWorktree,
     signal?: AbortSignal,
   ): Promise<void> {
+    // Validate ownership before cleanup can touch the retained path. A crash
+    // or external replacement must never turn cleanup into foreign deletion.
+    await this.#assertPreparedRepository(prepared, signal);
+    if (await exists(prepared.worktreePath))
+      prepared = await this.rebind(prepared, signal, prepared.repository);
     // Cleanup is a retryable owned effect. A crash may happen after Git has
     // removed either the worktree or the branch, so absence is success.
     await this.#cleanupWorktree(
@@ -768,6 +768,51 @@ export class GitWorktreeManager {
     }
     if (await exists(worktreePath))
       await rm(worktreePath, { recursive: true, force: true });
+  }
+
+  async #assertPreparedRepository(
+    prepared: PreparedWorktree,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const root = await realpath(prepared.repositoryRoot);
+    const currentRepositoryIdentity = await this.#repositoryIdentity(
+      root,
+      signal,
+    );
+    if (
+      !prepared.repositoryIdentity ||
+      prepared.repositoryIdentity !== currentRepositoryIdentity
+    )
+      throw new Error(
+        "Forge worktree binding failure: retained repository identity is missing or has been replaced.",
+      );
+    if (prepared.repository)
+      await this.#assertRepositoryOrigin(root, prepared.repository, signal);
+    return root;
+  }
+
+  async #assertRepositoryOrigin(
+    repositoryRoot: string,
+    expectedRepository: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    let remote: ExecResult;
+    try {
+      remote = await this.#git(
+        repositoryRoot,
+        ["config", "--get", "remote.origin.url"],
+        30_000,
+        signal,
+      );
+    } catch {
+      throw new Error(
+        `Forge worktree binding failure: repository origin does not match ${expectedRepository}.`,
+      );
+    }
+    if (!repositoryRemoteMatches(remote.stdout, expectedRepository))
+      throw new Error(
+        `Forge worktree binding failure: repository origin does not match ${expectedRepository}.`,
+      );
   }
 
   async #repositoryIdentity(
