@@ -67,6 +67,70 @@ class FakeEventBus {
   }
 }
 
+class StopBarrierEventBus extends FakeEventBus {
+  statusReads = 0;
+
+  override emit(event: string, payload: unknown): void {
+    if (event === "subagents:rpc:v1:request") {
+      const request = payload as { requestId: string; method: string };
+      if (request.method === "stop" || request.method === "status") {
+        this.requests.push(payload);
+        if (request.method === "status") this.statusReads += 1;
+        this.emit(`subagents:rpc:v1:reply:${request.requestId}`, {
+          version: 1,
+          requestId: request.requestId,
+          success: true,
+          data: {
+            runId: "async-run-1",
+            state:
+              request.method === "stop"
+                ? "paused"
+                : this.statusReads === 1
+                  ? "paused"
+                  : "stopped",
+          },
+        });
+        return;
+      }
+    }
+    super.emit(event, payload);
+  }
+}
+
+class ImmediateTerminalEventBus extends FakeEventBus {
+  readonly terminalState: string;
+  readonly field: "state" | "status" | "text";
+
+  constructor(
+    terminalState: string,
+    field: "state" | "status" | "text" = "state",
+  ) {
+    super();
+    this.terminalState = terminalState;
+    this.field = field;
+  }
+
+  override emit(event: string, payload: unknown): void {
+    if (event === "subagents:rpc:v1:request") {
+      const request = payload as { requestId: string; method: string };
+      if (request.method === "stop" || request.method === "status") {
+        this.requests.push(payload);
+        this.emit(`subagents:rpc:v1:reply:${request.requestId}`, {
+          version: 1,
+          requestId: request.requestId,
+          success: true,
+          data:
+            this.field === "text"
+              ? { runId: "async-run-1", text: `State: ${this.terminalState}` }
+              : { runId: "async-run-1", [this.field]: this.terminalState },
+        });
+        return;
+      }
+    }
+    super.emit(event, payload);
+  }
+}
+
 function fakePi(bus = new FakeEventBus()): {
   pi: ExtensionAPI;
   bus: FakeEventBus;
@@ -101,6 +165,37 @@ const policy = parseForgePolicy({
   subagents: { maxConcurrent: 2, maxDepth: 2 },
 });
 
+test("stopAndWait waits for Pi's terminal state before replacement", async () => {
+  const bus = new StopBarrierEventBus();
+  const { pi } = fakePi(bus);
+  const client = new SubagentsRpcClient(pi);
+  await client.ping();
+  await client.stopAndWait("async-run-1", 1_000);
+  assert.equal(bus.statusReads, 2);
+});
+
+test("stopAndWait accepts provider terminal state aliases", async () => {
+  for (const terminalState of ["completed", "cancelled", "canceled", "timed-out"]) {
+    const { pi, bus } = fakePi(new ImmediateTerminalEventBus(terminalState));
+    const client = new SubagentsRpcClient(pi);
+    await client.ping();
+    await client.stopAndWait("async-run-1", 1_000);
+    assert.equal(bus.requests.length, 2);
+  }
+  for (const [terminalState, field] of [
+    ["partial", "status"],
+    ["stopped", "text"],
+  ] as const) {
+    const { pi, bus } = fakePi(
+      new ImmediateTerminalEventBus(terminalState, field),
+    );
+    const client = new SubagentsRpcClient(pi);
+    await client.ping();
+    await client.stopAndWait("async-run-1", 1_000);
+    assert.equal(bus.requests.length, 2);
+  }
+});
+
 test("RPC work-on launch binds the nested-review runtime contract", async () => {
   const { pi, bus } = fakePi();
   const client = new SubagentsRpcClient(pi);
@@ -110,10 +205,12 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
     runId: "run-1",
     issueNumber: 42,
     repository: "owner/repo",
+    repositoryIdentity: "repo-identity",
     worktreeRoot: "/tmp/worktree",
     branch: "forge/42",
     baseBranch: "staging",
     baseSha: "abcdef1234567890",
+    expectedHeadSha: "abcdef1234567890",
     leaseEpoch: 1,
     policy,
     issueContext: "Issue body as untrusted data",
@@ -126,6 +223,13 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
   assert.equal(spawn.method, "spawn");
   assert.equal(spawn.params.agent, FORGE_WORK_ON_AGENT);
   assert.equal(spawn.params.async, true);
+  assert.equal(spawn.params.cwd, "/tmp/worktree");
+  assert.equal(spawn.params.worktree, false);
+  assert.equal(
+    (spawn.params.extensionBindings as Record<string, { expectedHeadSha?: string }>)
+      ["forgedock.pi/1"]?.expectedHeadSha,
+    "abcdef1234567890",
+  );
   assert.equal(spawn.params.workflowScript, undefined);
   const serialized = JSON.stringify(spawn.params);
   assert.match(
@@ -135,6 +239,11 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
   assert.match(spawn.params.task, /up to three times/);
   assert.match(spawn.params.task, /extensionBindings/);
   assert.match(spawn.params.task, /reviewHeadSha = REVIEW_HEAD_SHA/);
+  assert.match(spawn.params.task, /worktree: false/);
+  assert.equal(
+    (spawn.params.task.match(/worktree: false/g) ?? []).length,
+    3,
+  );
   assert.match(spawn.params.task, /Call forge_diff in patch mode first/);
   assert.match(spawn.params.task, /call forge_finalize_reviewer/);
   assert.match(spawn.params.task, /one compact proof link for every accepted criterion/);
@@ -158,12 +267,35 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
   assert.doesNotMatch(serialized, /gh auth token/);
 });
 
+test("RPC work-on launch refuses an empty expected head", async () => {
+  const { pi } = fakePi();
+  const client = new SubagentsRpcClient(pi);
+  await assert.rejects(
+    client.spawnWorkOn({
+      runId: "run-missing-head",
+      issueNumber: 42,
+      repository: "owner/repo",
+      repositoryIdentity: "repo-identity",
+      worktreeRoot: "/tmp/worktree",
+      branch: "forge/42",
+      baseBranch: "staging",
+      baseSha: "abcdef1234567890",
+      expectedHeadSha: "",
+      leaseEpoch: 1,
+      policy,
+      issueContext: "Issue body",
+    }),
+    /expected head SHA/,
+  );
+});
+
 test("RPC standalone reviewer binding has review authority without a fake issue lease", async () => {
   const { pi, bus } = fakePi();
   const client = new SubagentsRpcClient(pi);
   await client.spawnStandaloneReviewNode({
     reviewId: "review-standalone-1",
     repository: "owner/repo",
+    repositoryIdentity: "repo-identity",
     pullNumber: 17,
     worktreeRoot: "/tmp/review-worktree",
     headRef: "feature/review",
@@ -173,20 +305,26 @@ test("RPC standalone reviewer binding has review authority without a fake issue 
     reviewer: "forge-review-security",
     round: 1,
     reviewerTimeoutMs: 900_000,
+    detached: true,
   });
   const spawn = bus.requests.at(-1) as {
     params: {
       task: string;
+      cwd: string;
+      worktree: boolean;
       extensionBindings: Record<string, Record<string, unknown>>;
     };
   };
   const binding = spawn.params.extensionBindings["forgedock.pi/1"];
   assert.equal(binding?.authorityMode, "review");
   assert.equal(binding?.reviewId, "review-standalone-1");
+  assert.equal(binding?.repositoryIdentity, "repo-identity");
   assert.equal(binding?.issueNumber, undefined);
   assert.equal(binding?.leaseEpoch, undefined);
   assert.equal(binding?.leaseOwnerRunId, undefined);
   assert.equal(binding?.stateBranch, undefined);
+  assert.equal(spawn.params.cwd, "/tmp/review-worktree");
+  assert.equal(spawn.params.worktree, false);
   assert.match(spawn.params.task, /pull request #17/);
   assert.match(spawn.params.task, /never edit files/i);
 });
@@ -198,10 +336,12 @@ test("RPC dedicated reviewer launch uses the registered reviewer and reviewer sc
     runId: "run-review",
     issueNumber: 10,
     repository: "owner/repo",
+    repositoryIdentity: "repo-identity",
     worktreeRoot: "/tmp/worktree",
     branch: "forge/10",
     baseBranch: "staging",
     baseSha: "abcdef1234567890",
+    expectedHeadSha: "fedcba9876543210",
     reviewHeadSha: "fedcba9876543210",
     leaseEpoch: 1,
     policy,
@@ -212,14 +352,23 @@ test("RPC dedicated reviewer launch uses the registered reviewer and reviewer sc
     params: {
       agent: string;
       task: string;
+      cwd: string;
+      worktree: boolean;
       extensionBindings: Record<
         string,
-        { nodeId: string; reviewHeadSha: string; reviewerTimeoutMs: number }
+        {
+          nodeId: string;
+          reviewHeadSha: string;
+          expectedHeadSha: string;
+          reviewerTimeoutMs: number;
+        }
       >;
       outputSchema: { properties: { schema: { const: string } } };
     };
   };
   assert.equal(spawn.params.agent, "forge-review-security");
+  assert.equal(spawn.params.cwd, "/tmp/worktree");
+  assert.equal(spawn.params.worktree, false);
   assert.equal(
     spawn.params.outputSchema.properties.schema.const,
     "forgedock.reviewer-result/v1",
@@ -240,6 +389,10 @@ test("RPC dedicated reviewer launch uses the registered reviewer and reviewer sc
     "fedcba9876543210",
   );
   assert.equal(
+    spawn.params.extensionBindings["forgedock.pi/1"]?.expectedHeadSha,
+    "fedcba9876543210",
+  );
+  assert.equal(
     spawn.params.extensionBindings["forgedock.pi/1"]?.reviewerTimeoutMs,
     900_000,
   );
@@ -254,10 +407,12 @@ test("RPC domain reviewer must finalize its bound result", async () => {
       runId: "run-domain-review",
       issueNumber: 10,
       repository: "owner/repo",
+      repositoryIdentity: "repo-identity",
       worktreeRoot: "/tmp/worktree",
       branch: "forge/10",
       baseBranch: "staging",
       baseSha: "abcdef1234567890",
+      expectedHeadSha: "fedcba9876543210",
       reviewHeadSha: "fedcba9876543210",
       leaseEpoch: 1,
       policy,
@@ -274,13 +429,22 @@ test("RPC domain reviewer must finalize its bound result", async () => {
     params: {
       agent: string;
       task: string;
+      cwd: string;
+      worktree: boolean;
       extensionBindings: Record<
         string,
-        { nodeId: string; reviewHeadSha: string; reviewerTimeoutMs: number }
+        {
+          nodeId: string;
+          reviewHeadSha: string;
+          expectedHeadSha: string;
+          reviewerTimeoutMs: number;
+        }
       >;
     };
   };
   assert.equal(spawn.params.agent, "forge-review-domain");
+  assert.equal(spawn.params.cwd, "/tmp/worktree");
+  assert.equal(spawn.params.worktree, false);
   assert.match(spawn.params.task, /forge_finalize_reviewer/);
   assert.match(spawn.params.task, /structured_output with the identical value/);
   assert.equal(
@@ -296,10 +460,12 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
     runId: "run-node",
     issueNumber: 9,
     repository: "owner/repo",
+    repositoryIdentity: "repo-identity",
     worktreeRoot: "/tmp/worktree",
     branch: "forge/9",
     baseBranch: "staging",
     baseSha: "abcdef1234567890",
+    expectedHeadSha: "abcdef1234567890",
     leaseEpoch: 1,
     policy,
     issueContext: "untrusted issue text",
@@ -309,6 +475,8 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
     params: {
       agent: string;
       task: string;
+      cwd: string;
+      worktree: boolean;
       extensionBindings: Record<
         string,
         { verificationCommands: Record<string, { cwd: string }> }
@@ -317,6 +485,8 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
     };
   };
   assert.equal(spawn.params.agent, FORGE_READ_ONLY_NODE_AGENT);
+  assert.equal(spawn.params.cwd, "/tmp/worktree");
+  assert.equal(spawn.params.worktree, false);
   assert.equal(
     spawn.params.outputSchema.properties.schema.const,
     "forgedock.node-result/v1",
@@ -340,10 +510,12 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
     runId: "run-resolve",
     issueNumber: 9,
     repository: "owner/repo",
+    repositoryIdentity: "repo-identity",
     worktreeRoot: "/tmp/worktree",
     branch: "forge/9",
     baseBranch: "staging",
     baseSha: "abcdef1234567890",
+    expectedHeadSha: "abcdef1234567890",
     leaseEpoch: 1,
     policy,
     issueContext: "untrusted issue text",
@@ -362,10 +534,12 @@ test("bounded implementation launch binds the durable builder contract", async (
     runId: "run-implement",
     issueNumber: 9,
     repository: "owner/repo",
+    repositoryIdentity: "repo-identity",
     worktreeRoot: "/tmp/worktree",
     branch: "forge/9",
     baseBranch: "staging",
     baseSha: "abcdef1234567890",
+    expectedHeadSha: "abcdef1234567890",
     leaseEpoch: 1,
     policy,
     issueContext: "untrusted issue text",
@@ -375,12 +549,16 @@ test("bounded implementation launch binds the durable builder contract", async (
   const spawn = bus.requests.at(-1) as {
     params: {
       task: string;
+      cwd: string;
+      worktree: boolean;
       extensionBindings: Record<
         string,
         { builderContract?: { contractHash: string } }
       >;
     };
   };
+  assert.equal(spawn.params.cwd, "/tmp/worktree");
+  assert.equal(spawn.params.worktree, false);
   assert.equal(
     spawn.params.extensionBindings["forgedock.pi/1"]?.builderContract
       ?.contractHash,
@@ -421,10 +599,12 @@ test("RPC work-on treats GitHub-only verification as valid", async () => {
     runId: "run-github-ci",
     issueNumber: 7,
     repository: "owner/repo",
+    repositoryIdentity: "repo-identity",
     worktreeRoot: "/tmp/worktree",
     branch: "forge/7",
     baseBranch: "staging",
     baseSha: "abcdef1234567890",
+    expectedHeadSha: "abcdef1234567890",
     leaseEpoch: 1,
     policy: githubOnlyPolicy,
     issueContext: "Issue body",

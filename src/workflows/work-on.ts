@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { constants as fsConstants } from "node:fs";
+import { lstat, open, realpath } from "node:fs/promises";
+import { join, resolve } from "node:path";
 
 import type {
   ExtensionAPI,
@@ -20,7 +21,10 @@ import {
 } from "../adapters/github-projection.ts";
 import { GitHubStateBranchStore } from "../adapters/github-state.ts";
 import { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
-import { SubagentsRpcClient } from "../adapters/subagents.ts";
+import {
+  SubagentsRpcClient,
+  type SubagentSpawnReceipt,
+} from "../adapters/subagents.ts";
 import { preflightRequiredVerificationCommands } from "../adapters/verification-preflight.ts";
 import {
   findForgeNodeResult,
@@ -35,6 +39,7 @@ import {
   DIRECT_WORK_ON_FINALIZED_EVENT,
   type ForgeChildBinding,
 } from "../agents/child-runtime.ts";
+import { isPathWithin } from "../agents/child-containment.ts";
 import { materializeForgeAgents } from "../agents/materialize.ts";
 import { FORGE_WORK_ON_PROMPT } from "../agents/register.ts";
 import {
@@ -137,6 +142,8 @@ export interface ActiveRunLink {
   reviewBaseSha: string;
   refreshes: number;
   providerRetries: number;
+  /** Persisted barrier: do not spawn again without a known provider receipt. */
+  launchFailure?: "ambiguous" | "binding";
   remediationAttempts: number;
   findingIssueMap: Record<string, number>;
   issueContext: string;
@@ -145,6 +152,14 @@ export interface ActiveRunLink {
   activeNodes: Record<string, ActiveNodeRunLink>;
   currentNodeId?: string;
   nodeResultPath?: string;
+  refreshLaunch?: {
+    runId: string;
+    resultPath: string;
+    previousResultPath: string;
+    baseSha: string;
+    refreshAttempt: number;
+    launchNonce: string;
+  };
   reviewHeadSha?: string;
   terminalOutcome?: "merged" | "closed";
 }
@@ -303,9 +318,44 @@ export class ForgeWorkOnController {
 
   async attach(ctx: ExtensionContext): Promise<void> {
     this.#restoreLinks(ctx);
-    for (const repositoryRoot of new Set(
-      [...this.#links.values()].map((link) => link.prepared.repositoryRoot),
-    ))
+    const validRoots = new Set<string>();
+    for (const link of new Set(this.#links.values())) {
+      try {
+        const needsRepositoryAdoption = !link.prepared.repositoryIdentity;
+        if (needsRepositoryAdoption)
+          link.prepared = await this.#git.adoptPreparedWorktree(
+            link.prepared,
+            link.repository,
+            ctx.signal,
+            link.reviewHeadSha ?? link.prepared.baseSha,
+          );
+        if (needsRepositoryAdoption) this.#persistLink(link);
+        await this.#git.assertRepositoryIdentity(
+          link.prepared,
+          link.repository,
+          ctx.signal,
+        );
+        validRoots.add(link.prepared.repositoryRoot);
+      } catch (error) {
+        if (link.executionMode === "orchestrated")
+          await Promise.all(
+            [
+              link.subagentRunId,
+              ...Object.keys(link.activeNodes),
+            ]
+              .filter(
+                (runId) => runId && !isLaunchSentinel(runId),
+              )
+              .map((runId) => this.#rpc.stopAndWait(runId)),
+          );
+        link.status = "failed";
+        this.#persistLink(link);
+        this.#emitLifecycle(link, {
+          reason: `Exact-worktree repository validation failed before attach: ${errorMessage(error)}`,
+        });
+      }
+    }
+    for (const repositoryRoot of validRoots)
       await this.#git.ensureRuntimeIgnored(repositoryRoot);
     await this.#rpc.ping();
     this.#directFinalizeUnsubscribe?.();
@@ -321,7 +371,16 @@ export class ForgeWorkOnController {
             candidate.forgeRunId === runId &&
             candidate.executionMode === "direct",
         );
-        if (!link || link.status !== "running") return;
+        if (
+          !link ||
+          (link.status !== "running" && link.status !== "refreshing")
+        )
+          return;
+        const headSha =
+          payload && typeof payload === "object" && "headSha" in payload
+            ? String((payload as { headSha: unknown }).headSha)
+            : "";
+        if (headSha) link.reviewHeadSha = headSha;
         link.status = "finalizing";
         this.#persistLink(link);
         void this.#finalize(link, ctx).catch((error) => {
@@ -410,6 +469,7 @@ export class ForgeWorkOnController {
         this.#emitLifecycle(link, { reason: failure });
         return;
       }
+      delete link.refreshLaunch;
       link.status = "finalizing";
       this.#persistLink(link);
       void this.#finalize(link, ctx).catch((error) => {
@@ -442,7 +502,9 @@ export class ForgeWorkOnController {
         let directState:
           | import("../adapters/github-state.ts").ReadRunStateResult
           | undefined;
+        let directRefreshRecovery = false;
         if (link.executionMode === "direct") {
+          directRefreshRecovery = link.status === "refreshing";
           directState = await projectionStore.readRun(
             link.forgeRunId,
             ctx.signal,
@@ -472,16 +534,58 @@ export class ForgeWorkOnController {
           link.status = "running";
           this.#persistLink(link);
         }
-        if (link.status !== "running" && link.status !== "refreshing") continue;
+        const retryableCleanup =
+          link.status === "failed" &&
+          parentNodeFromId(link.currentNodeId) === "cleanup";
+        const retryableRefresh = Boolean(
+          link.refreshLaunch &&
+            link.refreshLaunch.runId === link.subagentRunId &&
+            isLaunchSentinel(link.refreshLaunch.runId) &&
+            link.launchFailure === "binding",
+        );
+        if (
+          link.status !== "running" &&
+          link.status !== "refreshing" &&
+          !retryableCleanup &&
+          !retryableRefresh
+        )
+          continue;
+        if (retryableCleanup || retryableRefresh) {
+          link.status = "running";
+          this.#persistLink(link);
+        }
         if (link.executionMode === "direct") {
           if (!directState?.state) continue;
+          try {
+            link.prepared = await this.#git.rebind(
+              link.prepared,
+              ctx.signal,
+              link.repository,
+              link.reviewHeadSha ?? link.prepared.baseSha,
+            );
+            await materializeForgeAgents(link.prepared.worktreePath);
+            this.#persistLink(link);
+          } catch (error) {
+            link.status = "failed";
+            this.#persistLink(link);
+            this.#emitLifecycle(link, {
+              reason: `Exact-worktree direct recovery failed: ${errorMessage(error)}`,
+            });
+            continue;
+          }
           const { policy } = await loadForgePolicy(
             link.prepared.repositoryRoot,
           );
+          const previousReviewRounds = latestReviewRound(directState.state);
+          if (directRefreshRecovery && previousReviewRounds >= 5)
+            throw new Error(
+              "Direct refresh cannot start after the five-round result cap.",
+            );
           this.#directBinding = {
             runId: link.forgeRunId,
             resultPath: link.resultPath,
             repository: link.repository,
+            repositoryIdentity: requirePreparedRepositoryIdentity(link.prepared),
             issueNumber: link.issueNumber,
             leaseEpoch: link.leaseEpoch,
             leaseOwnerRunId: link.forgeRunId,
@@ -490,23 +594,134 @@ export class ForgeWorkOnController {
             branch: link.prepared.branch,
             baseBranch: link.prepared.baseBranch,
             baseSha: link.prepared.baseSha,
+            expectedHeadSha:
+              link.reviewHeadSha ?? link.prepared.baseSha,
             maxReviewRounds: policy.review.maxRounds,
             reviewerTimeoutMs: policy.subagents.reviewerTimeoutMs,
             verificationCommands: policy.verification.commands,
-            refresh: false,
+            refresh: directRefreshRecovery,
+            ...(directRefreshRecovery
+              ? { previousReviewRounds }
+              : {}),
           };
           process.env.PI_SUBAGENT_EXTENSION_BINDINGS = JSON.stringify({
             "forgedock.pi/1": this.#directBinding,
           });
-          this.#pi.sendUserMessage(
-            directRunResumeTask(link, directState.state),
-          );
+          const resumeTask = directRefreshRecovery
+            ? [
+                "Resume the existing ForgeDock direct run after its integration base moved during refresh.",
+                `Run ID: ${link.forgeRunId}`,
+                `New integration base: ${link.prepared.baseBranch} at ${link.prepared.baseSha}`,
+                "Call forge_refresh_base first. Then run every required forge_verify command, update the existing PR with forge_prepare_review, launch the fresh review panel for the new frozen head, and continue through the existing finalization path. Do not create another run, worktree, branch, commit, or PR.",
+              ].join("\n\n")
+            : directRunResumeTask(link, directState.state);
+          this.#pi.sendUserMessage(resumeTask);
           continue;
         }
         const activeNodes = Object.values(link.activeNodes);
+        const ambiguousRefresh = Boolean(
+          link.refreshLaunch &&
+            link.refreshLaunch.runId === link.subagentRunId &&
+            isLaunchSentinel(link.refreshLaunch.runId) &&
+            link.launchFailure === "binding",
+        );
+        if (
+          (link.launchFailure === "ambiguous" || ambiguousRefresh) &&
+          (activeNodes.length === 0 ||
+            activeNodes.every((activeNode) =>
+              isLaunchSentinel(activeNode.subagentRunId),
+            ))
+        ) {
+          if (ambiguousRefresh && link.orchestrationId) {
+            await this.#retryRefreshBindingFailure(link, ctx);
+            continue;
+          }
+          const recoverySnapshot = await projectionStore.readRun(
+            link.forgeRunId,
+            ctx.signal,
+          );
+          const nodeArtifacts: Array<{
+            activeNode: ActiveNodeRunLink;
+            result: ForgeNodeResult | undefined;
+          }> = [];
+          for (const activeNode of activeNodes) {
+            const expectedHeadSha = expectedNodeArtifactHead(
+              link,
+              recoverySnapshot.state,
+              recoverySnapshot.state?.nodes[activeNode.nodeId],
+            );
+            await this.#rebindLink(link, ctx.signal, expectedHeadSha);
+            nodeArtifacts.push({
+              activeNode,
+              result: findForgeNodeResult(
+                // Node artifacts are independently typed from top-level work-on results.
+                await readBoundedForgeResult(
+                  link.prepared.worktreePath,
+                  activeNode.resultPath,
+                ),
+              ),
+            });
+          }
+          if (activeNodes.length === 0)
+            await this.#rebindLink(
+              link,
+              ctx.signal,
+              expectedNodeArtifactHead(link, recoverySnapshot.state),
+            );
+          const boundedArtifact = nodeArtifacts.find(
+            (candidate) => candidate.result,
+          );
+          if (boundedArtifact) {
+            await this.#reconcileActiveNode(
+              link,
+              ctx,
+              undefined,
+              boundedArtifact.activeNode,
+            );
+            continue;
+          }
+          await this.#rebindLink(
+            link,
+            ctx.signal,
+            expectedNodeArtifactHead(link, recoverySnapshot.state),
+          );
+          const durableResult = findForgeWorkOnResult(
+            await readBoundedForgeResult(
+              link.prepared.worktreePath,
+              link.resultPath,
+            ),
+          );
+          if (durableResult) {
+            delete link.launchFailure;
+            delete link.refreshLaunch;
+            link.status = "running";
+            this.#persistLink(link);
+            await this.#finalize(link, ctx, durableResult);
+            continue;
+          }
+          // There is no provider run ID to stop. A technical terminal
+          // failure is safer than guessing and creating a second writer.
+          link.status = "failed";
+          this.#persistLink(link);
+          this.#emitLifecycle(link, {
+            reason:
+              "Ambiguous Forge provider launch remains unbound; refusing a replacement writer.",
+          });
+          continue;
+        }
         if (activeNodes.length > 0) {
           for (const activeNode of activeNodes) {
             if (isLaunchSentinel(activeNode.subagentRunId)) {
+              if (!link.launchFailure && link.orchestrationId) {
+                const recovered =
+                  await this.reactivateOrchestrationIssue(
+                    link.orchestrationId,
+                    link.issueNumber,
+                    ctx.sessionManager.getSessionId(),
+                    ctx,
+                  );
+                if (recovered) continue;
+              }
               await this.#reconcileActiveNode(
                 link,
                 ctx,
@@ -533,8 +748,50 @@ export class ForgeWorkOnController {
           }
           continue;
         }
+        if (
+          link.orchestrationId &&
+          activeNodes.length === 0 &&
+          !link.currentNodeId
+        ) {
+          const queuedSnapshot = await projectionStore.readRun(
+            link.forgeRunId,
+            ctx.signal,
+          );
+          const queuedNode = Object.values(queuedSnapshot.state?.nodes ?? {}).find(
+            (candidate) => candidate.status === "queued",
+          );
+          if (queuedNode) {
+            const { policy } = await loadForgePolicy(
+              link.prepared.repositoryRoot,
+            );
+            await this.#dispatchNode(
+              link,
+              {
+                nodeId: queuedNode.nodeId,
+                node: queuedNode.node as WorkflowNode,
+                attempt: queuedNode.attempt,
+                ...(queuedNode.round ? { round: queuedNode.round } : {}),
+                ...(queuedNode.headSha
+                  ? { headSha: queuedNode.headSha }
+                  : {}),
+              },
+              policy,
+              projectionStore,
+              ctx,
+              [
+                link.issueContext,
+                link.planContext,
+                "Continue from the durable queued node after restart.",
+              ]
+                .filter(Boolean)
+                .join("\n\n"),
+            );
+            continue;
+          }
+        }
         const parentNode = parentNodeFromId(link.currentNodeId);
         if (parentNode && link.currentNodeId) {
+          await this.#rebindParentWorktree(link, ctx, parentNode);
           const { policy } = await loadForgePolicy(
             link.prepared.repositoryRoot,
           );
@@ -562,10 +819,13 @@ export class ForgeWorkOnController {
           continue;
         }
         if (isLaunchSentinel(link.subagentRunId)) {
+          if (link.launchFailure === "ambiguous") continue;
           const recovered = link.orchestrationId
             ? await this.reactivateOrchestrationIssue(
                 link.orchestrationId,
                 link.issueNumber,
+                ctx.sessionManager.getSessionId(),
+                ctx,
               )
             : undefined;
           if (recovered?.state === "running") continue;
@@ -712,22 +972,28 @@ export class ForgeWorkOnController {
       const projection = await projector.projectEventWithReceipt({
         issueNumber: link.issueNumber,
         event: completed,
-        markdown: terminalRunMarkdown(link, latest.state),
+        markdown:
+          latest.state.outcome === "closed" && isNoChangeClosure(latest.state)
+            ? noChangeClosureMarkdown(link, latest.state)
+            : terminalRunMarkdown(link, latest.state),
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
       receipts.push(...projection.receipts);
     }
-    if (
-      latest.state.outcome === "merged" &&
-      !latest.state.effects[ids.workflow]
-    ) {
+    if (!latest.state.effects[ids.workflow]) {
       receipts.push(
-        await projector.setWorkflowLabelWithReceipt(
-          link.issueNumber,
-          WORKFLOW_LABEL_BY_STAGE.merged,
-          ctx.signal,
-          `${completed.eventId}:workflow`,
-        ),
+        latest.state.outcome === "merged"
+          ? await projector.setWorkflowLabelWithReceipt(
+              link.issueNumber,
+              WORKFLOW_LABEL_BY_STAGE.merged,
+              ctx.signal,
+              `${completed.eventId}:workflow`,
+            )
+          : await projector.clearWorkflowLabelWithReceipt(
+              link.issueNumber,
+              ctx.signal,
+              `${completed.eventId}:workflow`,
+            ),
       );
     }
     await recordProjectionReceipts(
@@ -805,6 +1071,20 @@ export class ForgeWorkOnController {
   ): Promise<void> {
     if (this.#providerRecovering.has(link.forgeRunId)) return;
     this.#providerRecovering.add(link.forgeRunId);
+    if (isWorktreeBindingFailure(failure) && link.refreshLaunch) {
+      try {
+        await this.#retryRefreshBindingFailure(link, ctx);
+      } catch (error) {
+        link.status = "failed";
+        this.#persistLink(link);
+        this.#emitLifecycle(link, {
+          reason: `Refresh binding recovery failed: ${errorMessage(error)}`,
+        });
+      } finally {
+        this.#providerRecovering.delete(link.forgeRunId);
+      }
+      return;
+    }
     const previousRunId = link.subagentRunId;
     const retry = link.providerRetries + 1;
     const intent = createNodeLaunchIntent(
@@ -813,8 +1093,31 @@ export class ForgeWorkOnController {
     );
     this.#links.delete(previousRunId);
     link.subagentRunId = intent.sentinelRunId;
+    link.launchFailure = "ambiguous";
     link.status = "running";
     this.#persistLink(link);
+    if (isWorktreeBindingFailure(failure) && link.orchestrationId) {
+      try {
+        await this.#rpc.stopAndWait(previousRunId);
+        delete link.launchFailure;
+        this.#persistLink(link);
+        await this.reactivateOrchestrationIssue(
+          link.orchestrationId,
+          link.issueNumber,
+          ctx.sessionManager.getSessionId(),
+          ctx,
+        );
+      } catch (error) {
+        link.status = "failed";
+        this.#persistLink(link);
+        this.#emitLifecycle(link, {
+          reason: `Exact-worktree launch retry failed after durable binding failure: ${errorMessage(error)}`,
+        });
+      } finally {
+        this.#providerRecovering.delete(link.forgeRunId);
+      }
+      return;
+    }
     try {
       const receipt = await this.#rpc.resume(
         previousRunId,
@@ -823,12 +1126,24 @@ export class ForgeWorkOnController {
       this.#links.delete(intent.sentinelRunId);
       link.subagentRunId = receipt.runId;
       link.providerRetries = retry;
+      delete link.launchFailure;
       link.status = "running";
       this.#persistLink(link);
       ctx.ui.notify(
         `ForgeDock issue #${link.issueNumber} resumed after transient provider failure (${retry}/3).`,
         "warning",
       );
+      const buffered = this.#earlyCompletions.get(receipt.runId);
+      const observed =
+        buffered ??
+        parseAsyncCompletion(
+          await this.#rpc.status(receipt.runId).catch(() => undefined),
+        );
+      if (buffered) this.#earlyCompletions.delete(receipt.runId);
+      if (observed && observed.state !== "running" && observed.state !== "paused") {
+        this.#providerRecovering.delete(link.forgeRunId);
+        await this.#handleTopLevelCompletion(link, ctx, observed);
+      }
     } catch (error) {
       link.status = "failed";
       this.#persistLink(link);
@@ -840,6 +1155,62 @@ export class ForgeWorkOnController {
     }
   }
 
+  async #retryRefreshBindingFailure(
+    link: ActiveRunLink,
+    ctx: ExtensionContext,
+  ): Promise<void> {
+    const refresh = link.refreshLaunch;
+    if (!refresh) {
+      link.status = "failed";
+      this.#persistLink(link);
+      return;
+    }
+    await this.#rebindLink(
+      link,
+      ctx.signal,
+      link.reviewHeadSha ?? link.prepared.baseSha,
+    );
+    const previousResult = findForgeWorkOnResult(
+      await readBoundedForgeResult(
+        link.prepared.worktreePath,
+        refresh.previousResultPath,
+      ),
+    );
+    if (!previousResult) {
+      link.status = "failed";
+      this.#persistLink(link);
+      this.#emitLifecycle(link, {
+        reason:
+          "Refresh worktree binding failed and its prior durable result is unavailable; refusing a duplicate refresh writer.",
+      });
+      return;
+    }
+    try {
+      const { policy } = await loadForgePolicy(
+        link.prepared.repositoryRoot,
+      );
+      link.resultPath = refresh.previousResultPath;
+      delete link.refreshLaunch;
+      delete link.launchFailure;
+      link.status = "refreshing";
+      this.#persistLink(link);
+      await this.#refreshForMovedBase(
+        link,
+        previousResult,
+        policy,
+        refresh.baseSha,
+        ctx,
+        refresh.refreshAttempt,
+      );
+    } catch (error) {
+      link.status = "failed";
+      this.#persistLink(link);
+      this.#emitLifecycle(link, {
+        reason: `Refresh binding recovery failed: ${errorMessage(error)}`,
+      });
+    }
+  }
+
   async #resumeInterruptedNode(
     link: ActiveRunLink,
     ctx: ExtensionContext,
@@ -847,7 +1218,14 @@ export class ForgeWorkOnController {
     activeNode: ActiveNodeRunLink,
   ): Promise<boolean> {
     const nodeId = activeNode.nodeId;
-    if (!nodeId || !isTransientProviderFailure(failure)) return false;
+    const recoveryMode = launchRecoveryMode(failure);
+    const worktreeBindingFailure = recoveryMode === "fresh-worktree";
+    if (!nodeId || recoveryMode === "none") return false;
+    await this.#git.assertRepositoryIdentity(
+      link.prepared,
+      link.repository,
+      ctx.signal,
+    );
     const tokenProvider = createGitHubTokenProvider(
       this.#pi,
       link.prepared.repositoryRoot,
@@ -866,7 +1244,9 @@ export class ForgeWorkOnController {
     const previousSubagentRunId = activeNode.subagentRunId;
     if (node.subagentRunId !== previousSubagentRunId) return false;
     const retry = transportRetries + 1;
-    const resultPath = node.resultPath ?? activeNode.resultPath;
+    const resultPath = worktreeBindingFailure
+      ? linkResultPath(link.prepared.worktreePath, link.forgeRunId, nodeId)
+      : node.resultPath ?? activeNode.resultPath;
     const intent = createNodeLaunchIntent(
       `${nodeId}-resume-${retry}`,
       resultPath,
@@ -906,22 +1286,47 @@ export class ForgeWorkOnController {
     if (link.subagentRunId === previousSubagentRunId)
       link.subagentRunId = intent.sentinelRunId;
     link.status = "running";
+    link.launchFailure = "ambiguous";
     this.#persistLink(link);
 
     let receipt;
     try {
-      receipt = await this.#rpc.resume(
-        previousSubagentRunId,
-        [
-          `Resume the same retained ForgeDock node ${nodeId} after a transient transport interruption.`,
-          "Continue from the existing child transcript and tool history.",
-          "Do not restart investigation, planning, implementation, verification, or review exploration.",
-          "Do not create a fresh replacement node or repeat completed side effects.",
-          `Interrupted transport: ${failure}`,
-        ].join("\n"),
-      );
+      if (worktreeBindingFailure) {
+        // A stale Pi cwd belongs to the failed launch, so resuming its session
+        // would preserve the wrong workspace. Start a fresh child with the
+        // same durable node identity and the exact Forge worktree instead.
+        await this.#rpc.stopAndWait(previousSubagentRunId);
+        link.prepared = await this.#git.rebind(
+          link.prepared,
+          ctx.signal,
+          link.repository,
+          link.reviewHeadSha ?? link.prepared.baseSha,
+        );
+        await materializeForgeAgents(link.prepared.worktreePath);
+        this.#persistLink(link);
+        const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
+        receipt = await this.#spawnBoundNode(link, node, policy);
+      } else {
+        receipt = await this.#rpc.resume(
+          previousSubagentRunId,
+          [
+            `Resume the same retained ForgeDock node ${nodeId} after a transient transport interruption.`,
+            "Continue from the existing child transcript and tool history.",
+            "Do not restart investigation, planning, implementation, verification, or review exploration.",
+            "Do not create a fresh replacement node or repeat completed side effects.",
+            `Interrupted transport: ${failure}`,
+          ].join("\n"),
+        );
+      }
     } catch (error) {
-      const reason = `Provider continuation is ambiguous after durable resume intent; refusing a duplicate: ${errorMessage(error)}`;
+      if (receipt) {
+        await this.#rpc.stopAndWait(receipt.runId);
+        link.launchFailure = "ambiguous";
+      }
+      if (worktreeBindingFailure && !receipt) delete link.launchFailure;
+      const reason = worktreeBindingFailure
+        ? `Exact-worktree launch retry failed after durable binding failure: ${errorMessage(error)}`
+        : `Provider continuation is ambiguous after durable resume intent; refusing a duplicate: ${errorMessage(error)}`;
       await journal.append({
         runId: link.forgeRunId,
         type: "node.failed",
@@ -956,6 +1361,7 @@ export class ForgeWorkOnController {
     if (link.subagentRunId === intent.sentinelRunId)
       link.subagentRunId = receipt.runId;
     link.providerRetries = retry;
+    delete link.launchFailure;
     link.status = "running";
     this.#persistLink(link);
     await journal.append({
@@ -981,13 +1387,26 @@ export class ForgeWorkOnController {
       message: `Bind resume receipt for ForgeDock node ${nodeId}`,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
+    const resumedActiveNode = link.activeNodes[receipt.runId];
+    if (
+      resumedActiveNode &&
+      (await this.#drainReceiptCompletion(
+        link,
+        ctx,
+        receipt,
+        resumedActiveNode,
+      ))
+    )
+      return true;
     await this.#projectWorkflowStage(
       link,
       workflowStageForNodeTransition(node.node, "resumed"),
       ctx,
     );
     ctx.ui.notify(
-      `ForgeDock issue #${link.issueNumber} resumed ${nodeId} in-place after a transient transport failure (${retry}/3).`,
+      worktreeBindingFailure
+        ? `ForgeDock issue #${link.issueNumber} rebound ${nodeId} to its exact worktree after a stale Pi workspace (${retry}/3).`
+        : `ForgeDock issue #${link.issueNumber} resumed ${nodeId} in-place after a transient transport failure (${retry}/3).`,
       "warning",
     );
     return true;
@@ -1026,8 +1445,13 @@ export class ForgeWorkOnController {
       ctx.cwd,
       ctx.signal,
     );
-    await this.#git.ensureRuntimeIgnored(repositoryRoot, ctx.signal);
     const { policy } = await loadForgePolicy(repositoryRoot);
+    await this.#git.assertRepositoryRoot(
+      repositoryRoot,
+      policy.repository.name,
+      ctx.signal,
+    );
+    await this.#git.ensureRuntimeIgnored(repositoryRoot, ctx.signal);
     const integrationBranch = chooseIntegrationBranch(policy);
     if (isProtectedBranch(policy, integrationBranch))
       throw new Error(`Integration branch ${integrationBranch} is protected.`);
@@ -1050,6 +1474,7 @@ export class ForgeWorkOnController {
       runId,
       issueNumber,
       baseBranch: integrationBranch,
+      expectedRepository: policy.repository.name,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
 
@@ -1106,7 +1531,10 @@ export class ForgeWorkOnController {
         status: "running",
         executionMode,
         ...(options.orchestrationId
-          ? { orchestrationId: options.orchestrationId }
+          ? {
+              orchestrationId: options.orchestrationId,
+              launchFailure: "ambiguous" as const,
+            }
           : {}),
         leaseOwnerRunId: runId,
         leaseEpoch: initialized.lease?.epoch ?? 1,
@@ -1162,18 +1590,34 @@ export class ForgeWorkOnController {
       }
       let task: string | undefined;
       if (executionMode === "orchestrated") {
+        link.launchFailure = "ambiguous";
+        this.#persistLink(link);
         let receipt: { runId: string; resultPath: string } | undefined;
         let launchFailure: unknown;
         for (let attempt = 0; attempt <= 3; attempt += 1) {
           try {
+            const rebound = await this.#git.rebind(
+              link.prepared,
+              ctx.signal,
+              policy.repository.name,
+              link.reviewHeadSha ?? link.prepared.baseSha,
+            );
+            await materializeForgeAgents(rebound.worktreePath);
+            link.prepared = rebound;
+            this.#persistLink(link);
             receipt = await this.#rpc.spawnWorkOn({
               runId,
               issueNumber,
               repository: policy.repository.name,
-              worktreeRoot: prepared.worktreePath,
-              branch: prepared.branch,
-              baseBranch: prepared.baseBranch,
-              baseSha: prepared.baseSha,
+              repositoryIdentity: requirePreparedRepositoryIdentity(
+                link.prepared,
+              ),
+              worktreeRoot: link.prepared.worktreePath,
+              branch: link.prepared.branch,
+              baseBranch: link.prepared.baseBranch,
+              baseSha: link.prepared.baseSha,
+              expectedHeadSha:
+                link.reviewHeadSha ?? link.prepared.baseSha,
               leaseEpoch: link.leaseEpoch,
               leaseOwnerRunId: link.leaseOwnerRunId,
               policy,
@@ -1182,28 +1626,54 @@ export class ForgeWorkOnController {
             break;
           } catch (error) {
             launchFailure = error;
-            if (!isTransientProviderFailure(errorMessage(error))) throw error;
+            if (!isWorktreeBindingFailure(errorMessage(error))) break;
+            delete link.launchFailure;
             if (attempt >= 3) break;
+            try {
+              const rebound = await this.#git.rebind(
+                link.prepared,
+                ctx.signal,
+                policy.repository.name,
+                link.reviewHeadSha ?? link.prepared.baseSha,
+              );
+              await materializeForgeAgents(rebound.worktreePath);
+              link.prepared = rebound;
+            } catch (rebindError) {
+              launchFailure = rebindError;
+              break;
+            }
             link.providerRetries = attempt + 1;
+            link.launchFailure = "ambiguous";
             this.#persistLink(link);
             ctx.ui.notify(
-              `ForgeDock issue #${issueNumber} retained its durable launch intent after a transient provider failure; retrying (${attempt + 1}/3).`,
+              `ForgeDock issue #${issueNumber} rebound its launch to the exact worktree; retrying (${attempt + 1}/3).`,
               "warning",
             );
           }
         }
         if (receipt) {
+          const boundReceipt = receipt;
           this.#links.delete(link.subagentRunId);
-          link.subagentRunId = receipt.runId;
-          link.resultPath = receipt.resultPath;
+          link.subagentRunId = boundReceipt.runId;
+          link.resultPath = boundReceipt.resultPath;
           link.providerRetries = 0;
+          delete link.launchFailure;
+          this.#receiptBindings.add(boundReceipt.runId);
           this.#persistLink(link);
+          void this.#drainReceiptCompletion(link, ctx, boundReceipt)
+            .catch((error) => {
+              link.status = "failed";
+              this.#persistLink(link);
+              this.#emitLifecycle(link, { reason: errorMessage(error) });
+            })
+            .finally(() => this.#receiptBindings.delete(boundReceipt.runId));
         } else {
           link.status = "failed";
+          if (!isWorktreeBindingFailure(errorMessage(launchFailure)))
+            link.launchFailure = "ambiguous";
           this.#persistLink(link);
-          ctx.ui.notify(
-            `ForgeDock issue #${issueNumber} retained launch intent ${link.subagentRunId} after retry exhaustion: ${errorMessage(launchFailure)}`,
-            "warning",
+          throw new Error(
+            `${link.launchFailure === "ambiguous" ? "Ambiguous Forge provider launch after durable intent" : "Forge worktree binding retries exhausted"}: ${errorMessage(launchFailure)}`,
           );
         }
       } else {
@@ -1211,6 +1681,7 @@ export class ForgeWorkOnController {
           runId,
           resultPath,
           repository: policy.repository.name,
+          repositoryIdentity: requirePreparedRepositoryIdentity(prepared),
           issueNumber,
           leaseEpoch: link.leaseEpoch,
           leaseOwnerRunId: runId,
@@ -1219,6 +1690,7 @@ export class ForgeWorkOnController {
           branch: prepared.branch,
           baseBranch: prepared.baseBranch,
           baseSha: prepared.baseSha,
+          expectedHeadSha: prepared.baseSha,
           maxReviewRounds: policy.review.maxRounds,
           reviewerTimeoutMs: policy.subagents.reviewerTimeoutMs,
           verificationCommands: policy.verification.commands,
@@ -1263,7 +1735,9 @@ export class ForgeWorkOnController {
         // Preparation cleanup is compensating work; do not let a cancelled
         // launch leave its owned worktree or branch behind. Once run creation
         // is durable, its persisted link owns recovery and cleanup instead.
-        await this.#git.cleanup(prepared).catch(() => undefined);
+        await this.#git
+          .cleanup(prepared, undefined, prepared.baseSha)
+          .catch(() => undefined);
       this.#clearDirectBinding(runId);
       throw error;
     }
@@ -1275,6 +1749,60 @@ export class ForgeWorkOnController {
       const oldest = this.#earlyCompletions.keys().next().value;
       if (oldest) this.#earlyCompletions.delete(oldest);
     }
+  }
+
+  async #handleTopLevelCompletion(
+    link: ActiveRunLink,
+    ctx: ExtensionContext,
+    completion: ParsedAsyncCompletion,
+  ): Promise<void> {
+    if (completion.state === "paused" || completion.state === "running") return;
+    if (
+      completion.state === "failed" &&
+      isTransientProviderFailure(completion.error ?? "") &&
+      link.providerRetries < 3
+    ) {
+      await this.#retryProviderFailure(
+        link,
+        ctx,
+        completion.error ?? "Transient provider failure.",
+      );
+      return;
+    }
+    if (completion.state === "complete") {
+      delete link.refreshLaunch;
+      link.status = "finalizing";
+      this.#persistLink(link);
+      await this.#finalize(link, ctx);
+      return;
+    }
+    this.#clearDirectBinding(link.forgeRunId);
+    link.status = "failed";
+    this.#persistLink(link);
+    this.#emitLifecycle(link, {
+      reason: completion.error ?? `Subagent ${completion.state}.`,
+    });
+  }
+
+  async #drainReceiptCompletion(
+    link: ActiveRunLink,
+    ctx: ExtensionContext,
+    receipt: Pick<SubagentSpawnReceipt, "runId">,
+    activeNode?: ActiveNodeRunLink,
+  ): Promise<boolean> {
+    const buffered = this.#earlyCompletions.get(receipt.runId);
+    const observed =
+      buffered ??
+      parseAsyncCompletion(
+        await this.#rpc.status(receipt.runId).catch(() => undefined),
+      );
+    if (buffered) this.#earlyCompletions.delete(receipt.runId);
+    if (!observed || observed.state === "running" || observed.state === "paused")
+      return false;
+    if (activeNode)
+      await this.#reconcileActiveNode(link, ctx, observed.error, activeNode);
+    else await this.#handleTopLevelCompletion(link, ctx, observed);
+    return true;
   }
 
   async #reconcileActiveNode(
@@ -1317,7 +1845,7 @@ export class ForgeWorkOnController {
     reason: string,
   ): Promise<void> {
     if (!isLaunchSentinel(activeNode.subagentRunId))
-      await this.#rpc.stop(activeNode.subagentRunId).catch(() => undefined);
+      await this.#rpc.stopAndWait(activeNode.subagentRunId);
     const tokenProvider = createGitHubTokenProvider(
       this.#pi,
       link.prepared.repositoryRoot,
@@ -1406,6 +1934,8 @@ export class ForgeWorkOnController {
     if (!nodeId)
       throw new Error("Node reconciliation has no active node identity.");
     const parentNode = parentNodeFromId(nodeId);
+    if (parentNode)
+      await this.#rebindParentWorktree(link, ctx, parentNode);
     if (parentNode) {
       const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
       const tokenProvider = createGitHubTokenProvider(
@@ -1433,6 +1963,11 @@ export class ForgeWorkOnController {
     }
     if (!activeNode)
       throw new Error(`Node ${nodeId} has no active subagent correlation.`);
+    await this.#git.assertRepositoryIdentity(
+      link.prepared,
+      link.repository,
+      ctx.signal,
+    );
     const recoveryTokenProvider = createGitHubTokenProvider(
       this.#pi,
       link.prepared.repositoryRoot,
@@ -1451,8 +1986,15 @@ export class ForgeWorkOnController {
       throw new Error(
         `Node ${nodeId} has no durable state during reconciliation.`,
       );
-    const resultText = await readFile(activeNode.resultPath, "utf8").catch(
-      () => "",
+    const expectedHeadSha = expectedNodeArtifactHead(
+      link,
+      recoverySnapshot.state,
+      durableNode,
+    );
+    await this.#rebindLink(link, ctx.signal, expectedHeadSha);
+    const resultText = await readBoundedForgeResult(
+      link.prepared.worktreePath,
+      activeNode.resultPath,
     );
     const recoveryAction = reconcileLaunchState({
       durableStatus: durableNode.status,
@@ -1537,9 +2079,10 @@ export class ForgeWorkOnController {
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
       }
+      delete link.launchFailure;
     }
     const reviewerResult = nodeId.startsWith("review-")
-      ? await this.#loadReviewerResult(link, activeNode)
+      ? await this.#loadReviewerResult(link, activeNode, expectedHeadSha)
       : undefined;
     const nodeResult = reviewerResult
       ? {
@@ -1565,9 +2108,9 @@ export class ForgeWorkOnController {
             ? { blocker: "Reviewer returned blocked." }
             : {}),
         }
-      : await this.#loadNodeResult(link, activeNode);
+      : await this.#loadNodeResult(link, activeNode, expectedHeadSha);
     if (!nodeResult) {
-      if (!failure) return;
+      failure ??= `Bounded node ${nodeId} ended without a schema-valid result artifact.`;
       try {
         if (await this.#resumeInterruptedNode(link, ctx, failure, activeNode))
           return;
@@ -1642,6 +2185,71 @@ export class ForgeWorkOnController {
     const reviewerNode =
       nodeResult.node === "review-correctness" ||
       nodeResult.node === "review-security";
+    const journal = new RunJournal(store);
+    if (nodeResult.node === "implement" && nodeResult.noChange === true) {
+      if (nodeResult.status !== "completed" || nodeResult.changedFiles.length > 0)
+        throw new Error(
+          "No-change implement result must be completed with zero changed files.",
+        );
+      if (nodeResult.baseSha !== link.prepared.baseSha)
+        throw new Error("No-change implement result base SHA is not bound.");
+      await this.#rebindLink(link, ctx.signal, nodeResult.headSha);
+      await this.#git.assertClean(link.prepared.worktreePath, ctx.signal);
+      const actualHead = await this.#git.head(
+        link.prepared.worktreePath,
+        ctx.signal,
+      );
+      const actualFiles = await this.#git.changedFiles(
+        link.prepared.worktreePath,
+        nodeResult.baseSha,
+        ctx.signal,
+      );
+      if (actualHead !== nodeResult.baseSha || actualFiles.length > 0)
+        throw new Error(
+          "No-change implement result does not match the clean base worktree.",
+        );
+      await journal.append({
+        runId: link.forgeRunId,
+        type: "node.completed",
+        payload: {
+          nodeId: nodeResult.nodeId,
+          node: nodeResult.node,
+          attempt: nodeAttempt(nodeResult.nodeId),
+          round: nodeAttempt(nodeResult.nodeId),
+          headSha: nodeResult.headSha,
+          baseSha: nodeResult.baseSha,
+          outcome: "invalid",
+          evidence: [
+            ...nodeResult.evidence,
+            "FORGE:COMMIT:NO-CHANGE",
+          ],
+          verificationResults: nodeResult.verification,
+        },
+        idempotencyKey: `node:${nodeResult.nodeId}:completed`,
+        sessionId: ctx.sessionManager.getSessionId(),
+        message: `Complete no-change ForgeDock node ${nodeResult.nodeId}`,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      delete link.activeNodes[activeNode.subagentRunId];
+      this.#links.delete(activeNode.subagentRunId);
+      link.currentNodeId = "close-1";
+      link.status = "running";
+      this.#persistLink(link);
+      const noChangePull = await github.findPullRequest(
+        link.prepared.branch,
+        ctx.signal,
+      );
+      await this.#finalizeNoChangeClosure({
+        link,
+        journal,
+        github,
+        projector,
+        pullNumber: noChangePull?.number,
+        sessionId: ctx.sessionManager.getSessionId(),
+        ctx,
+      });
+      return;
+    }
     if (nodeResult.status === "completed" && !reviewerNode) {
       if (!nodeResult.artifact)
         throw new Error(
@@ -1673,7 +2281,6 @@ export class ForgeWorkOnController {
       link.planContext = JSON.stringify(nodeResult.artifact, null, 2);
       link.builderContract = completedBuilderContract;
     }
-    const journal = new RunJournal(store);
     const reportedVerification = new Map(
       nodeResult.verification.map((result) => [result.name, result]),
     );
@@ -1849,6 +2456,7 @@ export class ForgeWorkOnController {
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
     }
+    delete link.launchFailure;
     delete link.activeNodes[activeNode.subagentRunId];
     this.#links.delete(activeNode.subagentRunId);
     if (link.currentNodeId === nodeId) link.currentNodeId = undefined;
@@ -1938,14 +2546,17 @@ export class ForgeWorkOnController {
   async #loadReviewerResult(
     link: ActiveRunLink,
     activeNode: ActiveNodeRunLink,
+    expectedHeadSha = link.reviewHeadSha ?? link.prepared.baseSha,
   ): Promise<ForgeReviewerResult | undefined> {
     const payload = await this.#rpc
       .status(activeNode.subagentRunId)
       .catch(() => undefined);
+    await this.#rebindLink(link, undefined, expectedHeadSha);
     let result = findForgeReviewerResult(payload);
     if (!result) {
-      const resultText = await readFile(activeNode.resultPath, "utf8").catch(
-        () => "",
+      const resultText = await readBoundedForgeResult(
+        link.prepared.worktreePath,
+        activeNode.resultPath,
       );
       result =
         findForgeReviewerResult(resultText) ??
@@ -1964,7 +2575,7 @@ export class ForgeWorkOnController {
       throw new Error(
         `Reviewer identity mismatch: expected ${expectedReviewer}.`,
       );
-    if (result.headSha !== (link.reviewHeadSha ?? result.headSha))
+    if (result.headSha !== expectedHeadSha)
       throw new Error("Reviewer result head SHA mismatch.");
     if (
       result.findings.some(
@@ -1980,21 +2591,30 @@ export class ForgeWorkOnController {
   }
 
   async #loadNodeResult(
-    _link: ActiveRunLink,
+    link: ActiveRunLink,
     activeNode: ActiveNodeRunLink,
+    expectedHeadSha = link.reviewHeadSha ?? link.prepared.baseSha,
   ): Promise<ForgeNodeResult | undefined> {
     const payload = await this.#rpc
       .status(activeNode.subagentRunId)
       .catch(() => undefined);
-    let result = findForgeNodeResult(payload);
+    const statusResult = findForgeNodeResult(payload);
+    await this.#rebindLink(
+      link,
+      undefined,
+      statusResult?.headSha ?? expectedHeadSha,
+    );
+    let result = statusResult;
     if (!result) {
-      const resultText = await readFile(activeNode.resultPath, "utf8").catch(
-        () => "",
+      const resultText = await readBoundedForgeResult(
+        link.prepared.worktreePath,
+        activeNode.resultPath,
       );
       result =
         findForgeNodeResult(resultText) ??
         findForgeNodeResult(extractJsonObject(resultText));
     }
+    if (result) await this.#rebindLink(link, undefined, result.headSha);
     return result;
   }
 
@@ -2389,6 +3009,8 @@ export class ForgeWorkOnController {
         execution: {
           kind: "work-on",
           worktreePath: link.prepared.worktreePath,
+          repositoryIdentity: requirePreparedRepositoryIdentity(link.prepared),
+          prepared: link.prepared,
         },
         // Each synthetic work-on review ID owns one fresh journal, so its
         // internal panel sequence always starts at round 1. The external work-on
@@ -2719,12 +3341,19 @@ export class ForgeWorkOnController {
         signal: ctx.signal,
       });
     } else if (node.node === "close") {
+      if (isNoChangeClosure(current.state) && pull && !pull.merged && pull.state === "open")
+        await github.closePullRequest(pull.number, ctx.signal);
       await github.closeIssue(link.issueNumber, ctx.signal);
       const closed = await github.getIssue(link.issueNumber, ctx.signal);
       if (closed.state !== "closed")
         throw new Error("Issue close read-back failed.");
       outcome = "closed";
-      evidence = ["issue close read-back passed"];
+      evidence = [
+        "issue close read-back passed",
+        ...(isNoChangeClosure(current.state)
+          ? ["FORGE:COMMIT:NO-CHANGE"]
+          : []),
+      ];
       await journal.append({
         runId: link.forgeRunId,
         type: "effect.recorded",
@@ -2755,10 +3384,22 @@ export class ForgeWorkOnController {
         )
         .sort((left, right) => right.attempt - left.attempt)[0];
       const terminalDecision = decisionNode?.finalReviewDecision;
+      const expectedCleanupHeadSha =
+        terminalDecision?.headSha ??
+        link.reviewHeadSha ??
+        link.prepared.baseSha;
       // Capture all Git-dependent terminal evidence before deleting the owned
       // worktree. Cleanup is destructive, so no later renderer may run git diff.
+      let worktreePresent = true;
+      try {
+        await lstat(link.prepared.worktreePath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT")
+          worktreePresent = false;
+        else throw error;
+      }
       const terminalAggregate =
-        pull && terminalDecision && mergeNode?.headSha
+        worktreePresent && pull && terminalDecision && mergeNode?.headSha
           ? await this.#aggregateFromState(
               link,
               terminalState.state,
@@ -2768,8 +3409,17 @@ export class ForgeWorkOnController {
       const cleanupEffect =
         terminalState.state.effects[`cleanup:${link.forgeRunId}`];
       if (!cleanupEffect) {
-        await this.#git.deleteRemoteBranch(link.prepared, ctx.signal);
-        await this.#git.cleanup(link.prepared, ctx.signal);
+        await this.#git.deleteRemoteBranch(
+          link.prepared,
+          ctx.signal,
+          link.repository,
+          expectedCleanupHeadSha,
+        );
+        await this.#git.cleanup(
+          link.prepared,
+          ctx.signal,
+          expectedCleanupHeadSha,
+        );
         await journal.append({
           runId: link.forgeRunId,
           type: "effect.recorded",
@@ -2895,19 +3545,27 @@ export class ForgeWorkOnController {
           const projection = await projector.projectEventWithReceipt({
             issueNumber: link.issueNumber,
             event,
-            markdown: terminalRunMarkdown(link, terminal.state),
+            markdown:
+              isNoChangeClosure(terminal.state)
+                ? noChangeClosureMarkdown(link, terminal.state)
+                : terminalRunMarkdown(link, terminal.state),
             ...(ctx.signal ? { signal: ctx.signal } : {}),
           });
           const receipts: GitHubProjectionReceipt[] = [...projection.receipts];
-          if (link.terminalOutcome === "merged")
-            receipts.push(
-              await projector.setWorkflowLabelWithReceipt(
-                link.issueNumber,
-                WORKFLOW_LABEL_BY_STAGE.merged,
-                ctx.signal,
-                `${event.eventId}:workflow`,
-              ),
-            );
+          receipts.push(
+            link.terminalOutcome === "merged"
+              ? await projector.setWorkflowLabelWithReceipt(
+                  link.issueNumber,
+                  WORKFLOW_LABEL_BY_STAGE.merged,
+                  ctx.signal,
+                  `${event.eventId}:workflow`,
+                )
+              : await projector.clearWorkflowLabelWithReceipt(
+                  link.issueNumber,
+                  ctx.signal,
+                  `${event.eventId}:workflow`,
+                ),
+          );
           await recordProjectionReceipts(
             journal,
             link.forgeRunId,
@@ -3063,6 +3721,62 @@ export class ForgeWorkOnController {
     };
   }
 
+  async #spawnBoundNode(
+    link: ActiveRunLink,
+    node: {
+      nodeId: string;
+      node: string;
+      attempt: number;
+      headSha?: string;
+    },
+    policy: ForgePolicy,
+    issueContext = link.issueContext,
+  ): Promise<SubagentSpawnReceipt> {
+    const launchInput = {
+      runId: link.forgeRunId,
+      issueNumber: link.issueNumber,
+      repository: link.repository,
+      repositoryIdentity: requirePreparedRepositoryIdentity(link.prepared),
+      worktreeRoot: link.prepared.worktreePath,
+      branch: link.prepared.branch,
+      baseBranch: link.prepared.baseBranch,
+      baseSha: link.prepared.baseSha,
+      expectedHeadSha:
+        node.headSha ?? link.reviewHeadSha ?? link.prepared.baseSha,
+      leaseEpoch: link.leaseEpoch,
+      leaseOwnerRunId: link.leaseOwnerRunId,
+      policy,
+      ...(link.builderContract
+        ? { builderContract: link.builderContract }
+        : {}),
+      issueContext,
+      node: {
+        nodeId: node.nodeId,
+        node: node.node as WorkflowNode,
+        attempt: node.attempt,
+        ...(node.headSha ? { headSha: node.headSha } : {}),
+      },
+    };
+    if (
+      node.node === "review-correctness" ||
+      node.node === "review-security"
+    ) {
+      const reviewHeadSha =
+        node.headSha ?? link.reviewHeadSha ?? link.prepared.baseSha;
+      return this.#rpc.spawnReviewNode({
+        ...launchInput,
+        reviewHeadSha,
+        node: {
+          nodeId: node.nodeId,
+          node: node.node,
+          attempt: node.attempt,
+          headSha: reviewHeadSha,
+        },
+      });
+    }
+    return this.#rpc.spawnNode(launchInput);
+  }
+
   async #dispatchNode(
     link: ActiveRunLink,
     node: {
@@ -3082,8 +3796,15 @@ export class ForgeWorkOnController {
         node.node,
       )
     ) {
+      await this.#rebindParentWorktree(
+        link,
+        ctx,
+        node.node,
+        node.headSha ?? link.reviewHeadSha ?? link.prepared.baseSha,
+      );
       link.currentNodeId = node.nodeId;
       link.reviewHeadSha = node.headSha ?? link.reviewHeadSha;
+      delete link.launchFailure;
       this.#persistLink(link);
       await this.#runParentNode(link, node, policy, store, ctx);
       return;
@@ -3094,34 +3815,27 @@ export class ForgeWorkOnController {
       link.forgeRunId,
       node.nodeId,
     );
-    await journal.append({
-      runId: link.forgeRunId,
-      type: "node.queued",
-      payload: {
-        nodeId: node.nodeId,
-        node: node.node,
-        attempt: node.attempt,
-        ...(node.round ? { round: node.round } : {}),
-        baseSha: link.prepared.baseSha,
-        resultPath,
-      },
-      idempotencyKey: `node:${node.nodeId}:queued`,
-      sessionId: ctx.sessionManager.getSessionId(),
-      message: `Queue ForgeDock node ${node.nodeId}`,
-      ...(ctx.signal ? { signal: ctx.signal } : {}),
-    });
-    if (node.node === "review-correctness" || node.node === "review-security") {
-      await this.#git.assertClean(link.prepared.worktreePath, ctx.signal);
-      const actualHead = await this.#git.head(
-        link.prepared.worktreePath,
-        ctx.signal,
-      );
-      if (node.headSha && actualHead !== node.headSha)
-        throw new Error(
-          `Reviewer node ${node.nodeId} requires frozen head ${node.headSha}, found ${actualHead}.`,
-        );
+    let queuedState = await store.readRun(link.forgeRunId, ctx.signal);
+    if (!queuedState.state?.nodes[node.nodeId]) {
+      await journal.append({
+        runId: link.forgeRunId,
+        type: "node.queued",
+        payload: {
+          nodeId: node.nodeId,
+          node: node.node,
+          attempt: node.attempt,
+          ...(node.round ? { round: node.round } : {}),
+          ...(node.headSha ? { headSha: node.headSha } : {}),
+          baseSha: link.prepared.baseSha,
+          resultPath,
+        },
+        idempotencyKey: `node:${node.nodeId}:queued`,
+        sessionId: ctx.sessionManager.getSessionId(),
+        message: `Queue ForgeDock node ${node.nodeId}`,
+        ...(ctx.signal ? { signal: ctx.signal } : {}),
+      });
+      queuedState = await store.readRun(link.forgeRunId, ctx.signal);
     }
-    const queuedState = await store.readRun(link.forgeRunId, ctx.signal);
     if (!link.builderContract && queuedState.state) {
       const durablePlan = Object.values(queuedState.state.nodes)
         .filter(
@@ -3135,7 +3849,11 @@ export class ForgeWorkOnController {
         link.builderContract = durablePlan.builderContract;
     }
     const queuedNode = queuedState.state?.nodes[node.nodeId];
-    if (queuedNode?.status === "completed") return;
+    if (queuedNode?.status === "completed") {
+      delete link.launchFailure;
+      this.#persistLink(link);
+      return;
+    }
     if (queuedNode?.status === "running" && queuedNode.subagentRunId) {
       const existing = {
         nodeId: node.nodeId,
@@ -3150,6 +3868,7 @@ export class ForgeWorkOnController {
       link.resultPath = existing.resultPath;
       link.nodeResultPath = existing.resultPath;
       link.currentNodeId = node.nodeId;
+      delete link.launchFailure;
       link.status = "running";
       this.#persistLink(link);
       return;
@@ -3168,6 +3887,7 @@ export class ForgeWorkOnController {
     link.resultPath = resultPath;
     link.nodeResultPath = resultPath;
     link.currentNodeId = node.nodeId;
+    delete link.launchFailure;
     link.status = "running";
     this.#persistLink(link);
     const started = await journal.append({
@@ -3182,6 +3902,7 @@ export class ForgeWorkOnController {
         resultPath,
         launchNonce: launchIntent.launchNonce,
         launchIntent: true,
+        ...(node.headSha ? { headSha: node.headSha } : {}),
         baseSha: link.prepared.baseSha,
       },
       idempotencyKey: `node:${node.nodeId}:started`,
@@ -3216,72 +3937,85 @@ export class ForgeWorkOnController {
       link.resultPath = durableResultPath;
       link.nodeResultPath = durableResultPath;
       link.currentNodeId = node.nodeId;
+      delete link.launchFailure;
       link.status = "running";
       this.#persistLink(link);
       return;
     }
-    const launchInput = {
-      runId: link.forgeRunId,
-      issueNumber: link.issueNumber,
-      repository: link.repository,
-      worktreeRoot: link.prepared.worktreePath,
-      branch: link.prepared.branch,
-      baseBranch: link.prepared.baseBranch,
-      baseSha: link.prepared.baseSha,
-      leaseEpoch: link.leaseEpoch,
-      leaseOwnerRunId: link.leaseOwnerRunId,
-      policy,
-      ...(link.builderContract
-        ? { builderContract: link.builderContract }
-        : {}),
-      issueContext:
+    try {
+      const rebound = await this.#git.rebind(
+        link.prepared,
+        ctx.signal,
+        link.repository,
+        node.headSha ?? link.reviewHeadSha ?? link.prepared.baseSha,
+      );
+      await materializeForgeAgents(rebound.worktreePath);
+      if (
+        rebound.repositoryRoot !== link.prepared.repositoryRoot ||
+        rebound.worktreePath !== link.prepared.worktreePath
+      )
+        link.prepared = rebound;
+    } catch (error) {
+      throw new Error(
+        `Forge worktree binding failure before ${node.node}: ${errorMessage(error)}`,
+        { cause: error },
+      );
+    }
+    this.#persistLink(link);
+    if (node.node === "review-correctness" || node.node === "review-security") {
+      await this.#git.assertClean(link.prepared.worktreePath, ctx.signal);
+      const actualHead = await this.#git.head(
+        link.prepared.worktreePath,
+        ctx.signal,
+      );
+      if (node.headSha && actualHead !== node.headSha)
+        throw new Error(
+          `Reviewer node ${node.nodeId} requires frozen head ${node.headSha}, found ${actualHead}.`
+        );
+    }
+    link.launchFailure = "ambiguous";
+    this.#persistLink(link);
+    let receipt;
+    try {
+      receipt = await this.#spawnBoundNode(
+        link,
+        node,
+        policy,
         node.node === "implement" && node.attempt > 1
           ? `${issueContext}\n\nThis is immutable remediation attempt ${node.attempt}. Read the durable decision/review artifacts and apply only confirmed or likely in-contract findings. Do not repeat investigation or planning.`
           : issueContext,
-      node,
-      ...(node.node === "review-correctness" || node.node === "review-security"
-        ? {
-            reviewHeadSha:
-              node.headSha ?? link.reviewHeadSha ?? link.prepared.baseSha,
-          }
-        : {}),
-    };
-    let receipt;
-    try {
-      receipt =
-        node.node === "review-correctness" || node.node === "review-security"
-          ? await this.#rpc.spawnReviewNode(
-              launchInput as typeof launchInput & {
-                node: {
-                  nodeId: string;
-                  node: "review-correctness" | "review-security";
-                  attempt: number;
-                  headSha?: string;
-                };
-              },
-            )
-          : await this.#rpc.spawnNode(launchInput);
+      );
     } catch (error) {
-      const reason = `Provider launch requires autonomous retry after durable intent: ${errorMessage(error)}`;
-      await journal.append({
-        runId: link.forgeRunId,
-        type: "node.failed",
-        payload: {
-          nodeId: node.nodeId,
-          node: node.node,
-          attempt: node.attempt,
-          ...(node.round ? { round: node.round } : {}),
-          subagentRunId: sentinel,
-          resultPath,
-          launchNonce: launchIntent.launchNonce,
-          launchIntent: true,
-          reason,
-        },
-        idempotencyKey: `node:${node.nodeId}:launch-ambiguous`,
-        sessionId: ctx.sessionManager.getSessionId(),
-        message: `Record recoverable provider launch failure for ForgeDock node ${node.nodeId}`,
-        ...(ctx.signal ? { signal: ctx.signal } : {}),
-      });
+      const worktreeBindingFailure = isWorktreeBindingFailure(
+        errorMessage(error),
+      );
+      const reason = worktreeBindingFailure
+        ? `Forge worktree binding failure before provider receipt: ${errorMessage(error)}`
+        : `Ambiguous Forge provider launch after durable intent: ${errorMessage(error)}`;
+      if (!worktreeBindingFailure) {
+        link.launchFailure = "ambiguous";
+        await journal.append({
+          runId: link.forgeRunId,
+          type: "node.failed",
+          payload: {
+            nodeId: node.nodeId,
+            node: node.node,
+            attempt: node.attempt,
+            ...(node.round ? { round: node.round } : {}),
+            subagentRunId: sentinel,
+            resultPath,
+            launchNonce: launchIntent.launchNonce,
+            launchIntent: true,
+            reason,
+          },
+          idempotencyKey: `node:${node.nodeId}:launch-ambiguous`,
+          sessionId: ctx.sessionManager.getSessionId(),
+          message: `Record recoverable provider launch failure for ForgeDock node ${node.nodeId}`,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        });
+      } else {
+        delete link.launchFailure;
+      }
       link.status = "failed";
       this.#persistLink(link);
       this.#emitLifecycle(link, { reason, nodeId: node.nodeId });
@@ -3338,6 +4072,12 @@ export class ForgeWorkOnController {
         ctx,
       );
     } catch (error) {
+      try {
+        await this.#rpc.stopAndWait(receipt.runId);
+      } finally {
+        this.#receiptBindings.delete(receipt.runId);
+      }
+      link.launchFailure = "ambiguous";
       const reason = `launch-receipt-bind-failed: ${errorMessage(error)}`;
       let recorded = false;
       try {
@@ -3373,6 +4113,7 @@ export class ForgeWorkOnController {
     }
     this.#receiptBindings.delete(receipt.runId);
     link.providerRetries = 0;
+    delete link.launchFailure;
     link.status = "running";
     this.#persistLink(link);
     const buffered = this.#earlyCompletions.get(receipt.runId);
@@ -3401,6 +4142,8 @@ export class ForgeWorkOnController {
   async reactivateOrchestrationIssue(
     orchestrationId: string,
     issueNumber: number,
+    sessionId = "unknown",
+    ctx?: ExtensionContext,
   ): Promise<
     | {
         forgeRunId: string;
@@ -3415,6 +4158,17 @@ export class ForgeWorkOnController {
         candidate.issueNumber === issueNumber,
     );
     if (!link) return undefined;
+    if (link.launchFailure === "ambiguous") return undefined;
+    if (link.launchFailure === "binding" && link.refreshLaunch) {
+      if (!ctx) return undefined;
+      await this.#retryRefreshBindingFailure(link, ctx);
+      if (link.status !== "refreshing") return undefined;
+      return {
+        forgeRunId: link.forgeRunId,
+        subagentRunId: link.subagentRunId,
+        state: "running",
+      };
+    }
     if (isLaunchSentinel(link.subagentRunId)) {
       if (link.providerRetries >= 3) {
         link.status = "failed";
@@ -3425,36 +4179,202 @@ export class ForgeWorkOnController {
           state: "paused",
         };
       }
-      const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
       const sentinelRunId = link.subagentRunId;
+      const boundedNodeId = link.currentNodeId;
       link.providerRetries += 1;
+      link.launchFailure = "ambiguous";
       link.status = "running";
       this.#persistLink(link);
+      let providerLaunchAttempted = false;
+      let receipt: SubagentSpawnReceipt | undefined;
       try {
-        const receipt = await this.#rpc.spawnWorkOn({
-          runId: link.forgeRunId,
-          issueNumber: link.issueNumber,
-          repository: link.repository,
-          worktreeRoot: link.prepared.worktreePath,
-          branch: link.prepared.branch,
-          baseBranch: link.prepared.baseBranch,
-          baseSha: link.prepared.baseSha,
-          leaseEpoch: link.leaseEpoch,
-          leaseOwnerRunId: link.leaseOwnerRunId,
-          policy,
-          issueContext: link.issueContext,
-        });
-        this.#links.delete(sentinelRunId);
+        link.prepared = await this.#git.rebind(
+          link.prepared,
+          undefined,
+          link.repository,
+          link.reviewHeadSha ?? link.prepared.baseSha,
+        );
+        await materializeForgeAgents(link.prepared.worktreePath);
+        this.#persistLink(link);
+        const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
+        let boundedNode:
+          | import("../core/state.ts").NodeState
+          | undefined;
+        let store: GitHubStateBranchStore | undefined;
+        const receiptPreviousRunId = sentinelRunId;
+        let receiptTransportRetries = 0;
+        let receiptLaunchNonce: string | undefined;
+        if (boundedNodeId) {
+          const tokenProvider = createGitHubTokenProvider(
+            this.#pi,
+            link.prepared.repositoryRoot,
+          );
+          store = new GitHubStateBranchStore(
+            new FetchGitHubTransport({ tokenProvider }),
+            link.repository,
+            link.stateBranch,
+          );
+          const snapshot = await store.readRun(link.forgeRunId);
+          boundedNode = snapshot.state?.nodes[boundedNodeId];
+          if (parentNodeFromId(boundedNodeId))
+            throw new Error(
+              `Forge worktree binding retry cannot relaunch parent node ${boundedNodeId}.`,
+            );
+          if (!boundedNode)
+            throw new Error(
+              `Forge worktree binding retry lost bounded node ${boundedNodeId}.`,
+            );
+          const activeIntent = link.activeNodes[sentinelRunId];
+          if (!activeIntent)
+            throw new Error(
+              `Forge worktree binding retry lost launch intent for ${boundedNodeId}.`,
+            );
+          if (boundedNode.status === "queued") {
+            const started = await new RunJournal(store).append({
+              runId: link.forgeRunId,
+              type: "node.started",
+              payload: {
+                nodeId: boundedNode.nodeId,
+                node: boundedNode.node,
+                attempt: boundedNode.attempt,
+                ...(boundedNode.round ? { round: boundedNode.round } : {}),
+                subagentRunId: sentinelRunId,
+                resultPath: activeIntent.resultPath,
+                launchNonce: activeIntent.launchNonce,
+                launchIntent: true,
+                baseSha: boundedNode.baseSha ?? link.prepared.baseSha,
+                ...(boundedNode.headSha
+                  ? { headSha: boundedNode.headSha }
+                  : {}),
+              },
+              idempotencyKey: `node:${boundedNode.nodeId}:started`,
+              sessionId,
+              message: `Record launch intent for ForgeDock node ${boundedNode.nodeId}`,
+            });
+            boundedNode = started.state?.nodes[boundedNodeId];
+            if (!boundedNode)
+              throw new Error(
+                `Forge worktree binding retry lost bounded node ${boundedNodeId}.`,
+              );
+          }
+          if (
+            boundedNode.status !== "running" ||
+            boundedNode.subagentRunId !== sentinelRunId
+          )
+            throw new Error(
+              `Forge worktree binding retry lost bounded node ${boundedNodeId}.`,
+            );
+          if (
+            boundedNode.node === "review-correctness" ||
+            boundedNode.node === "review-security"
+          ) {
+            await this.#git.assertClean(
+              link.prepared.worktreePath,
+              undefined,
+            );
+            const actualHead = await this.#git.head(
+              link.prepared.worktreePath,
+              undefined,
+            );
+            if (boundedNode.headSha && actualHead !== boundedNode.headSha)
+              throw new Error(
+                `Reviewer node ${boundedNode.nodeId} requires frozen head ${boundedNode.headSha}, found ${actualHead}.`,
+              );
+          }
+          receiptTransportRetries = boundedNode.transportRetries ?? 0;
+          receiptLaunchNonce = activeIntent.launchNonce;
+          providerLaunchAttempted = true;
+          receipt = await this.#spawnBoundNode(link, boundedNode, policy);
+        } else {
+          providerLaunchAttempted = true;
+          receipt = await this.#rpc.spawnWorkOn({
+            runId: link.forgeRunId,
+            issueNumber: link.issueNumber,
+            repository: link.repository,
+            repositoryIdentity: requirePreparedRepositoryIdentity(link.prepared),
+            worktreeRoot: link.prepared.worktreePath,
+            branch: link.prepared.branch,
+            baseBranch: link.prepared.baseBranch,
+            baseSha: link.prepared.baseSha,
+            expectedHeadSha:
+              link.reviewHeadSha ?? link.prepared.baseSha,
+            leaseEpoch: link.leaseEpoch,
+            leaseOwnerRunId: link.leaseOwnerRunId,
+            policy,
+            issueContext: link.issueContext,
+          });
+        }
+        const launchNonce =
+          link.activeNodes[receiptPreviousRunId]?.launchNonce ??
+          receiptLaunchNonce;
+        this.#receiptBindings.add(receipt.runId);
+        this.#links.delete(receiptPreviousRunId);
+        if (boundedNode) {
+          delete link.activeNodes[receiptPreviousRunId];
+          link.activeNodes[receipt.runId] = {
+            nodeId: boundedNode.nodeId,
+            subagentRunId: receipt.runId,
+            resultPath: receipt.resultPath,
+            ...(launchNonce ? { launchNonce } : {}),
+          };
+          link.currentNodeId = boundedNode.nodeId;
+          link.nodeResultPath = receipt.resultPath;
+          await new RunJournal(store!).append({
+            runId: link.forgeRunId,
+            type: "node.resumed",
+            payload: {
+              nodeId: boundedNode.nodeId,
+              node: boundedNode.node,
+              attempt: boundedNode.attempt,
+              ...(boundedNode.round ? { round: boundedNode.round } : {}),
+              subagentRunId: receipt.runId,
+              previousSubagentRunId: receiptPreviousRunId,
+              resultPath: receipt.resultPath,
+              ...(launchNonce ? { launchNonce } : {}),
+              launchReceipt: true,
+              transportRetries: receiptTransportRetries,
+              baseSha: boundedNode.baseSha ?? link.prepared.baseSha,
+              ...(boundedNode.headSha
+                ? { headSha: boundedNode.headSha }
+                : {}),
+              reason: "Recovered after a stale or wrong Pi worktree binding.",
+            },
+            idempotencyKey: `node:${boundedNode.nodeId}:worktree-binding-receipt:${receiptTransportRetries}`,
+            sessionId,
+            message: `Bind fresh ForgeDock node ${boundedNode.nodeId} after worktree recovery`,
+          });
+        }
         link.subagentRunId = receipt.runId;
         link.resultPath = receipt.resultPath;
+        delete link.launchFailure;
         link.status = "running";
         this.#persistLink(link);
+        if (ctx) {
+          const activeNode = boundedNode
+            ? link.activeNodes[receipt.runId]
+            : undefined;
+          await this.#drainReceiptCompletion(
+            link,
+            ctx,
+            receipt,
+            activeNode,
+          );
+        }
         return {
           forgeRunId: link.forgeRunId,
           subagentRunId: link.subagentRunId,
           state: "running",
         };
-      } catch {
+      } catch (error) {
+        if (receipt) {
+          await this.#rpc.stopAndWait(receipt.runId);
+          link.launchFailure = "ambiguous";
+        } else if (
+          !providerLaunchAttempted ||
+          isWorktreeBindingFailure(errorMessage(error))
+        ) {
+          delete link.launchFailure;
+        }
         link.status = "failed";
         this.#persistLink(link);
         return {
@@ -3462,17 +4382,57 @@ export class ForgeWorkOnController {
           subagentRunId: link.subagentRunId,
           state: "paused",
         };
+      } finally {
+        if (receipt) this.#receiptBindings.delete(receipt.runId);
       }
     }
     const payload = await this.#rpc.status(link.subagentRunId);
     const completion = findAsyncCompletionForRun(payload, link.subagentRunId);
-    const resultText = await readFile(link.resultPath, "utf8").catch(() => "");
-    const durableResult = findForgeWorkOnResult(resultText);
+    const statusResult = findForgeWorkOnResult(payload);
+    const expectedHeadSha =
+      statusResult?.headSha ?? (await this.#expectedHeadForResult(link));
+    await this.#rebindLink(link, undefined, expectedHeadSha);
+    const resultText = statusResult
+      ? ""
+      : await readBoundedForgeResult(
+          link.prepared.worktreePath,
+          link.resultPath,
+        );
+    const durableResult = statusResult ?? findForgeWorkOnResult(resultText);
     const recoverableBlocker =
       durableResult?.blocker &&
       isRecoverableWorkOnBlocker(durableResult.blocker)
         ? durableResult.blocker
         : undefined;
+    const worktreeBindingFailure =
+      isWorktreeBindingFailure(completion?.error ?? "") ||
+      isWorktreeBindingFailure(recoverableBlocker ?? "");
+    if (
+      worktreeBindingFailure &&
+      !shouldTrustDurableWorkOnResult(durableResult, completion?.state) &&
+      link.providerRetries < 3
+    ) {
+      if (!isLaunchSentinel(link.subagentRunId)) {
+        const previousRunId = link.subagentRunId;
+        await this.#rpc.stopAndWait(previousRunId);
+        const intent = createNodeLaunchIntent(
+          `work-on-rebind-${link.providerRetries + 1}`,
+          link.resultPath,
+        );
+        this.#links.delete(previousRunId);
+        link.subagentRunId = intent.sentinelRunId;
+        link.status = "running";
+        this.#persistLink(link);
+      }
+      // Re-enter the existing sentinel recovery path so one fresh launch is
+      // bound to the recorded Forge worktree without rotating the run.
+      return this.reactivateOrchestrationIssue(
+        orchestrationId,
+        issueNumber,
+        sessionId,
+        ctx,
+      );
+    }
     if (shouldTrustDurableWorkOnResult(durableResult, completion?.state)) {
       link.status = "running";
       this.#persistLink(link);
@@ -3604,6 +4564,11 @@ export class ForgeWorkOnController {
     const { orchestrationId, forgeRunId, subagentRunId, repositoryRoot, ctx } =
       input;
     const { policy } = await loadForgePolicy(repositoryRoot);
+    await this.#git.assertRepositoryRoot(
+      repositoryRoot,
+      policy.repository.name,
+      ctx.signal,
+    );
     const tokenProvider = createGitHubTokenProvider(this.#pi, repositoryRoot);
     const store = new GitHubStateBranchStore(
       new FetchGitHubTransport({ tokenProvider }),
@@ -3645,6 +4610,26 @@ export class ForgeWorkOnController {
       );
       const branch = `forge/issue-${state.issueNumber}-${forgeRunId.slice(0, 8)}`;
       const baseSha = this.#adoptedBaseSha(state) ?? "";
+      const adoptedHeadSha = this.#adoptedHeadSha(state) ?? baseSha;
+      let prepared: PreparedWorktree;
+      try {
+        prepared = await this.#git.adoptPreparedWorktree(
+          {
+            repositoryRoot,
+            worktreePath,
+            branch,
+            baseBranch: state.integrationBranch,
+            baseSha,
+          },
+          state.repository,
+          ctx.signal,
+          adoptedHeadSha,
+        );
+      } catch (error) {
+        if (!isLaunchSentinel(subagentRunId))
+          await this.#rpc.stopAndWait(subagentRunId);
+        throw error;
+      }
       link = {
         forgeRunId,
         subagentRunId,
@@ -3652,18 +4637,12 @@ export class ForgeWorkOnController {
         repository: state.repository,
         stateBranch: policy.state.branch,
         resultPath: join(
-          worktreePath,
+          prepared.worktreePath,
           ".pi",
           "forge",
           `${forgeRunId}-work-on.json`,
         ),
-        prepared: {
-          repositoryRoot,
-          worktreePath,
-          branch,
-          baseBranch: state.integrationBranch,
-          baseSha,
-        },
+        prepared,
         status: "running",
         executionMode: "orchestrated",
         orchestrationId,
@@ -3673,6 +4652,7 @@ export class ForgeWorkOnController {
         heartbeatSeconds: policy.state.heartbeatSeconds,
         lastHeartbeatAt: newLease.lastHeartbeatAt,
         reviewBaseSha: baseSha,
+        reviewHeadSha: adoptedHeadSha,
         refreshes: 0,
         providerRetries: 0,
         remediationAttempts: 0,
@@ -3687,6 +4667,14 @@ export class ForgeWorkOnController {
       state.issueNumber,
       ctx,
     );
+  }
+
+  #adoptedHeadSha(
+    state: import("../core/state.ts").RunState,
+  ): string | undefined {
+    return Object.values(state.nodes)
+      .filter((node) => node.status === "completed" && node.headSha)
+      .sort((left, right) => right.attempt - left.attempt)[0]?.headSha;
   }
 
   /** Frozen base SHA recorded by prepare-worktree, when reconstructable. */
@@ -3788,6 +4776,8 @@ export class ForgeWorkOnController {
         current.state.status,
         link.prepared,
         this.#git,
+        expectedNodeArtifactHead(link, current.state),
+        link.repository,
       );
       const authority =
         current.state.authorityMode === "run-scoped"
@@ -3816,11 +4806,15 @@ export class ForgeWorkOnController {
   }
 
   async stopProviderRuns(runIds: readonly string[]): Promise<void> {
-    await Promise.allSettled(
+    const stops = await Promise.allSettled(
       [...new Set(runIds)]
         .filter((runId) => !isLaunchSentinel(runId))
-        .map((runId) => this.#rpc.stop(runId)),
+        .map((runId) => this.#rpc.stopAndWait(runId)),
     );
+    const failure = stops.find(
+      (entry): entry is PromiseRejectedResult => entry.status === "rejected",
+    );
+    if (failure) throw failure.reason;
   }
 
   async stopOrchestration(
@@ -3866,7 +4860,8 @@ export class ForgeWorkOnController {
         )
           providerRunIds.add(link.subagentRunId);
         for (const runId of providerRunIds) {
-          if (!isLaunchSentinel(runId)) await this.#rpc.stop(runId);
+          if (!isLaunchSentinel(runId))
+            await this.#rpc.stopAndWait(runId);
         }
         await new RunJournal(store).append({
           runId: link.forgeRunId,
@@ -3887,6 +4882,8 @@ export class ForgeWorkOnController {
         current.state.status,
         link.prepared,
         this.#git,
+        expectedNodeArtifactHead(link, current.state),
+        link.repository,
       );
       link.status = "failed";
       link.activeNodes = {};
@@ -3960,6 +4957,7 @@ export class ForgeWorkOnController {
       link.prepared.repositoryRoot,
       link.prepared.baseBranch,
       ctx.signal,
+      link.repository,
     );
     if (currentBaseSha !== decision.baseSha) {
       // A moving integration base is a normal concurrency event. Refresh the
@@ -4019,11 +5017,17 @@ export class ForgeWorkOnController {
     result: ForgeWorkOnResult,
     policy: ForgePolicy,
     currentBaseSha: string,
-    _ctx: ExtensionContext,
+    ctx: ExtensionContext,
+    refreshAttempt?: number,
   ): Promise<void> {
+    if (result.review.rounds >= 5)
+      throw new Error(
+        "Refresh cannot start after the five-round result cap.",
+      );
     link.reviewBaseSha = currentBaseSha;
     link.prepared = { ...link.prepared, baseSha: currentBaseSha };
-    link.refreshes += 1;
+    link.refreshes = refreshAttempt ?? link.refreshes + 1;
+    link.currentNodeId = undefined;
     link.status = "refreshing";
     this.#persistLink(link);
     if (link.executionMode === "direct") {
@@ -4034,6 +5038,7 @@ export class ForgeWorkOnController {
       this.#directBinding = {
         ...this.#directBinding,
         baseSha: currentBaseSha,
+        expectedHeadSha: result.headSha,
         refresh: true,
         previousReviewRounds: result.review.rounds,
       };
@@ -4049,46 +5054,154 @@ export class ForgeWorkOnController {
       );
       return;
     }
-    const receipt = await this.#rpc.spawnRefreshReview({
-      runId: link.forgeRunId,
-      issueNumber: link.issueNumber,
-      repository: link.repository,
-      worktreeRoot: link.prepared.worktreePath,
-      branch: link.prepared.branch,
-      baseBranch: link.prepared.baseBranch,
+    const previousRunId = link.subagentRunId;
+    const previousResultPath = link.resultPath;
+    const refreshResultPath = join(
+      link.prepared.worktreePath,
+      ".pi",
+      "forge",
+      `${link.forgeRunId}-refresh-${link.refreshes}.json`,
+    );
+    const launchIntent = createNodeLaunchIntent(
+      `refresh-review-${link.refreshes}`,
+      refreshResultPath,
+    );
+    this.#links.delete(previousRunId);
+    link.subagentRunId = launchIntent.sentinelRunId;
+    link.resultPath = refreshResultPath;
+    link.refreshLaunch = {
+      runId: launchIntent.sentinelRunId,
+      resultPath: refreshResultPath,
+      previousResultPath,
       baseSha: currentBaseSha,
-      leaseEpoch: link.leaseEpoch,
-      leaseOwnerRunId: link.leaseOwnerRunId,
-      policy,
-      issueContext: link.issueContext,
-      previousResult: result,
       refreshAttempt: link.refreshes,
-    });
-    this.#links.delete(link.subagentRunId);
-    link.subagentRunId = receipt.runId;
-    link.resultPath = receipt.resultPath;
+      launchNonce: launchIntent.launchNonce,
+    };
+    link.launchFailure = "ambiguous";
     this.#persistLink(link);
-    this.#emitLifecycle(link, {
-      baseSha: currentBaseSha,
-      reason: `Integration base moved from ${result.baseSha}.`,
-    });
+    let providerLaunchAttempted = false;
+    let previousStopped = isLaunchSentinel(previousRunId);
+    let receipt: SubagentSpawnReceipt | undefined;
+    try {
+      if (!isLaunchSentinel(previousRunId)) {
+        await this.#rpc.stopAndWait(previousRunId);
+        previousStopped = true;
+      }
+      const rebound = await this.#git.rebind(
+        link.prepared,
+        ctx.signal,
+        link.repository,
+        link.reviewHeadSha ?? link.prepared.baseSha,
+      );
+      await materializeForgeAgents(rebound.worktreePath);
+      if (
+        rebound.repositoryRoot !== link.prepared.repositoryRoot ||
+        rebound.worktreePath !== link.prepared.worktreePath
+      )
+        link.prepared = rebound;
+      this.#persistLink(link);
+      providerLaunchAttempted = true;
+      receipt = await this.#rpc.spawnRefreshReview({
+        runId: link.forgeRunId,
+        issueNumber: link.issueNumber,
+        repository: link.repository,
+        repositoryIdentity: requirePreparedRepositoryIdentity(link.prepared),
+        worktreeRoot: link.prepared.worktreePath,
+        branch: link.prepared.branch,
+        baseBranch: link.prepared.baseBranch,
+        baseSha: currentBaseSha,
+        expectedHeadSha: result.headSha,
+        leaseEpoch: link.leaseEpoch,
+        leaseOwnerRunId: link.leaseOwnerRunId,
+        policy,
+        issueContext: link.issueContext,
+        previousResult: result,
+        refreshAttempt: link.refreshes,
+      });
+      const boundReceipt = receipt;
+      this.#receiptBindings.add(boundReceipt.runId);
+      this.#links.delete(launchIntent.sentinelRunId);
+      link.subagentRunId = boundReceipt.runId;
+      link.resultPath = boundReceipt.resultPath;
+      link.refreshLaunch = {
+        runId: boundReceipt.runId,
+        resultPath: boundReceipt.resultPath,
+        previousResultPath,
+        baseSha: currentBaseSha,
+        refreshAttempt: link.refreshes,
+        launchNonce: launchIntent.launchNonce,
+      };
+      delete link.launchFailure;
+      this.#persistLink(link);
+      void this.#drainReceiptCompletion(link, ctx, boundReceipt)
+        .catch((error) => {
+          link.status = "failed";
+          this.#persistLink(link);
+          this.#emitLifecycle(link, { reason: errorMessage(error) });
+        })
+        .finally(() => this.#receiptBindings.delete(boundReceipt.runId));
+      this.#emitLifecycle(link, {
+        baseSha: currentBaseSha,
+        reason: `Integration base moved from ${result.baseSha}.`,
+      });
+    } catch (error) {
+      if (receipt) {
+        await this.#rpc.stopAndWait(receipt.runId);
+        link.launchFailure = "ambiguous";
+      } else if (!providerLaunchAttempted && previousStopped) {
+        // Keep the durable refresh sentinel and metadata. A later attach can
+        // rebind and retry this same refresh attempt without guessing whether
+        // a provider launch occurred.
+        link.launchFailure = "binding";
+        link.resultPath = refreshResultPath;
+      }
+      this.#persistLink(link);
+      throw error;
+    } finally {
+      if (receipt) this.#receiptBindings.delete(receipt.runId);
+    }
+  }
+
+  async #expectedHeadForResult(link: ActiveRunLink): Promise<string> {
+    let state: RunState | undefined;
+    try {
+      const tokenProvider = createGitHubTokenProvider(
+        this.#pi,
+        link.prepared.repositoryRoot,
+      );
+      const store = new GitHubStateBranchStore(
+        new FetchGitHubTransport({ tokenProvider }),
+        link.repository,
+        link.stateBranch,
+      );
+      state = (await store.readRun(link.forgeRunId)).state;
+    } catch {
+      // A missing durable snapshot leaves the caller with the conservative
+      // recorded binding; rebind will fail closed if it is stale.
+    }
+    return expectedNodeArtifactHead(link, state);
   }
 
   async #loadResult(link: ActiveRunLink): Promise<ForgeWorkOnResult> {
     let result: ForgeWorkOnResult | undefined;
+    let statusPayload: unknown;
     if (link.executionMode !== "direct") {
       // An adopting session has no rpc knowledge of the original child; a
       // dead/unreachable child must fall through to the durable result file
       // and worktree reconstruction instead of failing the load.
-      const statusPayload = await this.#rpc
+      statusPayload = await this.#rpc
         .status(link.subagentRunId)
         .catch(() => undefined);
       if (statusPayload !== undefined)
         result = findForgeWorkOnResult(statusPayload);
     }
+    const expectedHeadSha =
+      result?.headSha ?? (await this.#expectedHeadForResult(link));
+    await this.#rebindLink(link, undefined, expectedHeadSha);
     if (!result) {
-      const resultText = await readFile(link.resultPath, "utf8").catch(
-        () => "",
+      const resultText = await readBoundedForgeResult(
+        link.prepared.worktreePath,
+        link.resultPath,
       );
       result =
         findForgeWorkOnResult(resultText) ??
@@ -4099,26 +5212,30 @@ export class ForgeWorkOnController {
       // result write leaves an empty result file. The durable reviewer
       // artifacts plus Git facts are sufficient to reconstruct the identical
       // result; requiring the child's file would burn the completed lane.
-      result = await this.#reconstructResultFromWorktree(link).catch(
-        () => undefined,
-      );
+      result = await this.#reconstructResultFromWorktree(
+        link,
+        expectedHeadSha,
+      ).catch(() => undefined);
     }
     if (!result)
       throw new Error(
         "Completed work-on subagent did not return a schema-valid Forge result artifact.",
       );
+    await this.#rebindLink(link, undefined, result.headSha);
     return result;
   }
 
   /** Rebuild the final result from trusted reviewer artifacts and Git facts. */
   async #reconstructResultFromWorktree(
     link: ActiveRunLink,
+    expectedHeadSha: string,
   ): Promise<ForgeWorkOnResult> {
     if (link.executionMode === "direct" || link.refreshes > 0) {
       throw new Error(
         "Result reconstruction is not supported for this run binding.",
       );
     }
+    await this.#rebindLink(link, undefined, expectedHeadSha);
     const worktree = link.prepared.worktreePath;
     const headSha = (await this.#git.head(worktree)).trim();
     const baseSha = link.reviewBaseSha || link.prepared.baseSha;
@@ -4133,10 +5250,10 @@ export class ForgeWorkOnController {
       "forge-review-correctness",
       "forge-review-security",
     ]) {
-      const text = await readFile(
+      const text = await readBoundedForgeResult(
+        worktree,
         join(forgeDir, `${link.forgeRunId}-${reviewer}.json`),
-        "utf8",
-      ).catch(() => "");
+      );
       const parsed = findForgeReviewerResult(text);
       if (!parsed || parsed.headSha !== headSha)
         throw new Error(
@@ -4367,8 +5484,15 @@ export class ForgeWorkOnController {
         ctx.signal,
       );
     }
-    await github.deleteBranch(link.prepared.branch, ctx.signal);
-    await this.#git.cleanup(link.prepared, ctx.signal);
+    const expectedHeadSha =
+      link.reviewHeadSha ?? link.prepared.baseSha;
+    await this.#git.deleteRemoteBranch(
+      link.prepared,
+      ctx.signal,
+      link.repository,
+      expectedHeadSha,
+    );
+    await this.#git.cleanup(link.prepared, ctx.signal, expectedHeadSha);
 
     if (action === "terminal-cleanup") {
       await appendEffect(
@@ -4451,10 +5575,12 @@ export class ForgeWorkOnController {
     link: ActiveRunLink;
     journal: RunJournal;
     github: GitHubWorkflowAdapter;
+    projector: GitHubIssueProjector;
+    pullNumber?: number;
     sessionId: string;
     ctx: ExtensionContext;
   }): Promise<void> {
-    const { link, journal, github, sessionId, ctx } = deps;
+    const { link, journal, github, projector, pullNumber, sessionId, ctx } = deps;
     const signal = ctx.signal;
     const closeCommon = {
       nodeId: "close-1",
@@ -4470,6 +5596,9 @@ export class ForgeWorkOnController {
     };
     const baseSha = link.prepared.baseSha;
 
+    link.currentNodeId = closeCommon.nodeId;
+    link.status = "running";
+    this.#persistLink(link);
     await journal.append({
       runId: link.forgeRunId,
       type: "node.queued",
@@ -4488,6 +5617,7 @@ export class ForgeWorkOnController {
       message: `Start parent node close-1 (no-change closure)`,
       ...(signal ? { signal } : {}),
     });
+    if (pullNumber) await github.closePullRequest(pullNumber, signal);
     await github.closeIssue(link.issueNumber, signal);
     const closed = await github.getIssue(link.issueNumber, signal);
     if (closed.state !== "closed")
@@ -4525,6 +5655,9 @@ export class ForgeWorkOnController {
       ...(signal ? { signal } : {}),
     });
 
+    link.currentNodeId = cleanupCommon.nodeId;
+    link.status = "running";
+    this.#persistLink(link);
     await journal.append({
       runId: link.forgeRunId,
       type: "node.queued",
@@ -4543,10 +5676,13 @@ export class ForgeWorkOnController {
       message: `Start parent node cleanup-1 (no-change closure)`,
       ...(signal ? { signal } : {}),
     });
-    await this.#git
-      .deleteRemoteBranch(link.prepared, signal)
-      .catch(() => undefined);
-    await this.#git.cleanup(link.prepared, signal).catch(() => undefined);
+    await this.#git.deleteRemoteBranch(
+      link.prepared,
+      signal,
+      link.repository,
+      baseSha,
+    );
+    await this.#git.cleanup(link.prepared, signal, baseSha);
     await journal.append({
       runId: link.forgeRunId,
       type: "effect.recorded",
@@ -4577,7 +5713,7 @@ export class ForgeWorkOnController {
       ...(signal ? { signal } : {}),
     });
 
-    await journal.append({
+    const terminal = await journal.append({
       runId: link.forgeRunId,
       type: "run.completed",
       payload: { outcome: "closed" },
@@ -4591,6 +5727,60 @@ export class ForgeWorkOnController {
     link.activeNodes = {};
     link.currentNodeId = undefined;
     this.#persistLink(link);
+    let terminalProjectionComplete = false;
+    try {
+      const event = terminal.events.find(
+        (candidate) => candidate.type === "run.completed",
+      );
+      if (!event) throw new Error("No-change completion event is missing.");
+      const projection = await projector.projectEventWithReceipt({
+        issueNumber: link.issueNumber,
+        event,
+        markdown: noChangeClosureMarkdown(link, terminal.state),
+        ...(signal ? { signal } : {}),
+      });
+      const labelReceipt = await projector.clearWorkflowLabelWithReceipt(
+        link.issueNumber,
+        signal,
+        `${event.eventId}:workflow`,
+      );
+      await recordProjectionReceipts(
+        journal,
+        link.forgeRunId,
+        [...projection.receipts, labelReceipt],
+        sessionId,
+        signal,
+      );
+      terminalProjectionComplete = true;
+    } catch (error) {
+      ctx.ui.notify(
+        `ForgeDock run ${link.forgeRunId} is durably completed; terminal projection will replay: ${errorMessage(error)}`,
+        "warning",
+      );
+    }
+    if (
+      !link.orchestrationId &&
+      terminal.state.lease &&
+      terminalProjectionComplete
+    )
+      await journal.append({
+        runId: link.forgeRunId,
+        type: "lease.released",
+        payload: {
+          ownerRunId: link.leaseOwnerRunId,
+          epoch: terminal.state.lease.epoch,
+        },
+        idempotencyKey: "lease:release",
+        sessionId,
+        message: `Release ForgeDock lease ${link.forgeRunId}`,
+        ...(signal ? { signal } : {}),
+      });
+    this.#clearDirectBinding(link.forgeRunId);
+    this.#emitLifecycle(link, {
+      nodeId: "cleanup-1",
+      outcome: "closed",
+    });
+    ctx.ui.setStatus("forgedock", undefined);
   }
 
   async #finalize(
@@ -4599,8 +5789,15 @@ export class ForgeWorkOnController {
     suppliedResult?: ForgeWorkOnResult,
     integrate = false,
   ): Promise<void> {
+    await this.#git.assertRepositoryIdentity(
+      link.prepared,
+      link.repository,
+      ctx.signal,
+    );
     const result = suppliedResult ?? (await this.#loadResult(link));
     assertResultIdentity(result, link);
+    await this.#rebindLink(link, ctx.signal, result.headSha);
+    await materializeForgeAgents(link.prepared.worktreePath);
     const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
     const tokenProvider = createGitHubTokenProvider(
       this.#pi,
@@ -4753,6 +5950,8 @@ export class ForgeWorkOnController {
         link,
         journal,
         github,
+        projector,
+        pullNumber: existingPull?.number,
         sessionId,
         ctx,
       });
@@ -4779,9 +5978,10 @@ export class ForgeWorkOnController {
     );
     if (!existingPull || existingPull.headSha !== actualHead)
       await this.#git.push(
-        link.prepared.worktreePath,
-        link.prepared.branch,
+        link.prepared,
         ctx.signal,
+        link.repository,
+        result.headSha,
       );
     await appendEffect(
       journal,
@@ -4821,6 +6021,7 @@ export class ForgeWorkOnController {
       link.prepared.repositoryRoot,
       link.prepared.baseBranch,
       ctx.signal,
+      link.repository,
     );
     if (currentBaseSha !== result.baseSha) {
       await this.#refreshForMovedBase(
@@ -4992,6 +6193,8 @@ export class ForgeWorkOnController {
       execution: {
         kind: "work-on",
         worktreePath: link.prepared.worktreePath,
+        repositoryIdentity: requirePreparedRepositoryIdentity(link.prepared),
+        prepared: link.prepared,
       },
       // A refreshed work-on round uses a new review ID and therefore a fresh
       // internal panel sequence beginning at round 1.
@@ -5178,8 +6381,14 @@ export class ForgeWorkOnController {
       sessionId,
       ctx.signal,
     );
-    await github.deleteBranch(link.prepared.branch, ctx.signal);
-    await this.#git.cleanup(link.prepared, ctx.signal);
+    const expectedHeadSha = result.review.headSha;
+    await this.#git.deleteRemoteBranch(
+      link.prepared,
+      ctx.signal,
+      link.repository,
+      expectedHeadSha,
+    );
+    await this.#git.cleanup(link.prepared, ctx.signal, expectedHeadSha);
     await appendEffect(
       journal,
       link.forgeRunId,
@@ -5339,6 +6548,51 @@ export class ForgeWorkOnController {
     }
   }
 
+  async #rebindLink(
+    link: ActiveRunLink,
+    signal?: AbortSignal,
+    expectedHeadSha = link.reviewHeadSha ?? link.prepared.baseSha,
+  ): Promise<void> {
+    const rebound = await this.#git.rebind(
+      link.prepared,
+      signal,
+      link.repository,
+      expectedHeadSha,
+    );
+    if (
+      rebound.repositoryRoot !== link.prepared.repositoryRoot ||
+      rebound.worktreePath !== link.prepared.worktreePath
+    ) {
+      link.prepared = rebound;
+      this.#persistLink(link);
+    }
+  }
+
+  async #rebindParentWorktree(
+    link: ActiveRunLink,
+    ctx: ExtensionContext,
+    node: WorkflowNode,
+    expectedHeadSha = link.reviewHeadSha ?? link.prepared.baseSha,
+  ): Promise<void> {
+    let missing = false;
+    try {
+      await lstat(link.prepared.worktreePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") missing = true;
+      else throw error;
+    }
+    if (node === "cleanup" && missing) {
+      await this.#git.assertRepositoryIdentity(
+        link.prepared,
+        link.repository,
+        ctx.signal,
+      );
+      return;
+    }
+    await this.#rebindLink(link, ctx.signal, expectedHeadSha);
+    await materializeForgeAgents(link.prepared.worktreePath);
+  }
+
   #persistLink(link: ActiveRunLink): void {
     this.#pi.appendEntry(RUN_LINK_ENTRY, link);
     this.#links.set(link.subagentRunId, link);
@@ -5423,6 +6677,8 @@ export async function cleanupDurablyCancelledWorktree(
   status: string,
   prepared: PreparedWorktree,
   git: Pick<GitWorktreeManager, "deleteRemoteBranch" | "cleanup">,
+  expectedHeadSha = prepared.baseSha,
+  expectedRepository = prepared.repository,
 ): Promise<void> {
   if (status !== "cancelled")
     throw new Error(
@@ -5430,8 +6686,13 @@ export async function cleanupDurablyCancelledWorktree(
     );
   // Do not forward an aborted operation signal: compensating cleanup must be
   // retryable after the cancellation transition commits.
-  await git.deleteRemoteBranch(prepared);
-  await git.cleanup(prepared);
+  await git.deleteRemoteBranch(
+    prepared,
+    undefined,
+    expectedRepository,
+    expectedHeadSha,
+  );
+  await git.cleanup(prepared, undefined, expectedHeadSha);
 }
 
 function startupRunMarkdown(runId: string, integrationBranch: string): string {
@@ -5445,6 +6706,19 @@ function terminalRunMarkdown(
   if (state.outcome === "merged")
     return `## ForgeDock Pi complete\n\nPR #${state.pullNumber ?? "unknown"} merged into \`${link.prepared.baseBranch}\`.\n${link.reviewHeadSha ? `Nested review completed at \`${link.reviewHeadSha}\`.\n` : ""}Run: \`${link.forgeRunId}\`.`;
   return `## ForgeDock Pi complete\n\nRun: \`${link.forgeRunId}\`\nOutcome: closed.`;
+}
+
+function isNoChangeClosure(state: Pick<RunState, "nodes">): boolean {
+  return Object.values(state.nodes).some((node) =>
+    node.evidence?.includes("FORGE:COMMIT:NO-CHANGE"),
+  );
+}
+
+function noChangeClosureMarkdown(
+  link: Pick<ActiveRunLink, "forgeRunId" | "prepared" | "reviewHeadSha">,
+  state: Pick<RunState, "outcome" | "pullNumber" | "nodes">,
+): string {
+  return `${terminalRunMarkdown(link, state)}\n\n<!-- FORGE:INVALID run=${link.forgeRunId} -->\n<!-- FORGE:COMMIT:NO-CHANGE run=${link.forgeRunId} -->`;
 }
 
 async function recordProjectionReceipts(
@@ -6167,6 +7441,9 @@ function normalizeActiveRunLink(value: unknown): ActiveRunLink | undefined {
     reviewBaseSha: link.reviewBaseSha ?? link.prepared.baseSha,
     refreshes: link.refreshes ?? 0,
     providerRetries: link.providerRetries ?? 0,
+    ...(link.launchFailure === "ambiguous" || link.launchFailure === "binding"
+      ? { launchFailure: link.launchFailure }
+      : {}),
     remediationAttempts: link.remediationAttempts ?? 0,
     findingIssueMap: link.findingIssueMap ?? {},
     issueContext: link.issueContext ?? "",
@@ -6349,12 +7626,27 @@ export function shouldTrustDurableWorkOnResult(
 
 export function isRecoverableWorkOnBlocker(message: string): boolean {
   if (humanAuthorityReasonFromText(message)) return false;
+  if (isWorktreeBindingFailure(message)) return true;
   return /State branch changed after|stale (?:state|head|base)|rebase|merge conflict|conflict(?:s|ing)?|rounds? (?:exhausted|limit)|remediation rounds|WebSocket|timed? out|timeout|connection (?:lost|reset|error)|\b50[0234]\b|\b429\b|checkpoint failed validation|omitted the required canonical|required canonical .* section|Bound branch push failed|provider|API (?:error|failure)|CI (?:failed|pending|timeout)/i.test(
     message,
   );
 }
 
+export function isWorktreeBindingFailure(message: string): boolean {
+  return /Forge worktree binding failure:|outside bound worktree|(?:^|\b)cwd [^\n]*(?:does not exist|not a directory|no such file)/i.test(
+    message,
+  );
+}
+
+export type LaunchRecoveryMode = "fresh-worktree" | "resume" | "none";
+
+export function launchRecoveryMode(message: string): LaunchRecoveryMode {
+  if (isWorktreeBindingFailure(message)) return "fresh-worktree";
+  return isTransientProviderFailure(message) ? "resume" : "none";
+}
+
 export function isTransientProviderFailure(message: string): boolean {
+  if (isWorktreeBindingFailure(message)) return true;
   if (
     /insufficient_quota|quota exceeded|out of budget|billing|authentication|unauthorized|forbidden/i.test(
       message,
@@ -6364,6 +7656,104 @@ export function isTransientProviderFailure(message: string): boolean {
   return /websocket\s*(?:closed|closure|error)|connection\s*(?:error|refused|lost|reset)|socket hang up|socket connection was closed|network error|fetch failed|EAI_AGAIN|ENOTFOUND|terminated|timed? out|timeout|rate.?limit|too many requests|\b429\b|\b50[0234]\b|\b524\b|service unavailable|server error|internal error|provider returned error|stream ended/i.test(
     message,
   );
+}
+
+const MAX_FORGE_RESULT_BYTES = 1_048_576;
+
+async function readBoundedForgeResult(
+  worktreeRoot: string,
+  resultPath: string,
+): Promise<string> {
+  let root: string;
+  let forgeRoot: string;
+  try {
+    root = await realpath(worktreeRoot);
+    forgeRoot = resolve(root, ".pi", "forge");
+    if ((await realpath(forgeRoot)) !== forgeRoot) return "";
+  } catch {
+    return "";
+  }
+  const candidate = resolve(root, resultPath);
+  if (!isPathWithin(forgeRoot, candidate) || candidate === forgeRoot) return "";
+  let stat: Awaited<ReturnType<typeof lstat>>;
+  try {
+    stat = await lstat(candidate);
+    if (
+      stat.isSymbolicLink() ||
+      !stat.isFile() ||
+      stat.size > MAX_FORGE_RESULT_BYTES ||
+      (await realpath(candidate)) !== candidate
+    )
+      return "";
+  } catch {
+    return "";
+  }
+  let handle: Awaited<ReturnType<typeof open>> | undefined;
+  try {
+    handle = await open(
+      candidate,
+      fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0),
+    );
+    const current = await handle.stat();
+    if (
+      current.dev !== stat.dev ||
+      current.ino !== stat.ino ||
+      current.size > MAX_FORGE_RESULT_BYTES
+    )
+      return "";
+    const buffer = Buffer.alloc(current.size);
+    const { bytesRead } = await handle.read(buffer, 0, current.size, 0);
+    return buffer.subarray(0, bytesRead).toString("utf8");
+  } catch {
+    return "";
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
+
+function expectedNodeArtifactHead(
+  link: Pick<ActiveRunLink, "reviewHeadSha" | "prepared">,
+  state: RunState | undefined,
+  node?: { node?: string; attempt?: number; headSha?: string },
+): string {
+  if (node?.node?.startsWith("review-"))
+    return node.headSha ?? link.reviewHeadSha ?? link.prepared.baseSha;
+  const phase = node?.node
+    ? state?.phases[node.node as keyof RunState["phases"]]
+    : undefined;
+  const phaseCommit = phase?.attempts.find(
+    (attempt) => attempt.attempt === node?.attempt,
+  )?.commitSha;
+  if (phaseCommit) return phaseCommit;
+  if (node?.headSha) return node.headSha;
+  let latestCommit: string | undefined;
+  for (const phaseState of Object.values(state?.phases ?? {}))
+    for (const attempt of phaseState.attempts)
+      if (attempt.commitSha) latestCommit = attempt.commitSha;
+  return latestCommit ?? link.reviewHeadSha ?? link.prepared.baseSha;
+}
+
+function latestReviewRound(state: RunState): number {
+  return Math.max(
+    1,
+    ...Object.values(state.nodes)
+      .filter(
+        (node) =>
+          node.node === "review-correctness" ||
+          node.node === "review-security",
+      )
+      .map((node) => node.round ?? node.attempt),
+  );
+}
+
+function requirePreparedRepositoryIdentity(
+  prepared: PreparedWorktree,
+): string {
+  if (!prepared.repositoryIdentity)
+    throw new Error(
+      "Forge worktree binding failure: prepared repository identity is missing.",
+    );
+  return prepared.repositoryIdentity;
 }
 
 function errorMessage(error: unknown): string {

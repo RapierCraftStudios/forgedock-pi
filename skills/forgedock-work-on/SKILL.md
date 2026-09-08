@@ -33,13 +33,14 @@ Continue without stopping at intermediate success:
 
 Investigation defines acceptance and scope; publish the named pre-build graph before editing.
 Every accepted criterion must carry a compact proof link naming its implementation mechanism,
-counterexample/behavioral test, and residual risk; a contradictory residual risk is never a
-PASS. For bug fixes, record trigger/expected/observed
+counterexample/behavioral test, and residual risk; a contradictory residual risk is never a PASS. For bug fixes, record trigger/expected/observed
 baseline and fail-before/pass-after evidence; use inspection-only proof only with an explicit
 safety/impossibility justification. Execute investigation, planning, implementation, quality
 gates, verification, PR preparation, remediation, merge, close, and cleanup inline.
 Do not launch delegates, phase agents, builders, quality-gate agents, another work-on agent,
-or a review coordinator.
+or a review coordinator. ForgeDock owns each lane's exact isolated staging-based worktree;
+child launches pass that path as `cwd` with `worktree: false`. A stale, missing, or wrong Pi
+workspace is an internal launch-binding failure to rebind/retry, never a human-facing gate.
 
 At review or re-review only, launch the complete risk-selected panel as fresh ordinary
 `delegate` agents with full normal tools through one concurrent workflow. Every task carries

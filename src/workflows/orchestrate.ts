@@ -37,7 +37,9 @@ import { isLeaseExpired } from "../core/lease.ts";
 import { isProtectedBranch, type ForgePolicy } from "../core/policy.ts";
 import { OrchestrationJournal } from "./orchestration-journal.ts";
 import {
+  isLaunchSentinel,
   isTransientProviderFailure,
+  isWorktreeBindingFailure,
   type ForgeWorkOnController,
   type WorkOnLifecycleEvent,
 } from "./work-on.ts";
@@ -61,6 +63,7 @@ export interface ActiveOrchestrationLink {
   orchestrationId: string;
   repository: string;
   repositoryRoot: string;
+  repositoryIdentity?: string;
   stateBranch: string;
   issueNumbers: readonly number[];
   integrationBranch: string;
@@ -171,9 +174,52 @@ export class ForgeOrchestrationController {
     const key = `${link.orchestrationId}:${issueNumber}`;
     const cached = this.#priorInvalidVerdicts.get(key);
     if (cached !== undefined) return cached;
-    const verdict = await this.#githubFor(link)
-      .hasInvalidVerdictMarker(issueNumber, signal)
-      .catch(() => false);
+    const comments = await this.#githubFor(link).getComments(issueNumber, signal);
+    const runIds = new Set<string>();
+    for (const comment of comments) {
+      const invalid = /<!-- FORGE:INVALID run=([A-Za-z0-9:_-]+) -->/.exec(
+        comment,
+      );
+      const noChange =
+        /<!-- FORGE:COMMIT:NO-CHANGE run=([A-Za-z0-9:_-]+) -->/.exec(comment);
+      if (invalid?.[1] && invalid[1] === noChange?.[1])
+        runIds.add(invalid[1]);
+    }
+    let verdict = false;
+    if (runIds.size > 0) {
+      const tokenProvider = createGitHubTokenProvider(
+        this.#pi,
+        link.repositoryRoot,
+      );
+      const store = new GitHubStateBranchStore(
+        new FetchGitHubTransport({ tokenProvider }),
+        link.repository,
+        link.stateBranch,
+      );
+      for (const runId of runIds) {
+        const candidate = await store.readRun(runId, signal);
+        const state = candidate.state;
+        if (
+          state?.repository === link.repository &&
+          state.issueNumber === issueNumber &&
+          state.status === "completed" &&
+          state.outcome === "closed" &&
+          Object.values(state.nodes).some(
+            (node) =>
+              node.node === "close" &&
+              node.status === "completed" &&
+              node.outcome === "closed" &&
+              node.evidence?.includes("FORGE:COMMIT:NO-CHANGE"),
+          ) &&
+          Object.values(state.nodes).some(
+            (node) => node.node === "cleanup" && node.status === "completed",
+          )
+        ) {
+          verdict = true;
+          break;
+        }
+      }
+    }
     this.#priorInvalidVerdicts.set(key, verdict);
     return verdict;
   }
@@ -191,6 +237,11 @@ export class ForgeOrchestrationController {
       ctx.signal,
     );
     const { policy } = await loadForgePolicy(repositoryRoot);
+    const repositoryIdentity = await this.#git.repositoryIdentityFor(
+      repositoryRoot,
+      policy.repository.name,
+      ctx.signal,
+    );
     const tokenProvider = createGitHubTokenProvider(this.#pi, repositoryRoot);
     const store = new GitHubStateBranchStore(
       new FetchGitHubTransport({ tokenProvider }),
@@ -223,6 +274,7 @@ export class ForgeOrchestrationController {
         orchestrationId,
         repository: persisted.repository,
         repositoryRoot,
+        repositoryIdentity,
         stateBranch: policy.state.branch,
         issueNumbers: persisted.lanes.map((lane) => lane.issueNumber),
         integrationBranch: persisted.integrationBranch,
@@ -372,10 +424,16 @@ export class ForgeOrchestrationController {
     const integrationBranch = chooseIntegrationBranch(policy);
     if (isProtectedBranch(policy, integrationBranch))
       throw new Error(`Integration branch ${integrationBranch} is protected.`);
+    const repositoryIdentity = await this.#git.repositoryIdentityFor(
+      repositoryRoot,
+      policy.repository.name,
+      ctx.signal,
+    );
     await this.#git.remoteBaseSha(
       repositoryRoot,
       integrationBranch,
       ctx.signal,
+      policy.repository.name,
     );
     const tokenProvider = createGitHubTokenProvider(this.#pi, repositoryRoot);
     const transport = new FetchGitHubTransport({
@@ -408,6 +466,7 @@ export class ForgeOrchestrationController {
       orchestrationId,
       repository: policy.repository.name,
       repositoryRoot,
+      repositoryIdentity,
       stateBranch: policy.state.branch,
       issueNumbers: [...issueNumbers],
       integrationBranch,
@@ -455,6 +514,11 @@ export class ForgeOrchestrationController {
       ctx.signal,
     );
     const { policy } = await loadForgePolicy(repositoryRoot);
+    await this.#git.assertRepositoryRoot(
+      repositoryRoot,
+      policy.repository.name,
+      ctx.signal,
+    );
     const tokenProvider = createGitHubTokenProvider(this.#pi, repositoryRoot);
     const store = new GitHubStateBranchStore(
       new FetchGitHubTransport({
@@ -491,9 +555,13 @@ export class ForgeOrchestrationController {
     const active = [...this.#links.values()].filter(
       (link) => link.status === "running",
     );
-    await Promise.allSettled(
+    const cancellations = await Promise.allSettled(
       active.map((link) => this.cancel(link.orchestrationId, ctx, reason)),
     );
+    const failure = cancellations.find(
+      (entry): entry is PromiseRejectedResult => entry.status === "rejected",
+    );
+    if (failure) throw failure.reason;
   }
 
   async #cancelDurableChildRuns(
@@ -504,7 +572,24 @@ export class ForgeOrchestrationController {
   ): Promise<void> {
     const childRunIds: string[] = [];
     const providerRunIds: string[] = [];
+    const runs = this.#workOn.listRuns();
     for (const lane of state.lanes) {
+      const linked = runs.find(
+        (candidate) =>
+          candidate.orchestrationId === state.orchestrationId &&
+          candidate.issueNumber === lane.issueNumber,
+      );
+      const activeNodeIds = Object.keys(linked?.activeNodes ?? {});
+      const unknownLaunch = Boolean(
+        linked &&
+          isLaunchSentinel(linked.subagentRunId) &&
+          (activeNodeIds.length === 0 ||
+            activeNodeIds.every(isLaunchSentinel)),
+      );
+      if (linked?.launchFailure === "ambiguous" && unknownLaunch)
+        throw new Error(
+          `Cannot cancel issue #${lane.issueNumber} while its provider launch receipt is ambiguous.`,
+        );
       if (!lane.forgeRunId) continue;
       const current = await store.readRun(lane.forgeRunId, ctx.signal);
       if (
@@ -582,14 +667,14 @@ export class ForgeOrchestrationController {
       if (
         !["failed", "blocked", "needs-human"].includes(lane.status) ||
         !lane.reason ||
-        !/schema-valid Forge result artifact|State branch changed after|unsupported-continuation|WebSocket|timed? out|timeout|connection (?:lost|reset|error)|\b50[0234]\b|\b429\b|No comment found for marker.*FORGE:BUILDER|checkpoint failed validation|omitted the required canonical|required canonical .* section|Invalid username or token|Bound branch push failed|^forge-work-on:\s*$/i.test(
-          lane.reason,
-        )
+        !isRecoverableLaneFailure(lane.reason)
       )
         continue;
       const active = await this.#workOn.reactivateOrchestrationIssue(
         link.orchestrationId,
         lane.issueNumber,
+        ctx.sessionManager.getSessionId(),
+        ctx,
       );
       if (!active) continue;
       const current = await this.#read(link, ctx.signal);
@@ -758,6 +843,13 @@ export class ForgeOrchestrationController {
       while (progress && link.status === "running") {
         progress = false;
         let current = await this.#read(link, ctx.signal);
+        if (this.#hasAmbiguousChildLaunch(current.state)) {
+          ctx.ui.notify(
+            `ForgeDock orchestration ${link.orchestrationId} is retained without cleanup while a provider launch receipt remains ambiguous.`,
+            "warning",
+          );
+          return;
+        }
         const dependencyBlocks = blockedOrchestrationLanes(current.state);
         if (dependencyBlocks.length > 0) {
           // Persist one event per dependent lane. Re-reading after each event
@@ -1058,6 +1150,25 @@ export class ForgeOrchestrationController {
     }
   }
 
+  #hasAmbiguousChildLaunch(state: OrchestrationState): boolean {
+    const runs = this.#workOn.listRuns();
+    return state.lanes.some((lane) => {
+      const run = runs.find(
+        (candidate) =>
+          candidate.orchestrationId === state.orchestrationId &&
+          candidate.issueNumber === lane.issueNumber,
+      );
+      const activeNodeIds = Object.keys(run?.activeNodes ?? {});
+      const unknownLaunch = Boolean(
+        run &&
+          isLaunchSentinel(run.subagentRunId) &&
+          (activeNodeIds.length === 0 ||
+            activeNodeIds.every(isLaunchSentinel)),
+      );
+      return Boolean(run?.launchFailure === "ambiguous" && unknownLaunch);
+    });
+  }
+
   async #read(
     link: ActiveOrchestrationLink,
     signal?: AbortSignal,
@@ -1066,6 +1177,22 @@ export class ForgeOrchestrationController {
     journal: OrchestrationJournal;
     store: GitHubStateBranchStore;
   }> {
+    const repositoryIdentity = await this.#git.repositoryIdentityFor(
+      link.repositoryRoot,
+      link.repository,
+      signal,
+    );
+    if (
+      link.repositoryIdentity &&
+      link.repositoryIdentity !== repositoryIdentity
+    )
+      throw new Error(
+        "Forge orchestration repository identity was replaced during recovery.",
+      );
+    if (!link.repositoryIdentity) {
+      link.repositoryIdentity = repositoryIdentity;
+      this.#persistLink(link);
+    }
     const tokenProvider = createGitHubTokenProvider(
       this.#pi,
       link.repositoryRoot,
@@ -1312,6 +1439,21 @@ function requiredNumber(value: number | undefined, field: string): number {
   if (!Number.isSafeInteger(value) || (value ?? 0) < 1)
     throw new Error(`Work-on lifecycle event is missing ${field}.`);
   return value as number;
+}
+
+export function isRecoverableLaneFailure(reason: string): boolean {
+  if (
+    /Ambiguous Forge provider launch (?:after durable intent|remains unbound)/i.test(
+      reason,
+    )
+  )
+    return false;
+  return (
+    isWorktreeBindingFailure(reason) ||
+    /schema-valid Forge result artifact|State branch changed after|unsupported-continuation|WebSocket|timed? out|timeout|connection (?:lost|reset|error)|\b50[0234]\b|\b429\b|No comment found for marker.*FORGE:BUILDER|checkpoint failed validation|omitted the required canonical|required canonical .* section|Invalid username or token|Bound branch push failed|^forge-work-on:\s*$/i.test(
+      reason,
+    )
+  );
 }
 
 function isRetryableSetupError(error: unknown): boolean {
