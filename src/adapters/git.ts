@@ -650,12 +650,19 @@ export class GitWorktreeManager {
     repositoryRoot: string,
     refs: readonly string[],
     signal?: AbortSignal,
+    expectedRepository?: string,
   ): Promise<void> {
     if (refs.length === 0) throw new TypeError("At least one Git ref is required.");
     for (const ref of refs) {
       if (!ref.trim() || ref.startsWith("-"))
         throw new TypeError("Git ref is invalid.");
     }
+    if (expectedRepository)
+      await this.assertRepositoryRoot(
+        repositoryRoot,
+        expectedRepository,
+        signal,
+      );
     await this.#git(
       repositoryRoot,
       ["fetch", "--no-tags", "origin", ...refs],
@@ -691,7 +698,14 @@ export class GitWorktreeManager {
     repositoryRoot: string,
     baseBranch: string,
     signal?: AbortSignal,
+    expectedRepository?: string,
   ): Promise<string> {
+    if (expectedRepository)
+      await this.assertRepositoryRoot(
+        repositoryRoot,
+        expectedRepository,
+        signal,
+      );
     await this.#git(
       repositoryRoot,
       ["fetch", "--no-tags", "origin", baseBranch],

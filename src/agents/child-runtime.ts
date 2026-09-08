@@ -1,9 +1,15 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import {
+  constants as fsConstants,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+} from "node:fs";
 import {
   lstat,
   mkdir,
+  open,
   readFile,
   realpath,
   rename,
@@ -280,7 +286,7 @@ async function assertBoundRepository(
   }
 }
 
-function boundWorktreeRegistrationMatches(
+export function boundWorktreeRegistrationMatches(
   output: string,
   root: string,
   binding: ForgeRepositoryBinding,
@@ -298,7 +304,7 @@ function boundWorktreeRegistrationMatches(
       ? detached && (!binding.headSha || head === binding.headSha)
       : branch === `refs/heads/${binding.branch}` &&
         (!binding.headSha || head === binding.headSha));
-  for (const line of output.split("\\n")) {
+  for (const line of output.split("\n")) {
     if (!line.trim()) {
       if (matches()) return true;
       path = undefined;
@@ -2847,7 +2853,27 @@ async function readTrustedResultFile(
     throw new Error("Bound reviewer result must be a regular file.");
   if (resultStat.size > 1024 * 1024)
     throw new Error("Bound reviewer result exceeds the 1 MiB limit.");
-  return readFile(resultPath, "utf8");
+  const handle = await open(
+    resultPath,
+    fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0),
+  );
+  try {
+    const opened = await handle.stat();
+    if (
+      !opened.isFile() ||
+      opened.isSymbolicLink() ||
+      opened.dev !== resultStat.dev ||
+      opened.ino !== resultStat.ino
+    )
+      throw new Error("Bound reviewer result changed during read.");
+    if (opened.size > 1024 * 1024)
+      throw new Error("Bound reviewer result exceeds the 1 MiB limit.");
+    const buffer = Buffer.alloc(opened.size);
+    const { bytesRead } = await handle.read(buffer, 0, opened.size, 0);
+    return buffer.subarray(0, bytesRead).toString("utf8");
+  } finally {
+    await handle.close();
+  }
 }
 
 export interface ExpectedReviewerResult {

@@ -186,21 +186,6 @@ export class ReviewPrCoordinator {
     const mode = input.mode ?? "standard";
     if (mode === "staging" && input.autoMergeRequested)
       throw new Error("Staging review cannot merge or deploy.");
-
-    const route =
-      input.route ??
-      (await this.#github.getPullRequestRouteSnapshot(
-        input.pullNumber,
-        input.signal,
-      ));
-    if (route.pullNumber !== input.pullNumber)
-      throw new Error("Review route pull request does not match the request.");
-    const resumedPull = input.resume
-      ? await this.#github.getPullRequest(input.pullNumber, input.signal)
-      : undefined;
-    const alreadyMergedOnResume = resumedPull?.merged === true;
-    if (!alreadyMergedOnResume)
-      await this.#github.revalidatePullRequestRoute(route, input.signal);
     if (input.execution.kind === "standalone") {
       await this.#git.assertRepositoryRoot(
         input.execution.repositoryRoot,
@@ -217,14 +202,6 @@ export class ReviewPrCoordinator {
         throw new Error(
           "Review work-on execution path does not match its prepared worktree.",
         );
-      const actualHead = await this.#git.head(
-        rebound.worktreePath,
-        input.signal,
-      );
-      if (actualHead !== route.headSha)
-        throw new Error(
-          `Review work-on execution head ${actualHead} does not match frozen PR head ${route.headSha}.`,
-        );
     } else if (input.execution.repositoryIdentity) {
       await this.#git.assertRepositoryIdentity(
         {
@@ -233,11 +210,28 @@ export class ReviewPrCoordinator {
           worktreePath: input.execution.worktreePath,
           branch: "review-unbound",
           baseBranch: "review-unbound",
-          baseSha: route.baseSha,
+          baseSha: "0".repeat(40),
         },
         input.repository,
         input.signal,
       );
+    }
+
+    const route =
+      input.route ??
+      (await this.#github.getPullRequestRouteSnapshot(
+        input.pullNumber,
+        input.signal,
+      ));
+    if (route.pullNumber !== input.pullNumber)
+      throw new Error("Review route pull request does not match the request.");
+    const resumedPull = input.resume
+      ? await this.#github.getPullRequest(input.pullNumber, input.signal)
+      : undefined;
+    const alreadyMergedOnResume = resumedPull?.merged === true;
+    if (!alreadyMergedOnResume)
+      await this.#github.revalidatePullRequestRoute(route, input.signal);
+    if (input.execution.kind === "work-on") {
       const actualHead = await this.#git.head(
         input.execution.worktreePath,
         input.signal,
@@ -1022,6 +1016,7 @@ export class ForgeReviewController {
             ? await this.#resolveStagingBundle(
                 environment.github,
                 environment.repositoryRoot,
+                environment.policy.repository.name,
                 route,
                 ctx.signal,
               )
@@ -1155,6 +1150,7 @@ export class ForgeReviewController {
         ? await this.#resolveStagingBundle(
             environment.github,
             environment.repositoryRoot,
+            environment.policy.repository.name,
             resumeRoute,
             ctx.signal,
           )
@@ -1203,10 +1199,16 @@ export class ForgeReviewController {
   async #resolveStagingBundle(
     github: GitHubWorkflowAdapter,
     repositoryRoot: string,
+    expectedRepository: string,
     route: GitHubPullRequestRouteSnapshot,
     signal?: AbortSignal,
   ): Promise<StagingBundleResolution> {
-    await this.#git.fetchRefs(repositoryRoot, [route.baseRef, route.headRef], signal);
+    await this.#git.fetchRefs(
+      repositoryRoot,
+      [route.baseRef, route.headRef],
+      signal,
+      expectedRepository,
+    );
     return github.resolveStagingBundle({
       route: {
         baseRef: route.baseRef,

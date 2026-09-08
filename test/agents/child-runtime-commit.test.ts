@@ -22,6 +22,7 @@ import {
   allowedNodeTools,
   appendBounded,
   assertBoundWorktreeCwd,
+  boundWorktreeRegistrationMatches,
   assertCommittedTree,
   assertCompleteProcessOutput,
   assertCompleteReviewDiff,
@@ -71,6 +72,23 @@ test("technical phase failures do not project needs-human authority", () => {
   assert.deepEqual(phaseProjectionLabels("fail"), []);
   assert.deepEqual(phaseProjectionLabels("block"), []);
   assert.deepEqual(phaseProjectionLabels("needs-human"), ["needs-human"]);
+});
+
+test("bound repository registration parses porcelain records line by line", () => {
+  assert.equal(
+    boundWorktreeRegistrationMatches(
+      "worktree /repo/.forge/worktrees/run-1\nHEAD abcdef\nbranch refs/heads/forge/run-1\n\n",
+      "/repo/.forge/worktrees/run-1",
+      {
+        runId: "run-1",
+        repository: "owner/repo",
+        repositoryIdentity: "repo-id",
+        worktreeRoot: "/repo/.forge/worktrees/run-1",
+        branch: "forge/run-1",
+      },
+    ),
+    true,
+  );
 });
 
 test("wrong Pi workspaces fail as typed internal binding errors", () => {

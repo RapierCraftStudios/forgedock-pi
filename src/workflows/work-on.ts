@@ -4633,6 +4633,7 @@ export class ForgeWorkOnController {
       link.prepared.repositoryRoot,
       link.prepared.baseBranch,
       ctx.signal,
+      link.repository,
     );
     if (currentBaseSha !== decision.baseSha) {
       // A moving integration base is a normal concurrency event. Refresh the
@@ -5576,6 +5577,7 @@ export class ForgeWorkOnController {
       link.prepared.repositoryRoot,
       link.prepared.baseBranch,
       ctx.signal,
+      link.repository,
     );
     if (currentBaseSha !== result.baseSha) {
       await this.#refreshForMovedBase(

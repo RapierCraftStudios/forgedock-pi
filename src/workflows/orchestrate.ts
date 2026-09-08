@@ -387,6 +387,7 @@ export class ForgeOrchestrationController {
       repositoryRoot,
       integrationBranch,
       ctx.signal,
+      policy.repository.name,
     );
     const tokenProvider = createGitHubTokenProvider(this.#pi, repositoryRoot);
     const transport = new FetchGitHubTransport({
