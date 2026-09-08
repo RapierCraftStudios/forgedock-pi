@@ -23,9 +23,13 @@ active-phase labels with `workflow:building`.
 
 ### Proof map admission
 
-Before editing, compile each acceptance criterion from the accepted contract into one compact proof-link row:
-`<criterion> | Mechanism: <implementation path/symbol and behavior> | Counterexample/behavioral test: <test path, trigger, assertion> | Residual risk: <none or bounded non-contradictory limit> | Status: PASS|FAIL|MISSING|SKIPPED|CONTRADICTED|UNKNOWN`.
-The mechanism traces the invariant through its producer/consumer boundary and relevant failure paths; the test exercises a counterexample or observable behavior and, for a bug fix, rejects the baseline defect. Include namespace/type, serialization, interleaving, failure-injection, retry, recovery, and fresh/existing-state obligations for each new key, protocol, state machine, or external call.
+Before editing, verify the bound `forgedock.issue-contract/v1` descriptor and its digest against
+prepared lane input. Compile exactly one row for every bound source criterion—no fewer, no
+more—from the accepted contract into one compact proof-link row:
+`<bound criterion ID + source text hash> | Mechanism: <implementation path/symbol and behavior> | Counterexample/behavioral test: <test path, trigger, assertion> | Residual risk: <none or bounded non-contradictory limit> | Status: PASS|FAIL|MISSING|SKIPPED|CONTRADICTED|UNKNOWN`.
+A generic `criterion-1` row is invalid unless it is the exact bound source ID. Missing, stale,
+tampered, omitted, or extra identities block mutation and PR preparation.
+The mechanism traces the invariant through its producer/consumer boundary and relevant failure paths; the test exercises a counterexample or observable behavior and, for a bug fix, rejects the baseline defect. Reconcile each acceptance criterion against its implementation and test evidence. Include namespace/type, serialization, interleaving, failure-injection, retry, recovery, and fresh/existing-state obligations for each new key, protocol, state machine, or external call.
 PASS requires both concrete proof ends and non-contradictory residual risk. A contradictory risk is `CONTRADICTED`, never `PASS`; missing, skipped, unknown, or contradicted proof cannot be reported as satisfied or sent to review. Required-risk integration capability that is unavailable or skipped must gate the row. This enriches imperfect intake without becoming a separate qualitative refusal gate.
 
 ## Plan once and publish the pre-build graph
@@ -104,7 +108,7 @@ Commands come from repository/configuration authority, never executable GitHub t
 
 ## Final inspection and commit
 
-Before commit, emit one compact proof-link row for every accepted contract criterion in the existing builder receipt: criterion, implementation mechanism, counterexample/behavioral test, residual risk, and status. Reconcile each criterion and material historical constraint against the code and actual test, including unchanged paths claimed safe. A citation, unchanged constant, positive-only test, or test that cannot reject the baseline defect is not proof. Do not request review with a known acceptance gap.
+Before commit, emit exactly one compact proof-link row for every bound source criterion in the existing builder receipt: criterion ID and source text hash, implementation mechanism, counterexample/behavioral test, residual risk, and status. Revalidate the contract digest and reject missing, stale, tampered, omitted, extra, or generic-only identities. Reconcile each criterion and material historical constraint against the code and actual test, including unchanged paths claimed safe. A citation, unchanged constant, positive-only test, or test that cannot reject the baseline defect is not proof. Do not request review with a known acceptance gap.
 PASS requires concrete mechanism and behavioral-test proof with explicitly non-contradictory residual risk; contradictory risk is `CONTRADICTED`, never `PASS`. Any `MISSING`, `SKIPPED`, `UNKNOWN`, or `CONTRADICTED` row remains an acceptance gap: complete and retest it or report the unavailable required prerequisite before review. Do not skip checks to meet a deadline. Record this coverage in the existing build receipt, not a new gate.
 
 Before commit:
@@ -146,7 +150,8 @@ After the commit and push exist, publish one immutable issue comment:
 - `path` — behavior changed
 
 ### Acceptance and Verification
-- `<criterion>` — **Proof link**: `Mechanism: <implementation path/symbol and behavior>; Counterexample/behavioral test: <test path, trigger, assertion>; Residual risk: <none or bounded non-contradictory limit>` — **Status**: `PASS|FAIL|MISSING|SKIPPED|CONTRADICTED|UNKNOWN` with actual result/evidence
+- `<bound criterion ID + source text hash>` — **Proof link**: `Mechanism: <implementation path/symbol and behavior>; Counterexample/behavioral test: <test path, trigger, assertion>; Residual risk: <none or bounded non-contradictory limit>` — **Status**: `PASS|FAIL|MISSING|SKIPPED|CONTRADICTED|UNKNOWN` with actual result/evidence
+- Acceptance report cardinality and exact identity: **PASS** only when the report contains exactly the bound source criterion set; generic-only, missing, stale, altered, or extra rows remain an acceptance gap.
 
 ### Residual Risks
 - <limitation or none>

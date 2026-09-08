@@ -14,7 +14,10 @@ fresh reviewer panel may be nested.
 ## Prepare or reuse the PR
 
 1. Reuse the retained build head, target, changed files, verification and published decision
-   chain. Require criterion-to-implementation/test coverage; do not delegate known gaps.
+   chain. Read and verify the bound `forgedock.issue-contract/v1` descriptor and digest before
+   preparing the PR. Require criterion-to-implementation/test coverage for exactly the bound
+   source criterion IDs; missing, stale, altered, omitted, extra, or generic-only identities
+   are blockers and must not be delegated to reviewers.
 2. Check once for an existing open PR from the owned branch.
 3. Create one PR when absent; otherwise update the existing PR body only when required.
 4. The PR body states issue, intent, changed behavior, verification, and residual risks.
@@ -36,8 +39,11 @@ head, and base arguments. That skill owns:
 - exact-head evidence and comment readback;
 - finding classification and official verdict.
 
-Each reviewer task carries acceptance invariants, test evidence/scope, bounded diff/context,
-linked classification/context/contract/plan and decision revisions, and unique role ownership.
+Each reviewer task carries the contract digest and exact bound criterion ID set alongside
+acceptance invariants, test evidence/scope, bounded diff/context, linked
+classification/context/contract/plan and decision revisions, and unique role ownership.
+The panel must verify that its acceptance report and verdict contain exactly those IDs; a
+prose-only or generic `criterion-1` report is not valid evidence.
 Fresh reviewers validate the history's current applicability rather than review historically blind. A blocker must be confirmed patch-caused and
 reachable in the supplied patch. A valid same-head reviewer role is retained. Retry only a missing, failed, or malformed
 role; never restart a valid role or complete panel for publication uncertainty that an
@@ -46,6 +52,9 @@ exact-ID readback can resolve.
 ## Result routing
 
 - `APPROVE`, no blockers: continue to merge checks.
+- A contract digest mismatch, missing/extra criterion, or generic-only acceptance report is
+  a contract-integrity blocker even when code review otherwise approves; preserve the exact
+  failure and do not authorize merge.
 - Confirmed patch-caused HIGH/CRITICAL blocker: consolidate findings and perform scope
   reassessment when the admitted scope was incomplete/non-convergent. A DECOMPOSE proposal
   uses the preserved-work handoff, not more code fixes. Otherwise check remaining remediation

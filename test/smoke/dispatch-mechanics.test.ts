@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -18,9 +19,19 @@ async function fixture(run: (f: any) => Promise<void>) {
   execFileSync("git", ["add", "base.txt"], { cwd: repo });
   execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "base"], { cwd: repo });
   await writeFile(join(repo, "forge.yaml"), 'project: {owner: example, repo: project}\nagents: {subagent_model: "openai-codex/gpt-5.6-luna"}\norchestration: {max_concurrent: 3}\nprivate_value: do-not-print-this\n');
+  const makeContract = async (issue: number) => {
+    const contract = dispatch.createIssueContract(issue, [
+      { id: "source-behavior", textHash: `sha256:${"1".repeat(64)}`, proofType: "behavioral", affectedBoundaries: ["src/example.ts"] },
+      { id: "source-safety", textHash: `sha256:${"2".repeat(64)}`, proofType: "unit", affectedBoundaries: ["test/example.test.ts"] },
+    ]);
+    const path = join(root, `contract-${issue}.json`);
+    const bytes = `${JSON.stringify(contract)}\n`;
+    await writeFile(path, bytes);
+    return { path, sha256: createHash("sha256").update(bytes).digest("hex") };
+  };
   const plan = { activeOwners: 2, launchAllowance: 24, requestStartedAt: "2026-01-01T00:00:00Z", issues: [
-    { number: 33724, target: "staging", baseCwd: repo, predecessors: [] },
-    { number: 33745, target: "staging", baseCwd: repo, predecessors: [] },
+    { number: 33724, target: "staging", baseCwd: repo, predecessors: [], contract: await makeContract(33724) },
+    { number: 33745, target: "staging", baseCwd: repo, predecessors: [], contract: await makeContract(33745) },
   ] };
   try { await run({ root, repo, plan }); } finally { await rm(root, { recursive: true, force: true }); }
 }
@@ -51,6 +62,30 @@ test("prepared requests bind one canonical model/cap despite absent child config
   });
 });
 
+test("contract descriptors are exact, immutable, and fail closed before launch", async () => {
+  await fixture(async ({ root, repo, plan }) => {
+    assert.throws(
+      () => dispatch.prepareBatch({ ...plan, issues: [{ ...plan.issues[0], contract: undefined }] }, join(root, "missing"), repo),
+      /contract descriptor/,
+    );
+    const original = plan.issues[0].contract;
+    await writeFile(original.path, `${JSON.stringify(dispatch.createIssueContract(33724, [{ id: "changed", textHash: `sha256:${"4".repeat(64)}`, proofType: "behavioral", affectedBoundaries: ["src/example.ts"] }]) )}\n`);
+    assert.throws(
+      () => dispatch.prepareBatch(plan, join(root, "stale"), repo),
+      /Contract descriptor digest mismatch/,
+    );
+    const tampered = dispatch.createIssueContract(33724, [{ id: "source", textHash: `sha256:${"5".repeat(64)}`, proofType: "behavioral", affectedBoundaries: ["src/example.ts"] }]);
+    tampered.digest = `sha256:${"0".repeat(64)}`;
+    const tamperedPath = join(root, "tampered-contract.json");
+    const tamperedBytes = `${JSON.stringify(tampered)}\n`;
+    await writeFile(tamperedPath, tamperedBytes);
+    assert.throws(
+      () => dispatch.prepareBatch({ ...plan, issues: [{ ...plan.issues[0], contract: { path: tamperedPath, sha256: createHash("sha256").update(tamperedBytes).digest("hex") } }] }, join(root, "tampered"), repo),
+      /Contract digest does not match/,
+    );
+  });
+});
+
 test("bad launch shape fails before request publication, not inside native dispatch", async () => {
   await fixture(async ({ root, repo, plan }) => {
     const out = join(root, "bad");
@@ -64,10 +99,14 @@ test("review preparation cannot substitute a model, duplicate correctness or exc
     const prepared = dispatch.prepareBatch(plan, join(root, "prepared"), repo);
     const batch = JSON.parse(await readFile(prepared.batchFile, "utf8"));
     const env = { PI_SUBAGENT_EXTENSION_BINDINGS: JSON.stringify({ [dispatch.BINDING]: batch.lanes[0].input }) };
-    const review = { head: dispatch.gitHead(repo), round: 1, roles: [{ role: "correctness", thinking: "high", task: "Review only" }] };
+    const policy = dispatch.loadPolicy(undefined, env);
+    const boundContract = JSON.parse(await readFile(policy.contract.path, "utf8"));
+    const review = { head: dispatch.gitHead(repo), round: 1, contractDigest: policy.contractDigest, criterionIds: boundContract.criteria.map((criterion: { id: string }) => criterion.id), roles: [{ role: "correctness", thinking: "high", task: "Review only" }] };
     assert.throws(() => dispatch.prepareReview({ ...review, round: 4 }, join(root, "over"), env), /exceeds bound remediation limit 1/);
     assert.throws(() => dispatch.prepareReview({ ...review, roles: [{ ...review.roles[0], model: "anthropic/stale" }] }, join(root, "model"), env), /Unknown role field: model/);
     assert.throws(() => dispatch.prepareReview({ ...review, roles: [...review.roles, { role: "general", thinking: "high", task: "Duplicate" }] }, join(root, "dupe"), env), /Duplicate/);
+    assert.throws(() => dispatch.prepareReview({ ...review, criterionIds: ["source-behavior"] }, join(root, "missing-criterion"), env), /exactly match/);
+    assert.throws(() => dispatch.prepareReview({ ...review, criterionIds: ["criterion-1", "source-safety"] }, join(root, "generic-criterion"), env), /exactly match/);
     const valid = dispatch.prepareReview(review, join(root, "review"), env);
     assert.match(await readFile(valid.request.workflowScriptPath, "utf8"), /openai-codex\/gpt-5.6-luna:high/);
   });
@@ -128,7 +167,12 @@ test("record rendering derives identity and treats shell metacharacters as liter
 
 test("standalone policy and corrupt descriptor handling", async () => {
   await fixture(async ({ root, repo }) => {
-    const single = dispatch.prepareSingle({ number: 42, target: "staging" }, join(root, "single"), repo);
+    const contract = dispatch.createIssueContract(42, [{ id: "source", textHash: `sha256:${"3".repeat(64)}`, proofType: "behavioral", affectedBoundaries: ["src/example.ts"] }]);
+    const contractPath = join(root, "contract-42.json");
+    const contractBytes = `${JSON.stringify(contract)}\n`;
+    await writeFile(contractPath, contractBytes);
+    const contractDescriptor = { path: contractPath, sha256: createHash("sha256").update(contractBytes).digest("hex") };
+    const single = dispatch.prepareSingle({ number: 42, target: "staging", contract: contractDescriptor }, join(root, "single"), repo);
     assert.equal(dispatch.loadPolicy(single.input, {}).issue, 42);
     assert.throws(() => dispatch.loadPolicy({ ...single.input, sha256: "0".repeat(64) }, {}), /digest mismatch/);
     assert.equal(fs.existsSync(join(root, "single", "config.snapshot.yaml")), false);

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -36,6 +37,24 @@ import {
   workflowStageForNodeTransition,
   workflowStageForRecoveredNodeTransition,
 } from "../../src/workflows/work-on.ts";
+
+test("work-on acceptance identity is exact and source-bound across phases", async () => {
+  const [investigate, build, review, mechanics] = await Promise.all([
+    readFile("specs/original/commands/work-on/investigate.md", "utf8"),
+    readFile("specs/original/commands/work-on/build.md", "utf8"),
+    readFile("specs/original/commands/work-on/review.md", "utf8"),
+    readFile("specs/mechanical-execution.md", "utf8"),
+  ]);
+  for (const content of [investigate, build, review, mechanics]) {
+    assert.match(content, /forgedock\.issue-contract\/v1/);
+    assert.match(content, /exact.*criterion|criterion.*exact/i);
+    assert.match(content, /digest/);
+  }
+  assert.match(investigate, /textHash.*proofType.*affectedBoundaries/s);
+  assert.match(build, /exactly one row.*every bound source criterion/s);
+  assert.match(review, /generic `criterion-1`.*not valid evidence/s);
+  assert.match(mechanics, /Missing, stale,.*tampered, wrong-issue/s);
+});
 
 test("work-on reviewer results are rebound to the shared frozen review identity", () => {
   const result: ForgeReviewerResult = {

@@ -41,16 +41,26 @@ Write approved data—not JavaScript—to a plan file:
   "launchAllowance": 24,
   "requestStartedAt": "<actual original request timestamp>",
   "issues": [
-    {"number": 42, "target": "staging", "baseCwd": "/actual/clean/target/base", "predecessors": []},
-    {"number": 43, "target": "staging", "baseCwd": "/actual/clean/target/base", "predecessors": [42]}
+    {"number": 42, "target": "staging", "baseCwd": "/actual/clean/target/base", "predecessors": [], "contract": {"path": "/retained/issue-42-contract.json", "sha256": "<descriptor-bytes-sha256>"}},
+    {"number": 43, "target": "staging", "baseCwd": "/actual/clean/target/base", "predecessors": [42], "contract": {"path": "/retained/issue-43-contract.json", "sha256": "<descriptor-bytes-sha256>"}}
   ]
 }
 ```
 
 The issue list is already confirmed/topologically ordered; bases are prepared by existing
-worktree rules. Optional `verification` is the prepared catalog path/SHA descriptor. If
-omitted, the helper snapshots current configured commands; an empty catalog is not PASS
-and does not excuse missing required verification.
+worktree rules. Each issue must carry a retained `contract` descriptor. The referenced
+`forgedock.issue-contract/v1` JSON is canonical and versioned: it contains the issue number,
+revision, optional predecessor digest, and a non-empty exact criterion list. Every criterion
+has a stable ID, `sha256:<text>` hash, required proof type, and one or more affected
+boundaries; `digest` is the SHA-256 of the canonical contract content excluding `digest`.
+The helper validates both descriptor bytes and the internal digest before publishing a
+request, and emits `contract` plus `contractDigest` in every lane policy. Missing, stale,
+tampered, wrong-issue, or superseded descriptors fail before launch. Child-local config,
+issue prose, or a generic `criterion-1` cannot replace the bound input.
+
+`verification` is the prepared catalog path/SHA descriptor. If omitted, the helper snapshots
+current configured commands; an empty catalog is not PASS and does not excuse missing
+required verification.
 
 Run `node <package>/specs/helpers/dispatch.mjs batch <plan.json> <new-empty-output-dir>`.
 Read its `request.json` and invoke `subagent` with those exact fields, including the generated
@@ -59,13 +69,16 @@ workflow body. Preparation rejects malformed data before publishing a runnable r
 fix the named plan/config field, not the native runner. Keep inputs while lanes may resume.
 
 For standalone work-on, before leaving the canonical root use `single` with a plan containing
-`number`, `target`, `requestStartedAt` and optional `verification`. Retain the returned input
+`number`, `target`, `requestStartedAt`, and the retained `contract` descriptor (plus optional
+`verification`). Retain the returned input
 descriptor and pass it explicitly to subsequent helpers; do not dispatch its own coordinator.
 
 ## Prepare a review
 
 The owner writes a review plan containing `head`, `round` (0 initial, 1 first remediation),
-and selected `roles`, each with `role`, `task` and `thinking`. Role tasks contain the frozen
+and selected `roles`, each with `role`, `task` and `thinking`. Review input must also carry
+the bound `contractDigest` and exact criterion IDs; a stale contract blocks reviewer launch.
+Role tasks contain the frozen
 diff/graph context; they cannot provide a different model. Use optional `input` only for an
 explicit standalone/legacy descriptor; it must match the native binding when one exists.
 
