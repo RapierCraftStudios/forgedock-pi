@@ -143,7 +143,7 @@ export interface ActiveRunLink {
   refreshes: number;
   providerRetries: number;
   /** Persisted barrier: do not spawn again without a known provider receipt. */
-  launchFailure?: "ambiguous";
+  launchFailure?: "ambiguous" | "binding";
   remediationAttempts: number;
   findingIssueMap: Record<string, number>;
   issueContext: string;
@@ -534,7 +534,8 @@ export class ForgeWorkOnController {
         const retryableRefresh = Boolean(
           link.refreshLaunch &&
             link.refreshLaunch.runId === link.subagentRunId &&
-            isLaunchSentinel(link.refreshLaunch.runId),
+            isLaunchSentinel(link.refreshLaunch.runId) &&
+            link.launchFailure === "binding",
         );
         if (
           link.status !== "running" &&
@@ -615,7 +616,8 @@ export class ForgeWorkOnController {
         const ambiguousRefresh = Boolean(
           link.refreshLaunch &&
             link.refreshLaunch.runId === link.subagentRunId &&
-            isLaunchSentinel(link.refreshLaunch.runId),
+            isLaunchSentinel(link.refreshLaunch.runId) &&
+            link.launchFailure === "binding",
         );
         if (
           (link.launchFailure === "ambiguous" || ambiguousRefresh) &&
@@ -758,8 +760,7 @@ export class ForgeWorkOnController {
         }
         const parentNode = parentNodeFromId(link.currentNodeId);
         if (parentNode && link.currentNodeId) {
-          await this.#rebindLink(link, ctx.signal);
-          await materializeForgeAgents(link.prepared.worktreePath);
+          await this.#rebindParentWorktree(link, ctx, parentNode);
           const { policy } = await loadForgePolicy(
             link.prepared.repositoryRoot,
           );
@@ -939,7 +940,10 @@ export class ForgeWorkOnController {
       const projection = await projector.projectEventWithReceipt({
         issueNumber: link.issueNumber,
         event: completed,
-        markdown: terminalRunMarkdown(link, latest.state),
+        markdown:
+          latest.state.outcome === "closed" && isNoChangeClosure(latest.state)
+            ? noChangeClosureMarkdown(link, latest.state)
+            : terminalRunMarkdown(link, latest.state),
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
       receipts.push(...projection.receipts);
@@ -1855,7 +1859,9 @@ export class ForgeWorkOnController {
     if (!nodeId)
       throw new Error("Node reconciliation has no active node identity.");
     const parentNode = parentNodeFromId(nodeId);
-    await this.#rebindLink(link, ctx.signal);
+    if (parentNode)
+      await this.#rebindParentWorktree(link, ctx, parentNode);
+    else await this.#rebindLink(link, ctx.signal);
     if (parentNode) {
       const { policy } = await loadForgePolicy(link.prepared.repositoryRoot);
       const tokenProvider = createGitHubTokenProvider(
@@ -3594,8 +3600,7 @@ export class ForgeWorkOnController {
         node.node,
       )
     ) {
-      await this.#rebindLink(link, ctx.signal);
-      await materializeForgeAgents(link.prepared.worktreePath);
+      await this.#rebindParentWorktree(link, ctx, node.node);
       link.currentNodeId = node.nodeId;
       link.reviewHeadSha = node.headSha ?? link.reviewHeadSha;
       delete link.launchFailure;
@@ -4821,10 +4826,13 @@ export class ForgeWorkOnController {
     link.launchFailure = "ambiguous";
     this.#persistLink(link);
     let providerLaunchAttempted = false;
+    let previousStopped = isLaunchSentinel(previousRunId);
     let receipt: SubagentSpawnReceipt | undefined;
     try {
-      if (!isLaunchSentinel(previousRunId))
+      if (!isLaunchSentinel(previousRunId)) {
         await this.#rpc.stopAndWait(previousRunId);
+        previousStopped = true;
+      }
       const rebound = await this.#git.rebind(
         link.prepared,
         ctx.signal,
@@ -4888,10 +4896,11 @@ export class ForgeWorkOnController {
       if (receipt) {
         await this.#rpc.stopAndWait(receipt.runId);
         link.launchFailure = "ambiguous";
-      } else if (!providerLaunchAttempted) {
+      } else if (!providerLaunchAttempted && previousStopped) {
         // Keep the durable refresh sentinel and metadata. A later attach can
         // rebind and retry this same refresh attempt without guessing whether
         // a provider launch occurred.
+        link.launchFailure = "binding";
         link.resultPath = refreshResultPath;
       }
       this.#persistLink(link);
@@ -5431,7 +5440,7 @@ export class ForgeWorkOnController {
       const projection = await projector.projectEventWithReceipt({
         issueNumber: link.issueNumber,
         event,
-        markdown: terminalRunMarkdown(link, terminal.state),
+        markdown: noChangeClosureMarkdown(link, terminal.state),
         ...(signal ? { signal } : {}),
       });
       const labelReceipt = await projector.clearWorkflowLabelWithReceipt(
@@ -6248,6 +6257,30 @@ export class ForgeWorkOnController {
     }
   }
 
+  async #rebindParentWorktree(
+    link: ActiveRunLink,
+    ctx: ExtensionContext,
+    node: WorkflowNode,
+  ): Promise<void> {
+    let missing = false;
+    try {
+      await lstat(link.prepared.worktreePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") missing = true;
+      else throw error;
+    }
+    if (node === "cleanup" && missing) {
+      await this.#git.assertRepositoryIdentity(
+        link.prepared,
+        link.repository,
+        ctx.signal,
+      );
+      return;
+    }
+    await this.#rebindLink(link, ctx.signal);
+    await materializeForgeAgents(link.prepared.worktreePath);
+  }
+
   #persistLink(link: ActiveRunLink): void {
     this.#pi.appendEntry(RUN_LINK_ENTRY, link);
     this.#links.set(link.subagentRunId, link);
@@ -6354,6 +6387,21 @@ function terminalRunMarkdown(
   if (state.outcome === "merged")
     return `## ForgeDock Pi complete\n\nPR #${state.pullNumber ?? "unknown"} merged into \`${link.prepared.baseBranch}\`.\n${link.reviewHeadSha ? `Nested review completed at \`${link.reviewHeadSha}\`.\n` : ""}Run: \`${link.forgeRunId}\`.`;
   return `## ForgeDock Pi complete\n\nRun: \`${link.forgeRunId}\`\nOutcome: closed.`;
+}
+
+function isNoChangeClosure(state: Pick<RunState, "nodes">): boolean {
+  return Object.values(state.nodes).some(
+    (node) =>
+      node.node === "close" &&
+      node.evidence?.includes("FORGE:COMMIT:NO-CHANGE"),
+  );
+}
+
+function noChangeClosureMarkdown(
+  link: Pick<ActiveRunLink, "forgeRunId" | "prepared" | "reviewHeadSha">,
+  state: Pick<RunState, "outcome" | "pullNumber" | "nodes">,
+): string {
+  return `${terminalRunMarkdown(link, state)}\n\n<!-- FORGE:INVALID -->\n<!-- FORGE:COMMIT:NO-CHANGE -->`;
 }
 
 async function recordProjectionReceipts(
