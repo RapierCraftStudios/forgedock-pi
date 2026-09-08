@@ -2,6 +2,7 @@
 // Mechanical request preparation only: no agents, GitHub writes or phase decisions.
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -163,15 +164,25 @@ function listAgentFiles(root) {
   visit(root);
   return files;
 }
-function assertNoTargetAgentCollision(cwd) {
+function assertNoTargetAgentCollision(cwd, controlPlane) {
   const roots = new Set();
+  const allowed = new Set([controlPlane?.forgeDock?.agent?.path, controlPlane?.forgeDock?.reviewAgent?.path].filter(Boolean).map(file => fs.realpathSync(file)));
+  const addPackageAgentRoots = packageRoot => {
+    const packageFile = path.join(packageRoot, "package.json");
+    if (!fs.existsSync(packageFile)) return;
+    const packageJson = JSON.parse(fs.readFileSync(packageFile, "utf8"));
+    const declarations = [packageJson["pi-subagents"], packageJson.pi?.subagents].filter(value => value && typeof value === "object" && !Array.isArray(value));
+    for (const declaration of declarations) for (const directory of Array.isArray(declaration.agents) ? declaration.agents : []) if (typeof directory === "string") roots.add(path.resolve(packageRoot, directory));
+  };
+  const configuredUserRoot = process.env.PI_CODING_AGENT_DIR;
+  for (const userRoot of [configuredUserRoot, configuredUserRoot ? path.join(configuredUserRoot, "agents") : undefined, path.join(os.homedir(), ".agents"), path.join(os.homedir(), ".pi", "agent", "agents")].filter(Boolean)) roots.add(userRoot);
   let current = fs.realpathSync(cwd);
   while (true) {
-    const packageFile = path.join(current, "package.json");
-    if (fs.existsSync(packageFile)) {
-      const packageJson = JSON.parse(fs.readFileSync(packageFile, "utf8"));
-      const declarations = [packageJson["pi-subagents"], packageJson.pi?.subagents].filter(value => value && typeof value === "object" && !Array.isArray(value));
-      for (const declaration of declarations) for (const directory of Array.isArray(declaration.agents) ? declaration.agents : []) if (typeof directory === "string") roots.add(path.resolve(current, directory));
+    addPackageAgentRoots(current);
+    const nodeModules = path.join(current, "node_modules");
+    if (fs.existsSync(nodeModules)) for (const entry of fs.readdirSync(nodeModules, { withFileTypes: true })) {
+      if (entry.name.startsWith("@") && entry.isDirectory()) for (const scoped of fs.readdirSync(path.join(nodeModules, entry.name), { withFileTypes: true })) if (scoped.isDirectory()) addPackageAgentRoots(path.join(nodeModules, entry.name, scoped.name));
+      else if (entry.isDirectory()) addPackageAgentRoots(path.join(nodeModules, entry.name));
     }
     roots.add(path.join(current, ".pi", "agents"));
     roots.add(path.join(current, ".agents"));
@@ -181,7 +192,7 @@ function assertNoTargetAgentCollision(cwd) {
   }
   for (const root of roots) for (const file of listAgentFiles(root)) {
     const names = agentRuntimeNames(file);
-    requireThat(!names.includes(FORGEDOCK_OWNER_AGENT) && !names.includes(FORGEDOCK_REVIEW_AGENT), `Target agent definition collides with bound parent control agent: ${file}`);
+    if (!allowed.has(file)) requireThat(!names.includes(FORGEDOCK_OWNER_AGENT) && !names.includes(FORGEDOCK_REVIEW_AGENT), `Target agent definition collides with bound parent control agent: ${file}`);
   }
 }
 function validateFileSet(root, files, label, expected) {
@@ -292,16 +303,20 @@ export function readInput(input) {
 export function gitHead(cwd = process.cwd()) { return execFileSync("git", ["rev-parse", "HEAD"], { cwd, encoding: "utf8" }).trim(); }
 export function canonicalRepositoryIdentity(remote) {
   let value = String(remote ?? "").trim().replace(/^git\+/, "").replace(/\/+$/, "");
-  let pathPart = value;
-  if (value.includes("://")) {
-    try { pathPart = new URL(value).pathname; } catch { pathPart = value; }
+  requireThat(value && !/[?#\s]/.test(value), "Git origin contains unsupported query, fragment, or whitespace");
+  let pathPart;
+  if (value.startsWith("https://") || value.startsWith("ssh://")) {
+    const url = new URL(value);
+    requireThat(url.hostname.toLowerCase() === "github.com" && !url.username && !url.password && !url.port && !url.search && !url.hash, "Git origin must be GitHub HTTPS or SSH without credentials");
+    pathPart = url.pathname;
   } else {
-    const scp = value.match(/^[^@]+@[^:]+:(.+)$/);
-    if (scp) pathPart = scp[1];
+    const scp = value.match(/^git@github\.com:(.+)$/i);
+    requireThat(scp, "Git origin must be GitHub HTTPS, SSH, or scp form");
+    pathPart = scp[1];
   }
-  const parts = pathPart.split(/[\\/]/).filter(Boolean).map(part => part.replace(/\.git$/, ""));
-  requireThat(parts.length >= 2, "Git origin does not identify an owner/repository pair");
-  return parts.slice(-2).join("/").toLowerCase();
+  const parts = pathPart.split("/").filter(Boolean).map(part => part.replace(/\.git$/, ""));
+  requireThat(parts.length === 2 && parts.every(part => /^[A-Za-z0-9_.-]+$/.test(part)), "Git origin does not identify an owner/repository pair");
+  return parts.join("/").toLowerCase();
 }
 export function assertRepo(repo, cwd = process.cwd()) {
   const remote = execFileSync("git", ["remote", "get-url", "origin"], { cwd, encoding: "utf8" });
@@ -364,7 +379,7 @@ export function prepareSingle(plan, out, cwd = process.cwd()) {
   execFileSync("git", ["check-ref-format", "--branch", plan.target], { cwd, stdio: "pipe" });
   const source = configAt(cwd);
   assertInstalledDispatcherNotTarget(cwd);
-  assertNoTargetAgentCollision(cwd);
+  assertNoTargetAgentCollision(cwd, controlPlane);
   if (plan.verification) readInput(plan.verification);
   fs.mkdirSync(out, { recursive: true }); out = path.resolve(out);
   const config = { path: path.resolve(cwd, "forge.yaml"), sha256: sha(source.raw) };
@@ -388,9 +403,9 @@ export function prepareBatch(plan, out, cwd = process.cwd()) {
   fields(plan, ["issues", "activeOwners", "launchAllowance", "requestStartedAt", "verification"], "plan");
   const source = configAt(cwd);
   assertInstalledDispatcherNotTarget(cwd);
-  assertNoTargetAgentCollision(cwd);
   const controlPlane = createControlPlaneDescriptor();
   assertParentControlPlaneNotTarget(controlPlane, cwd);
+  assertNoTargetAgentCollision(cwd, controlPlane);
   integer(plan.activeOwners, "activeOwners"); integer(plan.launchAllowance, "launchAllowance");
   requireThat(Array.isArray(plan.issues) && plan.issues.length > 0, "Plan needs issues");
   requireThat(plan.launchAllowance >= plan.issues.length, "Allowance cannot cover even the issue owners");
@@ -407,7 +422,7 @@ export function prepareBatch(plan, out, cwd = process.cwd()) {
     requireThat(path.isAbsolute(issue.baseCwd ?? "") && fs.statSync(issue.baseCwd).isDirectory(), "Issue needs an existing absolute baseCwd");
     assertInstalledDispatcherNotTarget(issue.baseCwd);
     assertParentControlPlaneNotTarget(controlPlane, issue.baseCwd);
-    assertNoTargetAgentCollision(issue.baseCwd);
+    assertNoTargetAgentCollision(issue.baseCwd, controlPlane);
     assertRepo(source.repo, issue.baseCwd);
     requireThat(Array.isArray(issue.predecessors) && issue.predecessors.every(n => seen.has(n)), "Issues must be topologically ordered with known predecessors");
     seen.add(issue.number);
@@ -445,6 +460,9 @@ export function prepareBatch(plan, out, cwd = process.cwd()) {
 export function prepareReview(plan, out, env = process.env) {
   fields(plan, ["input", "head", "round", "roles", "contractDigest", "criterionIds"], "review");
   const policy = loadPolicy(plan.input, env);
+  const reviewRoot = path.dirname(policy.config.path);
+  assertInstalledDispatcherNotTarget(reviewRoot);
+  assertNoTargetAgentCollision(reviewRoot, policy.controlPlane);
   requireThat(plan.contractDigest === policy.contractDigest, "Review contract digest disagrees with bound lane");
   requireThat(Array.isArray(plan.criterionIds) && new Set(plan.criterionIds).size === plan.criterionIds.length, "Review criterion IDs must be unique");
   const boundContract = validateIssueContractFile(policy.contract, policy.issue);

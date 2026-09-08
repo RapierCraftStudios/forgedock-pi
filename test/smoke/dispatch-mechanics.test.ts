@@ -281,6 +281,7 @@ test("record rendering derives identity and treats shell metacharacters as liter
     const historical = records.renderRecord({ kind: "GATED", input: legacyInput, inputs: [] }, body, { cwd: repo, env: legacyEnv, legacyHistory: true });
     assert.equal(historical.target, 33745);
     const historicalOutput = join(root, "historical-record.md"); await writeFile(historicalOutput, historical.markdown);
+    historical.legacyHistory = false;
     assert.throws(() => records.publishRecord(historical, historicalOutput, () => ""), /render-only/);
     const legacyDraftPath = join(root, "legacy-draft.json"); const legacyOutput = join(root, "legacy-record.md");
     await writeFile(legacyDraftPath, JSON.stringify({ kind: "GATED", input: legacyInput, inputs: [] }));
