@@ -62,6 +62,7 @@ export interface ActiveOrchestrationLink {
   orchestrationId: string;
   repository: string;
   repositoryRoot: string;
+  repositoryIdentity?: string;
   stateBranch: string;
   issueNumbers: readonly number[];
   integrationBranch: string;
@@ -192,7 +193,7 @@ export class ForgeOrchestrationController {
       ctx.signal,
     );
     const { policy } = await loadForgePolicy(repositoryRoot);
-    await this.#git.assertRepositoryRoot(
+    const repositoryIdentity = await this.#git.repositoryIdentityFor(
       repositoryRoot,
       policy.repository.name,
       ctx.signal,
@@ -229,6 +230,7 @@ export class ForgeOrchestrationController {
         orchestrationId,
         repository: persisted.repository,
         repositoryRoot,
+        repositoryIdentity,
         stateBranch: policy.state.branch,
         issueNumbers: persisted.lanes.map((lane) => lane.issueNumber),
         integrationBranch: persisted.integrationBranch,
@@ -378,7 +380,7 @@ export class ForgeOrchestrationController {
     const integrationBranch = chooseIntegrationBranch(policy);
     if (isProtectedBranch(policy, integrationBranch))
       throw new Error(`Integration branch ${integrationBranch} is protected.`);
-    await this.#git.assertRepositoryRoot(
+    const repositoryIdentity = await this.#git.repositoryIdentityFor(
       repositoryRoot,
       policy.repository.name,
       ctx.signal,
@@ -420,6 +422,7 @@ export class ForgeOrchestrationController {
       orchestrationId,
       repository: policy.repository.name,
       repositoryRoot,
+      repositoryIdentity,
       stateBranch: policy.state.branch,
       issueNumbers: [...issueNumbers],
       integrationBranch,
@@ -467,6 +470,11 @@ export class ForgeOrchestrationController {
       ctx.signal,
     );
     const { policy } = await loadForgePolicy(repositoryRoot);
+    await this.#git.assertRepositoryRoot(
+      repositoryRoot,
+      policy.repository.name,
+      ctx.signal,
+    );
     const tokenProvider = createGitHubTokenProvider(this.#pi, repositoryRoot);
     const store = new GitHubStateBranchStore(
       new FetchGitHubTransport({
@@ -1077,6 +1085,22 @@ export class ForgeOrchestrationController {
     journal: OrchestrationJournal;
     store: GitHubStateBranchStore;
   }> {
+    const repositoryIdentity = await this.#git.repositoryIdentityFor(
+      link.repositoryRoot,
+      link.repository,
+      signal,
+    );
+    if (
+      link.repositoryIdentity &&
+      link.repositoryIdentity !== repositoryIdentity
+    )
+      throw new Error(
+        "Forge orchestration repository identity was replaced during recovery.",
+      );
+    if (!link.repositoryIdentity) {
+      link.repositoryIdentity = repositoryIdentity;
+      this.#persistLink(link);
+    }
     const tokenProvider = createGitHubTokenProvider(
       this.#pi,
       link.repositoryRoot,

@@ -1010,6 +1010,12 @@ export class ForgeWorkOnController {
     if (isWorktreeBindingFailure(failure) && link.refreshLaunch) {
       try {
         await this.#retryRefreshBindingFailure(link, ctx);
+      } catch (error) {
+        link.status = "failed";
+        this.#persistLink(link);
+        this.#emitLifecycle(link, {
+          reason: `Refresh binding recovery failed: ${errorMessage(error)}`,
+        });
       } finally {
         this.#providerRecovering.delete(link.forgeRunId);
       }
@@ -1083,6 +1089,7 @@ export class ForgeWorkOnController {
       this.#persistLink(link);
       return;
     }
+    await this.#rebindLink(link, ctx.signal);
     const previousResult = findForgeWorkOnResult(
       await readBoundedForgeResult(
         link.prepared.worktreePath,
@@ -1133,6 +1140,11 @@ export class ForgeWorkOnController {
     const recoveryMode = launchRecoveryMode(failure);
     const worktreeBindingFailure = recoveryMode === "fresh-worktree";
     if (!nodeId || recoveryMode === "none") return false;
+    await this.#git.assertRepositoryIdentity(
+      link.prepared,
+      link.repository,
+      ctx.signal,
+    );
     const tokenProvider = createGitHubTokenProvider(
       this.#pi,
       link.prepared.repositoryRoot,
