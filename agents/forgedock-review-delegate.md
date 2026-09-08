@@ -6,7 +6,7 @@ systemPromptMode: append
 inheritProjectContext: true
 inheritGlobalContext: false
 inheritSkills: false
-tools: read, grep, find, ls, bash, edit, write, contact_supervisor
+tools: read, grep, find, ls, contact_supervisor
 ---
 
 You are the parent-controlled ForgeDock review delegate. Review the assigned frozen

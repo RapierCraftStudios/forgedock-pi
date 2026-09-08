@@ -123,6 +123,50 @@ function validatePackageIdentity(root, packagePath, expectedName, expectedReposi
   const repository = typeof packageJson.repository === "string" ? packageJson.repository : packageJson.repository?.url;
   requireThat(packageJson.name === expectedName && typeof repository === "string" && repository.replace(/^git\+/, "").replace(/\.git$/, "").replace(/^https?:\/\//, "").toLowerCase() === expectedRepository.toLowerCase(), `${expectedName} package identity is invalid`);
 }
+function agentRuntimeName(file) {
+  const text = fs.readFileSync(file, "utf8");
+  const match = text.match(/^---\n([\s\S]*?)\n---(?:\n|$)/);
+  if (!match) return undefined;
+  const frontmatter = parse(match[1]);
+  if (!frontmatter || typeof frontmatter.name !== "string") return undefined;
+  const local = frontmatter.name.trim();
+  const packageName = typeof frontmatter.package === "string" ? frontmatter.package.trim().toLowerCase().replace(/\s+/g, "-") : "";
+  return packageName ? `${packageName}.${local}` : local;
+}
+function listAgentFiles(root) {
+  const files = [];
+  const visit = directory => {
+    if (!fs.existsSync(directory)) return;
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) visit(file);
+      else if (entry.isFile() && entry.name.endsWith(".md")) files.push(file);
+    }
+  };
+  visit(root);
+  return files;
+}
+function assertNoTargetAgentCollision(cwd) {
+  const roots = new Set();
+  const packageFile = path.join(cwd, "package.json");
+  if (fs.existsSync(packageFile)) {
+    const packageJson = JSON.parse(fs.readFileSync(packageFile, "utf8"));
+    const declarations = [packageJson["pi-subagents"], packageJson.pi?.subagents].filter(value => value && typeof value === "object" && !Array.isArray(value));
+    for (const declaration of declarations) for (const directory of Array.isArray(declaration.agents) ? declaration.agents : []) if (typeof directory === "string") roots.add(path.resolve(cwd, directory));
+  }
+  let current = path.resolve(cwd);
+  while (true) {
+    roots.add(path.join(current, ".pi", "agents"));
+    roots.add(path.join(current, ".agents"));
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  for (const root of roots) for (const file of listAgentFiles(root)) {
+    const name = agentRuntimeName(file);
+    requireThat(name !== FORGEDOCK_OWNER_AGENT && name !== FORGEDOCK_REVIEW_AGENT, `Target agent definition collides with bound parent control agent: ${file}`);
+  }
+}
 function validateFileSet(root, files, label, expected) {
   requireThat(fs.realpathSync(root) === root, `${label} root must be canonical`);
   requireThat(Array.isArray(files) && files.length === expected.length, `${label} descriptor file set is incomplete`);
@@ -276,6 +320,7 @@ export function prepareSingle(plan, out, cwd = process.cwd()) {
   requireThat(typeof plan.target === "string" && plan.target.length > 0, "Single policy needs target");
   execFileSync("git", ["check-ref-format", "--branch", plan.target], { cwd, stdio: "pipe" });
   const source = configAt(cwd);
+  assertNoTargetAgentCollision(cwd);
   if (plan.verification) readInput(plan.verification);
   fs.mkdirSync(out, { recursive: true }); out = path.resolve(out);
   const config = { path: path.resolve(cwd, "forge.yaml"), sha256: sha(source.raw) };
@@ -290,7 +335,7 @@ function recipe(controlPlane) {
   let body = doc.slice(doc.indexOf("Use one visible promise graph.")).match(/```js\n([\s\S]*?)\n```/)?.[1];
   requireThat(body, "Bound installed dispatcher recipe is missing");
   const oldSatisfied = `function satisfied(result) {\n  return result.ok === true && /^FORGE_WORK_ON_RESULT status=DONE .* dependency=SATISFIED$/.test(resultLine(result));\n}`;
-  const exactSatisfied = `function exactAcceptanceSatisfied(result, expected) {\n  if (!expected?.criteria) return true;\n  const child = result?.results?.[0] ?? result;\n  const ledger = child?.acceptance;\n  const effective = ledger?.effectiveAcceptance?.criteria;\n  const reported = ledger?.childReport?.criteriaSatisfied;\n  if (!Array.isArray(effective) || !Array.isArray(reported) || effective.length !== expected.criteria.length || reported.length !== expected.criteria.length) return false;\n  for (let index = 0; index < expected.criteria.length; index++) {\n    const expectedCriterion = expected.criteria[index];\n    const actualCriterion = effective[index];\n    const actualReported = reported[index];\n    const exactToken = "acceptance-id=" + expectedCriterion.id + ";textHash=" + expectedCriterion.textHash;\n    if (actualCriterion?.id !== expectedCriterion.id || actualCriterion?.must !== expectedCriterion.must || actualReported?.id !== expectedCriterion.id || actualReported?.status !== "satisfied" || !Array.isArray(actualReported?.evidence) || !actualReported.evidence.includes(exactToken)) return false;\n  }\n  return true;\n}\nfunction enforceOwnerAcceptance(result, expected) {\n  if (exactAcceptanceSatisfied(result, expected)) return result;\n  return { ...result, ok: false, status: "FAILED", error: "Bound issue acceptance criteria were missing, reordered, generic, or mismatched." };\n}\nfunction satisfied(result, expected) {\n  return result.ok === true && exactAcceptanceSatisfied(result, expected) && /^FORGE_WORK_ON_RESULT status=DONE .* dependency=SATISFIED$/.test(resultLine(result));\n}`;
+  const exactSatisfied = `function exactAcceptanceSatisfied(result, expected) {\n  if (!expected?.criteria) return true;\n  const child = result?.results?.[0] ?? result;\n  const ledger = child?.acceptance;\n  if (!ledger || ledger.status === "rejected" || ledger.evidenceStatus === "rejected") return false;\n  const effective = ledger?.effectiveAcceptance?.criteria;\n  const reported = ledger?.childReport?.criteriaSatisfied;\n  if (!Array.isArray(effective) || !Array.isArray(reported) || effective.length !== expected.criteria.length || reported.length !== expected.criteria.length) return false;\n  for (let index = 0; index < expected.criteria.length; index++) {\n    const expectedCriterion = expected.criteria[index];\n    const actualCriterion = effective[index];\n    const actualReported = reported[index];\n    const exactToken = "acceptance-id=" + expectedCriterion.id + ";textHash=" + expectedCriterion.textHash;\n    if (actualCriterion?.id !== expectedCriterion.id || actualCriterion?.must !== expectedCriterion.must || actualReported?.id !== expectedCriterion.id || actualReported?.status !== "satisfied" || !Array.isArray(actualReported?.evidence) || !actualReported.evidence.includes(exactToken)) return false;\n  }\n  return true;\n}\nfunction enforceOwnerAcceptance(result, expected) {\n  if (exactAcceptanceSatisfied(result, expected)) return result;\n  return { ...result, ok: false, status: "FAILED", error: "Bound issue acceptance criteria were missing, reordered, generic, or mismatched." };\n}\nfunction satisfied(result, expected) {\n  return result.ok === true && exactAcceptanceSatisfied(result, expected) && /^FORGE_WORK_ON_RESULT status=DONE .* dependency=SATISFIED$/.test(resultLine(result));\n}`;
   requireThat(body.includes(oldSatisfied), "Bound installed dispatcher recipe lacks the acceptance boundary");
   body = body.replace(oldSatisfied, exactSatisfied).replace("return launch(key, { ...issue, model: configuredModel }).then((result) => {", "return launch(key, { ...issue, model: configuredModel }).then((rawResult) => {\n    const result = enforceOwnerAcceptance(rawResult, issue.acceptance);").replace("satisfied(outcomes.get(key))", "satisfied(outcomes.get(key), node.launch.acceptance)");
   return body;
@@ -298,6 +343,7 @@ function recipe(controlPlane) {
 export function prepareBatch(plan, out, cwd = process.cwd()) {
   fields(plan, ["issues", "activeOwners", "launchAllowance", "requestStartedAt", "verification"], "plan");
   const source = configAt(cwd);
+  assertNoTargetAgentCollision(cwd);
   const controlPlane = createControlPlaneDescriptor();
   assertParentControlPlaneNotTarget(controlPlane, cwd);
   integer(plan.activeOwners, "activeOwners"); integer(plan.launchAllowance, "launchAllowance");
@@ -337,7 +383,7 @@ export function prepareBatch(plan, out, cwd = process.cwd()) {
       predecessors: issue.predecessors.map(n => keys.get(n)),
       launch: { agent: FORGEDOCK_OWNER_AGENT, task: `${issue.number} --under-orchestration\n\nPrepared lane input: ${JSON.stringify(input)}\n\n${controlPlaneInstructions(controlPlane)}\n\nBound issue acceptance contract: ${JSON.stringify(acceptanceForContract(contract))}\n\nPrepared verification catalog: ${JSON.stringify(verification)}`,
         context: "fresh", model: source.model, agentScope: "user", cwd: issue.baseCwd, worktree: true, output: false, outputMode: "inline", artifacts: true,
-        extensionBindings: { [BINDING]: input }, acceptance: acceptanceForContract(contract), timeoutMs: 2147483647 } });
+        extensionBindings: { [BINDING]: input }, acceptance: acceptanceForContract(contract), agentContract: { version: 1 }, gateOn: "acceptance", timeoutMs: 2147483647 } });
   }
   const scriptPath = path.join(out, "workflow.js");
   save(scriptPath, `const configuredModel=${JSON.stringify(source.model)};\nconst ownerConcurrency=${plan.activeOwners};\nconst issueGraph=${JSON.stringify(issueGraph)};\n${recipe(controlPlane)}\n`);

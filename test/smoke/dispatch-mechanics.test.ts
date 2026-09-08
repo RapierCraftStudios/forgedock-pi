@@ -108,6 +108,9 @@ test("parent control-plane binding and exact native acceptance survive lane publ
     assert.equal(control.forgeDock.specs.workOn.path, join(control.forgeDock.root, "specs/original/commands/work-on.md"));
     assert.equal(control.forgeDock.helpers.record.path, `${control.forgeDock.root}/specs/helpers/record.mjs`);
     assert.equal(control.forgeDock.reviewAgent.path, join(control.forgeDock.root, "agents/forgedock-review-delegate.md"));
+    const reviewAgent = await readFile(control.forgeDock.reviewAgent.path, "utf8");
+    assert.match(reviewAgent, /^tools: read, grep, find, ls, contact_supervisor$/m);
+    assert.doesNotMatch(reviewAgent, /bash|edit|write/);
     assert.equal(control.piSubagents.acceptance.path, `${control.piSubagents.root}/src/runs/shared/acceptance.ts`);
     assert.throws(() => dispatch.validateControlPlaneDescriptor({ ...control, digest: `sha256:${"0".repeat(64)}` }), /digest does not match/);
     const policy = JSON.parse(await readFile(batch.lanes[0].input.path, "utf8"));
@@ -115,11 +118,14 @@ test("parent control-plane binding and exact native acceptance survive lane publ
     const script = await readFile(prepared.request.workflowScriptPath, "utf8");
     assert.match(script, /effectiveAcceptance.*criteria/);
     assert.match(script, /childReport.*criteriaSatisfied/);
+    assert.match(script, /evidenceStatus === "rejected"/);
     assert.match(script, /enforceOwnerAcceptance/);
     const graph = JSON.parse(script.match(/^const issueGraph=(.+);$/m)![1]!);
     const launch = graph[0].launch;
     assert.equal(launch.agentScope, "user");
     assert.equal(launch.agent, "forgedock-parent-control.forgedock-work-on-coordinator");
+    assert.deepEqual(launch.agentContract, { version: 1 });
+    assert.equal(launch.gateOn, "acceptance");
     assert.equal(launch.acceptance.criteria.length, 2);
     assert.deepEqual(launch.acceptance.criteria.map((criterion: { id: string }) => criterion.id), ["source-behavior", "source-safety"]);
     assert.ok(launch.acceptance.criteria.every((criterion: { must: string }) => /acceptance-id=.*;textHash=sha256:|proofType=|affectedBoundaries=/.test(criterion.must)));
@@ -146,6 +152,16 @@ test("parent control-plane binding and exact native acceptance survive lane publ
     assert.match(reviewScript, /agentScope":"user/);
     assert.match(reviewScript, /forgedock-parent-control\.delegate/);
     assert.match(reviewScript, /forgedock\.control-plane\/v1/);
+  });
+});
+
+test("target package-qualified parent agent collisions fail before launch", async () => {
+  await fixture(async ({ root, repo, plan }) => {
+    await mkdir(join(repo, ".pi/agents"), { recursive: true });
+    await writeFile(join(repo, ".pi/agents/collision.md"), "---\nname: forgedock-work-on-coordinator\npackage: forgedock-parent-control\n---\nTarget collision\n");
+    await writeFile(join(repo, "package.json"), JSON.stringify({ name: "target-project", pi: { subagents: { agents: [".pi/agents"] } } }));
+    assert.throws(() => dispatch.prepareBatch(plan, join(root, "collision"), repo), /collides with bound parent control agent/);
+    assert.equal(fs.existsSync(join(root, "collision")), false);
   });
 });
 
