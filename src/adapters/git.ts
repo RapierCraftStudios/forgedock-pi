@@ -1,6 +1,7 @@
 import { constants } from "node:fs";
 import {
   access,
+  lstat,
   mkdir,
   open,
   realpath,
@@ -42,6 +43,9 @@ export interface CommandExecutor {
 
 export interface PreparedWorktree {
   repositoryRoot: string;
+  repository?: string;
+  /** Stable local identity used to reject a replaced repository at the same path. */
+  repositoryIdentity?: string;
   worktreePath: string;
   branch: string;
   baseBranch: string;
@@ -50,11 +54,22 @@ export interface PreparedWorktree {
 
 export interface PreparedReviewWorktree {
   repositoryRoot: string;
+  repository?: string;
+  /** Stable local identity used to reject a replaced review repository. */
+  repositoryIdentity?: string;
   worktreePath: string;
   headRef: string;
   headSha: string;
   baseRef: string;
   baseSha: string;
+}
+
+export interface BoundWorktreeInspection {
+  repositoryIdentity: string;
+  worktreePath: string;
+  branch: string;
+  detached: boolean;
+  headSha: string;
 }
 
 export class GitOperationError extends Error {
@@ -135,12 +150,130 @@ export class GitWorktreeManager {
     return realpath(result.stdout.trim());
   }
 
+  async assertRepositoryIdentity(
+    prepared: PreparedWorktree,
+    expectedRepository?: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await this.#assertPreparedRepository(
+      prepared,
+      signal,
+      expectedRepository,
+    );
+  }
+
+  async assertRepositoryRoot(
+    repositoryRoot: string,
+    expectedRepository: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const root = await realpath(repositoryRoot);
+    await this.#assertRepositoryOrigin(root, expectedRepository, signal);
+    await this.#repositoryIdentity(root, signal);
+  }
+
+  async repositoryIdentityFor(
+    repositoryRoot: string,
+    expectedRepository: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const root = await realpath(repositoryRoot);
+    await this.#assertRepositoryOrigin(root, expectedRepository, signal);
+    return this.#repositoryIdentity(root, signal);
+  }
+
+  async inspectWorktree(
+    repositoryRoot: string,
+    worktreePath: string,
+    expectedRepository?: string,
+    signal?: AbortSignal,
+  ): Promise<BoundWorktreeInspection> {
+    const root = await realpath(repositoryRoot);
+    const expectedPath = resolve(root, worktreePath);
+    if (!isPathWithin(root, expectedPath) || expectedPath === root)
+      throw new Error(
+        "Forge worktree binding failure: supplied worktree is outside the repository root.",
+      );
+    const candidate = await realpath(expectedPath);
+    if (candidate !== expectedPath)
+      throw new Error(
+        "Forge worktree binding failure: supplied worktree is not the exact path.",
+      );
+    const repositoryIdentity = await this.#repositoryIdentity(root, signal);
+    if (expectedRepository)
+      await this.#assertRepositoryOrigin(root, expectedRepository, signal);
+    if ((await this.#repositoryIdentity(candidate, signal)) !== repositoryIdentity)
+      throw new Error(
+        "Forge worktree binding failure: supplied worktree belongs to another Git repository.",
+      );
+    if (expectedRepository)
+      await this.#assertRepositoryOrigin(candidate, expectedRepository, signal);
+    const registration = await this.#git(
+      root,
+      ["worktree", "list", "--porcelain"],
+      30_000,
+      signal,
+    );
+    const record = worktreeRegistrationRecord(
+      registration.stdout,
+      root,
+      candidate,
+    );
+    if (!record || record.prunable)
+      throw new Error(
+        "Forge worktree binding failure: supplied worktree is not a registered non-prunable worktree.",
+      );
+    const headSha = await this.head(candidate, signal);
+    if (record.head !== headSha)
+      throw new Error(
+        "Forge worktree binding failure: registered worktree head changed during validation.",
+      );
+    const branch = await this.branch(candidate, signal);
+    if (record.detached !== !branch)
+      throw new Error(
+        "Forge worktree binding failure: registered worktree mode changed during validation.",
+      );
+    if (!record.detached && record.branch !== `refs/heads/${branch}`)
+      throw new Error(
+        "Forge worktree binding failure: registered worktree branch changed during validation.",
+      );
+    return {
+      repositoryIdentity,
+      worktreePath: candidate,
+      branch,
+      detached: record.detached,
+      headSha,
+    };
+  }
+
+  async adoptPreparedWorktree(
+    prepared: PreparedWorktree,
+    expectedRepository: string,
+    signal?: AbortSignal,
+    expectedHeadSha?: string,
+  ): Promise<PreparedWorktree> {
+    const root = await realpath(prepared.repositoryRoot);
+    await this.#assertRepositoryOrigin(root, expectedRepository, signal);
+    const adopted = {
+      ...prepared,
+      repository: expectedRepository,
+      repositoryIdentity: await this.#repositoryIdentity(root, signal),
+    };
+    return this.rebind(
+      adopted,
+      signal,
+      expectedRepository,
+      expectedHeadSha,
+    );
+  }
+
   async prepare(
     repositoryRoot: string,
     input: {
       runId: string;
       issueNumber: number;
       baseBranch: string;
+      expectedRepository?: string;
       signal?: AbortSignal;
     },
   ): Promise<PreparedWorktree> {
@@ -150,6 +283,16 @@ export class GitWorktreeManager {
     if (!input.baseBranch.trim() || input.baseBranch.startsWith("-"))
       throw new TypeError("Base branch is invalid.");
     const root = await realpath(repositoryRoot);
+    if (input.expectedRepository)
+      await this.#assertRepositoryOrigin(
+        root,
+        input.expectedRepository,
+        input.signal,
+      );
+    const repositoryIdentity = await this.#repositoryIdentity(
+      root,
+      input.signal,
+    );
     await this.#git(
       root,
       ["fetch", "--no-tags", "origin", input.baseBranch],
@@ -170,6 +313,10 @@ export class GitWorktreeManager {
       throw new Error(`Owned worktree path already exists: ${worktreePath}`);
     const prepared = {
       repositoryRoot: root,
+      ...(input.expectedRepository
+        ? { repository: input.expectedRepository }
+        : {}),
+      repositoryIdentity,
       worktreePath,
       branch,
       baseBranch: input.baseBranch,
@@ -214,6 +361,7 @@ export class GitWorktreeManager {
       headSha: string;
       baseRef: string;
       baseSha: string;
+      expectedRepository?: string;
       signal?: AbortSignal;
     },
   ): Promise<PreparedReviewWorktree> {
@@ -223,6 +371,16 @@ export class GitWorktreeManager {
     assertCommitSha(input.headSha, "headSha");
     assertCommitSha(input.baseSha, "baseSha");
     const root = await realpath(repositoryRoot);
+    if (input.expectedRepository)
+      await this.#assertRepositoryOrigin(
+        root,
+        input.expectedRepository,
+        input.signal,
+      );
+    const repositoryIdentity = await this.#repositoryIdentity(
+      root,
+      input.signal,
+    );
     await this.#git(
       root,
       ["fetch", "--no-tags", "origin", input.headRef, input.baseRef],
@@ -250,25 +408,23 @@ export class GitWorktreeManager {
         "Pull request head/base changed before review worktree preparation.",
       );
     const worktreePath = join(root, ".forge", "reviews", input.reviewId);
+    const prepared = {
+      repositoryRoot: root,
+      ...(input.expectedRepository
+        ? { repository: input.expectedRepository }
+        : {}),
+      repositoryIdentity,
+      worktreePath,
+      headRef: input.headRef,
+      headSha: input.headSha,
+      baseRef: input.baseRef,
+      baseSha: input.baseSha,
+    };
     await mkdir(dirname(worktreePath), { recursive: true });
     if (await exists(worktreePath)) {
-      const canonicalWorktree = await realpath(worktreePath);
-      if (!isPathWithin(join(root, ".forge", "reviews"), canonicalWorktree))
-        throw new Error("Existing review worktree is outside the Forge review directory.");
-      const existingHead = await this.head(canonicalWorktree, input.signal);
-      if (existingHead !== input.headSha)
-        throw new Error(
-          `Existing review worktree head ${existingHead} does not match ${input.headSha}.`,
-        );
-      await this.assertClean(canonicalWorktree, input.signal);
-      return {
-        repositoryRoot: root,
-        worktreePath: canonicalWorktree,
-        headRef: input.headRef,
-        headSha: input.headSha,
-        baseRef: input.baseRef,
-        baseSha: input.baseSha,
-      };
+      await this.#assertReviewWorktree(prepared, input.signal);
+      await this.assertClean(worktreePath, input.signal);
+      return prepared;
     }
     let worktreeCreated = false;
     try {
@@ -282,14 +438,7 @@ export class GitWorktreeManager {
       const canonicalWorktree = await realpath(worktreePath);
       if (!isPathWithin(join(root, ".forge", "reviews"), canonicalWorktree))
         throw new Error("Git created a review worktree outside the Forge review directory.");
-      return {
-        repositoryRoot: root,
-        worktreePath: canonicalWorktree,
-        headRef: input.headRef,
-        headSha: input.headSha,
-        baseRef: input.baseRef,
-        baseSha: input.baseSha,
-      };
+      return { ...prepared, worktreePath: canonicalWorktree };
     } catch (error) {
       if (worktreeCreated)
         await this.#cleanupFailedReviewPreparation(
@@ -304,6 +453,7 @@ export class GitWorktreeManager {
     prepared: PreparedReviewWorktree,
     signal?: AbortSignal,
   ): Promise<void> {
+    await this.#assertReviewWorktree(prepared, signal);
     await this.#cleanupWorktree(
       prepared.repositoryRoot,
       prepared.worktreePath,
@@ -311,17 +461,298 @@ export class GitWorktreeManager {
     );
   }
 
+  async #assertReviewWorktree(
+    prepared: PreparedReviewWorktree,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const root = await realpath(prepared.repositoryRoot);
+    const currentRepositoryIdentity = await this.#repositoryIdentity(
+      root,
+      signal,
+    );
+    if (
+      !prepared.repositoryIdentity ||
+      prepared.repositoryIdentity !== currentRepositoryIdentity
+    )
+      throw new Error(
+        "Forge worktree binding failure: retained review repository identity is missing or has been replaced.",
+      );
+    if (prepared.repository)
+      await this.#assertRepositoryOrigin(root, prepared.repository, signal);
+    const reviewBase = join(root, ".forge", "reviews");
+    const expectedPath = resolve(root, prepared.worktreePath);
+    if (!isPathWithin(reviewBase, expectedPath) || expectedPath === reviewBase)
+      throw new Error(
+        `Forge worktree binding failure: retained review path ${prepared.worktreePath} is outside the owned review directory.`,
+      );
+    let existing: Awaited<ReturnType<typeof lstat>> | undefined;
+    try {
+      existing = await lstat(expectedPath);
+    } catch (error) {
+      if (isMissingFile(error)) return;
+      throw error;
+    }
+    if (existing.isSymbolicLink() || !existing.isDirectory())
+      throw new Error(
+        `Forge worktree binding failure: retained review path ${prepared.worktreePath} is not a real directory.`,
+      );
+    const canonicalWorktree = await realpath(expectedPath);
+    if (canonicalWorktree !== expectedPath)
+      throw new Error(
+        `Forge worktree binding failure: retained review path ${prepared.worktreePath} is not the exact owned worktree.`,
+      );
+    const registration = await this.#git(
+      root,
+      ["worktree", "list", "--porcelain"],
+      30_000,
+      signal,
+    );
+    if (
+      !reviewWorktreeRegistrationMatches(
+        registration.stdout,
+        root,
+        canonicalWorktree,
+        prepared.headSha,
+      )
+    )
+      throw new Error(
+        `Forge worktree binding failure: ${canonicalWorktree} is not the registered review worktree.`,
+      );
+    const [rootCommon, worktreeCommon] = await Promise.all([
+      this.#git(root, ["rev-parse", "--git-common-dir"], 30_000, signal),
+      this.#git(
+        canonicalWorktree,
+        ["rev-parse", "--git-common-dir"],
+        30_000,
+        signal,
+      ),
+    ]);
+    if (
+      (await realpath(resolve(root, rootCommon.stdout.trim()))) !==
+      (await realpath(resolve(canonicalWorktree, worktreeCommon.stdout.trim())))
+    )
+      throw new Error(
+        `Forge worktree binding failure: ${canonicalWorktree} belongs to another Git repository.`,
+      );
+    const currentHead = await this.#git(
+      canonicalWorktree,
+      ["rev-parse", "HEAD"],
+      30_000,
+      signal,
+    );
+    if (currentHead.stdout.trim() !== prepared.headSha)
+      throw new Error(
+        `Forge worktree binding failure: expected review head ${prepared.headSha}, found ${currentHead.stdout.trim() || "unknown"}.`,
+      );
+  }
+
+  /** Rebind a retained run to its exact Forge worktree without changing its branch. */
+  async rebind(
+    prepared: PreparedWorktree,
+    signal?: AbortSignal,
+    expectedRepository?: string,
+    expectedHeadSha = prepared.baseSha,
+  ): Promise<PreparedWorktree> {
+    const root = await this.#assertPreparedRepository(
+      prepared,
+      signal,
+      expectedRepository,
+    );
+    const worktreeBase = join(root, ".forge", "worktrees");
+    const expectedPath = resolve(root, prepared.worktreePath);
+    if (
+      !isPathWithin(worktreeBase, expectedPath) ||
+      expectedPath === resolve(worktreeBase)
+    )
+      throw new Error(
+        `Forge worktree binding failure: retained path ${prepared.worktreePath} is outside the owned worktree directory.`,
+      );
+    assertSafeBranchRef(prepared.branch, "prepared branch");
+    let parentStat: Awaited<ReturnType<typeof lstat>>;
+    try {
+      parentStat = await lstat(worktreeBase);
+    } catch {
+      throw new Error(
+        `Forge worktree binding failure: owned parent ${worktreeBase} is unavailable.`,
+      );
+    }
+    if (
+      parentStat.isSymbolicLink() ||
+      !parentStat.isDirectory() ||
+      (await realpath(worktreeBase)) !== worktreeBase
+    )
+      throw new Error(
+        `Forge worktree binding failure: owned parent ${worktreeBase} is not a real directory.`,
+      );
+
+    let created = false;
+    try {
+      let existing: Awaited<ReturnType<typeof lstat>> | undefined;
+      try {
+        existing = await lstat(expectedPath);
+      } catch (error) {
+        if (!isMissingFile(error)) throw error;
+      }
+      if (existing?.isSymbolicLink())
+        throw new Error(
+          `Forge worktree binding failure: retained path ${prepared.worktreePath} is a symlink.`,
+        );
+      if (existing && !existing.isDirectory())
+        throw new Error(
+          `Forge worktree binding failure: retained path ${prepared.worktreePath} is not a directory.`,
+        );
+
+      if (!existing) {
+        try {
+          await this.#git(
+            root,
+            ["worktree", "remove", "--force", expectedPath],
+            120_000,
+            signal,
+          );
+        } catch (error) {
+          if (!isAlreadyAbsent(error)) throw error;
+        }
+        const branch = await this.#executor.exec(
+          "git",
+          ["show-ref", "--verify", "--quiet", `refs/heads/${prepared.branch}`],
+          {
+            cwd: root,
+            timeout: 30_000,
+            ...(signal ? { signal } : {}),
+          },
+        );
+        if (branch.code === 0) {
+          created = true;
+          await this.#git(
+            root,
+            ["worktree", "add", expectedPath, prepared.branch],
+            120_000,
+            signal,
+          );
+        } else if (branch.code === 1) {
+          await this.#git(
+            root,
+            ["fetch", "--no-tags", "origin", prepared.branch],
+            120_000,
+            signal,
+          );
+          created = true;
+          await this.#git(
+            root,
+            [
+              "worktree",
+              "add",
+              "-b",
+              prepared.branch,
+              expectedPath,
+              `origin/${prepared.branch}`,
+            ],
+            120_000,
+            signal,
+          );
+        } else {
+          throw new GitOperationError(
+            `resolve retained branch ${prepared.branch}`,
+            branch,
+          );
+        }
+      }
+
+      const canonicalWorktree = await realpath(expectedPath);
+      if (canonicalWorktree !== expectedPath)
+        throw new Error(
+          `Forge worktree binding failure: retained path ${prepared.worktreePath} is not the exact owned worktree.`,
+        );
+      const registration = await this.#git(
+        root,
+        ["worktree", "list", "--porcelain"],
+        30_000,
+        signal,
+      );
+      if (
+        !worktreeRegistrationMatches(
+          registration.stdout,
+          root,
+          canonicalWorktree,
+          prepared.branch,
+          expectedHeadSha,
+        )
+      )
+        throw new Error(
+          `Forge worktree binding failure: ${canonicalWorktree} is not registered to the repository and branch.`,
+        );
+      const [rootCommon, worktreeCommon] = await Promise.all([
+        this.#git(root, ["rev-parse", "--git-common-dir"], 30_000, signal),
+        this.#git(
+          canonicalWorktree,
+          ["rev-parse", "--git-common-dir"],
+          30_000,
+          signal,
+        ),
+      ]);
+      if (
+        (await realpath(resolve(root, rootCommon.stdout.trim()))) !==
+        (await realpath(resolve(canonicalWorktree, worktreeCommon.stdout.trim())))
+      )
+        throw new Error(
+          `Forge worktree binding failure: ${canonicalWorktree} belongs to another Git repository.`,
+        );
+      const currentBranch = await this.#git(
+        canonicalWorktree,
+        ["branch", "--show-current"],
+        30_000,
+        signal,
+      );
+      if (currentBranch.stdout.trim() !== prepared.branch)
+        throw new Error(
+          `Forge worktree binding failure: expected branch ${prepared.branch}, found ${currentBranch.stdout.trim() || "detached"}.`,
+        );
+      const currentHead = await this.#git(
+        canonicalWorktree,
+        ["rev-parse", "HEAD"],
+        30_000,
+        signal,
+      );
+      if (currentHead.stdout.trim() !== expectedHeadSha)
+        throw new Error(
+          `Forge worktree binding failure: expected head ${expectedHeadSha}, found ${currentHead.stdout.trim() || "unknown"}.`,
+        );
+      return {
+        ...prepared,
+        repositoryRoot: root,
+        worktreePath: canonicalWorktree,
+      };
+    } catch (error) {
+      if (created)
+        await this.#git(
+          root,
+          ["worktree", "remove", "--force", expectedPath],
+          120_000,
+          signal,
+        ).catch(() => undefined);
+      throw error;
+    }
+  }
+
   /** Fetch refs used by a frozen reachability decision without changing HEAD. */
   async fetchRefs(
     repositoryRoot: string,
     refs: readonly string[],
     signal?: AbortSignal,
+    expectedRepository?: string,
   ): Promise<void> {
     if (refs.length === 0) throw new TypeError("At least one Git ref is required.");
     for (const ref of refs) {
       if (!ref.trim() || ref.startsWith("-"))
         throw new TypeError("Git ref is invalid.");
     }
+    if (expectedRepository)
+      await this.assertRepositoryRoot(
+        repositoryRoot,
+        expectedRepository,
+        signal,
+      );
     await this.#git(
       repositoryRoot,
       ["fetch", "--no-tags", "origin", ...refs],
@@ -357,7 +788,14 @@ export class GitWorktreeManager {
     repositoryRoot: string,
     baseBranch: string,
     signal?: AbortSignal,
+    expectedRepository?: string,
   ): Promise<string> {
+    if (expectedRepository)
+      await this.assertRepositoryRoot(
+        repositoryRoot,
+        expectedRepository,
+        signal,
+      );
     await this.#git(
       repositoryRoot,
       ["fetch", "--no-tags", "origin", baseBranch],
@@ -377,6 +815,17 @@ export class GitWorktreeManager {
   async head(worktreePath: string, signal?: AbortSignal): Promise<string> {
     return (
       await this.#git(worktreePath, ["rev-parse", "HEAD"], 30_000, signal)
+    ).stdout.trim();
+  }
+
+  async branch(worktreePath: string, signal?: AbortSignal): Promise<string> {
+    return (
+      await this.#git(
+        worktreePath,
+        ["branch", "--show-current"],
+        30_000,
+        signal,
+      )
     ).stdout.trim();
   }
 
@@ -424,14 +873,21 @@ export class GitWorktreeManager {
   }
 
   async push(
-    worktreePath: string,
-    branch: string,
+    prepared: PreparedWorktree,
     signal?: AbortSignal,
+    expectedRepository?: string,
+    expectedHeadSha?: string,
   ): Promise<void> {
-    await this.assertClean(worktreePath, signal);
+    const rebound = await this.rebind(
+      prepared,
+      signal,
+      expectedRepository,
+      expectedHeadSha,
+    );
+    await this.assertClean(rebound.worktreePath, signal);
     await this.#git(
-      worktreePath,
-      ["push", "--set-upstream", "origin", branch],
+      rebound.worktreePath,
+      ["push", "--set-upstream", "origin", rebound.branch],
       120_000,
       signal,
     );
@@ -440,12 +896,41 @@ export class GitWorktreeManager {
   async deleteRemoteBranch(
     prepared: PreparedWorktree,
     signal?: AbortSignal,
+    expectedRepository?: string,
+    expectedHeadSha = prepared.baseSha,
   ): Promise<void> {
+    const root = await this.#assertPreparedRepository(
+      prepared,
+      signal,
+      expectedRepository,
+    );
+    assertSafeBranchRef(prepared.branch, "prepared branch");
+    if (!expectedHeadSha.trim())
+      throw new Error(
+        `Forge worktree binding failure: remote branch ${prepared.branch} requires an expected head lease.`,
+      );
+    const remote = await this.#git(
+      root,
+      ["ls-remote", "origin", `refs/heads/${prepared.branch}`],
+      30_000,
+      signal,
+    );
+    const remoteSha = remote.stdout.trim().split(/\s+/)[0] ?? "";
+    if (!remoteSha) return;
+    if (remoteSha !== expectedHeadSha)
+      throw new Error(
+        `Forge worktree binding failure: remote branch ${prepared.branch} moved from expected head ${expectedHeadSha}.`,
+      );
     const result = await this.#executor.exec(
       "git",
-      ["push", "origin", "--delete", prepared.branch],
+      [
+        "push",
+        "origin",
+        `--force-with-lease=refs/heads/${prepared.branch}:${expectedHeadSha}`,
+        `:refs/heads/${prepared.branch}`,
+      ],
       {
-        cwd: prepared.repositoryRoot,
+        cwd: root,
         timeout: 120_000,
         ...(signal ? { signal } : {}),
       },
@@ -466,7 +951,29 @@ export class GitWorktreeManager {
   async cleanup(
     prepared: PreparedWorktree,
     signal?: AbortSignal,
+    expectedHeadSha = prepared.baseSha,
   ): Promise<void> {
+    // Validate ownership before cleanup can touch the retained path. A crash
+    // or external replacement must never turn cleanup into foreign deletion.
+    const root = await this.#assertPreparedRepository(prepared, signal);
+    assertSafeBranchRef(prepared.branch, "prepared branch");
+    if (!expectedHeadSha.trim())
+      throw new Error(
+        `Forge worktree binding failure: local branch ${prepared.branch} requires an expected head lease.`,
+      );
+    if (await exists(prepared.worktreePath))
+      prepared = await this.rebind(
+        prepared,
+        signal,
+        prepared.repository,
+        expectedHeadSha,
+      );
+    await this.#assertLocalBranchHead(
+      root,
+      prepared.branch,
+      expectedHeadSha,
+      signal,
+    );
     // Cleanup is a retryable owned effect. A crash may happen after Git has
     // removed either the worktree or the branch, so absence is success.
     await this.#cleanupWorktree(
@@ -474,16 +981,12 @@ export class GitWorktreeManager {
       prepared.worktreePath,
       signal,
     );
-    try {
-      await this.#git(
-        prepared.repositoryRoot,
-        ["branch", "-D", prepared.branch],
-        30_000,
-        signal,
-      );
-    } catch (error) {
-      if (!isAlreadyAbsent(error)) throw error;
-    }
+    await this.#deleteLocalBranchWithLease(
+      root,
+      prepared.branch,
+      expectedHeadSha,
+      signal,
+    );
   }
 
   async #cleanupFailedReviewPreparation(
@@ -534,6 +1037,63 @@ export class GitWorktreeManager {
     }
   }
 
+  async #assertLocalBranchHead(
+    repositoryRoot: string,
+    branch: string,
+    expectedHeadSha: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const result = await this.#executor.exec(
+      "git",
+      ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`],
+      {
+        cwd: repositoryRoot,
+        timeout: 30_000,
+        ...(signal ? { signal } : {}),
+      },
+    );
+    if (result.code === 1) return;
+    if (result.code !== 0)
+      throw new GitOperationError(`resolve local branch ${branch}`, result);
+    if (result.stdout.trim() !== expectedHeadSha)
+      throw new Error(
+        `Forge worktree binding failure: local branch ${branch} moved from expected head ${expectedHeadSha}.`,
+      );
+  }
+
+  async #deleteLocalBranchWithLease(
+    repositoryRoot: string,
+    branch: string,
+    expectedHeadSha: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const result = await this.#executor.exec(
+      "git",
+      ["update-ref", "-d", `refs/heads/${branch}`, expectedHeadSha],
+      {
+        cwd: repositoryRoot,
+        timeout: 30_000,
+        ...(signal ? { signal } : {}),
+      },
+    );
+    if (result.code === 0) return;
+    const current = await this.#executor.exec(
+      "git",
+      ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`],
+      {
+        cwd: repositoryRoot,
+        timeout: 30_000,
+        ...(signal ? { signal } : {}),
+      },
+    );
+    if (current.code === 1) return;
+    if (current.code !== 0)
+      throw new GitOperationError(`resolve local branch ${branch}`, current);
+    throw new Error(
+      `Forge worktree binding failure: local branch ${branch} moved from expected head ${expectedHeadSha}.`,
+    );
+  }
+
   async #cleanupWorktree(
     repositoryRoot: string,
     worktreePath: string,
@@ -557,6 +1117,69 @@ export class GitWorktreeManager {
       await rm(worktreePath, { recursive: true, force: true });
   }
 
+  async #assertPreparedRepository(
+    prepared: PreparedWorktree,
+    signal?: AbortSignal,
+    expectedRepository = prepared.repository,
+  ): Promise<string> {
+    const root = await realpath(prepared.repositoryRoot);
+    const currentRepositoryIdentity = await this.#repositoryIdentity(
+      root,
+      signal,
+    );
+    if (
+      !prepared.repositoryIdentity ||
+      prepared.repositoryIdentity !== currentRepositoryIdentity
+    )
+      throw new Error(
+        "Forge worktree binding failure: retained repository identity is missing or has been replaced.",
+      );
+    if (expectedRepository)
+      await this.#assertRepositoryOrigin(root, expectedRepository, signal);
+    return root;
+  }
+
+  async #assertRepositoryOrigin(
+    repositoryRoot: string,
+    expectedRepository: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    let remote: ExecResult;
+    try {
+      remote = await this.#git(
+        repositoryRoot,
+        ["config", "--get", "remote.origin.url"],
+        30_000,
+        signal,
+      );
+    } catch {
+      throw new Error(
+        `Forge worktree binding failure: repository origin does not match ${expectedRepository}.`,
+      );
+    }
+    if (!repositoryRemoteMatches(remote.stdout, expectedRepository))
+      throw new Error(
+        `Forge worktree binding failure: repository origin does not match ${expectedRepository}.`,
+      );
+  }
+
+  async #repositoryIdentity(
+    repositoryRoot: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const commonDirResult = await this.#git(
+      repositoryRoot,
+      ["rev-parse", "--git-common-dir"],
+      30_000,
+      signal,
+    );
+    const commonDir = await realpath(
+      resolve(repositoryRoot, commonDirResult.stdout.trim()),
+    );
+    const stat = await lstat(commonDir);
+    return `${commonDir}:${String(stat.dev)}:${String(stat.ino)}`;
+  }
+
   async #git(
     cwd: string,
     args: readonly string[],
@@ -572,6 +1195,128 @@ export class GitWorktreeManager {
       throw new GitOperationError(`git ${args.join(" ")}`, result);
     return result;
   }
+}
+
+function repositoryRemoteMatches(
+  remote: string,
+  repository: string,
+): boolean {
+  const normalized = remote
+    .trim()
+    .replace(/^git@github\.com:/i, "https://github.com/")
+    .replace(/^ssh:\/\/git@github\.com\//i, "https://github.com/")
+    .replace(/\.git$/i, "")
+    .replace(/\/$/, "")
+    .toLowerCase();
+  return normalized === `https://github.com/${repository.toLowerCase()}`;
+}
+
+interface WorktreeRegistrationRecord {
+  branch?: string;
+  head?: string;
+  detached: boolean;
+  prunable: boolean;
+}
+
+function worktreeRegistrationRecord(
+  output: string,
+  repositoryRoot: string,
+  expectedPath: string,
+): WorktreeRegistrationRecord | undefined {
+  let path: string | undefined;
+  let branch: string | undefined;
+  let head: string | undefined;
+  let detached = false;
+  let prunable = false;
+  const finish = (): WorktreeRegistrationRecord | undefined =>
+    path !== undefined && resolve(repositoryRoot, path) === expectedPath
+      ? { branch, head, detached, prunable }
+      : undefined;
+  for (const line of output.split("\n")) {
+    if (!line.trim()) {
+      const found = finish();
+      if (found) return found;
+      path = undefined;
+      branch = undefined;
+      head = undefined;
+      detached = false;
+      prunable = false;
+      continue;
+    }
+    if (line.startsWith("worktree ")) path = line.slice("worktree ".length);
+    else if (line.startsWith("branch ")) branch = line.slice("branch ".length);
+    else if (line.startsWith("HEAD ")) head = line.slice("HEAD ".length);
+    else if (line === "detached") detached = true;
+    else if (line.startsWith("prunable")) prunable = true;
+  }
+  return finish();
+}
+
+function reviewWorktreeRegistrationMatches(
+  output: string,
+  repositoryRoot: string,
+  expectedPath: string,
+  expectedHead: string,
+): boolean {
+  let path: string | undefined;
+  let head: string | undefined;
+  let detached = false;
+  let prunable = false;
+  const matches = (): boolean =>
+    path !== undefined &&
+    resolve(repositoryRoot, path) === expectedPath &&
+    head === expectedHead &&
+    detached &&
+    !prunable;
+  for (const line of output.split("\n")) {
+    if (!line.trim()) {
+      if (matches()) return true;
+      path = undefined;
+      head = undefined;
+      detached = false;
+      prunable = false;
+      continue;
+    }
+    if (line.startsWith("worktree ")) path = line.slice("worktree ".length);
+    else if (line.startsWith("HEAD ")) head = line.slice("HEAD ".length);
+    else if (line === "detached") detached = true;
+    else if (line.startsWith("prunable")) prunable = true;
+  }
+  return matches();
+}
+
+function worktreeRegistrationMatches(
+  output: string,
+  repositoryRoot: string,
+  expectedPath: string,
+  expectedBranch: string,
+  expectedHead: string,
+): boolean {
+  let path: string | undefined;
+  let branch: string | undefined;
+  let head: string | undefined;
+  let prunable = false;
+  const matches = (): boolean =>
+    path !== undefined &&
+    resolve(repositoryRoot, path) === expectedPath &&
+    branch === `refs/heads/${expectedBranch}` &&
+    head === expectedHead &&
+    !prunable;
+  for (const line of output.split("\n")) {
+    if (!line.trim()) {
+      if (matches()) return true;
+      path = undefined;
+      branch = undefined;
+      head = undefined;
+      prunable = false;
+      continue;
+    }
+    if (line.startsWith("worktree ")) path = line.slice("worktree ".length);
+    else if (line.startsWith("branch ")) branch = line.slice("branch ".length);
+    else if (line.startsWith("HEAD ")) head = line.slice("HEAD ".length);
+    else if (line.startsWith("prunable")) prunable = true;
+  }
+  return matches();
 }
 
 async function openAnchoredDirectory(path: string): Promise<FileHandle> {

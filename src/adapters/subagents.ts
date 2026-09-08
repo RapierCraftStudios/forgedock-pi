@@ -51,10 +51,12 @@ export interface WorkOnLaunchInput {
   };
   issueNumber: number;
   repository: string;
+  repositoryIdentity: string;
   worktreeRoot: string;
   branch: string;
   baseBranch: string;
   baseSha: string;
+  expectedHeadSha: string;
   reviewHeadSha?: string;
   leaseEpoch: number;
   leaseOwnerRunId?: string;
@@ -66,16 +68,19 @@ export interface WorkOnLaunchInput {
 export interface StandaloneReviewerLaunchInput {
   reviewId: string;
   repository: string;
+  repositoryIdentity: string;
   pullNumber: number;
   issueNumber?: number;
   worktreeRoot: string;
   headRef: string;
   headSha: string;
+  branch?: string;
   baseRef: string;
   baseSha: string;
   reviewer: string;
   round: number;
   reviewerTimeoutMs: number;
+  detached: boolean;
   context?: string;
 }
 
@@ -118,6 +123,7 @@ export class SubagentsRpcClient {
   async spawnStandaloneReviewNode(
     input: StandaloneReviewerLaunchInput,
   ): Promise<SubagentSpawnReceipt> {
+    assertExpectedHeadSha(input.headSha);
     validateReviewDeadlines({ reviewerTimeoutMs: input.reviewerTimeoutMs });
     if (!this.#asyncCompleteEvent) await this.ping();
     if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(input.reviewId))
@@ -130,6 +136,8 @@ export class SubagentsRpcClient {
       input.round > 5
     )
       throw new TypeError("Review round must be from 1 through 5.");
+    if (typeof input.detached !== "boolean")
+      throw new TypeError("Review worktree detached mode must be explicit.");
     if (
       !Number.isSafeInteger(input.pullNumber) ||
       input.pullNumber < 1 ||
@@ -156,16 +164,19 @@ export class SubagentsRpcClient {
     const binding = {
       authorityMode: "review",
       reviewId: input.reviewId,
+      detached: input.detached,
       runId: input.reviewId,
       resultPath,
       repository: input.repository,
+      repositoryIdentity: input.repositoryIdentity,
       ...(input.issueNumber === undefined
         ? {}
         : { issueNumber: input.issueNumber }),
       worktreeRoot: input.worktreeRoot,
-      branch: input.headRef,
+      branch: input.branch ?? input.headRef,
       baseBranch: input.baseRef,
       baseSha: input.baseSha,
+      expectedHeadSha: input.headSha,
       maxReviewRounds: 5,
       reviewerTimeoutMs: input.reviewerTimeoutMs,
       verificationCommands: {},
@@ -190,6 +201,7 @@ export class SubagentsRpcClient {
         agent,
         task,
         cwd: input.worktreeRoot,
+        worktree: false,
         context: "fresh",
         extensionBindings: { [BINDING_NAMESPACE]: binding },
         outputSchema: FORGE_REVIEWER_OUTPUT_SCHEMA,
@@ -238,6 +250,7 @@ export class SubagentsRpcClient {
         ? FORGE_REVIEW_CORRECTNESS_AGENT
         : FORGE_REVIEW_SECURITY_AGENT;
     const reviewHeadSha = input.reviewHeadSha ?? input.baseSha;
+    assertExpectedHeadSha(reviewHeadSha);
     const binding = {
       runId: input.runId,
       resultPath,
@@ -250,6 +263,7 @@ export class SubagentsRpcClient {
       branch: input.branch,
       baseBranch: input.baseBranch,
       baseSha: input.baseSha,
+      expectedHeadSha: reviewHeadSha,
       maxReviewRounds: input.policy.review.maxRounds,
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
@@ -258,6 +272,7 @@ export class SubagentsRpcClient {
       node: input.node.node,
       nodeAttempt: input.node.attempt,
       reviewHeadSha,
+      repositoryIdentity: input.repositoryIdentity,
     };
     const task = [
       `Review ForgeDock issue #${input.issueNumber} as the ${input.node.node === "review-correctness" ? "correctness" : "security"} reviewer.`,
@@ -273,6 +288,7 @@ export class SubagentsRpcClient {
         agent: reviewer,
         task,
         cwd: input.worktreeRoot,
+        worktree: false,
         context: "fresh",
         extensionBindings: { [BINDING_NAMESPACE]: binding },
         outputSchema: FORGE_REVIEWER_OUTPUT_SCHEMA,
@@ -317,6 +333,7 @@ export class SubagentsRpcClient {
       `${input.runId}-${input.node.nodeId}.json`,
     );
     const reviewHeadSha = input.reviewHeadSha ?? input.baseSha;
+    assertExpectedHeadSha(reviewHeadSha);
     const binding = {
       runId: input.runId,
       resultPath,
@@ -329,6 +346,7 @@ export class SubagentsRpcClient {
       branch: input.branch,
       baseBranch: input.baseBranch,
       baseSha: input.baseSha,
+      expectedHeadSha: reviewHeadSha,
       maxReviewRounds: input.policy.review.maxRounds,
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
@@ -337,6 +355,7 @@ export class SubagentsRpcClient {
       node: `review-${domain}`,
       nodeAttempt: input.node.attempt,
       reviewHeadSha,
+      repositoryIdentity: input.repositoryIdentity,
     };
     const data = await this.#request(
       "spawn",
@@ -351,6 +370,7 @@ export class SubagentsRpcClient {
           input.issueContext,
         ].join("\n\n"),
         cwd: input.worktreeRoot,
+        worktree: false,
         context: "fresh",
         extensionBindings: { [BINDING_NAMESPACE]: binding },
         outputSchema: FORGE_REVIEWER_OUTPUT_SCHEMA,
@@ -399,6 +419,7 @@ export class SubagentsRpcClient {
     input: WorkOnLaunchInput,
     bounded: boolean,
   ): Promise<SubagentSpawnReceipt> {
+    assertExpectedHeadSha(input.expectedHeadSha);
     if (!this.#asyncCompleteEvent) await this.ping();
     const resultPath = join(
       input.worktreeRoot,
@@ -418,6 +439,7 @@ export class SubagentsRpcClient {
       branch: input.branch,
       baseBranch: input.baseBranch,
       baseSha: input.baseSha,
+      expectedHeadSha: input.expectedHeadSha,
       maxReviewRounds: input.policy.review.maxRounds,
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
@@ -432,6 +454,7 @@ export class SubagentsRpcClient {
             nodeAttempt: input.node.attempt,
           }
         : {}),
+      repositoryIdentity: input.repositoryIdentity,
     };
     const requiredLocalChecks = Object.entries(
       input.policy.verification.commands,
@@ -477,7 +500,7 @@ export class SubagentsRpcClient {
           input.node.node === "resolve"
             ? "The resolve artifact contract is exact: { schema: 'forgedock.phase-artifact/v1', phase: 'resolve', issueNumber: positive integer, title: non-empty string, eligible: boolean, baseBranch: non-empty string, evidence: string[] }. Investigation fields are not a substitute for these fields."
             : "Use the phase-specific artifact branch in the supplied output schema.",
-          "For every non-review node, return artifact as a forgedock.phase-artifact/v1 object whose phase matches this node. Supply typed facts only; never author Markdown or markers. Investigation must include actual taskType, complexity, evidence, decomposition, skipped phases, and acceptance checks. Plan must include allowed paths, forbidden changes, invariants, context, hazards, steps, and criterion mapping. Its acceptance mapping must retain one compact proof link per accepted criterion: implementation mechanism plus counterexample/behavioral test plus residual risk. Implementation must include the real commit SHA and changed-file statistics and must report that proof link for every criterion; PASS requires both proof ends and non-contradictory residual risk, while contradiction is CONTRADICTED, never PASS. Verification must name every check and use passed, failed, skipped, pending, unknown, not-configured, or policy-exempt truthfully. For prepare-pr, call forge_prepare_review and return the exact PR/head/domains. The trusted parent validates the object and deterministically renders GitHub Markdown. Review nodes return only the typed reviewer result.",
+          "For every non-review node, return artifact as a forgedock.phase-artifact/v1 object whose phase matches this node. Supply typed facts only; never author Markdown or markers. Investigation must include actual taskType, complexity, evidence, decomposition, skipped phases, and acceptance checks. Plan must include allowed paths, forbidden changes, invariants, context, hazards, steps, and criterion mapping. Its acceptance mapping must retain one compact proof link per accepted criterion: implementation mechanism plus counterexample/behavioral test plus residual risk. Implementation must include the real commit SHA and changed-file statistics and must report that proof link for every criterion; PASS requires both proof ends and non-contradictory residual risk, while contradiction is CONTRADICTED, never PASS. Verification must name every check and use passed, failed, skipped, pending, unknown, not-configured, or policy-exempt truthfully. If forge_commit reports noChange, return a completed implement node result with noChange: true, changedFiles: [], outcome: invalid, a current HEAD, and evidence explaining FORGE:COMMIT:NO-CHANGE; omit the implement phase artifact and do not retry or invent a commit. The parent will durably close and clean up the issue. For prepare-pr, call forge_prepare_review and return the exact PR/head/domains. The trusted parent validates the object and deterministically renders GitHub Markdown. Review nodes return only the typed reviewer result.",
           "Before returning, call forge_finalize_node with the complete node result, then call structured_output with the identical value. Never write or edit .pi/forge files directly; the trusted finalizer owns the bound result artifact.",
           input.issueContext,
         ].join("\n\n")
@@ -489,6 +512,7 @@ export class SubagentsRpcClient {
           : FORGE_WORK_ON_AGENT,
       task: boundedTask,
       cwd: input.worktreeRoot,
+      worktree: false,
       context: "fresh",
       extensionBindings: { [BINDING_NAMESPACE]: binding },
       outputSchema: input.node
@@ -525,6 +549,7 @@ export class SubagentsRpcClient {
   async spawnRefreshReview(
     input: RefreshReviewLaunchInput,
   ): Promise<SubagentSpawnReceipt> {
+    assertExpectedHeadSha(input.expectedHeadSha);
     if (!this.#asyncCompleteEvent) await this.ping();
     const resultPath = join(
       input.worktreeRoot,
@@ -543,6 +568,7 @@ export class SubagentsRpcClient {
       branch: input.branch,
       baseBranch: input.baseBranch,
       baseSha: input.baseSha,
+      expectedHeadSha: input.expectedHeadSha,
       maxReviewRounds: input.policy.review.maxRounds,
       reviewerTimeoutMs: input.policy.subagents.reviewerTimeoutMs,
       verificationCommands: input.policy.verification.commands,
@@ -557,6 +583,7 @@ export class SubagentsRpcClient {
             nodeAttempt: input.node.attempt,
           }
         : {}),
+      repositoryIdentity: input.repositoryIdentity,
     };
     const task = [
       `Refresh ForgeDock issue #${input.issueNumber} after its integration base moved.`,
@@ -574,6 +601,7 @@ export class SubagentsRpcClient {
       agent: FORGE_REFRESH_REVIEW_AGENT,
       task,
       cwd: input.worktreeRoot,
+      worktree: false,
       context: "fresh",
       extensionBindings: { [BINDING_NAMESPACE]: binding },
       outputSchema: FORGE_WORK_ON_OUTPUT_SCHEMA,
@@ -607,6 +635,40 @@ export class SubagentsRpcClient {
 
   async stop(runId: string): Promise<unknown> {
     return this.#request("stop", { id: runId }, 10_000);
+  }
+
+  /** Stop a child and wait until Pi confirms that no writer remains active. */
+  async stopAndWait(runId: string, timeoutMs = 30_000): Promise<void> {
+    if (!runId.trim()) throw new TypeError("Subagent run ID is required.");
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1)
+      throw new TypeError("Stop timeout must be a positive integer.");
+    let requested: unknown;
+    try {
+      requested = await this.stop(runId);
+    } catch (error) {
+      if (!terminalStopError(error)) throw error;
+      return;
+    }
+    if (terminalSubagentState(subagentState(requested))) return;
+    const deadline = Date.now() + timeoutMs;
+    let lastState = subagentState(requested) ?? "unknown";
+    while (Date.now() < deadline) {
+      let status: unknown;
+      try {
+        status = await this.status(runId);
+      } catch (error) {
+        if (terminalStopError(error)) return;
+        throw error;
+      }
+      const state = subagentState(status);
+      if (state) lastState = state;
+      if (terminalSubagentState(state)) return;
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
+    }
+    throw new SubagentRpcError(
+      "stop-timeout",
+      `Subagent ${runId} did not reach a terminal state after stop (last state: ${lastState}).`,
+    );
   }
 
   async resume(runId: string, message: string): Promise<SubagentSpawnReceipt> {
@@ -731,6 +793,38 @@ function findRunId(value: unknown): string | undefined {
   return undefined;
 }
 
+function subagentState(value: unknown): string | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return undefined;
+  const record = value as Record<string, unknown>;
+  const state =
+    typeof record.state === "string"
+      ? record.state
+      : typeof record.status === "string"
+        ? record.status
+        : typeof record.text === "string"
+          ? record.text.match(/^State:\s*([^\s]+)\s*$/im)?.[1]
+          : undefined;
+  return state;
+}
+
+function terminalSubagentState(state: string | undefined): boolean {
+  return /^(?:complete|completed|failed|partial|stopped|cancelled|canceled|rejected|timed[-_ ]?out)$/i.test(
+    state ?? "",
+  );
+}
+
+function assertExpectedHeadSha(value: string): void {
+  if (typeof value !== "string" || !value.trim())
+    throw new TypeError("Forge child launch requires an expected head SHA.");
+}
+
+function terminalStopError(error: unknown): boolean {
+  return /not found|already (?:complete|completed|failed|partial|stopped|cancelled|canceled|rejected|timed[-_ ]?out)|is (?:complete|completed|failed|partial|stopped|cancelled|canceled|rejected|timed[-_ ]?out)/i.test(
+    error instanceof Error ? error.message : String(error),
+  );
+}
+
 function reviewWorkflowInstruction(
   input: WorkOnLaunchInput | RefreshReviewLaunchInput,
 ): string {
@@ -739,6 +833,7 @@ function reviewWorkflowInstruction(
   const binding = safeScriptJson({
     runId: input.runId,
     repository: input.repository,
+    repositoryIdentity: input.repositoryIdentity,
     issueNumber: input.issueNumber,
     leaseEpoch: input.leaseEpoch,
     leaseOwnerRunId: input.leaseOwnerRunId ?? input.runId,
@@ -747,6 +842,7 @@ function reviewWorkflowInstruction(
     branch: input.branch,
     baseBranch: input.baseBranch,
     baseSha: input.baseSha,
+    expectedHeadSha: input.expectedHeadSha,
     maxReviewRounds: input.policy.review.maxRounds,
     reviewerTimeoutMs: timeoutMs,
     verificationCommands: input.policy.verification.commands,
@@ -764,7 +860,7 @@ function reviewWorkflowInstruction(
     "forge",
     `${input.runId}-review-security.json`,
   );
-  return `At review, use one synchronous workflowScript per complete panel attempt. If any required reviewer has a transient provider failure, rerun a fresh complete panel at the same frozen head up to three times without advancing the review phase. Replace only REVIEW_HEAD_SHA with the quoted frozen head and REVIEW_ROUND with the numeric round; the reviewer prompts and bindings below are authoritative and must not be rewritten. Return the ordered results array; do not call forge_run_review_panel, launch reviewers separately, use a partial panel as the verdict, or continue before all required results return. Use this exact baseline shape:\n\nsubagent({\n  async: false,\n  workflowScript: \`\n    const binding = ${binding};\n    const reviewHeadSha = REVIEW_HEAD_SHA;\n    const reviewRound = REVIEW_ROUND;\n    const correctnessTask = "Review ForgeDock run ${input.runId} as forge-review-correctness at frozen head " + reviewHeadSha + ". Call forge_diff in patch mode first and consume every chunk until coverage.complete is true. Review only defects introduced by the frozen patch. Return forgedock.reviewer-result/v1 with runId exactly ${input.runId}, reviewer exactly forge-review-correctness, and headSha exactly " + reviewHeadSha + ". Before returning, call forge_finalize_reviewer with the complete result, then call structured_output with the identical value. Do not edit files, launch subagents, access GitHub, or make merge decisions.";\n    const securityTask = "Review ForgeDock run ${input.runId} as forge-review-security at frozen head " + reviewHeadSha + ". Call forge_diff in patch mode first and consume every chunk until coverage.complete is true. Review only security and production-safety defects introduced by the frozen patch. Return forgedock.reviewer-result/v1 with runId exactly ${input.runId}, reviewer exactly forge-review-security, and headSha exactly " + reviewHeadSha + ". Before returning, call forge_finalize_reviewer with the complete result, then call structured_output with the identical value. Do not edit files, launch subagents, access GitHub, or make merge decisions.";\n    const results = await runs.all([\n      { key: "correctness", agent: ${JSON.stringify(FORGE_REVIEW_CORRECTNESS_AGENT)}, task: correctnessTask, context: "fresh", cwd: ${JSON.stringify(input.worktreeRoot)}, timeoutMs: ${timeoutMs}, turnBudget: { maxTurns: 16, graceTurns: 4 }, outputSchema: ${reviewerSchema}, extensionBindings: { "forgedock.pi/1": { ...binding, resultPath: ${JSON.stringify(correctnessPath)}, reviewHeadSha, nodeId: "review-correctness-" + reviewRound, node: "review-correctness", nodeAttempt: reviewRound } } },\n      { key: "security", agent: ${JSON.stringify(FORGE_REVIEW_SECURITY_AGENT)}, task: securityTask, context: "fresh", cwd: ${JSON.stringify(input.worktreeRoot)}, timeoutMs: ${timeoutMs}, turnBudget: { maxTurns: 16, graceTurns: 4 }, outputSchema: ${reviewerSchema}, extensionBindings: { "forgedock.pi/1": { ...binding, resultPath: ${JSON.stringify(securityPath)}, reviewHeadSha, nodeId: "review-security-" + reviewRound, node: "review-security", nodeAttempt: reviewRound } } }\n    ]);\n    return results;\n  \`\n});`;
+  return `At review, use one synchronous workflowScript per complete panel attempt. If any required reviewer has a transient provider failure, rerun a fresh complete panel at the same frozen head up to three times without advancing the review phase. Replace only REVIEW_HEAD_SHA with the quoted frozen head and REVIEW_ROUND with the numeric round; the reviewer prompts and bindings below are authoritative and must not be rewritten. Return the ordered results array; do not call forge_run_review_panel, launch reviewers separately, use a partial panel as the verdict, or continue before all required results return. Use this exact baseline shape:\n\nsubagent({\n  async: false,\n  worktree: false,\n  workflowScript: \`\n    const binding = ${binding};\n    const reviewHeadSha = REVIEW_HEAD_SHA;\n    const reviewRound = REVIEW_ROUND;\n    const correctnessTask = "Review ForgeDock run ${input.runId} as forge-review-correctness at frozen head " + reviewHeadSha + ". Call forge_diff in patch mode first and consume every chunk until coverage.complete is true. Review only defects introduced by the frozen patch. Return forgedock.reviewer-result/v1 with runId exactly ${input.runId}, reviewer exactly forge-review-correctness, and headSha exactly " + reviewHeadSha + ". Before returning, call forge_finalize_reviewer with the complete result, then call structured_output with the identical value. Do not edit files, launch subagents, access GitHub, or make merge decisions.";\n    const securityTask = "Review ForgeDock run ${input.runId} as forge-review-security at frozen head " + reviewHeadSha + ". Call forge_diff in patch mode first and consume every chunk until coverage.complete is true. Review only security and production-safety defects introduced by the frozen patch. Return forgedock.reviewer-result/v1 with runId exactly ${input.runId}, reviewer exactly forge-review-security, and headSha exactly " + reviewHeadSha + ". Before returning, call forge_finalize_reviewer with the complete result, then call structured_output with the identical value. Do not edit files, launch subagents, access GitHub, or make merge decisions.";\n    const results = await runs.all([\n      { key: "correctness", agent: ${JSON.stringify(FORGE_REVIEW_CORRECTNESS_AGENT)}, task: correctnessTask, context: "fresh", cwd: ${JSON.stringify(input.worktreeRoot)}, worktree: false, timeoutMs: ${timeoutMs}, turnBudget: { maxTurns: 16, graceTurns: 4 }, outputSchema: ${reviewerSchema}, extensionBindings: { "forgedock.pi/1": { ...binding, resultPath: ${JSON.stringify(correctnessPath)}, expectedHeadSha: reviewHeadSha, reviewHeadSha, nodeId: "review-correctness-" + reviewRound, node: "review-correctness", nodeAttempt: reviewRound } } },\n      { key: "security", agent: ${JSON.stringify(FORGE_REVIEW_SECURITY_AGENT)}, task: securityTask, context: "fresh", cwd: ${JSON.stringify(input.worktreeRoot)}, worktree: false, timeoutMs: ${timeoutMs}, turnBudget: { maxTurns: 16, graceTurns: 4 }, outputSchema: ${reviewerSchema}, extensionBindings: { "forgedock.pi/1": { ...binding, resultPath: ${JSON.stringify(securityPath)}, expectedHeadSha: reviewHeadSha, reviewHeadSha, nodeId: "review-security-" + reviewRound, node: "review-security", nodeAttempt: reviewRound } } }\n    ]);\n    return results;\n  \`\n});`;
 }
 
 function safeScriptJson(value: unknown): string {

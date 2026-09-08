@@ -19,6 +19,7 @@ import {
   parseChangedGitPaths,
   type CommandExecutor,
 } from "../../src/adapters/git.ts";
+import { materializeForgeAgents } from "../../src/agents/materialize.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -97,7 +98,22 @@ test("worktree manager creates an issue branch from integration and cleans it sa
     await git(seed, "push", "origin", "main", "staging", "feature/review");
     await execFileAsync("git", ["clone", origin, clone]);
 
-    const manager = new GitWorktreeManager(executor);
+    const gitCalls: string[][] = [];
+    const manager = new GitWorktreeManager({
+      async exec(command, args, options) {
+        gitCalls.push([command, ...args]);
+        return executor.exec(command, args, options);
+      },
+    });
+    await assert.rejects(
+      manager.prepare(clone, {
+        runId: "wrong-origin",
+        issueNumber: 6,
+        baseBranch: "staging",
+        expectedRepository: "owner/repo",
+      }),
+      /repository origin does not match owner\/repo/,
+    );
     await manager.ensureRuntimeIgnored(clone);
     assert.match(
       await readFile(join(clone, ".git", "info", "exclude"), "utf8"),
@@ -122,6 +138,18 @@ test("worktree manager creates an issue branch from integration and cleans it sa
     await manager.cleanupReview(review);
     await manager.cleanupReview(review);
     await assert.rejects(readFile(join(review.worktreePath, "app.txt"), "utf8"));
+    await mkdir(review.worktreePath, { recursive: true });
+    await execFileAsync("git", ["init", "-q", "-b", "foreign", review.worktreePath]);
+    await writeFile(join(review.worktreePath, "foreign-review.txt"), "keep\n");
+    await assert.rejects(
+      manager.cleanupReview(review),
+      /Forge worktree binding failure/,
+    );
+    assert.equal(
+      await readFile(join(review.worktreePath, "foreign-review.txt"), "utf8"),
+      "keep\n",
+    );
+    await rm(review.worktreePath, { recursive: true, force: true });
 
     const prepared = await manager.prepare(clone, {
       runId: "run-1234",
@@ -129,6 +157,19 @@ test("worktree manager creates an issue branch from integration and cleans it sa
       baseBranch: "staging",
     });
     assert.equal(prepared.branch, "forge/issue-7-run-1234");
+    const foreignWorktree = join(
+      clone,
+      ".forge",
+      "worktrees",
+      "foreign-repository",
+    );
+    await mkdir(foreignWorktree, { recursive: true });
+    await execFileAsync("git", ["init", "-q", "-b", "main", foreignWorktree]);
+    await assert.rejects(
+      manager.rebind({ ...prepared, worktreePath: foreignWorktree }),
+      /not registered to the repository and branch/,
+    );
+    await rm(foreignWorktree, { recursive: true, force: true });
     assert.equal(
       await readFile(join(prepared.worktreePath, "app.txt"), "utf8"),
       "base\n",
@@ -141,17 +182,82 @@ test("worktree manager creates an issue branch from integration and cleans it sa
       "generated runtime\n",
     );
     await manager.assertClean(prepared.worktreePath);
-    await manager.push(prepared.worktreePath, prepared.branch);
-    await manager.deleteRemoteBranch(prepared);
+    await manager.push(prepared, undefined, undefined, prepared.baseSha);
+    await assert.rejects(
+      manager.rebind({
+        ...prepared,
+        worktreePath: join(root, "outside-worktree"),
+      }),
+      /Forge worktree binding failure/,
+    );
+    await assert.rejects(
+      manager.deleteRemoteBranch(
+        prepared,
+        undefined,
+        undefined,
+        "f".repeat(40),
+      ),
+      /remote branch .* moved from expected head/,
+    );
+    await manager.deleteRemoteBranch(
+      prepared,
+      undefined,
+      undefined,
+      prepared.baseSha,
+    );
     const remoteBranch = await execFileAsync(
       "git",
       ["ls-remote", origin, `refs/heads/${prepared.branch}`],
       { encoding: "utf8" },
     );
     assert.equal(remoteBranch.stdout.trim(), "");
-    await manager.cleanup(prepared);
+    assert.ok(
+      gitCalls.some((args) =>
+        args.some((arg) =>
+          arg ===
+          `--force-with-lease=refs/heads/${prepared.branch}:${prepared.baseSha}`,
+        ),
+      ),
+    );
+    await assert.rejects(
+      manager.cleanup(prepared, undefined, "f".repeat(40)),
+      /Forge worktree binding failure/,
+    );
+    assert.equal(
+      await readFile(join(prepared.worktreePath, "app.txt"), "utf8"),
+      "base\n",
+    );
+    await rm(prepared.worktreePath, { recursive: true, force: true });
+    const rebound = await manager.rebind(
+      prepared,
+      undefined,
+      undefined,
+      prepared.baseSha,
+    );
+    assert.equal(rebound.worktreePath, prepared.worktreePath);
+    assert.equal(
+      await readFile(join(rebound.worktreePath, "app.txt"), "utf8"),
+      "base\n",
+    );
+    const runtimeAgents = await materializeForgeAgents(rebound.worktreePath);
+    assert.ok(
+      runtimeAgents.some((path) => path.endsWith("/forge-work-on.md")),
+    );
+    await manager.cleanup(rebound, undefined, prepared.baseSha);
     // Retry after the first cleanup has already removed both owned resources.
-    await manager.cleanup(prepared);
+    await manager.cleanup(prepared, undefined, prepared.baseSha);
+    assert.equal(
+      gitCalls.some((args) => args[1] === "worktree" && args[2] === "prune"),
+      false,
+    );
+    assert.ok(
+      gitCalls.some(
+        (args) =>
+          args[1] === "update-ref" &&
+          args[2] === "-d" &&
+          args[4] === prepared.baseSha,
+      ),
+    );
     await assert.rejects(
       readFile(join(prepared.worktreePath, "app.txt"), "utf8"),
     );
@@ -161,6 +267,24 @@ test("worktree manager creates an issue branch from integration and cleans it sa
       { encoding: "utf8" },
     );
     assert.equal(localBranch.stdout.trim(), "");
+    await mkdir(prepared.worktreePath, { recursive: true });
+    await execFileAsync("git", ["init", "-q", "-b", "foreign", prepared.worktreePath]);
+    await writeFile(join(prepared.worktreePath, "foreign.txt"), "keep\n");
+    await assert.rejects(
+      manager.cleanup(prepared),
+      /Forge worktree binding failure/,
+    );
+    assert.equal(
+      await readFile(join(prepared.worktreePath, "foreign.txt"), "utf8"),
+      "keep\n",
+    );
+    await rm(prepared.worktreePath, { recursive: true, force: true });
+    await rm(clone, { recursive: true, force: true });
+    await execFileAsync("git", ["clone", origin, clone]);
+    await assert.rejects(
+      manager.rebind(prepared),
+      /Forge worktree binding failure/,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -192,6 +316,17 @@ test("failed worktree containment validation removes its branch and worktree", a
     await symlink(external, ownedParent, "dir");
 
     const manager = new GitWorktreeManager(executor);
+    await assert.rejects(
+      manager.rebind({
+        repositoryRoot: clone,
+        worktreePath: join(ownedParent, "escaped1"),
+        branch,
+        baseBranch: "staging",
+        baseSha: "base",
+      }),
+      /Forge worktree binding failure/,
+    );
+    await assert.rejects(access(join(external, "escaped1")));
     await assert.rejects(
       manager.prepare(clone, {
         runId: "escaped1",

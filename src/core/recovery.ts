@@ -190,6 +190,12 @@ export function classifyReviewerFailure(
   }
   if (/parent.{0,20}(?:timeout|deadline)|(?:timeout|deadline).{0,20}parent|terminated by parent/.test(message))
     return "parent-termination";
+  if (
+    /Forge worktree binding failure:|outside bound worktree|(?:^|\b)cwd [^\n]*(?:does not exist|not a directory|no such file)/i.test(
+      message,
+    )
+  )
+    return "provider-inactivity";
   if (/timed?\s*out|timeout|deadline exceeded/i.test(message)) return "timeout";
   if (/inactiv|provider|socket|websocket|connection|transport|no valid bound result/i.test(message))
     return "provider-inactivity";

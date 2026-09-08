@@ -58,7 +58,11 @@ thinking suffix selected by the review skill.
 Under orchestration, `$PWD` is the Pi-managed issue worktree. Require clean linked
 `pi-parallel-*` state and configured-target ancestry before mutation. Never reset, replace,
 or remove the active managed worktree. Standalone work-on creates and later removes at
-most one exact retained owned worktree.
+most one exact retained owned worktree. ForgeDock-owned lanes pass that exact prepared path
+as each child `cwd` with `worktree: false`; Pi must not layer a second managed worktree.
+The child runtime checks the exact effective cwd; a stale, missing, or wrong workspace is
+an internal launch-binding failure to rebind/retry, never a `GATED` or `needs-human` issue
+outcome.
 
 ## Reviewers
 

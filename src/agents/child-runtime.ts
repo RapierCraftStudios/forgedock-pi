@@ -1,9 +1,15 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import {
+  constants as fsConstants,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+} from "node:fs";
 import {
   lstat,
   mkdir,
+  open,
   readFile,
   realpath,
   rename,
@@ -107,6 +113,7 @@ export interface ForgeChildBinding {
   reviewId?: string;
   resultPath: string;
   repository: string;
+  repositoryIdentity: string;
   issueNumber?: number;
   leaseEpoch?: number;
   leaseOwnerRunId?: string;
@@ -115,6 +122,8 @@ export interface ForgeChildBinding {
   branch: string;
   baseBranch: string;
   baseSha: string;
+  /** Expected branch head before the child performs its next write. */
+  expectedHeadSha: string;
   maxReviewRounds: number;
   reviewerTimeoutMs: number;
   verificationCommands: Readonly<Record<string, BoundVerificationCommand>>;
@@ -126,6 +135,7 @@ export interface ForgeChildBinding {
   reviewHeadSha?: string;
   refresh: boolean;
   previousReviewRounds?: number;
+  detached?: boolean;
 }
 
 export type WorkOnForgeChildBinding = ForgeChildBinding & {
@@ -155,6 +165,195 @@ export class ForgeOutputLimitError extends Error {
     );
     this.name = "ForgeOutputLimitError";
   }
+}
+
+export class ForgeWorktreeBindingError extends Error {
+  readonly code = "worktree-binding";
+  readonly expectedCwd: string;
+  readonly actualCwd: string;
+
+  constructor(expectedCwd: string, actualCwd: string) {
+    super(
+      `Forge worktree binding failure: runtime cwd ${actualCwd} does not match bound worktree ${expectedCwd}.`,
+    );
+    this.name = "ForgeWorktreeBindingError";
+    this.expectedCwd = expectedCwd;
+    this.actualCwd = actualCwd;
+  }
+}
+
+/** Require Pi's effective session cwd to be the exact Forge-owned worktree. */
+export function assertBoundWorktreeCwd(
+  boundCwd: string,
+  runtimeCwd: string,
+  caseInsensitive = false,
+): void {
+  if (
+    !isPathWithin(boundCwd, runtimeCwd, caseInsensitive) ||
+    !isPathWithin(runtimeCwd, boundCwd, caseInsensitive)
+  )
+    throw new ForgeWorktreeBindingError(
+      resolve(boundCwd),
+      resolve(runtimeCwd),
+    );
+}
+
+export interface ForgeRepositoryBinding {
+  runId: string;
+  repository: string;
+  repositoryIdentity: string;
+  worktreeRoot: string;
+  branch: string;
+  reviewId?: string;
+  detached?: boolean;
+  headSha: string;
+}
+
+function childRepositoryBinding(
+  binding: ForgeChildBinding,
+  expectedHeadSha = binding.expectedHeadSha,
+): ForgeRepositoryBinding {
+  return {
+    runId: binding.runId,
+    repository: binding.repository,
+    repositoryIdentity: binding.repositoryIdentity,
+    worktreeRoot: binding.worktreeRoot,
+    branch: binding.branch,
+    headSha: expectedHeadSha,
+    ...(binding.reviewId ? { reviewId: binding.reviewId } : {}),
+    ...(binding.detached ? { detached: true } : {}),
+  };
+}
+
+async function assertBoundRepository(
+  binding: ForgeRepositoryBinding,
+  root: string,
+  env: NodeJS.ProcessEnv,
+  signal?: AbortSignal,
+): Promise<void> {
+  const common = await runProcess(
+    "git",
+    ["-C", root, "rev-parse", "--git-common-dir"],
+    { cwd: root, timeoutMs: 30_000, env, ...(signal ? { signal } : {}) },
+  );
+  assertCompleteProcessOutput(common, "Forge repository identity");
+  if (common.exitCode !== 0 || !common.stdout.trim())
+    throw new Error(
+      "Forge worktree binding failure: unable to resolve the repository common directory.",
+    );
+  const commonDir = await realpath(
+    resolve(root, common.stdout.trim()),
+  );
+  const stat = await lstat(commonDir);
+  const identity = `${commonDir}:${String(stat.dev)}:${String(stat.ino)}`;
+  if (identity !== binding.repositoryIdentity)
+    throw new Error(
+      "Forge worktree binding failure: the bound repository was replaced.",
+    );
+  const remote = await runProcess(
+    "git",
+    ["-C", root, "config", "--get", "remote.origin.url"],
+    { cwd: root, timeoutMs: 30_000, env, ...(signal ? { signal } : {}) },
+  );
+  assertCompleteProcessOutput(remote, "Forge repository origin");
+  if (
+    remote.exitCode !== 0 ||
+    !repositoryRemoteMatches(remote.stdout, binding.repository)
+  )
+    throw new Error(
+      "Forge worktree binding failure: repository origin changed.",
+    );
+  const registration = await runProcess(
+    "git",
+    ["-C", root, "worktree", "list", "--porcelain"],
+    { cwd: root, timeoutMs: 30_000, env, ...(signal ? { signal } : {}) },
+  );
+  assertCompleteProcessOutput(registration, "Forge worktree registration");
+  if (
+    registration.exitCode !== 0 ||
+    !boundWorktreeRegistrationMatches(registration.stdout, root, binding)
+  )
+    throw new Error(
+      "Forge worktree binding failure: current path is not the registered bound worktree.",
+    );
+  const head = await runProcess(
+    "git",
+    ["-C", root, "rev-parse", "HEAD"],
+    { cwd: root, timeoutMs: 30_000, env, ...(signal ? { signal } : {}) },
+  );
+  assertCompleteProcessOutput(head, "Forge worktree head");
+  if (head.exitCode !== 0 || head.stdout.trim() !== binding.headSha)
+    throw new Error(
+      `Forge worktree binding failure: expected head ${binding.headSha}, found ${head.stdout.trim() || "unknown"}.`,
+    );
+  if (!binding.detached) {
+    const branch = await runProcess(
+      "git",
+      ["-C", root, "branch", "--show-current"],
+      { cwd: root, timeoutMs: 30_000, env, ...(signal ? { signal } : {}) },
+    );
+    assertCompleteProcessOutput(branch, "Forge worktree branch");
+    if (branch.exitCode !== 0 || branch.stdout.trim() !== binding.branch)
+      throw new Error(
+        `Forge worktree binding failure: expected branch ${binding.branch}, found ${branch.stdout.trim() || "detached"}.`,
+      );
+  }
+}
+
+export function boundWorktreeRegistrationMatches(
+  output: string,
+  root: string,
+  binding: ForgeRepositoryBinding,
+): boolean {
+  let path: string | undefined;
+  let branch: string | undefined;
+  let head: string | undefined;
+  let detached = false;
+  let prunable = false;
+  const matches = (): boolean =>
+    path !== undefined &&
+    resolve(root, path) === root &&
+    !prunable &&
+    (binding.detached
+      ? detached && head === binding.headSha
+      : branch === `refs/heads/${binding.branch}` && head === binding.headSha);
+  for (const line of output.split("\n")) {
+    if (!line.trim()) {
+      if (matches()) return true;
+      path = undefined;
+      branch = undefined;
+      head = undefined;
+      detached = false;
+      prunable = false;
+      continue;
+    }
+    if (line.startsWith("worktree ")) path = line.slice("worktree ".length);
+    else if (line.startsWith("branch ")) branch = line.slice("branch ".length);
+    else if (line.startsWith("HEAD ")) head = line.slice("HEAD ".length);
+    else if (line === "detached") detached = true;
+    else if (line.startsWith("prunable")) prunable = true;
+  }
+  return matches();
+}
+
+export async function assertBoundRepositoryIdentity(
+  binding: ForgeRepositoryBinding,
+  signal?: AbortSignal,
+): Promise<string> {
+  const root = await realpath(binding.worktreeRoot);
+  await assertBoundRepository(binding, root, safeEnvironment(binding.runId), signal);
+  return root;
+}
+
+function repositoryRemoteMatches(remote: string, repository: string): boolean {
+  const normalized = remote
+    .trim()
+    .replace(/^git@github\.com:/i, "https://github.com/")
+    .replace(/^ssh:\/\/git@github\.com\//i, "https://github.com/")
+    .replace(/\.git$/i, "")
+    .replace(/\/$/, "")
+    .toLowerCase();
+  return normalized === `https://github.com/${repository.toLowerCase()}`;
 }
 
 const CheckpointParameters = Type.Object({
@@ -298,11 +497,37 @@ export function registerForgeRuntime(
       return Reflect.get(currentBinding(), property);
     },
   });
+  const assertCurrentBinding = async (signal?: AbortSignal): Promise<string> => {
+    let root: string;
+    try {
+      root = await realpath(binding.worktreeRoot);
+    } catch {
+      throw new ForgeWorktreeBindingError(
+        binding.worktreeRoot,
+        binding.worktreeRoot,
+      );
+    }
+    if (canonicalRoot)
+      assertBoundWorktreeCwd(
+        canonicalRoot,
+        root,
+        caseInsensitivePaths ?? false,
+      );
+    await assertBoundRepository(
+      childRepositoryBinding(binding, expectedHeadSha),
+      root,
+      safeEnvironment(binding.runId),
+      signal,
+    );
+    return root;
+  };
   const agentRegistrations =
     options.registerAgents === false ? [] : registerForgeAgents(pi);
   let ceiling: SubagentCapabilityCeilingHandle | undefined;
   let canonicalRoot: string | undefined;
   let caseInsensitivePaths: boolean | undefined;
+  let expectedHeadSha = binding.expectedHeadSha;
+  let noChangeCommitObserved = false;
   let refreshPushLeaseSha: string | undefined;
   let preparedPull: { number: number; headSha: string } | undefined;
   let reviewDiffCoverage:
@@ -311,22 +536,28 @@ export function registerForgeRuntime(
 
   pi.on("session_start", async (_event, ctx) => {
     if (options.mainSession) return;
-    canonicalRoot = await realpath(binding.worktreeRoot);
+    try {
+      canonicalRoot = await realpath(binding.worktreeRoot);
+    } catch {
+      throw new ForgeWorktreeBindingError(binding.worktreeRoot, ctx.cwd);
+    }
     caseInsensitivePaths = await checkoutIgnoresCase(
       canonicalRoot,
       binding.runId,
     );
-    if (
-      !isPathWithin(
-        canonicalRoot,
-        await realpath(ctx.cwd),
-        caseInsensitivePaths,
-      )
-    ) {
-      throw new Error(
-        `Forge child cwd ${ctx.cwd} is outside bound worktree ${canonicalRoot}.`,
-      );
+    let runtimeCwd: string;
+    try {
+      runtimeCwd = await realpath(ctx.cwd);
+    } catch {
+      throw new ForgeWorktreeBindingError(canonicalRoot, ctx.cwd);
     }
+    assertBoundWorktreeCwd(canonicalRoot, runtimeCwd, caseInsensitivePaths);
+    await assertBoundRepository(
+      childRepositoryBinding(binding, expectedHeadSha),
+      canonicalRoot,
+      safeEnvironment(binding.runId),
+      ctx.signal,
+    );
     ceiling?.dispose();
     ceiling = registerSubagentCapabilityCeiling({
       sessionId: ctx.sessionManager.getSessionId(),
@@ -367,6 +598,8 @@ export function registerForgeRuntime(
       !["read", "write", "edit", "grep", "find", "ls"].includes(event.toolName)
     )
       return;
+    if (event.toolName === "write" || event.toolName === "edit")
+      await assertCurrentBinding(ctx.signal);
     const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
     const pathValue = toolPath(event.input);
     if (!pathValue) return;
@@ -401,7 +634,7 @@ export function registerForgeRuntime(
         throw new Error(
           "forge_refresh_base is only available to a bound refresh-review run.",
         );
-      const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const root = await assertCurrentBinding(signal);
       const env = safeEnvironment(binding.runId);
       const status = await runProcess(
         "git",
@@ -423,6 +656,7 @@ export function registerForgeRuntime(
         throw new Error(
           `Base refresh requires a clean worktree: ${status.stderr || refreshStatus}`,
         );
+      await assertCurrentBinding(signal);
       const fetched = await (async () => {
         // Fetching origin requires credentials on private repositories, and
         // the scrubbed environment strips every ambient GitHub credential
@@ -430,6 +664,7 @@ export function registerForgeRuntime(
         // so the guarded refresh never depends on ambient identity.
         const tokenProvider = createGitHubTokenProvider(pi, binding.worktreeRoot);
         const token = await tokenProvider.get(signal);
+        await assertCurrentBinding(signal);
         return runGitWithGitHubToken(
           root,
           [
@@ -479,6 +714,7 @@ export function registerForgeRuntime(
           "Cannot refresh a lane without the existing owned remote branch.",
         );
       refreshPushLeaseSha = remote.stdout.trim();
+      await assertCurrentBinding(signal);
       const rebased = await runProcess(
         "git",
         ["-C", root, "rebase", binding.baseSha],
@@ -507,6 +743,7 @@ export function registerForgeRuntime(
       });
       if (head.exitCode !== 0 || !head.stdout.trim())
         throw new Error(`Unable to resolve refreshed HEAD: ${head.stderr}`);
+      expectedHeadSha = head.stdout.trim();
       return {
         content: [
           {
@@ -530,7 +767,7 @@ export function registerForgeRuntime(
       "Read the assigned diff in bounded chunks; follow nextCursor until coverage.complete is true",
     parameters: DiffParameters,
     async execute(_toolCallId, params, signal) {
-      const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const root = await assertCurrentBinding(signal);
       const modeArgs =
         params.mode === "name-only"
           ? ["--name-only"]
@@ -682,7 +919,7 @@ export function registerForgeRuntime(
       "Create an owned local commit from the assigned worktree without pushing",
     parameters: CommitParameters,
     async execute(_toolCallId, params, signal) {
-      const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const root = await assertCurrentBinding(signal);
       const env = safeEnvironment(binding.runId);
       const ignoreCase =
         caseInsensitivePaths ??
@@ -709,6 +946,26 @@ export function registerForgeRuntime(
           `Refusing to commit Forge runtime paths: ${runtimePaths.join(", ")}.`,
         );
       if (changedPaths.length === 0) {
+        const committedDiff = await runProcess(
+          "git",
+          ["-C", root, "diff", "--name-only", binding.baseSha, "HEAD", "--"],
+          {
+            cwd: root,
+            timeoutMs: 30_000,
+            env,
+            ...(signal ? { signal } : {}),
+          },
+        );
+        assertCompleteProcessOutput(committedDiff, "Base-to-head diff");
+        if (committedDiff.exitCode !== 0)
+          throw new Error(
+            `Unable to verify the base-to-head diff: ${committedDiff.stderr}`,
+          );
+        if (committedDiff.stdout.trim())
+          throw new Error(
+            "The worktree has no uncommitted changes but already contains a base-to-head diff; do not classify it as no-change.",
+          );
+        noChangeCommitObserved = true;
         // A zero-diff worktree is a legitimate outcome when the cited finding
         // is stale or already renders clean on the frozen base. Fail soft
         // with a typed marker so the run can finalize the node as invalid
@@ -779,6 +1036,10 @@ export function registerForgeRuntime(
       if (binding.builderContract)
         assertBuilderContractPaths(binding.builderContract, stagedPaths);
       const preCommitHead = await gitHead(root, binding.runId, signal);
+      if (preCommitHead !== expectedHeadSha)
+        throw new Error(
+          `Forge worktree binding failure: expected head ${expectedHeadSha}, found ${preCommitHead}.`,
+        );
       const stagedTreeResult = await runProcess(
         "git",
         ["-C", root, "write-tree"],
@@ -802,6 +1063,7 @@ export function registerForgeRuntime(
         params.kind === "implementation"
           ? `forge: implement issue #${binding.issueNumber}`
           : `forge: address review for issue #${binding.issueNumber}`;
+      await assertCurrentBinding(signal);
       const hooksPath = mkdtempSync(join(tmpdir(), "forgedock-empty-hooks-"));
       let committed: ProcessResult;
       try {
@@ -897,6 +1159,7 @@ export function registerForgeRuntime(
           parseChangedGitPaths(contractPaths.stdout),
         );
       }
+      expectedHeadSha = headSha;
       const details: ForgeCommitDetails = {
         kind: params.kind,
         noChange: false,
@@ -932,7 +1195,7 @@ export function registerForgeRuntime(
         throw new Error(
           `Verification command '${params.name}' has an empty argv.`,
         );
-      const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const root = await assertCurrentBinding(signal);
       const commandCwd = await resolveVerificationCommandDirectory(
         root,
         command.cwd,
@@ -987,7 +1250,7 @@ export function registerForgeRuntime(
     parameters: PrepareReviewParameters,
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       assertWorkOnAuthority(binding);
-      const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const root = await assertCurrentBinding(signal);
       const status = await runProcess(
         "git",
         ["-C", root, "status", "--porcelain"],
@@ -1068,8 +1331,10 @@ export function registerForgeRuntime(
         "origin",
         binding.branch,
       ];
+      await assertCurrentBinding(signal);
       const tokenProvider = createGitHubTokenProvider(pi, binding.worktreeRoot);
       const token = await tokenProvider.get(signal);
+      await assertCurrentBinding(signal);
       const push = await pushWithGitHubToken(
         root,
         pushArgs,
@@ -1218,6 +1483,7 @@ export function registerForgeRuntime(
     parameters: ReviewPanelParameters,
     async execute(_toolCallId, params, signal) {
       assertWorkOnAuthority(binding);
+      await assertCurrentBinding(signal);
       if (binding.node)
         throw new Error(
           "Review panels can only be launched by the work-on coordinator.",
@@ -1270,10 +1536,12 @@ export function registerForgeRuntime(
         runId: binding.runId,
         issueNumber: binding.issueNumber,
         repository: binding.repository,
+        repositoryIdentity: binding.repositoryIdentity,
         worktreeRoot: binding.worktreeRoot,
         branch: binding.branch,
         baseBranch: binding.baseBranch,
         baseSha: binding.baseSha,
+        expectedHeadSha: params.headSha,
         reviewHeadSha: params.headSha,
         leaseEpoch: binding.leaseEpoch,
         leaseOwnerRunId: binding.leaseOwnerRunId,
@@ -1393,13 +1661,14 @@ export function registerForgeRuntime(
                 },
                 binding.worktreeRoot,
                 signal,
+                childRepositoryBinding(binding, expectedHeadSha),
               );
               return { result };
             } catch (error) {
               if (signal?.aborted)
                 throw signal.reason ?? new Error("Reviewer panel was aborted.");
               if (launch.required) throw error;
-              await rpc.stop(launch.receipt.runId).catch(() => undefined);
+              await rpc.stopAndWait(launch.receipt.runId);
               return {
                 optionalFailure: {
                   reviewer: launch.reviewer,
@@ -1435,9 +1704,13 @@ export function registerForgeRuntime(
           },
         };
       } catch (error) {
-        await Promise.allSettled(
-          launchedReceipts.map((receipt) => rpc.stop(receipt.runId)),
+        const stops = await Promise.allSettled(
+          launchedReceipts.map((receipt) => rpc.stopAndWait(receipt.runId)),
         );
+        const stopFailure = stops.find(
+          (entry): entry is PromiseRejectedResult => entry.status === "rejected",
+        );
+        if (stopFailure) throw stopFailure.reason;
         throw error;
       }
     },
@@ -1449,7 +1722,7 @@ export function registerForgeRuntime(
     description:
       "Persist one schema-valid read-only reviewer result at the trusted bound result path",
     parameters: FinalizeReviewerParameters,
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId, params, signal) {
       if (!binding.nodeId || !binding.node?.startsWith("review-"))
         throw new Error(
           "forge_finalize_reviewer requires a bounded reviewer binding.",
@@ -1467,7 +1740,7 @@ export function registerForgeRuntime(
         throw new Error(
           "Final reviewer result identity does not match its binding.",
         );
-      const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const root = await assertCurrentBinding(signal);
       const resultPath = await writeTrustedResultFile(
         root,
         binding.resultPath,
@@ -1491,7 +1764,7 @@ export function registerForgeRuntime(
     description:
       "Persist one schema-valid bounded node result at the trusted bound result path",
     parameters: FinalizeNodeParameters,
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId, params, signal) {
       if (!binding.nodeId || !binding.node || !binding.nodeAttempt)
         throw new Error("forge_finalize_node requires a bounded node binding.");
       if (!isForgeNodeResult(params.value)) {
@@ -1506,6 +1779,13 @@ export function registerForgeRuntime(
         );
       }
       if (
+        params.value.noChange === true &&
+        !noChangeCommitObserved
+      )
+        throw new Error(
+          "No-change node result requires the current forge_commit no-change observation.",
+        );
+      if (
         params.value.runId !== binding.runId ||
         params.value.issueNumber !== binding.issueNumber ||
         params.value.nodeId !== binding.nodeId ||
@@ -1516,7 +1796,7 @@ export function registerForgeRuntime(
         throw new Error(
           "Final node result identity does not match its binding.",
         );
-      const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const root = await assertCurrentBinding(signal);
       const resultPath = await writeTrustedResultFile(
         root,
         binding.resultPath,
@@ -1540,7 +1820,7 @@ export function registerForgeRuntime(
     description:
       "Persist the schema-valid final work-on result for deterministic parent reconciliation",
     parameters: FinalizeWorkOnParameters,
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId, params, signal) {
       if (!isForgeWorkOnResult(params.value))
         throw new Error("Final work-on result failed schema validation.");
       if (
@@ -1563,7 +1843,7 @@ export function registerForgeRuntime(
         throw new Error(
           "Final work-on result base SHA does not match the bound base.",
         );
-      const root = canonicalRoot ?? (await realpath(binding.worktreeRoot));
+      const root = await assertCurrentBinding(signal);
       const resultPath = await writeTrustedResultFile(
         root,
         binding.resultPath,
@@ -1572,6 +1852,7 @@ export function registerForgeRuntime(
       if (options.mainSession)
         pi.events.emit(DIRECT_WORK_ON_FINALIZED_EVENT, {
           runId: binding.runId,
+          headSha: params.value.headSha,
         });
       return {
         content: [
@@ -1593,6 +1874,7 @@ export function registerForgeRuntime(
     parameters: CheckpointParameters,
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       assertWorkOnAuthority(binding);
+      await assertCurrentBinding(signal);
       if (
         params.action === "complete" &&
         params.phase === "investigate" &&
@@ -1800,10 +2082,12 @@ function readBinding(): ForgeChildBinding {
     "runId",
     "resultPath",
     "repository",
+    "repositoryIdentity",
     "worktreeRoot",
     "branch",
     "baseBranch",
     "baseSha",
+    "expectedHeadSha",
   ] as const;
   for (const field of requiredStrings) {
     if (typeof value[field] !== "string" || !(value[field] as string).trim())
@@ -1885,13 +2169,12 @@ function readBinding(): ForgeChildBinding {
     refresh &&
     (!Number.isSafeInteger(previousReviewRounds) ||
       (previousReviewRounds as number) < 1 ||
-      (previousReviewRounds as number) > (value.maxReviewRounds as number))
+      (previousReviewRounds as number) > (value.maxReviewRounds as number) ||
+      (previousReviewRounds as number) >= 5)
   ) {
-    // A remediated head always receives its verification review: the cap
-    // bounds remediation cycles, so previous == maxReviewRounds is allowed
-    // exactly once more (the verification panel); beyond that, block.
+    // The refreshed review must remain inside both the configured and schema caps.
     throw new Error(
-      "Refresh binding previousReviewRounds must leave room for exactly one verification review round (maxReviewRounds + 1).",
+      "Refresh binding previousReviewRounds must leave room for one verification review round within maxReviewRounds and the result schema cap.",
     );
   }
   return {
@@ -1902,6 +2185,7 @@ function readBinding(): ForgeChildBinding {
       : {}),
     resultPath: value.resultPath as string,
     repository: value.repository as string,
+    repositoryIdentity: value.repositoryIdentity as string,
     ...(value.issueNumber === undefined
       ? {}
       : { issueNumber: value.issueNumber as number }),
@@ -1918,6 +2202,7 @@ function readBinding(): ForgeChildBinding {
     branch: value.branch as string,
     baseBranch: value.baseBranch as string,
     baseSha: value.baseSha as string,
+    expectedHeadSha: value.expectedHeadSha as string,
     maxReviewRounds: value.maxReviewRounds as number,
     reviewerTimeoutMs: value.reviewerTimeoutMs as number,
     verificationCommands,
@@ -1936,6 +2221,7 @@ function readBinding(): ForgeChildBinding {
     ...(refresh
       ? { previousReviewRounds: previousReviewRounds as number }
       : {}),
+    ...(value.detached === true ? { detached: true } : {}),
   };
 }
 
@@ -2592,6 +2878,8 @@ export async function writeTrustedResultFile(
   inputPath: string,
   content: string,
 ): Promise<string> {
+  if (Buffer.byteLength(content, "utf8") > 1024 * 1024)
+    throw new Error("Bound Forge result exceeds the 1 MiB limit.");
   const resultPath = await trustedResultPath(root, inputPath, true);
   const temporaryPath = join(
     dirname(resultPath),
@@ -2629,7 +2917,27 @@ async function readTrustedResultFile(
     throw new Error("Bound reviewer result must be a regular file.");
   if (resultStat.size > 1024 * 1024)
     throw new Error("Bound reviewer result exceeds the 1 MiB limit.");
-  return readFile(resultPath, "utf8");
+  const handle = await open(
+    resultPath,
+    fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0),
+  );
+  try {
+    const opened = await handle.stat();
+    if (
+      !opened.isFile() ||
+      opened.isSymbolicLink() ||
+      opened.dev !== resultStat.dev ||
+      opened.ino !== resultStat.ino
+    )
+      throw new Error("Bound reviewer result changed during read.");
+    if (opened.size > 1024 * 1024)
+      throw new Error("Bound reviewer result exceeds the 1 MiB limit.");
+    const buffer = Buffer.alloc(opened.size);
+    const { bytesRead } = await handle.read(buffer, 0, opened.size, 0);
+    return buffer.subarray(0, bytesRead).toString("utf8");
+  } finally {
+    await handle.close();
+  }
 }
 
 export interface ExpectedReviewerResult {
@@ -2697,6 +3005,7 @@ export async function waitForReviewerResult(
   expected: ExpectedReviewerResult,
   worktreeRoot: string,
   signal?: AbortSignal,
+  repositoryBinding?: ForgeRepositoryBinding,
 ): Promise<ForgeReviewerResult> {
   const deadline = Date.now() + timeoutMs;
   const root = await realpath(worktreeRoot);
@@ -2704,6 +3013,16 @@ export async function waitForReviewerResult(
   const loadBoundResult = async (): Promise<
     ForgeReviewerResult | undefined
   > => {
+    if (repositoryBinding) {
+      const currentRoot = await assertBoundRepositoryIdentity(
+        repositoryBinding,
+        signal,
+      );
+      if (currentRoot !== root)
+        throw new Error(
+          "Forge worktree binding failure: reviewer result root changed during polling.",
+        );
+    }
     try {
       const text = await readTrustedResultFile(root, receipt.resultPath);
       if (!text?.trim()) return undefined;

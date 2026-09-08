@@ -80,6 +80,7 @@ export interface ForgeNodeResult {
   artifact?: PhaseArtifact;
   reviewerResult?: ForgeReviewerResult;
   blocker?: string;
+  noChange?: boolean;
 }
 
 export interface ForgeWorkOnResult {
@@ -255,6 +256,7 @@ export const FORGE_NODE_OUTPUT_SCHEMA = {
       },
     },
     evidence: { type: "array", items: { type: "string", minLength: 1 } },
+    noChange: { type: "boolean" },
     artifact: FORGE_PHASE_ARTIFACT_SCHEMA,
     reviewerResult: FORGE_REVIEWER_OUTPUT_SCHEMA,
     blocker: { type: "string", minLength: 1 },
@@ -278,10 +280,16 @@ export function isForgeNodeResult(value: unknown): value is ForgeNodeResult {
     typeof result.headSha === "string" &&
     isStringArray(result.changedFiles) &&
     isStringArray(result.evidence) &&
+    (result.noChange === undefined ||
+      (result.noChange === true &&
+        result.node === "implement" &&
+        result.outcome === "invalid" &&
+        result.changedFiles.length === 0)) &&
     Array.isArray(result.verification) &&
     result.verification.every(isVerificationResult) &&
     (result.status !== "completed" ||
       result.reviewerResult !== undefined ||
+      result.noChange === true ||
       isPhaseArtifact(result.artifact)) &&
     (!result.artifact ||
       (isPhaseArtifact(result.artifact) && result.artifact.phase === result.node))

@@ -19,7 +19,10 @@ verification input. Native `extensionBindings` carries its path/digest into the 
 uses `helpers/dispatch.mjs context` to read that binding. A local index such as child 0 is
 not issue identity. Local/missing/sibling forge.yaml files and historical comments cannot
 change bound execution policy. If binding/input is absent or corrupt, report the exact
-handoff failure; never borrow another checkout's configuration.
+handoff failure; never borrow another checkout's configuration. The prepared lane worktree
+is a separate exact binding: pass it as the child `cwd` with `worktree: false`, and treat a
+stale or wrong Pi workspace as an internal launch-binding failure for rebind/retry, never a
+human-facing issue gate.
 
 Additional settings may be read selectively from the canonical config path after verifying
 its recorded digest, never neighbouring files. A changed source requires parent clarification,

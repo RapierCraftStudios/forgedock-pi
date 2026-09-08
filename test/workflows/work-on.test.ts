@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   ExternalIssueDependencyError,
   discoverIssueDependencies,
+  isRecoverableLaneFailure,
 } from "../../src/workflows/orchestrate.ts";
 import type { ForgeReviewerResult } from "../../src/agents/contracts.ts";
 import {
@@ -17,6 +18,8 @@ import {
   findingPriority,
   isRecoverableWorkOnBlocker,
   isTransientProviderFailure,
+  isWorktreeBindingFailure,
+  launchRecoveryMode,
   parentNodeFromId,
   parseAsyncCompletion,
   reconcileLaunchState,
@@ -160,11 +163,20 @@ test("owned cancellation cleanup runs only after durable cancellation and delete
     baseSha: "a".repeat(40),
   };
   const git = {
-    async deleteRemoteBranch(): Promise<void> {
-      calls.push("delete-remote");
+    async deleteRemoteBranch(
+      _prepared: typeof prepared,
+      _signal: AbortSignal | undefined,
+      _repository: string | undefined,
+      expectedHeadSha: string,
+    ): Promise<void> {
+      calls.push(`delete-remote:${expectedHeadSha}`);
     },
-    async cleanup(): Promise<void> {
-      calls.push("cleanup-worktree");
+    async cleanup(
+      _prepared: typeof prepared,
+      _signal: AbortSignal | undefined,
+      expectedHeadSha: string,
+    ): Promise<void> {
+      calls.push(`cleanup-worktree:${expectedHeadSha}`);
     },
   };
 
@@ -173,8 +185,17 @@ test("owned cancellation cleanup runs only after durable cancellation and delete
     /requires durable cancelled state/,
   );
   assert.deepEqual(calls, []);
-  await cleanupDurablyCancelledWorktree("cancelled", prepared, git);
-  assert.deepEqual(calls, ["delete-remote", "cleanup-worktree"]);
+  await cleanupDurablyCancelledWorktree(
+    "cancelled",
+    prepared,
+    git,
+    prepared.baseSha,
+    "owner/repo",
+  );
+  assert.deepEqual(calls, [
+    `delete-remote:${prepared.baseSha}`,
+    `cleanup-worktree:${prepared.baseSha}`,
+  ]);
 });
 
 test("direct restart selects terminal cleanup and authority release windows", () => {
@@ -540,6 +561,26 @@ test("provider retry classification includes WebSocket failures but excludes quo
     true,
   );
   assert.equal(isTransientProviderFailure("insufficient_quota billing"), false);
+});
+
+test("wrong worktree failures rebind instead of becoming human gates", () => {
+  const failure =
+    "Forge worktree binding failure: runtime cwd /tmp/pi-worktree does not match bound worktree /repo/.forge/worktrees/run-1.";
+  assert.equal(isWorktreeBindingFailure(failure), true);
+  assert.equal(isRecoverableLaneFailure(failure), true);
+  assert.equal(launchRecoveryMode(failure), "fresh-worktree");
+  assert.equal(isTransientProviderFailure(failure), true);
+  assert.equal(isRecoverableWorkOnBlocker(failure), true);
+  assert.equal(launchRecoveryMode("WebSocket error"), "resume");
+  assert.equal(launchRecoveryMode("Product decision requires operator approval."), "none");
+  assert.equal(isRecoverableLaneFailure("Product decision requires operator approval."), false);
+  assert.equal(isWorktreeBindingFailure("Product decision requires operator approval."), false);
+  assert.equal(
+    isRecoverableLaneFailure(
+      "Ambiguous Forge provider launch after durable intent: RPC spawn timed out.",
+    ),
+    false,
+  );
 });
 
 test("terminal workflow completion is matched only by top-level run ID", () => {

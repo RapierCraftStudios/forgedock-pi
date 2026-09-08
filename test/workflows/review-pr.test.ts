@@ -231,6 +231,7 @@ class GitHubFake {
 class GitFake {
   headSha = route.headSha;
   readonly prepared: PreparedReviewWorktree[] = [];
+  async assertRepositoryRoot(): Promise<void> {}
   readonly cleaned: PreparedReviewWorktree[] = [];
 
   async prepareReview(

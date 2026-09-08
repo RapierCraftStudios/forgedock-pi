@@ -11,6 +11,7 @@ import { loadForgePolicy } from "../adapters/config.ts";
 import {
   GitWorktreeManager,
   type PreparedReviewWorktree,
+  type PreparedWorktree,
 } from "../adapters/git.ts";
 import { FetchGitHubTransport } from "../adapters/github-api.ts";
 import { createGitHubTokenProvider } from "../adapters/github-auth.ts";
@@ -27,8 +28,10 @@ import {
 } from "../adapters/subagents.ts";
 import { isPathWithin } from "../agents/child-containment.ts";
 import {
+  assertBoundRepositoryIdentity,
   waitForReviewerResult,
   type ExpectedReviewerResult,
+  type ForgeRepositoryBinding,
 } from "../agents/child-runtime.ts";
 import type {
   ForgeReviewFindingResult,
@@ -70,7 +73,14 @@ import { testGateVerification } from "./test-gate.ts";
 
 export type ReviewExecution =
   | { kind: "standalone"; repositoryRoot: string }
-  | { kind: "work-on"; worktreePath: string };
+  | {
+      kind: "work-on";
+      worktreePath: string;
+      repositoryIdentity?: string;
+      branch?: string;
+      detached?: boolean;
+      prepared?: PreparedWorktree;
+    };
 
 export interface ReviewPrRequest {
   reviewId: string;
@@ -124,6 +134,9 @@ export interface ReviewPanelRunInput {
   pullNumber: number;
   issueNumber?: number;
   worktreePath: string;
+  repositoryIdentity?: string;
+  branch?: string;
+  detached?: boolean;
   route: GitHubPullRequestRouteSnapshot;
   reviewers: readonly string[];
   round: number;
@@ -143,6 +156,17 @@ export interface ReviewPrCoordinatorDependencies {
   git: GitWorktreeManager;
   panel: ReviewPanelRunner;
   materializeAgents?: (worktreePath: string) => Promise<readonly string[]>;
+}
+
+export class ReviewStopBarrierError extends Error {
+  constructor(cause: unknown) {
+    super(
+      `Reviewer stop barrier did not reach a terminal state: ${
+        cause instanceof Error ? cause.message : String(cause)
+      }`,
+    );
+    this.name = "ReviewStopBarrierError";
+  }
 }
 
 /**
@@ -173,6 +197,32 @@ export class ReviewPrCoordinator {
     const mode = input.mode ?? "standard";
     if (mode === "staging" && input.autoMergeRequested)
       throw new Error("Staging review cannot merge or deploy.");
+    if (input.execution.kind === "standalone") {
+      await this.#git.assertRepositoryRoot(
+        input.execution.repositoryRoot,
+        input.repository,
+        input.signal,
+      );
+    } else if (input.execution.prepared) {
+      await this.#git.assertRepositoryIdentity(
+        input.execution.prepared,
+        input.repository,
+        input.signal,
+      );
+    } else if (input.execution.repositoryIdentity) {
+      await this.#git.assertRepositoryIdentity(
+        {
+          repositoryRoot: input.execution.worktreePath,
+          repositoryIdentity: input.execution.repositoryIdentity,
+          worktreePath: input.execution.worktreePath,
+          branch: "review-unbound",
+          baseBranch: "review-unbound",
+          baseSha: "0".repeat(40),
+        },
+        input.repository,
+        input.signal,
+      );
+    }
 
     const route =
       input.route ??
@@ -188,6 +238,28 @@ export class ReviewPrCoordinator {
     const alreadyMergedOnResume = resumedPull?.merged === true;
     if (!alreadyMergedOnResume)
       await this.#github.revalidatePullRequestRoute(route, input.signal);
+    if (input.execution.kind === "work-on" && input.execution.prepared) {
+      const rebound = await this.#git.rebind(
+        input.execution.prepared,
+        input.signal,
+        input.repository,
+        route.headSha,
+      );
+      if (rebound.worktreePath !== input.execution.worktreePath)
+        throw new Error(
+          "Review work-on execution path does not match its prepared worktree.",
+        );
+    }
+    if (input.execution.kind === "work-on") {
+      const actualHead = await this.#git.head(
+        input.execution.worktreePath,
+        input.signal,
+      );
+      if (actualHead !== route.headSha)
+        throw new Error(
+          `Review work-on execution head ${actualHead} does not match frozen PR head ${route.headSha}.`,
+        );
+    }
 
     let snapshot = await this.#journal.initialize({
       reviewId: input.reviewId,
@@ -266,7 +338,7 @@ export class ReviewPrCoordinator {
       );
     const stagingBundle = mode === "staging" ? input.stagingBundle : undefined;
     let prepared: PreparedReviewWorktree | undefined;
-    const worktreePath =
+    let worktreePath =
       input.execution.kind === "standalone"
         ? (prepared = await this.#git.prepareReview(
             input.execution.repositoryRoot,
@@ -276,11 +348,12 @@ export class ReviewPrCoordinator {
               headSha: route.headSha,
               baseRef: route.baseRef,
               baseSha: route.baseSha,
+              expectedRepository: input.repository,
               ...(input.signal ? { signal: input.signal } : {}),
             },
           )).worktreePath
         : input.execution.worktreePath;
-
+    let preservePrepared = false;
     try {
       const localHead = await this.#git.head(worktreePath, input.signal);
       if (localHead !== route.headSha)
@@ -288,11 +361,17 @@ export class ReviewPrCoordinator {
           `Review worktree head ${localHead} does not match frozen PR head ${route.headSha}.`,
         );
       await this.#materializeAgents(worktreePath);
+      const repositoryIdentity =
+        prepared?.repositoryIdentity ??
+        (input.execution.kind === "work-on"
+          ? input.execution.repositoryIdentity
+          : undefined);
       snapshot = await this.#runPanelIfNeeded(
         snapshot.state,
         input,
         route,
         worktreePath,
+        repositoryIdentity,
       );
       if (snapshot.state.panel?.status === "running") {
         const additionalChecks: readonly VerificationResult[] = [
@@ -532,8 +611,13 @@ export class ReviewPrCoordinator {
         ...(merge ? { mergeSha: merge.sha } : {}),
         ...(stagingBundle ? { stagingBundle } : {}),
       };
+    } catch (error) {
+      if (error instanceof ReviewStopBarrierError) preservePrepared = true;
+      throw error;
     } finally {
-      if (prepared) await this.#git.cleanupReview(prepared, input.signal);
+      // Cleanup is compensating work and must continue after the review signal
+      // is aborted, otherwise the owned review worktree is retained forever.
+      if (prepared && !preservePrepared) await this.#git.cleanupReview(prepared);
     }
   }
 
@@ -562,6 +646,7 @@ export class ReviewPrCoordinator {
     input: ReviewPrRequest,
     route: GitHubPullRequestRouteSnapshot,
     worktreePath: string,
+    repositoryIdentity?: string,
   ): Promise<Awaited<ReturnType<ReviewJournal["append"]>>> {
     let state = initial;
     const requestedRound = input.round ?? state.panel?.round ?? 1;
@@ -594,6 +679,19 @@ export class ReviewPrCoordinator {
           ? {}
           : { issueNumber: input.issueNumber }),
         worktreePath,
+        ...(repositoryIdentity ? { repositoryIdentity } : {}),
+        ...(input.execution.kind === "standalone"
+          ? { branch: route.headRef, detached: true }
+          : input.execution.prepared
+            ? { branch: input.execution.prepared.branch }
+            : input.execution.branch
+              ? {
+                  branch: input.execution.branch,
+                  ...(input.execution.detached ? { detached: true } : {}),
+                }
+              : input.execution.detached
+                ? { branch: route.headRef, detached: true }
+                : {}),
         route,
         reviewers: input.roster.reviewers,
         round: requestedRound,
@@ -689,6 +787,22 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
     input: ReviewPanelRunInput,
   ): Promise<readonly ForgeReviewerResult[]> {
     validateReviewDeadlines({ reviewerTimeoutMs: input.reviewerTimeoutMs });
+    if (!input.repositoryIdentity)
+      throw new Error(
+        "Review panel requires an immutable prepared repository identity.",
+      );
+    const repositoryIdentity = input.repositoryIdentity;
+    const repositoryBinding: ForgeRepositoryBinding = {
+      runId: input.reviewId,
+      repository: input.repository,
+      repositoryIdentity,
+      worktreeRoot: input.worktreePath,
+      branch: input.branch ?? input.route.headRef,
+      ...(input.detached
+        ? { reviewId: input.reviewId, detached: true }
+        : {}),
+      headSha: input.route.headSha,
+    };
     await this.#rpc.ping();
     const receipts: Array<{
       receipt: SubagentSpawnReceipt;
@@ -696,20 +810,24 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
       reviewer: string;
     }> = [];
     this.#active.set(input.reviewId, []);
+    let retainActiveReceipts = false;
     const spawn = async (reviewer: string, reviewerTimeoutMs = input.reviewerTimeoutMs): Promise<(typeof receipts)[number]> => {
       const receipt = await this.#rpc.spawnStandaloneReviewNode({
         reviewId: input.reviewId,
         repository: input.repository,
+        repositoryIdentity,
         pullNumber: input.pullNumber,
         ...(input.issueNumber === undefined ? {} : { issueNumber: input.issueNumber }),
         worktreeRoot: input.worktreePath,
         headRef: input.route.headRef,
         headSha: input.route.headSha,
+        ...(input.branch ? { branch: input.branch } : {}),
         baseRef: input.route.baseRef,
         baseSha: input.route.baseSha,
         reviewer,
         round: input.round,
         reviewerTimeoutMs,
+        detached: input.detached === true,
         ...(input.context ? { context: input.context } : {}),
       });
       const entry = {
@@ -747,6 +865,7 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
             entry.expected,
             input.worktreePath,
             input.signal,
+            repositoryBinding,
           ),
         ),
       );
@@ -773,11 +892,16 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
       });
       const retryable = [...recoveryPlan.retryReviewers];
       if (retryable.length > 0) {
-        await Promise.allSettled(
+        const stopResults = await Promise.allSettled(
           launched
             .filter((entry) => retryable.includes(entry.reviewer))
-            .map((entry) => this.#rpc.stop(entry.receipt.runId)),
+            .map((entry) => this.#rpc.stopAndWait(entry.receipt.runId)),
         );
+        const stopFailure = stopResults.find(
+          (entry): entry is PromiseRejectedResult => entry.status === "rejected",
+        );
+        if (stopFailure)
+          throw new ReviewStopBarrierError(stopFailure.reason);
         const retryTimeoutMs = extendedReviewerTimeout(input.reviewerTimeoutMs);
         const retryLaunchSettled = await Promise.allSettled(
           retryable.map((reviewer) => spawn(reviewer, retryTimeoutMs)),
@@ -798,6 +922,7 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
               entry.expected,
               input.worktreePath,
               input.signal,
+              repositoryBinding,
             ),
           ),
         );
@@ -815,21 +940,31 @@ export class SubagentReviewPanelRunner implements ReviewPanelRunner {
         attempt: input.round,
       });
     } catch (error) {
-      if (input.signal?.aborted) throw input.signal.reason ?? error;
-      await Promise.allSettled(
-        receipts.map(({ receipt }) => this.#rpc.stop(receipt.runId)),
+      const stops = await Promise.allSettled(
+        receipts.map(({ receipt }) => this.#rpc.stopAndWait(receipt.runId)),
       );
-      throw error;
+      const stopFailure = stops.find(
+        (entry): entry is PromiseRejectedResult => entry.status === "rejected",
+      );
+      if (stopFailure) {
+        retainActiveReceipts = true;
+        throw new ReviewStopBarrierError(stopFailure.reason);
+      }
+      throw input.signal?.aborted ? input.signal.reason ?? error : error;
     } finally {
-      this.#active.delete(input.reviewId);
+      if (!retainActiveReceipts) this.#active.delete(input.reviewId);
     }
   }
 
   async cancel(reviewId: string): Promise<void> {
     const receipts = this.#active.get(reviewId) ?? [];
-    await Promise.allSettled(
-      receipts.map((receipt) => this.#rpc.stop(receipt.runId)),
+    const stops = await Promise.allSettled(
+      receipts.map((receipt) => this.#rpc.stopAndWait(receipt.runId)),
     );
+    const stopFailure = stops.find(
+      (entry): entry is PromiseRejectedResult => entry.status === "rejected",
+    );
+    if (stopFailure) throw new ReviewStopBarrierError(stopFailure.reason);
     this.#active.delete(reviewId);
   }
 }
@@ -884,6 +1019,17 @@ export class ForgeReviewController {
         "--gh-flag is not supported by the typed GitHub adapter; no flag was executed.",
       );
     const environment = await this.#environment(ctx);
+    const suppliedWorktree = parsed.worktree
+      ? await this.#git.inspectWorktree(
+          environment.repositoryRoot,
+          await resolveReviewWorktree(
+            environment.repositoryRoot,
+            parsed.worktree,
+          ),
+          environment.policy.repository.name,
+          ctx.signal,
+        )
+      : undefined;
     const pulls = await environment.github.resolveReviewSelector(
       selectorValue(parsed.selector),
       ctx.signal,
@@ -908,23 +1054,31 @@ export class ForgeReviewController {
           pull.number,
           ctx.signal,
         );
+        if (
+          suppliedWorktree &&
+          suppliedWorktree.headSha !== route.headSha
+        )
+          throw new Error(
+            `Review worktree head ${suppliedWorktree.headSha} does not match frozen PR head ${route.headSha}.`,
+          );
         const reviewId = `review-${randomUUID()}`;
         const stagingBundle =
           effectiveMode === "staging"
             ? await this.#resolveStagingBundle(
                 environment.github,
                 environment.repositoryRoot,
+                environment.policy.repository.name,
                 route,
                 ctx.signal,
               )
             : undefined;
-        const execution: ReviewExecution = parsed.worktree
+        const execution: ReviewExecution = suppliedWorktree
           ? {
               kind: "work-on",
-              worktreePath: await resolveReviewWorktree(
-                environment.repositoryRoot,
-                parsed.worktree,
-              ),
+              worktreePath: suppliedWorktree.worktreePath,
+              repositoryIdentity: suppliedWorktree.repositoryIdentity,
+              branch: suppliedWorktree.branch || route.headRef,
+              ...(suppliedWorktree.detached ? { detached: true } : {}),
             }
           : { kind: "standalone", repositoryRoot: environment.repositoryRoot };
         const coordinator = this.#coordinator(environment);
@@ -1025,6 +1179,7 @@ export class ForgeReviewController {
         ? await this.#resolveStagingBundle(
             environment.github,
             environment.repositoryRoot,
+            environment.policy.repository.name,
             resumeRoute,
             ctx.signal,
           )
@@ -1073,10 +1228,16 @@ export class ForgeReviewController {
   async #resolveStagingBundle(
     github: GitHubWorkflowAdapter,
     repositoryRoot: string,
+    expectedRepository: string,
     route: GitHubPullRequestRouteSnapshot,
     signal?: AbortSignal,
   ): Promise<StagingBundleResolution> {
-    await this.#git.fetchRefs(repositoryRoot, [route.baseRef, route.headRef], signal);
+    await this.#git.fetchRefs(
+      repositoryRoot,
+      [route.baseRef, route.headRef],
+      signal,
+      expectedRepository,
+    );
     return github.resolveStagingBundle({
       route: {
         baseRef: route.baseRef,
@@ -1114,8 +1275,13 @@ export class ForgeReviewController {
       ctx.cwd,
       ctx.signal,
     );
-    await this.#git.ensureRuntimeIgnored(repositoryRoot, ctx.signal);
     const { policy } = await loadForgePolicy(repositoryRoot);
+    await this.#git.assertRepositoryRoot(
+      repositoryRoot,
+      policy.repository.name,
+      ctx.signal,
+    );
+    await this.#git.ensureRuntimeIgnored(repositoryRoot, ctx.signal);
     const tokenProvider = createGitHubTokenProvider(this.#pi, repositoryRoot);
     const transport = new FetchGitHubTransport({ tokenProvider });
     const github = new GitHubWorkflowAdapter(
