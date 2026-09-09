@@ -59,11 +59,16 @@ test("closure matrix admission catches omitted alternate callers and transitive 
   assert.match(verification, /name those omitted boundaries explicitly/i);
   assert.match(investigate, /cancellation.*concurrency/is);
   assert.match(build, /cancellation.*concurrency/is);
-  const requiredExamples = ["alternate caller", "transitive dependency"];
-  const initiallyScoped = new Set(["primary caller"]);
-  const omitted = requiredExamples.filter((example) => !initiallyScoped.has(example));
-  assert.deepEqual(omitted, requiredExamples);
-  assert.ok(omitted.every((example) => example.includes("caller") || example.includes("dependency")));
+  const fixture = await readFile("test/fixtures/closure-matrix-receipt.md", "utf8");
+  const rows = [...fixture.matchAll(/^[-*] ([^|]+) \| ([^\n]+)$/gm)].map((match) => ({
+    id: match[1]!.trim(),
+    detail: match[2]!,
+  }));
+  assert.equal(rows.length, 3);
+  const initiallyScoped = new Set(rows.slice(0, 1).map((row) => row.id));
+  const omitted = rows.filter((row) => !initiallyScoped.has(row.id));
+  assert.deepEqual(omitted.map((row) => row.id), ["alternate-caller", "transitive-dependency"]);
+  assert.ok(omitted.every((row) => /producer=.*consumer=.*dependency=.*state=.*counterexample=/.test(row.detail)));
 });
 
 test("work-on reviewer results are rebound to the shared frozen review identity", () => {

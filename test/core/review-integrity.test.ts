@@ -19,11 +19,15 @@ test("review closure integrity names alternate callers and transitive dependenci
   assert.match(verification, /Each row needs a concrete counterexample or behavioral test/);
   assert.match(verification, /cancellation.*concurrency/is);
 
-  const requiredExamples = ["alternate caller", "transitive dependency"];
-  const declared = requiredExamples.filter((example) => review.includes(example));
-  const initial = new Set(["primary caller"]);
-  assert.deepEqual(declared, requiredExamples);
-  assert.deepEqual(requiredExamples.filter((example) => !initial.has(example)), requiredExamples);
+  const fixture = await readFile("test/fixtures/closure-matrix-receipt.md", "utf8");
+  const rows = [...fixture.matchAll(/^[-*] ([^|]+) \| ([^\n]+)$/gm)].map((match) => ({
+    id: match[1]!.trim(),
+    detail: match[2]!,
+  }));
+  const initial = new Set(rows.slice(0, 1).map((row) => row.id));
+  const gaps = rows.filter((row) => !initial.has(row.id));
+  assert.deepEqual(gaps.map((row) => row.id), ["alternate-caller", "transitive-dependency"]);
+  assert.ok(gaps.every((row) => /producer=.*consumer=.*dependency=.*state=.*counterexample=/.test(row.detail)));
 });
 
 test("review metadata normalizes ranges and exposes typed DAG paths", () => {
