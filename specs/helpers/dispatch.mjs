@@ -87,15 +87,21 @@ function targetBaseDescriptor(baseCwd, repository, target) {
   requireThat(execFileSync("git", ["-C", basePath, "diff", "--cached", "--quiet"], { stdio: "ignore" }) === null, "Prepared target base has staged changes before dispatch");
   assertRepo(repository, basePath);
   const commonDir = fs.realpathSync(path.resolve(basePath, git(basePath, ["rev-parse", "--git-common-dir"])));
+  const commonStat = fs.statSync(commonDir);
+  const branch = git(basePath, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
+  requireThat(/^pi-parallel-[A-Za-z0-9._-]+$/.test(branch), "Prepared target base must be a managed pi-parallel worktree");
+  const worktreeEntry = git(basePath, ["worktree", "list", "--porcelain"]).split(/\n\n/).find(entry => entry.split("\n").includes(`worktree ${basePath}`) && entry.split("\n").includes(`branch refs/heads/${branch}`));
+  const gitdir = fs.realpathSync(path.resolve(basePath, git(basePath, ["rev-parse", "--git-dir"])));
+  requireThat(worktreeEntry && gitdir !== commonDir && !worktreeEntry.split("\n").includes("prunable"), "Prepared target base is not a registered managed worktree");
   const headSha = git(basePath, ["rev-parse", "HEAD"]);
-  let targetSha = headSha;
+  let targetSha;
   try { targetSha = git(basePath, ["rev-parse", "--verify", `refs/remotes/origin/${target}^{commit}`]); }
-  catch { /* A local fixture may not have fetched the named remote ref. */ }
+  catch { throw new Error("Prepared target base is missing the fetched configured target ref"); }
   let descended = true;
   try { execFileSync("git", ["-C", basePath, "merge-base", "--is-ancestor", targetSha, headSha], { stdio: "ignore" }); }
   catch { descended = false; }
   requireThat(descended, "Prepared target base is not descended from the configured target");
-  return valueDescriptor({ path: basePath, repository, target, targetSha, headSha, commonDir });
+  return valueDescriptor({ path: basePath, repository, target, targetSha, headSha, branch, gitdir, commonDir, repositoryIdentity: `${commonDir}:${String(commonStat.dev)}:${String(commonStat.ino)}` });
 }
 function validateTargetBaseDescriptor(value, repository, target, runtimeCwd) {
   requireThat(value && typeof value === "object" && !Array.isArray(value), "Target-base descriptor is invalid");
@@ -106,11 +112,18 @@ function validateTargetBaseDescriptor(value, repository, target, runtimeCwd) {
   catch { throw new Error("Workspace binding failure: prepared target base is missing"); }
   requireThat(path.isAbsolute(content.path ?? "") && canonicalPath === content.path, "Target-base path is not canonical");
   requireThat(content.repository === repository && content.target === target && /^[a-f0-9]{40}$/.test(content.targetSha ?? "") && /^[a-f0-9]{40}$/.test(content.headSha ?? ""), "Target-base identity mismatch");
-  requireThat(typeof content.commonDir === "string" && path.isAbsolute(content.commonDir), "Target-base repository identity is missing");
+  requireThat(typeof content.commonDir === "string" && path.isAbsolute(content.commonDir) && typeof content.repositoryIdentity === "string" && content.repositoryIdentity.startsWith(`${content.commonDir}:`), "Target-base repository identity is missing");
   if (runtimeCwd !== undefined) {
     requireThat(fs.realpathSync(runtimeCwd) === content.path, "Workspace binding failure: effective cwd disagrees with prepared target base");
     assertRepo(repository, runtimeCwd);
-    requireThat(fs.realpathSync(path.resolve(runtimeCwd, git(runtimeCwd, ["rev-parse", "--git-common-dir"]))) === content.commonDir, "Workspace binding failure: repository identity disagrees with prepared target base");
+    const runtimeCommonDir = fs.realpathSync(path.resolve(runtimeCwd, git(runtimeCwd, ["rev-parse", "--git-common-dir"])));
+    const runtimeCommonStat = fs.statSync(runtimeCommonDir);
+    requireThat(runtimeCommonDir === content.commonDir && `${runtimeCommonDir}:${String(runtimeCommonStat.dev)}:${String(runtimeCommonStat.ino)}` === content.repositoryIdentity, "Workspace binding failure: repository identity disagrees with prepared target base");
+    requireThat(git(runtimeCwd, ["symbolic-ref", "--quiet", "--short", "HEAD"]) === content.branch, "Workspace binding failure: managed branch disagrees with prepared target base");
+    const worktreeEntry = git(runtimeCwd, ["worktree", "list", "--porcelain"]).split(/\n\n/).find(entry => entry.split("\n").includes(`worktree ${content.path}`) && entry.split("\n").includes(`branch refs/heads/${content.branch}`));
+    requireThat(worktreeEntry && !worktreeEntry.split("\n").includes("prunable"), "Workspace binding failure: prepared worktree is not registered");
+    const runtimeGitdir = fs.realpathSync(path.resolve(runtimeCwd, git(runtimeCwd, ["rev-parse", "--git-dir"])));
+    requireThat(runtimeGitdir === content.gitdir && runtimeGitdir !== content.commonDir, "Workspace binding failure: managed worktree identity disagrees with prepared target base");
     requireThat(execFileSync("git", ["-C", runtimeCwd, "diff", "--quiet", "HEAD", "--"], { stdio: "ignore" }) === null, "Workspace binding failure: effective worktree has tracked changes");
     requireThat(execFileSync("git", ["-C", runtimeCwd, "diff", "--cached", "--quiet"], { stdio: "ignore" }) === null, "Workspace binding failure: effective worktree has staged changes");
     const head = git(runtimeCwd, ["rev-parse", "HEAD"]);
@@ -244,12 +257,14 @@ export function prepareBatch(plan, out, cwd = process.cwd()) {
   fs.mkdirSync(out, { recursive: true }); out = path.resolve(out);
   const configInput = { path: path.resolve(cwd, "forge.yaml"), sha256: sha(source.raw) };
   const verification = plan.verification ?? save(path.join(out, "verification.json"), json({ commands: source.config.verification?.commands ?? {}, discovery: source.config.verification?.discovery ?? {} }));
-  const issueGraph = [], lanes = [], keys = new Map();
+  const issueGraph = [], lanes = [], keys = new Map(), preparedPaths = new Set();
   const batchNonce = randomUUID();
   for (const issue of plan.issues) {
     const logicalKey = `issue-${issue.number}`;
     const contract = validateIssueContractFile(issue.contract, issue.number);
     const targetBase = targetBaseDescriptor(issue.baseCwd, source.repo, issue.target);
+    requireThat(!preparedPaths.has(targetBase.path), "Each issue must have a unique prepared worktree");
+    preparedPaths.add(targetBase.path);
     const packagedRoot = packagedRootDescriptor(plan.controlPlane);
     const policy = { v: 1, key: logicalKey, batchNonce, repo: source.repo, issue: issue.number, target: issue.target, model: source.model,
       remediationLimit: source.remediationLimit, requestStartedAt: plan.requestStartedAt, config: configInput, verification, controlPlane: plan.controlPlane,

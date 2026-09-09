@@ -19,6 +19,7 @@ const exec = promisify(execFile);
 test("documented child launch carries a prepared catalog absent from its clean target", async () => {
   const root = await mkdtemp(join(tmpdir(), "forge-catalog-test-"));
   const target = join(root, "target");
+  const preparedTarget = join(root, "prepared-target");
   const snapshot = join(root, "prepared-verification.json");
   try {
     await mkdir(target);
@@ -28,6 +29,9 @@ test("documented child launch carries a prepared catalog absent from its clean t
     await writeFile(join(target, "forge.yaml"), config);
     await exec("git", ["add", "forge.yaml"], { cwd: target });
     await exec("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "target"], { cwd: target });
+    await exec("git", ["branch", "-M", "pi-parallel-anchor"], { cwd: target });
+    await exec("git", ["update-ref", "refs/remotes/origin/staging", "HEAD"], { cwd: target });
+    await exec("git", ["worktree", "add", "-q", "-b", "pi-parallel-catalog", preparedTarget, "HEAD"], { cwd: target });
     const catalog = { commands: { api: { test: "npm run test:api" } }, discovery: {} };
     const bytes = JSON.stringify(catalog);
     await writeFile(snapshot, bytes, { mode: 0o400 });
@@ -40,11 +44,11 @@ test("documented child launch carries a prepared catalog absent from its clean t
     await writeFile(contractPath, contractBytes, { mode: 0o400 });
     const contractDescriptor = { path: contractPath, sha256: createHash("sha256").update(contractBytes).digest("hex") };
     const prepared = prepareBatch({ activeOwners: 1, launchAllowance: 8, requestStartedAt: "2026-01-01T00:00:00Z", controlPlane,
-      verification: { path: snapshot, sha256: digest }, issues: [{ number: 42, target: "staging", baseCwd: target, predecessors: [], contract: contractDescriptor }] }, join(root, "prepared"), target);
+      verification: { path: snapshot, sha256: digest }, issues: [{ number: 42, target: "staging", baseCwd: preparedTarget, predecessors: [], contract: contractDescriptor }] }, join(root, "prepared"), target);
     const script = await readFile(prepared.request.workflowScriptPath, "utf8");
     const graph = JSON.parse(script.match(/^const issueGraph=(.+);$/m)![1]!);
     const launch = graph[0].launch as { task: string; cwd: string; worktree: boolean; output: boolean; artifacts: boolean };
-    assert.equal(launch.cwd, target);
+    assert.equal(launch.cwd, preparedTarget);
     assert.equal(launch.worktree, false, "the prepared lane must not receive a second Pi-managed worktree");
     assert.equal(launch.output, false, "the recipe reuses native artifacts rather than extra named output");
     assert.equal(launch.artifacts, true);
@@ -58,7 +62,7 @@ test("documented child launch carries a prepared catalog absent from its clean t
     const lanePayload = launch.task.split("Prepared lane input: ")[1]!.split("\n\nParent-installed control plane:")[0]!;
     const laneInput = JSON.parse(lanePayload) as { path: string; sha256: string };
     const lanePolicy = JSON.parse(await readFile(laneInput.path, "utf8"));
-    assert.equal(lanePolicy.targetBase.path, realpathSync(target));
+    assert.equal(lanePolicy.targetBase.path, realpathSync(preparedTarget));
     assert.equal(lanePolicy.packagedRoot.path, realpathSync(installedForgeDockRoot));
     assert.match(lanePolicy.targetBase.digest, /^sha256:[a-f0-9]{64}$/);
     assert.match(lanePolicy.packagedRoot.digest, /^sha256:[a-f0-9]{64}$/);

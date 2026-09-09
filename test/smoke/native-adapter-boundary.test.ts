@@ -31,6 +31,7 @@ async function withAdapter(run: (h: any) => Promise<void>) {
     await writeFile(join(repo, "base.txt"), "base\n");
     execFileSync("git", ["add", "base.txt"], { cwd: repo });
     execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "base"], { cwd: repo });
+    execFileSync("git", ["branch", "-M", "pi-parallel-native"], { cwd: repo });
     mock = helpers.createMockPi(); mock.install(); mock.reset();
     const executor = createSubagentExecutor({
       pi: { events: helpers.createEventBus(), getSessionName: () => undefined },
@@ -113,6 +114,9 @@ test("prepared lane policy reaches the actual native child environment", { skip:
   await withAdapter(async ({ root, repo, mock, executor, context }) => {
     const dispatch = await import(new URL("../../specs/helpers/dispatch.mjs", import.meta.url).href);
     execFileSync("git", ["remote", "add", "origin", "https://github.com/example/project.git"], { cwd: repo });
+    execFileSync("git", ["update-ref", "refs/remotes/origin/staging", "HEAD"], { cwd: repo });
+    const preparedRepo = join(root, "prepared-repo");
+    execFileSync("git", ["worktree", "add", "-q", "-b", "pi-parallel-native-lane", preparedRepo, "HEAD"], { cwd: repo });
     await writeFile(join(repo, "forge.yaml"), 'project: {owner: example, repo: project}\nagents: {subagent_model: "test/model"}\n');
     await writeFile(join(repo, ".git", "info", "exclude"), "forge.yaml\n");
     const parentRoot = fileURLToPath(new URL("../..", import.meta.url));
@@ -125,7 +129,7 @@ test("prepared lane policy reaches the actual native child environment", { skip:
     await writeFile(contractPath, contractBytes, { mode: 0o400 });
     const contractDescriptor = { path: contractPath, sha256: createHash("sha256").update(contractBytes).digest("hex") };
     const prepared = dispatch.prepareBatch({ activeOwners: 1, launchAllowance: 8, requestStartedAt: "2026-01-01T00:00:00Z", controlPlane,
-      issues: [{ number: 42, target: "staging", baseCwd: repo, predecessors: [], contract: contractDescriptor }] }, join(root, "prepared"), repo);
+      issues: [{ number: 42, target: "staging", baseCwd: preparedRepo, predecessors: [], contract: contractDescriptor }] }, join(root, "prepared"), repo);
     const script = await readFile(prepared.request.workflowScriptPath, "utf8");
     const graph = JSON.parse(script.match(/^const issueGraph=(.+);$/m)![1]!);
     // Probe the exact generated child descriptor through the full adapter; the
