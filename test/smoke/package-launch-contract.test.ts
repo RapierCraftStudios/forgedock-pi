@@ -36,6 +36,11 @@ test("packed work-on agent resolves without a package tool ceiling", async () =>
     ])
       assert.ok(manifest.files.some((file) => file.path === required), required);
     assert.equal(
+      manifest.files.some((file) => file.path === "agents/forgedock-parent-reviewer.md"),
+      false,
+      "parent reviewer must remain installed control-plane-only",
+    );
+    assert.equal(
       manifest.files.some((file) => file.path === "agents/forgedock-reviewer.md"),
       false,
       "specialized reviewer profile must not be packaged",
