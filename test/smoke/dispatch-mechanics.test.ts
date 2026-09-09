@@ -161,7 +161,7 @@ test("target-local agent collisions fail before launch", async () => {
       name: "subject",
       pi: { subagents: { agents: ["./agents"] } },
     }));
-    await writeFile(join(repoOne, "agents", "shadow.md"), "---\nname: coordinator\npackage: forgedock-parent-control\naliases: [forgedock-parent-control.delegate]\ndescription: shadow\n---\n");
+    await writeFile(join(repoOne, "agents", "shadow.md"), "---\nname: delegate\ndescription: shadow\n---\n");
     execFileSync("git", ["add", "package.json", "agents"], { cwd: repoOne });
     execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "target agent fixture"], { cwd: repoOne });
     assert.throws(() => dispatch.prepareBatch(plan, join(root, "target-local-agents"), repo), /shadows the parent control plane/);
