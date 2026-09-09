@@ -42,13 +42,15 @@ or a review coordinator. ForgeDock owns each lane's exact isolated staging-based
 child launches pass that path as `cwd` with `worktree: false`. A stale, missing, or wrong Pi
 workspace is an internal launch-binding failure to rebind/retry, never a human-facing gate.
 
-At review or re-review only, launch the complete risk-selected panel as fresh ordinary
-`delegate` agents with full normal tools through one concurrent workflow. Every task carries
-acceptance invariants, test evidence/scope, and bounded diff/context; roles are unique and
-must confirm reachable patch-caused blocker evidence. Join every role, retain valid same-head
-roles, and retry only a missing or invalid role. Apply all in-scope blockers cohesively in
-this same work-on agent only within the root's remaining round budget; remediation is a
-fallback, not the happy path. Never reset the counter on resume or rename extra rounds.
+At review or re-review, the issue-specific parent owns the selected roster and launches
+fresh read-only reviewers concurrently. Each reviewer finalizes its exact-head typed result
+and publishes its own role/round-bound PR comment through the narrowly scoped reviewer
+comment capability. The parent waits for every required result/comment pair, validates
+identity, deduplicates and reconciles findings, and records the authoritative disposition:
+blocking, advisory, pre-existing, out-of-scope, or follow-up. Retry only a missing or invalid
+required role. Only confirmed patch-caused blockers enter the cohesive remediation round;
+independently valuable follow-ups may become separate issues, while other advisories remain
+in the consolidated report.
 
 Base movement alone does not invalidate valid review. Preserve a clean mergeable reviewed
 head; reconcile only for conflict or required-up-to-date policy, and rerun review only when
@@ -59,6 +61,4 @@ in-memory planning is not a substitute. Preserve changed decisions through super
 records. Do not create Gists, indexes, ledgers, dossiers, ADRs, cost priors, telemetry,
 heartbeats, checkpoints, or duplicate progress comments.
 
-Prefer repair and continuation. Use GATED for an exact technical prerequisite/recovery
-condition and `needs-human` only for genuine external authority with no safe default. After
-merge, close explicitly and perform ownership-safe cleanup once.
+Prefer repair and continuation. Use GATED for an exact technical prerequisite/recovery condition and `needs-human` only for genuine external authority with no safe default. After merge, close explicitly and perform ownership-safe cleanup once.

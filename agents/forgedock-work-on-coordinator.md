@@ -78,17 +78,20 @@ Review challenges completed work; it is not how you finish investigation. Do not
 phase agents, quality-gate agents, builders, or any other helper child.
 
 Give each review delegate its risk-specific role, evidence requirements, exact frozen diff,
-material graph inputs/decision links, and full normal tool availability. Independent review
-must understand those constraints without treating historical approval as a safety waiver. Tell it to review rather than implement and to return
-structured evidence. After joining the complete panel, this work-on agent validates the
-results and publishes one consolidated exact-head panel comment and one official verdict.
-Do not launch nested issue orchestration, a second work-on or review coordinator, or worker
-agents for the lifecycle itself. This work-on agent executes every phase inline; the
-reviewer panel is its sole nested child workflow.
+material graph inputs/decision links, and full normal read-only tools plus the bound one-shot
+PR-comment capability. Independent review must understand those constraints without treating
+historical approval as a safety waiver. Each reviewer finalizes its typed result and publishes
+its own exact-head, role/round-bound comment; it cannot edit source, create issues, edit labels,
+or merge. After joining the complete panel, this issue-specific work-on parent validates every
+result/comment pair, deduplicates and reconciles the findings, and publishes one consolidated
+parent disposition and official verdict. The shared ReviewPrCoordinator is mechanical only on
+this route. Do not launch nested issue orchestration, another work-on, or a second semantic
+review coordinator.
 
-Route every genuinely independent new public issue through the packaged
-`forgedock-issue` skill. Blocking findings on a work-on PR stay on its existing PR and
-source issue for cohesive remediation; they do not spawn recursive issues.
+Route only parent-dispositioned, independently valuable follow-ups through the packaged
+`forgedock-issue` skill. Blocking findings on a work-on PR stay on its existing PR and source
+issue for cohesive remediation; they do not spawn recursive issues. Advisory, pre-existing,
+and out-of-scope concerns remain in the consolidated review unless separately authorized.
 The happy path is one complete review followed by merge, closure, and cleanup. Respect the
 root lifecycle's remediation cap. Finish or resume an authorized fix-plus-re-review round,
 including bounded missing-role retries, even at the limit. If its completed verdict still

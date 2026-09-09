@@ -166,9 +166,15 @@ receipt. Preserve conclusions and source evidence, not private chain-of-thought.
 
 ### Persist Before Post
 
-GitHub is a delivery channel, not the sole record of a review. Before the first `gh pr comment` attempt, write the finalized complete review body, including its `<!-- FORGE:REVIEW-AGENT:{domain} -->` marker and structured findings block, to a uniquely named durable file such as `${TMPDIR:-/tmp}/forge-review-${PR_NUMBER}-${DOMAIN}-$$.md`. Use `gh pr comment --body-file "$REVIEW_BODY_PATH"`; do not construct a retry loop around a failed write.
+GitHub is a delivery channel, not the sole record of a review. Before the bound reviewer-comment
+capability is called, finalize the complete review body, including its
+`<!-- FORGE:REVIEW-AGENT:{domain} -->` marker and structured findings block, in the trusted
+reviewer result. The capability renders/posts the exact result-bound body and performs its own
+read-back; reviewers must not use raw GitHub writes or any broader mutation capability.
 
-Every agent MUST return its verdict, finding count, and one line per finding to the orchestrator even when posting succeeds. If the post fails, return the durable body path and the same finding summary, then stop. A 403 or other write failure is a failed delivery, not a clean review and not a reason to retry in the background.
+Every agent MUST return its verdict, finding count, and one line per finding to the parent even
+when posting succeeds. If the bound comment publication fails, the role is incomplete, not
+clean; the parent retries only that missing/invalid role under the normal bounded retry rules.
 
 ### Format
 
@@ -191,7 +197,11 @@ one body-integrity marker and append the HTML summary block at the very end of t
 
 ### Rules
 
-1. **Include evidence-backed findings at CONFIRMED, LIKELY, and POSSIBLE confidence** so the coordinator can disposition them. `POSSIBLE` findings are informational. Confidence or severity alone never makes a blocker: blocking requires the review policy's confirmed patch-caused production-risk standard. On work-on PRs, blockers stay on the existing PR/source issue for cohesive remediation; only valuable independent follow-up work becomes a separate issue.
+1. **Include evidence-backed findings at CONFIRMED, LIKELY, and POSSIBLE confidence** so the
+parent can disposition them. Every finding also includes reviewer block view/rationale and scope
+view/rationale. `POSSIBLE` findings are informational. Confidence or severity alone never makes
+a blocker: the parent requires confirmed patch-caused production risk. On work-on PRs, blockers
+stay on the existing PR/source issue; only valuable independent follow-up work becomes a separate issue.
 2. **One line per finding** — sequential numbering (PREFIX-1, PREFIX-2, ...)
 3. **Confidence**: `CONFIRMED`, `LIKELY`, or `POSSIBLE`
 4. **Severity**: `CRITICAL`, `HIGH`, `MEDIUM`, or `LOW`

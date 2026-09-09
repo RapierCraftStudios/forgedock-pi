@@ -30,6 +30,7 @@ import {
   type ReviewPrRequest,
 } from "../../src/workflows/review-pr.ts";
 import { testGateVerification } from "../../src/workflows/test-gate.ts";
+import { renderReviewerComment } from "../../src/core/reviewer-comment.ts";
 
 const route: GitHubPullRequestRouteSnapshot = {
   pullNumber: 7,
@@ -124,6 +125,8 @@ class GitHubFake {
   currentRoute: GitHubPullRequestRouteSnapshot;
   readonly driftAfterFirstValidation?: Partial<GitHubPullRequestRouteSnapshot>;
   readonly artifacts: Array<{ marker: string; body: string }> = [];
+  reviewerResults: readonly ForgeReviewerResult[] = [];
+  publishReviewerComments = true;
   readonly issues: Array<{
     number: number;
     title: string;
@@ -199,6 +202,13 @@ class GitHubFake {
   async postPullArtifact(input: { marker: string; body: string }) {
     this.artifacts.push({ marker: input.marker, body: input.body });
     return this.artifacts.length;
+  }
+
+  async getComments() {
+    if (!this.publishReviewerComments) return [];
+    return this.reviewerResults.map((result) =>
+      renderReviewerComment(result, 1, result.runId),
+    );
   }
 
   async listIssuesByLabel() {
@@ -370,6 +380,7 @@ function harness(
   const journal = new InMemoryReviewJournal();
   const git = new GitFake();
   const panel = new PanelFake(options.results ?? [reviewerResult()]);
+  github.reviewerResults = panel.results;
   const coordinator = new ReviewPrCoordinator({
     github: github as unknown as GitHubWorkflowAdapter,
     journal: journal as unknown as ReviewJournal,
@@ -448,14 +459,10 @@ test("clean standalone review posts route, reviewer, and summary and completes r
     true,
   );
   assert.equal(h.github.mergeInputs.length, 0);
-  assert.equal(h.github.artifacts.length, 4);
+  assert.equal(h.github.artifacts.length, 3);
   assert.match(h.github.artifacts[0]?.marker ?? "", /FORGE:REVIEW_ROUTE/);
-  assert.match(h.github.artifacts[1]?.marker ?? "", /FORGE:REVIEW_AGENT/);
-  assert.match(h.github.artifacts[1]?.body ?? "", /forge-review-security/);
-  assert.match(h.github.artifacts[1]?.body ?? "", /Qualitative Summary/);
-  assert.match(h.github.artifacts[1]?.body ?? "", /traced the changed behavior/);
-  assert.match(h.github.artifacts[2]?.marker ?? "", /REVIEW_FINDING_ISSUES/);
-  assert.match(h.github.artifacts[3]?.marker ?? "", /FORGE:REVIEW_SUMMARY/);
+  assert.match(h.github.artifacts[1]?.marker ?? "", /REVIEW_FINDING_ISSUES/);
+  assert.match(h.github.artifacts[2]?.marker ?? "", /FORGE:REVIEW_SUMMARY/);
 });
 
 test("passing reviewer scope limitations remain audit context, not unknown checks", async () => {
@@ -770,6 +777,24 @@ test("incomplete reviewer panel fails closed without recording findings", async 
     false,
   );
   assert.equal(h.git.cleaned.length, 1);
+});
+
+test("missing reviewer-authored comment fails closed before findings or verdict", async () => {
+  const h = harness();
+  h.github.publishReviewerComments = false;
+
+  await assert.rejects(
+    h.coordinator.review(request()),
+    /did not publish its complete exact-head comment/i,
+  );
+  assert.equal(
+    h.journal.events.some((event) => event.type === "review.findings-recorded"),
+    false,
+  );
+  assert.equal(
+    h.journal.events.some((event) => event.type === "review.verdict-recorded"),
+    false,
+  );
 });
 
 test("malformed reviewer identity fails closed without publishing reviewer output", async () => {

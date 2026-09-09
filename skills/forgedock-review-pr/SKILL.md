@@ -71,60 +71,36 @@ review. Do not blindly relaunch the previous panel.
 
 ## Run one panel
 
-A work-on owner uses the bound policy and `../../specs/helpers/dispatch.mjs review` to prepare
-the request. Supply role tasks/thinking and actual round/head, never a model or cap copied
-from history. Execute the generated request unchanged; out-of-policy preparation fails
-before reviewer admission. Standalone PR review without a bound issue keeps the existing
-direct route and canonical configuration; never invent an issue to satisfy helper inputs.
+The issue-specific work-on parent owns the selected roster and launches every role in fresh
+read-only context. Reviewers are allowed one bound PR-comment capability only: after
+finalizing their typed result, each reviewer must publish its own exact-head, role/round-bound
+comment. That capability cannot edit source, create issues, edit labels, merge, or authorize
+merge. The parent waits for every required role, validates the result/comment pair, and retries
+only a missing or invalid role.
 
-Prepare the full diff once and deterministic role bundles. Embed the relevant diff in each
-task or give the delegate one stable readable file path; never use `runs.host` to transfer
-it. Launch all selected roles as fresh ordinary `delegate` agents with full normal tool
-availability through the adapter's single `runs.all` workflow. Prompts assign review focus
-without creating specialized agent profiles or capability ceilings. Each task carries the
-acceptance invariants, relevant historical constraints/source links, test evidence/scope,
-and bounded ordinary diff/context (start with
-normal diff context, then read relevant callers). Correctness must check whether tests
-exercise the claimed behavior and catch the original defect; source-string assertions do
-not establish runtime correctness. Reproduce disputed blockers when safely feasible and
-resolve conflicting severity claims against the production-impact standard before assigning
-remediation. If a role runs longer than three minutes, its task asks for at most one
-`contact_supervisor` progress update naming the role, head, and current evidence step; this
-is runtime visibility, never a GitHub artifact. Join every role and retain valid same-head
-roles. If one role is missing or invalid, launch one additional workflow containing only that role; never restart the whole panel.
+The parent then collates the raw panel: deduplicate equivalent behavior, preserve source
+reviewers, require verified `path:line` behaviors, reconcile disagreement against evidence, and classify each concern as blocking,
+advisory, pre-existing, out-of-scope, or follow-up. Every finding carries the reviewer's
+block view/rationale and scope view/rationale; the parent disposition is authoritative.
 
-Bind repository, PR, head/base, attempt, and role from the launch key and task rather than
-requiring the delegate to echo them perfectly. Accept JSON or clearly structured Markdown
-when it contains a verdict, substantive summary, verified `path:line` behaviors, residual
-risks, and findings. A blocker identifies a reachable trigger, the patch-caused causal
-chain, existing mitigations checked, and concrete production impact. Preserve a supported
-root-cause/prevention lesson in that same finding, not a new knowledge-only issue; speculation or
-independent pre-existing debt is not a blocker. Normalize harmless key casing, number/string, and list-shape differences in the
-owning agent. Retry only when the child failed or no substantive review can be recovered;
-formatting variance alone never restarts a role or panel. Blocking findings still require
-the confirmed HIGH/CRITICAL production-incident standard.
-
-After complete validation, the owner publishes one SHA-bound `FORGE:REVIEW-PANEL` comment
-with the knowledge-records metadata envelope and visible graph-input links. Include each
-role's summary, relevant decisions considered, finding dispositions, acceptance/test evidence,
-verified behaviors and residual risks, then one official review verdict. Read
-back the exact IDs. Use quoted, file-backed bodies. When the active identity authored the
-PR, record the official verdict with `gh pr review --comment --body-file`; do not attempt
-self-approval or invent `gh pr reviews`. This never replaces a branch-required independent
-approval. No per-role POST/readback choreography, shell-regex grammar, body-integrity tokens,
-or review-start/checkpoint comments are required.
+The shared typed `ReviewPrCoordinator` remains the mechanical gate for exact identity, panel
+completeness, checks, lease/authority, mergeability, and protected-branch safety. It must not
+create work-on finding issues or replace the parent disposition. Standalone/staging routes may
+retain their own issue-publication policy and may use fresh ordinary `delegate` agents with full normal tool availability. If one role is missing or invalid, launch one additional workflow containing only that role. The parent must never use `runs.host` to transfer diffs or create new reviewer capability ceilings. formatting variance alone never restarts a role or panel. After disposition, the parent publishes one SHA-bound `FORGE:REVIEW-PANEL` comment containing panel evidence and the official verdict. Blocking
+findings still require the confirmed HIGH/CRITICAL production-incident standard.
 
 ## Decide
 
-- Any confirmed patch-caused blocking finding: `CHANGES_REQUESTED`.
-- No blockers and one or more follow-ups: `APPROVE_WITH_FOLLOW_UP`.
-- No findings: `APPROVE`.
-- Missing/invalid role after its bounded retry: `review-degraded`, no verdict.
+- Any confirmed patch-caused parent disposition of `blocking`: `CHANGES_REQUESTED`.
+- No blockers and one or more independently valuable `follow-up` dispositions:
+  `APPROVE_WITH_FOLLOW_UP`.
+- Advisory, pre-existing, and out-of-scope concerns remain in the consolidated report by
+  default and do not block.
+- Missing/invalid required role or comment after its bounded retry: `review-degraded`, no verdict.
 
-Keep work-on blockers on the existing PR/source issue for cohesive remediation. Create at
-most one valuable independent follow-up issue per causal concern when separate action is
-needed and authorized. Advisories and reusable lessons remain in the consolidated report
-by default; do not expand the backlog merely to make knowledge searchable.
+Only parent-dispositioned follow-ups reach issue creation. Create at most one valuable independent follow-up issue per causal concern. Current-issue blockers remain on the existing
+PR/source issue and enter the cohesive remediation loop; never create recursive blocker issues
+or one issue per duplicate observation.
 
 Merge only when explicitly authorized, the current head equals the accepted reviewed head
 or a proven equivalent patch, required checks pass, the PR is mergeable, and no blocker
