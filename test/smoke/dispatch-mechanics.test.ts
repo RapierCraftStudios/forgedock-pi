@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
 import test from "node:test";
 const dispatch = await import(new URL("../../specs/helpers/dispatch.mjs", import.meta.url).href);
 const records = await import(new URL("../../specs/helpers/record.mjs", import.meta.url).href);
@@ -87,6 +88,26 @@ test("contract descriptors are exact, immutable, and fail closed before launch",
       () => dispatch.prepareBatch({ ...plan, issues: [{ ...plan.issues[0], contract: { path: tamperedPath, sha256: createHash("sha256").update(tamperedBytes).digest("hex") } }] }, join(root, "tampered"), repo),
       /Contract digest does not match/,
     );
+  });
+});
+
+test("generated recipe rejects omitted, missing, extra, and generic owner criteria", async () => {
+  await fixture(async ({ root, repo, plan }) => {
+    const prepared = dispatch.prepareBatch(plan, join(root, "prepared"), repo);
+    const script = await readFile(prepared.request.workflowScriptPath, "utf8");
+    const graph = JSON.parse(script.match(/^const issueGraph=(.+);$/m)![1]!);
+    const execute = async (mutate: (result: any, index: number) => any) => {
+      const responses = graph.map((node: any, index: number) => {
+        const criteria = node.launch.acceptance.criteria;
+        const result = { ok: true, output: `FORGE_WORK_ON_RESULT status=DONE issue=${node.issue} pr=none dependency=SATISFIED`, acceptance: { effectiveAcceptance: { criteria }, childReport: { criteriaSatisfied: criteria.map((criterion: any) => ({ id: criterion.id, status: "satisfied" })) } } };
+        return mutate(result, index);
+      });
+      return runInNewContext(`(async () => {\n${script}\n})()`, { runs: { all: async () => [responses.shift()] } });
+    };
+    assert.ok((await execute((result, index) => index === 0 ? { ...result, acceptance: undefined } : result))[0].ok === false);
+    assert.ok((await execute((result, index) => index === 0 ? { ...result, acceptance: { ...result.acceptance, childReport: { criteriaSatisfied: [] } } } : result))[0].ok === false);
+    assert.ok((await execute((result, index) => index === 0 ? { ...result, acceptance: { ...result.acceptance, effectiveAcceptance: { criteria: [...result.acceptance.effectiveAcceptance.criteria, { id: "extra", must: "extra" }] } } } : result))[0].ok === false);
+    assert.ok((await execute((result, index) => index === 0 ? { ...result, acceptance: { ...result.acceptance, childReport: { criteriaSatisfied: [{ id: "criterion-1", status: "satisfied" }] } } } : result))[0].ok === false);
   });
 });
 
