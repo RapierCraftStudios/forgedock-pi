@@ -726,7 +726,7 @@ function applyNodeEvent(state: RunState, event: RunEvent): void {
         }
       : {}),
     ...validatedBuilderContract(record.builderContract),
-    ...validatedContractGapReplan(record.contractGapReplan),
+    ...validatedContractGapReplan(record.contractGapReplan, record.headSha),
     ...(typeof record.outcome === "string" ? { outcome: record.outcome } : {}),
     ...(Array.isArray(record.evidence)
       ? {
@@ -750,6 +750,7 @@ function applyNodeEvent(state: RunState, event: RunEvent): void {
 
 function validatedContractGapReplan(
   value: unknown,
+  expectedHeadSha?: unknown,
 ): { contractGapReplan?: NonNullable<NodeEventPayload["contractGapReplan"]> } {
   if (value === undefined) return {};
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -763,7 +764,8 @@ function validatedContractGapReplan(
     typeof record.replanId !== "string" ||
     !record.replanId.trim() ||
     typeof record.reviewedHead !== "string" ||
-    !/^[a-f0-9]{40}$/.test(record.reviewedHead)
+    !/^[a-f0-9]{40}$/.test(record.reviewedHead) ||
+    (typeof expectedHeadSha === "string" && record.reviewedHead !== expectedHeadSha)
   )
     throw new StateTransitionError(
       "invalid-contract-gap-replan",

@@ -305,6 +305,7 @@ export class ForgeWorkOnController {
   readonly #receiptBindings = new Set<string>();
   readonly #earlyCompletions = new Map<string, ParsedAsyncCompletion>();
   readonly #reconcilingNodes = new Set<string>();
+  readonly #finalizingRuns = new Set<string>();
   #directStartInFlight = false;
   #completionUnsubscribe: (() => void) | undefined;
   #directFinalizeUnsubscribe: (() => void) | undefined;
@@ -6000,6 +6001,21 @@ export class ForgeWorkOnController {
     suppliedResult?: ForgeWorkOnResult,
     integrate = false,
   ): Promise<void> {
+    if (this.#finalizingRuns.has(link.forgeRunId)) return;
+    this.#finalizingRuns.add(link.forgeRunId);
+    try {
+      await this.#finalizeInternal(link, ctx, suppliedResult, integrate);
+    } finally {
+      this.#finalizingRuns.delete(link.forgeRunId);
+    }
+  }
+
+  async #finalizeInternal(
+    link: ActiveRunLink,
+    ctx: ExtensionContext,
+    suppliedResult?: ForgeWorkOnResult,
+    integrate = false,
+  ): Promise<void> {
     await this.#git.assertRepositoryIdentity(
       link.prepared,
       link.repository,
@@ -7688,7 +7704,12 @@ function recoverContractGapHandoff(
     try {
       const parsed = JSON.parse(marker.slice("contract-gap-handoff:".length));
       validateContractGapHandoff(parsed);
-      return parsed;
+      const consumed = decisionNodes.some(
+        (candidate) => candidate !== node && candidate.attempt > node.attempt,
+      );
+      return consumed && parsed.status === "REPLAN_REQUIRED"
+        ? { ...parsed, status: "GATED" }
+        : parsed;
     } catch {
       return undefined;
     }
