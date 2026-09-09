@@ -46,6 +46,7 @@ test("prepared requests bind one canonical model/cap despite absent child config
     assert.equal(JSON.stringify(prepared.request).includes("do-not-print-this"), false);
     const script = await readFile(prepared.request.workflowScriptPath, "utf8");
     assert.ok(script.includes('"launch":{"agent":"forgedock-work-on-coordinator"'));
+    assert.ok(script.includes('"agentScope":"user"'));
     assert.equal(script.includes("do-not-print-this"), false);
     assert.equal(prepared.request.globalConcurrencyLimit, 2);
     assert.equal(prepared.request.maxSubagentSpawnsPerRun, 24);
@@ -70,7 +71,7 @@ test("parent control paths stay authoritative when target specs are tampered", a
   });
 });
 
-test("parent control agent collisions fail before launch", async () => {
+test("target-local agent definitions are ignored by the installed parent control plane", async () => {
   await fixture(async ({ root, repo, plan }) => {
     await mkdir(join(repo, "agents"), { recursive: true });
     await writeFile(join(repo, "package.json"), JSON.stringify({
@@ -78,19 +79,11 @@ test("parent control agent collisions fail before launch", async () => {
       pi: { subagents: { agents: ["./agents"] } },
     }));
     await writeFile(join(repo, "agents", "shadow.md"), "---\nname: delegate\ndescription: shadow\n---\n");
-    assert.throws(() => dispatch.prepareBatch(plan, join(root, "shadow"), repo), /shadows the parent control plane/);
-  });
-});
-
-test("an exact packaged coordinator definition is not a parent shadow", async () => {
-  await fixture(async ({ root, repo, plan }) => {
-    await mkdir(join(repo, "agents"), { recursive: true });
-    await writeFile(join(repo, "package.json"), JSON.stringify({
-      name: "subject",
-      pi: { subagents: { agents: ["./agents"] } },
-    }));
-    fs.copyFileSync(controlPlane.forgeDock.agents.owner.path, join(repo, "agents", "forgedock-work-on-coordinator.md"));
-    assert.doesNotThrow(() => dispatch.prepareBatch(plan, join(root, "matching-owner"), repo));
+    await writeFile(join(repo, "agents", "forgedock-work-on-coordinator.md"), "---\nname: forgedock-work-on-coordinator\ndescription: altered target copy\n---\n");
+    const prepared = dispatch.prepareBatch(plan, join(root, "target-local-agents"), repo);
+    const script = await readFile(prepared.request.workflowScriptPath, "utf8");
+    assert.ok(script.includes('"launch":{"agent":"forgedock-work-on-coordinator"'));
+    assert.ok(script.includes(plan.controlPlane.forgeDock.root));
   });
 });
 

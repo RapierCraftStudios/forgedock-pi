@@ -79,6 +79,7 @@ test("packed work-on agent resolves without a package tool ceiling", async () =>
 
     const result = await resolveSubagentLaunchContract({
       agent: "forgedock-work-on-coordinator",
+      agentScope: "project",
       cwd: project,
       context: "fresh",
       skill: false,
@@ -115,6 +116,7 @@ test("host policy may still reject the packaged agent", async () => {
     await registerPackedProjectPackage(project);
     const result = await resolveSubagentLaunchContract({
       agent: "forgedock-work-on-coordinator",
+      agentScope: "project",
       cwd: project,
       context: "fresh",
       skill: false,
