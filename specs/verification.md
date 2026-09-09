@@ -46,8 +46,10 @@ Structural/source-string checks may support `structural` criteria, but can never
 Every non-PASS admission report must emit one machine-readable
 `FORGE:VERIFICATION_BLOCKED` object containing the exact `capability`, `criterion`,
 `criterionTextHash`, `sourceHead`, `contractDigest`, current `state`, and `wakeCondition`.
-Build and PR admission consume the same records; `/test-gate` must classify and bind them
-before its manual/no-test SKIP paths. A formal contract re-scope creates a new bound
+A deliberate no-test/manual skip may emit the explicit marker
+`FORGE:VERIFICATION_NO_REQUIRED_CAPABILITIES`; a bare `RESULT=SKIP` is a required-check
+failure. Build and PR admission consume the same records; `/test-gate` must classify and
+bind them before its manual/no-test SKIP paths. A formal contract re-scope creates a new bound
 criterion/contract identity; it does not convert an old unresolved record to PASS.
 
 Use the existing `forge.yaml` `verification.commands` contract. Commands are grouped by

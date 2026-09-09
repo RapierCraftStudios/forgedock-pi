@@ -75,7 +75,18 @@ If `--prs` is absent, Phase 0 computes the bundle.
 
 ---
 
-## Missing-Config Guard (MANDATORY — runs before all phases)
+## Required-capability preflight (MANDATORY — runs before all phases and every exit)
+
+Run the capability preflight from the Required-capability section below immediately after
+config resolution, before the missing-config guard, bundle triage, service checks, or any
+`SKIP` exit. Every deliberate no-test/manual skip must emit
+`FORGE:VERIFICATION_NO_REQUIRED_CAPABILITIES`; a skip without that marker is a required
+`BLOCK`. Required capabilities must be classified before an absent configuration can be
+called advisory. The executable consumer in `src/workflows/test-gate.ts` validates the
+records and converts malformed, stale-shaped, or unresolved required capability evidence to
+`BLOCK`.
+
+## Missing-Config Guard (MANDATORY — runs after required-capability preflight)
 
 ```bash
 # If integration_tests is empty/absent, exit ADVISORY — never crash
@@ -97,6 +108,7 @@ if [ "${TEST_COUNT:-0}" -eq 0 ]; then
   echo "      override_phrase: \"OVERRIDE: shipping with test failures —\""
   # Emit structured SKIP verdict and exit
   echo "<!-- FORGE:TEST_GATE:SKIP|reason=no-tests-configured -->"
+  echo "<!-- FORGE:VERIFICATION_NO_REQUIRED_CAPABILITIES -->"
   echo "<!-- FORGE:TEST_GATE:RESULT=SKIP -->"
   exit 0
 fi
@@ -133,6 +145,7 @@ fi
 if [ -z "$BUNDLE_PRS" ]; then
   echo "No PRs found in bundle. Emitting SKIP verdict."
   echo "<!-- FORGE:TEST_GATE:SKIP|reason=no-bundle-prs -->"
+  echo "<!-- FORGE:VERIFICATION_NO_REQUIRED_CAPABILITIES -->"
   echo "<!-- FORGE:TEST_GATE:RESULT=SKIP -->"
   exit 0
 fi
@@ -151,6 +164,7 @@ if [ -z "$EXECUTABLE_FILES" ]; then
   echo "$BUNDLE_DIFF"
   echo "RESULT: SKIP (no executable changes in bundle)"
   echo "<!-- FORGE:TEST_GATE:SKIP|reason=no-executable-changes -->"
+  echo "<!-- FORGE:VERIFICATION_NO_REQUIRED_CAPABILITIES -->"
   echo "<!-- FORGE:TEST_GATE:RESULT=SKIP -->"
   exit 0
 fi
@@ -229,6 +243,7 @@ if [ "$TRIAGE_HAS_TESTABLE_CRITERIA" = "false" ]; then
   fi
   echo "Emitting SKIP verdict (triage: ${SKIP_REASON})."
   echo "<!-- FORGE:TEST_GATE:SKIP|reason=${SKIP_REASON} -->"
+  echo "<!-- FORGE:VERIFICATION_NO_REQUIRED_CAPABILITIES -->"
   echo "<!-- FORGE:TEST_GATE:RESULT=SKIP -->"
   exit 0
 fi
@@ -354,6 +369,7 @@ if [ -z "$(echo -e "$AUTOMATED_CRITERIA" | grep -E '^-')" ]; then
   echo "All criteria are manual — no automated test clusters to run."
   echo "Emitting SKIP verdict (manual-only bundle — defense-in-depth check after Phase 0C)."
   echo "<!-- FORGE:TEST_GATE:SKIP|reason=manual-only-criteria -->"
+  echo "<!-- FORGE:VERIFICATION_NO_REQUIRED_CAPABILITIES -->"
   echo "<!-- FORGE:TEST_GATE:RESULT=SKIP -->"
   exit 0
 fi

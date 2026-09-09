@@ -29,7 +29,10 @@ import {
   type ReviewPanelRunner,
   type ReviewPrRequest,
 } from "../../src/workflows/review-pr.ts";
-import { testGateVerification } from "../../src/workflows/test-gate.ts";
+import {
+  parseVerificationCapabilities,
+  testGateVerification,
+} from "../../src/workflows/test-gate.ts";
 
 const route: GitHubPullRequestRouteSnapshot = {
   pullNumber: 7,
@@ -617,8 +620,46 @@ test("Phase 6.5 propagates explicit BLOCK, PASS, and SKIP results", () => {
     { name: "test-gate", required: true, status: "passed" },
   );
   assert.deepEqual(
-    testGateVerification("<!-- FORGE:TEST_GATE:RESULT=SKIP -->"),
+    testGateVerification("<!-- FORGE:VERIFICATION_NO_REQUIRED_CAPABILITIES -->\n<!-- FORGE:TEST_GATE:RESULT=SKIP -->"),
     { name: "test-gate", required: false, status: "skipped" },
+  );
+});
+
+test("required capability markers block unresolved or stale-shaped proof", () => {
+  const record = {
+    v: 1,
+    capability: "runtime:e2e",
+    criterion: "required-proof-fail-closed",
+    criterionTextHash: "sha256:" + "a".repeat(64),
+    sourceHead: "b".repeat(40),
+    contractDigest: "sha256:" + "c".repeat(64),
+    proofType: "runtime",
+    boundary: "e2e boundary",
+    state: "MISSING",
+    evidence: "",
+    wakeCondition: "restore e2e environment",
+  } as const;
+  const blocked = `<!-- FORGE:VERIFICATION_CAPABILITY ${JSON.stringify(record)} -->\n<!-- FORGE:VERIFICATION_BLOCKED ${JSON.stringify({ ...record })} -->\n<!-- FORGE:TEST_GATE:RESULT=SKIP -->`;
+  assert.deepEqual(parseVerificationCapabilities(blocked), [record]);
+  assert.deepEqual(testGateVerification(blocked), {
+    name: "test-gate",
+    required: true,
+    status: "failed",
+    exitCode: 1,
+  });
+  assert.deepEqual(testGateVerification(blocked, { sourceHead: "d".repeat(40) }), {
+    name: "test-gate",
+    required: true,
+    status: "failed",
+    exitCode: 1,
+  });
+  assert.deepEqual(
+    testGateVerification(`<!-- FORGE:VERIFICATION_CAPABILITY ${JSON.stringify({ ...record, state: "PASS", evidence: "bound e2e result" })} -->\n<!-- FORGE:TEST_GATE:RESULT=PASS -->`),
+    { name: "test-gate", required: true, status: "passed" },
+  );
+  assert.deepEqual(
+    testGateVerification("<!-- FORGE:TEST_GATE:RESULT=SKIP -->"),
+    { name: "test-gate", required: true, status: "failed", exitCode: 1 },
   );
 });
 
@@ -635,7 +676,7 @@ test("staging review carries every Phase 6.5 verdict into its gate", async () =>
   for (const [output, expectedStatus, expectedDecision] of [
     ["<!-- FORGE:TEST_GATE:RESULT=BLOCK -->", "failed", "changes-requested"],
     ["<!-- FORGE:TEST_GATE:RESULT=PASS -->", "passed", "approved"],
-    ["<!-- FORGE:TEST_GATE:RESULT=SKIP -->", "skipped", "approved"],
+    ["<!-- FORGE:VERIFICATION_NO_REQUIRED_CAPABILITIES -->\n<!-- FORGE:TEST_GATE:RESULT=SKIP -->", "skipped", "approved"],
   ] as const) {
     const h = harness();
     const result = await h.coordinator.review(

@@ -2,21 +2,140 @@ import type { VerificationResult } from "../core/review.ts";
 
 export type TestGateVerdict = "BLOCK" | "PASS" | "SKIP";
 
+export type VerificationCapabilityState =
+  | "PASS"
+  | "MISSING"
+  | "SKIPPED"
+  | "UNKNOWN"
+  | "CONTRADICTED";
+
+export interface VerificationCapabilityRecord {
+  v: 1;
+  capability: string;
+  criterion: string;
+  criterionTextHash: string;
+  sourceHead: string;
+  contractDigest: string;
+  proofType: string;
+  boundary: string;
+  state: VerificationCapabilityState;
+  evidence: string;
+  wakeCondition: string;
+}
+
 export interface TestGateResult {
   verdict: TestGateVerdict;
   reason?: string;
+  capabilities?: readonly VerificationCapabilityRecord[];
 }
 
-/** Parse only the authoritative marker emitted by the packaged test-gate skill. */
-export function parseTestGateResult(value: unknown): TestGateResult | undefined {
+const capabilityStates = new Set<VerificationCapabilityState>([
+  "PASS",
+  "MISSING",
+  "SKIPPED",
+  "UNKNOWN",
+  "CONTRADICTED",
+]);
+const requiredProofTypes = new Set([
+  "runtime",
+  "integration",
+  "e2e",
+  "queue",
+  "database",
+  "browser",
+  "credential",
+]);
+const hash = /^sha256:[a-f0-9]{64}$/;
+const sourceHead = /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/;
+
+function isCapabilityRecord(value: unknown): value is VerificationCapabilityRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Partial<VerificationCapabilityRecord>;
+  return record.v === 1 &&
+    typeof record.capability === "string" && record.capability.length > 0 &&
+    typeof record.criterion === "string" && record.criterion.length > 0 &&
+    typeof record.criterionTextHash === "string" && hash.test(record.criterionTextHash) &&
+    typeof record.sourceHead === "string" && sourceHead.test(record.sourceHead) &&
+    typeof record.contractDigest === "string" && hash.test(record.contractDigest) &&
+    typeof record.proofType === "string" && record.proofType.length > 0 &&
+    typeof record.boundary === "string" && record.boundary.length > 0 &&
+    typeof record.state === "string" && capabilityStates.has(record.state as VerificationCapabilityState) &&
+    typeof record.evidence === "string" &&
+    typeof record.wakeCondition === "string";
+}
+
+export function parseVerificationCapabilities(value: string): readonly VerificationCapabilityRecord[] | undefined {
+  const markers = [...value.matchAll(/FORGE:VERIFICATION_CAPABILITY (\{[^\n]+\})/g)];
+  if (!markers.length) return undefined;
+  const records: VerificationCapabilityRecord[] = [];
+  for (const marker of markers) {
+    try {
+      const parsed: unknown = JSON.parse(marker[1]!);
+      if (!isCapabilityRecord(parsed)) return undefined;
+      records.push(parsed);
+    } catch {
+      return undefined;
+    }
+  }
+  return records;
+}
+
+function blockedEvidenceMatches(value: string, capability: VerificationCapabilityRecord): boolean {
+  const markers = [...value.matchAll(/FORGE:VERIFICATION_BLOCKED (\{[^\n]+\})/g)];
+  return markers.some((marker) => {
+    try {
+      const parsed = JSON.parse(marker[1]!) as Partial<VerificationCapabilityRecord>;
+      return parsed.capability === capability.capability &&
+        parsed.criterion === capability.criterion &&
+        parsed.criterionTextHash === capability.criterionTextHash &&
+        parsed.sourceHead === capability.sourceHead &&
+        parsed.contractDigest === capability.contractDigest &&
+        parsed.state === capability.state &&
+        parsed.wakeCondition === capability.wakeCondition;
+    } catch {
+      return false;
+    }
+  });
+}
+
+function capabilityFailure(value: string, capabilities: readonly VerificationCapabilityRecord[] | undefined): string | undefined {
+  if (value.includes("FORGE:VERIFICATION_CAPABILITY") && !capabilities)
+    return "malformed verification capability record";
+  for (const capability of capabilities ?? []) {
+    const required = requiredProofTypes.has(capability.proofType);
+    if (required && capability.state !== "PASS") {
+      return blockedEvidenceMatches(value, capability)
+        ? `required capability ${capability.capability} is ${capability.state}`
+        : `required capability ${capability.capability} is ${capability.state} without blocked evidence`;
+    }
+    if (required && capability.state === "PASS" && !capability.evidence.trim())
+      return `required capability ${capability.capability} has no evidence`;
+  }
+  return undefined;
+}
+
+/** Parse the authoritative test-gate and capability markers emitted by the packaged skill. */
+export function parseTestGateResult(
+  value: unknown,
+  expected?: { sourceHead?: string },
+): TestGateResult | undefined {
   if (typeof value !== "string") return undefined;
   const matches = [...value.matchAll(/FORGE:TEST_GATE:RESULT=(BLOCK|PASS|SKIP)/g)];
   const verdict = matches.at(-1)?.[1] as TestGateVerdict | undefined;
   if (!verdict) return undefined;
+  const capabilities = parseVerificationCapabilities(value);
+  const identityFailure = expected?.sourceHead && capabilities?.some((capability) => capability.sourceHead !== expected.sourceHead)
+    ? `capability source head does not match reviewed head ${expected.sourceHead}`
+    : undefined;
+  const failure = identityFailure ?? capabilityFailure(value, capabilities);
+  const explicitlyNoRequiredCapabilities = value.includes("FORGE:VERIFICATION_NO_REQUIRED_CAPABILITIES");
   const reason = value.match(
     /FORGE:TEST_GATE:(?:BLOCK|PASS|SKIP)\|reason=([^\s\n]+)/,
   )?.[1];
-  return reason ? { verdict, reason } : { verdict };
+  if (failure) return { verdict: "BLOCK", reason: failure, capabilities };
+  if (verdict === "SKIP" && !capabilities && !explicitlyNoRequiredCapabilities)
+    return { verdict: "BLOCK", reason: "SKIP lacks required-capability preflight evidence" };
+  return { verdict, ...(reason ? { reason } : {}), ...(capabilities ? { capabilities } : {}) };
 }
 
 /**
@@ -26,8 +145,9 @@ export function parseTestGateResult(value: unknown): TestGateResult | undefined 
  */
 export function testGateVerification(
   value: unknown,
+  expected?: { sourceHead?: string },
 ): VerificationResult {
-  const result = parseTestGateResult(value);
+  const result = parseTestGateResult(value, expected);
   if (!result) {
     return {
       name: "test-gate",

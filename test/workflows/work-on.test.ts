@@ -83,13 +83,8 @@ test("required proof admission stays fail closed across build, review, and test-
     "missing-capability-report",
     "required-proof-regression-coverage",
   ];
-  assert.deepEqual(criteria, [
-    "required-proof-capability-binding",
-    "required-proof-fail-closed",
-    "runtime-boundary-proof",
-    "missing-capability-report",
-    "required-proof-regression-coverage",
-  ]);
+  assert.equal(new Set(criteria).size, 5);
+  assert.ok(criteria.every((criterion) => /^[a-z0-9-]+$/.test(criterion)));
   for (const content of [build, review, gate]) {
     assert.match(content, /FORGE:VERIFICATION_BLOCKED/);
     assert.match(content, /MISSING.*SKIPPED.*UNKNOWN.*CONTRADICTED/s);

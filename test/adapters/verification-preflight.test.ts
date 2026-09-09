@@ -204,12 +204,20 @@ test("required proof capability binding is exact and fail closed", async () => {
     evidence,
     wakeCondition,
   });
-  const admission = (candidate: ReturnType<typeof record>) =>
-    candidate.state === "PASS" && candidate.proofType === "runtime" && candidate.evidence.length > 0;
+  const admission = (candidate: ReturnType<typeof record>, expected = bound) =>
+    candidate.state === "PASS" && candidate.proofType === "runtime" && candidate.evidence.length > 0 &&
+    candidate.criterion === expected.criterion &&
+    candidate.criterionTextHash === expected.criterionTextHash &&
+    candidate.sourceHead === expected.sourceHead &&
+    candidate.contractDigest === expected.contractDigest &&
+    candidate.boundary === expected.boundary;
   assert.equal(admission(record("PASS", "e2e run at bound head", "")), true);
   for (const state of ["MISSING", "SKIPPED", "UNKNOWN", "CONTRADICTED"] as const)
     assert.equal(admission(record(state, "", "restore hosted e2e capability")), false, state);
   assert.equal(admission({ ...record("PASS", "source string matched", ""), proofType: "structural" }), false);
+  assert.equal(admission({ ...record("PASS", "bound e2e result", ""), sourceHead: "d".repeat(40) }), false);
+  assert.equal(admission({ ...record("PASS", "bound e2e result", ""), contractDigest: "sha256:" + "d".repeat(64) }), false);
+  assert.equal(admission({ ...record("PASS", "bound e2e result", ""), criterionTextHash: "sha256:" + "d".repeat(64) }), false);
   const blocked = record("MISSING", "", "restore hosted e2e capability");
   assert.deepEqual(
     Object.fromEntries(["capability", "criterion", "criterionTextHash", "sourceHead", "contractDigest", "state", "wakeCondition"].map((key) => [key, blocked[key as keyof typeof blocked]])),
