@@ -246,8 +246,10 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
   );
   assert.match(spawn.params.task, /Call forge_diff in patch mode first/);
   assert.match(spawn.params.task, /call forge_finalize_reviewer/);
-  assert.match(spawn.params.task, /one compact proof link for every accepted criterion/);
-  assert.match(spawn.params.task, /implementation mechanism plus counterexample\/behavioral test plus residual risk/);
+  assert.match(spawn.params.task, /observable outcome, exact in-scope behavior and files/);
+  assert.match(spawn.params.task, /smallest behavioral test or proof/);
+  assert.match(spawn.params.task, /ambiguous or lacks credible proof.*stop before editing.*request clarification/s);
+  assert.match(spawn.params.task, /ownership, scheduling, worktree provisioning, hashes\/digests, lineage/);
   assert.match(spawn.params.task, /residual risk that contradicts its invariant is CONTRADICTED, never PASS/);
   assert.match(spawn.params.task, /const results = await runs\.all/);
   assert.match(spawn.params.task, /return results/);
@@ -529,7 +531,39 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
 test("bounded implementation launch binds the durable builder contract", async () => {
   const { pi, bus } = fakePi();
   const client = new SubagentsRpcClient(pi);
-  const builderContract = createBuilderPathContract(["src/**", "test/**"]);
+  const builderBrief = [
+    "<!-- FORGE:CONTRACT -->",
+    "## Builder Contract",
+    "### Observable Outcome\nThe review gate preserves the accepted decision.",
+    "### In-Scope Behavior and Files\nBehavior: retain the decision.\nFiles: src/review.ts, test/review.test.ts.",
+    "### Non-Goals\nDo not change ownership, scheduling, or review policy.",
+    "### Smallest Behavioral Proof\n| Criterion | Smallest Proof |\n| AC-1 | test/review.test.ts; trigger: rejected input; assertion: needs-human; prerequisite: local runner. |",
+  ].join("\n\n");
+  const builderContract = createBuilderPathContract(["src/**", "test/**"], 1, {
+    objective: "The review gate preserves the accepted decision.",
+    allowedPaths: ["src/**", "test/**"],
+    forbiddenChanges: ["ownership, scheduling, or review policy"],
+    invariants: ["The decision remains stable."],
+    deliverables: ["Retain the decision."],
+    acceptanceMapping: [
+      {
+        checkId: "AC-1",
+        implementation: {
+          proofKind: "behavioral",
+          mechanism: "review gate",
+          boundary: "protected branch",
+          test: "test/review.test.ts",
+          trigger: "rejected input",
+          assertion: "returns needs-human",
+          baseline: "fails before the regression test",
+          passAfter: "passes after the regression test",
+          prerequisite: "local runner",
+          residualRisk: "none",
+        },
+      },
+    ],
+    outOfScope: [],
+  });
   await client.spawnNode({
     runId: "run-implement",
     issueNumber: 9,
@@ -542,7 +576,7 @@ test("bounded implementation launch binds the durable builder contract", async (
     expectedHeadSha: "abcdef1234567890",
     leaseEpoch: 1,
     policy,
-    issueContext: "untrusted issue text",
+    issueContext: `untrusted issue text\n\n${builderBrief}`,
     builderContract,
     node: { nodeId: "implement-1", node: "implement", attempt: 1 },
   });
@@ -566,8 +600,18 @@ test("bounded implementation launch binds the durable builder contract", async (
   );
   assert.match(spawn.params.task, new RegExp(builderContract.contractHash));
   assert.match(spawn.params.task, /Allowed paths: src\/\*\*, test\/\*\*/);
-  assert.match(spawn.params.task, /one compact proof link per accepted criterion/);
-  assert.match(spawn.params.task, /implementation mechanism plus counterexample\/behavioral test plus residual risk/);
+  assert.ok(spawn.params.task.includes(builderBrief));
+  for (const section of [
+    "### Observable Outcome",
+    "### In-Scope Behavior and Files",
+    "### Non-Goals",
+    "### Smallest Behavioral Proof",
+  ]) assert.ok(spawn.params.task.includes(section), section);
+  assert.match(spawn.params.task, /accepted Builder Contract is immutable.*remediation.*context only.*cannot rewrite/s);
+  assert.match(spawn.params.task, /objective is the observable outcome/);
+  assert.match(spawn.params.task, /exact in-scope files/);
+  assert.match(spawn.params.task, /smallest behavioral test or justified proof/);
+  assert.match(spawn.params.task, /ownership, scheduling, worktree provisioning, hashes\/digests, lineage/);
   assert.match(spawn.params.task, /PASS requires both proof ends.*CONTRADICTED, never PASS/s);
   assert.match(spawn.params.task, /Bash is available for implementation/);
 });

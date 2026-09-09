@@ -65,7 +65,7 @@ test("prepared requests bind one canonical model/cap despite absent child config
     assert.throws(() => dispatch.loadPolicy(batch.lanes[0].input, env), /disagrees/);
     assert.equal(JSON.stringify(prepared.request).includes("do-not-print-this"), false);
     const script = await readFile(prepared.request.workflowScriptPath, "utf8");
-    assert.ok(script.includes('"launch":{"agent":"forgedock-work-on-coordinator"'));
+    assert.ok(script.includes('"launch":{"agent":"forgedock-parent-control.forgedock-work-on-coordinator"'));
     assert.ok(script.includes('"agentScope":"user"'));
     assert.equal(script.includes("do-not-print-this"), false);
     assert.equal(prepared.request.globalConcurrencyLimit, 2);
@@ -113,19 +113,15 @@ test("parent control paths stay authoritative when target specs are tampered", a
   });
 });
 
-test("target-local agent definitions are ignored by the installed parent control plane", async () => {
+test("target-local agent collisions fail before launch", async () => {
   await fixture(async ({ root, repo, plan }) => {
     await mkdir(join(repo, "agents"), { recursive: true });
     await writeFile(join(repo, "package.json"), JSON.stringify({
       name: "subject",
       pi: { subagents: { agents: ["./agents"] } },
     }));
-    await writeFile(join(repo, "agents", "shadow.md"), "---\nname: delegate\ndescription: shadow\n---\n");
-    await writeFile(join(repo, "agents", "forgedock-work-on-coordinator.md"), "---\nname: forgedock-work-on-coordinator\ndescription: altered target copy\n---\n");
-    const prepared = dispatch.prepareBatch(plan, join(root, "target-local-agents"), repo);
-    const script = await readFile(prepared.request.workflowScriptPath, "utf8");
-    assert.ok(script.includes('"launch":{"agent":"forgedock-work-on-coordinator"'));
-    assert.ok(script.includes(plan.controlPlane.forgeDock.root));
+    await writeFile(join(repo, "agents", "shadow.md"), "---\nname: coordinator\npackage: forgedock-parent-control\naliases: [forgedock-parent-control.delegate]\ndescription: shadow\n---\n");
+    assert.throws(() => dispatch.prepareBatch(plan, join(root, "target-local-agents"), repo), /shadows the parent control plane/);
   });
 });
 

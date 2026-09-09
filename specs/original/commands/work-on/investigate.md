@@ -50,17 +50,24 @@ records; append a superseding investigation for material corrections under
    `change`. Adjacent paths remain read-only unless compilation, runtime correctness,
    schema/interface consistency, or a security invariant requires them to change.
 9. Define non-goals and residual uncertainty.
-10. Establish the Acceptance Contract in the existing receipt: every criterion carries one
-    compact proof link in the form `Mechanism: <implementation path/symbol and behavior>;
-    Counterexample/behavioral test: <test path, trigger, and assertion>; Residual risk:
-    <none or bounded non-contradictory limit>`. The mechanism names its producer,
-    consumer, persisted state, and relevant failure paths; the test exercises a counterexample or
-    observable behavior and, for a bug fix, would fail against the baseline. A missing
-    mechanism or test is `MISSING`/`UNKNOWN`, not an accepted proof; a justified
-    inspection-only exception remains explicitly unverified. A residual risk that
-    contradicts the criterion invariant is `CONTRADICTED`, never `PASS`. For claims such
-    as all data being independently recoverable, enumerate each recovery source and its
-    capture, verification, and restore path; a catalog entry is not proof.
+10. Compile the existing `FORGE:CONTRACT` Builder Brief as the deterministic implementation
+    source of truth. For every accepted criterion it must state: the observable outcome; the
+    exact in-scope behavior and repository-relative files; explicit non-goals; and the
+    smallest credible behavioral test or justified inspection proof with its trigger and
+    assertion. Each criterion also retains one compact proof link: `Mechanism: <implementation path/symbol>; Counterexample/behavioral test: <test path, trigger, assertion>; Residual risk: <none or bounded non-contradictory limit>`. The supporting
+    investigation/context/architecture records retain producer, consumer, persisted state,
+    failure, retry, recovery, history, and lifecycle detail. For independently recoverable
+    data, enumerate each recovery source and its capture, verification, and restore path; do
+    not turn ownership, scheduling,
+    worktree provisioning, hashes/digests, lineage, extra records, or review/deployment
+    procedure into Builder Contract requirements.
+
+    A criterion that is ambiguous or lacks credible proof is not accepted: stop before any
+    repository edit and request clarification. Do not infer a missing requirement or replace
+    a behavioral proof with a source-string assertion or broad suite. A bug criterion's proof
+    must fail against the baseline and pass after the change, unless the explicitly justified
+    inspection-only exception is recorded as unverified. A contradictory residual risk is
+    `CONTRADICTED`, never `PASS`.
 11. Resolve required dependencies, environments, permissions, and evidence before editing.
     If required proof is unavailable, surface the exact condition before implementation;
     do not assume an owner will supply it after review. Separate code-merge acceptance
@@ -142,6 +149,13 @@ Publish the completed investigation with the common metadata envelope from
 - <explicit exclusions>
 
 ### Acceptance Contract
+The linked `FORGE:CONTRACT` Builder Brief is the source of truth and records these four fields
+for each accepted outcome:
+- **Observable outcome**: <externally visible result>
+- **In-scope behavior and files**: <exact behavior and repository-relative paths>
+- **Non-goals**: <explicit exclusions>
+- **Smallest behavioral proof**: <named boundary/test, trigger, assertion, and prerequisite>
+
 - `<criterion>` → producer/consumer/state → **Proof link**: `Mechanism: <path/symbol and behavior>; Counterexample/behavioral test: <test path, trigger, assertion>; Residual risk: <none or bounded limit>` → prerequisite availability
 
 ### Acceptance Checks

@@ -64,11 +64,11 @@ test("packed work-on agent resolves without a package tool ceiling", async () =>
     );
     assert.match(packedAgent, /^timeoutMs: 2147483647$/m);
     assert.match(packedAgent, /^toolTimeoutMs: 3900000$/m);
-    assert.match(packedAgent, /^inheritProjectContext: true$/m);
+    assert.match(packedAgent, /^inheritProjectContext: false$/m);
     assert.match(packedAgent, /^skills: forgedock-work-on, forgedock-review-pr, forgedock-issue$/m);
     assert.match(packedAgent, /^allowNestedSubagents: true$/m);
-    assert.doesNotMatch(packedAgent, /^package:/m);
-    assert.doesNotMatch(packedAgent, /^skillPath:/m);
+    assert.match(packedAgent, /^package: forgedock-parent-control$/m);
+    assert.match(packedAgent, /^skillPath: \.\.\/skills\/forgedock-work-on\/SKILL\.md, \.\.\/skills\/forgedock-review-pr\/SKILL\.md, \.\.\/skills\/forgedock-issue\/SKILL\.md$/m);
     assert.doesNotMatch(packedAgent, /^tools:/m);
     const extractorMode = (
       await stat(
@@ -78,7 +78,7 @@ test("packed work-on agent resolves without a package tool ceiling", async () =>
     assert.notEqual(extractorMode & 0o111, 0, "affected-file helper must be executable");
 
     const result = await resolveSubagentLaunchContract({
-      agent: "forgedock-work-on-coordinator",
+      agent: "forgedock-parent-control.forgedock-work-on-coordinator",
       agentScope: "project",
       cwd: project,
       context: "fresh",
@@ -115,7 +115,7 @@ test("host policy may still reject the packaged agent", async () => {
     );
     await registerPackedProjectPackage(project);
     const result = await resolveSubagentLaunchContract({
-      agent: "forgedock-work-on-coordinator",
+      agent: "forgedock-parent-control.forgedock-work-on-coordinator",
       agentScope: "project",
       cwd: project,
       context: "fresh",
