@@ -48,20 +48,26 @@ Write approved data—not JavaScript—to a plan file:
   "launchAllowance": 24,
   "requestStartedAt": "<actual original request timestamp>",
   "issues": [
-    {"number": 42, "target": "staging", "baseCwd": "/actual/clean/target/base", "predecessors": [], "contract": {"path": "/actual/parent-artifacts/issue-42-contract.json", "sha256": "<file SHA-256>"}},
-    {"number": 43, "target": "staging", "baseCwd": "/actual/clean/target/base", "predecessors": [42], "contract": {"path": "/actual/parent-artifacts/issue-43-contract.json", "sha256": "<file SHA-256>"}}
+    {"number": 42, "target": "staging", "baseCwd": "/actual/prepared/issue-42", "predecessors": [], "contract": {"path": "/actual/parent-artifacts/issue-42-contract.json", "sha256": "<file SHA-256>"}},
+    {"number": 43, "target": "staging", "baseCwd": "/actual/prepared/issue-43", "predecessors": [42], "contract": {"path": "/actual/parent-artifacts/issue-43-contract.json", "sha256": "<file SHA-256>"}}
   ]
 }
 ```
 
-The issue list is already confirmed/topologically ordered; bases are prepared by existing
-worktree rules. Before writing the plan, the dispatcher compiles each retained issue's exact
+The issue list is already confirmed/topologically ordered; `baseCwd` is each exact clean
+managed issue worktree prepared from `origin/<target>` by the parent. The dispatcher never
+asks Pi to create another worktree. Before writing the plan, the dispatcher compiles each retained issue's exact
 checked acceptance criteria into a fresh issue-contract file with the installed
 `createIssueContract` helper. Each criterion preserves a stable source ID, exact text hash,
 proof type, and affected boundaries; the returned contract object has top-level `criteria`
 and `digest`. Every batch issue must carry its file descriptor as `contract`; `prepareBatch`
 validates the descriptor and binds both `contract` and `contractDigest` into the lane policy
-and native acceptance. A missing contract fails before request publication. Optional
+and native acceptance. The lane policy also carries digest-checked `targetBase` and
+`packagedRoot` descriptors; startup verifies their path, repository, target ancestry, and
+installed-helper identity before source mutation. A missing contract or binding descriptor
+fails before request publication. A stale/missing/wrong workspace is an internal
+launch-binding error for rebind/retry, never an issue-level GATED result or ambient path
+search. Optional
 `verification` is the prepared catalog path/SHA descriptor. If omitted, the helper snapshots
 current configured commands; an empty catalog is not PASS and does not excuse missing
 required verification.

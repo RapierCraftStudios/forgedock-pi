@@ -56,6 +56,17 @@ test("prepared requests bind one canonical model/cap despite absent child config
     assert.equal(policy.issue, 33745); assert.equal(policy.repo, "example/project");
     assert.equal(policy.target, "staging");
     assert.equal(policy.model, "openai-codex/gpt-5.6-luna"); assert.equal(policy.remediationLimit, 1);
+    assert.equal(policy.targetBase.path, fs.realpathSync(repo));
+    assert.equal(policy.targetBase.repository, "example/project");
+    assert.equal(policy.targetBase.target, "staging");
+    assert.match(policy.targetBase.headSha, /^[a-f0-9]{40}$/);
+    assert.match(policy.targetBase.digest, /^sha256:[a-f0-9]{64}$/);
+    assert.equal(policy.packagedRoot.path, fs.realpathSync(forgeDockRoot));
+    assert.equal(policy.packagedRoot.controlPlaneDigest, controlPlane.digest);
+    assert.equal(policy.packagedRoot.helper.path, controlPlane.forgeDock.files.find((file: any) => file.id === "dispatch").path);
+    assert.match(policy.packagedRoot.digest, /^sha256:[a-f0-9]{64}$/);
+    assert.equal(dispatch.validateLaneStartup(policy, repo), policy);
+    assert.throws(() => dispatch.validateLaneStartup(policy, child), /Workspace binding failure/);
     const boundContract = dispatch.validateIssueContractFile(policy.contract, policy.issue);
     assert.equal(boundContract.issue, 33745);
     assert.equal(policy.contractDigest, boundContract.digest);
@@ -67,13 +78,34 @@ test("prepared requests bind one canonical model/cap despite absent child config
     const script = await readFile(prepared.request.workflowScriptPath, "utf8");
     assert.ok(script.includes('"launch":{"agent":"forgedock-work-on-coordinator"'));
     assert.ok(script.includes('"agentScope":"user"'));
+    assert.ok(script.includes('"worktree":false'));
+    assert.equal(script.includes('"worktree":true'), false);
+    assert.match(script, /Bound target-base descriptor:/);
+    assert.match(script, /Bound packaged-root descriptor:/);
     assert.equal(script.includes("do-not-print-this"), false);
     assert.equal(prepared.request.globalConcurrencyLimit, 2);
     assert.equal(prepared.request.maxSubagentSpawnsPerRun, 24);
     assert.equal(policy.config.sha256.length, 64);
-    const cli = execFileSync(process.execPath, [fileURLToPath(new URL("../../specs/helpers/dispatch.mjs", import.meta.url)), "context"], { cwd: child, env: { ...process.env, ...env }, encoding: "utf8" });
+    assert.throws(() => execFileSync(process.execPath, [fileURLToPath(new URL("../../specs/helpers/dispatch.mjs", import.meta.url)), "context"], { cwd: child, env: { ...process.env, ...env }, encoding: "utf8" }), /Workspace binding failure/);
+    const cli = execFileSync(process.execPath, [fileURLToPath(new URL("../../specs/helpers/dispatch.mjs", import.meta.url)), "context"], { cwd: repo, env: { ...process.env, ...env }, encoding: "utf8" });
     assert.equal(JSON.parse(cli).remediationLimit, 1);
     assert.equal(cli.includes("do-not-print-this"), false);
+  });
+});
+
+test("startup rejects stale descriptors and non-descended workspaces before mutation", async () => {
+  await fixture(async ({ root, repo, plan }) => {
+    const prepared = dispatch.prepareBatch(plan, join(root, "startup"), repo);
+    const batch = JSON.parse(await readFile(prepared.batchFile, "utf8"));
+    const env = { PI_SUBAGENT_EXTENSION_BINDINGS: JSON.stringify({ [dispatch.BINDING]: batch.lanes[0].input }) };
+    const policy = dispatch.loadPolicy(undefined, env);
+    assert.throws(() => dispatch.validateLaneStartup({ ...policy, targetBase: { ...policy.targetBase, headSha: "0".repeat(40) } }, repo), /descriptor digest mismatch/);
+    assert.throws(() => dispatch.validateLaneStartup({ ...policy, packagedRoot: { ...policy.packagedRoot, controlPlaneDigest: "sha256:" + "0".repeat(64) } }, repo), /descriptor digest mismatch/);
+    execFileSync("git", ["switch", "--orphan", "unrelated"], { cwd: repo });
+    await writeFile(join(repo, "unrelated.txt"), "unrelated\n");
+    execFileSync("git", ["add", "unrelated.txt"], { cwd: repo });
+    execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "unrelated"], { cwd: repo });
+    assert.throws(() => dispatch.validateLaneStartup(policy, repo), /not descended from target base/);
   });
 });
 
