@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { parse } from "yaml";
 
 export const CONTROL_PLANE_SCHEMA = "forgedock.control-plane/v1";
-export const FORGE_OWNER_AGENT = "forgedock-parent-control.forgedock-work-on-coordinator";
+export const FORGE_OWNER_AGENT = "forgedock-work-on-coordinator";
 export const FORGE_REVIEW_AGENT = "delegate";
 
 const FORGE_FILES = Object.freeze([
