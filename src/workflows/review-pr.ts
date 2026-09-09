@@ -69,7 +69,10 @@ import type {
 } from "../ui/forge-command-parser.ts";
 import type { StagingBundleResolution } from "../core/staging-bundle-resolver.ts";
 import { publishReviewFindingIssues } from "./review-findings.ts";
-import { testGateVerification } from "./test-gate.ts";
+import {
+  testGateVerification,
+  type TestGateRequirement,
+} from "./test-gate.ts";
 
 export type ReviewExecution =
   | { kind: "standalone"; repositoryRoot: string }
@@ -99,6 +102,8 @@ export interface ReviewPrRequest {
   additionalChecks?: readonly VerificationResult[];
   /** Raw output from the mandatory nested staging test-gate translation. */
   testGateOutput?: unknown;
+  /** Bound capability requirements compiled from the issue contract. */
+  testGateRequirements?: readonly TestGateRequirement[];
   malformedResults?: readonly string[];
   mergeability?: "mergeable" | "conflicting" | "unknown";
   protectedBranches: readonly string[];
@@ -376,7 +381,10 @@ export class ReviewPrCoordinator {
       if (snapshot.state.panel?.status === "running") {
         const additionalChecks: readonly VerificationResult[] = [
           ...(mode === "staging"
-            ? [testGateVerification(input.testGateOutput, { sourceHead: route.headSha })]
+            ? [testGateVerification(input.testGateOutput, {
+                sourceHead: route.headSha,
+                requirements: input.testGateRequirements,
+              })]
             : []),
           {
             name: "material-change",

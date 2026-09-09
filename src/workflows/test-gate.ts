@@ -23,6 +23,15 @@ export interface VerificationCapabilityRecord {
   wakeCondition: string;
 }
 
+export interface TestGateRequirement {
+  capability: string;
+  criterion: string;
+  criterionTextHash: string;
+  contractDigest: string;
+  proofType: string;
+  boundary: string;
+}
+
 export interface TestGateResult {
   verdict: TestGateVerdict;
   reason?: string;
@@ -45,6 +54,7 @@ const requiredProofTypes = new Set([
   "browser",
   "credential",
 ]);
+const knownProofTypes = new Set([...requiredProofTypes, "structural", "manual"]);
 const hash = /^sha256:[a-f0-9]{64}$/;
 const sourceHead = /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/;
 
@@ -80,6 +90,14 @@ export function parseVerificationCapabilities(value: string): readonly Verificat
   return records;
 }
 
+function capabilityTypeMatches(capability: VerificationCapabilityRecord): boolean {
+  if (!knownProofTypes.has(capability.proofType)) return false;
+  if (capability.proofType === "structural" || capability.proofType === "manual")
+    return capability.capability.startsWith(`${capability.proofType}:`);
+  return capability.capability.startsWith(`${capability.proofType}:`) &&
+    !/(?:source[- ]string|structural)/i.test(`${capability.boundary} ${capability.evidence}`);
+}
+
 function blockedEvidenceMatches(value: string, capability: VerificationCapabilityRecord): boolean {
   const markers = [...value.matchAll(/FORGE:VERIFICATION_BLOCKED (\{[^\n]+\})/g)];
   return markers.some((marker) => {
@@ -102,6 +120,8 @@ function capabilityFailure(value: string, capabilities: readonly VerificationCap
   if (value.includes("FORGE:VERIFICATION_CAPABILITY") && !capabilities)
     return "malformed verification capability record";
   for (const capability of capabilities ?? []) {
+    if (!capabilityTypeMatches(capability))
+      return `capability ${capability.capability} has an invalid proof type or boundary`;
     const required = requiredProofTypes.has(capability.proofType);
     if (required && capability.state !== "PASS") {
       return blockedEvidenceMatches(value, capability)
@@ -117,7 +137,7 @@ function capabilityFailure(value: string, capabilities: readonly VerificationCap
 /** Parse the authoritative test-gate and capability markers emitted by the packaged skill. */
 export function parseTestGateResult(
   value: unknown,
-  expected?: { sourceHead?: string },
+  expected?: { sourceHead?: string; requirements?: readonly TestGateRequirement[] },
 ): TestGateResult | undefined {
   if (typeof value !== "string") return undefined;
   const matches = [...value.matchAll(/FORGE:TEST_GATE:RESULT=(BLOCK|PASS|SKIP)/g)];
@@ -126,15 +146,26 @@ export function parseTestGateResult(
   const capabilities = parseVerificationCapabilities(value);
   const identityFailure = expected?.sourceHead && capabilities?.some((capability) => capability.sourceHead !== expected.sourceHead)
     ? `capability source head does not match reviewed head ${expected.sourceHead}`
-    : undefined;
+    : expected?.requirements && capabilities &&
+        (capabilities.length !== expected.requirements.length || expected.requirements.some((requirement) => {
+          const capability = capabilities.find((candidate) => candidate.criterion === requirement.criterion);
+          return !capability || capability.capability !== requirement.capability ||
+            capability.criterionTextHash !== requirement.criterionTextHash ||
+            capability.contractDigest !== requirement.contractDigest ||
+            capability.proofType !== requirement.proofType || capability.boundary !== requirement.boundary;
+        }))
+      ? "capability record does not match the bound contract requirements"
+      : expected?.requirements?.length && !capabilities
+        ? "bound required capabilities are missing"
+        : undefined;
   const failure = identityFailure ?? capabilityFailure(value, capabilities);
-  const explicitlyNoRequiredCapabilities = value.includes("FORGE:VERIFICATION_NO_REQUIRED_CAPABILITIES");
+  const explicitlyNoRequiredCapabilities = /^<!-- FORGE:VERIFICATION_NO_REQUIRED_CAPABILITIES -->$/m.test(value);
   const reason = value.match(
     /FORGE:TEST_GATE:(?:BLOCK|PASS|SKIP)\|reason=([^\s\n]+)/,
   )?.[1];
   if (failure) return { verdict: "BLOCK", reason: failure, capabilities };
-  if (verdict === "SKIP" && !capabilities && !explicitlyNoRequiredCapabilities)
-    return { verdict: "BLOCK", reason: "SKIP lacks required-capability preflight evidence" };
+  if ((verdict === "PASS" || verdict === "SKIP") && !capabilities && !explicitlyNoRequiredCapabilities)
+    return { verdict: "BLOCK", reason: `${verdict} lacks required-capability preflight evidence` };
   return { verdict, ...(reason ? { reason } : {}), ...(capabilities ? { capabilities } : {}) };
 }
 
@@ -145,7 +176,7 @@ export function parseTestGateResult(
  */
 export function testGateVerification(
   value: unknown,
-  expected?: { sourceHead?: string },
+  expected?: { sourceHead?: string; requirements?: readonly TestGateRequirement[] },
 ): VerificationResult {
   const result = parseTestGateResult(value, expected);
   if (!result) {

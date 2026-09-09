@@ -335,8 +335,9 @@ echo "=== Phase 2: Classifying criteria by test type ==="
 API_CRITERIA=""
 UNIT_CRITERIA=""
 E2E_CRITERIA=""
+REQUIRED_CAPABILITY_CRITERIA=""
 MANUAL_CRITERIA=""
-UNCLASSIFIED=""
+UNKNOWN_CRITERIA=""
 
 while IFS= read -r line; do
   if echo "$line" | grep -qP '\[type:api\]'; then
@@ -345,6 +346,10 @@ while IFS= read -r line; do
     UNIT_CRITERIA="${UNIT_CRITERIA}\n${line}"
   elif echo "$line" | grep -qP '\[type:e2e\]'; then
     E2E_CRITERIA="${E2E_CRITERIA}\n${line}"
+  elif echo "$line" | grep -qP '\[type:(integration|queue|database|browser|credential)\]'; then
+    REQUIRED_CAPABILITY_CRITERIA="${REQUIRED_CAPABILITY_CRITERIA}\n${line}"
+  elif echo "$line" | grep -qP '\[type:structural\]'; then
+    REQUIRED_CAPABILITY_CRITERIA="${REQUIRED_CAPABILITY_CRITERIA}\n${line}"
   elif echo "$line" | grep -qP '\[type:manual\]'; then
     MANUAL_CRITERIA="${MANUAL_CRITERIA}\n${line}"
   elif echo "$line" | grep -qP '(endpoint|request|response|status\s+\d{3}|curl|API|HTTP)'; then
@@ -354,15 +359,21 @@ while IFS= read -r line; do
   elif echo "$line" | grep -qP '(browser|click|navigate|render|page|user flow)'; then
     E2E_CRITERIA="${E2E_CRITERIA}\n${line} [inferred:e2e]"
   elif echo "$line" | grep -qP '^-\s+\['; then
-    # Has content but no type signal — treat as manual
-    MANUAL_CRITERIA="${MANUAL_CRITERIA}\n${line} [inferred:manual]"
+    # Has content but no type signal — UNKNOWN required proof, never manual.
+    UNKNOWN_CRITERIA="${UNKNOWN_CRITERIA}\n${line}"
   fi
 done <<< "$(echo -e "$COLLATED_CRITERIA")"
 
 echo "API criteria:    $(echo -e "$API_CRITERIA" | grep -c '^\-' || echo 0)"
 echo "Unit criteria:   $(echo -e "$UNIT_CRITERIA" | grep -c '^\-' || echo 0)"
 echo "E2E criteria:    $(echo -e "$E2E_CRITERIA" | grep -c '^\-' || echo 0)"
+echo "Required capabilities: $(echo -e "${REQUIRED_CAPABILITY_CRITERIA}${UNKNOWN_CRITERIA}" | grep -c '^\-' || echo 0)"
 echo "Manual criteria: $(echo -e "$MANUAL_CRITERIA" | grep -c '^\-' || echo 0)"
+
+if [ -n "$(echo -e "${REQUIRED_CAPABILITY_CRITERIA}${UNKNOWN_CRITERIA}" | grep -E '^-' || true)" ]; then
+  echo "Required capability classification/proof is missing. Emit FORGE:VERIFICATION_BLOCKED and BLOCK; do not downgrade to manual SKIP."
+  exit 1
+fi
 
 AUTOMATED_CRITERIA="${API_CRITERIA}${UNIT_CRITERIA}${E2E_CRITERIA}"
 if [ -z "$(echo -e "$AUTOMATED_CRITERIA" | grep -E '^-')" ]; then
