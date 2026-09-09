@@ -71,6 +71,46 @@ test("closure matrix admission catches omitted alternate callers and transitive 
   assert.ok(omitted.every((row) => /producer=.*consumer=.*dependency=.*state=.*counterexample=/.test(row.detail)));
 });
 
+test("required proof admission stays fail closed across build, review, and test-gate", async () => {
+  const build = await readFile("specs/original/commands/work-on/build.md", "utf8");
+  const review = await readFile("specs/original/commands/work-on/review.md", "utf8");
+  const gate = await readFile("specs/original/commands/test-gate.md", "utf8");
+  const verification = await readFile("specs/verification.md", "utf8");
+  const criteria = [
+    "required-proof-capability-binding",
+    "required-proof-fail-closed",
+    "runtime-boundary-proof",
+    "missing-capability-report",
+    "required-proof-regression-coverage",
+  ];
+  assert.deepEqual(criteria, [
+    "required-proof-capability-binding",
+    "required-proof-fail-closed",
+    "runtime-boundary-proof",
+    "missing-capability-report",
+    "required-proof-regression-coverage",
+  ]);
+  for (const content of [build, review, gate]) {
+    assert.match(content, /FORGE:VERIFICATION_BLOCKED/);
+    assert.match(content, /MISSING.*SKIPPED.*UNKNOWN.*CONTRADICTED/s);
+    assert.match(content, /source head|sourceHead/i);
+    assert.match(content, /wake condition|wakeCondition/i);
+  }
+  assert.match(gate, /mandatory before any SKIP/i);
+  assert.match(gate, /structural.*cannot.*runtime|structural.*source-string.*cannot/is);
+
+  const states = ["MISSING", "SKIPPED", "UNKNOWN", "CONTRADICTED"] as const;
+  const required = (state: (typeof states)[number] | "PASS", boundary: string) => ({ state, boundary });
+  const admitted = (proof: ReturnType<typeof required>) => proof.state === "PASS" && proof.boundary !== "structural";
+  for (const state of states) assert.equal(admitted(required(state, "runtime")), false, state);
+  assert.equal(admitted(required("PASS", "structural")), false);
+  assert.equal(admitted(required("PASS", "runtime")), true);
+
+  const unavailable = required("MISSING", "database");
+  assert.equal(unavailable.state, "MISSING");
+  assert.equal(admitted(unavailable), false);
+});
+
 test("work-on reviewer results are rebound to the shared frozen review identity", () => {
   const result: ForgeReviewerResult = {
     schema: "forgedock.reviewer-result/v1",

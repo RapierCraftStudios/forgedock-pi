@@ -4,6 +4,7 @@ import {
   chmod,
   mkdir,
   mkdtemp,
+  readFile,
   rm,
   symlink,
   writeFile,
@@ -177,6 +178,51 @@ test("verification cwd rejects missing, control, and symlink-escape directories"
   } finally {
     await testFixture.cleanup();
   }
+});
+
+test("required proof capability binding is exact and fail closed", async () => {
+  const specification = await readFile("specs/verification.md", "utf8");
+  assert.match(specification, /criterionTextHash/);
+  assert.match(specification, /contractDigest/);
+  assert.match(specification, /FORGE:VERIFICATION_BLOCKED/);
+  assert.match(specification, /MISSING.*SKIPPED.*UNKNOWN.*CONTRADICTED/s);
+  assert.match(specification, /Structural\/source-string checks.*never satisfy/is);
+
+  const bound = {
+    capability: "runtime:e2e",
+    criterion: "required-proof-capability-binding",
+    criterionTextHash: "sha256:" + "a".repeat(64),
+    sourceHead: "b".repeat(40),
+    contractDigest: "sha256:" + "c".repeat(64),
+    proofType: "runtime",
+    boundary: "hosted e2e boundary",
+  };
+  const record = (state: "PASS" | "MISSING" | "SKIPPED" | "UNKNOWN" | "CONTRADICTED", evidence: string, wakeCondition: string) => ({
+    v: 1,
+    ...bound,
+    state,
+    evidence,
+    wakeCondition,
+  });
+  const admission = (candidate: ReturnType<typeof record>) =>
+    candidate.state === "PASS" && candidate.proofType === "runtime" && candidate.evidence.length > 0;
+  assert.equal(admission(record("PASS", "e2e run at bound head", "")), true);
+  for (const state of ["MISSING", "SKIPPED", "UNKNOWN", "CONTRADICTED"] as const)
+    assert.equal(admission(record(state, "", "restore hosted e2e capability")), false, state);
+  assert.equal(admission({ ...record("PASS", "source string matched", ""), proofType: "structural" }), false);
+  const blocked = record("MISSING", "", "restore hosted e2e capability");
+  assert.deepEqual(
+    Object.fromEntries(["capability", "criterion", "criterionTextHash", "sourceHead", "contractDigest", "state", "wakeCondition"].map((key) => [key, blocked[key as keyof typeof blocked]])),
+    {
+      capability: "runtime:e2e",
+      criterion: "required-proof-capability-binding",
+      criterionTextHash: "sha256:" + "a".repeat(64),
+      sourceHead: "b".repeat(40),
+      contractDigest: "sha256:" + "c".repeat(64),
+      state: "MISSING",
+      wakeCondition: "restore hosted e2e capability",
+    },
+  );
 });
 
 test("verification cwd rejects case variants and canonical reserved-directory targets", async () => {

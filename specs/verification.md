@@ -1,5 +1,55 @@
 # Selective repository verification
 
+## Required proof capabilities (fail-closed contract)
+
+Acceptance criteria are verification inputs, not merely prose labels. Before build, PR
+review, or deploy-gate admission, compile every bound criterion into a deterministic
+capability requirement. A criterion may carry an explicit annotation such as
+`[type:unit]`, `[type:api]`, `[type:integration]`, `[type:e2e]`, `[type:queue]`,
+`[type:database]`, `[type:browser]`, `[type:credential]`, `[type:structural]`, or
+`[type:manual]`; the exact bound contract criterion ID and text hash remain authoritative.
+When the bound contract supplies capability metadata, it may refine the type/boundary but
+cannot weaken the annotation, change the criterion ID, or omit a required boundary.
+Unannotated criteria that describe executable behavior are `UNKNOWN`, not implicitly PASS.
+`manual` is an explicit human-only criterion and never makes a required runtime capability
+optional.
+
+Each compiled requirement and each resulting proof uses this machine-readable record shape:
+
+```json
+{
+  "v": 1,
+  "capability": "runtime:e2e",
+  "criterion": "criterion-id",
+  "criterionTextHash": "sha256:<exact-bound-text-hash>",
+  "sourceHead": "<full-reviewed-source-commit>",
+  "contractDigest": "sha256:<bound-contract-digest>",
+  "proofType": "runtime",
+  "boundary": "named executable boundary",
+  "state": "PASS|MISSING|SKIPPED|UNKNOWN|CONTRADICTED",
+  "evidence": "specific boundary result and identity",
+  "wakeCondition": "empty only for PASS; otherwise exact capability recovery/re-scope condition"
+}
+```
+
+`capability` is a stable capability/type identity, while `criterion` and
+`criterionTextHash` bind it to the exact acceptance contract. `sourceHead` and
+`contractDigest` prevent stale proof from satisfying a new head or contract. A required
+capability is PASS only when its named boundary proof ran successfully against those
+identities. `MISSING`, `SKIPPED`, `UNKNOWN`, and `CONTRADICTED` are hard non-PASS states;
+none may be normalized to a residual-risk note, intentional skip, advisory, or generic
+satisfied criterion. An unavailable service, database, queue, browser, hosted runner, or
+credential is `MISSING` with an explicit wake condition.
+
+Structural/source-string checks may support `structural` criteria, but can never satisfy
+`runtime`, `integration`, `e2e`, `queue`, `database`, `browser`, or `credential` proof.
+Every non-PASS admission report must emit one machine-readable
+`FORGE:VERIFICATION_BLOCKED` object containing the exact `capability`, `criterion`,
+`criterionTextHash`, `sourceHead`, `contractDigest`, current `state`, and `wakeCondition`.
+Build and PR admission consume the same records; `/test-gate` must classify and bind them
+before its manual/no-test SKIP paths. A formal contract re-scope creates a new bound
+criterion/contract identity; it does not convert an old unresolved record to PASS.
+
 Use the existing `forge.yaml` `verification.commands` contract. Commands are grouped by
 owning component/toolchain, not by a fixed list of supported languages. The agent selects
 the relevant checks; existing tools execute them mechanically. Do not create a second

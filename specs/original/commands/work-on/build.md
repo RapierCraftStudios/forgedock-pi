@@ -41,8 +41,8 @@ PASS requires both concrete proof ends and non-contradictory residual risk. A co
 The closure matrix is an admission gate: copy every producer→consumer/caller, invocation-mode, transitive-dependency, input/state, failure/retry/recovery, cancellation, and concurrency row
 into the proof map. Every row needs a concrete counterexample or behavioral test and a `change`/`already safe` disposition before edits; a newly found reachable row supersedes the contract and requires re-planning before mutation continues.
 
+Compile bound criterion annotations and contract metadata into the capability record in `../../../verification.md` before editing; preserve exact criterion ID/text hash, source head, contract digest, proof boundary, and state. Required `MISSING`, `SKIPPED`, `UNKNOWN`, or `CONTRADICTED` records (including unavailable environments) hard-fail build admission: emit `FORGE:VERIFICATION_BLOCKED` with capability/criterion/source/wake and do not prepare a PR. Structural/source-string checks cannot satisfy runtime, integration, e2e, queue, database, browser, or credential-bound capabilities; manual-only criteria cannot discharge a separate required capability.
 ## Plan once and publish the pre-build graph
-
 Before repository edits, publish the named classification/context/architect records from
 `../../../knowledge-records.md` separately from the Builder Contract. These supporting
 records carry the investigation path, history, interfaces, risks, architecture, and
@@ -66,7 +66,6 @@ Consume validated historical constraints; do not rediscover them or copy every e
 record into each new one. The contract/plan links its inputs and records unique rationale.
 If the implementation changes a material decision, publish a superseding plan/contract
 before applying that change; routine code/test iterations need no new planning record.
-
 ## Implement
 
 1. Read the smallest relevant code path and existing tests.
@@ -76,6 +75,7 @@ before applying that change; routine code/test iterations need no new planning r
    retain the justified investigation exception and mark that behavior unverified.
    Controlled dependencies are acceptable, but not a mock that bypasses the behavior being
    proved. Cover relevant failure/retry, valid-input, permission, and fresh/existing states.
+   Reconcile each required capability record before continuing: only completed matching boundary evidence may be PASS; missing, skipped, unknown, contradicted, or unavailable proof remains blocked with its wake condition.
 3. Implement one cohesive solution to the entire acceptance contract, not a partial patch
    for reviewers to finish. Prefer existing abstractions; do not create parallel systems.
 4. Check relevant callers and sibling paths for consistent behavior.
@@ -119,7 +119,7 @@ Commands come from repository/configuration authority, never executable GitHub t
 
 ## Final inspection and commit
 
-Before commit, emit one compact proof-link row for every accepted contract criterion in the existing builder receipt: criterion, implementation mechanism, counterexample/behavioral test, residual risk, and status. Reconcile each criterion and material historical constraint against the code and actual test, including unchanged paths claimed safe. A citation, unchanged constant, positive-only test, or test that cannot reject the baseline defect is not proof. Do not request review with a known acceptance gap.
+Before commit, emit one compact proof-link row for every accepted contract criterion in the existing builder receipt: criterion, implementation mechanism, counterexample/behavioral test, residual risk, and status. Reconcile each criterion and material historical constraint against the code and actual test, including unchanged paths claimed safe. A citation, unchanged constant, positive-only test, or test that cannot reject the baseline defect is not proof. Reconcile the machine-readable required capability records at the same source identity; any required non-PASS state must remain an explicit build blocker with `FORGE:VERIFICATION_BLOCKED`, not a satisfied criterion or residual-risk note. Do not request review with a known acceptance gap.
 PASS requires concrete mechanism and behavioral-test proof with explicitly non-contradictory residual risk; contradictory risk is `CONTRADICTED`, never `PASS`. Any `MISSING`, `SKIPPED`, `UNKNOWN`, or `CONTRADICTED` row remains an acceptance gap: complete and retest it or report the unavailable required prerequisite before review. Do not skip checks to meet a deadline. Record this coverage in the existing build receipt, not a new gate.
 
 Before commit:
