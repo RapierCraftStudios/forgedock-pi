@@ -596,7 +596,13 @@ TEST_GATE_REASON="Phase 6.5 not yet run"
 GATE_OUTPUT=$(Skill("test-gate", "--prs \"$(echo $ALL_PR_NUMBERS | tr '\n' ' ' | xargs)\" --base $DEFAULT_BRANCH"))
 
 # Extract machine-readable verdict from Skill output
-TEST_GATE_VERDICT=$(echo "$GATE_OUTPUT" | grep -oP '(?<=FORGE:TEST_GATE:RESULT=)(BLOCK|PASS|SKIP)' | tail -1 || echo "SKIP")
+TEST_GATE_MARKERS=$(echo "$GATE_OUTPUT" | grep -oP '^<!-- FORGE:TEST_GATE:RESULT=(BLOCK|PASS|SKIP) -->$' || true)
+if [ "$(echo "$TEST_GATE_MARKERS" | grep -c '^' || true)" -ne 1 ]; then
+  TEST_GATE_VERDICT="BLOCK"
+  TEST_GATE_REASON="BLOCK — missing, malformed, or contradictory test-gate result; rerun the bound capability gate"
+else
+  TEST_GATE_VERDICT=$(echo "$TEST_GATE_MARKERS" | sed -E 's/.*RESULT=([^ ]+).*/\1/')
+fi
 
 echo "Test-gate verdict: ${TEST_GATE_VERDICT}"
 ```
@@ -632,7 +638,7 @@ case "$TEST_GATE_VERDICT" in
   BLOCK)
     # Required capability blocks are an immutable prerequisite: they cannot be
     # downgraded by an override phrase or advisory posture.
-    if echo "$TEST_GATE_OUTPUT" | grep -qF '<!-- FORGE:TEST_GATE:CAPABILITY_BLOCK=true -->'; then
+    if echo "$GATE_OUTPUT" | grep -qF '<!-- FORGE:TEST_GATE:CAPABILITY_BLOCK=true -->'; then
       echo "⛔ DEPLOY BLOCKED — required verification capability is unresolved."
       echo "The exact capability report and wake condition above are authoritative; overrides are not permitted."
       TEST_GATE_REASON="BLOCK — required capability proof unresolved; wake condition required"
@@ -709,9 +715,9 @@ To override (ship known failures with documented reason), post a comment contain
     ;;
 
   *)
-    echo "⚠️  Test gate: unrecognised verdict '${TEST_GATE_VERDICT}' — treating as SKIP."
-    TEST_GATE_VERDICT="SKIP"
-    TEST_GATE_REASON="SKIP — unrecognised verdict from /test-gate (treated as SKIP)"
+    echo "⛔ Test gate: unrecognised or missing verdict '${TEST_GATE_VERDICT}' — treating as BLOCK."
+    TEST_GATE_VERDICT="BLOCK"
+    TEST_GATE_REASON="BLOCK — unrecognised or missing verdict from /test-gate; rerun the bound capability gate"
     ;;
 
 esac

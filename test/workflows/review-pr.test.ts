@@ -652,8 +652,8 @@ test("required capability rows bind identity and fail closed", () => {
     proof: "behavioral boundary evidence unavailable",
     wake: "Postgres integration capability is available",
   };
-  const output = `FORGE:TEST_GATE:CAPABILITY=${JSON.stringify(capability)}\nFORGE:TEST_GATE:CAPABILITIES_COMPLETE count=1\n<!-- FORGE:TEST_GATE:RESULT=PASS -->`;
-  const expected = [{ id: "db-read", criterionId: "runtime-proof", criterionTextHash: capability.criterionTextHash, required: true }];
+  const output = `FORGE:TEST_GATE:CAPABILITY=${JSON.stringify(capability)}\n<!-- FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=1 -->\n<!-- FORGE:TEST_GATE:RESULT=PASS -->`;
+  const expected = [{ id: "db-read", criterionId: "runtime-proof", criterionTextHash: capability.criterionTextHash, type: "database", boundary: "postgres", command: "npm run integration", required: true }];
   const check = testGateVerification(output, true, {
     repository: "owner/repo",
     target: "staging",
@@ -670,7 +670,7 @@ test("required capability rows bind identity and fail closed", () => {
     { repository: "owner/repo", target: "staging", sourceHead: route.headSha, sourceTree: "tree-1" },
     expected,
   );
-  assert.match(mismatched.evidence?.[0] ?? "", /source identity does not match/);
+  assert.equal(mismatched.status, "failed", "source identity mismatch must fail closed");
 
   const passed = testGateVerification(
     output.replace('"state":"MISSING"', '"state":"PASS"'),
@@ -696,7 +696,7 @@ test("required capability rows bind identity and fail closed", () => {
   assert.equal(structural.status, "failed", "structural evidence cannot satisfy a database capability");
 
   const malformed = testGateVerification(
-    `FORGE:TEST_GATE:CAPABILITY={"id":"broken"\nFORGE:TEST_GATE:CAPABILITIES_COMPLETE count=0\nFORGE:TEST_GATE:RESULT=PASS`,
+    `FORGE:TEST_GATE:CAPABILITY={"id":"broken"\n<!-- FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=0 -->\n<!-- FORGE:TEST_GATE:RESULT=PASS -->`,
     true,
     { repository: "owner/repo", target: "staging", sourceHead: route.headSha, sourceTree: "tree-1" },
     expected,
@@ -704,7 +704,7 @@ test("required capability rows bind identity and fail closed", () => {
   assert.equal(malformed.status, "failed", "malformed rows cannot be hidden by a zero count");
   assert.equal(
     testGateVerification(
-      "FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=0\n<!-- FORGE:TEST_GATE:RESULT=BLOCK -->\n<!-- FORGE:TEST_GATE:RESULT=PASS -->",
+      "<!-- FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=0 -->\n<!-- FORGE:TEST_GATE:RESULT=BLOCK -->\n<!-- FORGE:TEST_GATE:RESULT=PASS -->",
       true,
       { repository: "owner/repo", target: "staging", sourceHead: route.headSha, sourceTree: "tree-1" },
       [],

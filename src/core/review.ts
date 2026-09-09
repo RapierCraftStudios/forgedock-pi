@@ -196,7 +196,11 @@ export function evaluateReviewGate(input: ReviewGateInput): ReviewGateResult {
     blocked.push("No verification results were recorded for the reviewed head.");
 
   for (const check of input.checks) {
-    const capabilities = check.capabilities ?? (check.capability ? [check.capability] : []);
+    const capabilities = check.capabilities?.length
+      ? check.capabilities
+      : check.capability
+        ? [check.capability]
+        : [];
     let capabilityBlocked = false;
     for (const capability of capabilities) {
       if (capability.required && capability.state !== "PASS") {

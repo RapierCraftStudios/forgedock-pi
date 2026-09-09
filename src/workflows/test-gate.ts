@@ -71,9 +71,13 @@ export function parseTestGateResult(value: unknown): TestGateResult | undefined 
     capabilities.push(capability);
   }
   if (capabilityLines.length !== capabilities.length) return undefined;
-  const completeMatch = value.match(/FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=(\d+)/);
+  const completeMatches = [...value.matchAll(/^<!-- FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=(\d+) -->$/gm)];
+  const completeMatch = completeMatches[0];
+  const resultLine = /^<!-- FORGE:TEST_GATE:RESULT=(?:BLOCK|PASS|SKIP) -->$/m.exec(value);
   const capabilitiesComplete =
-    completeMatch !== null && Number(completeMatch[1]) === capabilities.length;
+    completeMatches.length === 1 && completeMatch !== undefined &&
+    Number(completeMatch[1]) === capabilities.length &&
+    value.indexOf(completeMatch[0]) < (resultLine?.index ?? -1);
   const reason = value.match(
     /FORGE:TEST_GATE:(?:BLOCK|PASS|SKIP)\|reason=([^\s\n]+)/,
   )?.[1];
@@ -101,6 +105,9 @@ export interface ExpectedCapability {
   id: string;
   criterionId: string;
   criterionTextHash: string;
+  type: string;
+  boundary: string;
+  command: string;
   required: boolean;
 }
 
@@ -126,7 +133,9 @@ export function testGateVerification(
     const missing = [...expected].filter(([id, capability]) => {
       const row = actual.get(id);
       return !row || row.criterionId !== capability.criterionId ||
-        row.criterionTextHash !== capability.criterionTextHash || row.required !== capability.required;
+        row.criterionTextHash !== capability.criterionTextHash || row.type !== capability.type ||
+        row.boundary !== capability.boundary || row.command !== capability.command ||
+        row.required !== capability.required;
     });
     if (actual.size !== expected.size || missing.length > 0) {
       const details = missing.map(([id, capability]) =>

@@ -1126,6 +1126,9 @@ export class ForgeReviewController {
             ),
           },
           execution,
+          ...(effectiveMode === "staging"
+            ? { sourceTree: route.headSha, requiredCapabilities: [] }
+            : {}),
           reviewerTimeoutMs: environment.policy.subagents.reviewerTimeoutMs,
           githubCheckTimeoutMs:
             environment.policy.verification.github.waitTimeoutMs,
@@ -1215,6 +1218,9 @@ export class ForgeReviewController {
         kind: "standalone",
         repositoryRoot: environment.repositoryRoot,
       },
+      ...(state.mode === "staging"
+        ? { sourceTree: resumeRoute.headSha, requiredCapabilities: [] }
+        : {}),
       round: state.panel?.round ?? 1,
       reviewerTimeoutMs: environment.policy.subagents.reviewerTimeoutMs,
       githubCheckTimeoutMs:
