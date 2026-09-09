@@ -205,7 +205,7 @@ test("required capability binding is explicit, source-bound, and fail-closed", a
   for (const field of ["capability", "criterion", "type", "boundary", "source", "command", "required", "state", "proof", "wake"]) {
     assert.match(verification, new RegExp(`^${field}:`, "m"), field);
   }
-  assert.match(gate, /FORGE:TEST_GATE:CAPABILITY id=.*criterion=.*source=.*tree=.*state=.*wake=/);
+  assert.match(gate, /FORGE:TEST_GATE:CAPABILITY=\{"id".*"criterionId".*"sourceHead".*"sourceTree".*"state".*"wake"/);
   assert.match(gate, /Missing, malformed, duplicate, or ambiguous metadata/);
   assert.match(gate, /No required runtime capabilities are bound; emitting explicit SKIP verdict/);
   assert.match(gate, /missing environment is therefore BLOCK, not SKIP/i);

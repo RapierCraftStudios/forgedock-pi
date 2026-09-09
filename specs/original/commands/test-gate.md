@@ -117,10 +117,11 @@ catalog command, required flag, proof type, state, and wake condition. An annota
 is authoritative when present. Missing, malformed, duplicate, or ambiguous metadata is a
 `MISSING` required capability, never an inferred manual criterion.
 
-Machine-readable output for every compiled row is:
+Machine-readable output for every compiled row is one line of JSON (use JSON escaping for
+commands, boundaries, and wake conditions; never parse arbitrary criterion text by whitespace):
 
 ```text
-FORGE:TEST_GATE:CAPABILITY id=<capability-id> criterion=<criterion-id> type=<type> boundary=<boundary> source=<repo>@<head> tree=<tree> required=<true|false> state=<state> wake=<condition>
+FORGE:TEST_GATE:CAPABILITY={"id":"<capability-id>","criterionId":"<criterion-id>","criterionTextHash":"<text-hash>","type":"<type>","boundary":"<boundary>","command":"<command>","repository":"<repo>","target":"<target>","sourceHead":"<head>","sourceTree":"<tree>","required":<true|false>,"state":"<state>","proof":"<proof>","wake":"<condition>"}
 ```
 
 A required row is admissible only when `state=PASS` and its behavioral evidence was produced by
@@ -928,6 +929,7 @@ if [ "$CAPABILITY_BLOCK" = "true" ]; then
   VERDICT="BLOCK"
   VERDICT_REASON="${CAPABILITY_BLOCK_COUNT} required verification capability/capabilities unresolved. Required proof cannot be overridden or downgraded to SKIP."
   echo -e "${CAPABILITY_RESULTS:-none}"
+  echo "<!-- FORGE:TEST_GATE:CAPABILITY_BLOCK=true -->"
 elif [ "${BATCH_FAILURE_COUNT}" -gt 0 ]; then
   VERDICT="BLOCK"
   VERDICT_REASON="${BATCH_FAILURE_COUNT} cluster(s) failed with batch-introduced regressions: $(echo -e "$BATCH_FAILURES" | tr '\n' ', ' | sed 's/,\s*$//')"

@@ -1009,7 +1009,32 @@ function validateCheck(value: unknown): VerificationResult {
     throw new ReviewTransitionError("invalid-check", `Unsupported check status: ${String(check.status)}.`);
   if (typeof check.required !== "boolean")
     throw new ReviewTransitionError("invalid-check", "check.required must be boolean.");
-  return { name, required: check.required, status: check.status as VerificationResult["status"], ...(check.exitCode === undefined ? {} : { exitCode: check.exitCode }) };
+  const capability = check.capability;
+  if (capability !== undefined) validateCapability(capability);
+  if (check.evidence !== undefined && (!Array.isArray(check.evidence) || !check.evidence.every((entry) => typeof entry === "string")))
+    throw new ReviewTransitionError("invalid-check", "check.evidence must be an array of strings.");
+  return {
+    name,
+    required: check.required,
+    status: check.status as VerificationResult["status"],
+    ...(check.exitCode === undefined ? {} : { exitCode: check.exitCode }),
+    ...(capability === undefined ? {} : { capability }),
+    ...(check.evidence === undefined ? {} : { evidence: check.evidence }),
+  };
+}
+
+function validateCapability(value: VerificationResult["capability"]): void {
+  if (!value || typeof value !== "object")
+    throw new ReviewTransitionError("invalid-check", "check.capability must be an object.");
+  const required = ["id", "criterionId", "criterionTextHash", "type", "boundary", "command", "repository", "target", "sourceHead", "sourceTree", "proof", "wake"] as const;
+  for (const key of required) {
+    if (typeof value[key] !== "string" || !value[key].trim())
+      throw new ReviewTransitionError("invalid-check", `check.capability.${key} must be a non-empty string.`);
+  }
+  if (typeof value.required !== "boolean")
+    throw new ReviewTransitionError("invalid-check", "check.capability.required must be boolean.");
+  if (!( ["PASS", "FAIL", "MISSING", "SKIPPED", "UNKNOWN", "CONTRADICTED"] as string[]).includes(value.state))
+    throw new ReviewTransitionError("invalid-check", `Unsupported capability state: ${String(value.state)}.`);
 }
 
 function validateFinding(value: unknown): ReviewFinding {

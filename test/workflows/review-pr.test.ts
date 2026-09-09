@@ -34,9 +34,9 @@ import { testGateVerification } from "../../src/workflows/test-gate.ts";
 const route: GitHubPullRequestRouteSnapshot = {
   pullNumber: 7,
   headRef: "feature/review",
-  headSha: "head-sha",
+  headSha: "a".repeat(40),
   baseRef: "main",
-  baseSha: "base-sha",
+  baseSha: "b".repeat(40),
 };
 
 const roster = {
@@ -330,7 +330,7 @@ function request(overrides: Partial<ReviewPrRequest> = {}): ReviewPrRequest {
     protectedBranches: [],
     autoMergeAuthorized: true,
     autoMergeRequested: false,
-    testGateOutput: "<!-- FORGE:TEST_GATE:RESULT=PASS -->",
+    testGateOutput: "<!-- FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=0 -->\n<!-- FORGE:TEST_GATE:RESULT=PASS -->",
     authorityValid: () => true,
     ...overrides,
   };
@@ -610,7 +610,7 @@ test("staging review rejects missing commit-reachability bundle evidence", async
 test("Phase 6.5 propagates explicit BLOCK, PASS, and SKIP results", () => {
   assert.deepEqual(
     testGateVerification("<!-- FORGE:TEST_GATE:RESULT=BLOCK -->"),
-    { name: "test-gate", required: true, status: "failed", exitCode: 1 },
+    { name: "test-gate", required: true, status: "failed", exitCode: 1, evidence: ["Test-gate returned BLOCK."] },
   );
   assert.deepEqual(
     testGateVerification("<!-- FORGE:TEST_GATE:RESULT=PASS -->"),
@@ -628,14 +628,68 @@ test("missing Phase 6.5 execution is a required failed check", () => {
     required: true,
     status: "failed",
     exitCode: 1,
+    evidence: ["Malformed or missing test-gate result."],
   });
+});
+
+test("required capability rows bind identity and fail closed", () => {
+  const capability = {
+    id: "db-read",
+    criterionId: "runtime-proof",
+    criterionTextHash: "sha256:" + "a".repeat(64),
+    type: "database",
+    boundary: "postgres",
+    command: "npm run integration",
+    repository: "owner/repo",
+    target: "staging",
+    sourceHead: route.headSha,
+    sourceTree: "tree-1",
+    required: true,
+    state: "MISSING",
+    proof: "behavioral boundary evidence unavailable",
+    wake: "Postgres integration capability is available",
+  };
+  const output = `FORGE:TEST_GATE:CAPABILITY=${JSON.stringify(capability)}\nFORGE:TEST_GATE:CAPABILITIES_COMPLETE count=1\n<!-- FORGE:TEST_GATE:RESULT=PASS -->`;
+  const check = testGateVerification(output, true, {
+    repository: "owner/repo",
+    target: "staging",
+    sourceHead: route.headSha,
+  });
+  assert.equal(check.required, true);
+  assert.equal(check.status, "failed");
+  assert.match(check.evidence?.join(" ") ?? "", /db-read.*runtime-proof.*source=owner\/repo@.*state=MISSING.*wake/);
+
+  const mismatched = testGateVerification(
+    output.replace('"sourceHead":"' + route.headSha + '"', '"sourceHead":"' + "b".repeat(40) + '"'),
+    true,
+    { repository: "owner/repo", target: "staging", sourceHead: route.headSha },
+  );
+  assert.match(mismatched.evidence?.[0] ?? "", /source identity does not match/);
+
+  const passed = testGateVerification(
+    output.replace('"state":"MISSING"', '"state":"PASS"'),
+    true,
+    { repository: "owner/repo", target: "staging", sourceHead: route.headSha },
+  );
+  assert.equal(passed.status, "passed", "matching behavioral capability binding may pass");
+  assert.equal(passed.capability?.sourceTree, "tree-1");
+
+  const structural = testGateVerification(
+    output.replace('"state":"MISSING"', '"state":"PASS"').replace(
+      "behavioral boundary evidence unavailable",
+      "structural source-string evidence",
+    ),
+    true,
+    { repository: "owner/repo", target: "staging", sourceHead: route.headSha },
+  );
+  assert.equal(structural.status, "failed", "structural evidence cannot satisfy a database capability");
 });
 
 test("staging review carries every Phase 6.5 verdict into its gate", async () => {
   for (const [output, expectedStatus, expectedDecision] of [
-    ["<!-- FORGE:TEST_GATE:RESULT=BLOCK -->", "failed", "changes-requested"],
-    ["<!-- FORGE:TEST_GATE:RESULT=PASS -->", "passed", "approved"],
-    ["<!-- FORGE:TEST_GATE:RESULT=SKIP -->", "skipped", "approved"],
+    ["<!-- FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=0 -->\n<!-- FORGE:TEST_GATE:RESULT=BLOCK -->", "failed", "changes-requested"],
+    ["<!-- FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=0 -->\n<!-- FORGE:TEST_GATE:RESULT=PASS -->", "passed", "approved"],
+    ["<!-- FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=0 -->\n<!-- FORGE:TEST_GATE:RESULT=SKIP -->", "skipped", "approved"],
   ] as const) {
     const h = harness();
     const result = await h.coordinator.review(

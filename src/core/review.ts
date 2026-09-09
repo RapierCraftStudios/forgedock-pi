@@ -64,11 +64,38 @@ export type VerificationStatus =
   | "not-configured"
   | "policy-exempt";
 
+export type VerificationCapabilityState =
+  | "PASS"
+  | "FAIL"
+  | "MISSING"
+  | "SKIPPED"
+  | "UNKNOWN"
+  | "CONTRADICTED";
+
+export interface VerificationCapability {
+  id: string;
+  criterionId: string;
+  criterionTextHash: string;
+  type: string;
+  boundary: string;
+  command: string;
+  repository: string;
+  target: string;
+  sourceHead: string;
+  sourceTree: string;
+  required: boolean;
+  state: VerificationCapabilityState;
+  proof: string;
+  wake: string;
+}
+
 export interface VerificationResult {
   name: string;
   required: boolean;
   status: VerificationStatus;
   exitCode?: number;
+  capability?: VerificationCapability;
+  evidence?: readonly string[];
 }
 
 export interface HumanAuthorityRequest {

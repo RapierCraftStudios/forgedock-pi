@@ -630,7 +630,15 @@ case "$TEST_GATE_VERDICT" in
     ;;
 
   BLOCK)
-    # Check for override comment on the staging→main PR (mirrors Phase 0A pattern)
+    # Required capability blocks are an immutable prerequisite: they cannot be
+    # downgraded by an override phrase or advisory posture.
+    if echo "$TEST_GATE_OUTPUT" | grep -qF '<!-- FORGE:TEST_GATE:CAPABILITY_BLOCK=true -->'; then
+      echo "⛔ DEPLOY BLOCKED — required verification capability is unresolved."
+      echo "The exact capability report and wake condition above are authoritative; overrides are not permitted."
+      TEST_GATE_REASON="BLOCK — required capability proof unresolved; wake condition required"
+      TEST_GATE_VERDICT="BLOCK"
+    else
+      # Check for override comment on the staging→main PR (mirrors Phase 0A pattern)
     if [ -n "$PR_NUMBER" ]; then
       TG_OVERRIDE=$(gh pr view "$PR_NUMBER" ${GH_FLAG} \
         --json comments \
@@ -696,6 +704,7 @@ To override (ship known failures with documented reason), post a comment contain
 <!-- FORGE:GATE_FAILURE:TYPE=test-gate|BUNDLE=$(echo $ALL_PR_NUMBERS | tr '\n' ' ' | xargs) -->" 2>/dev/null || true
       fi
       exit 1
+    fi
     fi
     ;;
 
