@@ -85,18 +85,26 @@ import { RunJournal } from "./journal.ts";
 import { ReviewJournal } from "../adapters/review-journal.ts";
 import { ReviewPrCoordinator, type ReviewPanelRunner } from "./review-pr.ts";
 import { publishReviewFindingIssues } from "./review-findings.ts";
+import {
+  collateWorkOnReview,
+  type WorkOnReviewDisposition,
+} from "./review-disposition.ts";
+import {
+  reviewerCommentMatchesResult,
+  reviewerCommentMarker,
+} from "../core/reviewer-comment.ts";
 export {
   findingPriority,
   publishReviewFindingIssues,
   reviewFindingMarker,
 } from "./review-findings.ts";
 import {
-  classifyRemediationFindings,
   closeAddressedReviewFindingIssues,
   isRemediationCandidate,
   loadAuthoritativeReviewFindingIssues,
   readRemediationMarkerState,
   remediationCompleteMarker,
+  remediationRoundAllowed,
   remediationStartMarker,
   type AuthoritativeReviewFinding,
 } from "./remediation.ts";
@@ -2393,18 +2401,30 @@ export class ForgeWorkOnController {
             ...(ctx.signal ? { signal: ctx.signal } : {}),
           })
         : undefined;
-      const marker = reviewInstanceMarker(
+      const marker = reviewerCommentMarker(
         link.forgeRunId,
-        domain,
+        reviewer.reviewer,
         nodeAttempt(nodeResult.nodeId),
         reviewer.headSha,
       );
-      const publishedCommentId = await github.postPullArtifact({
-        pullNumber: pull.number,
+      const publishedComment = await github.findPullArtifactComment(
+        pull.number,
         marker,
-        body: `<!-- FORGE:REVIEW-AGENT:${domain} -->\n${renderReviewerArtifact(reviewer, domain)}`,
-        ...(ctx.signal ? { signal: ctx.signal } : {}),
-      });
+        ctx.signal,
+      );
+      if (
+        !publishedComment ||
+        !reviewerCommentMatchesResult(
+          publishedComment.body,
+          reviewer,
+          nodeAttempt(nodeResult.nodeId),
+          link.forgeRunId,
+        )
+      )
+        throw new Error(
+          `Reviewer ${reviewer.reviewer} did not publish its complete exact-head comment.`,
+        );
+      const publishedCommentId = publishedComment.id;
       await journal.append({
         runId: link.forgeRunId,
         type: "reviewer.artifact-published",
@@ -2944,6 +2964,29 @@ export class ForgeWorkOnController {
         current.state,
         node.round ?? node.attempt,
       );
+      const priorFindingIssueMap = { ...link.findingIssueMap };
+      const parentDisposition = collateWorkOnReview(
+        aggregate.review.reviewerResults,
+        link.builderContract,
+        aggregate.review.findings,
+      );
+      const followUpResult: ForgeWorkOnResult = {
+        ...aggregate,
+        review: {
+          ...aggregate.review,
+          findings: parentDisposition.followUps,
+        },
+      };
+      link.findingIssueMap = {
+        ...link.findingIssueMap,
+        ...(await publishReviewFindingIssues({
+          github,
+          pullNumber: pull.number,
+          link,
+          result: followUpResult,
+          ...(ctx.signal ? { signal: ctx.signal } : {}),
+        })),
+      };
       const currentState = current.state;
       const latestNode = (name: string) =>
         Object.values(currentState.nodes)
@@ -3033,6 +3076,8 @@ export class ForgeWorkOnController {
         protectedBranches: policy.branches.protected,
         autoMergeAuthorized: canAutoMerge(policy, pull.baseRef),
         autoMergeRequested: false,
+        reviewerCommentRunId: link.forgeRunId,
+        publishFindingIssues: false,
         authorityValid: async () => {
           const authority = await store.readRun(link.forgeRunId, ctx.signal);
           return Boolean(
@@ -3044,15 +3089,17 @@ export class ForgeWorkOnController {
       });
       const gate = sharedReview.decision;
       finalReviewDecision = gate;
-      const priorFindingIssueMap = { ...link.findingIssueMap };
-      link.findingIssueMap = { ...sharedReview.findingIssues };
+      link.findingIssueMap = {
+        ...link.findingIssueMap,
+        ...sharedReview.findingIssues,
+      };
       if (aggregate.review.rounds > 1) {
         await closeAddressedReviewFindingIssues({
           github,
           pullNumber: pull.number,
           priorFindingIssueMap,
           activeFindingIds: new Set(
-            aggregate.review.findings.map((finding) => finding.id),
+            parentDisposition.followUps.map((finding) => finding.id),
           ),
           remediationCommitSha: aggregate.review.headSha,
           runId: link.forgeRunId,
@@ -3085,6 +3132,15 @@ export class ForgeWorkOnController {
         aggregate.review.rounds,
         gate,
         ctx.signal,
+      );
+      await publishReviewSummary(
+        github,
+        pull.number,
+        aggregate,
+        link.findingIssueMap,
+        gate,
+        ctx.signal,
+        parentDisposition,
       );
       const audit = await waitForPreMergeAudit(
         github,
@@ -3133,23 +3189,14 @@ export class ForgeWorkOnController {
         `decision-comment:${decisionCommentId}`,
         ...gate.reasons,
       ];
-      const authoritativeFindings =
-        gate.decision === "changes-requested"
-          ? await loadAuthoritativeReviewFindingIssues({
-              github,
-              pullNumber: pull.number,
-              ...(ctx.signal ? { signal: ctx.signal } : {}),
-            })
-          : [];
-      const remediation = classifyRemediationFindings(
-        authoritativeFindings,
-        link.builderContract,
-      );
       const canRemediate =
         gate.decision === "changes-requested" &&
-        remediation.fixable.length > 0 &&
-        remediation.escalated.length === 0 &&
-        aggregate.review.rounds < policy.review.maxRounds;
+        parentDisposition.blocking.length > 0 &&
+        remediationRoundAllowed(
+          link.remediationAttempts,
+          aggregate.review.rounds,
+          policy.review.maxRounds,
+        );
       outcome =
         gate.decision === "approved" ||
         gate.decision === "approved-with-follow-ups"
@@ -3167,9 +3214,9 @@ export class ForgeWorkOnController {
           link.forgeRunId,
         );
         const alreadyStarted = markerState.startedAttempts.includes(attempt);
-        const findingLines = remediation.fixable.map(
-          ({ issueNumber, finding }) =>
-            `- #${issueNumber} ${finding.id}: ${finding.summary} (${finding.file}:${finding.line})`,
+        const findingLines = parentDisposition.blocking.map(
+          (finding) =>
+            `- ${finding.id}: ${finding.summary} (${finding.file}:${finding.line})`,
         );
         const remediationBody = `${startMarker}\n## Remediation In Progress for PR #${pull.number}\n\n**Reviewed head**: \`${aggregate.review.headSha}\`\n**Authoritative findings**:\n${findingLines.join("\n")}\n\nApply only these in-contract findings, then run a fresh complete reviewer panel.`;
         await github.postPullArtifact({
@@ -3189,7 +3236,7 @@ export class ForgeWorkOnController {
         link.planContext = [
           link.planContext,
           "Remediation context (does not amend the accepted Builder Contract):",
-          JSON.stringify(remediation.fixable, null, 2),
+          JSON.stringify(parentDisposition.decisions.filter((decision) => decision.disposition === "blocking"), null, 2),
         ]
           .filter(Boolean)
           .join("\n\n");
@@ -5313,35 +5360,41 @@ export class ForgeWorkOnController {
       pullNumber: input.pullNumber,
       ...(input.ctx.signal ? { signal: input.ctx.signal } : {}),
     });
-    const authoritative: AuthoritativeReviewFinding[] =
-      storedFindings.length > 0
-        ? storedFindings
-        : input.result.review.findings.map((finding) => ({
-            issueNumber: input.findingIssueMap[finding.id] ?? 0,
-            sourcePullNumber: input.pullNumber,
-            sourceIssueNumber: input.link.issueNumber,
-            finding,
-          }));
-    const classification = classifyRemediationFindings(
-      authoritative,
+    const collated = collateWorkOnReview(
+      input.result.review.reviewerResults,
       input.link.builderContract,
+      input.result.review.findings,
+    );
+    const storedById = new Map(
+      storedFindings.map((entry) => [entry.finding.id, entry]),
+    );
+    const authoritative: AuthoritativeReviewFinding[] = collated.blocking.map(
+      (finding) =>
+        storedById.get(finding.id) ?? {
+          issueNumber: input.findingIssueMap[finding.id] ?? 0,
+          sourcePullNumber: input.pullNumber,
+          sourceIssueNumber: input.link.issueNumber,
+          finding,
+        },
     );
     if (
-      !isRemediationCandidate(input.result, classification.fixable) ||
-      classification.escalated.length > 0 ||
-      input.link.remediationAttempts >= input.maxRounds ||
-      input.result.review.rounds >= input.maxRounds
+      !isRemediationCandidate(input.result, authoritative) ||
+      !remediationRoundAllowed(
+        input.link.remediationAttempts,
+        input.result.review.rounds,
+        input.maxRounds,
+      )
     )
       return false;
-    const attempt = 1;
+    const attempt = Math.max(1, input.result.review.rounds);
     const markerState = readRemediationMarkerState(
       await input.github.getComments(input.pullNumber, input.ctx.signal),
       input.link.forgeRunId,
     );
     if (markerState.completedAttempts.includes(attempt)) return false;
-    const findingLines = classification.fixable.map(
+    const findingLines = authoritative.map(
       ({ issueNumber, finding }) =>
-        `- #${issueNumber} ${finding.id}: ${finding.summary} (${finding.file}:${finding.line})`,
+        `- ${issueNumber > 0 ? `#${issueNumber} ` : ""}${finding.id}: ${finding.summary} (${finding.file}:${finding.line})`,
     );
     const startMarker = remediationStartMarker(input.link.forgeRunId, attempt);
     const remediationBody = `${startMarker}\n## Remediation In Progress for PR #${input.pullNumber}\n\n**Run**: \`${input.link.forgeRunId}\`\n**Reviewed head**: \`${input.result.review.headSha}\`\n**Fixable findings**:\n${findingLines.join("\n")}\n\nA single bounded remediation attempt is authorized. Fresh full review is mandatory.`;
@@ -5821,28 +5874,29 @@ export class ForgeWorkOnController {
       throw new Error(
         "Structured review findings exist without the bound pull request.",
       );
+    if (existingPull)
+      await verifyReviewerArtifacts(
+        github,
+        existingPull.number,
+        result,
+        result.review.rounds,
+        link.forgeRunId,
+        ctx.signal,
+      );
     const priorFindingIssueMap = { ...link.findingIssueMap };
-    const resultFindings: AuthoritativeReviewFinding[] =
-      result.review.findings.map((finding) => ({
-        issueNumber: link.findingIssueMap[finding.id] ?? 0,
-        sourcePullNumber: existingPull?.number ?? 0,
-        sourceIssueNumber: link.issueNumber,
-        finding,
-      }));
-    const findingDisposition = classifyRemediationFindings(
-      resultFindings,
+    const findingDisposition = collateWorkOnReview(
+      result.review.reviewerResults,
       link.builderContract,
+      result.review.findings,
     );
     const followUpIds = new Set(
-      findingDisposition.followUp.map((entry) => entry.finding.id),
+      findingDisposition.followUps.map((finding) => finding.id),
     );
     const followUpResult: ForgeWorkOnResult = {
       ...result,
       review: {
         ...result.review,
-        findings: result.review.findings.filter((finding) =>
-          followUpIds.has(finding.id),
-        ),
+        findings: findingDisposition.followUps,
       },
     };
     const findingIssueMap = existingPull
@@ -5857,7 +5911,7 @@ export class ForgeWorkOnController {
     link.findingIssueMap = findingIssueMap;
     if (link.remediationAttempts > 0 && existingPull) {
       const activeFindingIds = new Set(
-        result.review.findings.map((finding) => finding.id),
+        findingDisposition.followUps.map((finding) => finding.id),
       );
       await closeAddressedReviewFindingIssues({
         github,
@@ -6040,10 +6094,12 @@ export class ForgeWorkOnController {
       );
       return;
     }
-    await publishReviewerArtifacts(
+    await verifyReviewerArtifacts(
       github,
       currentPull.number,
       result,
+      result.review.rounds,
+      link.forgeRunId,
       ctx.signal,
     );
     const issueComments = await github.getComments(
@@ -6216,6 +6272,8 @@ export class ForgeWorkOnController {
       protectedBranches: policy.branches.protected,
       autoMergeAuthorized: canAutoMerge(policy, currentPull.baseRef),
       autoMergeRequested: false,
+      reviewerCommentRunId: link.forgeRunId,
+      publishFindingIssues: false,
       authorityValid: async () => {
         const authority = await store.readRun(link.forgeRunId, ctx.signal);
         return runLeaseAuthorityMatches(authority.state, authority.lease, link);
@@ -6234,6 +6292,11 @@ export class ForgeWorkOnController {
       link.findingIssueMap,
       gate,
       ctx.signal,
+      collateWorkOnReview(
+        result.review.reviewerResults,
+        link.builderContract,
+        result.review.findings,
+      ),
     );
     const missingDecisionArtifacts = await waitForReviewDecisionAudit(
       github,
@@ -6928,20 +6991,24 @@ async function postRemediationArtifact(input: {
   });
 }
 
-async function publishReviewerArtifacts(
+async function verifyReviewerArtifacts(
   github: GitHubWorkflowAdapter,
   pullNumber: number,
   result: ForgeWorkOnResult,
+  round: number,
+  commentRunId: string,
   signal?: AbortSignal,
 ): Promise<void> {
+  const comments = await github.getComments(pullNumber, signal);
   for (const reviewer of result.review.reviewerResults) {
-    const domain = reviewerDomain(reviewer.reviewer);
-    await github.postPullArtifact({
-      pullNumber,
-      marker: `<!-- FORGE:REVIEW-AGENT:${domain} -->`,
-      body: renderReviewerArtifact(reviewer, domain),
-      ...(signal ? { signal } : {}),
-    });
+    if (
+      !comments.some((body) =>
+        reviewerCommentMatchesResult(body, reviewer, round, commentRunId),
+      )
+    )
+      throw new Error(
+        `Reviewer ${reviewer.reviewer} did not publish its complete exact-head comment.`,
+      );
   }
 }
 
@@ -7031,39 +7098,24 @@ async function publishReviewSummary(
   findingIssueMap: Readonly<Record<string, number>>,
   decision: FinalReviewDecision,
   signal?: AbortSignal,
+  disposition?: WorkOnReviewDisposition,
 ): Promise<void> {
   await github.postPullArtifact({
     pullNumber,
-    marker: "<!-- FORGE:REVIEW -->",
-    body: renderReviewSummary(pullNumber, result, findingIssueMap, decision),
+    marker: reviewSummaryInstanceMarker(
+      result.runId,
+      result.review.rounds,
+      decision.headSha,
+    ),
+    body: renderReviewSummary(
+      pullNumber,
+      result,
+      findingIssueMap,
+      decision,
+      disposition,
+    ),
     ...(signal ? { signal } : {}),
   });
-}
-
-function renderReviewerArtifact(
-  reviewer: ForgeReviewerResult,
-  domain: string,
-): string {
-  const title = domain
-    .split("-")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-  const findings =
-    reviewer.findings.length === 0
-      ? "No confirmed, likely, or possible findings."
-      : reviewer.findings
-          .map(
-            (finding) =>
-              `- **${finding.id}** ${finding.file}:${finding.line} — ${finding.summary}\n  - Confidence: ${finding.confidence}; severity: ${finding.severity}\n  - Evidence: ${finding.evidence.join("; ")}`,
-          )
-          .join("\n");
-  const findingMarkers = reviewer.findings
-    .map(
-      (finding) =>
-        `<!-- FINDING:${finding.id}|${finding.confidence.toUpperCase()}|${finding.severity.toUpperCase()}|${finding.file}:${finding.line}|${finding.summary.replaceAll("|", "/")} -->`,
-    )
-    .join("\n");
-  return `## ${title} Review\n\n**Review mode**: isolated fresh-context pass.  \n**Reviewed head**: \`${reviewer.headSha}\`  \n**Scope**: ${reviewer.filesReviewed.join(", ") || "frozen PR diff"}.\n\n### Qualitative Summary\n\n${reviewer.summary}\n\n### Verified Behaviors\n\n${reviewer.evidence.map((item) => `- ${item}`).join("\n")}\n\n### Findings\n\n${findings}\n\n**Verdict**: ${reviewer.verdict === "pass" ? "PASS" : reviewer.verdict.toUpperCase()}\n\n### Residual Risks\n\n${reviewer.limitations.length ? reviewer.limitations.map((item) => `- ${item}`).join("\n") : "- None identified within reviewed scope."}\n\n<!-- REVIEW-FINDINGS-START -->\n${findingMarkers}\n<!-- REVIEW-FINDINGS-END -->`;
 }
 
 function renderReviewSummary(
@@ -7071,6 +7123,7 @@ function renderReviewSummary(
   result: ForgeWorkOnResult,
   findingIssueMap: Readonly<Record<string, number>>,
   decision: FinalReviewDecision,
+  disposition?: WorkOnReviewDisposition,
 ): string {
   const domains = result.review.reviewerResults.map((reviewer) =>
     reviewerDomain(reviewer.reviewer),
@@ -7082,7 +7135,15 @@ function renderReviewSummary(
       : decision.decision === "approved-with-follow-ups"
         ? "Approve for the configured integration branch with the listed follow-up issues."
         : decision.reasons.join(" ") || "Do not merge.";
-  return `<!-- FORGE:REVIEW_SUMMARY -->\n# PR Review Summary: #${pullNumber}\n\n## Review Integrity\n\n**Reviewed commit**: \`${decision.headSha}\`  \n**Reviewed base**: \`${decision.baseSha}\`  \n**Current result HEAD**: \`${result.headSha}\`  \n**Status**: ${decision.headSha === result.headSha ? "CURRENT" : "STALE"}\n\n## Decision: ${verdict}\n\n## Context-Aware Review\n\n**Domains**: ${domains.join(", ")}  \n**Review passes**: ${result.review.reviewerResults.length}  \n**Dispatch mode**: nested Pi subagents in fresh read-only contexts\n\n## Integration Checks\n\n${renderVerificationEvidence(decision.checkResults)}\n\n## Findings\n\n${result.review.findings.length ? result.review.findings.map((finding) => `- #${findingIssueMap[finding.id] ?? "?"} — ${finding.id}: ${finding.summary}`).join("\n") : "No findings reported."}\n\n**Blocking finding IDs**: ${decision.blockingFindingIds.length ? decision.blockingFindingIds.join(", ") : "none"}  \n**Follow-up finding IDs**: ${decision.followUpFindingIds.length ? decision.followUpFindingIds.join(", ") : "none"}\n\n## Gate Reasons\n\n${decision.reasons.length ? decision.reasons.map((reason) => `- ${reason}`).join("\n") : "- No blocking reasons."}\n\n## Recommendation\n\n${recommendation}\n\n<!-- REVIEW-FINDINGS-START -->\n${result.review.findings.map((finding) => `<!-- FINDING:${finding.id}|${finding.confidence.toUpperCase()}|${finding.severity.toUpperCase()}|${finding.file}:${finding.line}|${finding.summary.replaceAll("|", "/")} -->`).join("\n")}\n<!-- REVIEW-FINDINGS-END -->`;
+  const dispositionLines = disposition?.decisions.length
+    ? disposition.decisions
+        .map(
+          (entry) =>
+            `- ${entry.finding.id}: **${entry.disposition}** — ${entry.rationale} (reviewers: ${entry.reviewers.join(", ")})`,
+        )
+        .join("\n")
+    : "- No parent dispositions recorded.";
+  return `<!-- FORGE:REVIEW-PANEL -->\n<!-- FORGE:REVIEW_SUMMARY -->\n# PR Review Summary: #${pullNumber}\n\n## Review Integrity\n\n**Reviewed commit**: \`${decision.headSha}\`  \n**Reviewed base**: \`${decision.baseSha}\`  \n**Current result HEAD**: \`${result.headSha}\`  \n**Status**: ${decision.headSha === result.headSha ? "CURRENT" : "STALE"}\n\n## Decision: ${verdict}\n\n## Context-Aware Review\n\n**Domains**: ${domains.join(", ")}  \n**Review passes**: ${result.review.reviewerResults.length}  \n**Dispatch mode**: nested Pi subagents in fresh read-only contexts\n\n## Integration Checks\n\n${renderVerificationEvidence(decision.checkResults)}\n\n## Findings\n\n${result.review.findings.length ? result.review.findings.map((finding) => `- ${findingIssueMap[finding.id] ? `#${findingIssueMap[finding.id]} — ` : ""}${finding.id}: ${finding.summary}`).join("\n") : "No findings reported."}\n\n## Parent Disposition\n\n${dispositionLines}\n\n**Blocking finding IDs**: ${decision.blockingFindingIds.length ? decision.blockingFindingIds.join(", ") : "none"}  \n**Follow-up finding IDs**: ${decision.followUpFindingIds.length ? decision.followUpFindingIds.join(", ") : "none"}\n\n## Gate Reasons\n\n${decision.reasons.length ? decision.reasons.map((reason) => `- ${reason}`).join("\n") : "- No blocking reasons."}\n\n## Recommendation\n\n${recommendation}\n\n<!-- REVIEW-FINDINGS-START -->\n${result.review.findings.map((finding) => `<!-- FINDING:${finding.id}|${finding.confidence.toUpperCase()}|${finding.severity.toUpperCase()}|${finding.file}:${finding.line}|${finding.summary.replaceAll("|", "/")} -->`).join("\n")}\n<!-- REVIEW-FINDINGS-END -->`;
 }
 
 function renderVerificationEvidence(

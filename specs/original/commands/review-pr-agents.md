@@ -16,8 +16,10 @@ Do not modify this file without also updating `review-pr.md`. To update either p
 Resolution** rule: `Task` when available, `Agent` when `Task` is absent from the environment — never inline
 self-review as a substitute for either. Every agent template in this catalog is intended to be passed as
 the `prompt` argument to whichever tool the orchestrator resolved (`Task(...)` or `Agent(...)`), with the
-same per-agent isolation and the same requirement that each agent posts structured findings to the PR
-directly (`gh pr comment`) rather than relaying them through the orchestrator's own context.
+same per-agent isolation and the same requirement that each agent posts its complete structured
+findings directly to the PR through the bound reviewer-comment capability. The capability is
+limited to that agent's exact head/role/round comment; it cannot create issues, edit labels,
+merge, or mutate source.
 
 **OpenCode override**: When `FORGE_RUNTIME=opencode` or an equivalent OpenCode marker is present, the
 orchestrator must set `DISPATCH_TOOL=task` before checking literal Claude tool names. A native task

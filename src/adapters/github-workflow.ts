@@ -921,6 +921,17 @@ export class GitHubWorkflowAdapter {
     );
   }
 
+  async findPullArtifactComment(
+    pullNumber: number,
+    marker: string,
+    signal?: AbortSignal,
+  ): Promise<{ id: number; body: string } | undefined> {
+    const comment = (await this.#getCommentRecords(pullNumber, signal)).find(
+      (candidate) => candidate.body.includes(marker),
+    );
+    return comment ? { id: comment.id, body: comment.body } : undefined;
+  }
+
   async #getCommentRecords(
     issueOrPullNumber: number,
     signal?: AbortSignal,

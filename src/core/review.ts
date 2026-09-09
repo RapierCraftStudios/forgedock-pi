@@ -22,6 +22,8 @@ export type ReviewDecision = (typeof REVIEW_DECISIONS)[number];
 
 export type FindingConfidence = "confirmed" | "likely" | "possible";
 export type FindingSeverity = "critical" | "high" | "medium" | "low";
+export type ReviewerBlockView = "blocking" | "advisory";
+export type ReviewerScope = "patch-caused" | "pre-existing" | "out-of-scope";
 export type FindingCategory =
   | "security"
   | "data-loss"
@@ -53,6 +55,10 @@ export interface ReviewFinding {
   line: number;
   summary: string;
   evidence: readonly string[];
+  reviewerBlockView?: ReviewerBlockView;
+  reviewerBlockRationale?: string;
+  reviewerScope?: ReviewerScope;
+  reviewerScopeRationale?: string;
 }
 
 export type VerificationStatus =

@@ -70,6 +70,7 @@ import type {
 import type { StagingBundleResolution } from "../core/staging-bundle-resolver.ts";
 import { publishReviewFindingIssues } from "./review-findings.ts";
 import { testGateVerification } from "./test-gate.ts";
+import { reviewerCommentMatchesResult } from "../core/reviewer-comment.ts";
 
 export type ReviewExecution =
   | { kind: "standalone"; repositoryRoot: string }
@@ -108,6 +109,10 @@ export interface ReviewPrRequest {
   resume?: boolean;
   authorityValid?: () => boolean | Promise<boolean>;
   reviewerContext?: string;
+  /** The run ID used by reviewer-authored PR comments when work-on rebinds results. */
+  reviewerCommentRunId?: string;
+  /** Work-on supplies dispositioned follow-ups; shared review must not create issues. */
+  publishFindingIssues?: boolean;
   /** Parent-supplied deterministic staging bundle; never derive this from text. */
   stagingBundle?: StagingBundleResolution;
   signal?: AbortSignal;
@@ -524,27 +529,31 @@ export class ReviewPrCoordinator {
 
       const forgeFindings = snapshot.state
         .findings as readonly ForgeReviewFindingResult[];
-      const findingIssues = await publishReviewFindingIssues({
-        github: this.#github,
-        pullNumber: route.pullNumber,
-        link: {
-          forgeRunId: input.reviewId,
-          ...(input.issueNumber === undefined
-            ? {}
-            : { issueNumber: input.issueNumber }),
-          repository: input.repository,
-        },
-        result: {
-          review: { headSha: route.headSha, findings: forgeFindings },
-        },
-        ...(input.signal ? { signal: input.signal } : {}),
-      });
-      await this.#github.postPullArtifact({
-        pullNumber: route.pullNumber,
-        marker: reviewSummaryMarker(input.reviewId, route.headSha),
-        body: renderReviewSummary(decision, forgeFindings, findingIssues),
-        ...(input.signal ? { signal: input.signal } : {}),
-      });
+      const findingIssues =
+        input.publishFindingIssues === false
+          ? {}
+          : await publishReviewFindingIssues({
+              github: this.#github,
+              pullNumber: route.pullNumber,
+              link: {
+                forgeRunId: input.reviewId,
+                ...(input.issueNumber === undefined
+                  ? {}
+                  : { issueNumber: input.issueNumber }),
+                repository: input.repository,
+              },
+              result: {
+                review: { headSha: route.headSha, findings: forgeFindings },
+              },
+              ...(input.signal ? { signal: input.signal } : {}),
+            });
+      if (input.publishFindingIssues !== false)
+        await this.#github.postPullArtifact({
+          pullNumber: route.pullNumber,
+          marker: reviewSummaryMarker(input.reviewId, route.headSha),
+          body: renderReviewSummary(decision, forgeFindings, findingIssues),
+          ...(input.signal ? { signal: input.signal } : {}),
+        });
       if (mode === "staging") {
         const marker = passed
           ? `<!-- FORGE:GATE_PASS id=${input.reviewId} head=${route.headSha} -->`
@@ -705,7 +714,25 @@ export class ReviewPrCoordinator {
         route.headSha,
         input.roster.reviewers,
       );
+      const commentRunId = input.reviewerCommentRunId ?? input.reviewId;
+      const pullComments = await this.#github.getComments(
+        route.pullNumber,
+        input.signal,
+      );
       for (const result of normalized.results) {
+        if (
+          !pullComments.some((body) =>
+            reviewerCommentMatchesResult(
+              body,
+              result,
+              requestedRound,
+              commentRunId,
+            ),
+          )
+        )
+          throw new Error(
+            `Reviewer ${result.reviewer} did not publish its complete exact-head comment.`,
+          );
         const check: VerificationResult = {
           name: `reviewer:${result.reviewer}`,
           required: true,
@@ -717,17 +744,6 @@ export class ReviewPrCoordinator {
           payload: { round: requestedRound, check },
           idempotencyKey: `check:reviewer:${requestedRound}:${stableKey(result.reviewer)}`,
           message: `Record reviewer ${result.reviewer} for ${input.reviewId}`,
-          ...(input.signal ? { signal: input.signal } : {}),
-        });
-        await this.#github.postPullArtifact({
-          pullNumber: route.pullNumber,
-          marker: reviewerMarker(
-            input.reviewId,
-            result.reviewer,
-            requestedRound,
-            route.headSha,
-          ),
-          body: renderReviewerResult(result),
           ...(input.signal ? { signal: input.signal } : {}),
         });
       }
@@ -1545,15 +1561,6 @@ function reviewRouteMarker(
   return `<!-- FORGE:REVIEW_ROUTE id=${reviewId} pr=${route.pullNumber} head=${route.headSha} base=${route.baseSha} -->`;
 }
 
-function reviewerMarker(
-  reviewId: string,
-  reviewer: string,
-  round: number,
-  headSha: string,
-): string {
-  return `<!-- FORGE:REVIEW_AGENT id=${reviewId} reviewer=${reviewer} round=${round} head=${headSha} -->`;
-}
-
 function reviewSummaryMarker(reviewId: string, headSha: string): string {
   return `<!-- FORGE:REVIEW_SUMMARY id=${reviewId} head=${headSha} -->`;
 }
@@ -1565,22 +1572,6 @@ function renderReviewRoute(
   reviewers: readonly string[],
 ): string {
   return `## ForgeDock Review Route\n\n- Review: \`${reviewId}\`\n- Mode: \`${mode}\`\n- Head: \`${route.headRef}\` at \`${route.headSha}\`\n- Base: \`${route.baseRef}\` at \`${route.baseSha}\`\n- Required reviewers: ${reviewers.map((reviewer) => `\`${reviewer}\``).join(", ")}`;
-}
-
-function renderReviewerResult(result: ForgeReviewerResult): string {
-  const findings = result.findings.length
-    ? result.findings
-        .map(
-          (finding) =>
-            `- **${finding.id}** (${finding.confidence}/${finding.severity}) \`${finding.file}:${finding.line}\` — ${finding.summary}`,
-        )
-        .join("\n")
-    : "- No findings.";
-  const limitations = result.limitations.length
-    ? result.limitations.map((value) => `- ${value}`).join("\n")
-    : "- None.";
-  const evidence = result.evidence.map((value) => `- ${value}`).join("\n");
-  return `## ${result.reviewer}\n\n**Verdict**: \`${result.verdict}\`\n**Reviewed head**: \`${result.headSha}\`\n\n### Qualitative Summary\n\n${result.summary}\n\n### Verified Behaviors\n\n${evidence}\n\n### Findings\n\n${findings}\n\n### Residual Risks\n\n${limitations}`;
 }
 
 function renderStagingGate(

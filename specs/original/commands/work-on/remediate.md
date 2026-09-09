@@ -6,8 +6,10 @@ description: Fix current-head blocking review findings cohesively and run scoped
 
 # Work On: Remediate
 
-Run only when the current reviewed head has confirmed patch-caused blocking findings that
-are fixable inside the investigation scope. The same work-on agent remains the sole writer.
+Run only when the current reviewed head has parent-dispositioned, confirmed patch-caused
+blocking findings that are fixable inside the investigation scope. The same issue-specific
+work-on parent remains the sole semantic authority and writer for the remediation round. The
+same work-on agent remains the sole writer; reviewer children never edit source.
 
 ## Preconditions
 
@@ -23,8 +25,9 @@ are fixable inside the investigation scope. The same work-on agent remains the s
   round of edits/panels. Return to investigation once for read-only reassessment, then GATED
   with the unresolved contract and wake condition. Reassessment never resets the budget.
 
-A stale, advisory, possible, low/medium, pre-existing, or unrelated finding does not enter
-remediation. Keep valuable independent findings as non-blocking follow-ups.
+A stale, advisory, possible, pre-existing, out-of-scope, or unrelated finding does not enter
+remediation. Keep only independently valuable parent-dispositioned follow-ups as non-blocking
+follow-ups; do not create blocker issues.
 
 ## Scope reassessment
 
@@ -88,11 +91,12 @@ Publish at most one receipt for the new head:
 
 ## Scoped fresh re-review
 
-Invoke `forgedock-review-pr` with the new exact head. Use one correctness/general role
-(count an existing blocker-producing correctness role), the blocker-producing specialists,
-and security for executable changes. Provide prior findings, dispositions, remediated
-hunks, and executable regression evidence; keep the full current diff available. Add another
-specialist only when remediation materially changed that specialist's risk surface.
+Invoke the same parent-owned review route with the new exact head. Use one correctness/general role
+(count an existing blocker-producing correctness role), the blocker-producing specialists, and
+security for executable changes. Every fresh reviewer must publish its own bound comment.
+Provide prior findings, parent dispositions, remediated hunks, and executable regression evidence;
+keep the full current diff available. Add another specialist only when remediation materially
+changed that specialist's risk surface.
 
 Retain valid same-head roles and retry only missing/invalid roles. Re-review passes when no
 confirmed patch-caused blocker remains. Non-blocking follow-ups do not trigger another

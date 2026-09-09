@@ -3,6 +3,7 @@ import test from "node:test";
 
 import type { GitHubWorkflowAdapter } from "../../src/adapters/github-workflow.ts";
 import type { ForgeWorkOnResult } from "../../src/agents/contracts.ts";
+import { collateWorkOnReview } from "../../src/workflows/review-disposition.ts";
 import {
   reviewFindingAuthorityReason,
   reviewFindingFingerprint,
@@ -150,6 +151,61 @@ test("finding fingerprints remain stable across review heads and nearby lines", 
     },
   });
   assert.equal(first, second);
+});
+
+test("work-on issue publication receives only parent-classified follow-ups", async () => {
+  const fake = new FindingGitHubFake();
+  const blocker = {
+    ...result.review.findings[0]!,
+    id: "BLOCK-001",
+    confidence: "confirmed" as const,
+    severity: "high" as const,
+    reviewerBlockView: "blocking" as const,
+    reviewerBlockRationale: "The changed path reaches production callers.",
+    reviewerScope: "patch-caused" as const,
+    reviewerScopeRationale: "The changed path was introduced by this patch.",
+  };
+  const followUp = {
+    ...result.review.findings[0]!,
+    id: "FOLLOW-001",
+    line: 80,
+    confidence: "likely" as const,
+    severity: "low" as const,
+    reviewerBlockView: "advisory" as const,
+    reviewerBlockRationale: "The behavior is degraded but merge-safe.",
+    reviewerScope: "patch-caused" as const,
+    reviewerScopeRationale: "The behavior is in the changed path.",
+  };
+  const parent = collateWorkOnReview([
+    {
+      schema: "forgedock.reviewer-result/v1",
+      runId: "run-1",
+      reviewer: "forge-review-security",
+      headSha: "head-sha",
+      verdict: "findings",
+      summary: "reviewed",
+      evidence: ["evidence"],
+      findings: [blocker, followUp],
+      filesReviewed: ["src/example.ts"],
+      limitations: [],
+    },
+  ]);
+  const issueMap = await publishReviewFindingIssues({
+    github: fake as unknown as GitHubWorkflowAdapter,
+    pullNumber: 7,
+    link,
+    result: {
+      ...result,
+      review: { ...result.review, findings: parent.followUps },
+    },
+  });
+
+  assert.deepEqual(parent.blocking.map((entry) => entry.id), ["BLOCK-001"]);
+  assert.deepEqual(parent.followUps.map((entry) => entry.id), ["FOLLOW-001"]);
+  assert.deepEqual(Object.keys(issueMap), ["FOLLOW-001"]);
+  assert.equal(fake.issues.length, 1);
+  assert.match(fake.issues[0]?.body ?? "", /FOLLOW-001/);
+  assert.doesNotMatch(fake.issues[0]?.body ?? "", /BLOCK-001/);
 });
 
 test("every structured finding creates one deduplicated standalone issue", async () => {
