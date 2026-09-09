@@ -1,12 +1,19 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, writeFile, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import test from "node:test";
-const { prepareBatch } = await import(new URL("../../specs/helpers/dispatch.mjs", import.meta.url).href);
+const dispatch = await import(new URL("../../specs/helpers/dispatch.mjs", import.meta.url).href);
+const { prepareBatch } = dispatch;
+const installedForgeDockRoot = process.env.FORGEDOCK_PARENT_PACKAGE_ROOT;
+const installedPiSubagentsRoot = process.env.PI_SUBAGENTS_PARENT_PACKAGE_ROOT;
+if (!installedForgeDockRoot || !installedPiSubagentsRoot) throw new Error("FORGEDOCK_PARENT_PACKAGE_ROOT and PI_SUBAGENTS_PARENT_PACKAGE_ROOT must name installed parent packages for this authority test");
+const controlPlane = dispatch.createControlPlaneDescriptor({ forgeDockRoot: installedForgeDockRoot, piSubagentsRoot: installedPiSubagentsRoot });
 
 const exec = promisify(execFile);
 
@@ -26,7 +33,7 @@ test("documented child launch carries a prepared catalog absent from its clean t
     const bytes = JSON.stringify(catalog);
     await writeFile(snapshot, bytes, { mode: 0o400 });
     const digest = createHash("sha256").update(bytes).digest("hex");
-    const prepared = prepareBatch({ activeOwners: 1, launchAllowance: 8, requestStartedAt: "2026-01-01T00:00:00Z",
+    const prepared = prepareBatch({ activeOwners: 1, launchAllowance: 8, requestStartedAt: "2026-01-01T00:00:00Z", controlPlane,
       verification: { path: snapshot, sha256: digest }, issues: [{ number: 42, target: "staging", baseCwd: target, predecessors: [] }] }, join(root, "prepared"), target);
     const script = await readFile(prepared.request.workflowScriptPath, "utf8");
     const graph = JSON.parse(script.match(/^const issueGraph=(.+);$/m)![1]!);
