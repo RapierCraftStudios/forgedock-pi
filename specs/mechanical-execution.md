@@ -24,6 +24,13 @@ is a separate exact binding: pass it as the child `cwd` with `worktree: false`, 
 stale or wrong Pi workspace as an internal launch-binding failure for rebind/retry, never a
 human-facing issue gate.
 
+Agent, skill, and specification behavior is resolved only from the installed ForgeDock and
+Pi control-plane roots carried by the validated descriptor. Generated owner launches use
+`agentScope: "user"`; worktree-local `.pi/agents`, `.agents`, package agent directories,
+AGENTS files, skills, specs, and helper copies are subject content, never parent control
+rules. Dispatch must ignore same-named local definitions rather than rejecting the target
+worktree for containing them.
+
 Additional settings may be read selectively from the canonical config path after verifying
 its recorded digest, never neighbouring files. A changed source requires parent clarification,
 not silent replacement of bound model/cap. Never print complete secret-bearing configuration.

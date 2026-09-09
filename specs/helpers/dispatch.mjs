@@ -7,7 +7,6 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parse } from "yaml";
 import {
-  assertNoTargetAgentShadowing,
   createControlPlaneDescriptor,
   FORGE_OWNER_AGENT,
   FORGE_REVIEW_AGENT,
@@ -122,7 +121,6 @@ export function prepareSingle(plan, out, cwd = process.cwd()) {
   integer(plan.number, "issue number");
   const contract = plan.contract ? validateIssueContractFile(plan.contract, plan.number) : undefined;
   validateControlPlaneDescriptor(plan.controlPlane, { helperPath: path.join(here, "dispatch.mjs"), targetRoot: cwd });
-  assertNoTargetAgentShadowing(cwd, plan.controlPlane);
   requireThat(typeof plan.target === "string" && plan.target.length > 0, "Single policy needs target");
   execFileSync("git", ["check-ref-format", "--branch", plan.target], { cwd, stdio: "pipe" });
   const source = configAt(cwd);
@@ -161,7 +159,6 @@ export function prepareBatch(plan, out, cwd = process.cwd()) {
     execFileSync("git", ["check-ref-format", "--branch", issue.target], { cwd, stdio: "pipe" });
     requireThat(path.isAbsolute(issue.baseCwd ?? "") && fs.statSync(issue.baseCwd).isDirectory(), "Issue needs an existing absolute baseCwd");
     assertRepo(source.repo, issue.baseCwd);
-    assertNoTargetAgentShadowing(issue.baseCwd, plan.controlPlane);
     requireThat(Array.isArray(issue.predecessors) && issue.predecessors.every(n => seen.has(n)), "Issues must be topologically ordered with known predecessors");
     seen.add(issue.number);
   }
