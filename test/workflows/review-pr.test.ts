@@ -702,6 +702,16 @@ test("required capability rows bind identity and fail closed", () => {
     expected,
   );
   assert.equal(malformed.status, "failed", "malformed rows cannot be hidden by a zero count");
+  assert.equal(
+    testGateVerification(
+      "FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=0\n<!-- FORGE:TEST_GATE:RESULT=BLOCK -->\n<!-- FORGE:TEST_GATE:RESULT=PASS -->",
+      true,
+      { repository: "owner/repo", target: "staging", sourceHead: route.headSha, sourceTree: "tree-1" },
+      [],
+    ).status,
+    "failed",
+    "contradictory verdict markers must fail closed",
+  );
 });
 
 test("staging review carries every Phase 6.5 verdict into its gate", async () => {

@@ -205,7 +205,7 @@ export function evaluateReviewGate(input: ReviewGateInput): ReviewGateResult {
         );
         capabilityBlocked = true;
       } else if (
-        ["runtime", "integration", "e2e", "queue", "database", "browser", "credential"].includes(capability.type) &&
+        ["unit", "api", "runtime", "integration", "e2e", "queue", "database", "browser", "credential"].includes(capability.type) &&
         capability.proofKind !== "behavioral"
       ) {
         blocked.push(`Capability ${capability.id} lacks behavioral boundary proof.`);

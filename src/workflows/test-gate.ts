@@ -26,6 +26,8 @@ const CAPABILITY_TYPES = new Set([
   "manual",
 ]);
 const CAPABILITY_TYPES_REQUIRING_BOUNDARY = new Set([
+  "unit",
+  "api",
   "runtime",
   "integration",
   "e2e",
@@ -46,8 +48,9 @@ const CAPABILITY_STATES = new Set<VerificationCapabilityState>([
 /** Parse the authoritative result and its structured capability rows. */
 export function parseTestGateResult(value: unknown): TestGateResult | undefined {
   if (typeof value !== "string") return undefined;
-  const matches = [...value.matchAll(/FORGE:TEST_GATE:RESULT=(BLOCK|PASS|SKIP)/g)];
-  const verdict = matches.at(-1)?.[1] as TestGateVerdict | undefined;
+  const matches = [...value.matchAll(/^<!-- FORGE:TEST_GATE:RESULT=(BLOCK|PASS|SKIP) -->$/gm)];
+  if (matches.length !== 1) return undefined;
+  const verdict = matches[0]?.[1] as TestGateVerdict | undefined;
   if (!verdict) return undefined;
 
   const capabilities: VerificationCapability[] = [];
@@ -57,6 +60,7 @@ export function parseTestGateResult(value: unknown): TestGateResult | undefined 
   for (const match of value.matchAll(/^FORGE:TEST_GATE:CAPABILITY=(\{.*\})$/gm)) {
     let parsed: unknown;
     try {
+      if (hasDuplicateJsonKeys(match[1]!)) return undefined;
       parsed = JSON.parse(match[1]!);
     } catch {
       return undefined;
@@ -115,14 +119,21 @@ export function testGateVerification(
       result.capabilities,
     );
   if (expectedCapabilities) {
+    if (new Set(expectedCapabilities.map((capability) => capability.id)).size !== expectedCapabilities.length)
+      return failedGate("Bound capability contract contains duplicate IDs.");
     const expected = new Map(expectedCapabilities.map((capability) => [capability.id, capability]));
     const actual = new Map(result.capabilities.map((capability) => [capability.id, capability]));
-    if (actual.size !== expected.size || [...expected].some(([id, capability]) => {
+    const missing = [...expected].filter(([id, capability]) => {
       const row = actual.get(id);
       return !row || row.criterionId !== capability.criterionId ||
         row.criterionTextHash !== capability.criterionTextHash || row.required !== capability.required;
-    }))
-      return failedGate("Capability report does not match the bound criterion contract.", result.capabilities);
+    });
+    if (actual.size !== expected.size || missing.length > 0) {
+      const details = missing.map(([id, capability]) =>
+        `capability=${id} criterion=${capability.criterionId} textHash=${capability.criterionTextHash} source=${expectedIdentity?.repository ?? "bound-repository"}@${expectedIdentity?.sourceHead ?? "bound-head"} target=${expectedIdentity?.target ?? "bound-target"} tree=${expectedIdentity?.sourceTree ?? "bound-tree"} boundary=unbound command=unbound state=MISSING wake=emit the bound capability row`,
+      );
+      return failedGate("Capability report does not match the bound criterion contract.", result.capabilities, details);
+    }
   }
   const identityMismatch = expectedIdentity
     ? result.capabilities.filter(
@@ -162,6 +173,7 @@ export function testGateVerification(
       required: true,
       status: "passed",
       ...(result.capabilities[0] ? { capability: result.capabilities[0], capabilities: result.capabilities } : {}),
+      ...(result.capabilities.length ? { evidence: capabilityEvidence(result.capabilities) } : {}),
     };
   if (result.verdict === "SKIP") {
     const optional = result.capabilities.filter((capability) => !capability.required);
@@ -170,6 +182,7 @@ export function testGateVerification(
       required: false,
       status: "skipped",
       ...(optional[0] ? { capability: optional[0], capabilities: result.capabilities } : {}),
+      ...(result.capabilities.length ? { evidence: capabilityEvidence(result.capabilities) } : {}),
     };
   }
   return failedGate(result.reason ?? "Test-gate returned BLOCK.", result.capabilities);
@@ -178,6 +191,7 @@ export function testGateVerification(
 function failedGate(
   reason: string,
   capabilities: readonly VerificationCapability[] = [],
+  extraEvidence: readonly string[] = [],
 ): VerificationResult {
   return {
     name: "test-gate",
@@ -187,12 +201,25 @@ function failedGate(
     ...(capabilities[0] ? { capability: capabilities[0], capabilities } : {}),
     evidence: [
       reason,
+      ...extraEvidence,
       ...capabilities.map(
         (capability) =>
           `capability=${capability.id} criterion=${capability.criterionId} textHash=${capability.criterionTextHash} source=${capability.repository}@${capability.sourceHead} target=${capability.target} tree=${capability.sourceTree} boundary=${capability.boundary} command=${capability.command} state=${capability.state} wake=${capability.wake}`,
       ),
     ],
   };
+}
+
+function hasDuplicateJsonKeys(value: string): boolean {
+  const keys = [...value.matchAll(/"([^"\\]+)"\s*:/g)].map((match) => match[1]);
+  return new Set(keys).size !== keys.length;
+}
+
+function capabilityEvidence(capabilities: readonly VerificationCapability[]): string[] {
+  return capabilities.map(
+    (capability) =>
+      `capability=${capability.id} criterion=${capability.criterionId} textHash=${capability.criterionTextHash} source=${capability.repository}@${capability.sourceHead} target=${capability.target} tree=${capability.sourceTree} boundary=${capability.boundary} command=${capability.command} state=${capability.state} proofKind=${capability.proofKind} wake=${capability.wake}`,
+  );
 }
 
 function parseCapability(value: unknown): VerificationCapability | undefined {

@@ -1454,6 +1454,9 @@ function assertRequest(input: ReviewPrRequest): void {
     throw new TypeError("Review roster cannot be empty.");
   if (new Set(input.roster.reviewers).size !== input.roster.reviewers.length)
     throw new TypeError("Review roster cannot contain duplicates.");
+  if (input.mode === "staging" &&
+    (!input.sourceTree || input.requiredCapabilities === undefined))
+    throw new TypeError("Staging review requires bound test-gate output, source tree, and expected capabilities.");
 }
 
 const THOROUGH_REVIEWERS = [
