@@ -236,8 +236,11 @@ function targetAgentRoots(targetRoot) {
 export function assertNoTargetAgentShadowing(targetRoot, controlPlane) {
   const names = new Set([FORGE_OWNER_AGENT, FORGE_REVIEW_AGENT]);
   const expected = new Set([controlPlane.forgeDock.agents.owner.path]);
+  const targetOwner = path.resolve(targetRoot, "agents/forgedock-work-on-coordinator.md");
+  const ownerSha = controlPlane.forgeDock.agents.owner.sha256;
   for (const root of targetAgentRoots(targetRoot)) for (const file of walk(root)) {
     if (expected.has(file)) continue;
+    if (file === targetOwner && ownerSha === sha(fs.readFileSync(file))) continue;
     if (agentNames(file).some(name => names.has(name))) throw new Error(`Target agent definition shadows the parent control plane: ${file}`);
   }
 }
