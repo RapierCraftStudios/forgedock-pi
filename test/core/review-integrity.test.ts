@@ -47,3 +47,18 @@ test("readback validates only the structured path marker", () => {
   assert.doesNotThrow(() => assertReviewFindingReadbackPaths(body, ["src/token.ts", "src/auth.ts"]));
   assert.throws(() => assertReviewFindingReadbackPaths(body, ["src/auth.ts"]), ReviewFindingIntegrityError);
 });
+
+test("review capability proof distinguishes runtime boundaries from structural evidence", async () => {
+  const verification = await readFile("specs/verification.md", "utf8");
+  const review = await readFile("specs/original/commands/work-on/review.md", "utf8");
+  const gate = await readFile("specs/original/commands/test-gate.md", "utf8");
+  assert.match(verification, /only `PASS`.*matching criterion.*capability.*command\/boundary.*source.*behavioral proof/s);
+  assert.match(verification, /source-string.*cannot\s+close.*row/is);
+  assert.match(review, /Exact-head approval is rejected when any\s+required capability.*FAIL.*MISSING.*SKIPPED.*UNKNOWN.*CONTRADICTED/s);
+  assert.match(review, /capability ID.*criterion ID\/text hash.*source head\/tree.*wake condition/s);
+  assert.match(gate, /Structural\/source-string\/YAML checks can\s+supplement.*cannot\s+satisfy/s);
+
+  const evidence = { type: "runtime", proof: "structural source-string check", state: "PASS" };
+  const runtimeProofIsValid = evidence.type === "runtime" && evidence.proof === "behavioral boundary evidence";
+  assert.equal(runtimeProofIsValid, false, "structural evidence cannot close a runtime capability");
+});

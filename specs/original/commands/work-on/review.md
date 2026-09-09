@@ -14,7 +14,9 @@ fresh reviewer panel may be nested.
 ## Prepare or reuse the PR
 
 1. Reuse the retained build head, target, changed files, verification and published decision
-   chain. Require criterion-to-implementation/test coverage; do not delegate known gaps.
+   chain. Require criterion-to-implementation/test and capability-to-boundary coverage; do not
+delegate known gaps. Reject review preparation when required capability binding or source
+identity is missing, stale, or unresolved.
 2. Check once for an existing open PR from the owned branch.
 3. Create one PR when absent; otherwise update the existing PR body only when required.
 4. The PR body states issue, intent, changed behavior, verification, and residual risks.
@@ -50,6 +52,15 @@ concurrency rows explicitly, and verify each row's concrete counterexample or be
 report an omitted alternate caller or transitive dependency by name. String-presence checks alone
 cannot close runtime rows. A reachable omission is `CONTRACT_GAP`,
 not an advisory: remediation must supersede the contract and re-plan before editing.
+
+Review also consumes the bound required-capability rows from `specs/verification.md`, retaining
+capability ID/type, exact criterion ID/text hash, named boundary/command, source head/tree,
+state, behavioral evidence, and wake condition. Exact-head approval is rejected when any
+required capability is `FAIL`, `MISSING`, `SKIPPED`, `UNKNOWN`, or `CONTRADICTED`, or when the
+row is absent/malformed. Structural/source-string evidence never satisfies a runtime,
+integration, e2e, queue, database, browser, or credential-bound row. The review report names
+the exact unresolved capability and criterion, source identity, observed state, and wake
+condition; optional skips remain explicit and non-blocking.
 
 ## Result routing
 

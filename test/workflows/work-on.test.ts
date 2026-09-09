@@ -38,6 +38,33 @@ import {
   workflowStageForRecoveredNodeTransition,
 } from "../../src/workflows/work-on.ts";
 
+test("required proof capabilities fail closed across build and review admission", async () => {
+  const verification = await readFile("specs/verification.md", "utf8");
+  const build = await readFile("specs/original/commands/work-on/build.md", "utf8");
+  const review = await readFile("specs/original/commands/work-on/review.md", "utf8");
+  const gate = await readFile("specs/original/commands/test-gate.md", "utf8");
+
+  assert.match(verification, /bound issue contract.*only source.*required verification capabilities/is);
+  assert.match(verification, /criterion.*text hash.*boundary.*source.*command.*required.*state.*proof.*wake/s);
+  for (const state of ["FAIL", "MISSING", "SKIPPED", "UNKNOWN", "CONTRADICTED"]) {
+    assert.ok(verification.includes("`" + state + "`"), state);
+    assert.match(build, new RegExp(`${state}`));
+    assert.match(review, new RegExp(`${state}`));
+  }
+  assert.match(build, /Before commit or PR preparation, block the lane/);
+  assert.match(review, /Exact-head approval is rejected/);
+  assert.match(gate, /missing environment.*BLOCK, not SKIP/i);
+  assert.match(gate, /CAPABILITY_BLOCK.*required row is unresolved/is);
+  assert.match(gate, /override phrases cannot authorize this gap/);
+  assert.match(gate, /report containing capability ID.*criterion\s+ID\/text hash.*source identity.*wake condition/is);
+
+  const required = (state: string) => state === "PASS";
+  assert.equal(required("PASS"), true);
+  for (const state of ["MISSING", "SKIPPED", "UNKNOWN", "CONTRADICTED"]) {
+    assert.equal(required(state), false, `${state} must not pass`);
+  }
+});
+
 test("closure matrix admission catches omitted alternate callers and transitive dependencies", async () => {
   const investigate = await readFile("specs/original/commands/work-on/investigate.md", "utf8");
   const build = await readFile("specs/original/commands/work-on/build.md", "utf8");

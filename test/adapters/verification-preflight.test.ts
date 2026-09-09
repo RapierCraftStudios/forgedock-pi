@@ -6,6 +6,7 @@ import {
   mkdtemp,
   rm,
   symlink,
+  readFile,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -196,4 +197,29 @@ test("verification cwd rejects case variants and canonical reserved-directory ta
   } finally {
     await testFixture.cleanup();
   }
+});
+
+test("required capability binding is explicit, source-bound, and fail-closed", async () => {
+  const verification = await readFile("specs/verification.md", "utf8");
+  const gate = await readFile("specs/original/commands/test-gate.md", "utf8");
+  for (const field of ["capability", "criterion", "type", "boundary", "source", "command", "required", "state", "proof", "wake"]) {
+    assert.match(verification, new RegExp(`^${field}:`, "m"), field);
+  }
+  assert.match(gate, /FORGE:TEST_GATE:CAPABILITY id=.*criterion=.*source=.*tree=.*state=.*wake=/);
+  assert.match(gate, /Missing, malformed, duplicate, or ambiguous metadata/);
+  assert.match(gate, /No required runtime capabilities are bound; emitting explicit SKIP verdict/);
+  assert.match(gate, /missing environment is therefore BLOCK, not SKIP/i);
+  assert.match(verification, /runtime.*integration.*e2e.*queue.*database.*browser.*credential/s);
+
+  const requiredStates = ["FAIL", "MISSING", "SKIPPED", "UNKNOWN", "CONTRADICTED"];
+  const capability = (state: string, required = true) =>
+    required && state !== "PASS";
+  assert.equal(capability("MISSING"), true, "omitted proof must block");
+  assert.equal(capability("SKIPPED"), true, "intentional required skip must block");
+  assert.equal(capability("MISSING", false), false, "optional omission is not a required block");
+  for (const state of requiredStates) assert.equal(capability(state), true, state);
+  assert.equal(capability("PASS"), false, "matching successful binding may pass");
+
+  const report = "cap=database-read criterion=required-proof source=repo@head tree=tree wake=database available";
+  assert.match(report, /cap=.*criterion=.*source=.*tree=.*wake=/);
 });

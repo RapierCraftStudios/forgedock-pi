@@ -70,6 +70,42 @@ remain dispatcher-owned and separate from issue-source commits; reconcile them a
 relevant merge. Standalone work-on uses its authorized local configuration instead. Preserve
 permissions and unrelated values; never print a whole secret-bearing config.
 
+## Required capability binding
+
+The bound issue contract is the only source for required verification capabilities. Before any
+command or proof result is admitted, compile each criterion into a capability row with this
+machine-readable shape:
+
+```text
+capability: <stable capability id>
+criterion: <exact bound criterion id and text hash>
+type: unit | api | runtime | integration | e2e | queue | database | browser | credential | manual
+boundary: <named executable producer/consumer or external system>
+source: <exact repository, target, source head, and tested tree identity>
+command: <bound catalog command or explicit external boundary>
+required: true | false
+state: PASS | FAIL | MISSING | SKIPPED | UNKNOWN | CONTRADICTED
+proof: <behavioral boundary evidence; structural evidence is explicitly typed structural>
+wake: <exact prerequisite or capability needed when state is unresolved>
+```
+
+Annotations such as `[type:e2e]`, `[type:database]`, `[type:queue]`, `[type:browser]`, and
+`[type:credential]` bind the corresponding capability class; contract metadata may provide the
+same class without annotations. A missing, malformed, duplicate, or ambiguous binding is a
+required capability failure, not a manual or optional row. `runtime`, `integration`, `e2e`,
+`queue`, `database`, `browser`, and `credential` rows require evidence from that named boundary.
+A source-string, YAML, prompt, import, or other structural check is supplementary and can never
+close such a row. `unit` and `api` rows likewise need the actual selected executable check, not
+only a catalog entry.
+
+For required rows, only `PASS` with matching criterion, capability, command/boundary, source,
+and behavioral proof is admissible. `FAIL`, `MISSING`, `SKIPPED`, `UNKNOWN`, and `CONTRADICTED`
+are fail-closed and block build, PR preparation, and exact-head approval. Optional `SKIPPED`
+remains visible and does not become a required pass. Every blocked report must include the exact
+capability ID, criterion ID/text hash, source head/tree, observed state, boundary or command, and
+wake condition. A capability may be retried only after the named wake condition is satisfied;
+reusing a result from another source identity, boundary, or invocation mode is invalid.
+
 ## Select from the actual change
 
 - Start with the changed behavior, paths, imports/callers, production entrypoint and the

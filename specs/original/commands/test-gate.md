@@ -78,24 +78,17 @@ If `--prs` is absent, Phase 0 computes the bundle.
 ## Missing-Config Guard (MANDATORY — runs before all phases)
 
 ```bash
-# If integration_tests is empty/absent, exit ADVISORY — never crash
+# If integration_tests is empty/absent, do not hide a required capability gap.
 TEST_COUNT=$(yq '.verification.integration_tests | length' "$CONFIG_FILE" 2>/dev/null || echo 0)
 if [ "${TEST_COUNT:-0}" -eq 0 ]; then
+  REQUIRED_CAPABILITY_COUNT=$(count_bound_required_capabilities)
+  if [ "${REQUIRED_CAPABILITY_COUNT:-0}" -gt 0 ]; then
+    emit_missing_capability_reports "integration test capability" "integration_tests is not configured" "configure the named required boundary and rerun"
+    echo "<!-- FORGE:TEST_GATE:RESULT=BLOCK -->"
+    exit 1
+  fi
   echo "ADVISORY: verification.integration_tests is not configured in $CONFIG_FILE."
-  echo "No tests to run. Emitting SKIP verdict."
-  echo ""
-  echo "To enable /test-gate, add to forge.yaml:"
-  echo "  verification:"
-  echo "    integration_tests:"
-  echo "      - cluster: \"api\""
-  echo "        command: \"pytest tests/integration/ -q --tb=short\""
-  echo "        working_dir: \".\""
-  echo "    test_services:"
-  echo "      api: \"your-api-container-name\""
-  echo "    test_gate:"
-  echo "      posture: \"blocking\""
-  echo "      override_phrase: \"OVERRIDE: shipping with test failures —\""
-  # Emit structured SKIP verdict and exit
+  echo "No required runtime capabilities are bound; emitting explicit SKIP verdict."
   echo "<!-- FORGE:TEST_GATE:SKIP|reason=no-tests-configured -->"
   echo "<!-- FORGE:TEST_GATE:RESULT=SKIP -->"
   exit 0
@@ -112,6 +105,40 @@ fi
 3. **0C** — no runtime-testable acceptance criteria → SKIP (all-manual or no criteria)
 
 Every SKIP emits both a machine-readable verdict (`FORGE:TEST_GATE:RESULT=SKIP`) and a logged reason annotation (`FORGE:TEST_GATE:SKIP|reason=...`) so the caller and pipeline-health see a deliberate skip, not a silent gap.
+
+### Required capability compilation (before triage)
+
+Compile every acceptance criterion from the bound issue contract before provisioning or
+classifying a cluster. The compiler emits one stable capability row per criterion using the
+exact criterion ID/text hash, source repository/target/head/tree identity, named boundary or
+catalog command, required flag, proof type, state, and wake condition. An annotation such as
+`[type:runtime]`, `[type:integration]`, `[type:e2e]`, `[type:queue]`, `[type:database]`,
+`[type:browser]`, or `[type:credential]` selects that required boundary class; contract metadata
+is authoritative when present. Missing, malformed, duplicate, or ambiguous metadata is a
+`MISSING` required capability, never an inferred manual criterion.
+
+Machine-readable output for every compiled row is:
+
+```text
+FORGE:TEST_GATE:CAPABILITY id=<capability-id> criterion=<criterion-id> type=<type> boundary=<boundary> source=<repo>@<head> tree=<tree> required=<true|false> state=<state> wake=<condition>
+```
+
+A required row is admissible only when `state=PASS` and its behavioral evidence was produced by
+the named boundary at the matching source/tree identity. Structural/source-string/YAML checks can
+supplement evidence but cannot satisfy `runtime`, `integration`, `e2e`, `queue`, `database`,
+`browser`, or `credential` rows. Required `FAIL`, `MISSING`, `SKIPPED`, `UNKNOWN`, and
+`CONTRADICTED` rows block the gate and emit an exact report containing capability ID, criterion
+ID/text hash, source identity, observed state, boundary/command, and wake condition. Optional
+`SKIPPED` rows remain explicit. A missing environment is therefore BLOCK, not SKIP; the wake
+condition names the unavailable capability and the retry may occur only after it is available.
+
+Compilation is deterministic: read criterion IDs/text hashes and contract metadata from the bound
+issue contract; apply an explicit type annotation first, then an explicitly permitted generic
+inference only for unannotated non-required criteria; resolve the type to the configured boundary
+or command; and initialize the row as `MISSING` until matching behavioral evidence is read back.
+Do not initialize a required row from a green aggregate, a source-presence assertion, or a
+catalog entry alone. A report with an absent capability ID, criterion ID, source identity, or
+wake condition is malformed and remains `BLOCK`.
 
 ### 0A: Resolve bundle PRs
 
@@ -161,7 +188,11 @@ echo "$EXECUTABLE_FILES"
 
 ### 0C: Criteria pre-check — test-or-skip before provisioning
 
-Check whether any solved issue in the bundle carries at least one runtime-testable acceptance criterion (`[type:api]`, `[type:unit]`, or `[type:e2e]`, or an unannotated criterion that does not match `[type:manual]`). Skip provisioning entirely if all criteria are manual-only or no criteria exist.
+Check the compiled capability rows, not raw issue prose, before provisioning. Skip provisioning
+only when every row is explicitly `manual` or there are no criteria. Any required capability
+whose boundary is unavailable is `BLOCK` with its exact capability/criterion/source/wake report;
+it is never downgraded to the no-tests `SKIP` path. Structural-only rows do not satisfy runtime
+capabilities.
 
 ```bash
 echo "=== Phase 0C: Criteria pre-check ==="
@@ -286,7 +317,7 @@ echo "$COLLATED_CRITERIA"
 
 ## Phase 2: Classify — Bucket Criteria by Test Type
 
-Bucket each acceptance criterion by `[type:api|unit|e2e|manual]` annotation. Regex fallback when unannotated.
+Bucket each acceptance criterion by its compiled capability row and `[type:api|unit|runtime|integration|e2e|queue|database|browser|credential|manual]` annotation. Contract metadata wins; regex inference is permitted only for an explicitly unannotated, non-required criterion and must be recorded as inferred. Never infer away a missing required capability.
 
 ```bash
 echo "=== Phase 2: Classifying criteria by test type ==="
@@ -626,7 +657,8 @@ echo "Passing clusters: ${PASSING_CLUSTERS:-none}"
 echo "All configured clusters: ${ALL_CLUSTERS:-none}"
 echo ""
 
-# Helper: classify a single criterion line into one of four buckets:
+# Helper: classify a single criterion line into one of the capability buckets. The returned row
+# must retain criterion identity, source identity, required state, and wake condition:
 #   covered, uncovered, untestable, manual
 # Arguments: $1 = criterion text, $2 = source_issue, $3 = source_pr
 classify_criterion() {
@@ -883,12 +915,20 @@ BATCH_FAILURE_COUNT=$(echo -e "$BATCH_FAILURES" | grep -c '\S' || echo 0)
 TOTAL_PASS=$(echo -e "$CLUSTER_RESULTS" | grep -c "PASS" || echo 0)
 TOTAL_FAIL=$(echo -e "$CLUSTER_RESULTS" | grep -c "FAIL" || echo 0)
 
+# CAPABILITY_BLOCK is set during bound capability compilation/proof readback whenever a
+# required row is unresolved or its source/boundary identity does not match.
+CAPABILITY_BLOCK="${CAPABILITY_BLOCK:-false}"
+CAPABILITY_BLOCK_COUNT="${CAPABILITY_BLOCK_COUNT:-0}"
 # COVERAGE_BLOCK is set by Phase 6 when uncovered runtime-testable criteria exist
 # and posture is blocking. It is initialized to false if Phase 6 found no gaps.
 COVERAGE_BLOCK="${COVERAGE_BLOCK:-false}"
 UNCOVERED_BLOCK_COUNT="${UNCOVERED_BLOCK_COUNT:-0}"
 
-if [ "${BATCH_FAILURE_COUNT}" -gt 0 ]; then
+if [ "$CAPABILITY_BLOCK" = "true" ]; then
+  VERDICT="BLOCK"
+  VERDICT_REASON="${CAPABILITY_BLOCK_COUNT} required verification capability/capabilities unresolved. Required proof cannot be overridden or downgraded to SKIP."
+  echo -e "${CAPABILITY_RESULTS:-none}"
+elif [ "${BATCH_FAILURE_COUNT}" -gt 0 ]; then
   VERDICT="BLOCK"
   VERDICT_REASON="${BATCH_FAILURE_COUNT} cluster(s) failed with batch-introduced regressions: $(echo -e "$BATCH_FAILURES" | tr '\n' ', ' | sed 's/,\s*$//')"
 elif [ "$COVERAGE_BLOCK" = "true" ]; then
@@ -919,6 +959,8 @@ echo -e "$CLUSTER_RESULTS"
 echo ""
 echo "Adequacy summary:"
 echo "  Covered: ${COVERED_COUNT:-0} | Uncovered: ${UNCOVERED_COUNT:-0} | Untestable-as-written: ${UNTESTABLE_COUNT:-0} | Manual: ${MANUAL_COUNT:-0}"
+echo "Capability summary:"
+echo -e "${CAPABILITY_RESULTS:-none}"
 echo "============================================="
 
 # Emit machine-readable verdict marker (consumed by review-pr-staging Phase 6.5)
@@ -927,7 +969,11 @@ echo "<!-- FORGE:TEST_GATE:RESULT=${VERDICT} -->"
 
 # Handle BLOCK verdict according to posture
 if [ "$VERDICT" = "BLOCK" ]; then
-  if [ "$GATE_POSTURE" = "advisory" ]; then
+  if [ "$CAPABILITY_BLOCK" = "true" ]; then
+    echo "Required capability proof is fail-closed; override phrases cannot authorize this gap."
+    echo "TEST GATE: BLOCK DEPLOY"
+    exit 1
+  elif [ "$GATE_POSTURE" = "advisory" ]; then
     echo ""
     echo "ADVISORY posture: BLOCK verdict surfaced but deploy is NOT prevented."
     echo "Switch to posture: blocking in forge.yaml to make this gate enforce."
@@ -980,4 +1026,4 @@ VERDICT=$(gh pr view "$PR_NUMBER" ${GH_FLAG} --json comments \
 |---------|---------|
 | `PASS` | All clusters passed (or all failures are pre-existing). Deploy may proceed. |
 | `BLOCK` | Batch-introduced failures detected. Deploy blocked (blocking posture) or warned (advisory posture). |
-| `SKIP` | No tests configured, no executable changes, or manual-only criteria. Deploy proceeds without test verification. |
+| `SKIP` | No tests configured, no executable changes, or explicitly manual-only criteria. Required capability gaps never use this result. |

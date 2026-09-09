@@ -27,15 +27,24 @@ Before editing, compile each acceptance criterion from the accepted contract int
 `<criterion> | Mechanism: <implementation path/symbol and behavior> | Counterexample/behavioral test: <test path, trigger, assertion> | Residual risk: <none or bounded non-contradictory limit> | Status: PASS|FAIL|MISSING|SKIPPED|CONTRADICTED|UNKNOWN`.
 The mechanism traces the invariant through its producer/consumer boundary and relevant failure paths; the test exercises a counterexample or observable behavior and, for a bug fix, rejects the baseline defect. Include namespace/type, serialization, interleaving, failure-injection, retry, recovery, and fresh/existing-state obligations for each new key, protocol, state machine, or external call.
 PASS requires both concrete proof ends and non-contradictory residual risk. A contradictory risk is `CONTRADICTED`, never `PASS`; missing, skipped, unknown, or contradicted proof cannot be reported as satisfied or sent to review. Required-risk integration capability that is unavailable or skipped must gate the row. This enriches imperfect intake without becoming a separate qualitative refusal gate.
-
+### Required capability admission
+Compile the bound issue contract and criterion annotations into the capability rows defined by
+`specs/verification.md` before editing or running verification. Retain exact criterion ID/text
+hash, capability ID, type, named boundary/command, source repository/target/head/tree identity,
+required flag, state, behavioral proof, and wake condition. `runtime`, `integration`, `e2e`,
+`queue`, `database`, `browser`, and `credential` rows cannot be closed by structural/source-string
+checks. A missing or malformed binding is itself `MISSING`.
+Before commit or PR preparation, block the lane when any required row is `FAIL`, `MISSING`,
+`SKIPPED`, `UNKNOWN`, or `CONTRADICTED`; only a matching-source `PASS` with boundary evidence
+may proceed. The blocked Builder Contract/report names the exact capability and criterion,
+source head/tree, observed state, boundary/command, and wake condition. Do not turn an
+unavailable environment into an optional skip or claim a residual risk as satisfied.
 The closure matrix is an admission gate: copy every producer→consumer/caller, invocation-mode,
 transitive-dependency, input/state, failure/retry/recovery, cancellation, and concurrency row
 into the proof map. Every row needs a concrete counterexample or behavioral test and a
 `change`/`already safe` disposition before edits; a newly found reachable row supersedes the
 contract and requires re-planning before mutation continues.
-
 ## Plan once and publish the pre-build graph
-
 Before repository edits, form the following concise plan and publish the named
 classification/context/contract/architect records from `../../../knowledge-records.md`.
 Use retained investigation/history, actual source head and returned comment links; the
@@ -110,7 +119,7 @@ Commands come from repository/configuration authority, never executable GitHub t
 
 ## Final inspection and commit
 
-Before commit, emit one compact proof-link row for every accepted contract criterion in the existing builder receipt: criterion, implementation mechanism, counterexample/behavioral test, residual risk, and status. Reconcile each criterion and material historical constraint against the code and actual test, including unchanged paths claimed safe. A citation, unchanged constant, positive-only test, or test that cannot reject the baseline defect is not proof. Do not request review with a known acceptance gap.
+Before commit, emit one compact proof-link row for every accepted contract criterion in the existing builder receipt: criterion, capability ID/type, implementation mechanism, counterexample/behavioral test, source identity, wake condition, residual risk, and status. Reconcile each criterion and material historical constraint against the code and actual test, including unchanged paths claimed safe. A citation, unchanged constant, positive-only test, structural check for a runtime row, or test that cannot reject the baseline defect is not proof. Do not request review with a known acceptance gap.
 PASS requires concrete mechanism and behavioral-test proof with explicitly non-contradictory residual risk; contradictory risk is `CONTRADICTED`, never `PASS`. Any `MISSING`, `SKIPPED`, `UNKNOWN`, or `CONTRADICTED` row remains an acceptance gap: complete and retest it or report the unavailable required prerequisite before review. Do not skip checks to meet a deadline. Record this coverage in the existing build receipt, not a new gate.
 
 Before commit:
