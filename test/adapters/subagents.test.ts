@@ -246,8 +246,10 @@ test("RPC work-on launch binds the nested-review runtime contract", async () => 
   );
   assert.match(spawn.params.task, /Call forge_diff in patch mode first/);
   assert.match(spawn.params.task, /call forge_finalize_reviewer/);
-  assert.match(spawn.params.task, /one compact proof link for every accepted criterion/);
-  assert.match(spawn.params.task, /implementation mechanism plus counterexample\/behavioral test plus residual risk/);
+  assert.match(spawn.params.task, /observable outcome, exact in-scope behavior and files/);
+  assert.match(spawn.params.task, /smallest behavioral test or proof/);
+  assert.match(spawn.params.task, /ambiguous or lacks credible proof.*stop before editing.*request clarification/s);
+  assert.match(spawn.params.task, /ownership, scheduling, worktree provisioning, hashes\/digests, lineage/);
   assert.match(spawn.params.task, /residual risk that contradicts its invariant is CONTRADICTED, never PASS/);
   assert.match(spawn.params.task, /const results = await runs\.all/);
   assert.match(spawn.params.task, /return results/);
@@ -566,8 +568,10 @@ test("bounded implementation launch binds the durable builder contract", async (
   );
   assert.match(spawn.params.task, new RegExp(builderContract.contractHash));
   assert.match(spawn.params.task, /Allowed paths: src\/\*\*, test\/\*\*/);
-  assert.match(spawn.params.task, /one compact proof link per accepted criterion/);
-  assert.match(spawn.params.task, /implementation mechanism plus counterexample\/behavioral test plus residual risk/);
+  assert.match(spawn.params.task, /objective is the observable outcome/);
+  assert.match(spawn.params.task, /exact in-scope files/);
+  assert.match(spawn.params.task, /smallest behavioral test or justified proof/);
+  assert.match(spawn.params.task, /ownership, scheduling, worktree provisioning, hashes\/digests, lineage/);
   assert.match(spawn.params.task, /PASS requires both proof ends.*CONTRADICTED, never PASS/s);
   assert.match(spawn.params.task, /Bash is available for implementation/);
 });

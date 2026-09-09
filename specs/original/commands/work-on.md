@@ -51,7 +51,7 @@ Follow `../../knowledge-records.md`; normal code delivery publishes linked named
 1. one `FORGE:INVESTIGATOR` issue receipt;
 2. `FORGE:CLASSIFICATION` — task/risk/cohesion decision;
 3. `FORGE:CONTEXT` — validated historical understanding;
-4. `FORGE:CONTRACT` — promised behavior, scope and acceptance;
+4. `FORGE:CONTRACT` — deterministic builder brief: observable outcome, exact behavior/files, non-goals and smallest proof;
 5. `FORGE:ARCHITECT` — chosen approach, ordered plan and material alternatives;
 6. one completed `FORGE:BUILDER` issue receipt;
 7. the PR's reviewer evidence and official review verdict;
@@ -157,9 +157,9 @@ present, mark `workflow:decomposed`, and stop; a split is not code delivery.
 
 ### 3. Build and verify
 
-Load `work-on/build.md` once. Treat the completed investigation receipt as mutation
-scope and publish the named pre-build records under `../../knowledge-records.md` before
-repository edits. Establish feasible executable regressions before production changes and
+Load `work-on/build.md` once. Treat the completed investigation's `FORGE:CONTRACT`
+Builder Brief as the implementation source of truth and publish the named pre-build records
+under `../../knowledge-records.md` before repository edits. Establish feasible executable regressions before production changes and
 reconcile every acceptance criterion and decision revision to evidence before review.
 
 Inspect the relevant production path, implement one cohesive change, add focused
@@ -169,12 +169,11 @@ code, formatting, tests, or safe environment problems inline instead of creating
 loop. A newly discovered required mutation path must be added to the investigation
 receipt before editing.
 
-The Builder Contract is a finite proof map: each criterion names its invariant, reachable failure modes,
-producer/consumer, state, source boundary, test/evidence, and
-(`PASS`, `FAIL`, `MISSING`, `SKIPPED`, `CONTRADICTED`, or `UNKNOWN`). Every criterion also
-carries one compact proof link: mechanism + counterexample/behavioral test + residual risk.
-Contradictory residual risk is `CONTRADICTED`, never `PASS`; retain the acceptance gap. New
-protocols/external calls require namespace/type, interleaving, failure, retry, and recovery closure. Skipped required-risk capability is insufficient proof; multiple blockers trigger bounded re-plan/decomposition, never a silent cap increase.
+The Builder Contract is the four-part implementation brief described in `work-on/build.md`;
+supporting investigation/context/architecture records retain producer/consumer, state,
+failure/retry/recovery and lifecycle detail. Each criterion still carries mechanism +
+counterexample/behavioral test + residual risk; contradictory residual risk is
+`CONTRADICTED`, never `PASS`.
 
 ### 4. Prepare PR and review
 

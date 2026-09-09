@@ -8,7 +8,7 @@
     { "name": "run claim", "markers": ["<!-- FORGEDOCK-RUN:", "## ForgeDock Pi run started"] },
     { "name": "investigation", "markers": ["<!-- FORGE:INVESTIGATOR -->", "## Investigation Report", "### Root Cause", "### Evidence", "### Acceptance Checks", "<!-- INVESTIGATION:COMPLETE -->"] },
     { "name": "routing", "markers": ["<!-- FORGE:FAST_PATH -->", "**Complexity**:", "**Task type**:"] },
-    { "name": "builder contract", "markers": ["<!-- FORGE:CONTRACT -->", "## Builder Contract", "### Allowed Paths", "### Forbidden Changes", "### Acceptance Mapping"] },
+    { "name": "builder contract", "markers": ["<!-- FORGE:CONTRACT -->", "## Builder Contract", "### Observable Outcome", "### In-Scope Behavior and Files", "### Non-Goals", "### Smallest Behavioral Proof"] },
     { "name": "context", "markers": ["<!-- FORGE:CONTEXT -->", "## Implementation Context", "### CI Surface", "### Hazards", "<!-- FORGE:CONTEXT:COMPLETE -->"] },
     { "name": "architecture", "markers": ["<!-- FORGE:ARCHITECT -->", "## Architecture Plan", "<!-- FORGE:ARCHITECT:COMPLETE -->"] },
     { "name": "implementation", "markers": ["<!-- FORGE:BUILDER -->", "## Implementation Complete", "Commit SHA", "### Changed Files", "### Acceptance Status", "<!-- FORGE:BUILDER:COMPLETE -->"] },

@@ -14,7 +14,7 @@ into one combined comment; preserve each stage's identity and actual publication
 | `FORGE:INVESTIGATOR` | Issue, after investigation | Claim versus corrected cause, current evidence, initial scope/route and acceptance needs |
 | `FORGE:CLASSIFICATION` | Issue, before edits | Task type, affected components/risk, cohesion decision and why BUILD/DECOMPOSE; link investigation instead of repeating it |
 | `FORGE:CONTEXT` | Issue, before edits | Relevant historical decisions, pitfalls and successful patterns; source links, current applicability and resulting constraints |
-| `FORGE:CONTRACT` | Issue, before edits | Promised behavior/deliverables, compatibility, non-goals and planned acceptance checks; link classification/context/investigation |
+| `FORGE:CONTRACT` | Issue, before edits | Deterministic builder brief: observable outcome, exact in-scope behavior/files, explicit non-goals, and smallest behavioral proof; link classification/context/investigation |
 | `FORGE:ARCHITECT` | Issue, before edits | Chosen approach, ordered changes, interfaces/invariants, material alternatives actually considered and why rejected; link contract/context |
 | `FORGE:BUILDER` | Issue, after verified implementation | What actually changed, deviations and their decision links, commits, tests and limitations |
 | `FORGE:REVIEW-PANEL` | PR, after complete review | Exact-head verdict, graph context considered, finding dispositions with causal evidence and justified prevention lessons |
@@ -60,11 +60,17 @@ read back the exact comment. Do not invent an issue or lane policy to use the he
 **Inputs**: <human-readable links matching the metadata>
 **Supersedes**: none, or <link matching the metadata>
 
-### Promised Behavior
-<what must work, compatibility and non-goals; reference existing facts>
+### Observable Outcome
+<the externally visible result that must be true>
 
-### Acceptance
-<criterion → observable check → prerequisite/limitation>
+### In-Scope Behavior and Files
+<exact behavior and repository-relative files allowed to change>
+
+### Non-Goals
+<explicit behavior, files, and operational concerns this change does not alter>
+
+### Smallest Behavioral Proof
+<named executable boundary or justified inspection proof, trigger, observable assertion, and prerequisite/limitation>
 ```
 
 Every new named record uses this envelope plus the relevant content from the table. Keep

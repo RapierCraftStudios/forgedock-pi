@@ -115,7 +115,11 @@ test("investigation defines scope without children or executable comments", asyn
 test("build is one inline procedure with SHA-keyed verification", async () => {
   const build = await text(WORK_ON_PHASES[2]);
   assert.match(build, /Do not launch builders, quality-gate\s+agents, context agents, architects/s);
-  assert.match(build, /investigation receipt\s+is the mutation contract/s);
+  assert.match(build, /deterministic implementation source of truth/);
+  for (const requirement of ["Observable outcome", "In-scope behavior and files", "Non-goals", "Smallest behavioral test or proof"])
+    assert.match(build, new RegExp(requirement, "i"));
+  assert.match(build, /ambiguous.*stop.*before.*edit.*request clarification/is);
+  assert.match(build, /ownership, scheduling, worktree\s+provisioning, hashes\/digests, lineage/is);
   assert.match(build, /Verify once per SHA/);
   assert.match(build, /one compact proof-link row/);
   assert.match(build, /implementation mechanism.*counterexample\/behavioral\s+test.*residual risk/s);

@@ -39,6 +39,35 @@ test("build writes behavioral regressions first and reconciles every acceptance 
   assert.match(build, /skip.*checks.*deadline|deadline.*skip.*checks/s);
 });
 
+test("builder contract is explicit, fail-closed, and operationally bounded", async () => {
+  const build = await phase("build");
+  const investigate = await phase("investigate");
+  const records = await text("specs/knowledge-records.md");
+  const contract = build.slice(
+    build.indexOf("### Builder Contract"),
+    build.indexOf("### Proof map admission"),
+  );
+  for (const requirement of [
+    "Observable outcome",
+    "In-scope behavior and files",
+    "Non-goals",
+    "Smallest behavioral test or proof",
+  ]) {
+    assert.match(contract, new RegExp(requirement, "i"));
+  }
+  assert.match(contract, /deterministic implementation source of truth/);
+  assert.match(contract, /ambiguous.*stop.*before.*edit.*request clarification/is);
+  assert.match(investigate, /criterion.*ambiguous.*stop.*before.*repository edit.*request clarification/is);
+  assert.match(records, /Deterministic builder brief.*observable outcome.*exact.*behavior\/files.*smallest behavioral proof/is);
+  assert.match(records, /### Observable Outcome/);
+  assert.match(records, /### In-Scope Behavior and Files/);
+  assert.match(records, /### Non-Goals/);
+  assert.match(records, /### Smallest Behavioral Proof/);
+  for (const heading of ["Ownership", "Scheduling", "Worktree", "Hash", "Lineage", "Deep Review"]) {
+    assert.doesNotMatch(contract, new RegExp(`^### .*${heading}`, "im"));
+  }
+});
+
 test("remediation is bounded across resumes and review names in every authority", async () => {
   const root = await text("specs/original/commands/work-on.md");
   const remediate = await phase("remediate");

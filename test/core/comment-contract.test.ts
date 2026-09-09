@@ -167,13 +167,36 @@ test("investigation rendering is deterministic and never invents routing", () =>
   assert.doesNotMatch(first, /Bug Fix|STANDARD/);
 });
 
-test("plan rendering deterministically separates contract, context, and architecture", () => {
+test("plan rendering makes the builder contract a minimal deterministic behavior handoff", () => {
   const markdown = renderPhaseArtifact(plan);
-  assert.match(markdown, /<!-- FORGE:CONTRACT -->/);
+  const contract = markdown.slice(
+    markdown.indexOf("<!-- FORGE:CONTRACT -->"),
+    markdown.indexOf("<!-- FORGE:CONTEXT -->"),
+  );
+  assert.match(contract, /### Observable Outcome/);
+  assert.match(contract, /### In-Scope Behavior and Files/);
+  assert.match(contract, /\*\*Behavior\*\*/);
+  assert.match(contract, /\*\*Files\*\*/);
+  assert.match(contract, /### Non-Goals/);
+  assert.match(contract, /### Smallest Behavioral Proof/);
+  assert.deepEqual(
+    [...contract.matchAll(/^### (.+)$/gm)].map((match) => match[1]),
+    [
+      "Observable Outcome",
+      "In-Scope Behavior and Files",
+      "Non-Goals",
+      "Smallest Behavioral Proof",
+    ],
+  );
+  assert.match(contract, /\| Criterion \| Smallest Proof \|/);
+  assert.match(contract, /test\/core\/review\.test\.ts/);
+  assert.match(contract, /Assert needs-human/);
+  for (const heading of ["Allowed Paths", "Forbidden Changes", "Acceptance Mapping", "Ownership", "Scheduling", "Worktree", "Hash", "Lineage", "Review"]) {
+    assert.doesNotMatch(contract, new RegExp(`^### .*${heading}`, "im"));
+  }
+  assert.doesNotMatch(contract, /Ownership|Scheduling|Worktree|Hash|Lineage|Deep Review/i);
   assert.match(markdown, /<!-- FORGE:CONTEXT -->/);
   assert.match(markdown, /<!-- FORGE:ARCHITECT -->/);
-  assert.match(markdown, /test\/core\/review\.test\.ts/);
-  assert.match(markdown, /Assert needs-human/);
 });
 
 test("invalid verdict markers are detected in comment bodies", async () => {

@@ -7,8 +7,8 @@ description: Implement and verify one confirmed issue inline in its owned worktr
 # Work On: Build
 
 The sole work-on agent executes this phase inline. Do not launch builders, quality-gate
-agents, context agents, architects, or other helpers. The completed investigation receipt
-is the mutation contract.
+agents, context agents, architects, or other helpers. The completed investigation's
+`FORGE:CONTRACT` Builder Brief is the mutation contract.
 
 ## Preconditions
 
@@ -21,6 +21,17 @@ is the mutation contract.
 At phase entry, use one label edit to replace `workflow:ready-to-build` and other stale
 active-phase labels with `workflow:building`.
 
+### Builder Contract (Build Brief)
+
+The existing `FORGE:CONTRACT` is the deterministic implementation source of truth: a short, self-contained handoff with exactly four parts:
+
+- **Observable outcome** — the externally visible result that must be true when complete.
+- **In-scope behavior and files** — exact behavior and repository-relative files allowed to change; do not hide missing paths behind a broad directory or generic component.
+- **Non-goals** — behavior, files, and operational concerns this change does not alter.
+- **Smallest behavioral test or proof** — one named executable boundary or justified inspection proof with trigger and observable assertion; bug fixes name failing baseline and pass result.
+
+If a criterion is ambiguous or lacks credible proof, stop before editing, leave the worktree unchanged, and request clarification: do not infer requirements, widen scope, substitute a source-string assertion or broad suite for behavior, or ask a reviewer to complete the contract. Ownership, scheduling, worktree provisioning, hashes/digests, lineage/source identity, extra `FORGE:*` records, CI/deployment, and deep review remain in existing parent, adapter, record, review, and deployment contracts, not this brief.
+
 ### Proof map admission
 
 Before editing, compile each acceptance criterion from the accepted contract into one compact proof-link row:
@@ -30,10 +41,12 @@ PASS requires both concrete proof ends and non-contradictory residual risk. A co
 
 ## Plan once and publish the pre-build graph
 
-Before repository edits, form the following concise plan and publish the named
-classification/context/contract/architect records from `../../../knowledge-records.md`.
-Use retained investigation/history, actual source head and returned comment links; the
-plan must be fetchable from GitHub, not only held in this agent's context:
+Before repository edits, publish the named classification/context/architect records from
+`../../../knowledge-records.md` separately from the Builder Contract. These supporting
+records carry the investigation path, history, interfaces, risks, architecture, and
+lifecycle evidence; they may inform the contract but do not add requirements to it. Use
+retained investigation/history, actual source head and returned comment links; the plan must
+be fetchable from GitHub, not only held in this agent's context:
 
 1. production entrypoint and active path to the failure;
 2. files and symbols that must change;
