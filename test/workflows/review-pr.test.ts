@@ -331,6 +331,8 @@ function request(overrides: Partial<ReviewPrRequest> = {}): ReviewPrRequest {
     autoMergeAuthorized: true,
     autoMergeRequested: false,
     testGateOutput: "<!-- FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=0 -->\n<!-- FORGE:TEST_GATE:RESULT=PASS -->",
+    sourceTree: "tree-1",
+    requiredCapabilities: [],
     authorityValid: () => true,
     ...overrides,
   };
@@ -645,16 +647,19 @@ test("required capability rows bind identity and fail closed", () => {
     sourceHead: route.headSha,
     sourceTree: "tree-1",
     required: true,
+    proofKind: "behavioral",
     state: "MISSING",
     proof: "behavioral boundary evidence unavailable",
     wake: "Postgres integration capability is available",
   };
   const output = `FORGE:TEST_GATE:CAPABILITY=${JSON.stringify(capability)}\nFORGE:TEST_GATE:CAPABILITIES_COMPLETE count=1\n<!-- FORGE:TEST_GATE:RESULT=PASS -->`;
+  const expected = [{ id: "db-read", criterionId: "runtime-proof", criterionTextHash: capability.criterionTextHash, required: true }];
   const check = testGateVerification(output, true, {
     repository: "owner/repo",
     target: "staging",
     sourceHead: route.headSha,
-  });
+    sourceTree: "tree-1",
+  }, expected);
   assert.equal(check.required, true);
   assert.equal(check.status, "failed");
   assert.match(check.evidence?.join(" ") ?? "", /db-read.*runtime-proof.*source=owner\/repo@.*state=MISSING.*wake/);
@@ -662,27 +667,41 @@ test("required capability rows bind identity and fail closed", () => {
   const mismatched = testGateVerification(
     output.replace('"sourceHead":"' + route.headSha + '"', '"sourceHead":"' + "b".repeat(40) + '"'),
     true,
-    { repository: "owner/repo", target: "staging", sourceHead: route.headSha },
+    { repository: "owner/repo", target: "staging", sourceHead: route.headSha, sourceTree: "tree-1" },
+    expected,
   );
   assert.match(mismatched.evidence?.[0] ?? "", /source identity does not match/);
 
   const passed = testGateVerification(
     output.replace('"state":"MISSING"', '"state":"PASS"'),
     true,
-    { repository: "owner/repo", target: "staging", sourceHead: route.headSha },
+    { repository: "owner/repo", target: "staging", sourceHead: route.headSha, sourceTree: "tree-1" },
+    expected,
   );
   assert.equal(passed.status, "passed", "matching behavioral capability binding may pass");
   assert.equal(passed.capability?.sourceTree, "tree-1");
 
   const structural = testGateVerification(
     output.replace('"state":"MISSING"', '"state":"PASS"').replace(
+      '"proofKind":"behavioral"',
+      '"proofKind":"structural"',
+    ).replace(
       "behavioral boundary evidence unavailable",
       "structural source-string evidence",
     ),
     true,
-    { repository: "owner/repo", target: "staging", sourceHead: route.headSha },
+    { repository: "owner/repo", target: "staging", sourceHead: route.headSha, sourceTree: "tree-1" },
+    expected,
   );
   assert.equal(structural.status, "failed", "structural evidence cannot satisfy a database capability");
+
+  const malformed = testGateVerification(
+    `FORGE:TEST_GATE:CAPABILITY={"id":"broken"\nFORGE:TEST_GATE:CAPABILITIES_COMPLETE count=0\nFORGE:TEST_GATE:RESULT=PASS`,
+    true,
+    { repository: "owner/repo", target: "staging", sourceHead: route.headSha, sourceTree: "tree-1" },
+    expected,
+  );
+  assert.equal(malformed.status, "failed", "malformed rows cannot be hidden by a zero count");
 });
 
 test("staging review carries every Phase 6.5 verdict into its gate", async () => {

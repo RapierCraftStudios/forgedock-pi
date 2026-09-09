@@ -85,7 +85,8 @@ source: <exact repository, target, source head, and tested tree identity>
 command: <bound catalog command or explicit external boundary>
 required: true | false
 state: PASS | FAIL | MISSING | SKIPPED | UNKNOWN | CONTRADICTED
-proof: <behavioral boundary evidence; structural evidence is explicitly typed structural>
+proofKind: behavioral | structural
+proof: <evidence from the named boundary; structural evidence is explicitly typed structural>
 wake: <exact prerequisite or capability needed when state is unresolved>
 ```
 

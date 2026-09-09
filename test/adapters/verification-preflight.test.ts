@@ -202,7 +202,7 @@ test("verification cwd rejects case variants and canonical reserved-directory ta
 test("required capability binding is explicit, source-bound, and fail-closed", async () => {
   const verification = await readFile("specs/verification.md", "utf8");
   const gate = await readFile("specs/original/commands/test-gate.md", "utf8");
-  for (const field of ["capability", "criterion", "type", "boundary", "source", "command", "required", "state", "proof", "wake"]) {
+  for (const field of ["capability", "criterion", "type", "boundary", "source", "command", "required", "state", "proofKind", "proof", "wake"]) {
     assert.match(verification, new RegExp(`^${field}:`, "m"), field);
   }
   assert.match(gate, /FORGE:TEST_GATE:CAPABILITY=\{"id".*"criterionId".*"sourceHead".*"sourceTree".*"state".*"wake"/);

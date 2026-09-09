@@ -1011,6 +1011,12 @@ function validateCheck(value: unknown): VerificationResult {
     throw new ReviewTransitionError("invalid-check", "check.required must be boolean.");
   const capability = check.capability;
   if (capability !== undefined) validateCapability(capability);
+  const capabilities = check.capabilities;
+  if (capabilities !== undefined) {
+    if (!Array.isArray(capabilities))
+      throw new ReviewTransitionError("invalid-check", "check.capabilities must be an array.");
+    for (const entry of capabilities) validateCapability(entry);
+  }
   if (check.evidence !== undefined && (!Array.isArray(check.evidence) || !check.evidence.every((entry) => typeof entry === "string")))
     throw new ReviewTransitionError("invalid-check", "check.evidence must be an array of strings.");
   return {
@@ -1019,6 +1025,7 @@ function validateCheck(value: unknown): VerificationResult {
     status: check.status as VerificationResult["status"],
     ...(check.exitCode === undefined ? {} : { exitCode: check.exitCode }),
     ...(capability === undefined ? {} : { capability }),
+    ...(capabilities === undefined ? {} : { capabilities }),
     ...(check.evidence === undefined ? {} : { evidence: check.evidence }),
   };
 }
@@ -1033,6 +1040,10 @@ function validateCapability(value: VerificationResult["capability"]): void {
   }
   if (typeof value.required !== "boolean")
     throw new ReviewTransitionError("invalid-check", "check.capability.required must be boolean.");
+  if (value.proofKind !== "behavioral" && value.proofKind !== "structural")
+    throw new ReviewTransitionError("invalid-check", "check.capability.proofKind is invalid.");
+  if (!( ["unit", "api", "runtime", "integration", "e2e", "queue", "database", "browser", "credential", "manual"] as string[]).includes(value.type))
+    throw new ReviewTransitionError("invalid-check", "check.capability.type is invalid.");
   if (!( ["PASS", "FAIL", "MISSING", "SKIPPED", "UNKNOWN", "CONTRADICTED"] as string[]).includes(value.state))
     throw new ReviewTransitionError("invalid-check", `Unsupported capability state: ${String(value.state)}.`);
 }

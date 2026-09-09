@@ -13,6 +13,18 @@ export interface TestGateResult {
   capabilitiesComplete: boolean;
 }
 
+const CAPABILITY_TYPES = new Set([
+  "unit",
+  "api",
+  "runtime",
+  "integration",
+  "e2e",
+  "queue",
+  "database",
+  "browser",
+  "credential",
+  "manual",
+]);
 const CAPABILITY_TYPES_REQUIRING_BOUNDARY = new Set([
   "runtime",
   "integration",
@@ -39,6 +51,9 @@ export function parseTestGateResult(value: unknown): TestGateResult | undefined 
   if (!verdict) return undefined;
 
   const capabilities: VerificationCapability[] = [];
+  const capabilityLines = value
+    .split("\n")
+    .filter((line) => /FORGE:TEST_GATE:CAPABILITY(?:=|$)/.test(line));
   for (const match of value.matchAll(/^FORGE:TEST_GATE:CAPABILITY=(\{.*\})$/gm)) {
     let parsed: unknown;
     try {
@@ -51,6 +66,7 @@ export function parseTestGateResult(value: unknown): TestGateResult | undefined 
       return undefined;
     capabilities.push(capability);
   }
+  if (capabilityLines.length !== capabilities.length) return undefined;
   const completeMatch = value.match(/FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=(\d+)/);
   const capabilitiesComplete =
     completeMatch !== null && Number(completeMatch[1]) === capabilities.length;
@@ -74,27 +90,47 @@ export interface TestGateIdentity {
   repository: string;
   target: string;
   sourceHead: string;
+  sourceTree: string;
+}
+
+export interface ExpectedCapability {
+  id: string;
+  criterionId: string;
+  criterionTextHash: string;
+  required: boolean;
 }
 
 export function testGateVerification(
   value: unknown,
   requireCapabilityReport = false,
   expectedIdentity?: TestGateIdentity,
+  expectedCapabilities?: readonly ExpectedCapability[],
 ): VerificationResult {
   const result = parseTestGateResult(value);
   if (!result) return failedGate("Malformed or missing test-gate result.");
-  if (requireCapabilityReport && !result.capabilitiesComplete)
+  if (requireCapabilityReport &&
+    (!result.capabilitiesComplete || expectedCapabilities === undefined || !expectedIdentity?.sourceTree))
     return failedGate(
-      "Required capability report is missing, malformed, or incomplete; rerun the bound gate.",
+      "Required capability report is missing, malformed, incomplete, or unbound; rerun the bound gate.",
       result.capabilities,
     );
-
+  if (expectedCapabilities) {
+    const expected = new Map(expectedCapabilities.map((capability) => [capability.id, capability]));
+    const actual = new Map(result.capabilities.map((capability) => [capability.id, capability]));
+    if (actual.size !== expected.size || [...expected].some(([id, capability]) => {
+      const row = actual.get(id);
+      return !row || row.criterionId !== capability.criterionId ||
+        row.criterionTextHash !== capability.criterionTextHash || row.required !== capability.required;
+    }))
+      return failedGate("Capability report does not match the bound criterion contract.", result.capabilities);
+  }
   const identityMismatch = expectedIdentity
     ? result.capabilities.filter(
         (capability) =>
           capability.repository !== expectedIdentity.repository ||
           capability.target !== expectedIdentity.target ||
-          capability.sourceHead !== expectedIdentity.sourceHead,
+          capability.sourceHead !== expectedIdentity.sourceHead ||
+          capability.sourceTree !== expectedIdentity.sourceTree,
       )
     : [];
   if (identityMismatch.length > 0)
@@ -117,7 +153,7 @@ export function testGateVerification(
       name: "test-gate",
       required: true,
       status: "passed",
-      ...(result.capabilities[0] ? { capability: result.capabilities[0] } : {}),
+      ...(result.capabilities[0] ? { capability: result.capabilities[0], capabilities: result.capabilities } : {}),
     };
   if (result.verdict === "SKIP") {
     const optional = result.capabilities.filter((capability) => !capability.required);
@@ -125,7 +161,7 @@ export function testGateVerification(
       name: "test-gate",
       required: false,
       status: "skipped",
-      ...(optional[0] ? { capability: optional[0] } : {}),
+      ...(optional[0] ? { capability: optional[0], capabilities: result.capabilities } : {}),
     };
   }
   return failedGate(result.reason ?? "Test-gate returned BLOCK.", result.capabilities);
@@ -140,7 +176,7 @@ function failedGate(
     required: true,
     status: "failed",
     exitCode: 1,
-    ...(capabilities[0] ? { capability: capabilities[0] } : {}),
+    ...(capabilities[0] ? { capability: capabilities[0], capabilities } : {}),
     evidence: [
       reason,
       ...capabilities.map(
@@ -165,6 +201,7 @@ function parseCapability(value: unknown): VerificationCapability | undefined {
     "target",
     "sourceHead",
     "sourceTree",
+    "proofKind",
     "proof",
     "wake",
   ];
@@ -177,9 +214,11 @@ function parseCapability(value: unknown): VerificationCapability | undefined {
   if (typeof row.required !== "boolean" || typeof row.state !== "string") return undefined;
   const state = row.state as VerificationCapabilityState;
   if (!CAPABILITY_STATES.has(state)) return undefined;
+  if (!CAPABILITY_TYPES.has(row.type as string)) return undefined;
+  if (row.proofKind !== "behavioral" && row.proofKind !== "structural") return undefined;
   if (
     CAPABILITY_TYPES_REQUIRING_BOUNDARY.has(row.type as string) &&
-    !/^behavioral(?: boundary)? evidence/i.test(row.proof as string)
+    row.proofKind !== "behavioral"
   )
     return undefined;
   return {
@@ -195,6 +234,7 @@ function parseCapability(value: unknown): VerificationCapability | undefined {
     sourceTree: row.sourceTree as string,
     required: row.required as boolean,
     state,
+    proofKind: row.proofKind as "behavioral" | "structural",
     proof: row.proof as string,
     wake: row.wake as string,
   };

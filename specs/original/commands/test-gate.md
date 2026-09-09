@@ -84,11 +84,14 @@ if [ "${TEST_COUNT:-0}" -eq 0 ]; then
   REQUIRED_CAPABILITY_COUNT=$(count_bound_required_capabilities)
   if [ "${REQUIRED_CAPABILITY_COUNT:-0}" -gt 0 ]; then
     emit_missing_capability_reports "integration test capability" "integration_tests is not configured" "configure the named required boundary and rerun"
+    echo "<!-- FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=${REQUIRED_CAPABILITY_COUNT} -->"
+    echo "<!-- FORGE:TEST_GATE:CAPABILITY_BLOCK=true -->"
     echo "<!-- FORGE:TEST_GATE:RESULT=BLOCK -->"
     exit 1
   fi
   echo "ADVISORY: verification.integration_tests is not configured in $CONFIG_FILE."
   echo "No required runtime capabilities are bound; emitting explicit SKIP verdict."
+  echo "<!-- FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=0 -->"
   echo "<!-- FORGE:TEST_GATE:SKIP|reason=no-tests-configured -->"
   echo "<!-- FORGE:TEST_GATE:RESULT=SKIP -->"
   exit 0
@@ -121,7 +124,7 @@ Machine-readable output for every compiled row is one line of JSON (use JSON esc
 commands, boundaries, and wake conditions; never parse arbitrary criterion text by whitespace):
 
 ```text
-FORGE:TEST_GATE:CAPABILITY={"id":"<capability-id>","criterionId":"<criterion-id>","criterionTextHash":"<text-hash>","type":"<type>","boundary":"<boundary>","command":"<command>","repository":"<repo>","target":"<target>","sourceHead":"<head>","sourceTree":"<tree>","required":<true|false>,"state":"<state>","proof":"<proof>","wake":"<condition>"}
+FORGE:TEST_GATE:CAPABILITY={"id":"<capability-id>","criterionId":"<criterion-id>","criterionTextHash":"<text-hash>","type":"<type>","boundary":"<boundary>","command":"<command>","repository":"<repo>","target":"<target>","sourceHead":"<head>","sourceTree":"<tree>","required":<true|false>,"state":"<state>","proofKind":"behavioral|structural","proof":"<proof>","wake":"<condition>"}
 ```
 
 A required row is admissible only when `state=PASS` and its behavioral evidence was produced by
@@ -139,7 +142,10 @@ inference only for unannotated non-required criteria; resolve the type to the co
 or command; and initialize the row as `MISSING` until matching behavioral evidence is read back.
 Do not initialize a required row from a green aggregate, a source-presence assertion, or a
 catalog entry alone. A report with an absent capability ID, criterion ID, source identity, or
-wake condition is malformed and remains `BLOCK`.
+wake condition is malformed and remains `BLOCK`. Emit
+`FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=<number>` only after every bound criterion has
+one row; strict staging review rejects a missing completion marker or a row set that does not
+match the bound criterion IDs/text hashes.
 
 ### 0A: Resolve bundle PRs
 
@@ -160,6 +166,7 @@ fi
 
 if [ -z "$BUNDLE_PRS" ]; then
   echo "No PRs found in bundle. Emitting SKIP verdict."
+  echo "<!-- FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=0 -->"
   echo "<!-- FORGE:TEST_GATE:SKIP|reason=no-bundle-prs -->"
   echo "<!-- FORGE:TEST_GATE:RESULT=SKIP -->"
   exit 0
@@ -178,6 +185,7 @@ if [ -z "$EXECUTABLE_FILES" ]; then
   echo "Files changed:"
   echo "$BUNDLE_DIFF"
   echo "RESULT: SKIP (no executable changes in bundle)"
+  echo "<!-- FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=0 -->"
   echo "<!-- FORGE:TEST_GATE:SKIP|reason=no-executable-changes -->"
   echo "<!-- FORGE:TEST_GATE:RESULT=SKIP -->"
   exit 0
@@ -260,6 +268,7 @@ if [ "$TRIAGE_HAS_TESTABLE_CRITERIA" = "false" ]; then
     echo "All ${TRIAGE_CRITERIA_COUNT} acceptance criteria are manual-only. No automated tests to run."
   fi
   echo "Emitting SKIP verdict (triage: ${SKIP_REASON})."
+  echo "<!-- FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=0 -->"
   echo "<!-- FORGE:TEST_GATE:SKIP|reason=${SKIP_REASON} -->"
   echo "<!-- FORGE:TEST_GATE:RESULT=SKIP -->"
   exit 0
@@ -359,6 +368,7 @@ AUTOMATED_CRITERIA="${API_CRITERIA}${UNIT_CRITERIA}${E2E_CRITERIA}"
 if [ -z "$(echo -e "$AUTOMATED_CRITERIA" | grep -E '^-')" ]; then
   echo "All criteria are manual — no automated test clusters to run."
   echo "Emitting SKIP verdict (manual-only bundle — defense-in-depth check after Phase 0C)."
+  echo "<!-- FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=0 -->"
   echo "<!-- FORGE:TEST_GATE:SKIP|reason=manual-only-criteria -->"
   echo "<!-- FORGE:TEST_GATE:RESULT=SKIP -->"
   exit 0
@@ -967,6 +977,7 @@ echo "============================================="
 
 # Emit machine-readable verdict marker (consumed by review-pr-staging Phase 6.5)
 echo ""
+echo "<!-- FORGE:TEST_GATE:CAPABILITIES_COMPLETE count=${CAPABILITY_COUNT:-0} -->"
 echo "<!-- FORGE:TEST_GATE:RESULT=${VERDICT} -->"
 
 # Handle BLOCK verdict according to posture

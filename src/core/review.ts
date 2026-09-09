@@ -85,6 +85,7 @@ export interface VerificationCapability {
   sourceTree: string;
   required: boolean;
   state: VerificationCapabilityState;
+  proofKind: "behavioral" | "structural";
   proof: string;
   wake: string;
 }
@@ -95,6 +96,7 @@ export interface VerificationResult {
   status: VerificationStatus;
   exitCode?: number;
   capability?: VerificationCapability;
+  capabilities?: readonly VerificationCapability[];
   evidence?: readonly string[];
 }
 
@@ -194,6 +196,23 @@ export function evaluateReviewGate(input: ReviewGateInput): ReviewGateResult {
     blocked.push("No verification results were recorded for the reviewed head.");
 
   for (const check of input.checks) {
+    const capabilities = check.capabilities ?? (check.capability ? [check.capability] : []);
+    let capabilityBlocked = false;
+    for (const capability of capabilities) {
+      if (capability.required && capability.state !== "PASS") {
+        blocked.push(
+          `Required capability ${capability.id} for ${capability.criterionId} is ${capability.state}; source=${capability.repository}@${capability.sourceHead} tree=${capability.sourceTree} wake=${capability.wake}.`,
+        );
+        capabilityBlocked = true;
+      } else if (
+        ["runtime", "integration", "e2e", "queue", "database", "browser", "credential"].includes(capability.type) &&
+        capability.proofKind !== "behavioral"
+      ) {
+        blocked.push(`Capability ${capability.id} lacks behavioral boundary proof.`);
+        capabilityBlocked = true;
+      }
+    }
+    if (capabilityBlocked) continue;
     if (!check.required || check.status === "passed") continue;
     if (check.status === "failed") {
       changes.push(`Required check ${check.name} failed.`);

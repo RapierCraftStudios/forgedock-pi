@@ -99,6 +99,9 @@ export interface ReviewPrRequest {
   additionalChecks?: readonly VerificationResult[];
   /** Raw output from the mandatory nested staging test-gate translation. */
   testGateOutput?: unknown;
+  /** Bound source tree and criterion capabilities for strict staging admission. */
+  sourceTree?: string;
+  requiredCapabilities?: readonly import("./test-gate.ts").ExpectedCapability[];
   malformedResults?: readonly string[];
   mergeability?: "mergeable" | "conflicting" | "unknown";
   protectedBranches: readonly string[];
@@ -375,21 +378,29 @@ export class ReviewPrCoordinator {
       );
       if (snapshot.state.panel?.status === "running") {
         const additionalChecks: readonly VerificationResult[] = [
-          ...(mode === "staging"
-            ? [
-                testGateVerification(input.testGateOutput, true, {
-                  repository: input.repository,
-                  target: route.baseRef,
-                  sourceHead: route.headSha,
-                }),
-              ]
-            : []),
           {
             name: "material-change",
             required: true,
             status: route.headSha === route.baseSha ? "failed" : "passed",
           },
-          ...(input.additionalChecks ?? []),
+          ...(input.additionalChecks ?? []).filter(
+            (check) => mode !== "staging" || check.name !== "test-gate",
+          ),
+          ...(mode === "staging"
+            ? [
+                testGateVerification(
+                  input.testGateOutput,
+                  true,
+                  {
+                    repository: input.repository,
+                    target: route.baseRef,
+                    sourceHead: route.headSha,
+                    sourceTree: input.sourceTree ?? "",
+                  },
+                  input.requiredCapabilities,
+                ),
+              ]
+            : []),
         ];
         for (const [index, check] of additionalChecks.entries()) {
           snapshot = await this.#journal.append({
