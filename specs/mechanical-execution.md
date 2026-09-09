@@ -48,16 +48,23 @@ Write approved data—not JavaScript—to a plan file:
   "launchAllowance": 24,
   "requestStartedAt": "<actual original request timestamp>",
   "issues": [
-    {"number": 42, "target": "staging", "baseCwd": "/actual/clean/target/base", "predecessors": []},
-    {"number": 43, "target": "staging", "baseCwd": "/actual/clean/target/base", "predecessors": [42]}
+    {"number": 42, "target": "staging", "baseCwd": "/actual/clean/target/base", "predecessors": [], "contract": {"path": "/actual/parent-artifacts/issue-42-contract.json", "sha256": "<file SHA-256>"}},
+    {"number": 43, "target": "staging", "baseCwd": "/actual/clean/target/base", "predecessors": [42], "contract": {"path": "/actual/parent-artifacts/issue-43-contract.json", "sha256": "<file SHA-256>"}}
   ]
 }
 ```
 
 The issue list is already confirmed/topologically ordered; bases are prepared by existing
-worktree rules. Optional `verification` is the prepared catalog path/SHA descriptor. If
-omitted, the helper snapshots current configured commands; an empty catalog is not PASS
-and does not excuse missing required verification.
+worktree rules. Before writing the plan, the dispatcher compiles each retained issue's exact
+checked acceptance criteria into a fresh issue-contract file with the installed
+`createIssueContract` helper. Each criterion preserves a stable source ID, exact text hash,
+proof type, and affected boundaries; the returned contract object has top-level `criteria`
+and `digest`. Every batch issue must carry its file descriptor as `contract`; `prepareBatch`
+validates the descriptor and binds both `contract` and `contractDigest` into the lane policy
+and native acceptance. A missing contract fails before request publication. Optional
+`verification` is the prepared catalog path/SHA descriptor. If omitted, the helper snapshots
+current configured commands; an empty catalog is not PASS and does not excuse missing
+required verification.
 
 Run `node <package>/specs/helpers/dispatch.mjs batch <plan.json> <new-empty-output-dir>`.
 Read its `request.json` and invoke `subagent` with those exact fields, including the generated
