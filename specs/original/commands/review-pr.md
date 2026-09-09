@@ -10,6 +10,19 @@ allowed-tools: Task, Agent, Bash, Read, Grep, Glob, WebFetch, Skill
 
 **Input**: $ARGUMENTS
 
+## Typed Pi runtime authority
+
+For an issue-owned `/work-on` or typed Pi review, this specification is read together with
+`work-on/review.md` and the installed `forgedock-review-pr` skill. The issue-specific work-on
+parent is the semantic authority: it owns the selected roster, waits for every exact-head
+review result/comment pair, deduplicates and reconciles findings, and classifies them as
+blocking, advisory, pre-existing, out-of-scope, or follow-up. Each reviewer posts its own
+complete result through the bound reviewer-comment capability. The shared ReviewPrCoordinator
+is mechanical on this route (identity, completeness, checks, lease, mergeability, and safety)
+and must not create blocker issues or override the parent disposition. Standalone/staging
+routes may retain their independent publication policy. The legacy shell snippets below are
+compatibility guidance only where they do not conflict with this typed authority.
+
 ## Admitted proof and boundary closure
 
 For work-on PRs, review the exact current diff against the admitted criterion proof map,
@@ -32,11 +45,18 @@ bounded re-plan/decomposition decision rather than normalizing repeated review.
 
 ## HARD RULES — READ BEFORE ANYTHING ELSE
 
-1. **Use the resolved `{DISPATCH_TOOL}(...)` for ALL domain agent launches.** Resolve `{DISPATCH_TOOL}` once, per the **Sub-Agent Dispatch Tool Resolution** section below: `Task` when available, `Agent` as the documented fallback when `Task` is absent from the environment. Every dispatch call in this run uses the same resolved tool — do not mix. Whichever tool is used, each agent MUST run in an isolated, fresh-context sub-agent (not inline in the orchestrator's own context) and post findings to the PR via `gh pr comment` in structured form.
+1. **Use the resolved dispatch path for all domain launches.** Legacy shell invocations use the
+resolved `{DISPATCH_TOOL}`. Typed Pi reviewers use the bound reviewer-comment capability after
+finalizing their result; that capability is the only GitHub mutation available to a reviewer and
+posts one exact-head, role/round-bound structured comment.
 
 2. **Post the FORGE:REVIEW verdict regardless of finding severity.** A review that completes but posts no `<!-- FORGE:REVIEW -->` comment is invisible to the pipeline. Even a PASS verdict must be posted.
 
-3. **Review findings do NOT block merge UNLESS they meet the Blocking Criteria in §7B** (a CONFIRMED HIGH/CRITICAL finding, a purpose regression, a merge conflict, or a build/type/test failure) **or the calibration threshold check in §7B.5 sets `CALIBRATION_NEEDS_HUMAN=true`** (HIGH-confidence task type with historical survival < 80%). In work-on review, keep blockers on the existing PR/source issue for cohesive remediation and create issues only for valuable independent follow-up work; standalone and staging review retain their finding-publication policy. Minor/style findings never block; §7B's and §7B.5's blocking conditions always do — including under `--auto-merge`. <!-- forge#1741 -->
+3. **Typed work-on blocking is parent-owned.** Only a confirmed patch-caused parent disposition of
+`blocking` may enter remediation. Blocking findings remain on the existing PR/source issue;
+only independently valuable parent-dispositioned follow-ups create issues. Standalone/staging
+routes retain their own publication policy. Mechanical conflicts, checks, leases, and authority
+remain fail-closed safety gates.
 
 4. **Route correctly at Phase 0.** If the input is "staging" or the PR targets `main`, invoke `Skill("review-pr-staging", ...)` — do NOT run the standard PR review pipeline against a staging→main PR.
 
@@ -1554,7 +1574,11 @@ The `protocols.md` file contains the Evidence-Based Review Protocol, Structured 
 8. If Phase 2.5 found broken assumptions, append them to the agent's prompt as "Pre-found integration issues to verify"
 9. Launch via the resolved `{DISPATCH_TOOL}` (see Sub-Agent Dispatch Tool Resolution above) with `model: "{SUBAGENT_MODEL}"` (forge.yaml `agents.subagent_model`, else `agents.default_model`, else `"sonnet"`; fallback `"opus"` if rate-limited). Under OpenCode, emit a top-level `subagent_type: "general"` or `"explore"` in the native `task` argument object and use `background: false` for each reviewer.
 
-**CRITICAL**: Launch ALL selected agents in a SINGLE message using multiple `{DISPATCH_TOOL}` calls. Each agent must persist its finalized body before posting it with `gh pr comment --body-file`, include `<!-- FORGE:REVIEW-AGENT:{lowercase-domain} -->`, and return its verdict and findings to the orchestrator independently of GitHub delivery.
+**CRITICAL**: Launch ALL selected agents in a SINGLE message using multiple `{DISPATCH_TOOL}` calls.
+Each typed Pi agent must finalize its result, call the bound reviewer-comment capability exactly
+once, include `<!-- FORGE:REVIEW-AGENT:{lowercase-domain} -->`, and return its verdict/findings
+to the parent independently of the GitHub read-back. Legacy shell agents may use the documented
+`gh pr comment --body-file` route only outside the typed work-on path.
 
 **Dispatch failure and partial-panel guard (MANDATORY):** Count the selected roster before dispatch. If any launch fails, including from pool exhaustion, do not continue with the agents that did launch as a sufficient panel. Immediately create the managed label if necessary, label the PR `review-degraded`, add `needs-human` to the linked issue, post `FORGE:GATE_FAILURE`, and exit without a verdict. After all foreground reviewers return, independently compare their posted `FORGE:REVIEW-AGENT` markers with the selected count; a smaller count is the same hard stop. This catches a reviewer that accepted dispatch but failed before posting.
 
@@ -1606,9 +1630,9 @@ When substituting `[FILE_LIST]` in each agent's template:
 gh pr view $ARGUMENTS --json comments --jq '.comments | length'
 gh api repos/{owner}/{repo}/issues/$ARGUMENTS/comments --jq '.[-10:] | .[].body[:100]'
 
-# Every dispatched agent must have delivered its own persisted review to GitHub.
-# Do not infer a clean review from a missing comment: its return text may contain
-# findings that could not be posted because GitHub writes were throttled.
+# Every dispatched agent must have delivered its own persisted review to GitHub through the
+# typed reviewer-comment capability or the legacy direct route. Do not infer a clean review from
+# a missing comment: the result may contain findings that were not durably delivered.
 MISSING_AGENT_COMMENTS=""
 for AGENT in $SELECTED_AGENTS; do
     AGENT_DOMAIN=$(printf '%s' "$AGENT" | tr '[:upper:]' '[:lower:]')
@@ -1657,10 +1681,12 @@ If synthesis needed, launch a `general-purpose` Task (model: `"{SUBAGENT_MODEL}"
 
 ## Phase 6: Finding Triage & Durable Disposition (MANDATORY)
 
-**STOP. DO NOT skip triage or post the summary first.** First deduplicate and classify every finding. Publication then depends on review ownership:
-
-- **Work-on review** (`--issue` / `{MERGE_ISSUE}` is present): blocking findings stay in the synthesized PR review and are copied to the existing source issue for one cohesive remediation pass on the current PR branch. They do **not** create recursive blocker issues. Create a separate issue only for valuable independent follow-up work that should outlive this PR; group findings that share one root cause and implementation, and publish that concern once. Style, optional hardening, and low-value observations remain in the review summary.
-- **Standalone review or staging review**: retain the existing finding-publication contract because no owning work-on issue/branch may exist to carry remediation.
+**STOP. DO NOT skip triage or post the summary first.** First deduplicate and classify every
+finding. For typed work-on review, the parent disposition is authoritative. Skip issue creation
+for `blocking`, `advisory`, `pre-existing`, and `out-of-scope` findings; create issues only for
+deduplicated, independently valuable `follow-up` concerns. Standalone/staging review retains the
+existing finding-publication contract because no owning work-on issue/branch may exist to carry
+remediation.
 
 The source PR and linked work-on issue are already durable ownership. Do not multiply one delivery into a backlog of child blocker issues.
 
@@ -1694,7 +1720,10 @@ If still 0: review is clean — skip to Phase 7.
 
 ### 6C: Publish Independent Follow-Up Issues When Required
 
-For work-on review, skip issue creation for every blocking finding and record those blocker IDs, evidence, and invariants on `{MERGE_ISSUE}` before the official verdict. Apply the issue-creation flow below only to deduplicated, genuinely independent follow-up work. For standalone review, apply it to findings under the original contract.
+For typed work-on review, skip issue creation for every `blocking`, `advisory`, `pre-existing`, and
+`out-of-scope` disposition and record current blockers on `{MERGE_ISSUE}` before the verdict.
+Apply the issue-creation flow below only to deduplicated, independently valuable `follow-up`
+concerns. For standalone review, apply it to findings under the original contract.
 
 ```bash
 # Colors match the canonical ForgeDock label manifest (bin/labels.json).

@@ -91,6 +91,11 @@ import {
   FORGE_REVIEW_SECURITY_AGENT,
   registerForgeAgents,
 } from "./register.ts";
+import {
+  renderReviewerComment,
+  reviewerCommentMarker,
+  reviewerDomain,
+} from "../core/reviewer-comment.ts";
 
 const BINDING_ENV = "PI_SUBAGENT_EXTENSION_BINDINGS";
 const BINDING_NAMESPACE = "forgedock.pi/1";
@@ -476,7 +481,11 @@ export interface ForgeRuntimeOptions {
 
 export const FORGE_REVIEWER_CAPABILITY_CEILING = {
   allowedAgents: [FORGE_REVIEW_CORRECTNESS_AGENT, FORGE_REVIEW_SECURITY_AGENT],
-  allowedTools: ["forge_diff", "forge_finalize_reviewer"],
+  allowedTools: [
+    "forge_diff",
+    "forge_finalize_reviewer",
+    "forge_publish_reviewer_comment",
+  ],
   denyExtensions: false,
 } as const;
 
@@ -534,6 +543,7 @@ export function registerForgeRuntime(
   let reviewDiffCoverage:
     | { headSha: string; sha256: string; bytes: number; coveredBytes: number }
     | undefined;
+  let finalizedReviewerResult: ForgeReviewerResult | undefined;
 
   pi.on("session_start", async (_event, ctx) => {
     if (options.mainSession) return;
@@ -1749,6 +1759,7 @@ export function registerForgeRuntime(
         binding.resultPath,
         `${JSON.stringify(params.value, null, 2)}\n`,
       );
+      finalizedReviewerResult = params.value;
       return {
         content: [
           {
@@ -1757,6 +1768,75 @@ export function registerForgeRuntime(
           },
         ],
         details: { resultPath, nodeId: binding.nodeId },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "forge_publish_reviewer_comment",
+    label: "Forge Publish Reviewer Comment",
+    description:
+      "Publish exactly one bound, exact-head reviewer comment to the associated pull request",
+    parameters: Type.Object({}),
+    async execute(_toolCallId, _params, signal) {
+      if (!binding.nodeId || !binding.node?.startsWith("review-"))
+        throw new Error(
+          "forge_publish_reviewer_comment requires a bounded reviewer binding.",
+        );
+      const result = finalizedReviewerResult;
+      if (!result)
+        throw new Error(
+          "forge_publish_reviewer_comment requires forge_finalize_reviewer first.",
+        );
+      const expectedReviewer = binding.node.replace(/^review-/, "");
+      if (
+        result.runId !== binding.runId ||
+        (result.reviewer !== expectedReviewer &&
+          result.reviewer !== `forge-review-${expectedReviewer}`) ||
+        result.headSha !== binding.reviewHeadSha
+      )
+        throw new Error(
+          "Reviewer comment identity does not match its bound result.",
+        );
+      const root = await assertCurrentBinding(signal);
+      const tokenProvider = createGitHubTokenProvider(pi, root);
+      const github = new GitHubWorkflowAdapter(
+        new FetchGitHubTransport({ tokenProvider }),
+        binding.repository,
+      );
+      const pull = await github.findPullRequest(binding.branch, signal);
+      if (!pull)
+        throw new Error(
+          `No pull request exists for bound reviewer branch ${binding.branch}.`,
+        );
+      if (
+        pull.headSha !== binding.reviewHeadSha ||
+        pull.baseRef !== binding.baseBranch
+      )
+        throw new Error(
+          "Bound reviewer pull request does not match the frozen head or base.",
+        );
+      const round = binding.nodeAttempt ?? 1;
+      const marker = reviewerCommentMarker(
+        binding.runId,
+        result.reviewer,
+        round,
+        result.headSha,
+      );
+      const commentId = await github.postPullArtifact({
+        pullNumber: pull.number,
+        marker,
+        body: renderReviewerComment(result, round, binding.runId),
+        ...(signal ? { signal } : {}),
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Published reviewer comment for ${reviewerDomain(result.reviewer)} at PR #${pull.number}.`,
+          },
+        ],
+        details: { commentId, pullNumber: pull.number, marker, round },
       };
     },
   });
@@ -2246,7 +2326,11 @@ export function allowedNodeTools(
       "forge_finalize_work_on",
     ]);
   if (node.startsWith("review-"))
-    return new Set(["forge_diff", "forge_finalize_reviewer"]);
+    return new Set([
+      "forge_diff",
+      "forge_finalize_reviewer",
+      "forge_publish_reviewer_comment",
+    ]);
   const common = ["forge_diff", "forge_finalize_node"];
   if (node === "implement") return new Set([...common, "forge_commit"]);
   if (node === "verify") return new Set([...common, "forge_verify"]);

@@ -86,6 +86,19 @@ export function classifyRemediationFindings(
   return { fixable, escalated, followUp, unvalidated, dispositions };
 }
 
+export function remediationRoundAllowed(
+  remediationAttempts: number,
+  reviewRound: number,
+  maxRounds: number,
+): boolean {
+  return (
+    Number.isSafeInteger(maxRounds) &&
+    maxRounds > 0 &&
+    remediationAttempts < maxRounds &&
+    reviewRound < maxRounds
+  );
+}
+
 export function isRemediationCandidate(
   result: ForgeWorkOnResult,
   fixable: readonly AuthoritativeReviewFinding[],
@@ -152,6 +165,16 @@ export function parseAuthoritativeReviewFindingIssue(input: {
     /(CRITICAL|HIGH|MEDIUM|LOW)/i,
   )?.toLowerCase();
   const category = field(input.body, "Category", /([^\s]+)/)?.toLowerCase();
+  const reviewerBlockView = field(
+    input.body,
+    "Reviewer block view",
+    /(BLOCKING|ADVISORY)/i,
+  )?.toLowerCase();
+  const reviewerScope = field(
+    input.body,
+    "Reviewer scope",
+    /(PATCH-CAUSED|PRE-EXISTING|OUT-OF-SCOPE)/i,
+  )?.toLowerCase();
   const file = field(input.body, "File", /`([^`]+)`/);
   const line = field(input.body, "Line", /(\d+)/);
   const summary = section(input.body, "Problem");
@@ -187,6 +210,18 @@ export function parseAuthoritativeReviewFindingIssue(input: {
       line: Number(line),
       summary,
       evidence,
+      ...(reviewerBlockView === undefined
+        ? {}
+        : {
+            reviewerBlockView:
+              reviewerBlockView as ForgeReviewFindingResult["reviewerBlockView"],
+          }),
+      ...(reviewerScope === undefined
+        ? {}
+        : {
+            reviewerScope:
+              reviewerScope as ForgeReviewFindingResult["reviewerScope"],
+          }),
     },
   };
 }

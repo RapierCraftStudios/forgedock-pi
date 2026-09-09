@@ -20,6 +20,9 @@ export interface ForgeReviewFindingFileRange {
   endLine: number;
 }
 
+export type ReviewerBlockView = "blocking" | "advisory";
+export type ReviewerScope = "patch-caused" | "pre-existing" | "out-of-scope";
+
 export interface ForgeReviewFindingResult {
   id: string;
   reviewer: string;
@@ -36,6 +39,12 @@ export interface ForgeReviewFindingResult {
   patternMetadataFiles?: readonly string[];
   summary: string;
   evidence: readonly string[];
+  /** The reviewer's non-authoritative view; the work-on parent decides finally. */
+  reviewerBlockView?: ReviewerBlockView;
+  reviewerBlockRationale?: string;
+  /** The reviewer's scope assessment; the work-on parent reconciles disagreement. */
+  reviewerScope?: ReviewerScope;
+  reviewerScopeRationale?: string;
 }
 
 export interface ForgeReviewerResult {
@@ -123,6 +132,10 @@ const findingSchema = {
     "line",
     "summary",
     "evidence",
+    "reviewerBlockView",
+    "reviewerBlockRationale",
+    "reviewerScope",
+    "reviewerScopeRationale",
   ],
   properties: {
     id: { type: "string", minLength: 1 },
@@ -163,6 +176,13 @@ const findingSchema = {
     patternMetadataFiles: { type: "array", minItems: 1, items: { type: "string", minLength: 1 } },
     summary: { type: "string", minLength: 1 },
     evidence: { type: "array", items: { type: "string", minLength: 1 } },
+    reviewerBlockView: { type: "string", enum: ["blocking", "advisory"] },
+    reviewerBlockRationale: { type: "string", minLength: 1 },
+    reviewerScope: {
+      type: "string",
+      enum: ["patch-caused", "pre-existing", "out-of-scope"],
+    },
+    reviewerScopeRationale: { type: "string", minLength: 1 },
   },
 } as const;
 
@@ -571,7 +591,13 @@ function isFindingResult(value: unknown): value is ForgeReviewFindingResult {
     (finding.affectedFiles === undefined || isFindingFileRanges(finding.affectedFiles)) &&
     (finding.patternMetadataFiles === undefined || isNonEmptyStringArray(finding.patternMetadataFiles)) &&
     typeof finding.summary === "string" &&
-    isStringArray(finding.evidence)
+    isStringArray(finding.evidence) &&
+    ["blocking", "advisory"].includes(String(finding.reviewerBlockView)) &&
+    typeof finding.reviewerBlockRationale === "string" &&
+    ["patch-caused", "pre-existing", "out-of-scope"].includes(
+      String(finding.reviewerScope),
+    ) &&
+    typeof finding.reviewerScopeRationale === "string"
   );
 }
 

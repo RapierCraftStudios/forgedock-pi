@@ -1042,6 +1042,18 @@ function validateFinding(value: unknown): ReviewFinding {
     line: line as number,
     summary: finding.summary as string,
     evidence,
+    ...(finding.reviewerBlockView === undefined
+      ? {}
+      : { reviewerBlockView: finding.reviewerBlockView as CoreReviewFinding["reviewerBlockView"] }),
+    ...(finding.reviewerBlockRationale === undefined
+      ? {}
+      : { reviewerBlockRationale: finding.reviewerBlockRationale as string }),
+    ...(finding.reviewerScope === undefined
+      ? {}
+      : { reviewerScope: finding.reviewerScope as CoreReviewFinding["reviewerScope"] }),
+    ...(finding.reviewerScopeRationale === undefined
+      ? {}
+      : { reviewerScopeRationale: finding.reviewerScopeRationale as string }),
   };
 }
 

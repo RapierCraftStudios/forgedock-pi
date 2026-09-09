@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   assertBuilderContractPaths,
+  assertBuilderContractProofRows,
   BuilderContractViolationError,
   createBuilderPathContract,
   validateBuilderContract,
@@ -81,10 +82,87 @@ test("full builder briefs are hash-bound and immutable", () => {
   });
   assert.ok(contract.brief);
   assert.doesNotThrow(() => validateBuilderContract(contract));
+  assert.doesNotThrow(() => assertBuilderContractProofRows(contract));
   const tampered = structuredClone(contract);
   tampered.brief!.objective = "Changed by remediation context.";
   assert.throws(
     () => validateBuilderPathContract(tampered),
     /hash does not match|not canonical/,
+  );
+});
+
+test("parent readiness rejects missing, generic, and static-only proof rows", () => {
+  const contract = createBuilderPathContract(["src/**"], 1, {
+    objective: "Preserve the review decision.",
+    allowedPaths: ["src/**"],
+    forbiddenChanges: ["Review policy"],
+    invariants: ["The decision remains stable."],
+    deliverables: ["One implementation change."],
+    acceptanceMapping: [
+      {
+        checkId: "AC-1",
+        implementation: {
+          proofKind: "behavioral",
+          mechanism: "evaluateReviewGate",
+          boundary: "protected branch",
+          test: "test/review.test.ts",
+          trigger: "unapproved merge request",
+          assertion: "returns needs-human",
+          baseline: "fails before the test",
+          passAfter: "passes after the test",
+          prerequisite: "npm test",
+          residualRisk: "none",
+        },
+      },
+    ],
+    outOfScope: [],
+  });
+
+  assert.doesNotThrow(() => assertBuilderContractProofRows(contract));
+  assert.throws(
+    () => assertBuilderContractProofRows(undefined),
+    /Builder contract must be an object/,
+  );
+
+  for (const field of [
+    "mechanism",
+    "boundary",
+    "test",
+    "trigger",
+    "assertion",
+  ] as const) {
+    const invalid = createBuilderPathContract(contract.allowedPaths, 1, {
+      ...contract.brief!,
+      acceptanceMapping: [
+        {
+          checkId: "AC-1",
+          implementation: {
+            ...contract.brief!.acceptanceMapping[0]!.implementation,
+            [field]: field,
+          },
+        },
+      ],
+    });
+    assert.throws(
+      () => assertBuilderContractProofRows(invalid),
+      new RegExp(`AC-1\\.${field} is generic`),
+    );
+  }
+
+  const staticOnly = createBuilderPathContract(contract.allowedPaths, 1, {
+    ...contract.brief!,
+    acceptanceMapping: [
+      {
+        checkId: "AC-1",
+        implementation: {
+          ...contract.brief!.acceptanceMapping[0]!.implementation,
+          proofKind: "inspection",
+        },
+      },
+    ],
+  });
+  assert.throws(
+    () => assertBuilderContractProofRows(staticOnly),
+    /AC-1\.proofKind is static-only/,
   );
 });

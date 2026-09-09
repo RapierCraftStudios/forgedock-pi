@@ -13,6 +13,7 @@ import {
   parseAuthoritativeReviewFindingIssue,
   readRemediationMarkerState,
   remediationCompleteMarker,
+  remediationRoundAllowed,
   remediationFindingClosedMarker,
   remediationStartMarker,
 } from "../../src/workflows/remediation.ts";
@@ -165,6 +166,14 @@ test("remediation classification fixes in-contract blockers and escalates true a
     ),
     false,
   );
+});
+
+test("remediation rounds remain bounded across attempts and review heads", () => {
+  assert.equal(remediationRoundAllowed(0, 1, 2), true);
+  assert.equal(remediationRoundAllowed(1, 2, 2), false);
+  assert.equal(remediationRoundAllowed(2, 1, 4), true);
+  assert.equal(remediationRoundAllowed(4, 4, 4), false);
+  assert.equal(remediationRoundAllowed(0, 0, 0), false);
 });
 
 test("durable remediation markers distinguish partial and complete attempts", () => {

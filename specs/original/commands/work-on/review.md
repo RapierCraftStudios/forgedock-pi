@@ -38,10 +38,12 @@ head, and base arguments. That skill owns:
 
 Each reviewer task carries acceptance invariants, test evidence/scope, bounded diff/context,
 linked classification/context/contract/plan and decision revisions, and unique role ownership.
-Fresh reviewers validate the history's current applicability rather than review historically blind. A blocker must be confirmed patch-caused and
-reachable in the supplied patch. A valid same-head reviewer role is retained. Retry only a missing, failed, or malformed
-role; never restart a valid role or complete panel for publication uncertainty that an
-exact-ID readback can resolve.
+Fresh reviewers validate the history's current applicability rather than review historically blind.
+Each reviewer finalizes its typed result and publishes one exact-head, role/round-bound PR
+comment through the bound reviewer-comment capability. A blocker must be confirmed patch-caused
+and reachable in the supplied patch. The parent retains valid same-head roles, verifies every
+result/comment pair, retries only a missing, failed, or malformed required role, and never
+restarts a valid role for publication formatting variance.
 
 Review consumes the frozen closure matrix criterion by criterion, preserving producer →
 consumer identity. Report uncovered caller, invocation-mode, transitive-dependency,
@@ -54,16 +56,16 @@ not an advisory: remediation must supersede the contract and re-plan before edit
 ## Result routing
 
 - `APPROVE`, no blockers: continue to merge checks.
-- Confirmed patch-caused HIGH/CRITICAL blocker: consolidate findings and perform scope
-  reassessment when the admitted scope was incomplete/non-convergent. A DECOMPOSE proposal
-  uses the preserved-work handoff, not more code fixes. Otherwise check remaining remediation
-  budget, then one cohesive fallback pass. At the cap, use the root's GATED
-  exit; never launch another panel by calling it final, last, or closure.
+- Confirmed patch-caused parent-dispositioned blocker: consolidate and deduplicate the
+  complete panel, then perform scope reassessment and, when warranted, a `DECOMPOSE` proposal
+  when the admitted scope is incomplete or non-convergent. Otherwise check remaining remediation budget and perform one cohesive pass.
+  At the cap, use the root's `GATED` exit; never launch another panel by calling it final,
+  last, or closure.
 - Explicit unresolved prerequisite: return `GATED` with exact wake condition.
-- Incomplete panel/provider failure: preserve valid roles, record `review-degraded`, and
-  resume only missing roles.
-- Independent pre-existing/advisory finding: include as residual risk or one valuable
-  follow-up; do not block the active PR.
+- Incomplete result/comment roster or provider failure: preserve valid roles, record
+  `review-degraded`, and resume only missing required roles.
+- Independent follow-up: create only a valuable causal concern that the parent has explicitly
+  dispositioned as `follow-up`; advisory, pre-existing, and out-of-scope findings do not block.
 
 ## Base movement
 
