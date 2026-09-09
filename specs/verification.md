@@ -74,6 +74,12 @@ permissions and unrelated values; never print a whole secret-bearing config.
 
 - Start with the changed behavior, paths, imports/callers, production entrypoint and the
   investigator's acceptance contract. The path metadata only supplies initial candidates.
+- For each criterion, verify a bounded closure matrix: producer → every reachable consumer/
+  caller and invocation mode, transitive imported/sourced dependencies, valid/invalid input,
+  fresh/existing state, failure/retry/recovery, cancellation, and applicable concurrency.
+  Each row needs a concrete counterexample or behavioral test; string-presence checks cannot
+  close runtime rows. An alternate caller or transitive dependency found after admission is a
+  contract gap requiring a superseding contract and re-plan before remediation.
 - Prefer focused behavioral tests supported by the repository's real test runner. Do not
   append guessed selectors or flags to an arbitrary configured command.
 - When impact is uncertain, broaden to the containing component/package suite. Expand

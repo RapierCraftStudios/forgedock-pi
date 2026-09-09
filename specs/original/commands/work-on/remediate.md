@@ -34,6 +34,11 @@ decomposition under `investigate.md`/`decompose.md`; it does not reset the budge
 partial work and require an approved handoff for an existing PR. If the work remains atomic,
 continue only its authorized round/remaining budget. Do not split merely to evade the cap.
 
+A reviewer-discovered caller, invocation mode, transitive dependency, input/state transition,
+failure/retry/recovery, cancellation, or concurrency row is `CONTRACT_GAP`. Before any fix,
+append a superseding contract and re-plan the complete closure matrix; never patch the reported
+line while the omitted row remains unadmitted.
+
 ## Cohesive fix
 
 1. Reproduce or verify every blocker against the current head, recording trigger,
@@ -54,7 +59,7 @@ continue only its authorized round/remaining budget. Do not split merely to evad
    evidence where executable. Changing a string assertion to match
    the new implementation is not regression proof.
 6. Edit only investigation-authorized paths, expanding the investigation receipt first
-   when new required scope is proven.
+   when new required scope is proven. A closure-gap revision is required before that edit.
 7. Run affected verification once, inspect the final diff, commit, and push one new head.
 
 Do not create blocker issues, closure matrices, progress comments, checkpoints, Gists,
