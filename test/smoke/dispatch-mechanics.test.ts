@@ -82,6 +82,18 @@ test("parent control agent collisions fail before launch", async () => {
   });
 });
 
+test("an exact packaged coordinator definition is not a parent shadow", async () => {
+  await fixture(async ({ root, repo, plan }) => {
+    await mkdir(join(repo, "agents"), { recursive: true });
+    await writeFile(join(repo, "package.json"), JSON.stringify({
+      name: "subject",
+      pi: { subagents: { agents: ["./agents"] } },
+    }));
+    fs.copyFileSync(controlPlane.forgeDock.agents.owner.path, join(repo, "agents", "forgedock-work-on-coordinator.md"));
+    assert.doesNotThrow(() => dispatch.prepareBatch(plan, join(root, "matching-owner"), repo));
+  });
+});
+
 test("bound issue contracts are validated and carried into native acceptance", async () => {
   await fixture(async ({ root, repo, plan }) => {
     const contract = dispatch.createIssueContract(33724, [
