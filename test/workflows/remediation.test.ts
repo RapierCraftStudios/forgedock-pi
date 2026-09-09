@@ -128,13 +128,16 @@ test("contract gaps classify before edits and permit one bounded re-plan", async
   assert.match(mechanical, /priorContractDigest/);
 
   const input = {
-    reviewedHead: "head-a",
+    issueNumber: 42,
+    pullNumber: 7,
+    target: "staging",
+    reviewedHead: "0123456789abcdef0123456789abcdef01234567",
     worktree: "/lane/a",
     reviewEvidence: ["review-a"],
     remediationUsage: { used: 1, limit: 1 },
-    priorContractDigest: "digest-old",
+    priorContractDigest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
     replanId: "replan-a",
-    contractDigest: "digest-new",
+    contractDigest: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
     replanCount: 0,
   } as const;
   const first = admitContractGapReplan(input);
@@ -145,8 +148,8 @@ test("contract gaps classify before edits and permit one bounded re-plan", async
   assert.equal(second.status, "GATED");
   assert.equal(second.replanCount, first.replanCount);
   assert.throws(
-    () => admitContractGapReplan({ ...input, contractDigest: "digest-old" }),
-    /new contract digest/i,
+    () => admitContractGapReplan({ ...input, contractDigest: input.priorContractDigest }),
+    /distinct SHA-256 contract digests/i,
   );
 });
 

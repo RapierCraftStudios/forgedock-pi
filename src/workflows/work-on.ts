@@ -91,6 +91,7 @@ export {
   reviewFindingMarker,
 } from "./review-findings.ts";
 import {
+  admitContractGapReplan,
   classifyRemediationFindings,
   closeAddressedReviewFindingIssues,
   isRemediationCandidate,
@@ -99,6 +100,7 @@ import {
   remediationCompleteMarker,
   remediationStartMarker,
   type AuthoritativeReviewFinding,
+  type ContractGapHandoff,
 } from "./remediation.ts";
 
 const RUN_LINK_ENTRY = "forgedock-run-link/v1";
@@ -145,6 +147,7 @@ export interface ActiveRunLink {
   /** Persisted barrier: do not spawn again without a known provider receipt. */
   launchFailure?: "ambiguous" | "binding";
   remediationAttempts: number;
+  contractGapReplan?: ContractGapHandoff;
   findingIssueMap: Record<string, number>;
   issueContext: string;
   planContext?: string;
@@ -3138,11 +3141,38 @@ export class ForgeWorkOnController {
         authoritativeFindings,
         link.builderContract,
       );
+      const hasContractGap =
+        gate.decision === "changes-requested" &&
+        remediation.contractGaps.length > 0 &&
+        remediation.escalated.length === 0;
+      if (hasContractGap && !link.contractGapReplan) {
+        const priorContractDigest = `sha256:${(link.builderContract?.contractHash ?? createHash("sha256").update(link.issueContext).digest("hex")).padStart(64, "0")}`.slice(0, 71);
+        const contractDigest = `sha256:${createHash("sha256").update(`${priorContractDigest}:${aggregate.review.headSha}:${link.issueNumber}`).digest("hex")}`;
+        link.contractGapReplan = admitContractGapReplan({
+          issueNumber: link.issueNumber,
+          pullNumber: pull.number,
+          target: link.prepared.baseBranch,
+          reviewedHead: aggregate.review.headSha,
+          worktree: link.prepared.worktreePath,
+          reviewEvidence: aggregate.review.reviewerResults.map((reviewer) => reviewer.runId),
+          remediationUsage: { used: aggregate.review.rounds, limit: policy.review.maxRounds },
+          priorContractDigest,
+          replanId: `${link.forgeRunId}:replan:${aggregate.review.headSha}`,
+          contractDigest,
+          replanCount: 0,
+        });
+        link.planContext = [
+          link.planContext,
+          "CONTRACT_GAP preserved-work handoff:",
+          JSON.stringify(link.contractGapReplan, null, 2),
+        ].filter(Boolean).join("\n\n");
+        this.#persistLink(link);
+      }
       const canRemediate =
         gate.decision === "changes-requested" &&
-        remediation.fixable.length > 0 &&
+        (remediation.fixable.length > 0 || link.contractGapReplan?.status === "REPLAN_REQUIRED") &&
         remediation.escalated.length === 0 &&
-        aggregate.review.rounds < policy.review.maxRounds;
+        (aggregate.review.rounds < policy.review.maxRounds || link.contractGapReplan?.status === "REPLAN_REQUIRED");
       outcome =
         gate.decision === "approved" ||
         gate.decision === "approved-with-follow-ups"
@@ -3160,7 +3190,10 @@ export class ForgeWorkOnController {
           link.forgeRunId,
         );
         const alreadyStarted = markerState.startedAttempts.includes(attempt);
-        const findingLines = remediation.fixable.map(
+        const actionableFindings = link.contractGapReplan?.status === "REPLAN_REQUIRED"
+          ? remediation.contractGaps
+          : remediation.fixable;
+        const findingLines = actionableFindings.map(
           ({ issueNumber, finding }) =>
             `- #${issueNumber} ${finding.id}: ${finding.summary} (${finding.file}:${finding.line})`,
         );
@@ -5319,11 +5352,15 @@ export class ForgeWorkOnController {
       authoritative,
       input.link.builderContract,
     );
+    const contractGapReplan = input.link.contractGapReplan?.status === "REPLAN_REQUIRED";
+    const actionableFindings = contractGapReplan
+      ? classification.contractGaps
+      : classification.fixable;
     if (
-      !isRemediationCandidate(input.result, classification.fixable) ||
+      !isRemediationCandidate(input.result, actionableFindings) ||
       classification.escalated.length > 0 ||
-      input.link.remediationAttempts >= input.maxRounds ||
-      input.result.review.rounds >= input.maxRounds
+      (!contractGapReplan && input.link.remediationAttempts >= input.maxRounds) ||
+      (!contractGapReplan && input.result.review.rounds >= input.maxRounds)
     )
       return false;
     const attempt = 1;
@@ -5332,7 +5369,7 @@ export class ForgeWorkOnController {
       input.link.forgeRunId,
     );
     if (markerState.completedAttempts.includes(attempt)) return false;
-    const findingLines = classification.fixable.map(
+    const findingLines = actionableFindings.map(
       ({ issueNumber, finding }) =>
         `- #${issueNumber} ${finding.id}: ${finding.summary} (${finding.file}:${finding.line})`,
     );
@@ -5366,6 +5403,12 @@ export class ForgeWorkOnController {
         `PR: #${input.pullNumber}`,
         `Issue: #${input.link.issueNumber}`,
         `Prior reviewed head: ${input.result.review.headSha}`,
+        ...(input.link.contractGapReplan ? [
+          `CONTRACT_GAP re-plan ID: ${input.link.contractGapReplan.replanId}`,
+          `Preserved contract digest: ${input.link.contractGapReplan.priorContractDigest}`,
+          `Fresh contract digest: ${input.link.contractGapReplan.contractDigest}`,
+          "Do not reuse prior approval; publish a fresh exact-head review with the new contract identity.",
+        ] : []),
         "Read the standalone review-finding issues listed below. Apply every confirmed/likely fix that is inside the accepted builder contract; escalate only product/policy/out-of-contract decisions.",
         ...findingLines,
         "Commit with forge_commit kind review-fixes, rerun applicable verification, call forge_prepare_review to update the same PR, and launch a fresh complete correctness/security panel.",
@@ -5374,7 +5417,8 @@ export class ForgeWorkOnController {
     );
     this.#links.delete(previousRunId);
     input.link.subagentRunId = receipt.runId;
-    input.link.remediationAttempts += 1;
+    if (contractGapReplan) input.link.contractGapReplan = undefined;
+    else input.link.remediationAttempts += 1;
     input.link.status = "running";
     this.#persistLink(input.link);
     input.ctx.ui.notify(

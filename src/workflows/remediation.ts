@@ -44,6 +44,9 @@ export interface RemediationClassification {
 
 export interface ContractGapHandoff {
   status: "REPLAN_REQUIRED" | "GATED";
+  issueNumber: number;
+  pullNumber: number;
+  target: string;
   reviewedHead: string;
   worktree: string;
   reviewEvidence: readonly string[];
@@ -56,6 +59,9 @@ export interface ContractGapHandoff {
 
 /** Admit exactly one preserved-work contract-gap transition without changing cap usage. */
 export function admitContractGapReplan(input: {
+  issueNumber: number;
+  pullNumber: number;
+  target: string;
   reviewedHead: string;
   worktree: string;
   reviewEvidence: readonly string[];
@@ -65,14 +71,14 @@ export function admitContractGapReplan(input: {
   contractDigest: string;
   replanCount: number;
 }): ContractGapHandoff {
-  if (!input.reviewedHead || !input.worktree || !input.priorContractDigest || !input.replanId || !input.contractDigest)
+  if (!Number.isSafeInteger(input.issueNumber) || input.issueNumber < 1 || !Number.isSafeInteger(input.pullNumber) || input.pullNumber < 1 || !input.target || !/^[a-f0-9]{40,64}$/.test(input.reviewedHead) || !input.worktree.startsWith("/") || input.reviewEvidence.length === 0 || !input.priorContractDigest || !input.replanId || !input.contractDigest)
     throw new TypeError("Contract-gap handoff requires exact identity fields.");
   if (!Number.isSafeInteger(input.remediationUsage.used) || !Number.isSafeInteger(input.remediationUsage.limit) || input.remediationUsage.used < 0 || input.remediationUsage.limit < input.remediationUsage.used)
     throw new TypeError("Contract-gap remediation usage is invalid.");
   if (!Number.isSafeInteger(input.replanCount) || input.replanCount < 0)
     throw new TypeError("Contract-gap re-plan count is invalid.");
-  if (input.contractDigest === input.priorContractDigest)
-    throw new TypeError("Contract-gap re-plan requires a new contract digest.");
+  if (!/^sha256:[0-9a-f]{64}$/.test(input.priorContractDigest) || !/^sha256:[0-9a-f]{64}$/.test(input.contractDigest) || input.contractDigest === input.priorContractDigest)
+    throw new TypeError("Contract-gap re-plan requires distinct SHA-256 contract digests.");
   const status = input.replanCount >= 1 ? "GATED" : "REPLAN_REQUIRED";
   return {
     ...input,
