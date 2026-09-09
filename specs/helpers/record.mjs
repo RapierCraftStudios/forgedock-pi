@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadPolicy, assertRepo, gitHead } from "./dispatch.mjs";
 
 const titles = { INVESTIGATOR: "Investigation", CLASSIFICATION: "Classification", CONTEXT: "Implementation Context", CONTRACT: "Build Contract", ARCHITECT: "Implementation Plan", BUILDER: "Build Complete", "REVIEW-PANEL": "Review Panel", REMEDIATION: "Remediation Complete", DECOMPOSED: "Decomposition Complete", GATED: "Work-On Gated", TRAJECTORY: "Work-On Outcome" };
@@ -12,8 +12,13 @@ const link = value => {
   if (typeof value !== "string" || /[\s<>]/.test(value)) return false;
   try { const url = new URL(value); return url.protocol === "https:" && !url.username && !url.password && !url.search; } catch { return false; }
 };
+function assertInstalledRecordHelper(policy) {
+  const expected = policy.controlPlane?.forgeDock?.files?.find(file => file.id === "record")?.path;
+  if (!expected || fs.realpathSync(fileURLToPath(import.meta.url)) !== expected) throw new Error(`Untrusted record helper; invoke the parent-installed helper at ${expected ?? "unknown"}`);
+}
 export function renderRecord(draft, body, options = {}) {
   const policy = loadPolicy(draft.input, options.env ?? process.env);
+  assertInstalledRecordHelper(policy);
   const cwd = options.cwd ?? process.cwd(); assertRepo(policy.repo, cwd);
   check(Object.hasOwn(titles, draft.kind), "Unsupported record kind");
   check(typeof body === "string" && body.trim(), "Record needs substantive Markdown sections");
@@ -39,6 +44,7 @@ export function renderRecord(draft, body, options = {}) {
 }
 export function publishRecord(record, outputFile, gh = args => execFileSync("gh", args, { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 })) {
   const { policy, target, head, markdown } = record;
+  if (!policy?.controlPlane) throw new Error("Records without a parent control-plane binding cannot be published");
   check(fs.readFileSync(outputFile, "utf8") === markdown, "Publication file does not match rendered identity/body");
   if (markdown.startsWith("<!-- FORGE:REVIEW-PANEL -->")) {
     const pr = JSON.parse(gh(["pr", "view", String(target), "-R", policy.repo, "--json", "headRefOid,baseRefName"]));
