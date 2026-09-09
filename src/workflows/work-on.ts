@@ -5365,7 +5365,10 @@ export class ForgeWorkOnController {
       authoritative,
       input.link.builderContract,
     );
-    const contractGapReplan = input.link.contractGapReplan?.status === "REPLAN_REQUIRED";
+    const handoff = input.link.contractGapReplan;
+    if (handoff && (handoff.pullNumber !== input.pullNumber || handoff.issueNumber !== input.link.issueNumber || handoff.reviewedHead !== input.result.review.headSha || handoff.worktree !== input.link.prepared.worktreePath || handoff.target !== input.link.prepared.baseBranch))
+      return false;
+    const contractGapReplan = handoff?.status === "REPLAN_REQUIRED";
     const actionableFindings = contractGapReplan
       ? classification.contractGaps
       : classification.fixable;
@@ -5410,25 +5413,41 @@ export class ForgeWorkOnController {
       ...(input.ctx.signal ? { signal: input.ctx.signal } : {}),
     });
     const previousRunId = input.link.subagentRunId;
-    const receipt = await this.#rpc.resume(
-      previousRunId,
-      [
-        "Run one legacy-compatible bounded remediation attempt on the existing PR branch.",
-        `PR: #${input.pullNumber}`,
-        `Issue: #${input.link.issueNumber}`,
-        `Prior reviewed head: ${input.result.review.headSha}`,
-        ...(input.link.contractGapReplan ? [
-          `CONTRACT_GAP re-plan ID: ${input.link.contractGapReplan.replanId}`,
-          `Preserved contract digest: ${input.link.contractGapReplan.priorContractDigest}`,
-          `Fresh contract digest: ${input.link.contractGapReplan.contractDigest}`,
-          "Do not reuse prior approval; publish a fresh exact-head review with the new contract identity.",
-        ] : []),
-        "Read the standalone review-finding issues listed below. Apply every confirmed/likely fix inside the current superseding builder contract; escalate only product/policy decisions.",
-        ...findingLines,
-        "Commit with forge_commit kind review-fixes, rerun applicable verification, call forge_prepare_review to update the same PR, and launch a fresh complete correctness/security panel.",
-        `Return a schema-valid work-on result with review.rounds=${input.result.review.rounds + 1}, persist it through forge_finalize_work_on, and do not repeat investigation or planning.`,
-      ].join("\n"),
-    );
+    await this.#rpc.stopAndWait(previousRunId);
+    const { policy } = await loadForgePolicy(input.link.prepared.repositoryRoot);
+    const remediationTask = [
+      "Run one fresh bounded remediation attempt on the existing PR branch.",
+      `PR: #${input.pullNumber}`,
+      `Issue: #${input.link.issueNumber}`,
+      `Prior reviewed head: ${input.result.review.headSha}`,
+      ...(input.link.contractGapReplan ? [
+        `CONTRACT_GAP re-plan ID: ${input.link.contractGapReplan.replanId}`,
+        `Preserved contract digest: ${input.link.contractGapReplan.priorContractDigest}`,
+        `Fresh contract digest: ${input.link.contractGapReplan.contractDigest}`,
+        "Do not reuse prior approval; publish a fresh exact-head review with the new contract identity.",
+      ] : []),
+      "Read the standalone review-finding issues listed below. Apply every confirmed/likely fix inside the current superseding builder contract; escalate only product/policy decisions.",
+      ...findingLines,
+      "Commit with forge_commit kind review-fixes, rerun applicable verification, call forge_prepare_review to update the same PR, and launch a fresh complete correctness/security panel.",
+      `Return a schema-valid work-on result with review.rounds=${input.result.review.rounds + 1}, persist it through forge_finalize_work_on, and do not repeat investigation or planning.`,
+    ].join("\n");
+    const receipt = await this.#rpc.spawnWorkOn({
+      runId: input.link.forgeRunId,
+      issueNumber: input.link.issueNumber,
+      repository: input.link.repository,
+      repositoryIdentity: requirePreparedRepositoryIdentity(input.link.prepared),
+      worktreeRoot: input.link.prepared.worktreePath,
+      branch: input.link.prepared.branch,
+      baseBranch: input.link.prepared.baseBranch,
+      baseSha: input.link.prepared.baseSha,
+      expectedHeadSha: input.result.review.headSha,
+      reviewHeadSha: input.result.review.headSha,
+      leaseEpoch: input.link.leaseEpoch,
+      leaseOwnerRunId: input.link.leaseOwnerRunId,
+      policy,
+      issueContext: `${input.link.issueContext}\n\n${remediationTask}`,
+      ...(input.link.builderContract ? { builderContract: input.link.builderContract } : {}),
+    });
     this.#links.delete(previousRunId);
     input.link.subagentRunId = receipt.runId;
     if (contractGapReplan) input.link.contractGapReplan = undefined;
