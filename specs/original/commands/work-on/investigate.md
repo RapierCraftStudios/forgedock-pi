@@ -43,20 +43,19 @@ records; append a superseding investigation for material corrections under
    imported/sourced dependencies, valid/invalid input, fresh/existing state, failure/retry/
    recovery, cancellation, and concurrency interleavings. Record sibling paths checked and
    ruled out; mark every row `change` or `already safe` with code, configuration, or test
-   evidence. Mark every listed path `change` or `already safe` with evidence. Do not declare scope complete while a relevant path has no disposition or a reachable row lacks one; counterexamples must expose omitted
-   callers and transitive dependencies rather than generic path wording.
+   evidence. Mark every listed path `change` or `already safe` with evidence. Do not declare scope complete while a relevant path has no disposition or a reachable row lacks one; counterexamples must expose an omitted alternate caller and transitive dependency rather than generic path wording.
 8. Define the minimal required mutation paths and behaviors, including every row marked `change`. Adjacent paths remain read-only unless compilation, runtime correctness, schema/interface consistency, or a security invariant requires them to change.
 9. Define non-goals and residual uncertainty.
 10. Compile the existing `FORGE:CONTRACT` Builder Brief as the deterministic implementation source of truth. Each accepted criterion states its observable outcome, exact in-scope
     behavior and repository-relative files, non-goals, smallest credible behavioral proof,
-    and compact proof link: `Mechanism: <implementation path/symbol>; Counterexample/behavioral
+    and one compact proof link: `Mechanism: <implementation path/symbol>; Counterexample/behavioral
     test: <test path, trigger, assertion>; Residual risk: <none or bounded non-contradictory limit>`.
     Supporting records retain producer, consumer, persisted state, failure, retry, recovery, history, and lifecycle detail; independently recoverable data lists every recovery source,
     capture, verification, and restore path. Do not turn ownership, scheduling, worktree
     provisioning, hashes/digests, lineage, extra records, or review/deployment procedure into
     Builder Contract requirements.
 
-    Ambiguous criteria or criteria lacking credible proof are not accepted: stop and request clarification. Do not infer requirements or replace behavioral proof with source strings or
+    A criterion that is ambiguous or lacks credible proof is not accepted: stop before any repository edit and request clarification. Do not infer requirements or replace behavioral proof with source strings or
     a broad suite. A bug proof must fail against baseline and pass after the change unless a
     justified inspection-only exception is recorded as unverified. Contradictory residual risk
     is `CONTRADICTED`, never `PASS`. The Acceptance Contract covers every criterion and closure
