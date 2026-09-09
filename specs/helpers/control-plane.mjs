@@ -9,7 +9,7 @@ import { parse } from "yaml";
 
 export const CONTROL_PLANE_SCHEMA = "forgedock.control-plane/v1";
 export const FORGE_OWNER_AGENT = "forgedock-parent-control.forgedock-work-on-coordinator";
-export const FORGE_REVIEW_AGENT = "forgedock-parent-control.delegate";
+export const FORGE_REVIEW_AGENT = "delegate";
 
 const FORGE_FILES = Object.freeze([
   ["package", "package.json"],
@@ -23,7 +23,6 @@ const FORGE_FILES = Object.freeze([
   ["workOnSkill", "skills/forgedock-work-on/SKILL.md"],
   ["reviewSkill", "skills/forgedock-review-pr/SKILL.md"],
   ["ownerAgent", "agents/forgedock-work-on-coordinator.md"],
-  ["reviewAgent", "agents/forgedock-parent-reviewer.md"],
 ]);
 const PI_FILES = Object.freeze([
   ["package", "package.json"],
@@ -94,7 +93,7 @@ export function createControlPlaneDescriptor({ forgeDockRoot, piSubagentsRoot })
   const piRoot = canonicalRoot(piSubagentsRoot, "pi-subagents parent root");
   const forgeFiles = FORGE_FILES.map(entry => fixedFile(forgeRoot, entry));
   const piFiles = PI_FILES.map(entry => fixedFile(piRoot, entry));
-  const forgeDock = { root: forgeRoot, files: forgeFiles, agents: { owner: forgeFiles.find(f => f.id === "ownerAgent"), reviewer: forgeFiles.find(f => f.id === "reviewAgent") } };
+  const forgeDock = { root: forgeRoot, files: forgeFiles, agents: { owner: forgeFiles.find(f => f.id === "ownerAgent") } };
   const piSubagents = { root: piRoot, files: piFiles };
   const value = { v: 1, schema: CONTROL_PLANE_SCHEMA, forgeDock, piSubagents };
   packageIdentity(forgeRoot, forgeFiles[0], "forgedock-pi", "rapiercraftstudios/forgedock-pi");
@@ -111,7 +110,6 @@ export function validateControlPlaneDescriptor(value, options = {}) {
   packageIdentity(forgeRoot, value.forgeDock.files[0], "forgedock-pi", "rapiercraftstudios/forgedock-pi");
   packageIdentity(piRoot, value.piSubagents.files[0], "pi-subagents", "nicobailon/pi-subagents");
   fail(value.forgeDock.agents?.owner?.path === value.forgeDock.files.find(f => f.id === "ownerAgent")?.path, "Owner agent descriptor mismatch");
-  fail(value.forgeDock.agents?.reviewer?.path === value.forgeDock.files.find(f => f.id === "reviewAgent")?.path, "Reviewer agent descriptor mismatch");
   if (options.helperPath) {
     const helper = fs.realpathSync(options.helperPath);
     const expected = value.forgeDock.files.find(f => f.id === "dispatch");
@@ -237,7 +235,7 @@ function targetAgentRoots(targetRoot) {
 }
 export function assertNoTargetAgentShadowing(targetRoot, controlPlane) {
   const names = new Set([FORGE_OWNER_AGENT, FORGE_REVIEW_AGENT]);
-  const expected = new Set([controlPlane.forgeDock.agents.owner.path, controlPlane.forgeDock.agents.reviewer.path]);
+  const expected = new Set([controlPlane.forgeDock.agents.owner.path]);
   for (const root of targetAgentRoots(targetRoot)) for (const file of walk(root)) {
     if (expected.has(file)) continue;
     if (agentNames(file).some(name => names.has(name))) throw new Error(`Target agent definition shadows the parent control plane: ${file}`);
