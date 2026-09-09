@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { checkCurrentReviewAuditTrail } from "../../src/core/artifact-protocol.ts";
@@ -132,6 +133,47 @@ test("a new prepared head creates distinct round-two reviewer nodes", () => {
     chooseReadyReviewerNodes({ nodes: records }).map((node) => node.nodeId),
     ["review-correctness-2", "review-security-2"],
   );
+});
+
+test("contract-gap lifecycle preserves one lane while unrelated lanes remain ready", async () => {
+  const [workOn, review, remediate, investigate, mechanical] = await Promise.all([
+    readFile("specs/original/commands/work-on.md", "utf8"),
+    readFile("specs/original/commands/review-pr.md", "utf8"),
+    readFile("specs/original/commands/work-on/remediate.md", "utf8"),
+    readFile("specs/original/commands/work-on/investigate.md", "utf8"),
+    readFile("specs/mechanical-execution.md", "utf8"),
+  ]);
+  for (const content of [workOn, review, remediate, investigate, mechanical]) {
+    assert.match(content, /CONTRACT_GAP/);
+    assert.match(content, /REPLAN_REQUIRED/);
+  }
+  assert.match(review, /fresh exact-head review/i);
+  assert.match(remediate, /remediation usage/i);
+  assert.match(investigate, /exact reviewed PR\s+head/i);
+  assert.match(mechanical, /replanId/);
+  assert.match(workOn, /GATED.*exact wake condition/is);
+  assert.match(mechanical, /replanId/);
+
+  const gapDecision = chooseWorkflowDispatch({
+    maxReviewRounds: 1,
+    nodes: [{
+      nodeId: "decision-1",
+      node: "decision",
+      attempt: 1,
+      round: 1,
+      status: "completed",
+      outcome: "remediation-required",
+      headSha: "head-a",
+    }],
+  });
+  assert.equal(gapDecision.kind, "blocked");
+  assert.match(gapDecision.reason, /exhausted/i);
+
+  // The scheduler evaluates an unrelated lane from its own state; no gap record
+  // is consulted and the lane remains independently ready for resolve.
+  const unrelatedDecision = chooseWorkflowDispatch({ maxReviewRounds: 1, nodes: [] });
+  assert.equal(unrelatedDecision.kind, "next");
+  assert.equal(unrelatedDecision.node, "resolve");
 });
 
 test("summary becomes eligible only after both current-head comments are durable", () => {

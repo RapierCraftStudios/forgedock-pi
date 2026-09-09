@@ -111,7 +111,7 @@ Derive exactly one next action from live state:
 | decomposition reassessment with an open PR | preserve the PR/work; require approved handoff/disposition before splitting, otherwise GATED |
 | authorized remediation round unfinished | resume its cohesive fix/scoped re-review; do not charge another round |
 | open PR with current blockers and remediation rounds available | remediate |
-| blockers remain after last authorized re-review | read-only reassessment once, then GATED with unresolved evidence; no automatic extra round |
+| blockers remain after last authorized re-review | classify the findings; if a reachable omitted proof row invalidates the admitted contract and the bounded transition is unused, preserve the reviewed work and enter `CONTRACT_GAP` → `REPLAN_REQUIRED`; otherwise read-only reassessment once, then GATED with unresolved evidence; no automatic extra round |
 | issue has durable GATED prerequisite/recovery | verify its exact wake condition; resume only when satisfied |
 | open PR awaiting current-head review | review |
 | committed build with no PR | prepare PR |
@@ -129,9 +129,9 @@ that round, so its remaining blockers require a new round. Never reset usage on 
 reinvestigation, a new head, or names such as `final`, `last`, or `closure`. Fixing code after
 blocking review consumes a round even when called build, polish, or cleanup. Only explicit
 new authority can extend an exhausted budget; do not ask for routine extensions.
+`CONTRACT_GAP` preserves exact reviewed head/worktree, reviewer evidence, prior contract and usage for one lane-local `REPLAN_REQUIRED` successor. It publishes superseding records, binds a new digest/`replanId`, and requires fresh exact-head review. Consumed transition, exhausted cap, or missing prerequisite is `GATED`; usage never resets, unrelated lanes never compete, and explicit new authority alone extends the bound.
 
 ## Lifecycle
-
 ### 1. Investigate
 
 Load `work-on/investigate.md` once. Confirm or invalidate the claim, identify root cause,

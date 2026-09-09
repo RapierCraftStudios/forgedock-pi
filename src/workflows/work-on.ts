@@ -55,6 +55,7 @@ import {
 import {
   assertBuilderContractPaths,
   createBuilderContract,
+  createBuilderPathContract,
   type BuilderPathContract,
 } from "../core/builder-contract.ts";
 import { renderPhaseArtifact } from "../core/comment-contract.ts";
@@ -91,6 +92,7 @@ export {
   reviewFindingMarker,
 } from "./review-findings.ts";
 import {
+  admitContractGapReplan,
   classifyRemediationFindings,
   closeAddressedReviewFindingIssues,
   isRemediationCandidate,
@@ -99,6 +101,7 @@ import {
   remediationCompleteMarker,
   remediationStartMarker,
   type AuthoritativeReviewFinding,
+  type ContractGapHandoff,
 } from "./remediation.ts";
 
 const RUN_LINK_ENTRY = "forgedock-run-link/v1";
@@ -145,6 +148,8 @@ export interface ActiveRunLink {
   /** Persisted barrier: do not spawn again without a known provider receipt. */
   launchFailure?: "ambiguous" | "binding";
   remediationAttempts: number;
+  contractGapReplan?: ContractGapHandoff;
+  contractGapReplanCount?: number;
   findingIssueMap: Record<string, number>;
   issueContext: string;
   planContext?: string;
@@ -3145,11 +3150,53 @@ export class ForgeWorkOnController {
         authoritativeFindings,
         link.builderContract,
       );
+      const hasContractGap =
+        gate.decision === "changes-requested" &&
+        remediation.contractGaps.length > 0 &&
+        remediation.escalated.length === 0;
+      if (hasContractGap && !link.contractGapReplan) {
+        const priorContract = link.builderContract ?? createBuilderPathContract(["**"]);
+        const priorContractDigest = `sha256:${priorContract.contractHash}`;
+        const supersedingPaths = [
+          ...priorContract.allowedPaths,
+          ...remediation.contractGaps.map(({ finding }) => finding.file),
+        ];
+        const supersedingContract = createBuilderPathContract(
+          supersedingPaths,
+          priorContract.revision + 1,
+        );
+        link.builderContract = supersedingContract;
+        const contractDigest = `sha256:${supersedingContract.contractHash}`;
+        link.contractGapReplan = admitContractGapReplan({
+          issueNumber: link.issueNumber,
+          pullNumber: pull.number,
+          target: link.prepared.baseBranch,
+          reviewedHead: aggregate.review.headSha,
+          worktree: link.prepared.worktreePath,
+          reviewEvidence: aggregate.review.reviewerResults.map((reviewer) => reviewer.runId),
+          remediationUsage: { used: aggregate.review.rounds, limit: policy.review.maxRounds },
+          priorContractDigest,
+          replanId: `${link.forgeRunId}:replan:${aggregate.review.headSha}`,
+          contractDigest,
+          replanCount: link.contractGapReplanCount ?? 0,
+        });
+        link.contractGapReplanCount = link.contractGapReplan.replanCount;
+        link.planContext = [
+          link.planContext,
+          "CONTRACT_GAP preserved-work handoff:",
+          JSON.stringify(link.contractGapReplan, null, 2),
+        ].filter(Boolean).join("\n\n");
+        this.#persistLink(link);
+      }
       const canRemediate =
         gate.decision === "changes-requested" &&
-        remediation.fixable.length > 0 &&
+        (remediation.fixable.length > 0 || link.contractGapReplan?.status === "REPLAN_REQUIRED") &&
         remediation.escalated.length === 0 &&
-        aggregate.review.rounds < policy.review.maxRounds;
+        (aggregate.review.rounds < policy.review.maxRounds || link.contractGapReplan?.status === "REPLAN_REQUIRED") &&
+        aggregate.review.rounds < 5;
+      const contractGapGated =
+        gate.decision === "changes-requested" &&
+        link.contractGapReplan?.status === "GATED";
       outcome =
         gate.decision === "approved" ||
         gate.decision === "approved-with-follow-ups"
@@ -3167,7 +3214,10 @@ export class ForgeWorkOnController {
           link.forgeRunId,
         );
         const alreadyStarted = markerState.startedAttempts.includes(attempt);
-        const findingLines = remediation.fixable.map(
+        const actionableFindings = link.contractGapReplan?.status === "REPLAN_REQUIRED"
+          ? remediation.contractGaps
+          : remediation.fixable;
+        const findingLines = actionableFindings.map(
           ({ issueNumber, finding }) =>
             `- #${issueNumber} ${finding.id}: ${finding.summary} (${finding.file}:${finding.line})`,
         );
@@ -3198,24 +3248,35 @@ export class ForgeWorkOnController {
           : link.remediationAttempts + 1;
       }
       if (outcome !== "awaiting-merge" && outcome !== "remediation-required") {
+        const stopReason = contractGapGated
+          ? `CONTRACT_GAP re-plan already consumed; GATED until explicit new authority supplies a fresh contract/re-plan allowance. Preserved reviewed head: ${link.contractGapReplan?.reviewedHead ?? pull.headSha}; replanId: ${link.contractGapReplan?.replanId ?? "unknown"}.`
+          : gate.reasons.join(" ");
         await journal.append({
           runId: link.forgeRunId,
-          type: outcome === "needs-human" ? "node.needs-human" : "node.failed",
+          type: outcome === "needs-human"
+            ? "node.needs-human"
+            : contractGapGated
+              ? "node.blocked"
+              : "node.failed",
           payload: {
             ...common,
             headSha: pull.headSha,
-            reason: gate.reasons.join(" "),
-            evidence,
+            reason: stopReason,
+            evidence: [...evidence, ...(contractGapGated ? [stopReason] : [])],
           },
-          idempotencyKey: `node:${node.nodeId}:${outcome}`,
+          idempotencyKey: `node:${node.nodeId}:${contractGapGated ? "gated" : outcome}`,
           sessionId,
           message: `Stop decision node ${node.nodeId}`,
           ...(ctx.signal ? { signal: ctx.signal } : {}),
         });
-        link.status = outcome === "needs-human" ? "needs-human" : "failed";
+        link.status = outcome === "needs-human"
+          ? "needs-human"
+          : contractGapGated
+            ? "blocked"
+            : "failed";
         this.#persistLink(link);
         this.#emitLifecycle(link, {
-          reason: gate.reasons.join(" "),
+          reason: stopReason,
           nodeId: node.nodeId,
           pullNumber: pull.number,
         });
@@ -5326,11 +5387,24 @@ export class ForgeWorkOnController {
       authoritative,
       input.link.builderContract,
     );
+    const handoff = input.link.contractGapReplan;
+    if (handoff && (handoff.pullNumber !== input.pullNumber || handoff.issueNumber !== input.link.issueNumber || handoff.reviewedHead !== input.result.review.headSha || handoff.worktree !== input.link.prepared.worktreePath || handoff.target !== input.link.prepared.baseBranch))
+      return false;
+    const contractGapReplan = handoff?.status === "REPLAN_REQUIRED";
+    // The controller installs the superseding contract before the child starts.
+    // Reclassify its preserved findings as in-contract for the actual fix while
+    // retaining their original CONTRACT_GAP disposition in the durable plan.
+    const actionableFindings = contractGapReplan
+      ? classification.contractGaps.length > 0
+        ? classification.contractGaps
+        : classification.fixable
+      : classification.fixable;
     if (
-      !isRemediationCandidate(input.result, classification.fixable) ||
+      !isRemediationCandidate(input.result, actionableFindings) ||
       classification.escalated.length > 0 ||
-      input.link.remediationAttempts >= input.maxRounds ||
-      input.result.review.rounds >= input.maxRounds
+      (!contractGapReplan && input.link.remediationAttempts >= input.maxRounds) ||
+      (!contractGapReplan && input.result.review.rounds >= input.maxRounds) ||
+      input.result.review.rounds >= 5
     )
       return false;
     const attempt = 1;
@@ -5339,7 +5413,7 @@ export class ForgeWorkOnController {
       input.link.forgeRunId,
     );
     if (markerState.completedAttempts.includes(attempt)) return false;
-    const findingLines = classification.fixable.map(
+    const findingLines = actionableFindings.map(
       ({ issueNumber, finding }) =>
         `- #${issueNumber} ${finding.id}: ${finding.summary} (${finding.file}:${finding.line})`,
     );
@@ -5366,22 +5440,45 @@ export class ForgeWorkOnController {
       ...(input.ctx.signal ? { signal: input.ctx.signal } : {}),
     });
     const previousRunId = input.link.subagentRunId;
-    const receipt = await this.#rpc.resume(
-      previousRunId,
-      [
-        "Run one legacy-compatible bounded remediation attempt on the existing PR branch.",
-        `PR: #${input.pullNumber}`,
-        `Issue: #${input.link.issueNumber}`,
-        `Prior reviewed head: ${input.result.review.headSha}`,
-        "Read the standalone review-finding issues listed below. Apply every confirmed/likely fix that is inside the accepted builder contract; escalate only product/policy/out-of-contract decisions.",
-        ...findingLines,
-        "Commit with forge_commit kind review-fixes, rerun applicable verification, call forge_prepare_review to update the same PR, and launch a fresh complete correctness/security panel.",
-        `Return a schema-valid work-on result with review.rounds=${input.result.review.rounds + 1}, persist it through forge_finalize_work_on, and do not repeat investigation or planning.`,
-      ].join("\n"),
-    );
+    await this.#rpc.stopAndWait(previousRunId);
+    const { policy } = await loadForgePolicy(input.link.prepared.repositoryRoot);
+    const remediationTask = [
+      "Run one fresh bounded remediation attempt on the existing PR branch.",
+      `PR: #${input.pullNumber}`,
+      `Issue: #${input.link.issueNumber}`,
+      `Prior reviewed head: ${input.result.review.headSha}`,
+      ...(input.link.contractGapReplan ? [
+        `CONTRACT_GAP re-plan ID: ${input.link.contractGapReplan.replanId}`,
+        `Preserved contract digest: ${input.link.contractGapReplan.priorContractDigest}`,
+        `Fresh contract digest: ${input.link.contractGapReplan.contractDigest}`,
+        "Do not reuse prior approval; publish a fresh exact-head review with the new contract identity.",
+      ] : []),
+      "Read the standalone review-finding issues listed below. Apply every confirmed/likely fix inside the current superseding builder contract; escalate only product/policy decisions.",
+      ...findingLines,
+      "Commit with forge_commit kind review-fixes, rerun applicable verification, call forge_prepare_review to update the same PR, and launch a fresh complete correctness/security panel.",
+      `Return a schema-valid work-on result with review.rounds=${input.result.review.rounds + 1}, persist it through forge_finalize_work_on, and do not repeat investigation or planning.`,
+    ].join("\n");
+    const receipt = await this.#rpc.spawnWorkOn({
+      runId: input.link.forgeRunId,
+      issueNumber: input.link.issueNumber,
+      repository: input.link.repository,
+      repositoryIdentity: requirePreparedRepositoryIdentity(input.link.prepared),
+      worktreeRoot: input.link.prepared.worktreePath,
+      branch: input.link.prepared.branch,
+      baseBranch: input.link.prepared.baseBranch,
+      baseSha: input.link.prepared.baseSha,
+      expectedHeadSha: input.result.review.headSha,
+      reviewHeadSha: input.result.review.headSha,
+      leaseEpoch: input.link.leaseEpoch,
+      leaseOwnerRunId: input.link.leaseOwnerRunId,
+      policy,
+      issueContext: `${input.link.issueContext}\n\n${remediationTask}`,
+      ...(input.link.builderContract ? { builderContract: input.link.builderContract } : {}),
+    });
     this.#links.delete(previousRunId);
     input.link.subagentRunId = receipt.runId;
-    input.link.remediationAttempts += 1;
+    if (contractGapReplan) input.link.contractGapReplan = undefined;
+    else input.link.remediationAttempts += 1;
     input.link.status = "running";
     this.#persistLink(input.link);
     input.ctx.ui.notify(
@@ -7452,6 +7549,10 @@ function normalizeActiveRunLink(value: unknown): ActiveRunLink | undefined {
       ? { launchFailure: link.launchFailure }
       : {}),
     remediationAttempts: link.remediationAttempts ?? 0,
+    ...(link.contractGapReplan ? { contractGapReplan: link.contractGapReplan } : {}),
+    ...(Number.isSafeInteger(link.contractGapReplanCount)
+      ? { contractGapReplanCount: link.contractGapReplanCount }
+      : {}),
     findingIssueMap: link.findingIssueMap ?? {},
     issueContext: link.issueContext ?? "",
     ...(typeof link.planContext === "string"

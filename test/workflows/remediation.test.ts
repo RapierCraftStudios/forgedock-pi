@@ -6,6 +6,7 @@ import type { GitHubWorkflowAdapter } from "../../src/adapters/github-workflow.t
 import type { ForgeWorkOnResult } from "../../src/agents/contracts.ts";
 import { createBuilderPathContract } from "../../src/core/builder-contract.ts";
 import {
+  admitContractGapReplan,
   classifyRemediationFindings,
   closeAddressedReviewFindingIssues,
   isRemediationCandidate,
@@ -105,6 +106,53 @@ test("closure gaps require a superseding contract before remediation edits", asy
   assert.equal("CONTRACT_GAP", "CONTRACT_GAP");
 });
 
+test("contract gaps classify before edits and permit one bounded re-plan", async () => {
+  const [workOn, review, remediate, investigate, mechanical] = await Promise.all([
+    readFile("specs/original/commands/work-on.md", "utf8"),
+    readFile("specs/original/commands/review-pr.md", "utf8"),
+    readFile("specs/original/commands/work-on/remediate.md", "utf8"),
+    readFile("specs/original/commands/work-on/investigate.md", "utf8"),
+    readFile("specs/mechanical-execution.md", "utf8"),
+  ]);
+  for (const content of [review, investigate]) {
+    assert.match(content, /CONTRACT_GAP/);
+    assert.match(content, /REPLAN_REQUIRED/);
+  }
+  assert.match(review, /IMPLEMENTATION_DEFECT/);
+  assert.match(review, /VERIFICATION_GAP/);
+  assert.match(workOn, /never reset usage/i);
+  assert.match(remediate, /IMPLEMENTATION_DEFECT/);
+  assert.match(remediate, /VERIFICATION_GAP/);
+  assert.match(remediate, /CONTRACT_GAP/);
+  assert.match(review, /fresh contract digest/i);
+  assert.match(mechanical, /priorContractDigest/);
+
+  const input = {
+    issueNumber: 42,
+    pullNumber: 7,
+    target: "staging",
+    reviewedHead: "0123456789abcdef0123456789abcdef01234567",
+    worktree: "/lane/a",
+    reviewEvidence: ["review-a"],
+    remediationUsage: { used: 1, limit: 1 },
+    priorContractDigest: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    replanId: "replan-a",
+    contractDigest: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    replanCount: 0,
+  } as const;
+  const first = admitContractGapReplan(input);
+  const second = admitContractGapReplan({ ...input, replanCount: first.replanCount });
+  assert.equal(first.status, "REPLAN_REQUIRED");
+  assert.equal(first.remediationUsage.used, 1);
+  assert.deepEqual(first.reviewEvidence, ["review-a"]);
+  assert.equal(second.status, "GATED");
+  assert.equal(second.replanCount, first.replanCount);
+  assert.throws(
+    () => admitContractGapReplan({ ...input, contractDigest: input.priorContractDigest }),
+    /distinct SHA-256 contract digests/i,
+  );
+});
+
 test("open review-finding issues are authoritative and deduplicated per PR", async () => {
   const fake = new RemediationGitHubFake();
   const findings = await loadAuthoritativeReviewFindingIssues({
@@ -158,6 +206,23 @@ test("remediation classification fixes in-contract blockers and escalates true a
     outsideContract.followUp.map((item) => item.finding.id),
     ["SEC-001"],
   );
+  assert.deepEqual(outsideContract.contractGaps.map((item) => item.finding.id), ["SEC-001"]);
+  assert.equal(
+    outsideContract.dispositions.find((item) => item.finding.finding.id === "SEC-001")?.classification,
+    "CONTRACT_GAP",
+  );
+  assert.equal(
+    classification.dispositions.find((item) => item.finding.finding.id === "SEC-001")?.classification,
+    "IMPLEMENTATION_DEFECT",
+  );
+  const verificationGap = classifyRemediationFindings([
+    parseAuthoritativeReviewFindingIssue({
+      number: 104,
+      body: findingBody(7, "VERIFY-001", "security").replace("**Line**: 50", "**Line**: 0"),
+    })!,
+  ]);
+  assert.deepEqual(verificationGap.verificationGaps.map((item) => item.finding.id), ["VERIFY-001"]);
+  assert.equal(verificationGap.dispositions[0]?.classification, "VERIFICATION_GAP");
   assert.equal(
     isRemediationCandidate(
       { ...blockedResult, blocker: "main protected branch policy" },

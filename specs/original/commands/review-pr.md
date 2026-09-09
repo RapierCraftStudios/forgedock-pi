@@ -23,6 +23,27 @@ merge behavior, imperfect-intake investigation, and bounded remediation cap. If 
 independent patch-caused blockers remain after a cohesive round, return the evidence to a
 bounded re-plan/decomposition decision rather than normalizing repeated review.
 
+### Finding classification and contract-gap handoff
+
+Every confirmed review finding is classified before remediation as one of:
+
+- `IMPLEMENTATION_DEFECT`: the admitted contract names the behavior and the patch violates it;
+- `VERIFICATION_GAP`: the admitted behavior is implemented but required evidence is missing
+  or cannot close a named proof row; or
+- `CONTRACT_GAP`: the finding demonstrates a reachable row that the admitted contract did
+  not name, such as an alternate caller, invocation mode, transitive dependency,
+  fresh/existing state, failure/retry/recovery, cancellation, or concurrency path.
+
+The classification records the exact finding, evidence, reviewed head, affected boundary,
+producer/consumer, and counterexample. A `CONTRACT_GAP` is not an ordinary in-contract
+fix: it preserves the exact PR head, worktree, complete reviewer evidence, and remediation
+usage, enters `CONTRACT_GAP`, and requests the single bounded `REPLAN_REQUIRED` transition.
+The owner must publish a superseding investigation/architecture/contract chain before any
+edit. The re-plan binds a fresh contract digest and fresh exact-head review; no old verdict,
+panel, or approval is reusable merely because the old head was preserved. A second re-plan,
+cap exhaustion, or missing wake prerequisite is `GATED`, never a silent cap increase. The
+classification is lane-local, so unrelated lanes continue without competition.
+
 **NEVER use plan mode (EnterPlanMode)** during review — it breaks execution context.
 **Sub-agent dispatch tool: `Task` preferred, `Agent` is the documented fallback.** review-pr dispatches domain review agents via a sub-agent-spawning tool. Resolve which one is available ONCE per invocation, before Phase 3C, per the **Sub-Agent Dispatch Tool Resolution** rule below — do not halt to ask the operator which tool to use. Never fall back to reviewing inline in the orchestrator's own context; inline self-review is a strictly weaker substitute for an isolated fresh-context reviewer and is not a permitted fallback.
 

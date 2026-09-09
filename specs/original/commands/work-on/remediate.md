@@ -26,6 +26,29 @@ are fixable inside the investigation scope. The same work-on agent remains the s
 A stale, advisory, possible, low/medium, pre-existing, or unrelated finding does not enter
 remediation. Keep valuable independent findings as non-blocking follow-ups.
 
+## Finding classification before editing
+
+Classify every confirmed blocker against the admitted proof map before reserving a round:
+
+- `IMPLEMENTATION_DEFECT` — the behavior was admitted and the patch violates it;
+- `VERIFICATION_GAP` — the behavior was admitted but required evidence is missing; or
+- `CONTRACT_GAP` — the finding proves a reachable caller, invocation mode, transitive
+dependency, input/state, failure/retry/recovery, cancellation, or concurrency row was not
+admitted.
+
+A `CONTRACT_GAP` preserves the exact reviewed PR head, worktree, complete reviewer evidence,
+prior contract digest, and original remediation usage. It does not permit a line-level fix.
+Enter the one bounded `REPLAN_REQUIRED` transition, publish a superseding investigation,
+architecture, and contract before editing, and bind a fresh `replanId` and contract digest.
+The re-plan must close the omitted row and require a fresh exact-head panel; old approval is
+not reusable. Do not reset the remediation counter or create a competing writer.
+
+When the bounded transition is consumed, or a required preserved-work or superseding-record
+prerequisite is unavailable, return `GATED` with the exact wake condition. A contract-gap
+re-plan preserves `remediationUsage` and does not silently increase the configured cap; the
+post-plan fix/review must still obey that recorded bound. Without an available transition,
+cap exhaustion is `GATED`. Unrelated lanes continue under their own identities and allowances.
+
 ## Scope reassessment
 
 Before another edit, reassess cohesion if review reveals distinct omitted outcomes, phased
