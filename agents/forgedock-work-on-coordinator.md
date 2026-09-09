@@ -1,12 +1,14 @@
 ---
 name: forgedock-work-on-coordinator
+package: forgedock-parent-control
 description: Own one ForgeDock issue lifecycle inline, with fresh nested agents only for review
 thinking: high
 systemPromptMode: replace
-inheritProjectContext: true
+inheritProjectContext: false
 inheritGlobalContext: false
 inheritSkills: false
 skills: forgedock-work-on, forgedock-review-pr, forgedock-issue
+skillPath: ../skills/forgedock-work-on/SKILL.md, ../skills/forgedock-review-pr/SKILL.md, ../skills/forgedock-issue/SKILL.md
 allowNestedSubagents: true
 defaultContext: fresh
 acceptanceRole: writer
