@@ -6,9 +6,7 @@ description: Implement and verify one confirmed issue inline in its owned worktr
 
 # Work On: Build
 
-The sole work-on agent executes this phase inline. Do not launch builders, quality-gate
-agents, context agents, architects, or other helpers. The completed investigation's
-`FORGE:CONTRACT` Builder Brief is the mutation contract.
+The sole work-on agent executes this phase inline. Do not launch builders, quality-gate agents, context agents, architects, or other helpers. The completed investigation's `FORGE:CONTRACT` Builder Brief is the mutation contract.
 
 ## Preconditions
 
@@ -18,8 +16,7 @@ agents, context agents, architects, or other helpers. The completed investigatio
 - Under orchestration, `$PWD` is the Pi-managed `pi-parallel-*` worktree.
 - No competing writer owns this issue or worktree.
 
-At phase entry, use one label edit to replace `workflow:ready-to-build` and other stale
-active-phase labels with `workflow:building`.
+At phase entry, use one label edit to replace `workflow:ready-to-build` and other stale active-phase labels with `workflow:building`.
 
 ### Builder Contract (Build Brief)
 
@@ -41,11 +38,8 @@ Before editing, compile each acceptance criterion from the accepted contract int
 The mechanism traces the invariant through its producer/consumer boundary and relevant failure paths; the test exercises a counterexample or observable behavior and, for a bug fix, rejects the baseline defect. Include namespace/type, serialization, interleaving, failure-injection, retry, recovery, and fresh/existing-state obligations for each new key, protocol, state machine, or external call.
 PASS requires both concrete proof ends and non-contradictory residual risk. A contradictory risk is `CONTRADICTED`, never `PASS`; missing, skipped, unknown, or contradicted proof cannot be reported as satisfied or sent to review. Required-risk integration capability that is unavailable or skipped must gate the row. This enriches imperfect intake without becoming a separate qualitative refusal gate.
 
-The closure matrix is an admission gate: copy every producer→consumer/caller, invocation-mode,
-transitive-dependency, input/state, failure/retry/recovery, cancellation, and concurrency row
-into the proof map. Every row needs a concrete counterexample or behavioral test and a
-`change`/`already safe` disposition before edits; a newly found reachable row supersedes the
-contract and requires re-planning before mutation continues.
+The closure matrix is an admission gate: copy every producer→consumer/caller, invocation-mode, transitive-dependency, input/state, failure/retry/recovery, cancellation, and concurrency row
+into the proof map. Every row needs a concrete counterexample or behavioral test and a `change`/`already safe` disposition before edits; a newly found reachable row supersedes the contract and requires re-planning before mutation continues.
 
 ## Plan once and publish the pre-build graph
 
