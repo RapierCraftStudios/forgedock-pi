@@ -707,6 +707,48 @@ test("resume intent is durable before a provider continuation receipt", () => {
   assert.equal(state.nodes["verify-1"]?.subagentRunId, "child-new");
 });
 
+test("contract-gap replan metadata survives durable node state", () => {
+  let state = initializedState();
+  state = applyRunEvent(
+    state,
+    nextEvent(state, "node.queued", {
+      nodeId: "decision-1",
+      node: "decision",
+      attempt: 1,
+    }, "decision:queue"),
+  );
+  state = applyRunEvent(
+    state,
+    nextEvent(state, "node.started", {
+      nodeId: "decision-1",
+      node: "decision",
+      attempt: 1,
+    }, "decision:start"),
+  );
+  const event = nextEvent(
+    state,
+    "node.completed",
+    {
+      nodeId: "decision-1",
+      node: "decision",
+      attempt: 1,
+      round: 1,
+      outcome: "remediation-required",
+      contractGapReplan: {
+        status: "REPLAN_REQUIRED",
+        replanId: "replan-a",
+        reviewedHead: "abcdefabcdefabcdefabcdefabcdefabcdefabcd",
+      },
+    },
+    "decision:complete",
+  );
+  state = applyRunEvent(state, event);
+  assert.deepEqual(
+    state.nodes["decision-1"]?.contractGapReplan,
+    (event.payload as { contractGapReplan?: unknown }).contractGapReplan,
+  );
+});
+
 test("run cancellation durably abandons every active phase and node", () => {
   let state = initializedState();
   state = applyRunEvent(

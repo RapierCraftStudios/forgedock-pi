@@ -726,6 +726,7 @@ function applyNodeEvent(state: RunState, event: RunEvent): void {
         }
       : {}),
     ...validatedBuilderContract(record.builderContract),
+    ...validatedContractGapReplan(record.contractGapReplan),
     ...(typeof record.outcome === "string" ? { outcome: record.outcome } : {}),
     ...(Array.isArray(record.evidence)
       ? {
@@ -745,6 +746,34 @@ function applyNodeEvent(state: RunState, event: RunEvent): void {
   if (status === "failed") state.status = "failed";
   if (status === "blocked") state.status = "blocked";
   if (status === "needs-human") state.status = "needs-human";
+}
+
+function validatedContractGapReplan(
+  value: unknown,
+): { contractGapReplan?: NonNullable<NodeEventPayload["contractGapReplan"]> } {
+  if (value === undefined) return {};
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new StateTransitionError(
+      "invalid-contract-gap-replan",
+      "Contract-gap re-plan metadata must be an object.",
+    );
+  const record = value as Record<string, unknown>;
+  if (
+    (record.status !== "REPLAN_REQUIRED" && record.status !== "GATED") ||
+    typeof record.replanId !== "string" ||
+    !record.replanId.trim() ||
+    typeof record.reviewedHead !== "string" ||
+    !/^[a-f0-9]{40}$/.test(record.reviewedHead)
+  )
+    throw new StateTransitionError(
+      "invalid-contract-gap-replan",
+      "Contract-gap re-plan metadata identity is invalid.",
+    );
+  return { contractGapReplan: {
+    status: record.status,
+    replanId: record.replanId,
+    reviewedHead: record.reviewedHead,
+  } };
 }
 
 function validatedBuilderContract(
