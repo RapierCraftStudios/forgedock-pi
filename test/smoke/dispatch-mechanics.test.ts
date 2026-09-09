@@ -133,7 +133,9 @@ test("review preparation cannot substitute a model, duplicate correctness or exc
     assert.throws(() => dispatch.prepareReview({ ...review, criterionIds: ["source-behavior"] }, join(root, "missing-criterion"), env), /exactly match/);
     assert.throws(() => dispatch.prepareReview({ ...review, criterionIds: ["criterion-1", "source-safety"] }, join(root, "generic-criterion"), env), /exactly match/);
     const valid = dispatch.prepareReview(review, join(root, "review"), env);
-    assert.match(await readFile(valid.request.workflowScriptPath, "utf8"), /openai-codex\/gpt-5.6-luna:high/);
+    const reviewScript = await readFile(valid.request.workflowScriptPath, "utf8");
+    assert.match(reviewScript, /openai-codex\/gpt-5.6-luna:high/);
+    assert.match(reviewScript, /agentScope":"user"/);
   });
 });
 

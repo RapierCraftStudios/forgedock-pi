@@ -245,7 +245,7 @@ export function prepareReview(plan, out, env = process.env) {
     requireThat(["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(role.thinking), "Invalid review thinking level");
     const model = /:(off|minimal|low|medium|high|xhigh|max)$/.test(policy.model) ? policy.model : `${policy.model}:${role.thinking}`;
     return { key: `${name}-${plan.round}-${plan.head.slice(0, 12)}`, agent: "delegate", task: `Bound review identity: ${policy.repo}#${policy.issue}, target ${policy.target}, head ${plan.head}, contract ${policy.contractDigest}, criteria ${plan.criterionIds.join(",")}.\n${role.task}`,
-      model, context: "fresh", worktree: false, acceptance: false, timeoutMs: 900000 };
+      model, context: "fresh", agentScope: "user", worktree: false, acceptance: false, timeoutMs: 900000 };
   });
   fs.mkdirSync(out, { recursive: true }); out = path.resolve(out);
   const scriptPath = path.join(out, "review.js"); save(scriptPath, `return await runs.all(${JSON.stringify(roles)});\n`);
