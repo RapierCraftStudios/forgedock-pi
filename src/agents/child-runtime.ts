@@ -47,6 +47,7 @@ import { resolveVerificationCommandDirectory } from "../adapters/verification-pr
 import {
   assertBuilderContractPaths,
   type BuilderPathContract,
+  validateBuilderContract,
   validateBuilderPathContract,
 } from "../core/builder-contract.ts";
 import { workflowLabelForPhaseBoundary } from "../core/artifact-protocol.ts";
@@ -989,6 +990,8 @@ export function registerForgeRuntime(
         throw new Error(
           "Implementation commit refused without an accepted builder contract.",
         );
+      if (binding.node === "implement" && binding.builderContract)
+        validateBuilderContract(binding.builderContract);
       if (binding.builderContract)
         assertBuilderContractPaths(binding.builderContract, changedPaths);
       const added = await runProcess(
@@ -2136,9 +2139,12 @@ function readBinding(): ForgeChildBinding {
       "Forge binding reviewerTimeoutMs must be from 300000 through 7200000.",
     );
   }
+  const node = typeof value.node === "string" ? value.node : undefined;
   const builderContract = value.builderContract;
-  if (builderContract !== undefined)
+  if (builderContract !== undefined) {
     validateBuilderPathContract(builderContract);
+    if (node === "implement") validateBuilderContract(builderContract);
+  }
   const commands = value.verificationCommands;
   if (!commands || typeof commands !== "object" || Array.isArray(commands))
     throw new Error("Forge binding verificationCommands must be an object.");
@@ -2147,7 +2153,6 @@ function readBinding(): ForgeChildBinding {
     validateBoundCommand(name, commandValue);
     verificationCommands[name] = commandValue;
   }
-  const node = typeof value.node === "string" ? value.node : undefined;
   if (
     node &&
     (typeof value.nodeId !== "string" ||

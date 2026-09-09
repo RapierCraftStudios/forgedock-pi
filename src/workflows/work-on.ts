@@ -54,7 +54,7 @@ import {
 } from "../core/artifact-protocol.ts";
 import {
   assertBuilderContractPaths,
-  createBuilderPathContract,
+  createBuilderContract,
   type BuilderPathContract,
 } from "../core/builder-contract.ts";
 import { renderPhaseArtifact } from "../core/comment-contract.ts";
@@ -2275,9 +2275,16 @@ export class ForgeWorkOnController {
     }
     const completedBuilderContract =
       nodeResult.status === "completed" && nodeResult.artifact?.phase === "plan"
-        ? createBuilderPathContract(nodeResult.artifact.allowedPaths)
+        ? createBuilderContract(nodeResult.artifact)
         : undefined;
     if (completedBuilderContract) {
+      if (
+        link.builderContract &&
+        link.builderContract.contractHash !== completedBuilderContract.contractHash
+      )
+        throw new Error(
+          "Accepted builder contract is immutable; a changed plan requires a superseding contract.",
+        );
       link.planContext = JSON.stringify(nodeResult.artifact, null, 2);
       link.builderContract = completedBuilderContract;
     }
@@ -3181,7 +3188,7 @@ export class ForgeWorkOnController {
         });
         link.planContext = [
           link.planContext,
-          "Authoritative remediation inputs:",
+          "Remediation context (does not amend the accepted Builder Contract):",
           JSON.stringify(remediation.fixable, null, 2),
         ]
           .filter(Boolean)
