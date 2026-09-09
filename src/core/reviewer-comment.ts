@@ -45,6 +45,12 @@ export function renderReviewerComment(
         })
         .join("\n")
     : "No findings reported.";
+  const structuredFindings = result.findings
+    .map(
+      (finding) =>
+        `<!-- FINDING:${finding.id}|${finding.confidence.toUpperCase()}|${finding.severity.toUpperCase()}|${finding.file}:${finding.line}|${finding.summary.replaceAll("|", "/")} -->`,
+    )
+    .join("\n");
   const evidence = result.evidence.map((entry) => `- ${entry}`).join("\n");
   const limitations = result.limitations.length
     ? result.limitations.map((entry) => `- ${entry}`).join("\n")
@@ -69,6 +75,10 @@ export function renderReviewerComment(
     "## Findings",
     "",
     findings,
+    "",
+    "<!-- REVIEW-FINDINGS-START -->",
+    structuredFindings,
+    "<!-- REVIEW-FINDINGS-END -->",
     "",
     "## Residual Risks",
     "",

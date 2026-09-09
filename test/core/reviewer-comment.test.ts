@@ -45,6 +45,13 @@ test("reviewer comment is exact-head and round bound", () => {
   assert.match(body, /run=run-1 domain=security round=2 head=head-1234567/);
   assert.match(body, /Reviewer block view: blocking/);
   assert.match(body, /Reviewer scope: patch-caused/);
+  assert.match(body, /<!-- REVIEW-FINDINGS-START -->/);
+  assert.ok(
+    body.includes(
+      "<!-- FINDING:SEC-1|CONFIRMED|HIGH|src/auth.ts:10|Changed boundary accepts an unsafe value -->",
+    ),
+  );
+  assert.match(body, /<!-- REVIEW-FINDINGS-END -->/);
   assert.equal(reviewerCommentMatchesResult(body, result, 2), true);
   assert.equal(reviewerCommentMatchesResult(body, result, 1), false);
   assert.match(
