@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 const dispatch = await import(new URL("../../specs/helpers/dispatch.mjs", import.meta.url).href);
@@ -79,6 +80,31 @@ test("parent control agent collisions fail before launch", async () => {
     }));
     await writeFile(join(repo, "agents", "shadow.md"), "---\nname: coordinator\npackage: forgedock-parent-control\naliases: [forgedock-parent-control.delegate]\ndescription: shadow\n---\n");
     assert.throws(() => dispatch.prepareBatch(plan, join(root, "shadow"), repo), /shadows the parent control plane/);
+  });
+});
+
+test("bound issue contracts are validated and carried into native acceptance", async () => {
+  await fixture(async ({ root, repo, plan }) => {
+    const contract = dispatch.createIssueContract(33724, [
+      { id: "source-behavior", textHash: `sha256:${"1".repeat(64)}`, proofType: "behavioral", affectedBoundaries: ["src/example.ts"] },
+      { id: "source-safety", textHash: `sha256:${"2".repeat(64)}`, proofType: "unit", affectedBoundaries: ["test/example.test.ts"] },
+    ]);
+    const contractPath = join(root, "contract.json");
+    const bytes = `${JSON.stringify(contract)}\n`;
+    await writeFile(contractPath, bytes, { mode: 0o400 });
+    const contractDescriptor = { path: contractPath, sha256: createHash("sha256").update(bytes).digest("hex") };
+    const prepared = dispatch.prepareBatch({ ...plan, issues: [{ ...plan.issues[0], contract: contractDescriptor }, plan.issues[1]] }, join(root, "contract-bound"), repo);
+    const script = await readFile(prepared.request.workflowScriptPath, "utf8");
+    const graph = JSON.parse(script.match(/^const issueGraph=(.+);$/m)![1]!);
+    assert.deepEqual(graph[0].launch.acceptance.criteria.map((criterion: { id: string }) => criterion.id), ["source-behavior", "source-safety"]);
+    assert.ok(graph[0].launch.acceptance.criteria.every((criterion: { must: string }) => criterion.must.includes("textHash=sha256:")));
+    const policy = JSON.parse(await readFile(prepared.batchFile, "utf8"));
+    assert.equal(policy.lanes[0].issue, 33724);
+    const tampered = `${JSON.stringify({ ...contract, criteria: [{ ...contract.criteria[0], id: "tampered" }] })}\n`;
+    fs.chmodSync(contractPath, 0o600);
+    await writeFile(contractPath, tampered);
+    fs.chmodSync(contractPath, 0o400);
+    assert.throws(() => dispatch.prepareBatch({ ...plan, issues: [{ ...plan.issues[0], contract: contractDescriptor }, plan.issues[1]] }, join(root, "tampered-contract"), repo), /Contract descriptor digest mismatch/);
   });
 });
 
