@@ -71,7 +71,7 @@ test("prepared requests bind one canonical model/cap despite absent child config
     assert.equal(policy.packagedRoot.helper.path, controlPlane.forgeDock.files.find((file: any) => file.id === "dispatch").path);
     assert.match(policy.packagedRoot.digest, /^sha256:[a-f0-9]{64}$/);
     assert.equal(dispatch.validateLaneStartup(policy, join(root, "repo-two")), policy);
-    assert.throws(() => dispatch.validateLaneStartup(policy, child), /Workspace binding failure/);
+    assert.throws(() => dispatch.validateLaneStartup(policy, child), /Forge worktree binding failure/);
     const boundContract = dispatch.validateIssueContractFile(policy.contract, policy.issue);
     assert.equal(boundContract.issue, 33745);
     assert.equal(policy.contractDigest, boundContract.digest);
@@ -91,7 +91,7 @@ test("prepared requests bind one canonical model/cap despite absent child config
     assert.equal(prepared.request.globalConcurrencyLimit, 2);
     assert.equal(prepared.request.maxSubagentSpawnsPerRun, 24);
     assert.equal(policy.config.sha256.length, 64);
-    assert.throws(() => execFileSync(process.execPath, [fileURLToPath(new URL("../../specs/helpers/dispatch.mjs", import.meta.url)), "context"], { cwd: child, env: { ...process.env, ...env }, encoding: "utf8" }), /Workspace binding failure/);
+    assert.throws(() => execFileSync(process.execPath, [fileURLToPath(new URL("../../specs/helpers/dispatch.mjs", import.meta.url)), "context"], { cwd: child, env: { ...process.env, ...env }, encoding: "utf8" }), /Forge worktree binding failure/);
     const cli = execFileSync(process.execPath, [fileURLToPath(new URL("../../specs/helpers/dispatch.mjs", import.meta.url)), "context"], { cwd: join(root, "repo-two"), env: { ...process.env, ...env }, encoding: "utf8" });
     assert.equal(JSON.parse(cli).remediationLimit, 1);
     assert.equal(cli.includes("do-not-print-this"), false);
@@ -114,7 +114,7 @@ test("startup rejects stale descriptors and non-descended workspaces before muta
     const unrelatedTree = execFileSync("git", ["write-tree"], { cwd: repoOne, encoding: "utf8" }).trim();
     const unrelatedCommit = execFileSync("git", ["commit-tree", unrelatedTree, "-m", "unrelated"], { cwd: repoOne, encoding: "utf8", env: { ...process.env, GIT_AUTHOR_NAME: "Fixture", GIT_AUTHOR_EMAIL: "fixture@example.test", GIT_COMMITTER_NAME: "Fixture", GIT_COMMITTER_EMAIL: "fixture@example.test" } }).trim();
     execFileSync("git", ["update-ref", "refs/heads/pi-parallel-fixture-one", unrelatedCommit], { cwd: repoOne });
-    assert.throws(() => dispatch.validateLaneStartup(policy, repoOne), /not descended from target base/);
+    assert.throws(() => dispatch.validateLaneStartup(policy, repoOne), /(?:not descended from target base|head disagrees with prepared target base)/);
   });
 });
 

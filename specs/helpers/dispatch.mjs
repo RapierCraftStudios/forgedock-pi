@@ -85,6 +85,7 @@ function targetBaseDescriptor(baseCwd, repository, target) {
   requireThat(fs.statSync(basePath).isDirectory(), "Issue needs an existing absolute baseCwd");
   requireThat(execFileSync("git", ["-C", basePath, "diff", "--quiet", "HEAD", "--"], { stdio: "ignore" }) === null, "Prepared target base has tracked changes before dispatch");
   requireThat(execFileSync("git", ["-C", basePath, "diff", "--cached", "--quiet"], { stdio: "ignore" }) === null, "Prepared target base has staged changes before dispatch");
+  requireThat(git(basePath, ["status", "--porcelain=v1", "--untracked-files=all"]) === "", "Prepared target base is not clean before dispatch");
   assertRepo(repository, basePath);
   const commonDir = fs.realpathSync(path.resolve(basePath, git(basePath, ["rev-parse", "--git-common-dir"])));
   const commonStat = fs.statSync(commonDir);
@@ -126,7 +127,9 @@ function validateTargetBaseDescriptor(value, repository, target, runtimeCwd) {
     requireThat(runtimeGitdir === content.gitdir && runtimeGitdir !== content.commonDir, "Workspace binding failure: managed worktree identity disagrees with prepared target base");
     requireThat(execFileSync("git", ["-C", runtimeCwd, "diff", "--quiet", "HEAD", "--"], { stdio: "ignore" }) === null, "Workspace binding failure: effective worktree has tracked changes");
     requireThat(execFileSync("git", ["-C", runtimeCwd, "diff", "--cached", "--quiet"], { stdio: "ignore" }) === null, "Workspace binding failure: effective worktree has staged changes");
+    requireThat(git(runtimeCwd, ["status", "--porcelain=v1", "--untracked-files=all"]) === "", "Workspace binding failure: effective worktree is not clean");
     const head = git(runtimeCwd, ["rev-parse", "HEAD"]);
+    requireThat(head === content.headSha, "Workspace binding failure: effective head disagrees with prepared target base");
     let descended = true;
     try { execFileSync("git", ["-C", runtimeCwd, "merge-base", "--is-ancestor", content.targetSha, head], { stdio: "ignore" }); }
     catch { descended = false; }
@@ -154,8 +157,8 @@ export function validateLaneStartup(policy, runtimeCwd = process.cwd()) {
     return policy;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (message.startsWith("Workspace binding failure:")) throw error;
-    throw new Error(`Workspace binding failure: ${message}`);
+    if (message.startsWith("Forge worktree binding failure:")) throw error;
+    throw new Error(`Forge worktree binding failure: ${message}`);
   }
 }
 function save(file, value) { fs.writeFileSync(file, value, { flag: "wx", mode: 0o400 }); return descriptor(file); }
