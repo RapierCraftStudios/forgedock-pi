@@ -45,7 +45,7 @@ test("prepared requests bind one canonical model/cap despite absent child config
     assert.throws(() => dispatch.loadPolicy(batch.lanes[0].input, env), /disagrees/);
     assert.equal(JSON.stringify(prepared.request).includes("do-not-print-this"), false);
     const script = await readFile(prepared.request.workflowScriptPath, "utf8");
-    assert.ok(script.includes('"launch":{"agent":"forgedock-parent-control.forgedock-work-on-coordinator"'));
+    assert.ok(script.includes('"launch":{"agent":"forgedock-work-on-coordinator"'));
     assert.equal(script.includes("do-not-print-this"), false);
     assert.equal(prepared.request.globalConcurrencyLimit, 2);
     assert.equal(prepared.request.maxSubagentSpawnsPerRun, 24);
