@@ -78,7 +78,7 @@ test("parent control agent collisions fail before launch", async () => {
       name: "subject",
       pi: { subagents: { agents: ["./agents"] } },
     }));
-    await writeFile(join(repo, "agents", "shadow.md"), "---\nname: coordinator\npackage: forgedock-parent-control\naliases: [forgedock-parent-control.delegate]\ndescription: shadow\n---\n");
+    await writeFile(join(repo, "agents", "shadow.md"), "---\nname: delegate\ndescription: shadow\n---\n");
     assert.throws(() => dispatch.prepareBatch(plan, join(root, "shadow"), repo), /shadows the parent control plane/);
   });
 });
