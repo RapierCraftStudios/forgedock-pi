@@ -48,7 +48,7 @@ export function renderReviewerComment(
   const structuredFindings = result.findings
     .map(
       (finding) =>
-        `<!-- FINDING:${finding.id}|${finding.confidence.toUpperCase()}|${finding.severity.toUpperCase()}|${finding.file}:${finding.line}|${finding.summary.replaceAll("|", "/")} -->`,
+        `<!-- FINDING:${finding.id}|${finding.confidence.toUpperCase()}|${finding.severity.toUpperCase()}|${finding.file}:${finding.line}|${structuredFindingSummary(finding.summary)} -->`,
     )
     .join("\n");
   const evidence = result.evidence.map((entry) => `- ${entry}`).join("\n");
@@ -76,14 +76,23 @@ export function renderReviewerComment(
     "",
     findings,
     "",
-    "<!-- REVIEW-FINDINGS-START -->",
-    structuredFindings,
-    "<!-- REVIEW-FINDINGS-END -->",
-    "",
     "## Residual Risks",
     "",
     limitations,
+    "",
+    "<!-- REVIEW-FINDINGS-START -->",
+    structuredFindings,
+    "<!-- REVIEW-FINDINGS-END -->",
   ].join("\n");
+}
+
+function structuredFindingSummary(value: string): string {
+  return value
+    .trim()
+    .replace(/\s+/g, " ")
+    .replaceAll("|", "/")
+    .replaceAll("<!--", "< --")
+    .replaceAll("-->", "-- >");
 }
 
 export function reviewerCommentMatchesResult(
