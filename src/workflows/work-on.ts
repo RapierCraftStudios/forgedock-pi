@@ -3181,7 +3181,7 @@ export class ForgeWorkOnController {
         });
         link.planContext = [
           link.planContext,
-          "Authoritative remediation inputs:",
+          "Remediation context (does not amend the accepted Builder Contract):",
           JSON.stringify(remediation.fixable, null, 2),
         ]
           .filter(Boolean)

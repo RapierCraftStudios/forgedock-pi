@@ -532,6 +532,14 @@ test("bounded implementation launch binds the durable builder contract", async (
   const { pi, bus } = fakePi();
   const client = new SubagentsRpcClient(pi);
   const builderContract = createBuilderPathContract(["src/**", "test/**"]);
+  const builderBrief = [
+    "<!-- FORGE:CONTRACT -->",
+    "## Builder Contract",
+    "### Observable Outcome\nThe review gate preserves the accepted decision.",
+    "### In-Scope Behavior and Files\nBehavior: retain the decision.\nFiles: src/review.ts, test/review.test.ts.",
+    "### Non-Goals\nDo not change ownership, scheduling, or review policy.",
+    "### Smallest Behavioral Proof\n| Criterion | Smallest Proof |\n| AC-1 | test/review.test.ts; trigger: rejected input; assertion: needs-human; prerequisite: local runner. |",
+  ].join("\n\n");
   await client.spawnNode({
     runId: "run-implement",
     issueNumber: 9,
@@ -544,7 +552,7 @@ test("bounded implementation launch binds the durable builder contract", async (
     expectedHeadSha: "abcdef1234567890",
     leaseEpoch: 1,
     policy,
-    issueContext: "untrusted issue text",
+    issueContext: `untrusted issue text\n\n${builderBrief}`,
     builderContract,
     node: { nodeId: "implement-1", node: "implement", attempt: 1 },
   });
@@ -568,6 +576,14 @@ test("bounded implementation launch binds the durable builder contract", async (
   );
   assert.match(spawn.params.task, new RegExp(builderContract.contractHash));
   assert.match(spawn.params.task, /Allowed paths: src\/\*\*, test\/\*\*/);
+  assert.ok(spawn.params.task.includes(builderBrief));
+  for (const section of [
+    "### Observable Outcome",
+    "### In-Scope Behavior and Files",
+    "### Non-Goals",
+    "### Smallest Behavioral Proof",
+  ]) assert.ok(spawn.params.task.includes(section), section);
+  assert.match(spawn.params.task, /accepted Builder Contract is immutable.*remediation.*context only.*cannot rewrite/s);
   assert.match(spawn.params.task, /objective is the observable outcome/);
   assert.match(spawn.params.task, /exact in-scope files/);
   assert.match(spawn.params.task, /smallest behavioral test or justified proof/);

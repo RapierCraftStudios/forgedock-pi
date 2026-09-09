@@ -30,6 +30,8 @@ The existing `FORGE:CONTRACT` is the deterministic implementation source of trut
 - **Non-goals** — behavior, files, and operational concerns this change does not alter.
 - **Smallest behavioral test or proof** — one named executable boundary or justified inspection proof with trigger and observable assertion; bug fixes name failing baseline and pass result.
 
+Once accepted, the Builder Contract is immutable for this run. Later reviewer or remediation findings are context only; label them as remediation context and do not rewrite the contract. If a finding changes the outcome, scope, non-goals, or proof, publish a superseding contract before editing.
+
 If a criterion is ambiguous or lacks credible proof, stop before editing, leave the worktree unchanged, and request clarification: do not infer requirements, widen scope, substitute a source-string assertion or broad suite for behavior, or ask a reviewer to complete the contract. Ownership, scheduling, worktree provisioning, hashes/digests, lineage/source identity, extra `FORGE:*` records, CI/deployment, and deep review remain in existing parent, adapter, record, review, and deployment contracts, not this brief.
 
 ### Proof map admission

@@ -173,7 +173,8 @@ The Builder Contract is the four-part implementation brief described in `work-on
 supporting investigation/context/architecture records retain producer/consumer, state,
 failure/retry/recovery and lifecycle detail. Each criterion still carries mechanism +
 counterexample/behavioral test + residual risk; contradictory residual risk is
-`CONTRADICTED`, never `PASS`.
+`CONTRADICTED`, never `PASS`. The accepted Builder Contract is immutable for the run;
+later reviewer/remediation inputs are labeled context and cannot rewrite it.
 
 ### 4. Prepare PR and review
 
