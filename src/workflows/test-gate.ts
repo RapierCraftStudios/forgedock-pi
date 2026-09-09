@@ -135,6 +135,14 @@ export function testGateVerification(
     : [];
   if (identityMismatch.length > 0)
     return failedGate("Capability source identity does not match the reviewed route.", identityMismatch);
+  if (
+    result.verdict === "SKIP" &&
+    result.capabilities.some((capability) => capability.required)
+  )
+    return failedGate(
+      "Required capability rows cannot be reported as SKIP.",
+      result.capabilities.filter((capability) => capability.required),
+    );
   const unresolved = result.capabilities.filter(
     (capability) => capability.required && capability.state !== "PASS",
   );
@@ -181,7 +189,7 @@ function failedGate(
       reason,
       ...capabilities.map(
         (capability) =>
-          `capability=${capability.id} criterion=${capability.criterionId} source=${capability.repository}@${capability.sourceHead} tree=${capability.sourceTree} boundary=${capability.boundary} state=${capability.state} wake=${capability.wake}`,
+          `capability=${capability.id} criterion=${capability.criterionId} textHash=${capability.criterionTextHash} source=${capability.repository}@${capability.sourceHead} target=${capability.target} tree=${capability.sourceTree} boundary=${capability.boundary} command=${capability.command} state=${capability.state} wake=${capability.wake}`,
       ),
     ],
   };

@@ -1608,7 +1608,11 @@ function renderStagingGate(
 ): string {
   const passed = decision.decision === "approved" && findings.length === 0;
   const bundleJson = bundle ? JSON.stringify(bundle) : "null";
-  return `## ForgeDock Staging Deployment Gate — ${passed ? "PASS" : "FAILURE"}\n\n**Reviewed head**: \`${decision.headSha}\`\n**Reviewed base**: \`${decision.baseSha}\`\n**Decision**: \`${decision.decision}\`\n**Merge/deploy performed**: no\n\n### Checks\n\n${checks.map((check) => `- ${check.required ? "required" : "optional"} \`${check.name}\`: ${check.status}`).join("\n") || "- No checks recorded."}\n\n### Findings\n\n${findings.length ? findings.map((finding) => `- ${finding.id}: ${finding.summary}`).join("\n") : "- None."}\n\n### Reasons\n\n${decision.reasons.length ? decision.reasons.map((reason) => `- ${reason}`).join("\n") : "- All strict staging gates passed."}\n\n### Machine-readable bundle resolution\n\n\`\`\`json\n${bundleJson}\n\`\`\``;
+  const renderedChecks = checks.map((check) => {
+    const evidence = check.evidence?.length ? ` — ${check.evidence.join("; ")}` : "";
+    return `- ${check.required ? "required" : "optional"} \`${check.name}\`: ${check.status}${evidence}`;
+  }).join("\n") || "- No checks recorded.";
+  return `## ForgeDock Staging Deployment Gate — ${passed ? "PASS" : "FAILURE"}\n\n**Reviewed head**: \`${decision.headSha}\`\n**Reviewed base**: \`${decision.baseSha}\`\n**Decision**: \`${decision.decision}\`\n**Merge/deploy performed**: no\n\n### Checks\n\n${renderedChecks}\n\n### Findings\n\n${findings.length ? findings.map((finding) => `- ${finding.id}: ${finding.summary}`).join("\n") : "- None."}\n\n### Reasons\n\n${decision.reasons.length ? decision.reasons.map((reason) => `- ${reason}`).join("\n") : "- All strict staging gates passed."}\n\n### Machine-readable bundle resolution\n\n\`\`\`json\n${bundleJson}\n\`\`\``;
 }
 
 function hasExactSourcePull(body: string, pullNumber: number): boolean {
