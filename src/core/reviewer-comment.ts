@@ -56,7 +56,6 @@ export function renderReviewerComment(
     ? result.limitations.map((entry) => `- ${entry}`).join("\n")
     : "- None identified within reviewed scope.";
   return [
-    reviewerCommentMarker(commentRunId, result.reviewer, round, result.headSha),
     `# ${reviewerDomain(result.reviewer)} Review`,
     "",
     `**Reviewer**: \`${result.reviewer}\`  `,
@@ -101,5 +100,9 @@ export function reviewerCommentMatchesResult(
   round: number,
   commentRunId = result.runId,
 ): boolean {
-  return body.trim() === renderReviewerComment(result, round, commentRunId).trim();
+  const expected = [
+    reviewerCommentMarker(commentRunId, result.reviewer, round, result.headSha),
+    renderReviewerComment(result, round, commentRunId).trim(),
+  ].join("\n");
+  return body.trim() === expected.trim();
 }

@@ -63,22 +63,24 @@ test("structured finding summaries stay one-line and cannot close HTML comments"
 
 test("reviewer comment is exact-head and round bound", () => {
   const body = renderReviewerComment(result, 2);
-  assert.match(body, /FORGE:REVIEW-AGENT:security/);
-  assert.match(body, /run=run-1 domain=security round=2 head=head-1234567/);
-  assert.match(body, /Reviewer block view: blocking/);
-  assert.match(body, /Reviewer scope: patch-caused/);
-  assert.match(body, /<!-- REVIEW-FINDINGS-START -->/);
+  const publishedBody = [
+    reviewerCommentMarker("run-1", result.reviewer, 2, result.headSha),
+    body,
+  ].join("\n");
+  assert.doesNotMatch(body, /FORGE:REVIEW-AGENT:security/);
+  assert.match(publishedBody, /FORGE:REVIEW-AGENT:security/);
+  assert.match(publishedBody, /run=run-1 domain=security round=2 head=head-1234567/);
+  assert.match(publishedBody, /Reviewer block view: blocking/);
+  assert.match(publishedBody, /Reviewer scope: patch-caused/);
+  assert.match(publishedBody, /<!-- REVIEW-FINDINGS-START -->/);
   assert.ok(
-    body.includes(
+    publishedBody.includes(
       "<!-- FINDING:SEC-1|CONFIRMED|HIGH|src/auth.ts:10|Changed boundary accepts an unsafe value -->",
     ),
   );
-  assert.match(body, /<!-- REVIEW-FINDINGS-END -->/);
-  assert.ok(body.endsWith("<!-- REVIEW-FINDINGS-END -->"));
-  assert.equal(reviewerCommentMatchesResult(body, result, 2), true);
-  assert.equal(reviewerCommentMatchesResult(body, result, 1), false);
-  assert.match(
-    reviewerCommentMarker("run-1", result.reviewer, 2, result.headSha),
-    /FORGE:REVIEW-AGENT:security/,
-  );
+  assert.match(publishedBody, /<!-- REVIEW-FINDINGS-END -->/);
+  assert.ok(publishedBody.endsWith("<!-- REVIEW-FINDINGS-END -->"));
+  assert.equal(reviewerCommentMatchesResult(publishedBody, result, 2), true);
+  assert.equal(reviewerCommentMatchesResult(publishedBody, result, 1), false);
+  assert.equal(publishedBody.match(/FORGE:REVIEW-AGENT:security/g)?.length, 1);
 });

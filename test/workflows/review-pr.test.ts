@@ -30,7 +30,10 @@ import {
   type ReviewPrRequest,
 } from "../../src/workflows/review-pr.ts";
 import { testGateVerification } from "../../src/workflows/test-gate.ts";
-import { renderReviewerComment } from "../../src/core/reviewer-comment.ts";
+import {
+  renderReviewerComment,
+  reviewerCommentMarker,
+} from "../../src/core/reviewer-comment.ts";
 
 const route: GitHubPullRequestRouteSnapshot = {
   pullNumber: 7,
@@ -207,7 +210,10 @@ class GitHubFake {
   async getComments() {
     if (!this.publishReviewerComments) return [];
     return this.reviewerResults.map((result) =>
-      renderReviewerComment(result, 1, result.runId),
+      [
+        reviewerCommentMarker(result.runId, result.reviewer, 1, result.headSha),
+        renderReviewerComment(result, 1, result.runId),
+      ].join("\n"),
     );
   }
 
