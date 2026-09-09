@@ -112,6 +112,34 @@ export function validateBuilderContract(
     throw new TypeError("Builder contract is missing its immutable brief.");
 }
 
+/** Require concrete behavioral proof rows before a parent creates a PR. */
+export function assertBuilderContractProofRows(
+  value: unknown,
+): asserts value is BuilderContract {
+  validateBuilderContract(value);
+  const contract = value;
+  const violations: string[] = [];
+  for (const row of contract.brief.acceptanceMapping) {
+    const proof = row.implementation;
+    if (proof.proofKind !== "behavioral")
+      violations.push(`${row.checkId}.proofKind is static-only`);
+    for (const field of [
+      "mechanism",
+      "boundary",
+      "test",
+      "trigger",
+      "assertion",
+    ] as const) {
+      if (isGenericProofText(proof[field]))
+        violations.push(`${row.checkId}.${field} is generic`);
+    }
+  }
+  if (violations.length > 0)
+    throw new TypeError(
+      `Builder contract proof rows are missing concrete behavioral evidence: ${violations.join(", ")}.`,
+    );
+}
+
 export function assertBuilderContractPaths(
   contract: BuilderPathContract,
   changedPaths: readonly string[],
@@ -177,6 +205,13 @@ function normalizeBrief(
     })),
     outOfScope: value.outOfScope.map((item) => text(item, "out-of-scope")),
   };
+}
+
+function isGenericProofText(value: string): boolean {
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, " ");
+  return /^(?:the )?(?:implementation|mechanism|code|change|behavior|boundary|test|tests|trigger|assertion|proof|evidence|result|generic|placeholder|tbd|todo|unknown|none|n\/a|not recorded)(?: (?:path|details?|evidence))?[.!?]*$/.test(
+    normalized,
+  );
 }
 
 function matchesRule(rule: string, path: string): boolean {

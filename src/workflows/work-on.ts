@@ -54,8 +54,10 @@ import {
 } from "../core/artifact-protocol.ts";
 import {
   assertBuilderContractPaths,
+  assertBuilderContractProofRows,
   createBuilderContract,
   type BuilderPathContract,
+  validateBuilderContract,
 } from "../core/builder-contract.ts";
 import { renderPhaseArtifact } from "../core/comment-contract.ts";
 import {
@@ -6003,9 +6005,6 @@ export class ForgeWorkOnController {
       throw new Error(
         "Work-on changed-file result does not match the actual committed diff.",
       );
-    if (link.builderContract)
-      assertBuilderContractPaths(link.builderContract, actualFiles);
-
     if (actualFiles.length === 0) {
       await this.#finalizeNoChangeClosure({
         link,
@@ -6018,6 +6017,12 @@ export class ForgeWorkOnController {
       });
       return;
     }
+
+    if (!link.builderContract)
+      throw new Error("PR preparation requires an accepted builder contract.");
+    validateBuilderContract(link.builderContract);
+    assertBuilderContractPaths(link.builderContract, actualFiles);
+    assertBuilderContractProofRows(link.builderContract);
 
     await appendPhase(
       journal,
