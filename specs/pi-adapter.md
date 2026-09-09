@@ -144,8 +144,14 @@ the isolated issue worktree from the correct commit. Retain exact base paths for
 owned cleanup.
 
 Prepare approved plan data through `helpers/dispatch.mjs batch` under
-`mechanical-execution.md`; invoke the generated native request unchanged. The helper reads
-the audited recipe below—agents do not reconstruct its object shape or control loop.
+`mechanical-execution.md`; invoke the generated native request unchanged. Before calling
+`prepareBatch`, the orchestrator must create a fresh digest-validated issue contract for
+every lane from the retained issue identity, exact acceptance criteria, proof types, and
+affected boundaries, then put its `{path, sha256}` descriptor in that lane's `contract`
+field. `prepareBatch` rejects a missing descriptor and binds the validated contract's
+`criteria` and top-level `digest` as `contractDigest`; no generic or child-authored
+replacement is permitted. The helper reads the audited recipe below—agents do not
+reconstruct its object shape or control loop.
 
 Launch one top-level async `subagent` workflow. Set `globalConcurrencyLimit` to the batch's
 approved active-owner limit, no higher than `orchestration.max_concurrent`. If unavailable,
