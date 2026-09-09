@@ -148,6 +148,7 @@ export interface ActiveRunLink {
   launchFailure?: "ambiguous" | "binding";
   remediationAttempts: number;
   contractGapReplan?: ContractGapHandoff;
+  contractGapReplanCount?: number;
   findingIssueMap: Record<string, number>;
   issueContext: string;
   planContext?: string;
@@ -3146,8 +3147,18 @@ export class ForgeWorkOnController {
         remediation.contractGaps.length > 0 &&
         remediation.escalated.length === 0;
       if (hasContractGap && !link.contractGapReplan) {
-        const priorContractDigest = `sha256:${(link.builderContract?.contractHash ?? createHash("sha256").update(link.issueContext).digest("hex")).padStart(64, "0")}`.slice(0, 71);
-        const contractDigest = `sha256:${createHash("sha256").update(`${priorContractDigest}:${aggregate.review.headSha}:${link.issueNumber}`).digest("hex")}`;
+        const priorContract = link.builderContract ?? createBuilderPathContract(["**"]);
+        const priorContractDigest = `sha256:${priorContract.contractHash}`;
+        const supersedingPaths = [
+          ...priorContract.allowedPaths,
+          ...remediation.contractGaps.map(({ finding }) => finding.file),
+        ];
+        const supersedingContract = createBuilderPathContract(
+          supersedingPaths,
+          priorContract.revision + 1,
+        );
+        link.builderContract = supersedingContract;
+        const contractDigest = `sha256:${supersedingContract.contractHash}`;
         link.contractGapReplan = admitContractGapReplan({
           issueNumber: link.issueNumber,
           pullNumber: pull.number,
@@ -3159,8 +3170,9 @@ export class ForgeWorkOnController {
           priorContractDigest,
           replanId: `${link.forgeRunId}:replan:${aggregate.review.headSha}`,
           contractDigest,
-          replanCount: 0,
+          replanCount: link.contractGapReplanCount ?? 0,
         });
+        link.contractGapReplanCount = link.contractGapReplan.replanCount;
         link.planContext = [
           link.planContext,
           "CONTRACT_GAP preserved-work handoff:",
@@ -3172,7 +3184,8 @@ export class ForgeWorkOnController {
         gate.decision === "changes-requested" &&
         (remediation.fixable.length > 0 || link.contractGapReplan?.status === "REPLAN_REQUIRED") &&
         remediation.escalated.length === 0 &&
-        (aggregate.review.rounds < policy.review.maxRounds || link.contractGapReplan?.status === "REPLAN_REQUIRED");
+        (aggregate.review.rounds < policy.review.maxRounds || link.contractGapReplan?.status === "REPLAN_REQUIRED") &&
+        aggregate.review.rounds < 5;
       outcome =
         gate.decision === "approved" ||
         gate.decision === "approved-with-follow-ups"
@@ -5360,7 +5373,8 @@ export class ForgeWorkOnController {
       !isRemediationCandidate(input.result, actionableFindings) ||
       classification.escalated.length > 0 ||
       (!contractGapReplan && input.link.remediationAttempts >= input.maxRounds) ||
-      (!contractGapReplan && input.result.review.rounds >= input.maxRounds)
+      (!contractGapReplan && input.result.review.rounds >= input.maxRounds) ||
+      input.result.review.rounds >= 5
     )
       return false;
     const attempt = 1;
@@ -5409,7 +5423,7 @@ export class ForgeWorkOnController {
           `Fresh contract digest: ${input.link.contractGapReplan.contractDigest}`,
           "Do not reuse prior approval; publish a fresh exact-head review with the new contract identity.",
         ] : []),
-        "Read the standalone review-finding issues listed below. Apply every confirmed/likely fix that is inside the accepted builder contract; escalate only product/policy/out-of-contract decisions.",
+        "Read the standalone review-finding issues listed below. Apply every confirmed/likely fix inside the current superseding builder contract; escalate only product/policy decisions.",
         ...findingLines,
         "Commit with forge_commit kind review-fixes, rerun applicable verification, call forge_prepare_review to update the same PR, and launch a fresh complete correctness/security panel.",
         `Return a schema-valid work-on result with review.rounds=${input.result.review.rounds + 1}, persist it through forge_finalize_work_on, and do not repeat investigation or planning.`,
