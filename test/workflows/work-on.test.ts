@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -36,6 +37,39 @@ import {
   workflowStageForNodeTransition,
   workflowStageForRecoveredNodeTransition,
 } from "../../src/workflows/work-on.ts";
+
+test("closure matrix admission catches omitted alternate callers and transitive dependencies", async () => {
+  const investigate = await readFile("specs/original/commands/work-on/investigate.md", "utf8");
+  const build = await readFile("specs/original/commands/work-on/build.md", "utf8");
+  const review = await readFile("specs/original/commands/work-on/review.md", "utf8");
+  const verification = await readFile("specs/verification.md", "utf8");
+  for (const content of [investigate, build, review, verification]) {
+    assert.match(content, /closure matrix/i);
+    assert.match(content, /producer.*consumer|consumer.*producer/is);
+    assert.match(content, /invocation.mode|invocation mode/i);
+    assert.match(content, /transitive.?dependenc/i);
+    assert.match(content, /fresh.*existing state|existing.*fresh/is);
+    assert.match(content, /failure\/retry\/recovery/i);
+    assert.match(content, /cancellation/i);
+    assert.match(content, /concurrency/i);
+    assert.match(content, /counterexample.*behavioral test/is);
+  }
+  assert.match(review, /CONTRACT_GAP/);
+  assert.match(investigate, /omitted alternate caller and transitive dependency/i);
+  assert.match(verification, /name those omitted boundaries explicitly/i);
+  assert.match(investigate, /cancellation.*concurrency/is);
+  assert.match(build, /cancellation.*concurrency/is);
+  const fixture = await readFile("test/fixtures/closure-matrix-receipt.md", "utf8");
+  const rows = [...fixture.matchAll(/^[-*] ([^|]+) \| ([^\n]+)$/gm)].map((match) => ({
+    id: match[1]!.trim(),
+    detail: match[2]!,
+  }));
+  assert.equal(rows.length, 3);
+  const initiallyScoped = new Set(rows.slice(0, 1).map((row) => row.id));
+  const omitted = rows.filter((row) => !initiallyScoped.has(row.id));
+  assert.deepEqual(omitted.map((row) => row.id), ["alternate-caller", "transitive-dependency"]);
+  assert.ok(omitted.every((row) => /producer=.*consumer=.*dependency=.*state=.*counterexample=/.test(row.detail)));
+});
 
 test("work-on reviewer results are rebound to the shared frozen review identity", () => {
   const result: ForgeReviewerResult = {

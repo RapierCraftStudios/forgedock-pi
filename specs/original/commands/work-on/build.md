@@ -6,9 +6,7 @@ description: Implement and verify one confirmed issue inline in its owned worktr
 
 # Work On: Build
 
-The sole work-on agent executes this phase inline. Do not launch builders, quality-gate
-agents, context agents, architects, or other helpers. The completed investigation's
-`FORGE:CONTRACT` Builder Brief is the mutation contract.
+The sole work-on agent executes this phase inline. Do not launch builders, quality-gate agents, context agents, architects, or other helpers. The completed investigation's `FORGE:CONTRACT` Builder Brief is the mutation contract.
 
 ## Preconditions
 
@@ -18,8 +16,7 @@ agents, context agents, architects, or other helpers. The completed investigatio
 - Under orchestration, `$PWD` is the Pi-managed `pi-parallel-*` worktree.
 - No competing writer owns this issue or worktree.
 
-At phase entry, use one label edit to replace `workflow:ready-to-build` and other stale
-active-phase labels with `workflow:building`.
+At phase entry, use one label edit to replace `workflow:ready-to-build` and other stale active-phase labels with `workflow:building`.
 
 ### Builder Contract (Build Brief)
 
@@ -40,6 +37,9 @@ Before editing, compile each acceptance criterion from the accepted contract int
 `<criterion> | Mechanism: <implementation path/symbol and behavior> | Counterexample/behavioral test: <test path, trigger, assertion> | Residual risk: <none or bounded non-contradictory limit> | Status: PASS|FAIL|MISSING|SKIPPED|CONTRADICTED|UNKNOWN`.
 The mechanism traces the invariant through its producer/consumer boundary and relevant failure paths; the test exercises a counterexample or observable behavior and, for a bug fix, rejects the baseline defect. Include namespace/type, serialization, interleaving, failure-injection, retry, recovery, and fresh/existing-state obligations for each new key, protocol, state machine, or external call.
 PASS requires both concrete proof ends and non-contradictory residual risk. A contradictory risk is `CONTRADICTED`, never `PASS`; missing, skipped, unknown, or contradicted proof cannot be reported as satisfied or sent to review. Required-risk integration capability that is unavailable or skipped must gate the row. This enriches imperfect intake without becoming a separate qualitative refusal gate.
+
+The closure matrix is an admission gate: copy every producer→consumer/caller, invocation-mode, transitive-dependency, input/state, failure/retry/recovery, cancellation, and concurrency row
+into the proof map. Every row needs a concrete counterexample or behavioral test and a `change`/`already safe` disposition before edits; a newly found reachable row supersedes the contract and requires re-planning before mutation continues.
 
 ## Plan once and publish the pre-build graph
 
@@ -125,9 +125,9 @@ PASS requires concrete mechanism and behavioral-test proof with explicitly non-c
 Before commit:
 
 - inspect `git diff --check`, changed paths, and final diff;
-- compare the final diff and tests with every Behavior Coverage item;
+- compare the final diff and tests with every Behavior Coverage item and closure-matrix row;
 - implement and test every `change` item, then recheck every `already safe` item to ensure
-  the patch preserves it; fix gaps before review;
+  the patch preserves it; a missing row is an acceptance gap; fix gaps before review;
 - ensure every changed path belongs to investigation scope;
 - ensure acceptance checks and every applicable item from the concise risk checklist are
   satisfied;

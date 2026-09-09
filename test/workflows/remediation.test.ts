@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import type { GitHubWorkflowAdapter } from "../../src/adapters/github-workflow.ts";
@@ -88,6 +89,21 @@ const blockedResult = {
   residualRisks: [],
   blocker: "review findings",
 } satisfies ForgeWorkOnResult;
+
+test("closure gaps require a superseding contract before remediation edits", async () => {
+  const review = await readFile("specs/original/commands/work-on/review.md", "utf8");
+  const remediate = await readFile("specs/original/commands/work-on/remediate.md", "utf8");
+  assert.match(review, /CONTRACT_GAP/);
+  assert.match(remediate, /superseding contract.*re.plan/is);
+  assert.match(remediate, /caller.*invocation mode.*transitive dependency/is);
+  assert.match(remediate, /closure-gap revision.*before.*edit/is);
+
+  const initial = new Set(["producer", "primary-caller"]);
+  const discovered = ["alternate-caller", "transitive-dependency", "existing-state"];
+  const gaps = discovered.filter((row) => !initial.has(row));
+  assert.deepEqual(gaps, discovered);
+  assert.equal("CONTRACT_GAP", "CONTRACT_GAP");
+});
 
 test("open review-finding issues are authoritative and deduplicated per PR", async () => {
   const fake = new RemediationGitHubFake();

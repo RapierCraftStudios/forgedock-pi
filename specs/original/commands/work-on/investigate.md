@@ -36,38 +36,31 @@ records; append a superseding investigation for material corrections under
    fixture for executable behavior. Identify the boundary that can run locally and the
    observable result it must assert; reserve inspection-only proof for what cannot run.
 4. Trace the active path through the suspected boundary to the observable result.
-5. Follow `../../../github-memory.md`: proactively retrieve relevant past bugs, decisions
-   and successful examples; validate their current applicability and apply the useful
-   constraints. Reuse retained evidence, keep lookup bounded, and avoid general archaeology.
-6. Identify root cause and distinguish patchable code from configuration, external
-   authority, pre-existing debt, or an already-fixed claim.
-7. State the behavior that must remain true. Check each relevant way that behavior can be
-   entered, continued, failed, or observed. Mark every listed path `change` or `already
-   safe` and give code, configuration, or test evidence. Inspect only paths reachable from
-   the changed behavior; do not inspect unrelated code. Do not declare scope complete
-   while a relevant path has no disposition.
-8. Define the minimal required mutation paths and behaviors, including every path marked
-   `change`. Adjacent paths remain read-only unless compilation, runtime correctness,
-   schema/interface consistency, or a security invariant requires them to change.
+5. Follow `../../../github-memory.md`: proactively retrieve relevant past bugs, decisions and successful examples; validate their applicability and apply useful constraints. Reuse retained evidence, keep lookup bounded, and avoid general archaeology.
+6. Identify root cause and distinguish patchable code from configuration, external authority, pre-existing debt, or an already-fixed claim.
+7. State the behavior that must remain true. Check every relevant way behavior can be entered, continued, failed, or observed; then build a bounded closure matrix for each changed criterion. Each row
+   names producer, consumer, persisted state, reachable callers and invocation modes,
+   imported/sourced dependencies, valid/invalid input, fresh/existing state, failure/retry/
+   recovery, cancellation, and concurrency interleavings. Record sibling paths checked and
+   ruled out; mark every row `change` or `already safe` with code, configuration, or test
+   evidence. Mark every listed path `change` or `already safe` with evidence. Do not declare scope complete while a relevant path has no disposition or a reachable row lacks one; counterexamples must expose an omitted alternate caller and transitive dependency rather than generic path wording.
+8. Define the minimal required mutation paths and behaviors, including every row marked `change`. Adjacent paths remain read-only unless compilation, runtime correctness, schema/interface consistency, or a security invariant requires them to change.
 9. Define non-goals and residual uncertainty.
-10. Compile the existing `FORGE:CONTRACT` Builder Brief as the deterministic implementation
-    source of truth. For every accepted criterion it must state: the observable outcome; the
-    exact in-scope behavior and repository-relative files; explicit non-goals; and the
-    smallest credible behavioral test or justified inspection proof with its trigger and
-    assertion. Each criterion also retains one compact proof link: `Mechanism: <implementation path/symbol>; Counterexample/behavioral test: <test path, trigger, assertion>; Residual risk: <none or bounded non-contradictory limit>`. The supporting
-    investigation/context/architecture records retain producer, consumer, persisted state,
-    failure, retry, recovery, history, and lifecycle detail. For independently recoverable
-    data, enumerate each recovery source and its capture, verification, and restore path; do
-    not turn ownership, scheduling,
-    worktree provisioning, hashes/digests, lineage, extra records, or review/deployment
-    procedure into Builder Contract requirements.
+10. Compile the existing `FORGE:CONTRACT` Builder Brief as the deterministic implementation source of truth. Each accepted criterion states its observable outcome, exact in-scope
+    behavior and repository-relative files, non-goals, smallest credible behavioral proof,
+    and one compact proof link: `Mechanism: <implementation path/symbol>; Counterexample/behavioral
+    test: <test path, trigger, assertion>; Residual risk: <none or bounded non-contradictory limit>`.
+    Supporting records retain producer, consumer, persisted state, failure, retry, recovery, history, and lifecycle detail; independently recoverable data lists every recovery source,
+    capture, verification, and restore path. Do not turn ownership, scheduling, worktree
+    provisioning, hashes/digests, lineage, extra records, or review/deployment procedure into
+    Builder Contract requirements.
 
-    A criterion that is ambiguous or lacks credible proof is not accepted: stop before any
-    repository edit and request clarification. Do not infer a missing requirement or replace
-    a behavioral proof with a source-string assertion or broad suite. A bug criterion's proof
-    must fail against the baseline and pass after the change, unless the explicitly justified
-    inspection-only exception is recorded as unverified. A contradictory residual risk is
-    `CONTRADICTED`, never `PASS`.
+    A criterion that is ambiguous or lacks credible proof is not accepted: stop before any repository edit and request clarification. Do not infer requirements or replace behavioral proof with source strings or
+    a broad suite. A bug proof must fail against baseline and pass after the change unless a
+    justified inspection-only exception is recorded as unverified. Contradictory residual risk
+    is `CONTRADICTED`, never `PASS`. The Acceptance Contract covers every criterion and closure
+    row; a string-presence check cannot close a runtime row. Missing mechanism, row, or test is
+    `MISSING`/`UNKNOWN`, not accepted proof; justified inspection exceptions remain unverified.
 11. Resolve required dependencies, environments, permissions, and evidence before editing.
     If required proof is unavailable, surface the exact condition before implementation;
     do not assume an owner will supply it after review. Separate code-merge acceptance
@@ -137,6 +130,10 @@ Publish the completed investigation with the common metadata envelope from
 **Required behavior**: <one sentence>
 - `path or component` — {change|already safe} — <evidence>
 
+### Closure Matrix
+- `<criterion>` | producer → consumer/caller + invocation mode | transitive dependencies | input/state | failure/retry/recovery/cancellation/concurrency | counterexample/behavioral test | disposition
+- Record every reachable sibling path, including paths checked and ruled out; an omitted row remains an open scope gap.
+
 ### Cohesion and Decomposition
 - <observed scope signals, or none>
 - <why Route is BUILD or DECOMPOSE; atomic invariant or independently safe outcomes/phases>
@@ -156,7 +153,7 @@ for each accepted outcome:
 - **Non-goals**: <explicit exclusions>
 - **Smallest behavioral proof**: <named boundary/test, trigger, assertion, and prerequisite>
 
-- `<criterion>` → producer/consumer/state → **Proof link**: `Mechanism: <path/symbol and behavior>; Counterexample/behavioral test: <test path, trigger, assertion>; Residual risk: <none or bounded limit>` → prerequisite availability
+- `<criterion>` → producer/consumer/state and each closure row → **Proof link**: `Mechanism: <path/symbol and behavior>; Counterexample/behavioral test: <test path, trigger, assertion>; Residual risk: <none or bounded limit>` → prerequisite availability
 
 ### Acceptance Checks
 - <criterion and trusted check; descriptive, never executable GitHub input; linked to the proof row>
