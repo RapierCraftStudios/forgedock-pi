@@ -22,6 +22,11 @@ async function fixture(run: (f: any) => Promise<void>) {
   await writeFile(join(repo, "base.txt"), "base\n");
   execFileSync("git", ["add", "base.txt"], { cwd: repo });
   execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "base"], { cwd: repo });
+  execFileSync("git", ["branch", "-M", "pi-parallel-anchor"], { cwd: repo });
+  execFileSync("git", ["update-ref", "refs/remotes/origin/staging", "HEAD"], { cwd: repo });
+  const repoOne = join(root, "repo-one"), repoTwo = join(root, "repo-two");
+  execFileSync("git", ["worktree", "add", "-q", "-b", "pi-parallel-fixture-one", repoOne, "HEAD"], { cwd: repo });
+  execFileSync("git", ["worktree", "add", "-q", "-b", "pi-parallel-fixture-two", repoTwo, "HEAD"], { cwd: repo });
   await writeFile(join(repo, "forge.yaml"), 'project: {owner: example, repo: project}\nagents: {subagent_model: "openai-codex/gpt-5.6-luna"}\norchestration: {max_concurrent: 3}\nprivate_value: do-not-print-this\n');
   const contractDescriptors = [];
   for (const number of [33724, 33745]) {
@@ -35,10 +40,10 @@ async function fixture(run: (f: any) => Promise<void>) {
     contractDescriptors.push({ path: contractPath, sha256: createHash("sha256").update(bytes).digest("hex") });
   }
   const plan = { activeOwners: 2, launchAllowance: 24, requestStartedAt: "2026-01-01T00:00:00Z", controlPlane, issues: [
-    { number: 33724, target: "staging", baseCwd: repo, predecessors: [], contract: contractDescriptors[0] },
-    { number: 33745, target: "staging", baseCwd: repo, predecessors: [], contract: contractDescriptors[1] },
+    { number: 33724, target: "staging", baseCwd: repoOne, predecessors: [], contract: contractDescriptors[0] },
+    { number: 33745, target: "staging", baseCwd: repoTwo, predecessors: [], contract: contractDescriptors[1] },
   ] };
-  try { await run({ root, repo, plan }); } finally { await rm(root, { recursive: true, force: true }); }
+  try { await run({ root, repo, repoOne, plan }); } finally { await rm(root, { recursive: true, force: true }); }
 }
 
 test("prepared requests bind one canonical model/cap despite absent child config and stale neighbours", async () => {
@@ -56,6 +61,17 @@ test("prepared requests bind one canonical model/cap despite absent child config
     assert.equal(policy.issue, 33745); assert.equal(policy.repo, "example/project");
     assert.equal(policy.target, "staging");
     assert.equal(policy.model, "openai-codex/gpt-5.6-luna"); assert.equal(policy.remediationLimit, 1);
+    assert.equal(policy.targetBase.path, fs.realpathSync(join(root, "repo-two")));
+    assert.equal(policy.targetBase.repository, "example/project");
+    assert.equal(policy.targetBase.target, "staging");
+    assert.match(policy.targetBase.headSha, /^[a-f0-9]{40}$/);
+    assert.match(policy.targetBase.digest, /^sha256:[a-f0-9]{64}$/);
+    assert.equal(policy.packagedRoot.path, fs.realpathSync(forgeDockRoot));
+    assert.equal(policy.packagedRoot.controlPlaneDigest, controlPlane.digest);
+    assert.equal(policy.packagedRoot.helper.path, controlPlane.forgeDock.files.find((file: any) => file.id === "dispatch").path);
+    assert.match(policy.packagedRoot.digest, /^sha256:[a-f0-9]{64}$/);
+    assert.equal(dispatch.validateLaneStartup(policy, join(root, "repo-two")), policy);
+    assert.throws(() => dispatch.validateLaneStartup(policy, child), /Forge worktree binding failure/);
     const boundContract = dispatch.validateIssueContractFile(policy.contract, policy.issue);
     assert.equal(boundContract.issue, 33745);
     assert.equal(policy.contractDigest, boundContract.digest);
@@ -67,13 +83,38 @@ test("prepared requests bind one canonical model/cap despite absent child config
     const script = await readFile(prepared.request.workflowScriptPath, "utf8");
     assert.ok(script.includes('"launch":{"agent":"forgedock-work-on-coordinator"'));
     assert.ok(script.includes('"agentScope":"user"'));
+    assert.ok(script.includes('"worktree":false'));
+    assert.equal(script.includes('"worktree":true'), false);
+    assert.match(script, /Bound target-base descriptor:/);
+    assert.match(script, /Bound packaged-root descriptor:/);
     assert.equal(script.includes("do-not-print-this"), false);
     assert.equal(prepared.request.globalConcurrencyLimit, 2);
     assert.equal(prepared.request.maxSubagentSpawnsPerRun, 24);
     assert.equal(policy.config.sha256.length, 64);
-    const cli = execFileSync(process.execPath, [fileURLToPath(new URL("../../specs/helpers/dispatch.mjs", import.meta.url)), "context"], { cwd: child, env: { ...process.env, ...env }, encoding: "utf8" });
+    assert.throws(() => execFileSync(process.execPath, [fileURLToPath(new URL("../../specs/helpers/dispatch.mjs", import.meta.url)), "context"], { cwd: child, env: { ...process.env, ...env }, encoding: "utf8" }), /Forge worktree binding failure/);
+    const cli = execFileSync(process.execPath, [fileURLToPath(new URL("../../specs/helpers/dispatch.mjs", import.meta.url)), "context"], { cwd: join(root, "repo-two"), env: { ...process.env, ...env }, encoding: "utf8" });
     assert.equal(JSON.parse(cli).remediationLimit, 1);
     assert.equal(cli.includes("do-not-print-this"), false);
+  });
+});
+
+test("startup rejects stale descriptors and non-descended workspaces before mutation", async () => {
+  await fixture(async ({ root, repo, repoOne, plan }) => {
+    const duplicate = { ...plan, issues: plan.issues.map((issue: any) => ({ ...issue, baseCwd: repoOne })) };
+    assert.throws(() => dispatch.prepareBatch(duplicate, join(root, "duplicate"), repo), /unique prepared worktree/);
+    const prepared = dispatch.prepareBatch(plan, join(root, "startup"), repo);
+    const batch = JSON.parse(await readFile(prepared.batchFile, "utf8"));
+    const env = { PI_SUBAGENT_EXTENSION_BINDINGS: JSON.stringify({ [dispatch.BINDING]: batch.lanes[0].input }) };
+    const policy = dispatch.loadPolicy(undefined, env);
+    assert.throws(() => dispatch.validateLaneStartup({ ...policy, targetBase: { ...policy.targetBase, headSha: "0".repeat(40) } }, repoOne), /descriptor digest mismatch/);
+    assert.throws(() => dispatch.validateLaneStartup({ ...policy, packagedRoot: { ...policy.packagedRoot, controlPlaneDigest: "sha256:" + "0".repeat(64) } }, repoOne), /descriptor digest mismatch/);
+    execFileSync("git", ["switch", "--orphan", "pi-parallel-unrelated"], { cwd: repoOne });
+    execFileSync("git", ["rm", "-f", "--ignore-unmatch", "base.txt"], { cwd: repoOne });
+    execFileSync("git", ["branch", "-M", "pi-parallel-fixture-one"], { cwd: repoOne });
+    const unrelatedTree = execFileSync("git", ["write-tree"], { cwd: repoOne, encoding: "utf8" }).trim();
+    const unrelatedCommit = execFileSync("git", ["commit-tree", unrelatedTree, "-m", "unrelated"], { cwd: repoOne, encoding: "utf8", env: { ...process.env, GIT_AUTHOR_NAME: "Fixture", GIT_AUTHOR_EMAIL: "fixture@example.test", GIT_COMMITTER_NAME: "Fixture", GIT_COMMITTER_EMAIL: "fixture@example.test" } }).trim();
+    execFileSync("git", ["update-ref", "refs/heads/pi-parallel-fixture-one", unrelatedCommit], { cwd: repoOne });
+    assert.throws(() => dispatch.validateLaneStartup(policy, repoOne), /(?:not descended from target base|head disagrees with prepared target base)/);
   });
 });
 

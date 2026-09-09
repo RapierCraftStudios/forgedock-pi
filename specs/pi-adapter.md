@@ -138,10 +138,11 @@ directory, cost, co-change, and low-confidence heuristics never create edges. Ha
 come only from explicit dependencies, exact shared mutation files, migration sequencing,
 or exact configured global/high-fan-in files.
 
-Fetch each distinct target and create one clean detached base at exact `origin/<target>`.
-Set each work-on item's `cwd` to its target base before `worktree: true`; Pi then creates
-the isolated issue worktree from the correct commit. Retain exact base paths for final
-owned cleanup.
+Fetch each distinct target and prepare one clean managed issue worktree at the exact
+`origin/<target>` ancestry before dispatch. Set each work-on item's `cwd` to that exact
+prepared lane path with `worktree: false`; each path is a unique registered `pi-parallel-*`
+worktree/branch and Pi must not create a second worktree. Retain the exact prepared paths
+for ownership-safe cleanup.
 
 Prepare approved plan data through `helpers/dispatch.mjs batch` under
 `mechanical-execution.md`; invoke the generated native request unchanged. Before calling
@@ -150,8 +151,12 @@ every lane from the retained issue identity, exact acceptance criteria, proof ty
 affected boundaries, then put its `{path, sha256}` descriptor in that lane's `contract`
 field. `prepareBatch` rejects a missing descriptor and binds the validated contract's
 `criteria` and top-level `digest` as `contractDigest`; no generic or child-authored
-replacement is permitted. The helper reads the audited recipe below—agents do not
-reconstruct its object shape or control loop.
+replacement is permitted. It also emits digest-checked `targetBase` and `packagedRoot`
+descriptors into each lane policy/task. The owner invokes the exact installed helper's
+`context` command before mutation; cwd, repository/common identity, clean state, target
+ancestry, and helper digest must match or the launch is internally rebound/retried. The
+helper reads the audited recipe below—agents do not reconstruct its object shape or control
+loop.
 
 Launch one top-level async `subagent` workflow. Set `globalConcurrencyLimit` to the batch's
 approved active-owner limit, no higher than `orchestration.max_concurrent`. If unavailable,
