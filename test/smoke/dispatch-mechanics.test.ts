@@ -10,9 +10,8 @@ import test from "node:test";
 const dispatch = await import(new URL("../../specs/helpers/dispatch.mjs", import.meta.url).href);
 const records = await import(new URL("../../specs/helpers/record.mjs", import.meta.url).href);
 const projectRoot = fileURLToPath(new URL("../..", import.meta.url));
-const forgeDockRoot = process.env.FORGEDOCK_PARENT_PACKAGE_ROOT;
-const piSubagentsRoot = process.env.PI_SUBAGENTS_PARENT_PACKAGE_ROOT;
-if (!forgeDockRoot || !piSubagentsRoot) throw new Error("FORGEDOCK_PARENT_PACKAGE_ROOT and PI_SUBAGENTS_PARENT_PACKAGE_ROOT must name installed parent packages for this authority test");
+const forgeDockRoot = process.env.FORGEDOCK_PARENT_PACKAGE_ROOT ?? projectRoot;
+const piSubagentsRoot = process.env.PI_SUBAGENTS_PARENT_PACKAGE_ROOT ?? fs.realpathSync(join(projectRoot, "node_modules/pi-subagents"));
 const controlPlane = dispatch.createControlPlaneDescriptor({ forgeDockRoot, piSubagentsRoot });
 
 async function fixture(run: (f: any) => Promise<void>) {
