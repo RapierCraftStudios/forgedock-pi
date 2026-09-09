@@ -32,6 +32,19 @@ markers, declared affected paths, target branch, and eligibility. Invoke
 table, and plain `path:line` forms. Do not search retired controllers or archived orchestration
 phase documents for routing already defined by this skill and the adapter.
 
+Before writing the approved plan, compile a fresh contract for every eligible issue lane.
+Read the exact checked items under `## Acceptance Criteria` from the retained issue body;
+for each item preserve a stable non-generic source criterion ID, hash the exact criterion
+text, carry its `[type:api|unit|e2e|manual]` proof type (or an explicit bounded
+`behavioral` classification when the annotation is absent), and list the declared affected
+boundaries. Call the installed helper's `createIssueContract(issueNumber, criteria)`; its
+returned object must retain top-level `criteria` and `digest`. Write that object once to a
+read-only parent artifact and pass its `{path, sha256}` descriptor as `issue.contract` in
+the plan. Do not hand-author `contractDigest`, reuse a historical contract, use generic
+`criterion-1` identities, place the contract in a target worktree, or let a child replace
+it. A missing or malformed acceptance section is a pre-dispatch input failure, not a reason
+to launch an unbound lane.
+
 ## Build the minimum safe DAG
 
 Add edges only for:

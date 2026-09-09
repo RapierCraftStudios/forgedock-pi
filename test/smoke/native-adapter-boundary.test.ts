@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, writeFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -116,8 +117,15 @@ test("prepared lane policy reaches the actual native child environment", { skip:
     await writeFile(join(repo, ".git", "info", "exclude"), "forge.yaml\n");
     const parentRoot = fileURLToPath(new URL("../..", import.meta.url));
     const controlPlane = dispatch.createControlPlaneDescriptor({ forgeDockRoot: parentRoot, piSubagentsRoot: realpathSync(join(parentRoot, "node_modules/pi-subagents")) });
+    const contract = dispatch.createIssueContract(42, [
+      { id: "source-behavior", textHash: `sha256:${"1".repeat(64)}`, proofType: "behavioral", affectedBoundaries: ["src/example.ts"] },
+    ]);
+    const contractBytes = `${JSON.stringify(contract)}\n`;
+    const contractPath = join(root, "issue-42-contract.json");
+    await writeFile(contractPath, contractBytes, { mode: 0o400 });
+    const contractDescriptor = { path: contractPath, sha256: createHash("sha256").update(contractBytes).digest("hex") };
     const prepared = dispatch.prepareBatch({ activeOwners: 1, launchAllowance: 8, requestStartedAt: "2026-01-01T00:00:00Z", controlPlane,
-      issues: [{ number: 42, target: "staging", baseCwd: repo, predecessors: [] }] }, join(root, "prepared"), repo);
+      issues: [{ number: 42, target: "staging", baseCwd: repo, predecessors: [], contract: contractDescriptor }] }, join(root, "prepared"), repo);
     const script = await readFile(prepared.request.workflowScriptPath, "utf8");
     const graph = JSON.parse(script.match(/^const issueGraph=(.+);$/m)![1]!);
     // Probe the exact generated child descriptor through the full adapter; the
@@ -130,7 +138,12 @@ test("prepared lane policy reaches the actual native child environment", { skip:
     const received = JSON.parse(status.workflow.value[0].output);
     const policy = dispatch.loadPolicy(undefined, received);
     assert.equal(policy.issue, 42); assert.equal(policy.repo, "example/project");
+    assert.equal(policy.target, "staging");
     assert.equal(policy.model, "test/model"); assert.equal(policy.remediationLimit, 1);
+    const boundContract = dispatch.validateIssueContractFile(policy.contract, policy.issue);
+    assert.equal(boundContract.issue, 42);
+    assert.equal(policy.contractDigest, boundContract.digest);
+    assert.deepEqual(boundContract.criteria.map((criterion: { id: string; proofType: string }) => [criterion.id, criterion.proofType]), [["source-behavior", "behavioral"]]);
     assert.ok(received.PI_SUBAGENT_RUN_ID);
     // Now execute the generated recipe unchanged through failure and retained resume.
     mock.onCall({ output: "technical owner failure", exitCode: 1 });
