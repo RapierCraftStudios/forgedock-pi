@@ -89,11 +89,16 @@ records and converts malformed, stale-shaped, or unresolved required capability 
 ## Missing-Config Guard (MANDATORY — runs after required-capability preflight)
 
 ```bash
+# Bound preflight initializes these before this guard and appends one record per criterion.
+: "${CAPABILITY_RECORDS:=}"
+: "${BLOCKED_CAPABILITIES:=}"
+```
+
+```bash
 # If integration_tests is empty/absent, exit ADVISORY — never crash
 TEST_COUNT=$(yq '.verification.integration_tests | length' "$CONFIG_FILE" 2>/dev/null || echo 0)
 if [ "${TEST_COUNT:-0}" -eq 0 ]; then
   echo "ADVISORY: verification.integration_tests is not configured in $CONFIG_FILE."
-  echo "No tests to run. Emitting SKIP verdict."
   echo ""
   echo "To enable /test-gate, add to forge.yaml:"
   echo "  verification:"
@@ -106,13 +111,13 @@ if [ "${TEST_COUNT:-0}" -eq 0 ]; then
   echo "    test_gate:"
   echo "      posture: \"blocking\""
   echo "      override_phrase: \"OVERRIDE: shipping with test failures —\""
-  # Emit structured SKIP verdict and exit
-  echo "<!-- FORGE:TEST_GATE:SKIP|reason=no-tests-configured -->"
-  echo "<!-- FORGE:VERIFICATION_NO_REQUIRED_CAPABILITIES -->"
-  echo "<!-- FORGE:TEST_GATE:RESULT=SKIP -->"
-  exit 0
+  # Continue through capability preflight; only a proven empty requirement set may skip.
+  TEST_GATE_NO_TESTS_CONFIGURED=true
 fi
 ```
+
+The guard does not terminate the gate: capability preflight and criterion triage still run.
+Only a preflight-proven empty requirement set may later emit the explicit no-required skip.
 
 ---
 
@@ -213,7 +218,7 @@ for pr_num in $BUNDLE_PRS; do
         TRIAGE_HAS_TESTABLE_CRITERIA=true
         echo "  Required capability criterion found in issue #${issue_num}: ${criterion}"
         break 3  # Break out of criterion loop, issue loop, and PR loop
-      elif echo "$criterion" | grep -qP '\[type:manual\]'; then
+      elif echo "$criterion" | grep -qP '\[type:manual\]' && ! echo "$criterion" | grep -qP '\[type:(?!manual\])[^]]+\]'; then
         TRIAGE_MANUAL_COUNT=$((TRIAGE_MANUAL_COUNT + 1))
       else
         # Unannotated executable criteria are UNKNOWN, never inferred or manual.
@@ -251,7 +256,27 @@ echo "Runtime-testable criteria confirmed. Proceeding with provisioning."
 Compile each bound acceptance criterion and its annotation/contract metadata into the
 capability record defined in `specs/verification.md`. Preserve the exact criterion ID,
 criterion text hash, source head, and contract digest. The classifier must emit one
-machine-readable record for every required capability:
+machine-readable record for every required capability. The preflight owns these accumulators
+and is called before every guard/exit:
+
+```bash
+CAPABILITY_RECORDS=""
+BLOCKED_CAPABILITIES=""
+record_capability() {
+  local record
+  record=$(jq -cn --arg capability "$1" --arg criterion "$2" --arg criterionTextHash "$3" \
+    --arg sourceHead "$4" --arg contractDigest "$5" --arg proofType "$6" --arg boundary "$7" \
+    --arg state "$8" --arg evidence "$9" --arg wakeCondition "${10}" \
+    '{v:1,capability:$capability,criterion:$criterion,criterionTextHash:$criterionTextHash,sourceHead:$sourceHead,contractDigest:$contractDigest,proofType:$proofType,boundary:$boundary,state:$state,evidence:$evidence,wakeCondition:$wakeCondition}')
+  CAPABILITY_RECORDS="${CAPABILITY_RECORDS}${CAPABILITY_RECORDS:+\n}${record}"
+  if [ "$8" != "PASS" ]; then
+    BLOCKED_CAPABILITIES="${BLOCKED_CAPABILITIES}${BLOCKED_CAPABILITIES:+\n}${record}"
+  fi
+}
+# For every bound criterion: classify its annotation, run/locate its boundary, then call
+# record_capability with the exact identity and either PASS evidence or a wake condition.
+```
+
 
 ```text
 <!-- FORGE:VERIFICATION_CAPABILITY {"v":1,"capability":"runtime:e2e","criterion":"<id>","criterionTextHash":"sha256:<hash>","sourceHead":"<full-sha>","contractDigest":"sha256:<digest>","proofType":"runtime","boundary":"<named-boundary>","state":"PASS|MISSING|SKIPPED|UNKNOWN|CONTRADICTED","evidence":"<identity-bound-result>","wakeCondition":"<empty-for-PASS-or-exact-recovery/re-scope-condition>"} -->
@@ -270,7 +295,9 @@ required runtime capability is present. For every blocked capability emit:
 
 The final result is `BLOCK`, not `PASS` or `SKIP`, when any required capability is
 unresolved. A formal re-scope creates a new bound contract; it never normalizes an old
-record to PASS. Structural checks can satisfy only explicitly structural criteria.
+record to PASS. Structural checks can satisfy only explicitly structural criteria. A PASS
+with no records is invalid; a BLOCK always carries the corresponding blocked records and
+wake conditions from `BLOCKED_CAPABILITIES`.
 
 ---
 
@@ -345,7 +372,7 @@ while IFS= read -r line; do
     REQUIRED_CAPABILITY_CRITERIA="${REQUIRED_CAPABILITY_CRITERIA}\n${line}"
   elif echo "$line" | grep -qP '\[type:structural\]'; then
     REQUIRED_CAPABILITY_CRITERIA="${REQUIRED_CAPABILITY_CRITERIA}\n${line}"
-  elif echo "$line" | grep -qP '\[type:manual\]'; then
+  elif echo "$line" | grep -qP '\[type:manual\]' && ! echo "$line" | grep -qP '\[type:(?!manual\])[^]]+\]'; then
     MANUAL_CRITERIA="${MANUAL_CRITERIA}\n${line}"
   elif echo "$line" | grep -qP '^-\s+\['; then
     # Has content but no type signal — UNKNOWN required proof, never manual.
@@ -677,7 +704,7 @@ classify_criterion() {
   local source_pr="$3"
 
   # --- Step 1: Detect explicitly manual criteria ---
-  if echo "$criterion" | grep -qP '\[type:manual\]'; then
+  if echo "$criterion" | grep -qP '\[type:manual\]' && ! echo "$criterion" | grep -qP '\[type:(?!manual\])[^]]+\]'; then
     ADEQUACY_MANUAL_LIST="${ADEQUACY_MANUAL_LIST}\n  [manual] Issue #${source_issue} (PR #${source_pr}): ${criterion}"
     return
   fi
@@ -693,23 +720,15 @@ classify_criterion() {
   local is_automated=false
   local inferred_type=""
 
-  if echo "$criterion" | grep -qP '\[type:(api|unit|e2e)\]'; then
+  if echo "$criterion" | grep -qP '\[type:(api|unit|integration|e2e|queue|database|browser|credential|structural)\]' && ! echo "$criterion" | grep -qP '\[type:(?!api|unit|integration|e2e|queue|database|browser|credential|structural)\][^]]*\]'; then
     is_automated=true
-    inferred_type=$(echo "$criterion" | grep -oP '\[type:\K(api|unit|e2e)' || echo "automated")
-  elif echo "$criterion" | grep -qP '(endpoint|request|response|status\s+\d{3}|curl|API|HTTP)'; then
-    is_automated=true
-    inferred_type="api"
-  elif echo "$criterion" | grep -qP '(unit|function|return|assert|throws)'; then
-    is_automated=true
-    inferred_type="unit"
-  elif echo "$criterion" | grep -qP '(browser|click|navigate|render|page|user flow)'; then
-    is_automated=true
-    inferred_type="e2e"
+    inferred_type=$(echo "$criterion" | grep -oP '\[type:\K(api|unit|integration|e2e|queue|database|browser|credential|structural)' | head -1 || echo "automated")
   fi
 
   if [ "$is_automated" = "false" ]; then
-    # No automation signal — treat as manual (inferred)
-    ADEQUACY_MANUAL_LIST="${ADEQUACY_MANUAL_LIST}\n  [manual/inferred] Issue #${source_issue} (PR #${source_pr}): ${criterion}"
+    # No explicit capability annotation — UNKNOWN required proof, never manual/inferred.
+    ADEQUACY_UNTESTABLE_LIST="${ADEQUACY_UNTESTABLE_LIST}\n  [UNKNOWN capability] Issue #${source_issue} (PR #${source_pr}): ${criterion}"
+    BLOCKED_CAPABILITIES="${BLOCKED_CAPABILITIES}\n{\"capability\":\"unknown\",\"criterion\":\"${criterion}\",\"criterionTextHash\":\"unknown\",\"sourceHead\":\"unknown\",\"contractDigest\":\"unknown\",\"state\":\"UNKNOWN\",\"wakeCondition\":\"bind an explicit capability\"}"
     return
   fi
 

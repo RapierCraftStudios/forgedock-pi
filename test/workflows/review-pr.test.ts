@@ -639,7 +639,7 @@ test("Phase 6.5 propagates explicit BLOCK, PASS, and SKIP results", () => {
     { name: "test-gate", required: true, status: "passed" },
   );
   assert.deepEqual(
-    testGateVerification("<!-- FORGE:VERIFICATION_NO_REQUIRED_CAPABILITIES -->\n<!-- FORGE:TEST_GATE:RESULT=SKIP -->"),
+    testGateVerification("<!-- FORGE:VERIFICATION_NO_REQUIRED_CAPABILITIES -->\n<!-- FORGE:TEST_GATE:RESULT=SKIP -->", { requirements: [] }),
     { name: "test-gate", required: false, status: "skipped" },
   );
 });
@@ -672,7 +672,7 @@ test("required capability markers block unresolved or stale-shaped proof", () =>
     status: "failed",
     exitCode: 1,
   });
-  const passing = `<!-- FORGE:VERIFICATION_CAPABILITY ${JSON.stringify({ ...record, state: "PASS", evidence: "bound e2e result" })} -->\n<!-- FORGE:TEST_GATE:RESULT=PASS -->`;
+  const passing = `<!-- FORGE:VERIFICATION_CAPABILITY ${JSON.stringify({ ...record, state: "PASS", evidence: "bound e2e result", wakeCondition: "" })} -->\n<!-- FORGE:TEST_GATE:RESULT=PASS -->`;
   assert.deepEqual(
     testGateVerification(passing, {
       sourceHead: record.sourceHead,
@@ -715,6 +715,28 @@ test("required capability markers block unresolved or stale-shaped proof", () =>
   );
   assert.deepEqual(
     testGateVerification(`${passing}\n<!-- FORGE:VERIFICATION_NO_REQUIRED_CAPABILITIES -->\n<!-- FORGE:TEST_GATE:RESULT=SKIP -->`),
+    { name: "test-gate", required: true, status: "failed", exitCode: 1 },
+  );
+  assert.deepEqual(
+    testGateVerification(`${passing}\n<!-- FORGE:VERIFICATION_CAPABILITY malformed -->`, { sourceHead: record.sourceHead, requirements: [{
+      capability: record.capability,
+      criterion: record.criterion,
+      criterionTextHash: record.criterionTextHash,
+      contractDigest: record.contractDigest,
+      proofType: record.proofType,
+      boundary: record.boundary,
+    }] }),
+    { name: "test-gate", required: true, status: "failed", exitCode: 1 },
+  );
+  assert.deepEqual(
+    testGateVerification(`<!-- FORGE:VERIFICATION_CAPABILITY ${JSON.stringify({ ...record, state: "PASS", evidence: "bound", wakeCondition: "restore runner" })} -->\n<!-- FORGE:TEST_GATE:RESULT=PASS -->`, { sourceHead: record.sourceHead, requirements: [{
+      capability: record.capability,
+      criterion: record.criterion,
+      criterionTextHash: record.criterionTextHash,
+      contractDigest: record.contractDigest,
+      proofType: record.proofType,
+      boundary: record.boundary,
+    }] }),
     { name: "test-gate", required: true, status: "failed", exitCode: 1 },
   );
   assert.deepEqual(

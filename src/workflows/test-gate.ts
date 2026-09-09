@@ -75,8 +75,10 @@ function isCapabilityRecord(value: unknown): value is VerificationCapabilityReco
 }
 
 export function parseVerificationCapabilities(value: string): readonly VerificationCapabilityRecord[] | undefined {
+  const rawMarkers = [...value.matchAll(/^<!-- FORGE:VERIFICATION_CAPABILITY\b[^\n]*$/gm)];
   const markers = [...value.matchAll(/^<!-- FORGE:VERIFICATION_CAPABILITY (\{[^\n]+\}) -->$/gm)];
   if (!markers.length) return undefined;
+  if (rawMarkers.length !== markers.length) return undefined;
   const records: VerificationCapabilityRecord[] = [];
   for (const marker of markers) {
     try {
@@ -130,6 +132,8 @@ function capabilityFailure(value: string, capabilities: readonly VerificationCap
     }
     if (capability.state === "PASS" && !capability.evidence.trim())
       return `capability ${capability.capability} has no evidence`;
+    if (capability.state === "PASS" && capability.wakeCondition !== "")
+      return `capability ${capability.capability} has a wake condition despite PASS`;
   }
   return undefined;
 }
@@ -166,6 +170,8 @@ export function parseTestGateResult(
   )?.[1];
   if (explicitlyNoRequiredCapabilities && verdict !== "SKIP")
     return { verdict: "BLOCK", reason: "no-required-capabilities marker is valid only for SKIP" };
+  if (explicitlyNoRequiredCapabilities && expected?.requirements === undefined)
+    return { verdict: "BLOCK", reason: "no-required-capabilities skip lacks an explicit empty bound requirement list" };
   if (explicitlyNoRequiredCapabilities && capabilities)
     return { verdict: "BLOCK", reason: "no-required-capabilities marker cannot accompany capability records" };
   if (failure) return { verdict: "BLOCK", reason: failure, capabilities };
