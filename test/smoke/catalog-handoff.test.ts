@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
-const { prepareBatch } = await import(new URL("../../specs/helpers/dispatch.mjs", import.meta.url).href);
+const { prepareBatch, createIssueContract } = await import(new URL("../../specs/helpers/dispatch.mjs", import.meta.url).href);
 
 const exec = promisify(execFile);
 
@@ -26,8 +26,12 @@ test("documented child launch carries a prepared catalog absent from its clean t
     const bytes = JSON.stringify(catalog);
     await writeFile(snapshot, bytes, { mode: 0o400 });
     const digest = createHash("sha256").update(bytes).digest("hex");
+    const contract = createIssueContract(42, [{ id: "source", textHash: `sha256:${"1".repeat(64)}`, proofType: "behavioral", affectedBoundaries: ["src/example.ts"] }]);
+    const contractContent = `${JSON.stringify(contract)}\n`;
+    const contractPath = join(root, "contract.json"); await writeFile(contractPath, contractContent, { mode: 0o400 });
+    const contractDescriptor = { path: contractPath, sha256: createHash("sha256").update(contractContent).digest("hex") };
     const prepared = prepareBatch({ activeOwners: 1, launchAllowance: 8, requestStartedAt: "2026-01-01T00:00:00Z",
-      verification: { path: snapshot, sha256: digest }, issues: [{ number: 42, target: "staging", baseCwd: target, predecessors: [] }] }, join(root, "prepared"), target);
+      verification: { path: snapshot, sha256: digest }, issues: [{ number: 42, target: "staging", baseCwd: target, predecessors: [], contract: contractDescriptor }] }, join(root, "prepared"), target);
     const script = await readFile(prepared.request.workflowScriptPath, "utf8");
     const graph = JSON.parse(script.match(/^const issueGraph=(.+);$/m)![1]!);
     const launch = graph[0].launch as { task: string; cwd: string; output: boolean; artifacts: boolean };

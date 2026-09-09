@@ -13,7 +13,7 @@ const link = value => {
   try { const url = new URL(value); return url.protocol === "https:" && !url.username && !url.password && !url.search; } catch { return false; }
 };
 export function renderRecord(draft, body, options = {}) {
-  const policy = loadPolicy(draft.input, options.env ?? process.env);
+  const policy = loadPolicy(draft.input, options.env ?? process.env, options.legacyHistory === true);
   const cwd = options.cwd ?? process.cwd(); assertRepo(policy.repo, cwd);
   check(Object.hasOwn(titles, draft.kind), "Unsupported record kind");
   check(typeof body === "string" && body.trim(), "Record needs substantive Markdown sections");

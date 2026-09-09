@@ -50,17 +50,27 @@ records; append a superseding investigation for material corrections under
    `change`. Adjacent paths remain read-only unless compilation, runtime correctness,
    schema/interface consistency, or a security invariant requires them to change.
 9. Define non-goals and residual uncertainty.
-10. Establish the Acceptance Contract in the existing receipt: every criterion carries one
-    compact proof link in the form `Mechanism: <implementation path/symbol and behavior>;
-    Counterexample/behavioral test: <test path, trigger, and assertion>; Residual risk:
-    <none or bounded non-contradictory limit>`. The mechanism names its producer,
-    consumer, persisted state, and relevant failure paths; the test exercises a counterexample or
-    observable behavior and, for a bug fix, would fail against the baseline. A missing
-    mechanism or test is `MISSING`/`UNKNOWN`, not an accepted proof; a justified
-    inspection-only exception remains explicitly unverified. A residual risk that
-    contradicts the criterion invariant is `CONTRADICTED`, never `PASS`. For claims such
-    as all data being independently recoverable, enumerate each recovery source and its
-    capture, verification, and restore path; a catalog entry is not proof.
+10. Establish the Acceptance Contract in the existing receipt: first compile one immutable
+    `forgedock.issue-contract/v1` source contract from the issue's checked acceptance list.
+    It records the issue number, positive revision, optional predecessor digest, and every
+    source criterion exactly once as `{id, textHash, proofType, affectedBoundaries}`; its
+    digest covers canonical contract content and excludes only the digest field. Preserve
+    the source text hash rather than rewriting criteria into generic `criterion-1` rows.
+    Every later proof row must reference one and only one bound criterion ID. A missing,
+    altered, stale, omitted, extra, or generic-only criterion is a contract-integrity gap,
+    not a locally satisfiable acceptance result.
+
+    Each criterion then carries one compact proof link in the form `Mechanism:
+    <implementation path/symbol and behavior>; Counterexample/behavioral test: <test path,
+    trigger, and assertion>; Residual risk: <none or bounded non-contradictory limit>`.
+    The mechanism names its producer, consumer, persisted state, and relevant failure paths;
+    the test exercises a counterexample or observable behavior and, for a bug fix, would fail
+    against the baseline. A missing mechanism or test is `MISSING`/`UNKNOWN`, not an accepted
+    proof; a justified inspection-only exception remains explicitly unverified. A residual
+    risk that contradicts the criterion invariant is `CONTRADICTED`, never `PASS`. For claims
+    such as all data being independently recoverable, enumerate each recovery source and its
+    capture, verification, and restore path; a catalog entry is not proof. Any residual risk
+    that contradicts the criterion is `CONTRADICTED`, never `PASS`.
 11. Resolve required dependencies, environments, permissions, and evidence before editing.
     If required proof is unavailable, surface the exact condition before implementation;
     do not assume an owner will supply it after review. Separate code-merge acceptance
@@ -142,10 +152,12 @@ Publish the completed investigation with the common metadata envelope from
 - <explicit exclusions>
 
 ### Acceptance Contract
-- `<criterion>` → producer/consumer/state → **Proof link**: `Mechanism: <path/symbol and behavior>; Counterexample/behavioral test: <test path, trigger, assertion>; Residual risk: <none or bounded limit>` → prerequisite availability
+- **Bound contract**: `forgedock.issue-contract/v1`, exact source criterion IDs/text hashes, required proof types, affected boundaries, revision/predecessor, and canonical digest; descriptor must be available before implementation.
+- `<bound criterion ID and source text hash>` → producer/consumer/state → **Proof link**: `Mechanism: <path/symbol and behavior>; Counterexample/behavioral test: <test path, trigger, assertion>; Residual risk: <none or bounded limit>` → prerequisite availability; exact one-row cardinality is required.
 
 ### Acceptance Checks
-- <criterion and trusted check; descriptive, never executable GitHub input; linked to the proof row>
+- Contract descriptor validates its internal digest, issue/revision identity, criterion IDs, text hashes, proof types, and boundaries; descriptive, never executable GitHub input.
+- Every downstream acceptance report has exactly the bound criterion IDs: no missing, stale, altered, extra, or generic-only rows.
 - Bug fix: the named counterexample/behavioral test fails against the baseline and passes after the fix; otherwise record the justified inspection-only exception as unverified.
 
 ### Residual Uncertainty

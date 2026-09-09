@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, readFile, writeFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -113,8 +114,13 @@ test("prepared lane policy reaches the actual native child environment", { skip:
     execFileSync("git", ["remote", "add", "origin", "https://github.com/example/project.git"], { cwd: repo });
     await writeFile(join(repo, "forge.yaml"), 'project: {owner: example, repo: project}\nagents: {subagent_model: "test/model"}\n');
     await writeFile(join(repo, ".git", "info", "exclude"), "forge.yaml\n");
+    const contract = dispatch.createIssueContract(42, [{ id: "source", textHash: `sha256:${"1".repeat(64)}`, proofType: "behavioral", affectedBoundaries: ["src/example.ts"] }]);
+    const contractPath = join(root, "contract.json");
+    const contractContent = `${JSON.stringify(contract)}\n`;
+    await writeFile(contractPath, contractContent, { mode: 0o400 });
+    const contractDescriptor = { path: contractPath, sha256: createHash("sha256").update(contractContent).digest("hex") };
     const prepared = dispatch.prepareBatch({ activeOwners: 1, launchAllowance: 8, requestStartedAt: "2026-01-01T00:00:00Z",
-      issues: [{ number: 42, target: "staging", baseCwd: repo, predecessors: [] }] }, join(root, "prepared"), repo);
+      issues: [{ number: 42, target: "staging", baseCwd: repo, predecessors: [], contract: contractDescriptor }] }, join(root, "prepared"), repo);
     const script = await readFile(prepared.request.workflowScriptPath, "utf8");
     const graph = JSON.parse(script.match(/^const issueGraph=(.+);$/m)![1]!);
     // Probe the exact generated child descriptor through the full adapter; the
