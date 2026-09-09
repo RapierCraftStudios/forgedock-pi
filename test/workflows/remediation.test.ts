@@ -8,6 +8,7 @@ import { createBuilderPathContract } from "../../src/core/builder-contract.ts";
 import {
   admitContractGapReplan,
   classifyRemediationFindings,
+  validateContractGapHandoff,
   closeAddressedReviewFindingIssues,
   isRemediationCandidate,
   loadAuthoritativeReviewFindingIssues,
@@ -142,6 +143,7 @@ test("contract gaps classify before edits and permit one bounded re-plan", async
   } as const;
   const first = admitContractGapReplan(input);
   const second = admitContractGapReplan({ ...input, replanCount: first.replanCount });
+  validateContractGapHandoff(first);
   assert.equal(first.status, "REPLAN_REQUIRED");
   assert.equal(first.remediationUsage.used, 1);
   assert.deepEqual(first.reviewEvidence, ["review-a"]);
@@ -153,7 +155,7 @@ test("contract gaps classify before edits and permit one bounded re-plan", async
   );
 });
 
-test("open review-finding issues are authoritative and deduplicated per PR", async () => {
+test("open review-finding issues are authoritative and deduplicated per PR/head", async () => {
   const fake = new RemediationGitHubFake();
   const findings = await loadAuthoritativeReviewFindingIssues({
     github: fake as unknown as GitHubWorkflowAdapter,
@@ -161,6 +163,12 @@ test("open review-finding issues are authoritative and deduplicated per PR", asy
   });
   assert.deepEqual(findings.map((finding) => finding.issueNumber), [100]);
   assert.equal(findings[0]?.finding.id, "SEC-001");
+  const stale = await loadAuthoritativeReviewFindingIssues({
+    github: fake as unknown as GitHubWorkflowAdapter,
+    pullNumber: 7,
+    headSha: "different-head",
+  });
+  assert.deepEqual(stale, []);
 });
 
 test("remediation classification fixes in-contract blockers and escalates true authority decisions", () => {

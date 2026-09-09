@@ -100,6 +100,7 @@ import {
   readRemediationMarkerState,
   remediationCompleteMarker,
   remediationStartMarker,
+  validateContractGapHandoff,
   type AuthoritativeReviewFinding,
   type ContractGapHandoff,
 } from "./remediation.ts";
@@ -3143,6 +3144,7 @@ export class ForgeWorkOnController {
           ? await loadAuthoritativeReviewFindingIssues({
               github,
               pullNumber: pull.number,
+              headSha: aggregate.review.headSha,
               ...(ctx.signal ? { signal: ctx.signal } : {}),
             })
           : [];
@@ -3155,31 +3157,37 @@ export class ForgeWorkOnController {
         remediation.contractGaps.length > 0 &&
         remediation.escalated.length === 0;
       if (hasContractGap && !link.contractGapReplan) {
-        const priorContract = link.builderContract ?? createBuilderPathContract(["**"]);
-        const priorContractDigest = `sha256:${priorContract.contractHash}`;
-        const supersedingPaths = [
-          ...priorContract.allowedPaths,
-          ...remediation.contractGaps.map(({ finding }) => finding.file),
-        ];
-        const supersedingContract = createBuilderPathContract(
-          supersedingPaths,
-          priorContract.revision + 1,
+        const priorContract = link.builderContract;
+        const priorContractDigest = `sha256:${(priorContract ?? createBuilderPathContract(["**"])).contractHash}`;
+        const supersedingContract = successorBuilderContract(
+          priorContract,
+          remediation.contractGaps,
         );
-        link.builderContract = supersedingContract;
         const contractDigest = `sha256:${supersedingContract.contractHash}`;
-        link.contractGapReplan = admitContractGapReplan({
-          issueNumber: link.issueNumber,
-          pullNumber: pull.number,
-          target: link.prepared.baseBranch,
-          reviewedHead: aggregate.review.headSha,
-          worktree: link.prepared.worktreePath,
-          reviewEvidence: aggregate.review.reviewerResults.map((reviewer) => reviewer.runId),
-          remediationUsage: { used: aggregate.review.rounds, limit: policy.review.maxRounds },
-          priorContractDigest,
-          replanId: `${link.forgeRunId}:replan:${aggregate.review.headSha}`,
-          contractDigest,
-          replanCount: link.contractGapReplanCount ?? 0,
-        });
+        link.contractGapReplan = {
+          ...admitContractGapReplan({
+            issueNumber: link.issueNumber,
+            pullNumber: pull.number,
+            target: link.prepared.baseBranch,
+            reviewedHead: aggregate.review.headSha,
+            worktree: link.prepared.worktreePath,
+            reviewEvidence: reviewEvidenceReferences({
+              pullNumber: pull.number,
+              headSha: aggregate.review.headSha,
+              round: aggregate.review.rounds,
+              reviewerRunIds: aggregate.review.reviewerResults.map((reviewer) => reviewer.runId),
+              decision: gate.decision,
+            }),
+            remediationUsage: { used: aggregate.review.rounds, limit: policy.review.maxRounds },
+            priorContractDigest,
+            replanId: `${link.forgeRunId}:replan:${aggregate.review.headSha}`,
+            contractDigest,
+            replanCount: link.contractGapReplanCount ?? 0,
+          }),
+          supersedingContract,
+        };
+        validateContractGapHandoff(link.contractGapReplan);
+        link.builderContract = supersedingContract;
         link.contractGapReplanCount = link.contractGapReplan.replanCount;
         link.planContext = [
           link.planContext,
@@ -3196,6 +3204,7 @@ export class ForgeWorkOnController {
         aggregate.review.rounds < 5;
       const contractGapGated =
         gate.decision === "changes-requested" &&
+        remediation.contractGaps.length > 0 &&
         link.contractGapReplan?.status === "GATED";
       outcome =
         gate.decision === "approved" ||
@@ -3520,6 +3529,12 @@ export class ForgeWorkOnController {
           signal: ctx.signal,
         });
       }
+    }
+    if (node.node === "decision" && link.contractGapReplan) {
+      evidence = [
+        ...evidence,
+        `contract-gap-handoff:${JSON.stringify(link.contractGapReplan)}`,
+      ];
     }
     if (node.node !== "ci") {
       await projector.postArtifact({
@@ -4679,6 +4694,7 @@ export class ForgeWorkOnController {
       const branch = `forge/issue-${state.issueNumber}-${forgeRunId.slice(0, 8)}`;
       const baseSha = this.#adoptedBaseSha(state) ?? "";
       const adoptedHeadSha = this.#adoptedHeadSha(state) ?? baseSha;
+      const recoveredContractGap = recoverContractGapHandoff(state);
       let prepared: PreparedWorktree;
       try {
         prepared = await this.#git.adoptPreparedWorktree(
@@ -4724,6 +4740,15 @@ export class ForgeWorkOnController {
         refreshes: 0,
         providerRetries: 0,
         remediationAttempts: 0,
+        ...(recoveredContractGap
+          ? {
+              contractGapReplan: recoveredContractGap,
+              contractGapReplanCount: recoveredContractGap.replanCount,
+              ...(recoveredContractGap.supersedingContract
+                ? { builderContract: recoveredContractGap.supersedingContract }
+                : {}),
+            }
+          : {}),
         findingIssueMap: {},
         issueContext: "Adopted orphaned run; complete from durable state.",
         activeNodes: {},
@@ -5372,6 +5397,7 @@ export class ForgeWorkOnController {
     const storedFindings = await loadAuthoritativeReviewFindingIssues({
       github: input.github,
       pullNumber: input.pullNumber,
+      headSha: input.result.review.headSha,
       ...(input.ctx.signal ? { signal: input.ctx.signal } : {}),
     });
     const authoritative: AuthoritativeReviewFinding[] =
@@ -5383,10 +5409,56 @@ export class ForgeWorkOnController {
             sourceIssueNumber: input.link.issueNumber,
             finding,
           }));
-    const classification = classifyRemediationFindings(
+    let classification = classifyRemediationFindings(
       authoritative,
       input.link.builderContract,
     );
+    if (
+      !input.link.contractGapReplan &&
+      classification.contractGaps.length > 0 &&
+      classification.escalated.length === 0
+    ) {
+      const priorContract = input.link.builderContract;
+      const priorContractDigest = `sha256:${(priorContract ?? createBuilderPathContract(["**"])).contractHash}`;
+      const supersedingContract = successorBuilderContract(
+        priorContract,
+        classification.contractGaps,
+      );
+      input.link.contractGapReplan = {
+        ...admitContractGapReplan({
+          issueNumber: input.link.issueNumber,
+          pullNumber: input.pullNumber,
+          target: input.link.prepared.baseBranch,
+          reviewedHead: input.result.review.headSha,
+          worktree: input.link.prepared.worktreePath,
+          reviewEvidence: reviewEvidenceReferences({
+            pullNumber: input.pullNumber,
+            headSha: input.result.review.headSha,
+            round: input.result.review.rounds,
+            reviewerRunIds: input.result.review.reviewerResults.map((reviewer) => reviewer.runId),
+          }),
+          remediationUsage: { used: input.result.review.rounds, limit: input.maxRounds },
+          priorContractDigest,
+          replanId: `${input.link.forgeRunId}:replan:${input.result.review.headSha}`,
+          contractDigest: `sha256:${supersedingContract.contractHash}`,
+          replanCount: input.link.contractGapReplanCount ?? 0,
+        }),
+        supersedingContract,
+      };
+      validateContractGapHandoff(input.link.contractGapReplan);
+      input.link.contractGapReplanCount = input.link.contractGapReplan.replanCount;
+      input.link.builderContract = supersedingContract;
+      input.link.planContext = [
+        input.link.planContext,
+        "CONTRACT_GAP preserved-work handoff:",
+        JSON.stringify(input.link.contractGapReplan, null, 2),
+      ].filter(Boolean).join("\n\n");
+      this.#persistLink(input.link);
+      classification = classifyRemediationFindings(
+        authoritative,
+        input.link.builderContract,
+      );
+    }
     const handoff = input.link.contractGapReplan;
     if (handoff && (handoff.pullNumber !== input.pullNumber || handoff.issueNumber !== input.link.issueNumber || handoff.reviewedHead !== input.result.review.headSha || handoff.worktree !== input.link.prepared.worktreePath || handoff.target !== input.link.prepared.baseBranch))
       return false;
@@ -5441,6 +5513,14 @@ export class ForgeWorkOnController {
     });
     const previousRunId = input.link.subagentRunId;
     await this.#rpc.stopAndWait(previousRunId);
+    const launchIntent = createNodeLaunchIntent(
+      `remediation-${input.result.review.rounds + 1}`,
+      input.link.resultPath,
+    );
+    this.#links.delete(previousRunId);
+    input.link.subagentRunId = launchIntent.sentinelRunId;
+    input.link.launchFailure = "ambiguous";
+    this.#persistLink(input.link);
     const { policy } = await loadForgePolicy(input.link.prepared.repositoryRoot);
     const remediationTask = [
       "Run one fresh bounded remediation attempt on the existing PR branch.",
@@ -5476,9 +5556,16 @@ export class ForgeWorkOnController {
       ...(input.link.builderContract ? { builderContract: input.link.builderContract } : {}),
     });
     this.#links.delete(previousRunId);
+    this.#links.delete(launchIntent.sentinelRunId);
     input.link.subagentRunId = receipt.runId;
-    if (contractGapReplan) input.link.contractGapReplan = undefined;
-    else input.link.remediationAttempts += 1;
+    delete input.link.launchFailure;
+    if (contractGapReplan && input.link.contractGapReplan) {
+      // Keep the consumed handoff as durable evidence; only its status changes.
+      input.link.contractGapReplan = {
+        ...input.link.contractGapReplan,
+        status: "GATED",
+      };
+    } else input.link.remediationAttempts += 1;
     input.link.status = "running";
     this.#persistLink(input.link);
     input.ctx.ui.notify(
@@ -5918,6 +6005,32 @@ export class ForgeWorkOnController {
       throw new Error(
         "Structured review findings exist without the bound pull request.",
       );
+    if (existingPull) {
+      if (
+        result.headSha !== existingPull.headSha ||
+        result.review.headSha !== existingPull.headSha
+      )
+        throw new Error(
+          "Work-on review result is not bound to the current pull-request head.",
+        );
+      const reviewerHeads = result.review.reviewerResults.filter(
+        (reviewer) => reviewer.headSha !== existingPull.headSha,
+      );
+      if (reviewerHeads.length > 0)
+        throw new Error(
+          "Fresh review contains reviewer evidence for a stale head.",
+        );
+      const reviewerDomains = new Set(
+        result.review.reviewerResults.map((reviewer) => reviewerDomain(reviewer.reviewer)),
+      );
+      const missingRequired = policy.review.required
+        .map(reviewerDomain)
+        .filter((domain) => !reviewerDomains.has(domain));
+      if (missingRequired.length > 0)
+        throw new Error(
+          `Fresh review panel is missing required reviewers: ${missingRequired.join(", ")}.`,
+        );
+    }
     const priorFindingIssueMap = { ...link.findingIssueMap };
     const resultFindings: AuthoritativeReviewFinding[] =
       result.review.findings.map((finding) => ({
@@ -7367,6 +7480,32 @@ function digest(value: string): string {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 
+function reviewEvidenceReferences(input: {
+  pullNumber: number;
+  headSha: string;
+  round: number;
+  reviewerRunIds: readonly string[];
+  decision?: string;
+}): string[] {
+  return [
+    `panel:pr=${input.pullNumber}:head=${input.headSha}:round=${input.round}`,
+    `verdict:pr=${input.pullNumber}:head=${input.headSha}:round=${input.round}:decision=${input.decision ?? "changes-requested"}`,
+    ...input.reviewerRunIds.map((runId) => `reviewer:${runId}`),
+  ];
+}
+
+function successorBuilderContract(
+  prior: BuilderPathContract | undefined,
+  findings: readonly AuthoritativeReviewFinding[],
+): BuilderPathContract {
+  const base = prior ?? createBuilderPathContract(["**"]);
+  return createBuilderPathContract(
+    [...base.allowedPaths, ...findings.map(({ finding }) => finding.file)],
+    base.revision + 1,
+    base.brief,
+  );
+}
+
 function sameStrings(
   left: readonly string[],
   right: readonly string[],
@@ -7507,6 +7646,28 @@ export function parseAsyncCompletion(
   return { runId, state, ...(error ? { error } : {}) };
 }
 
+function recoverContractGapHandoff(
+  state: import("../core/state.ts").RunState,
+): ContractGapHandoff | undefined {
+  const decisionNodes = Object.values(state.nodes)
+    .filter((node) => node.node === "decision")
+    .sort((left, right) => (right.attempt ?? 0) - (left.attempt ?? 0));
+  for (const node of decisionNodes) {
+    const marker = (node.evidence ?? []).find((entry) =>
+      entry.startsWith("contract-gap-handoff:"),
+    );
+    if (!marker) continue;
+    try {
+      const parsed = JSON.parse(marker.slice("contract-gap-handoff:".length));
+      validateContractGapHandoff(parsed);
+      return parsed;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 function normalizeActiveRunLink(value: unknown): ActiveRunLink | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value))
     return undefined;
@@ -7534,6 +7695,22 @@ function normalizeActiveRunLink(value: unknown): ActiveRunLink | undefined {
     typeof link.prepared !== "object"
   )
     return undefined;
+  let contractGapReplan: ContractGapHandoff | undefined;
+  try {
+    if (link.contractGapReplan) {
+      validateContractGapHandoff(link.contractGapReplan);
+      contractGapReplan = link.contractGapReplan;
+    }
+  } catch {
+    return undefined;
+  }
+  if (
+    link.contractGapReplanCount !== undefined &&
+    (!Number.isSafeInteger(link.contractGapReplanCount) ||
+      (link.contractGapReplanCount as number) < 0 ||
+      (contractGapReplan && link.contractGapReplanCount !== contractGapReplan.replanCount))
+  )
+    return undefined;
   return {
     ...(link as ActiveRunLink),
     executionMode: link.executionMode ?? "bounded-legacy",
@@ -7549,8 +7726,10 @@ function normalizeActiveRunLink(value: unknown): ActiveRunLink | undefined {
       ? { launchFailure: link.launchFailure }
       : {}),
     remediationAttempts: link.remediationAttempts ?? 0,
-    ...(link.contractGapReplan ? { contractGapReplan: link.contractGapReplan } : {}),
-    ...(Number.isSafeInteger(link.contractGapReplanCount)
+    ...(contractGapReplan ? { contractGapReplan } : {}),
+    ...(Number.isSafeInteger(link.contractGapReplanCount) &&
+    (link.contractGapReplanCount as number) >= 0 &&
+    (!contractGapReplan || link.contractGapReplanCount === contractGapReplan.replanCount)
       ? { contractGapReplanCount: link.contractGapReplanCount }
       : {}),
     findingIssueMap: link.findingIssueMap ?? {},

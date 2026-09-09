@@ -1,8 +1,9 @@
 import type { GitHubWorkflowAdapter } from "../adapters/github-workflow.ts";
 import {
   builderPathAllowed,
+  validateBuilderPathContract,
   type BuilderPathContract,
-} from "../core/builder-contract.ts";
+} from "../core/builder-contract.ts"
 import { findingBlocksMerge } from "../core/review.ts";
 import { humanAuthorityReasonFromText } from "../core/policy.ts";
 import { reviewFindingAuthorityReason } from "./review-findings.ts";
@@ -61,6 +62,8 @@ export interface ContractGapHandoff {
   replanId: string;
   contractDigest: string;
   replanCount: number;
+  /** Serialized successor contract used to recover an orphaned lane safely. */
+  supersedingContract?: BuilderPathContract;
 }
 
 /** Admit exactly one preserved-work contract-gap transition without changing cap usage. */
@@ -102,13 +105,60 @@ export function admitContractGapReplan(input: {
   if (!/^sha256:[0-9a-f]{64}$/.test(input.priorContractDigest) || !/^sha256:[0-9a-f]{64}$/.test(input.contractDigest) || input.contractDigest === input.priorContractDigest)
     throw new TypeError("Contract-gap re-plan requires distinct SHA-256 contract digests.");
   const status = input.replanCount >= 1 ? "GATED" : "REPLAN_REQUIRED";
-  return {
+  const handoff: ContractGapHandoff = {
     ...input,
     reviewEvidence: [...input.reviewEvidence],
     remediationUsage: { ...input.remediationUsage },
     replanCount: input.replanCount + (status === "REPLAN_REQUIRED" ? 1 : 0),
     status,
   };
+  validateContractGapHandoff(handoff);
+  return handoff;
+}
+
+export function validateContractGapHandoff(
+  value: unknown,
+): asserts value is ContractGapHandoff {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new TypeError("Contract-gap handoff must be an object.");
+  const handoff = value as Partial<ContractGapHandoff>;
+  if (handoff.status !== "REPLAN_REQUIRED" && handoff.status !== "GATED")
+    throw new TypeError("Contract-gap handoff status is invalid.");
+  if (
+    !Number.isSafeInteger(handoff.issueNumber) ||
+    (handoff.issueNumber as number) < 1 ||
+    !Number.isSafeInteger(handoff.pullNumber) ||
+    (handoff.pullNumber as number) < 1 ||
+    typeof handoff.target !== "string" ||
+    !handoff.target.trim() ||
+    typeof handoff.reviewedHead !== "string" ||
+    !/^[a-f0-9]{40}$/.test(handoff.reviewedHead) ||
+    typeof handoff.worktree !== "string" ||
+    !handoff.worktree.startsWith("/") ||
+    !Array.isArray(handoff.reviewEvidence) ||
+    handoff.reviewEvidence.length === 0 ||
+    handoff.reviewEvidence.some((entry) => typeof entry !== "string" || !entry.trim()) ||
+    !handoff.remediationUsage ||
+    !Number.isSafeInteger(handoff.remediationUsage.used) ||
+    !Number.isSafeInteger(handoff.remediationUsage.limit) ||
+    handoff.remediationUsage.used < 0 ||
+    handoff.remediationUsage.limit < handoff.remediationUsage.used ||
+    typeof handoff.priorContractDigest !== "string" ||
+    !/^sha256:[0-9a-f]{64}$/.test(handoff.priorContractDigest) ||
+    typeof handoff.contractDigest !== "string" ||
+    !/^sha256:[0-9a-f]{64}$/.test(handoff.contractDigest) ||
+    handoff.contractDigest === handoff.priorContractDigest ||
+    typeof handoff.replanId !== "string" ||
+    !handoff.replanId.trim() ||
+    !Number.isSafeInteger(handoff.replanCount) ||
+    (handoff.replanCount as number) < 1
+  )
+    throw new TypeError("Contract-gap handoff identity or usage is invalid.");
+  if (handoff.supersedingContract) {
+    validateBuilderPathContract(handoff.supersedingContract);
+    if (`sha256:${handoff.supersedingContract.contractHash}` !== handoff.contractDigest)
+      throw new TypeError("Contract-gap digest does not match its successor contract.");
+  }
 }
 
 export function classifyRemediationFindings(
@@ -186,6 +236,8 @@ export function isRemediationCandidate(
 export async function loadAuthoritativeReviewFindingIssues(input: {
   github: GitHubWorkflowAdapter;
   pullNumber: number;
+  /** Findings are only authoritative for the exact frozen review head. */
+  headSha?: string;
   signal?: AbortSignal;
 }): Promise<AuthoritativeReviewFinding[]> {
   const issues = await input.github.listIssuesByLabel(
@@ -201,6 +253,7 @@ export async function loadAuthoritativeReviewFindingIssues(input: {
     });
     if (
       parsed?.sourcePullNumber === input.pullNumber &&
+      (!input.headSha || parsed.finding.headSha === input.headSha) &&
       !byFinding.has(parsed.finding.id)
     )
       byFinding.set(parsed.finding.id, parsed);
