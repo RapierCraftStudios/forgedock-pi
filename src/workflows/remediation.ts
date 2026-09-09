@@ -112,7 +112,8 @@ export function admitContractGapReplan(input: {
     replanCount: input.replanCount + (status === "REPLAN_REQUIRED" ? 1 : 0),
     status,
   };
-  validateContractGapHandoff(handoff);
+  // The admission result is completed with its successor contract by the
+  // controller before it is persisted or sent to a child.
   return handoff;
 }
 
@@ -154,11 +155,11 @@ export function validateContractGapHandoff(
     (handoff.replanCount as number) < 1
   )
     throw new TypeError("Contract-gap handoff identity or usage is invalid.");
-  if (handoff.supersedingContract) {
-    validateBuilderPathContract(handoff.supersedingContract);
-    if (`sha256:${handoff.supersedingContract.contractHash}` !== handoff.contractDigest)
-      throw new TypeError("Contract-gap digest does not match its successor contract.");
-  }
+  if (!handoff.supersedingContract)
+    throw new TypeError("Contract-gap handoff requires a successor contract.");
+  validateBuilderPathContract(handoff.supersedingContract);
+  if (`sha256:${handoff.supersedingContract.contractHash}` !== handoff.contractDigest)
+    throw new TypeError("Contract-gap digest does not match its successor contract.");
 }
 
 export function classifyRemediationFindings(
@@ -175,7 +176,7 @@ export function classifyRemediationFindings(
   for (const finding of findings) {
     const value = finding.finding;
     const inContract =
-      builderContract === undefined || builderPathAllowed(builderContract, value.file);
+      builderContract !== undefined && builderPathAllowed(builderContract, value.file);
     const hasEvidence = value.evidence.some((entry) => entry.trim().length > 0);
     // A builder-path mismatch is a planning/decomposition problem, not a
     // human-authority request. Only explicit high-level authority language

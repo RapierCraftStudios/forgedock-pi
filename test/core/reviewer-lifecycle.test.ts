@@ -168,6 +168,24 @@ test("contract-gap lifecycle preserves one lane while unrelated lanes remain rea
   });
   assert.equal(gapDecision.kind, "blocked");
   assert.match(gapDecision.reason, /exhausted/i);
+  const boundedReplanDecision = chooseWorkflowDispatch({
+    maxReviewRounds: 1,
+    nodes: [{
+      nodeId: "decision-1",
+      node: "decision",
+      attempt: 1,
+      round: 1,
+      status: "completed",
+      outcome: "remediation-required",
+      headSha: "head-a",
+      contractGapReplan: {
+        status: "REPLAN_REQUIRED",
+        replanId: "replan-a",
+        reviewedHead: "head-a",
+      },
+    }],
+  });
+  assert.notEqual(boundedReplanDecision.kind, "blocked");
 
   // The scheduler evaluates an unrelated lane from its own state; no gap record
   // is consulted and the lane remains independently ready for resolve.

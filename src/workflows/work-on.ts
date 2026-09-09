@@ -3546,6 +3546,15 @@ export class ForgeWorkOnController {
         ...(ctx.signal ? { signal: ctx.signal } : {}),
       });
     }
+    const pendingContractGap =
+      node.node === "decision" &&
+      link.contractGapReplan?.status === "REPLAN_REQUIRED"
+        ? {
+            status: "REPLAN_REQUIRED" as const,
+            replanId: link.contractGapReplan.replanId,
+            reviewedHead: link.contractGapReplan.reviewedHead,
+          }
+        : undefined;
     await journal.append({
       runId: link.forgeRunId,
       type: "node.completed",
@@ -3560,12 +3569,20 @@ export class ForgeWorkOnController {
         evidence,
         verificationResults,
         ...(finalReviewDecision ? { finalReviewDecision } : {}),
+        ...(pendingContractGap ? { contractGapReplan: pendingContractGap } : {}),
       },
       idempotencyKey: `node:${node.nodeId}:complete`,
       sessionId,
       message: `Complete parent node ${node.nodeId}`,
       ...(ctx.signal ? { signal: ctx.signal } : {}),
     });
+    if (pendingContractGap && link.contractGapReplan) {
+      link.contractGapReplan = {
+        ...link.contractGapReplan,
+        status: "GATED",
+      };
+      this.#persistLink(link);
+    }
     const investigationOutcome = Object.values(current.state.nodes)
       .filter(
         (candidate) =>
@@ -5553,7 +5570,10 @@ export class ForgeWorkOnController {
       leaseOwnerRunId: input.link.leaseOwnerRunId,
       policy,
       issueContext: `${input.link.issueContext}\n\n${remediationTask}`,
-      ...(input.link.builderContract ? { builderContract: input.link.builderContract } : {}),
+      ...(input.link.builderContract &&
+      (!input.link.contractGapReplan || input.link.contractGapReplan.supersedingContract)
+        ? { builderContract: input.link.builderContract }
+        : {}),
     });
     this.#links.delete(previousRunId);
     this.#links.delete(launchIntent.sentinelRunId);
@@ -6108,15 +6128,23 @@ export class ForgeWorkOnController {
       const authorityEscalation =
         result.status === "needs-human" &&
         humanAuthorityReasonFromText(result.blocker ?? "") !== undefined;
+      const gatedHandoff = link.contractGapReplan;
+      const gatedContractGap =
+        gatedHandoff?.status === "GATED" &&
+        (findingDisposition.contractGaps.length > 0 ||
+          result.review.headSha !== gatedHandoff.reviewedHead);
+      const reason = gatedContractGap
+        ? `CONTRACT_GAP re-plan already consumed; GATED until explicit new authority supplies a fresh contract/re-plan allowance. Preserved reviewed head: ${gatedHandoff?.reviewedHead}; replanId: ${gatedHandoff?.replanId}.`
+        : result.blocker ?? result.status;
       link.status = authorityEscalation ? "needs-human" : "blocked";
       this.#persistLink(link);
       this.#emitLifecycle(link, {
-        reason: result.blocker ?? result.status,
+        reason,
         headSha: result.headSha,
         baseSha: result.baseSha,
       });
       ctx.ui.notify(
-        `ForgeDock issue #${link.issueNumber} stopped: ${result.blocker ?? result.status}`,
+        `ForgeDock issue #${link.issueNumber} stopped: ${reason}`,
         "warning",
       );
       return;
@@ -7698,6 +7726,8 @@ function normalizeActiveRunLink(value: unknown): ActiveRunLink | undefined {
   let contractGapReplan: ContractGapHandoff | undefined;
   try {
     if (link.contractGapReplan) {
+      if (!link.contractGapReplan.supersedingContract)
+        return undefined;
       validateContractGapHandoff(link.contractGapReplan);
       contractGapReplan = link.contractGapReplan;
     }

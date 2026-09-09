@@ -8,7 +8,6 @@ import { createBuilderPathContract } from "../../src/core/builder-contract.ts";
 import {
   admitContractGapReplan,
   classifyRemediationFindings,
-  validateContractGapHandoff,
   closeAddressedReviewFindingIssues,
   isRemediationCandidate,
   loadAuthoritativeReviewFindingIssues,
@@ -143,7 +142,6 @@ test("contract gaps classify before edits and permit one bounded re-plan", async
   } as const;
   const first = admitContractGapReplan(input);
   const second = admitContractGapReplan({ ...input, replanCount: first.replanCount });
-  validateContractGapHandoff(first);
   assert.equal(first.status, "REPLAN_REQUIRED");
   assert.equal(first.remediationUsage.used, 1);
   assert.deepEqual(first.reviewEvidence, ["review-a"]);
@@ -181,7 +179,10 @@ test("remediation classification fixes in-contract blockers and escalates true a
     body: findingBody(7, "POLICY-001", "production-safety"),
   });
   assert.ok(fixable && escalated);
-  const classification = classifyRemediationFindings([fixable, escalated]);
+  const classification = classifyRemediationFindings(
+    [fixable, escalated],
+    createBuilderPathContract(["src/**"]),
+  );
   assert.deepEqual(classification.fixable.map((item) => item.finding.id), [
     "SEC-001",
     "POLICY-001",

@@ -52,6 +52,11 @@ export interface WorkflowNodeRecord {
   resultPath?: string;
   subagentRunId?: string;
   publishedCommentId?: number;
+  contractGapReplan?: {
+    status: "REPLAN_REQUIRED" | "GATED";
+    replanId: string;
+    reviewedHead: string;
+  };
   reason?: string;
 }
 
@@ -124,7 +129,8 @@ export function chooseNextExecutableNode(
   if (
     latestDecision?.outcome === "remediation-required" &&
     maxReviewRounds !== undefined &&
-    latestDecision.attempt >= maxReviewRounds
+    latestDecision.attempt >= maxReviewRounds &&
+    latestDecision.contractGapReplan?.status !== "REPLAN_REQUIRED"
   )
     return { kind: "blocked", node: latestDecision, reason: "Review remediation rounds are exhausted." };
   if (ORDERED_NODES.every((node) => nodes.some((record) => record.node === node && record.status === "completed")))
@@ -162,7 +168,8 @@ function findNextExecutableNode(
     const nextRound = round + 1;
     if (
       maxReviewRounds !== undefined &&
-      nextRound > maxReviewRounds
+      nextRound > maxReviewRounds &&
+      decision.contractGapReplan?.status !== "REPLAN_REQUIRED"
     )
       return undefined;
     const roundNodes: readonly WorkflowNode[] = [
@@ -281,6 +288,7 @@ function dispatcherNodes(
         ...(node.resultPath ? { resultPath: node.resultPath } : {}),
         ...(node.subagentRunId ? { subagentRunId: node.subagentRunId } : {}),
         ...(node.publishedCommentId ? { publishedCommentId: node.publishedCommentId } : {}),
+        ...(node.contractGapReplan ? { contractGapReplan: node.contractGapReplan } : {}),
         ...(node.reason ? { reason: node.reason } : {}),
       }))
     : [];

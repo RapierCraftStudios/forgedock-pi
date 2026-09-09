@@ -124,6 +124,11 @@ export interface NodeEventPayload {
   finalReviewDecision?: FinalReviewDecision;
   verificationResults?: readonly VerificationResult[];
   builderContract?: BuilderPathContract;
+  contractGapReplan?: {
+    status: "REPLAN_REQUIRED" | "GATED";
+    replanId: string;
+    reviewedHead: string;
+  };
   outcome?: string;
   evidence?: readonly string[];
   reason?: string;
