@@ -52,7 +52,21 @@ const plan: PlanArtifact = {
   invariants: ["Existing gate behavior remains unchanged"],
   deliverables: ["One focused test"],
   acceptanceMapping: [
-    { checkId: "AC-1", implementation: "Assert needs-human." },
+    {
+      checkId: "AC-1",
+      implementation: {
+        proofKind: "behavioral",
+        mechanism: "evaluateReviewGate",
+        boundary: "protected-branch review gate",
+        test: "test/core/review.test.ts",
+        trigger: "unapproved merge request",
+        assertion: "returns needs-human",
+        baseline: "fails before the regression test exists",
+        passAfter: "passes after the regression test is added",
+        prerequisite: "npm test",
+        residualRisk: "none",
+      },
+    },
   ],
   context: {
     history: ["Adjacent coverage exists."],
@@ -189,14 +203,26 @@ test("plan rendering makes the builder contract a minimal deterministic behavior
     ],
   );
   assert.match(contract, /\| Criterion \| Smallest Proof \|/);
+  assert.match(contract, /Mechanism: evaluateReviewGate/);
+  assert.match(contract, /Trigger: unapproved merge request/);
+  assert.match(contract, /Pass-after: passes after the regression test is added/);
   assert.match(contract, /test\/core\/review\.test\.ts/);
-  assert.match(contract, /Assert needs-human/);
+  assert.match(contract, /Assertion: returns needs-human/);
   for (const heading of ["Allowed Paths", "Forbidden Changes", "Acceptance Mapping", "Ownership", "Scheduling", "Worktree", "Hash", "Lineage", "Review"]) {
     assert.doesNotMatch(contract, new RegExp(`^### .*${heading}`, "im"));
   }
   assert.doesNotMatch(contract, /Ownership|Scheduling|Worktree|Hash|Lineage|Deep Review/i);
   assert.match(markdown, /<!-- FORGE:CONTEXT -->/);
   assert.match(markdown, /<!-- FORGE:ARCHITECT -->/);
+});
+
+test("plan artifacts reject an incomplete acceptance proof", () => {
+  const invalid = structuredClone(plan) as unknown as Record<string, unknown>;
+  invalid.acceptanceMapping = [
+    { checkId: "AC-1", implementation: "Assert needs-human." },
+  ];
+  assert.equal(Check(FORGE_PHASE_ARTIFACT_SCHEMA, invalid), false);
+  assert.equal(isPhaseArtifact(invalid), false);
 });
 
 test("invalid verdict markers are detected in comment bodies", async () => {

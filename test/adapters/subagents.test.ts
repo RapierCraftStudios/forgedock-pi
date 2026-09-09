@@ -531,7 +531,6 @@ test("RPC bounded node launch delegates one node without child checkpoints", asy
 test("bounded implementation launch binds the durable builder contract", async () => {
   const { pi, bus } = fakePi();
   const client = new SubagentsRpcClient(pi);
-  const builderContract = createBuilderPathContract(["src/**", "test/**"]);
   const builderBrief = [
     "<!-- FORGE:CONTRACT -->",
     "## Builder Contract",
@@ -540,6 +539,31 @@ test("bounded implementation launch binds the durable builder contract", async (
     "### Non-Goals\nDo not change ownership, scheduling, or review policy.",
     "### Smallest Behavioral Proof\n| Criterion | Smallest Proof |\n| AC-1 | test/review.test.ts; trigger: rejected input; assertion: needs-human; prerequisite: local runner. |",
   ].join("\n\n");
+  const builderContract = createBuilderPathContract(["src/**", "test/**"], 1, {
+    objective: "The review gate preserves the accepted decision.",
+    allowedPaths: ["src/**", "test/**"],
+    forbiddenChanges: ["ownership, scheduling, or review policy"],
+    invariants: ["The decision remains stable."],
+    deliverables: ["Retain the decision."],
+    acceptanceMapping: [
+      {
+        checkId: "AC-1",
+        implementation: {
+          proofKind: "behavioral",
+          mechanism: "review gate",
+          boundary: "protected branch",
+          test: "test/review.test.ts",
+          trigger: "rejected input",
+          assertion: "returns needs-human",
+          baseline: "fails before the regression test",
+          passAfter: "passes after the regression test",
+          prerequisite: "local runner",
+          residualRisk: "none",
+        },
+      },
+    ],
+    outOfScope: [],
+  });
   await client.spawnNode({
     runId: "run-implement",
     issueNumber: 9,
