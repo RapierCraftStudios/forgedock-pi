@@ -93,7 +93,8 @@ function targetBaseDescriptor(baseCwd, repository, target) {
   requireThat(/^pi-parallel-[A-Za-z0-9._-]+$/.test(branch), "Prepared target base must be a managed pi-parallel worktree");
   const worktreeEntry = git(basePath, ["worktree", "list", "--porcelain"]).split(/\n\n/).find(entry => entry.split("\n").includes(`worktree ${basePath}`) && entry.split("\n").includes(`branch refs/heads/${branch}`));
   const gitdir = fs.realpathSync(path.resolve(basePath, git(basePath, ["rev-parse", "--git-dir"])));
-  requireThat(worktreeEntry && gitdir !== commonDir && !worktreeEntry.split("\n").includes("prunable"), "Prepared target base is not a registered managed worktree");
+  const gitdirPointer = fs.readFileSync(path.join(gitdir, "gitdir"), "utf8").trim();
+  requireThat(worktreeEntry && gitdir !== commonDir && !worktreeEntry.split("\n").some(line => line.startsWith("prunable ")) && path.resolve(path.dirname(gitdirPointer)) === basePath, "Prepared target base is not a registered managed worktree");
   const headSha = git(basePath, ["rev-parse", "HEAD"]);
   let targetSha;
   try { targetSha = git(basePath, ["rev-parse", "--verify", `refs/remotes/origin/${target}^{commit}`]); }
@@ -124,7 +125,8 @@ function validateTargetBaseDescriptor(value, repository, target, runtimeCwd) {
     const worktreeEntry = git(runtimeCwd, ["worktree", "list", "--porcelain"]).split(/\n\n/).find(entry => entry.split("\n").includes(`worktree ${content.path}`) && entry.split("\n").includes(`branch refs/heads/${content.branch}`));
     requireThat(worktreeEntry && !worktreeEntry.split("\n").includes("prunable"), "Workspace binding failure: prepared worktree is not registered");
     const runtimeGitdir = fs.realpathSync(path.resolve(runtimeCwd, git(runtimeCwd, ["rev-parse", "--git-dir"])));
-    requireThat(runtimeGitdir === content.gitdir && runtimeGitdir !== content.commonDir, "Workspace binding failure: managed worktree identity disagrees with prepared target base");
+    const runtimeGitdirPointer = fs.readFileSync(path.join(runtimeGitdir, "gitdir"), "utf8").trim();
+    requireThat(runtimeGitdir === content.gitdir && runtimeGitdir !== content.commonDir && path.resolve(path.dirname(runtimeGitdirPointer)) === content.path, "Workspace binding failure: managed worktree identity disagrees with prepared target base");
     requireThat(execFileSync("git", ["-C", runtimeCwd, "diff", "--quiet", "HEAD", "--"], { stdio: "ignore" }) === null, "Workspace binding failure: effective worktree has tracked changes");
     requireThat(execFileSync("git", ["-C", runtimeCwd, "diff", "--cached", "--quiet"], { stdio: "ignore" }) === null, "Workspace binding failure: effective worktree has staged changes");
     requireThat(git(runtimeCwd, ["status", "--porcelain=v1", "--untracked-files=all"]) === "", "Workspace binding failure: effective worktree is not clean");
@@ -197,7 +199,12 @@ export function loadPolicy(explicit, env = process.env) {
   requireThat(policy.v === 1 && typeof policy.repo === "string" && typeof policy.key === "string", "Invalid lane input");
   integer(policy.issue, "issue"); integer(policy.remediationLimit, "remediation limit", 0);
   requireThat(typeof policy.model === "string" && /^[^\s/]+\/[^\s]+$/.test(policy.model), "Invalid bound model");
-  validateControlPlaneDescriptor(policy.controlPlane, { helperPath: path.join(here, "dispatch.mjs") });
+  try { validateControlPlaneDescriptor(policy.controlPlane, { helperPath: path.join(here, "dispatch.mjs") }); }
+  catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (policy.targetBase) throw new Error(`Forge worktree binding failure: ${message}`);
+    throw error;
+  }
   if (policy.contract !== undefined || policy.contractDigest !== undefined) {
     requireThat(policy.contract && typeof policy.contractDigest === "string", "Bound issue contract is incomplete");
     requireThat(policy.contractDigest === validateIssueContractFile(policy.contract, policy.issue).digest, "Bound issue contract is stale");
