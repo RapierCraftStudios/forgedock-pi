@@ -50,17 +50,20 @@ test("closure matrix admission catches omitted alternate callers and transitive 
     assert.match(content, /transitive.?dependenc/i);
     assert.match(content, /fresh.*existing state|existing.*fresh/is);
     assert.match(content, /failure\/retry\/recovery/i);
+    assert.match(content, /cancellation/i);
+    assert.match(content, /concurrency/i);
     assert.match(content, /counterexample.*behavioral test/is);
   }
   assert.match(review, /CONTRACT_GAP/);
-  const rows = [
-    { kind: "caller", id: "alternate-caller", counterexample: "alternate caller rejects strict verifier" },
-    { kind: "dependency", id: "transitive-verifier", counterexample: "imported verifier version changes acceptance" },
-  ];
-  const initiallyScoped = new Set(["primary-caller"]);
-  const omitted = rows.filter((row) => !initiallyScoped.has(row.id));
-  assert.deepEqual(omitted.map((row) => row.id), ["alternate-caller", "transitive-verifier"]);
-  assert.ok(omitted.every((row) => row.counterexample.length > 0));
+  assert.match(investigate, /omitted alternate caller and transitive dependency/i);
+  assert.match(verification, /name those omitted boundaries explicitly/i);
+  assert.match(investigate, /cancellation.*concurrency/is);
+  assert.match(build, /cancellation.*concurrency/is);
+  const requiredExamples = ["alternate caller", "transitive dependency"];
+  const initiallyScoped = new Set(["primary caller"]);
+  const omitted = requiredExamples.filter((example) => !initiallyScoped.has(example));
+  assert.deepEqual(omitted, requiredExamples);
+  assert.ok(omitted.every((example) => example.includes("caller") || example.includes("dependency")));
 });
 
 test("work-on reviewer results are rebound to the shared frozen review identity", () => {

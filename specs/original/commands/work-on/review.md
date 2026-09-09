@@ -47,7 +47,8 @@ Review consumes the frozen closure matrix criterion by criterion, preserving pro
 consumer identity. Report uncovered caller, invocation-mode, transitive-dependency,
 valid/invalid input, fresh/existing state, failure/retry/recovery, cancellation, or
 concurrency rows explicitly, and verify each row's concrete counterexample or behavioral test;
-string-presence checks alone cannot close runtime rows. A reachable omission is `CONTRACT_GAP`,
+report an omitted alternate caller or transitive dependency by name. String-presence checks alone
+cannot close runtime rows. A reachable omission is `CONTRACT_GAP`,
 not an advisory: remediation must supersede the contract and re-plan before editing.
 
 ## Result routing

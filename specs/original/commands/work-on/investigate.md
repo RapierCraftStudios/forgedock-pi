@@ -47,7 +47,7 @@ records; append a superseding investigation for material corrections under
    reachable caller and invocation mode, imported/sourced transitive dependencies, valid/invalid input, fresh/
    existing state, failure/retry/recovery, cancellation, and relevant concurrency
    interleavings. Record sibling paths checked and ruled out; mark each row `change` or
-   `already safe` with code, configuration, or test evidence. Mark every listed path `change` or `already safe` with evidence. Do not declare scope complete while a relevant path has no disposition or a reachable row lacks a disposition.
+   `already safe` with code, configuration, or test evidence. Mark every listed path `change` or `already safe` with evidence. Do not declare scope complete while a relevant path has no disposition or a reachable row lacks a disposition. Counterexamples must make an omitted alternate caller and transitive dependency visible rather than relying on generic path wording.
 8. Define the minimal required mutation paths and behaviors, including every row marked
    `change`. Adjacent paths remain read-only unless compilation, runtime correctness,
    schema/interface consistency, or a security invariant requires them to change.

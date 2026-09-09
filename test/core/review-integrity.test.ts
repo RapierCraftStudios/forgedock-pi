@@ -13,18 +13,17 @@ test("review closure integrity names alternate callers and transitive dependenci
   const review = await readFile("specs/original/commands/work-on/review.md", "utf8");
   const verification = await readFile("specs/verification.md", "utf8");
   assert.match(review, /frozen closure matrix/);
-  assert.match(review, /alternate|caller/i);
-  assert.match(review, /transitive.dependenc/i);
+  assert.match(review, /alternate caller/i);
+  assert.match(review, /transitive.dependency/i);
   assert.match(review, /CONTRACT_GAP/);
   assert.match(verification, /Each row needs a concrete counterexample or behavioral test/);
+  assert.match(verification, /cancellation.*concurrency/is);
 
-  const closure = [
-    { producer: "emit", consumer: "primary-caller", dependency: "strict-verifier" },
-    { producer: "emit", consumer: "alternate-caller", dependency: "versioned-verifier" },
-  ];
-  const initial = closure.filter((row) => row.consumer === "primary-caller");
-  assert.equal(initial.length, 1);
-  assert.deepEqual(closure.filter((row) => !initial.includes(row)).map((row) => row.consumer), ["alternate-caller"]);
+  const requiredExamples = ["alternate caller", "transitive dependency"];
+  const declared = requiredExamples.filter((example) => review.includes(example));
+  const initial = new Set(["primary caller"]);
+  assert.deepEqual(declared, requiredExamples);
+  assert.deepEqual(requiredExamples.filter((example) => !initial.has(example)), requiredExamples);
 });
 
 test("review metadata normalizes ranges and exposes typed DAG paths", () => {
