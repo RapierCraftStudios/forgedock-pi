@@ -55,15 +55,17 @@ Write approved data—not JavaScript—to a plan file:
 ```
 
 The issue list is already confirmed/topologically ordered; `baseCwd` is each exact clean
-managed issue worktree prepared from `origin/<target>` by the parent. The dispatcher never
-asks Pi to create another worktree. Before writing the plan, the dispatcher compiles each retained issue's exact
+managed issue worktree prepared from `origin/<target>` by the parent. Each lane has a unique
+registered `pi-parallel-*` worktree path and branch; the dispatcher never asks Pi to create
+another worktree. Before writing the plan, the dispatcher compiles each retained issue's exact
 checked acceptance criteria into a fresh issue-contract file with the installed
 `createIssueContract` helper. Each criterion preserves a stable source ID, exact text hash,
 proof type, and affected boundaries; the returned contract object has top-level `criteria`
 and `digest`. Every batch issue must carry its file descriptor as `contract`; `prepareBatch`
 validates the descriptor and binds both `contract` and `contractDigest` into the lane policy
 and native acceptance. The lane policy also carries digest-checked `targetBase` and
-`packagedRoot` descriptors; startup verifies their path, repository, target ancestry, and
+`packagedRoot` descriptors; startup verifies their path, registered worktree/branch,
+repository, exact target/head, cleanliness, ancestry, and
 installed-helper identity before source mutation. A missing contract or binding descriptor
 fails before request publication. A stale/missing/wrong workspace is an internal
 launch-binding error for rebind/retry, never an issue-level GATED result or ambient path

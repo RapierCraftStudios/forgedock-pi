@@ -203,9 +203,15 @@ export function loadPolicy(explicit, env = process.env) {
     requireThat(policy.contractDigest === validateIssueContractFile(policy.contract, policy.issue).digest, "Bound issue contract is stale");
   }
   if (policy.targetBase !== undefined || policy.packagedRoot !== undefined) {
-    requireThat(policy.targetBase && policy.packagedRoot, "Bound workspace descriptors are incomplete");
-    validateTargetBaseDescriptor(policy.targetBase, policy.repo, policy.target);
-    validatePackagedRootDescriptor(policy.packagedRoot, policy.controlPlane);
+    try {
+      requireThat(policy.targetBase && policy.packagedRoot, "Bound workspace descriptors are incomplete");
+      validateTargetBaseDescriptor(policy.targetBase, policy.repo, policy.target);
+      validatePackagedRootDescriptor(policy.packagedRoot, policy.controlPlane);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.startsWith("Forge worktree binding failure:")) throw error;
+      throw new Error(`Forge worktree binding failure: ${message}`);
+    }
   }
   return policy;
 }
@@ -260,14 +266,16 @@ export function prepareBatch(plan, out, cwd = process.cwd()) {
   fs.mkdirSync(out, { recursive: true }); out = path.resolve(out);
   const configInput = { path: path.resolve(cwd, "forge.yaml"), sha256: sha(source.raw) };
   const verification = plan.verification ?? save(path.join(out, "verification.json"), json({ commands: source.config.verification?.commands ?? {}, discovery: source.config.verification?.discovery ?? {} }));
-  const issueGraph = [], lanes = [], keys = new Map(), preparedPaths = new Set();
+  const issueGraph = [], lanes = [], keys = new Map(), preparedPaths = new Set(), preparedBranches = new Set();
   const batchNonce = randomUUID();
   for (const issue of plan.issues) {
     const logicalKey = `issue-${issue.number}`;
     const contract = validateIssueContractFile(issue.contract, issue.number);
     const targetBase = targetBaseDescriptor(issue.baseCwd, source.repo, issue.target);
     requireThat(!preparedPaths.has(targetBase.path), "Each issue must have a unique prepared worktree");
+    requireThat(!preparedBranches.has(targetBase.branch), "Each issue must have a unique prepared worktree branch");
     preparedPaths.add(targetBase.path);
+    preparedBranches.add(targetBase.branch);
     const packagedRoot = packagedRootDescriptor(plan.controlPlane);
     const policy = { v: 1, key: logicalKey, batchNonce, repo: source.repo, issue: issue.number, target: issue.target, model: source.model,
       remediationLimit: source.remediationLimit, requestStartedAt: plan.requestStartedAt, config: configInput, verification, controlPlane: plan.controlPlane,

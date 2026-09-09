@@ -140,8 +140,9 @@ or exact configured global/high-fan-in files.
 
 Fetch each distinct target and prepare one clean managed issue worktree at the exact
 `origin/<target>` ancestry before dispatch. Set each work-on item's `cwd` to that exact
-prepared lane path with `worktree: false`; Pi must not create a second worktree. Retain the
-exact prepared paths for ownership-safe cleanup.
+prepared lane path with `worktree: false`; each path is a unique registered `pi-parallel-*`
+worktree/branch and Pi must not create a second worktree. Retain the exact prepared paths
+for ownership-safe cleanup.
 
 Prepare approved plan data through `helpers/dispatch.mjs batch` under
 `mechanical-execution.md`; invoke the generated native request unchanged. Before calling
