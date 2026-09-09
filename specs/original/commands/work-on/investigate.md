@@ -68,10 +68,22 @@ records; append a superseding investigation for material corrections under
     issue/comment text and never authorize later `eval` or `bash -c` of GitHub content.
 
 ## Decision
-
 If required merge proof is unavailable and no permitted inspection exception satisfies that
 criterion, return GATED with its exact wake condition under the root lifecycle. Do not
 mark the issue ready-to-build or publish completed investigation until that gap is resolved.
+A review-discovered `CONTRACT_GAP` enters one bounded `REPLAN_REQUIRED` transition and
+uses one superseding investigation rather than silently continuing ordinary remediation. The superseding record is tied to the exact reviewed PR
+head, preserved worktree, complete reviewer evidence, prior contract digest, remediation
+usage, and the finding's producer/consumer closure row. It states whether the prior
+contract was incomplete, what new behavior is admitted, and why the issue remains cohesive
+or must be decomposed. The record receives a fresh `replanId`; it does not reset
+remediation usage or authorize a second re-plan. Its resulting architecture and contract
+records are published before edits and require a fresh exact-head review.
+
+If the bounded re-plan transition was already consumed, the configured cap is exhausted, or
+any exact-head/preserved-work prerequisite is missing, retain the original work and return
+`GATED` with the precise wake condition. Unrelated lanes are not prerequisites and must not
+be blocked by this reassessment.
 
 Use separate fields:
 

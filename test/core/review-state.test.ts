@@ -263,6 +263,70 @@ test("review rounds reject stale and late evidence", () => {
   );
 });
 
+test("fresh contract and head evidence cannot reuse the preserved review approval", () => {
+  let state = created();
+  state = applyReviewEvent(
+    state,
+    next(state, "review.panel-started", { round: 1 }, "fresh-contract-start"),
+  );
+  state = applyReviewEvent(
+    state,
+    next(state, "review.findings-recorded", { round: 1, findings: [] }, "fresh-contract-findings"),
+  );
+  state = applyReviewEvent(
+    state,
+    next(state, "review.panel-completed", { round: 1, completedReviewers: ["correctness", "security"] }, "fresh-contract-panel"),
+  );
+  assert.throws(
+    () => applyReviewEvent(
+      state,
+      next(
+        state,
+        "review.verdict-recorded",
+        {
+          round: 1,
+          decision: "approved",
+          headSha: "different-head",
+          baseSha: "base-sha",
+          reasons: [],
+          blockingFindingIds: [],
+          followUpFindingIds: [],
+        },
+        "stale-preserved-approval",
+      ),
+    ),
+    /frozen head\/base|stale-identity/i,
+  );
+
+  const nextReview = applyReviewEvent(
+    undefined,
+    createReviewEvent({
+      reviewId: "review-2",
+      repository,
+      sequence: 1,
+      previousEventHash: null,
+      type: "review.created",
+      idempotencyKey: "new-contract",
+      eventId: "event-new-contract",
+      occurredAt: timestamp,
+      payload: {
+        pullNumber: 9,
+        issueNumber: 7,
+        mode: "staging",
+        headRef: "forge/7",
+        headSha: "different-head",
+        baseRef: "staging",
+        baseSha: "base-sha",
+        roster: { version: "roster-v1", reviewers: ["correctness", "security"] },
+        route: "staging-review",
+      },
+    }),
+  );
+  assert.equal(state.headSha, "head-sha");
+  assert.equal(nextReview.headSha, "different-head");
+  assert.notEqual(state.reviewId, nextReview.reviewId);
+});
+
 test("review cancellation is terminal", () => {
   let state = created();
   state = applyReviewEvent(

@@ -38,6 +38,36 @@ The prepared verification catalog remains a separate read-only input. A policy c
 legacy-resume input needs explicit parent authority and a newly prepared descriptor; native
 retained bindings cannot silently be overwritten or enlarged by a child.
 
+## Bounded contract-gap re-plan identity
+
+A review-discovered omission is a distinct control transition, not an implicit increase to
+ordinary remediation. When a reachable producer/consumer, invocation mode, transitive
+dependency, input/state, failure/retry/recovery, cancellation, or concurrency row was not
+admitted, the owner records `CONTRACT_GAP` against the exact reviewed PR head before any
+edit. The preserved handoff must carry all of the following immutable values:
+
+- `reviewedHead`: the full PR commit SHA and owned worktree identity;
+- `reviewEvidence`: the complete same-head panel/verdict references;
+- `remediationUsage`: the original used/configured allowance, unchanged;
+- `priorContractDigest`: the admitted contract digest and its source record;
+- `replanId`: a fresh lane-local identity bound to the issue, PR, reviewed head, and
+  superseding investigation/architecture records.
+
+The only automatic transition is one `REPLAN_REQUIRED` admission for that lane. It creates
+and binds a new contract digest, preserves the old evidence as superseded history, and
+requires one fresh exact-head panel before merge. `replanId` is not a remediation-round
+reset and does not authorize a second transition. If the bounded transition was already
+consumed or the configured cap is exhausted, the lane is `GATED` with the exact wake
+condition and preserved-work references. Unrelated ready lanes retain their own identity,
+allowance, worktree, and scheduler slot; a contract gap never creates a competing writer
+or blocks their progress.
+
+The re-plan descriptor is prepared with the same bound policy and lane input as the
+original owner. It must include `issue`, `target`, `reviewedHead`, `priorContractDigest`,
+`replanId`, `remediationUsage`, and a fresh superseding `contract` file descriptor. A
+missing, stale, or mismatched descriptor fails closed before repository mutation; do not
+borrow a sibling lane's contract or silently reuse a prior review.
+
 ## Prepare an orchestration
 
 Write approved data—not JavaScript—to a plan file:

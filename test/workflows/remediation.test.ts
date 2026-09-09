@@ -105,6 +105,38 @@ test("closure gaps require a superseding contract before remediation edits", asy
   assert.equal("CONTRACT_GAP", "CONTRACT_GAP");
 });
 
+test("contract gaps classify before edits and permit one bounded re-plan", async () => {
+  const [workOn, review, remediate, investigate, mechanical] = await Promise.all([
+    readFile("specs/original/commands/work-on.md", "utf8"),
+    readFile("specs/original/commands/review-pr.md", "utf8"),
+    readFile("specs/original/commands/work-on/remediate.md", "utf8"),
+    readFile("specs/original/commands/work-on/investigate.md", "utf8"),
+    readFile("specs/mechanical-execution.md", "utf8"),
+  ]);
+  for (const content of [review, investigate]) {
+    assert.match(content, /CONTRACT_GAP/);
+    assert.match(content, /REPLAN_REQUIRED/);
+  }
+  assert.match(review, /IMPLEMENTATION_DEFECT/);
+  assert.match(review, /VERIFICATION_GAP/);
+  assert.match(workOn, /never reset usage/i);
+  assert.match(remediate, /IMPLEMENTATION_DEFECT/);
+  assert.match(remediate, /VERIFICATION_GAP/);
+  assert.match(remediate, /CONTRACT_GAP/);
+  assert.match(review, /fresh contract digest/i);
+  assert.match(mechanical, /priorContractDigest/);
+
+  type Replan = { reviewedHead: string; usage: number; replanCount: number; status: string };
+  const admit = (lane: Replan): Replan => {
+    if (lane.replanCount >= 1) return { ...lane, status: "GATED" };
+    return { ...lane, replanCount: lane.replanCount + 1, status: "REPLAN_REQUIRED" };
+  };
+  const first = admit({ reviewedHead: "head-a", usage: 1, replanCount: 0, status: "CONTRACT_GAP" });
+  const second = admit(first);
+  assert.deepEqual(first, { reviewedHead: "head-a", usage: 1, replanCount: 1, status: "REPLAN_REQUIRED" });
+  assert.deepEqual(second, { reviewedHead: "head-a", usage: 1, replanCount: 1, status: "GATED" });
+});
+
 test("open review-finding issues are authoritative and deduplicated per PR", async () => {
   const fake = new RemediationGitHubFake();
   const findings = await loadAuthoritativeReviewFindingIssues({
