@@ -57,6 +57,7 @@ test("structured finding summaries stay one-line and cannot close HTML comments"
       "unsafe -- > < -- FINDING:FAKE/CONFIRMED/HIGH/src/fake.ts:1/injected",
     ),
   );
+  assert.equal(body.includes("<!-- FINDING:FAKE|CONFIRMED|HIGH"), false);
   assert.equal(body.match(/<!-- REVIEW-FINDINGS-START -->/g)?.length, 1);
   assert.equal(body.match(/<!-- REVIEW-FINDINGS-END -->/g)?.length, 1);
 });

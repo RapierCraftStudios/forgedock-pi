@@ -36,7 +36,7 @@ export function renderReviewerComment(
           const blockView = finding.reviewerBlockView ?? "advisory";
           const scope = finding.reviewerScope ?? "patch-caused";
           return [
-            `- **${finding.id}** ${finding.file}:${finding.line} — ${finding.summary}`,
+            `- **${finding.id}** ${finding.file}:${finding.line} — ${structuredFindingSummary(finding.summary)}`,
             `  - Confidence: ${finding.confidence}; severity: ${finding.severity}`,
             `  - Reviewer block view: ${blockView} — ${finding.reviewerBlockRationale ?? "No rationale supplied."}`,
             `  - Reviewer scope: ${scope} — ${finding.reviewerScopeRationale ?? "No rationale supplied."}`,
