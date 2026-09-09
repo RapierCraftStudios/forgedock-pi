@@ -75,7 +75,7 @@ function isCapabilityRecord(value: unknown): value is VerificationCapabilityReco
 }
 
 export function parseVerificationCapabilities(value: string): readonly VerificationCapabilityRecord[] | undefined {
-  const markers = [...value.matchAll(/FORGE:VERIFICATION_CAPABILITY (\{[^\n]+\})/g)];
+  const markers = [...value.matchAll(/^<!-- FORGE:VERIFICATION_CAPABILITY (\{[^\n]+\}) -->$/gm)];
   if (!markers.length) return undefined;
   const records: VerificationCapabilityRecord[] = [];
   for (const marker of markers) {
@@ -99,7 +99,7 @@ function capabilityTypeMatches(capability: VerificationCapabilityRecord): boolea
 }
 
 function blockedEvidenceMatches(value: string, capability: VerificationCapabilityRecord): boolean {
-  const markers = [...value.matchAll(/FORGE:VERIFICATION_BLOCKED (\{[^\n]+\})/g)];
+  const markers = [...value.matchAll(/^<!-- FORGE:VERIFICATION_BLOCKED (\{[^\n]+\}) -->$/gm)];
   return markers.some((marker) => {
     try {
       const parsed = JSON.parse(marker[1]!) as Partial<VerificationCapabilityRecord>;
@@ -122,14 +122,14 @@ function capabilityFailure(value: string, capabilities: readonly VerificationCap
   for (const capability of capabilities ?? []) {
     if (!capabilityTypeMatches(capability))
       return `capability ${capability.capability} has an invalid proof type or boundary`;
-    const required = requiredProofTypes.has(capability.proofType);
-    if (required && capability.state !== "PASS") {
+    if (capability.state !== "PASS") {
+
       return blockedEvidenceMatches(value, capability)
         ? `required capability ${capability.capability} is ${capability.state}`
         : `required capability ${capability.capability} is ${capability.state} without blocked evidence`;
     }
-    if (required && capability.state === "PASS" && !capability.evidence.trim())
-      return `required capability ${capability.capability} has no evidence`;
+    if (capability.state === "PASS" && !capability.evidence.trim())
+      return `capability ${capability.capability} has no evidence`;
   }
   return undefined;
 }
@@ -140,8 +140,9 @@ export function parseTestGateResult(
   expected?: { sourceHead?: string; requirements?: readonly TestGateRequirement[] },
 ): TestGateResult | undefined {
   if (typeof value !== "string") return undefined;
-  const matches = [...value.matchAll(/FORGE:TEST_GATE:RESULT=(BLOCK|PASS|SKIP)/g)];
-  const verdict = matches.at(-1)?.[1] as TestGateVerdict | undefined;
+  const matches = [...value.matchAll(/^<!-- FORGE:TEST_GATE:RESULT=(BLOCK|PASS|SKIP) -->$/gm)];
+  if (matches.length !== 1) return undefined;
+  const verdict = matches[0]?.[1] as TestGateVerdict | undefined;
   if (!verdict) return undefined;
   const capabilities = parseVerificationCapabilities(value);
   const identityFailure = expected?.sourceHead && capabilities?.some((capability) => capability.sourceHead !== expected.sourceHead)
@@ -163,9 +164,15 @@ export function parseTestGateResult(
   const reason = value.match(
     /FORGE:TEST_GATE:(?:BLOCK|PASS|SKIP)\|reason=([^\s\n]+)/,
   )?.[1];
+  if (explicitlyNoRequiredCapabilities && verdict !== "SKIP")
+    return { verdict: "BLOCK", reason: "no-required-capabilities marker is valid only for SKIP" };
+  if (explicitlyNoRequiredCapabilities && capabilities)
+    return { verdict: "BLOCK", reason: "no-required-capabilities marker cannot accompany capability records" };
   if (failure) return { verdict: "BLOCK", reason: failure, capabilities };
-  if ((verdict === "PASS" || verdict === "SKIP") && !capabilities && !explicitlyNoRequiredCapabilities)
+  if ((verdict === "PASS" || (verdict === "SKIP" && !explicitlyNoRequiredCapabilities)) && !capabilities)
     return { verdict: "BLOCK", reason: `${verdict} lacks required-capability preflight evidence` };
+  if (verdict === "PASS" && !expected?.requirements?.length)
+    return { verdict: "BLOCK", reason: "PASS lacks bound contract capability requirements" };
   return { verdict, ...(reason ? { reason } : {}), ...(capabilities ? { capabilities } : {}) };
 }
 

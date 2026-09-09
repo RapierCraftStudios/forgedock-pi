@@ -208,23 +208,18 @@ for pr_num in $BUNDLE_PRS; do
     while IFS= read -r criterion; do
       [ -z "$criterion" ] && continue
       TRIAGE_CRITERIA_COUNT=$((TRIAGE_CRITERIA_COUNT + 1))
-      if echo "$criterion" | grep -qP '\[type:(api|unit|e2e)\]'; then
-        # Explicit automated annotation found
+      if echo "$criterion" | grep -qP '\[type:(api|unit|integration|e2e|queue|database|browser|credential|structural)\]'; then
+        # Explicit capability annotation found; preflight must compile its bound record.
         TRIAGE_HAS_TESTABLE_CRITERIA=true
-        echo "  Testable criterion found in issue #${issue_num}: ${criterion}"
+        echo "  Required capability criterion found in issue #${issue_num}: ${criterion}"
         break 3  # Break out of criterion loop, issue loop, and PR loop
       elif echo "$criterion" | grep -qP '\[type:manual\]'; then
         TRIAGE_MANUAL_COUNT=$((TRIAGE_MANUAL_COUNT + 1))
       else
-        # Unannotated criterion — apply same regex heuristics as Phase 2
-        if echo "$criterion" | grep -qP '(endpoint|request|response|status\s+\d{3}|curl|API|HTTP|unit|function|return|assert|throws|browser|click|navigate|render|page|user flow)'; then
-          TRIAGE_HAS_TESTABLE_CRITERIA=true
-          echo "  Testable criterion found (inferred) in issue #${issue_num}: ${criterion}"
-          break 3  # Break out of all loops
-        else
-          # No type signal — treat as manual for triage purposes
-          TRIAGE_MANUAL_COUNT=$((TRIAGE_MANUAL_COUNT + 1))
-        fi
+        # Unannotated executable criteria are UNKNOWN, never inferred or manual.
+        TRIAGE_HAS_TESTABLE_CRITERIA=true
+        echo "  UNKNOWN required capability in issue #${issue_num}: ${criterion}"
+        break 3
       fi
     done <<< "$CRITERIA"
   done
@@ -352,12 +347,6 @@ while IFS= read -r line; do
     REQUIRED_CAPABILITY_CRITERIA="${REQUIRED_CAPABILITY_CRITERIA}\n${line}"
   elif echo "$line" | grep -qP '\[type:manual\]'; then
     MANUAL_CRITERIA="${MANUAL_CRITERIA}\n${line}"
-  elif echo "$line" | grep -qP '(endpoint|request|response|status\s+\d{3}|curl|API|HTTP)'; then
-    API_CRITERIA="${API_CRITERIA}\n${line} [inferred:api]"
-  elif echo "$line" | grep -qP '(unit|function|return|assert|throws)'; then
-    UNIT_CRITERIA="${UNIT_CRITERIA}\n${line} [inferred:unit]"
-  elif echo "$line" | grep -qP '(browser|click|navigate|render|page|user flow)'; then
-    E2E_CRITERIA="${E2E_CRITERIA}\n${line} [inferred:e2e]"
   elif echo "$line" | grep -qP '^-\s+\['; then
     # Has content but no type signal — UNKNOWN required proof, never manual.
     UNKNOWN_CRITERIA="${UNKNOWN_CRITERIA}\n${line}"
@@ -958,6 +947,12 @@ else
   VERDICT_REASON="All ${TOTAL_PASS} cluster(s) passed. No batch-introduced failures. All runtime-testable criteria covered."
 fi
 
+if [ "$VERDICT" = "PASS" ] && [ -z "${CAPABILITY_RECORDS:-}" ]; then
+  VERDICT="BLOCK"
+  VERDICT_REASON="No bound capability records were emitted for a PASS verdict. Required proof is missing."
+  BLOCKED_CAPABILITIES="${BLOCKED_CAPABILITIES:-}"
+fi
+
 echo ""
 echo "============================================="
 echo " TEST GATE VERDICT: ${VERDICT}"
@@ -974,7 +969,17 @@ echo "Adequacy summary:"
 echo "  Covered: ${COVERED_COUNT:-0} | Uncovered: ${UNCOVERED_COUNT:-0} | Untestable-as-written: ${UNTESTABLE_COUNT:-0} | Manual: ${MANUAL_COUNT:-0}"
 echo "============================================="
 
-# Emit machine-readable verdict marker (consumed by review-pr-staging Phase 6.5)
+# Emit every capability record produced by the preflight before the verdict.
+# CAPABILITY_RECORDS and BLOCKED_CAPABILITIES are bound, identity-checked JSON lines;
+# they are never inferred from the final verdict or replaced by a generic criterion.
+while IFS= read -r capability_record; do
+  [ -z "$capability_record" ] || echo "<!-- FORGE:VERIFICATION_CAPABILITY ${capability_record} -->"
+done <<< "${CAPABILITY_RECORDS:-}"
+while IFS= read -r blocked_record; do
+  [ -z "$blocked_record" ] || echo "<!-- FORGE:VERIFICATION_BLOCKED ${blocked_record} -->"
+done <<< "${BLOCKED_CAPABILITIES:-}"
+
+# Emit one anchored machine-readable verdict marker (consumed by review-pr-staging Phase 6.5).
 echo ""
 echo "<!-- FORGE:TEST_GATE:RESULT=${VERDICT} -->"
 

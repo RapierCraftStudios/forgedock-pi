@@ -318,15 +318,19 @@ function finding(reviewer: string = roster.reviewers[0]) {
   };
 }
 
-const passingCapabilityOutput = `<!-- FORGE:VERIFICATION_CAPABILITY ${JSON.stringify({
-  v: 1,
+const passingRequirement = {
   capability: "runtime:e2e",
   criterion: "required-proof-regression-coverage",
   criterionTextHash: "sha256:" + "a".repeat(64),
-  sourceHead: route.headSha,
   contractDigest: "sha256:" + "b".repeat(64),
   proofType: "runtime",
   boundary: "e2e boundary",
+} as const;
+
+const passingCapabilityOutput = `<!-- FORGE:VERIFICATION_CAPABILITY ${JSON.stringify({
+  v: 1,
+  ...passingRequirement,
+  sourceHead: route.headSha,
   state: "PASS",
   evidence: "bound e2e result",
   wakeCondition: "",
@@ -348,6 +352,7 @@ function request(overrides: Partial<ReviewPrRequest> = {}): ReviewPrRequest {
     autoMergeAuthorized: true,
     autoMergeRequested: false,
     testGateOutput: passingCapabilityOutput,
+    testGateRequirements: [passingRequirement],
     authorityValid: () => true,
     ...overrides,
   };
@@ -630,7 +635,7 @@ test("Phase 6.5 propagates explicit BLOCK, PASS, and SKIP results", () => {
     { name: "test-gate", required: true, status: "failed", exitCode: 1 },
   );
   assert.deepEqual(
-    testGateVerification(passingCapabilityOutput, { sourceHead: route.headSha }),
+    testGateVerification(passingCapabilityOutput, { sourceHead: route.headSha, requirements: [passingRequirement] }),
     { name: "test-gate", required: true, status: "passed" },
   );
   assert.deepEqual(
@@ -705,6 +710,22 @@ test("required capability markers block unresolved or stale-shaped proof", () =>
     { name: "test-gate", required: true, status: "failed", exitCode: 1 },
   );
   assert.deepEqual(
+    testGateVerification(passing, { sourceHead: record.sourceHead }),
+    { name: "test-gate", required: true, status: "failed", exitCode: 1 },
+  );
+  assert.deepEqual(
+    testGateVerification(`${passing}\n<!-- FORGE:VERIFICATION_NO_REQUIRED_CAPABILITIES -->\n<!-- FORGE:TEST_GATE:RESULT=SKIP -->`),
+    { name: "test-gate", required: true, status: "failed", exitCode: 1 },
+  );
+  assert.deepEqual(
+    testGateVerification("<!-- FORGE:VERIFICATION_NO_REQUIRED_CAPABILITIES -->\n<!-- FORGE:TEST_GATE:RESULT=PASS -->"),
+    { name: "test-gate", required: true, status: "failed", exitCode: 1 },
+  );
+  assert.deepEqual(
+    testGateVerification("<!-- FORGE:TEST_GATE:RESULT=BLOCK -->\n<!-- FORGE:TEST_GATE:RESULT=PASS -->"),
+    { name: "test-gate", required: true, status: "failed", exitCode: 1 },
+  );
+  assert.deepEqual(
     testGateVerification("<!-- FORGE:TEST_GATE:RESULT=SKIP -->"),
     { name: "test-gate", required: true, status: "failed", exitCode: 1 },
   );
@@ -724,14 +745,14 @@ test("missing Phase 6.5 execution is a required failed check", () => {
 });
 
 test("staging review carries every Phase 6.5 verdict into its gate", async () => {
-  for (const [output, expectedStatus, expectedDecision] of [
-    ["<!-- FORGE:TEST_GATE:RESULT=BLOCK -->", "failed", "changes-requested"],
-    [passingCapabilityOutput, "passed", "approved"],
-    ["<!-- FORGE:VERIFICATION_NO_REQUIRED_CAPABILITIES -->\n<!-- FORGE:TEST_GATE:RESULT=SKIP -->", "skipped", "approved"],
+  for (const [output, expectedStatus, expectedDecision, requirements] of [
+    ["<!-- FORGE:TEST_GATE:RESULT=BLOCK -->", "failed", "changes-requested", undefined],
+    [passingCapabilityOutput, "passed", "approved", [passingRequirement]],
+    ["<!-- FORGE:VERIFICATION_NO_REQUIRED_CAPABILITIES -->\n<!-- FORGE:TEST_GATE:RESULT=SKIP -->", "skipped", "approved", []],
   ] as const) {
     const h = harness();
     const result = await h.coordinator.review(
-      request({ mode: "staging", testGateOutput: output }),
+      request({ mode: "staging", testGateOutput: output, testGateRequirements: requirements }),
     );
     assert.equal(result.decision.decision, expectedDecision);
     assert.equal(
