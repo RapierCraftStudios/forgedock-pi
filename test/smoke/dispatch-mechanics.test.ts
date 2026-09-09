@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 const dispatch = await import(new URL("../../specs/helpers/dispatch.mjs", import.meta.url).href);
+const { assertNoTargetAgentShadowing } = await import(new URL("../../specs/helpers/control-plane.mjs", import.meta.url).href);
 const records = await import(new URL("../../specs/helpers/record.mjs", import.meta.url).href);
 const projectRoot = fileURLToPath(new URL("../..", import.meta.url));
 const forgeDockRoot = process.env.FORGEDOCK_PARENT_PACKAGE_ROOT ?? projectRoot;
@@ -166,6 +167,39 @@ test("target-local agent collisions fail before launch", async () => {
     execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "target agent fixture"], { cwd: repoOne });
     assert.throws(() => dispatch.prepareBatch(plan, join(root, "target-local-agents"), repo), /shadows the parent control plane/);
   });
+});
+
+test("canonical ForgeDock coordinator is allowed only for the matching package target", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forge-canonical-owner-"));
+  const target = join(root, "target");
+  const packageFile = join(target, "package.json");
+  const owner = join(target, "agents", "forgedock-work-on-coordinator.md");
+  const canonicalPackage = {
+    name: "forgedock-pi",
+    repository: { type: "git", url: "git+https://github.com/RapierCraftStudios/forgedock-pi.git" },
+    pi: { subagents: { agents: ["./agents"] } },
+  };
+  try {
+    await mkdir(join(target, "agents"), { recursive: true });
+    execFileSync("git", ["init", "-q"], { cwd: target });
+    execFileSync("git", ["remote", "add", "origin", "https://github.com/RapierCraftStudios/forgedock-pi.git"], { cwd: target });
+    await writeFile(packageFile, JSON.stringify(canonicalPackage));
+    await writeFile(owner, await readFile(controlPlane.forgeDock.agents.owner.path));
+    assert.doesNotThrow(() => assertNoTargetAgentShadowing(target, controlPlane));
+
+    await writeFile(owner, `${await readFile(owner, "utf8")}\n# tampered\n`);
+    assert.throws(() => assertNoTargetAgentShadowing(target, controlPlane), /shadows the parent control plane/);
+
+    await writeFile(owner, await readFile(controlPlane.forgeDock.agents.owner.path));
+    await writeFile(packageFile, JSON.stringify({ name: "subject", repository: { type: "git", url: "https://github.com/example/project.git" }, pi: canonicalPackage.pi }));
+    assert.throws(() => assertNoTargetAgentShadowing(target, controlPlane), /shadows the parent control plane/);
+
+    await writeFile(packageFile, JSON.stringify(canonicalPackage));
+    await writeFile(join(target, "agents", "shadow.md"), "---\nname: delegate\ndescription: unrelated shadow\n---\n");
+    assert.throws(() => assertNoTargetAgentShadowing(target, controlPlane), /shadows the parent control plane/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("bound issue contracts are validated and carried into native acceptance", async () => {
