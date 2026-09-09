@@ -43,9 +43,11 @@ architecture, and contract before editing, and bind a fresh `replanId` and contr
 The re-plan must close the omitted row and require a fresh exact-head panel; old approval is
 not reusable. Do not reset the remediation counter or create a competing writer.
 
-When the bounded transition is consumed, the cap is exhausted, or a required preserved-work
-or superseding-record prerequisite is unavailable, return `GATED` with the exact wake
-condition. Unrelated lanes continue under their own identities and allowances.
+When the bounded transition is consumed, or a required preserved-work or superseding-record
+prerequisite is unavailable, return `GATED` with the exact wake condition. A contract-gap
+re-plan preserves `remediationUsage` and does not silently increase the configured cap; the
+post-plan fix/review must still obey that recorded bound. Without an available transition,
+cap exhaustion is `GATED`. Unrelated lanes continue under their own identities and allowances.
 
 ## Scope reassessment
 

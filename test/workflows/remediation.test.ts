@@ -6,6 +6,7 @@ import type { GitHubWorkflowAdapter } from "../../src/adapters/github-workflow.t
 import type { ForgeWorkOnResult } from "../../src/agents/contracts.ts";
 import { createBuilderPathContract } from "../../src/core/builder-contract.ts";
 import {
+  admitContractGapReplan,
   classifyRemediationFindings,
   closeAddressedReviewFindingIssues,
   isRemediationCandidate,
@@ -126,15 +127,27 @@ test("contract gaps classify before edits and permit one bounded re-plan", async
   assert.match(review, /fresh contract digest/i);
   assert.match(mechanical, /priorContractDigest/);
 
-  type Replan = { reviewedHead: string; usage: number; replanCount: number; status: string };
-  const admit = (lane: Replan): Replan => {
-    if (lane.replanCount >= 1) return { ...lane, status: "GATED" };
-    return { ...lane, replanCount: lane.replanCount + 1, status: "REPLAN_REQUIRED" };
-  };
-  const first = admit({ reviewedHead: "head-a", usage: 1, replanCount: 0, status: "CONTRACT_GAP" });
-  const second = admit(first);
-  assert.deepEqual(first, { reviewedHead: "head-a", usage: 1, replanCount: 1, status: "REPLAN_REQUIRED" });
-  assert.deepEqual(second, { reviewedHead: "head-a", usage: 1, replanCount: 1, status: "GATED" });
+  const input = {
+    reviewedHead: "head-a",
+    worktree: "/lane/a",
+    reviewEvidence: ["review-a"],
+    remediationUsage: { used: 1, limit: 1 },
+    priorContractDigest: "digest-old",
+    replanId: "replan-a",
+    contractDigest: "digest-new",
+    replanCount: 0,
+  } as const;
+  const first = admitContractGapReplan(input);
+  const second = admitContractGapReplan({ ...input, replanCount: first.replanCount });
+  assert.equal(first.status, "REPLAN_REQUIRED");
+  assert.equal(first.remediationUsage.used, 1);
+  assert.deepEqual(first.reviewEvidence, ["review-a"]);
+  assert.equal(second.status, "GATED");
+  assert.equal(second.replanCount, first.replanCount);
+  assert.throws(
+    () => admitContractGapReplan({ ...input, contractDigest: "digest-old" }),
+    /new contract digest/i,
+  );
 });
 
 test("open review-finding issues are authoritative and deduplicated per PR", async () => {
@@ -190,6 +203,14 @@ test("remediation classification fixes in-contract blockers and escalates true a
     outsideContract.followUp.map((item) => item.finding.id),
     ["SEC-001"],
   );
+  assert.deepEqual(outsideContract.contractGaps.map((item) => item.finding.id), ["SEC-001"]);
+  const verificationGap = classifyRemediationFindings([
+    parseAuthoritativeReviewFindingIssue({
+      number: 104,
+      body: findingBody(7, "VERIFY-001", "security").replace("**Line**: 50", "**Line**: 0"),
+    })!,
+  ]);
+  assert.deepEqual(verificationGap.verificationGaps.map((item) => item.finding.id), ["VERIFY-001"]);
   assert.equal(
     isRemediationCandidate(
       { ...blockedResult, blocker: "main protected branch policy" },

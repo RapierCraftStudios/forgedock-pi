@@ -35,7 +35,52 @@ export interface RemediationClassification {
   escalated: AuthoritativeReviewFinding[];
   followUp: AuthoritativeReviewFinding[];
   unvalidated: AuthoritativeReviewFinding[];
+  /** Confirmed findings whose reachable behavior was omitted from the admitted contract. */
+  contractGaps: AuthoritativeReviewFinding[];
+  /** Findings that cannot yet close their required evidence row. */
+  verificationGaps: AuthoritativeReviewFinding[];
   dispositions: DispositionedFinding[];
+}
+
+export interface ContractGapHandoff {
+  status: "REPLAN_REQUIRED" | "GATED";
+  reviewedHead: string;
+  worktree: string;
+  reviewEvidence: readonly string[];
+  remediationUsage: { used: number; limit: number };
+  priorContractDigest: string;
+  replanId: string;
+  contractDigest: string;
+  replanCount: number;
+}
+
+/** Admit exactly one preserved-work contract-gap transition without changing cap usage. */
+export function admitContractGapReplan(input: {
+  reviewedHead: string;
+  worktree: string;
+  reviewEvidence: readonly string[];
+  remediationUsage: { used: number; limit: number };
+  priorContractDigest: string;
+  replanId: string;
+  contractDigest: string;
+  replanCount: number;
+}): ContractGapHandoff {
+  if (!input.reviewedHead || !input.worktree || !input.priorContractDigest || !input.replanId || !input.contractDigest)
+    throw new TypeError("Contract-gap handoff requires exact identity fields.");
+  if (!Number.isSafeInteger(input.remediationUsage.used) || !Number.isSafeInteger(input.remediationUsage.limit) || input.remediationUsage.used < 0 || input.remediationUsage.limit < input.remediationUsage.used)
+    throw new TypeError("Contract-gap remediation usage is invalid.");
+  if (!Number.isSafeInteger(input.replanCount) || input.replanCount < 0)
+    throw new TypeError("Contract-gap re-plan count is invalid.");
+  if (input.contractDigest === input.priorContractDigest)
+    throw new TypeError("Contract-gap re-plan requires a new contract digest.");
+  const status = input.replanCount >= 1 ? "GATED" : "REPLAN_REQUIRED";
+  return {
+    ...input,
+    reviewEvidence: [...input.reviewEvidence],
+    remediationUsage: { ...input.remediationUsage },
+    replanCount: input.replanCount + (status === "REPLAN_REQUIRED" ? 1 : 0),
+    status,
+  };
 }
 
 export function classifyRemediationFindings(
@@ -46,6 +91,8 @@ export function classifyRemediationFindings(
   const escalated: AuthoritativeReviewFinding[] = [];
   const followUp: AuthoritativeReviewFinding[] = [];
   const unvalidated: AuthoritativeReviewFinding[] = [];
+  const contractGaps: AuthoritativeReviewFinding[] = [];
+  const verificationGaps: AuthoritativeReviewFinding[] = [];
   const dispositions: DispositionedFinding[] = [];
   for (const finding of findings) {
     const value = finding.finding;
@@ -62,6 +109,7 @@ export function classifyRemediationFindings(
       disposition = "unvalidated";
       reason = "Finding lacks confirmed evidence or a valid source location.";
       unvalidated.push(finding);
+      verificationGaps.push(finding);
     } else if (findingBlocksMerge(value)) {
       if (authorityReason) {
         disposition = "authority-ambiguous";
@@ -71,6 +119,7 @@ export function classifyRemediationFindings(
         disposition = "validated-nonblocking";
         reason = "Finding is outside the accepted builder contract; replan or decompose it instead of escalating authority.";
         followUp.push(finding);
+        contractGaps.push(finding);
       } else {
         disposition = "actionable-blocking";
         reason = "Blocking finding is validated, deterministic, and in contract.";
@@ -83,7 +132,7 @@ export function classifyRemediationFindings(
     }
     dispositions.push({ finding, disposition, reason });
   }
-  return { fixable, escalated, followUp, unvalidated, dispositions };
+  return { fixable, escalated, followUp, unvalidated, contractGaps, verificationGaps, dispositions };
 }
 
 export function isRemediationCandidate(

@@ -57,8 +57,10 @@ The only automatic transition is one `REPLAN_REQUIRED` admission for that lane. 
 and binds a new contract digest, preserves the old evidence as superseded history, and
 requires one fresh exact-head panel before merge. `replanId` is not a remediation-round
 reset and does not authorize a second transition. If the bounded transition was already
-consumed or the configured cap is exhausted, the lane is `GATED` with the exact wake
-condition and preserved-work references. Unrelated ready lanes retain their own identity,
+consumed, the lane is `GATED` with the exact wake condition and preserved-work references.
+The configured remediation cap is never silently increased: the one re-plan allowance is a
+separate fixed transition that preserves `remediationUsage`; its cohesive fix/review must
+still obey the recorded bound or be GATED. Unrelated ready lanes retain their own identity,
 allowance, worktree, and scheduler slot; a contract gap never creates a competing writer
 or blocks their progress.
 

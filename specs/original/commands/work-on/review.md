@@ -56,9 +56,12 @@ not an advisory: remediation must supersede the contract and re-plan before edit
 - `APPROVE`, no blockers: continue to merge checks.
 - Confirmed patch-caused HIGH/CRITICAL blocker: consolidate findings and perform scope
   reassessment when the admitted scope was incomplete/non-convergent. A DECOMPOSE proposal
-  uses the preserved-work handoff, not more code fixes. Otherwise check remaining remediation
-  budget, then one cohesive fallback pass. At the cap, use the root's GATED
-  exit; never launch another panel by calling it final, last, or closure.
+  uses the preserved-work handoff, not more code fixes. A `CONTRACT_GAP` is the bounded
+  exception to ordinary cap routing: preserve reviewed work, admit one `REPLAN_REQUIRED`
+  transition, and do not increase `remediationUsage`; after it, the cohesive fix/review
+  still obeys the recorded bound. Other blockers check remaining remediation budget, then
+  one cohesive fallback pass. At the cap without an available contract-gap transition,
+  use the root's GATED exit; never launch another panel by calling it final, last, or closure.
 - Explicit unresolved prerequisite: return `GATED` with exact wake condition.
 - Incomplete panel/provider failure: preserve valid roles, record `review-degraded`, and
   resume only missing roles.

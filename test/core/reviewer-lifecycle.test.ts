@@ -154,14 +154,26 @@ test("contract-gap lifecycle preserves one lane while unrelated lanes remain rea
   assert.match(workOn, /GATED.*exact wake condition/is);
   assert.match(mechanical, /replanId/);
 
-  const lanes = new Map([
-    ["gap", { status: "CONTRACT_GAP", reviewedHead: "head-a", usage: 1 }],
-    ["unrelated", { status: "ready", reviewedHead: "head-b", usage: 0 }],
-  ]);
-  const gap = lanes.get("gap");
-  assert.deepEqual(gap, { status: "CONTRACT_GAP", reviewedHead: "head-a", usage: 1 });
-  assert.equal(lanes.get("unrelated")?.status, "ready");
-  assert.notEqual(lanes.get("gap"), lanes.get("unrelated"));
+  const gapDecision = chooseWorkflowDispatch({
+    maxReviewRounds: 1,
+    nodes: [{
+      nodeId: "decision-1",
+      node: "decision",
+      attempt: 1,
+      round: 1,
+      status: "completed",
+      outcome: "remediation-required",
+      headSha: "head-a",
+    }],
+  });
+  assert.equal(gapDecision.kind, "blocked");
+  assert.match(gapDecision.reason, /exhausted/i);
+
+  // The scheduler evaluates an unrelated lane from its own state; no gap record
+  // is consulted and the lane remains independently ready for resolve.
+  const unrelatedDecision = chooseWorkflowDispatch({ maxReviewRounds: 1, nodes: [] });
+  assert.equal(unrelatedDecision.kind, "next");
+  assert.equal(unrelatedDecision.node, "resolve");
 });
 
 test("summary becomes eligible only after both current-head comments are durable", () => {
