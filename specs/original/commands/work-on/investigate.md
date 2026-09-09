@@ -42,25 +42,23 @@ records; append a superseding investigation for material corrections under
 6. Identify root cause and distinguish patchable code from configuration, external
    authority, pre-existing debt, or an already-fixed claim.
 7. State the behavior that must remain true. Check each relevant way that behavior can be
-   entered, continued, failed, or observed. Mark every listed path `change` or `already
-   safe` and give code, configuration, or test evidence. Inspect only paths reachable from
-   the changed behavior; do not inspect unrelated code. Do not declare scope complete
-   while a relevant path has no disposition.
-8. Define the minimal required mutation paths and behaviors, including every path marked
+   entered, continued, failed, or observed, then build a bounded closure matrix for every
+   changed criterion. Each row names the producer, consumer, and persisted state, plus every
+   reachable caller and invocation mode, imported/sourced transitive dependencies, valid/invalid input, fresh/
+   existing state, failure/retry/recovery, cancellation, and relevant concurrency
+   interleavings. Record sibling paths checked and ruled out; mark each row `change` or
+   `already safe` with code, configuration, or test evidence. Mark every listed path `change` or `already safe` with evidence. Do not declare scope complete while a relevant path has no disposition or a reachable row lacks a disposition. Counterexamples must make an omitted alternate caller and transitive dependency visible rather than relying on generic path wording.
+8. Define the minimal required mutation paths and behaviors, including every row marked
    `change`. Adjacent paths remain read-only unless compilation, runtime correctness,
    schema/interface consistency, or a security invariant requires them to change.
 9. Define non-goals and residual uncertainty.
-10. Establish the Acceptance Contract in the existing receipt: every criterion carries one
-    compact proof link in the form `Mechanism: <implementation path/symbol and behavior>;
-    Counterexample/behavioral test: <test path, trigger, and assertion>; Residual risk:
-    <none or bounded non-contradictory limit>`. The mechanism names its producer,
-    consumer, persisted state, and relevant failure paths; the test exercises a counterexample or
-    observable behavior and, for a bug fix, would fail against the baseline. A missing
-    mechanism or test is `MISSING`/`UNKNOWN`, not an accepted proof; a justified
-    inspection-only exception remains explicitly unverified. A residual risk that
-    contradicts the criterion invariant is `CONTRADICTED`, never `PASS`. For claims such
-    as all data being independently recoverable, enumerate each recovery source and its
-    capture, verification, and restore path; a catalog entry is not proof.
+10. Establish the Acceptance Contract in the existing receipt: every criterion and matrix row
+    carries one compact proof link in the form `Mechanism: <implementation path/symbol and
+    producer/consumer/state behavior>; Counterexample/behavioral test: <test path, trigger, and assertion>; Residual risk: <none or bounded non-contradictory limit>`. A string-presence check cannot close a
+    runtime row. Missing mechanism, row, or test is `MISSING`/`UNKNOWN`, not accepted proof;
+    a justified inspection-only exception remains explicitly unverified. Contradictory residual risk
+    is `CONTRADICTED`, never `PASS`. For independently recoverable data, enumerate every
+    recovery source and its capture, verification, and restore path.
 11. Resolve required dependencies, environments, permissions, and evidence before editing.
     If required proof is unavailable, surface the exact condition before implementation;
     do not assume an owner will supply it after review. Separate code-merge acceptance
@@ -130,6 +128,10 @@ Publish the completed investigation with the common metadata envelope from
 **Required behavior**: <one sentence>
 - `path or component` — {change|already safe} — <evidence>
 
+### Closure Matrix
+- `<criterion>` | producer → consumer/caller + invocation mode | transitive dependencies | input/state | failure/retry/recovery/cancellation/concurrency | counterexample/behavioral test | disposition
+- Record every reachable sibling path, including paths checked and ruled out; an omitted row remains an open scope gap.
+
 ### Cohesion and Decomposition
 - <observed scope signals, or none>
 - <why Route is BUILD or DECOMPOSE; atomic invariant or independently safe outcomes/phases>
@@ -142,7 +144,7 @@ Publish the completed investigation with the common metadata envelope from
 - <explicit exclusions>
 
 ### Acceptance Contract
-- `<criterion>` → producer/consumer/state → **Proof link**: `Mechanism: <path/symbol and behavior>; Counterexample/behavioral test: <test path, trigger, assertion>; Residual risk: <none or bounded limit>` → prerequisite availability
+- `<criterion>` → producer/consumer/state and each closure row → **Proof link**: `Mechanism: <path/symbol and behavior>; Counterexample/behavioral test: <test path, trigger, assertion>; Residual risk: <none or bounded limit>` → prerequisite availability
 
 ### Acceptance Checks
 - <criterion and trusted check; descriptive, never executable GitHub input; linked to the proof row>

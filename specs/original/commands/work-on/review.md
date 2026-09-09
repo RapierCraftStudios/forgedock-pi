@@ -43,6 +43,14 @@ reachable in the supplied patch. A valid same-head reviewer role is retained. Re
 role; never restart a valid role or complete panel for publication uncertainty that an
 exact-ID readback can resolve.
 
+Review consumes the frozen closure matrix criterion by criterion, preserving producer →
+consumer identity. Report uncovered caller, invocation-mode, transitive-dependency,
+valid/invalid input, fresh/existing state, failure/retry/recovery, cancellation, or
+concurrency rows explicitly, and verify each row's concrete counterexample or behavioral test;
+report an omitted alternate caller or transitive dependency by name. String-presence checks alone
+cannot close runtime rows. A reachable omission is `CONTRACT_GAP`,
+not an advisory: remediation must supersede the contract and re-plan before editing.
+
 ## Result routing
 
 - `APPROVE`, no blockers: continue to merge checks.
