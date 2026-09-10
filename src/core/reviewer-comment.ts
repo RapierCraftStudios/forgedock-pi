@@ -36,7 +36,7 @@ export function renderReviewerComment(
           const blockView = finding.reviewerBlockView ?? "advisory";
           const scope = finding.reviewerScope ?? "patch-caused";
           return [
-            `- **${finding.id}** ${finding.file}:${finding.line} — ${finding.summary}`,
+            `- **${finding.id}** ${finding.file}:${finding.line} — ${structuredFindingSummary(finding.summary)}`,
             `  - Confidence: ${finding.confidence}; severity: ${finding.severity}`,
             `  - Reviewer block view: ${blockView} — ${finding.reviewerBlockRationale ?? "No rationale supplied."}`,
             `  - Reviewer scope: ${scope} — ${finding.reviewerScopeRationale ?? "No rationale supplied."}`,
@@ -45,12 +45,17 @@ export function renderReviewerComment(
         })
         .join("\n")
     : "No findings reported.";
+  const structuredFindings = result.findings
+    .map(
+      (finding) =>
+        `<!-- FINDING:${finding.id}|${finding.confidence.toUpperCase()}|${finding.severity.toUpperCase()}|${finding.file}:${finding.line}|${structuredFindingSummary(finding.summary)} -->`,
+    )
+    .join("\n");
   const evidence = result.evidence.map((entry) => `- ${entry}`).join("\n");
   const limitations = result.limitations.length
     ? result.limitations.map((entry) => `- ${entry}`).join("\n")
     : "- None identified within reviewed scope.";
   return [
-    reviewerCommentMarker(commentRunId, result.reviewer, round, result.headSha),
     `# ${reviewerDomain(result.reviewer)} Review`,
     "",
     `**Reviewer**: \`${result.reviewer}\`  `,
@@ -73,7 +78,20 @@ export function renderReviewerComment(
     "## Residual Risks",
     "",
     limitations,
+    "",
+    "<!-- REVIEW-FINDINGS-START -->",
+    structuredFindings,
+    "<!-- REVIEW-FINDINGS-END -->",
   ].join("\n");
+}
+
+function structuredFindingSummary(value: string): string {
+  return value
+    .trim()
+    .replace(/\s+/g, " ")
+    .replaceAll("|", "/")
+    .replaceAll("<!--", "< --")
+    .replaceAll("-->", "-- >");
 }
 
 export function reviewerCommentMatchesResult(
@@ -82,5 +100,9 @@ export function reviewerCommentMatchesResult(
   round: number,
   commentRunId = result.runId,
 ): boolean {
-  return body.trim() === renderReviewerComment(result, round, commentRunId).trim();
+  const expected = [
+    reviewerCommentMarker(commentRunId, result.reviewer, round, result.headSha),
+    renderReviewerComment(result, round, commentRunId).trim(),
+  ].join("\n");
+  return body.trim() === expected.trim();
 }

@@ -195,6 +195,15 @@ Do not create recursive blocker issues. A confirmed independent `NON-BLOCKING FO
 deduplicated and filed once under existing authorization; pre-existing, advisory, rejected, and
 out-of-scope findings remain review context and never delay an otherwise acceptable PR.
 
+Before editing, classify an immediate-repair finding as `IMPLEMENTATION_DEFECT`,
+`VERIFICATION_GAP`, or `CONTRACT_GAP`. The first two use the bounded cohesive remediation
+route. A `CONTRACT_GAP` is an omitted reachable caller, invocation, transitive dependency,
+state/input transition, failure/retry/recovery path, cancellation, concurrency interleaving,
+or outcome: preserve the current work, supersede the contract, and enter exactly one bounded
+`REPLAN_REQUIRED` transition before editing. A resume, renamed round, or new receipt cannot
+reset the remediation cap; an unavailable token or authority produces `GATED` with its exact
+wake condition. Unrelated lanes continue.
+
 ### 6. Merge
 
 Merge only when:
@@ -240,20 +249,11 @@ review blocker that is safely fixable inside scope.
 
 ## Terminal output
 
-Return one compact result containing issue, PR, target, reviewed head, merge commit, terminal
-state, changed files, verification summary, reviewer roles, remediation count,
-residual risks, and cleanup ownership. In the same compact result report first-pass acceptance, review panels,
-remediation rounds/limit, elapsed wall time, and waits from available
-native timestamps. First-pass means the initial complete panel accepted the implementation
-without blocker-driven code changes; skipped proof or a terminal gate is not first-pass success.
-Keep the configured model visible; never change routing merely to hit the time target.
-Summarize relevant history applied with representative permalinks and retrieval limitations;
-citation volume is not quality or performance proof.
+Return a compact result with issue/PR/target/head/merge, checks, reviewers, remediation count, risks, cleanup owner, first-pass review panels/remediation, elapsed waits, configured model, relevant history/limits, and no blocker-driven edits, skipped proof, or gates counted as first-pass.
 End with exactly one machine-readable line:
 
 `FORGE_WORK_ON_RESULT status=DONE|GATED|FAILED issue=<N> pr=<N|none> dependency=SATISFIED|UNSATISFIED`
 
-Use SATISFIED only with DONE and evidence that the promised prerequisite behavior is
-present on the configured target (merged implementation or verified already-fixed state).
-Invalidation without that proof, decomposition into unfinished replacements, GATED, and
-FAILED use UNSATISFIED. Closure alone never satisfies a hard dependency. Explain replacement or external wake conditions in the compact result; do not auto-enroll out-of-selector work; do not add analytics artifacts.
+Use SATISFIED only for DONE with merged or verified target evidence; invalidation,
+decomposition, GATED, or FAILED use UNSATISFIED. Explain wake/replacement conditions and avoid
+analytics or memory artifacts.

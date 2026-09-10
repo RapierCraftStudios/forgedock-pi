@@ -86,6 +86,16 @@ explicit acceptance gap. Severity, domain risk, reviewer confidence, and whether
 change are separate axes. Mechanical stale identity, incomplete panel, required-check, conflict,
 mergeability, and authority failures remain real gates but are not semantic code findings.
 
+For an immediate-repair finding, the parent records one bounded classification before editing:
+`IMPLEMENTATION_DEFECT` when the admitted contract is complete but the patch violates it;
+`VERIFICATION_GAP` when required proof is missing, stale, or contradicted; or `CONTRACT_GAP`
+when a reachable caller, invocation mode, transitive dependency, state/input transition,
+failure/retry/recovery path, cancellation, concurrency interleaving, or outcome was omitted
+from the admitted contract/proof map. A `CONTRACT_GAP` preserves the current head/worktree and
+enters exactly one bounded `REPLAN_REQUIRED` transition; it requires a superseding contract and
+fresh exact-head review before editing. It never silently becomes a blocker issue or resets the
+remediation cap.
+
 ## Verdict and merge handoff
 
 - Any parent-dispositioned `IMMEDIATE REPAIR` yields `CHANGES_REQUESTED` and keeps the blocker on

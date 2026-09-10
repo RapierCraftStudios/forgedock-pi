@@ -38,6 +38,36 @@ The prepared verification catalog remains a separate read-only input. A policy c
 legacy-resume input needs explicit parent authority and a newly prepared descriptor; native
 retained bindings cannot silently be overwritten or enlarged by a child.
 
+## Bind a contract-gap re-plan
+
+A lane that receives a parent-dispositioned contract-invalidating blocker records a
+`CONTRACT_GAP` transition before any edit. The retained lane policy must bind all of:
+
+- `issue`, `repository`, `target`, `pr`, `headSha`, `baseSha`, `worktree`, and writer/lease
+  identity for the preserved partial work;
+- `findingId`, exact reviewer result/comment references, omitted closure row, and the
+  original `contractDigest` that the finding invalidated;
+- `remediationAttempts` and configured `remediationLimit` as immutable accounting values;
+- `replan: { required: true, token, used, max: 1, sourceHead, oldContractDigest }`, with
+  a digest covering the complete object; and
+- the superseding investigation/architecture/contract references once the token is used.
+
+The token is lane-scoped and consumed exactly once. A resume, retry, new reviewed head,
+receipt name, or target movement cannot mint it again or increase the cap. The re-plan may
+produce a new contract digest, but it cannot mutate the original acceptance criterion IDs,
+text hashes, or affected-boundary bindings. For this contract the bound IDs remain exactly
+`finding-classification`, `contract-gap-preservation`, `bounded-replan-transition`,
+`superseding-contract-review`, `cap-exhaustion-gate`, and `unrelated-lane-isolation`; a
+consumer must never replace them with generic criterion names. Missing, conflicting, or
+stale identity is a mechanical recovery failure to repair or a durable `FORGE:GATED` wake
+condition; it is not permission to guess a policy or substitute a sibling lane.
+
+A superseding contract digest invalidates the prior review authorization. Review preparation
+must carry both the new digest and exact new head; the panel must be fresh, complete, and
+exact-head bound before merge. The old reviewer evidence remains context and audit history.
+The dispatcher keeps each lane's token, lease, and worktree separate, so a `CONTRACT_GAP`
+transition never pauses or rewrites an unrelated lane.
+
 ## Prepare an orchestration
 
 Write approved data—not JavaScript—to a plan file:
@@ -87,9 +117,12 @@ descriptor and pass it explicitly to subsequent helpers; do not dispatch its own
 ## Prepare a review
 
 The owner writes a review plan containing `head`, `round` (0 initial, 1 first remediation),
-and selected `roles`, each with `role`, `task` and `thinking`. Role tasks contain the frozen
-diff/graph context; they cannot provide a different model. Use optional `input` only for an
-explicit standalone/legacy descriptor; it must match the native binding when one exists.
+`contractDigest`, and selected `roles`, each with `role`, `task` and `thinking`. For a
+re-plan, the plan additionally carries the consumed lane token and the preserved prior
+review identity; the new head/digest must differ from the superseded contract identity.
+Role tasks contain the frozen diff/graph context; they cannot provide a different model. Use
+optional `input` only for an explicit standalone/legacy descriptor; it must match the native
+binding when one exists.
 
 Run `node <package>/specs/helpers/dispatch.mjs review <review.json> <new-empty-output-dir>`.
 Invoke the exact generated request. The model and maximum round come from bound policy;
