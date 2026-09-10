@@ -247,7 +247,11 @@ test("review preparation cannot substitute a model, duplicate correctness or exc
     assert.throws(() => dispatch.prepareReview({ ...review, roles: [{ ...review.roles[0], model: "anthropic/stale" }] }, join(root, "model"), env), /Unknown role field: model/);
     assert.throws(() => dispatch.prepareReview({ ...review, roles: [...review.roles, { role: "general", thinking: "high", task: "Duplicate" }] }, join(root, "dupe"), env), /Duplicate/);
     const valid = dispatch.prepareReview(review, join(root, "review"), env);
-    assert.match(await readFile(valid.request.workflowScriptPath, "utf8"), /openai-codex\/gpt-5.6-luna:high/);
+    const reviewScript = await readFile(valid.request.workflowScriptPath, "utf8");
+    assert.match(reviewScript, /openai-codex\/gpt-5.6-luna:high/);
+    assert.match(reviewScript, /Review transport: return one structured evidence result/);
+    assert.match(reviewScript, /parent publishes one consolidated exact-head panel record/);
+    assert.doesNotMatch(reviewScript, /forge_publish_reviewer_comment|reviewer-comment capability/);
   });
 });
 

@@ -1,82 +1,52 @@
 ---
-description: Orchestrate parallel work on multiple issues or an entire milestone — spawns sub-agents that each run the full /work-on pipeline
-argument-hint: "[milestone <slug> | #1 #2 #3 | next <N> | fast-lane | priority:P0] [--auto|--confirm]"
+description: Dispatch a confirmed issue set through isolated prompt-routed work-on lanes
+argument-hint: "[issue set or selector] [--auto|--confirm]"
 ---
 <!-- SPDX-FileCopyrightText: Copyright (c) RapierCraft Studios -->
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 
-# /orchestrate — Multi-Issue Parallel Orchestrator
+# ForgeDock Orchestrate
 
-**Input**: $ARGUMENTS
+The packaged `forgedock-orchestrate` skill is the active dispatcher contract. This compatibility
+spec records the same boundaries for direct specification resolution; it does not define a second
+workflow engine.
 
-`--auto` and `--confirm` authorize the dispatch checkpoint; they are control
-flags, not part of the issue-set query. `--deep-plan` requests the full analysis
-path, and `--max-concurrent N` only tunes the dispatch cap.
+## Ownership
 
-This file is the slim dispatcher. Detailed phase content lives in `commands/orchestrate/`.
+The visible parent is a dispatcher, never a builder. It resolves the confirmed issue set and
+configured targets, reads each issue's acceptance criteria and declared mutation paths, prepares
+one fresh digest-bound contract per lane, and computes only real hard dependency edges:
 
-## OpenCode Preflight
+- explicit issue dependencies;
+- exact shared declared mutation files;
+- database migration ordering; and
+- exact configured global/high-fan-in files.
 
-When `FORGE_RUNTIME=opencode` (or an OpenCode runtime marker is present), run the
-deterministic preflight at `$FORGE_HOME/bin/orchestrate-preflight.mjs` immediately,
-before reading `orchestrate/config.md`, this workflow, or any phase spec. The helper
-resolves the repository from `forge.yaml`, including a parent config when the target
-is a nested Git worktree:
+Domain keywords, directory proximity, cost, co-change guesses, missing paths, and uncertainty do
+not create edges. Ambiguous scope is visible and defaults to isolated parallel work. A predecessor
+is satisfied only by its verified `DONE` result with `dependency=SATISFIED`; invalid, decomposed,
+gated, failed, or merely dispatched lanes do not unblock dependents.
 
-```bash
-node "$FORGE_HOME/bin/orchestrate-preflight.mjs" \
-  --repo "$GH_REPO" \
-  --args "$ARGUMENTS"
-```
+## Native dispatch
 
-The preflight is a compact mechanical adapter for issue resolution, eligibility,
-explicit dependencies, scoped issue-body file overlap, database serialization, and
-the initial ready queue. If it returns a supported plan with `requiresDeepPlan: false`
-and `confirmed: true`, launch `dispatchNow` with native background `task` calls
-immediately. Without an explicit `--auto` or `--confirm` argument, present the
-compact plan and ask for one confirmation; after the user confirms, launch the
-plan's ready queue without re-reading the large phase files. Do not load the full
-Phase 3 or Phase 4 prose just to ask that question.
+Use the installed `specs/helpers/dispatch.mjs batch` preparation output unchanged. It binds the
+repository, issue, target, model, remediation limit, issue contract, verification catalog,
+prepared worktree, packaged control-plane root, and exact launch identity. Launch the generated
+request with the native `subagent` workflow and the approved active-owner limit; do not reconstruct
+its promise graph or search sibling worktrees for configuration. Each owner uses its exact prepared
+`cwd` with `worktree: false`; a stale or wrong workspace is an internal binding/recovery failure,
+not a product gate.
 
-Continue through the phase files when the plan says `requiresDeepPlan`, the input is
-unsupported, preflight fails, or a task-result event requires recovery. This adapter
-never closes, deduplicates, or edits issues; the full shared workflow remains the
-authority for investigations, review-finding cascade handling, recovery, cleanup,
-and reporting.
+The dispatcher admits ready lanes up to the configured capacity, preserves one writer per lane,
+resumes one retained technical failure when the native result is explicitly resumable, and keeps
+unrelated lanes moving. It does not create claims boards, leases, scoring passes, progress
+heartbeats, hidden journals, or automatically executed improvement backlog.
 
-For a supported compact OpenCode plan, stop after the fast-path dispatch. The phase
-execution order below is the fallback path for deep plans, unsupported inputs,
-preflight failures, and task-result recovery; do not read it merely to confirm or
-dispatch a compact plan.
+## Completion
 
-## Execution Order
-
-Read and execute phases in sequence. Each phase file is self-contained.
-
-| Step | File | Description |
-|------|------|-------------|
-| 0 | `orchestrate/config.md` | Hard rules, config resolution, multi-repo support — READ FIRST |
-| 1 | `orchestrate/phase-1-resolve.md` | Resolve the issue set from input |
-| 2 | `orchestrate/phase-2-triage.md` | Investigation-first triage, Wave 0 |
-| 2.5 | `orchestrate/phase-2.5-synthesis.md` | Investigation synthesis and deconfliction |
-| 3 | `orchestrate/phase-3-dependency.md` | Dependency analysis, DAG construction, execution plan |
-| 4 | `orchestrate/phase-4-execution.md` | Streaming DAG execution, agent dispatch, stall detection |
-| 5 | `orchestrate/phase-5-cleanup.md` | Post-batch cleanup sweep and agent audit |
-| 6 | `orchestrate/phase-6-report.md` | Consolidated report and pipeline summary |
-| — | `orchestrate/safety.md` | Safety rules and examples (reference) |
-
-## Quick Reference
-
-```
-Read: $FORGE_HOME/commands/orchestrate/config.md       # ALWAYS READ FIRST
-Read: $FORGE_HOME/commands/orchestrate/phase-1-resolve.md
-Read: $FORGE_HOME/commands/orchestrate/phase-2-triage.md
-Read: $FORGE_HOME/commands/orchestrate/phase-2.5-synthesis.md
-Read: $FORGE_HOME/commands/orchestrate/phase-3-dependency.md
-Read: $FORGE_HOME/commands/orchestrate/phase-4-execution.md
-Read: $FORGE_HOME/commands/orchestrate/phase-5-cleanup.md
-Read: $FORGE_HOME/commands/orchestrate/phase-6-report.md
-```
-
-The orchestrator reads only the phase file(s) relevant to the current step rather than
-loading the full 2300-line monolith upfront.
+Reconcile each lane from its exact native result and authoritative GitHub state as `DONE`, `GATED`,
+`FAILED`, or `IN_PROGRESS`. Work-on owns investigation, implementation, review, remediation,
+merge, issue closure, and its terminal records. The parent owns dependency unblocking and
+ownership-safe cleanup of only its detached prepared bases. Report wall time, usage, model,
+first-pass acceptance, review/remediation rounds, waits, follow-ups, and residual limits without
+counting gates or decomposition as delivery.

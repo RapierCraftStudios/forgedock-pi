@@ -47,11 +47,10 @@ profile name, it is the sole per-issue work-on agent and writer.
 
 A work-on agent executes investigation, planning, build, quality gates, verification, PR
 preparation, remediation, merge, close, and cleanup inline. Before review/re-review it must
-not call `subagent`. Any legacy phase `Task(...)`, `Agent(...)`, cache-TTL fork, alternate
-runtime, or builder handoff is ignored.
+not call `subagent`; only the selected fresh review panel may be nested.
 
 Resolve one full child model from `forge.yaml` `agents.subagent_model`, then
-`agents.default_model`. Reject empty or legacy shorthand model names before dispatch. The
+`agents.default_model`. Reject an empty or non-qualified model identifier before dispatch. The
 work-on agent retains that model for the lifecycle; review tasks add the risk-calibrated
 thinking suffix selected by the review skill.
 
@@ -67,16 +66,17 @@ outcome.
 ## Reviewers
 
 Review roles use fresh ordinary builtin `delegate` agents with full normal tool
-availability. Role prompts focus the review and require structured evidence; ForgeDock
-does not register a specialized reviewer profile or impose a reviewer capability ceiling.
-The owning work-on agent remains responsible for final publication, verdict, remediation,
-merge, and closure.
+availability. Role prompts focus the review and require structured evidence; ForgeDock does
+not register a specialized reviewer profile or impose a reviewer capability ceiling. The owning
+work-on agent remains responsible for joining results, semantic disposition, publication,
+verdict, remediation, merge, and closure. Generic delegates return evidence; they do not
+receive a direct publication or issue capability.
 
 Prepare repository, PR, full head/base SHAs, changed files, deterministic diff bundle,
 role/persona, attempt, and invariants once. Embed the bounded diff in each task or pass one
 stable readable file path; `runs.host` is not available in raw review workflows and must
-not be used for bundle transfer. Set `output` on each child launch when durable results are
-required and return the installed API's output reference/artifact paths; task text is not a
+not be used for bundle transfer. Set `output` on each child launch only when durable results
+are needed and return the installed API's output reference/artifact paths; task text is not a
 storage declaration. Keep context bounded to the frozen diff and required invariants.
 For standalone interactive review, launch with `async: true`, yield, then consume native
 completion and continue synthesis in the same owner. In a headless work-on child, keep the
@@ -88,7 +88,7 @@ because a panel was dispatched.
 
 Work-on owners prepare panel data with `helpers/dispatch.mjs review`; it applies the bound
 model/cap and emits the request without rewriting workflow code. Standalone PR reviews
-without a bound work-on issue retain their existing direct route; never invent an issue ID.
+without a bound work-on issue retain the same owner-publication route; never invent an issue ID.
 Each item uses:
 
 - a stable role/attempt key;
@@ -100,23 +100,23 @@ Each item uses:
 - `timeoutMs: 900000`.
 
 The panel join deadline is `1200000`. Join all roles before synthesis. A partial panel
-cannot publish a verdict or authorize merge. For reviews exceeding three minutes, each
+cannot publish a verdict or authorize merge. For reviews exceeding three minutes, a
 delegate may send at most one concise `contact_supervisor` progress update with role, head,
 and current evidence step; do not publish progress to GitHub.
 
 Retain each valid same-head role. Retry only when the child failed or the owning agent
-cannot recover a substantive review. Launch one additional workflow containing only that
-missing role with a new key under the same attempt. The one-workflow rule applies per
-panel/retry dispatch, not the whole review. Never restart a panel for JSON key casing,
+cannot recover a substantive result. Launch one additional workflow containing only that
+missing role with a new key under the same attempt. Never restart a panel for JSON key casing,
 number-versus-string identity echoes, equivalent list shapes, or other harmless formatting.
 
-Each delegate may use any normal tool needed for evidence, but its assignment is review,
-not implementation or workflow ownership. Bind repository, PR, head/base, attempt, and
-role from the launch record. Accept JSON or structured Markdown containing verdict,
+Each delegate may use normal read/search tools needed for evidence, but its assignment is
+review, not implementation or workflow ownership. Bind repository, PR, head/base, attempt,
+and role from the launch record. Accept JSON or structured Markdown containing verdict,
 qualitative summary, verified `path:line` behaviors, residual risks, and findings; normalize
-harmless representation differences in the owner. Publish one consolidated panel comment
-and one official verdict with exact-ID readback. Do not require per-role comments,
-enumerate all comments, or build shell-regex protocols.
+harmless representation differences in the owner. The owner publishes exactly one
+consolidated SHA-bound panel record and one official verdict with exact-ID readback. No
+reviewer-authored individual record, shell-regex comment protocol, or invented publication
+tool is part of this route.
 
 ## Base movement and review reuse
 

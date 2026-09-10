@@ -95,8 +95,11 @@ Run `node <package>/specs/helpers/dispatch.mjs review <review.json> <new-empty-o
 Invoke the exact generated request. The model and maximum round come from bound policy;
 `general` aliases correctness and cannot duplicate it. Explicit configured thinking wins;
 otherwise the role's risk-calibrated thinking suffix is added. Native budget and complete
-panel requirements still apply. The helper validates requested rounds, not semantic history:
-the owner must recover actual usage from the graph and cannot relabel another fix as round 1.
+panel requirements still apply. Each generic delegate returns structured evidence to the
+owner; it has no reviewer-comment or issue-publication capability. The owner validates and
+publishes one consolidated SHA-bound panel record. The helper validates requested rounds, not
+semantic history: the owner must recover actual usage from the graph and cannot relabel another
+fix as round 1.
 
 ## Resolve supervisor identity before acting
 

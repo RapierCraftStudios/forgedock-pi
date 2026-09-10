@@ -42,8 +42,10 @@ naming. Pi runtime mechanics live in [`specs/pi-adapter.md`](specs/pi-adapter.md
   one isolated worktree per ready issue. Each agent runs its lifecycle inline and only
   review or re-review fans out to fresh repository-capable children.
 - **Review is load-bearing.** It launches risk-specific prompts on fresh ordinary
-  `delegate` agents with full normal tools, publishes one consolidated panel result, and
-  never approves from a partial panel or repeats review for unrelated clean base movement.
+  `delegate` agents with full normal tools. Delegates return structured evidence to the issue
+  owner, who publishes one consolidated panel result and verdict; reviewers do not publish
+  individual records. The route never approves from a partial panel or repeats review for
+  unrelated clean base movement.
 - **Scope decisions are explicit.** Complexity signals require a cohesion assessment, not
   automatic splitting. A late decomposition proposal preserves partial work and requires
   an approved handoff/disposition before splitting an existing PR; it never resets retries.

@@ -14,7 +14,9 @@ same work-on agent remains the sole writer; reviewer children never edit source.
 ## Preconditions
 
 - PR, issue, target, reviewed head, and blocking findings are exact and current.
-- Each blocker is CONFIRMED HIGH/CRITICAL with a concrete production scenario.
+- Each blocker has confirmed current evidence of an unmet original acceptance criterion,
+  a reachable consequential patch-caused regression, or a material patch-caused
+  security/safety/data-integrity failure. A medium label does not waive an acceptance gap.
 - The fix does not require product, policy, legal, destructive, credential, or external
   authority.
 - Recover used/allowed rounds and any unfinished authorized round from retained work and
@@ -93,13 +95,14 @@ Publish at most one receipt for the new head:
 
 Invoke the same parent-owned review route with the new exact head. Use one correctness/general role
 (count an existing blocker-producing correctness role), the blocker-producing specialists, and
-security for executable changes. Every fresh reviewer must publish its own bound comment.
-Provide prior findings, parent dispositions, remediated hunks, and executable regression evidence;
-keep the full current diff available. Add another specialist only when remediation materially
-changed that specialist's risk surface.
+security for executable changes. Fresh reviewers return structured exact-head evidence to the
+parent; the parent publishes one consolidated panel record. Provide prior findings, parent
+dispositions, remediated hunks, and executable regression evidence; keep the full current diff
+available. Add another specialist only when remediation materially changed that specialist's
+risk surface.
 
 Retain valid same-head roles and retry only missing/invalid roles. Re-review passes when no
-confirmed patch-caused blocker remains. Non-blocking follow-ups do not trigger another
+confirmed immediate-repair finding remains. Non-blocking follow-ups do not trigger another
 remediation round.
 
 Base movement follows `work-on/review.md`: an unchanged clean effective patch retains its

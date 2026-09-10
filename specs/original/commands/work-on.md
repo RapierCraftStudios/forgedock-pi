@@ -185,13 +185,15 @@ produce a verdict or authorize merge.
 
 ### 5. Remediate when required
 
-Load `work-on/remediate.md` only for confirmed patch-caused blocking findings. The same
-work-on agent applies one cohesive fix covering all blockers on the current head, adds
-focused regression evidence, reruns affected verification, pushes one new head, and
-launches the scoped fresh re-review required by `forgedock-review-pr`.
+Load `work-on/remediate.md` only for parent-dispositioned `IMMEDIATE REPAIR` findings with
+confirmed evidence of an unmet original acceptance criterion, a reachable consequential
+patch-caused regression, or a material patch-caused security/safety/data-integrity failure.
+The owner fixes the complete affected behavior cohesively, adds regression evidence, reruns
+verification, pushes one head, and launches the scoped fresh re-review.
 
-Do not create recursive blocker issues. Independent pre-existing or advisory findings may
-be grouped into explicitly valuable follow-up issues, but never delay the active PR.
+Do not create recursive blocker issues. A confirmed independent `NON-BLOCKING FOLLOW-UP` is
+deduplicated and filed once under existing authorization; pre-existing, advisory, rejected, and
+out-of-scope findings remain review context and never delay an otherwise acceptable PR.
 
 ### 6. Merge
 
@@ -238,10 +240,10 @@ review blocker that is safely fixable inside scope.
 
 ## Terminal output
 
-Return one compact result containing issue, PR, target, reviewed head, merge commit,
-terminal state, changed files, verification summary, reviewer roles, remediation count,
-residual risks, and cleanup ownership. In the same compact result report first-pass acceptance,
-review panels, remediation rounds/limit, elapsed wall time, and material waits from available
+Return one compact result containing issue, PR, target, reviewed head, merge commit, terminal
+state, changed files, verification summary, reviewer roles, remediation count,
+residual risks, and cleanup ownership. In the same compact result report first-pass acceptance, review panels,
+remediation rounds/limit, elapsed wall time, and waits from available
 native timestamps. First-pass means the initial complete panel accepted the implementation
 without blocker-driven code changes; skipped proof or a terminal gate is not first-pass success.
 Keep the configured model visible; never change routing merely to hit the time target.
@@ -254,6 +256,4 @@ End with exactly one machine-readable line:
 Use SATISFIED only with DONE and evidence that the promised prerequisite behavior is
 present on the configured target (merged implementation or verified already-fixed state).
 Invalidation without that proof, decomposition into unfinished replacements, GATED, and
-FAILED use UNSATISFIED. Closure alone never satisfies a hard dependency. Explain replacement
-or external wake conditions in the compact result; do not auto-enroll out-of-selector work.
-Do not produce extended analytics or memory artifacts unless explicitly requested.
+FAILED use UNSATISFIED. Closure alone never satisfies a hard dependency. Explain replacement or external wake conditions in the compact result; do not auto-enroll out-of-selector work; do not add analytics artifacts.
