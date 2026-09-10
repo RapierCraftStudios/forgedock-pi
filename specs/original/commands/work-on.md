@@ -173,8 +173,9 @@ The Builder Contract is the four-part implementation brief described in `work-on
 supporting investigation/context/architecture records retain producer/consumer, state,
 failure/retry/recovery and lifecycle detail. Each criterion still carries mechanism +
 counterexample/behavioral test + residual risk; contradictory residual risk is
-`CONTRADICTED`, never `PASS`. The accepted Builder Contract is immutable for the run;
-later reviewer/remediation inputs are labeled context and cannot rewrite it.
+`CONTRADICTED`, never `PASS`. The accepted Builder Contract record is immutable history;
+an authorized material scope/proof revision appends a superseding contract before editing and
+never rewrites or erases the old record.
 
 ### 4. Prepare PR and review
 
@@ -197,9 +198,7 @@ out-of-scope findings remain review context and never delay an otherwise accepta
 
 Before editing, classify an immediate-repair finding as `IMPLEMENTATION_DEFECT`,
 `VERIFICATION_GAP`, or `CONTRACT_GAP`. The first two use the bounded cohesive remediation
-route. A `CONTRACT_GAP` is an omitted reachable caller, invocation, transitive dependency,
-state/input transition, failure/retry/recovery path, cancellation, concurrency interleaving,
-or outcome: preserve the current work, supersede the contract, and enter exactly one bounded
+route. A `CONTRACT_GAP` is an omitted reachable caller, invocation, transitive dependency, state/input transition, failure/retry/recovery path, cancellation, concurrency interleaving, or outcome: preserve the current work, supersede the contract, and enter exactly one bounded
 `REPLAN_REQUIRED` transition before editing. A resume, renamed round, or new receipt cannot
 reset the remediation cap; an unavailable token or authority produces `GATED` with its exact
 wake condition. Unrelated lanes continue.

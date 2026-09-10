@@ -242,9 +242,11 @@ test("review preparation cannot substitute a model, duplicate correctness or exc
     const prepared = dispatch.prepareBatch(plan, join(root, "prepared"), repo);
     const batch = JSON.parse(await readFile(prepared.batchFile, "utf8"));
     const env = { PI_SUBAGENT_EXTENSION_BINDINGS: JSON.stringify({ [dispatch.BINDING]: batch.lanes[0].input }) };
-    const review = { head: dispatch.gitHead(repo), round: 1, roles: [{ role: "correctness", thinking: "high", task: "Review only" }] };
+    const boundPolicy = dispatch.loadPolicy(undefined, env);
+    const review = { head: dispatch.gitHead(repo), round: 1, contractDigest: boundPolicy.contractDigest, roles: [{ role: "correctness", thinking: "high", task: "Review only" }] };
     assert.throws(() => dispatch.prepareReview({ ...review, round: 4 }, join(root, "over"), env), /exceeds bound remediation limit 1/);
     assert.throws(() => dispatch.prepareReview({ ...review, roles: [{ ...review.roles[0], model: "anthropic/stale" }] }, join(root, "model"), env), /Unknown role field: model/);
+    assert.throws(() => dispatch.prepareReview({ ...review, contractDigest: `sha256:${"0".repeat(64)}` }, join(root, "stale-contract"), env), /contractDigest disagrees/);
     assert.throws(() => dispatch.prepareReview({ ...review, roles: [...review.roles, { role: "general", thinking: "high", task: "Duplicate" }] }, join(root, "dupe"), env), /Duplicate/);
     const valid = dispatch.prepareReview(review, join(root, "review"), env);
     const reviewScript = await readFile(valid.request.workflowScriptPath, "utf8");
@@ -252,6 +254,24 @@ test("review preparation cannot substitute a model, duplicate correctness or exc
     assert.match(reviewScript, /Review transport: return one structured evidence result/);
     assert.match(reviewScript, /parent publishes one consolidated exact-head panel record/);
     assert.doesNotMatch(reviewScript, /forge_publish_reviewer_comment|reviewer-comment capability/);
+
+    const oldContract = dispatch.validateIssueContractFile(boundPolicy.contract, boundPolicy.issue);
+    const revisedContract = dispatch.createIssueContract(boundPolicy.issue, oldContract.criteria, 2, oldContract.digest);
+    const revisedPath = join(root, "revised-contract.json");
+    const revisedBytes = `${JSON.stringify(revisedContract)}\n`;
+    await writeFile(revisedPath, revisedBytes, { mode: 0o400 });
+    const revisedDescriptor = { path: revisedPath, sha256: createHash("sha256").update(revisedBytes).digest("hex") };
+    const previousHead = dispatch.gitHead(repo);
+    await writeFile(join(repo, "replan.txt"), "replanned\n");
+    execFileSync("git", ["add", "replan.txt"], { cwd: repo });
+    execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "replan head"], { cwd: repo });
+    const revisedHead = dispatch.gitHead(repo);
+    const replan = { token: "replan-1", previousHead, previousContractDigest: oldContract.digest, previousRound: 1 };
+    const revisedSingle = dispatch.prepareSingle({ number: boundPolicy.issue, target: "staging", requestStartedAt: "2026-01-01T00:00:00Z", controlPlane, contract: revisedDescriptor, replan }, join(root, "replanned"), repo);
+    const revisedEnv = { PI_SUBAGENT_EXTENSION_BINDINGS: JSON.stringify({ [dispatch.BINDING]: revisedSingle.input }) };
+    const revisedReview = { head: revisedHead, round: 1, contractDigest: revisedContract.digest, replan, roles: [{ role: "correctness", thinking: "high", task: "Review revised head" }] };
+    assert.doesNotThrow(() => dispatch.prepareReview(revisedReview, join(root, "replanned-review"), revisedEnv));
+    assert.throws(() => dispatch.prepareReview({ ...revisedReview, head: previousHead }, join(root, "same-head"), revisedEnv), /new head/);
   });
 });
 

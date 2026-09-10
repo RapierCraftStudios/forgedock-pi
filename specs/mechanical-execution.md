@@ -48,19 +48,18 @@ A lane that receives a parent-dispositioned contract-invalidating blocker record
 - `findingId`, exact reviewer result/comment references, omitted closure row, and the
   original `contractDigest` that the finding invalidated;
 - `remediationAttempts` and configured `remediationLimit` as immutable accounting values;
-- `replan: { required: true, token, used, max: 1, sourceHead, oldContractDigest }`, with
-  a digest covering the complete object; and
+- `replan: { token, previousHead, previousContractDigest, previousRound }`, bound inside the
+  lane input and validated against the superseding contract digest; and
 - the superseding investigation/architecture/contract references once the token is used.
 
 The token is lane-scoped and consumed exactly once. A resume, retry, new reviewed head,
 receipt name, or target movement cannot mint it again or increase the cap. The re-plan may
 produce a new contract digest, but it cannot mutate the original acceptance criterion IDs,
-text hashes, or affected-boundary bindings. For this contract the bound IDs remain exactly
-`finding-classification`, `contract-gap-preservation`, `bounded-replan-transition`,
-`superseding-contract-review`, `cap-exhaustion-gate`, and `unrelated-lane-isolation`; a
-consumer must never replace them with generic criterion names. Missing, conflicting, or
-stale identity is a mechanical recovery failure to repair or a durable `FORGE:GATED` wake
-condition; it is not permission to guess a policy or substitute a sibling lane.
+text hashes, or affected-boundary bindings. Consumers resolve those IDs and hashes from the
+bound issue contract; this guide never hardcodes feature-specific criterion names or replaces
+them with generic names. Missing, conflicting, or stale identity is a mechanical recovery
+failure to repair or a durable `FORGE:GATED` wake condition; it is not permission to guess a
+policy or substitute a sibling lane.
 
 A superseding contract digest invalidates the prior review authorization. Review preparation
 must carry both the new digest and exact new head; the panel must be fresh, complete, and
@@ -70,10 +69,17 @@ transition never pauses or rewrites an unrelated lane.
 
 ## Prepare an orchestration
 
-Write approved data—not JavaScript—to a plan file:
+Write approved data—not JavaScript—to a plan file. Before writing it, create the existing
+control-plane descriptor with `createControlPlaneDescriptor({ forgeDockRoot, piSubagentsRoot })`
+and include that exact value as top-level `controlPlane`; do not omit it or reconstruct it in
+the helper. The shape below is illustrative data with the descriptor and paths supplied by the
+parent. `controlPlane` is the complete object returned by
+`createControlPlaneDescriptor({ forgeDockRoot, piSubagentsRoot })`, not a string placeholder;
+the parent serializes that object into the JSON plan before invoking `prepareBatch`.
 
 ```json
 {
+  "controlPlane": { "v": 1, "schema": "forgedock.control-plane/v1", "forgeDock": "<complete descriptor object>", "piSubagents": "<complete descriptor object>", "digest": "sha256:<64 hex>" },
   "activeOwners": 2,
   "launchAllowance": 24,
   "requestStartedAt": "<actual original request timestamp>",
@@ -111,15 +117,20 @@ workflow body. Preparation rejects malformed data before publishing a runnable r
 fix the named plan/config field, not the native runner. Keep inputs while lanes may resume.
 
 For standalone work-on, before leaving the canonical root use `single` with a plan containing
-`number`, `target`, `requestStartedAt` and optional `verification`. Retain the returned input
-descriptor and pass it explicitly to subsequent helpers; do not dispatch its own coordinator.
+`number`, `target`, `requestStartedAt`, the same `controlPlane` descriptor, and the fresh
+`contract` descriptor when the issue has bound acceptance criteria, plus optional `verification`.
+For an authorized re-plan, include the new contract and its lane-bound `replan` object. Retain
+the returned input descriptor and pass it explicitly to subsequent helpers; do not dispatch its
+own coordinator.
 
 ## Prepare a review
 
 The owner writes a review plan containing `head`, `round` (0 initial, 1 first remediation),
-`contractDigest`, and selected `roles`, each with `role`, `task` and `thinking`. For a
-re-plan, the plan additionally carries the consumed lane token and the preserved prior
-review identity; the new head/digest must differ from the superseded contract identity.
+`contractDigest`, and selected `roles`, each with `role`, `task` and `thinking`. The digest must
+match the bound lane contract. For an authorized re-plan, the plan additionally carries
+`replan: {token, previousHead, previousContractDigest, previousRound}`; the helper validates
+that it matches the bound lane input and that the new head/digest differ from the preserved
+identity. This is the same validated input binding, not a side ledger.
 Role tasks contain the frozen diff/graph context; they cannot provide a different model. Use
 optional `input` only for an explicit standalone/legacy descriptor; it must match the native
 binding when one exists.

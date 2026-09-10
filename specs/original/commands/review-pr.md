@@ -92,9 +92,10 @@ For an immediate-repair finding, the parent records one bounded classification b
 when a reachable caller, invocation mode, transitive dependency, state/input transition,
 failure/retry/recovery path, cancellation, concurrency interleaving, or outcome was omitted
 from the admitted contract/proof map. A `CONTRACT_GAP` preserves the current head/worktree and
-enters exactly one bounded `REPLAN_REQUIRED` transition; it requires a superseding contract and
-fresh exact-head review before editing. It never silently becomes a blocker issue or resets the
-remediation cap.
+enters exactly one bounded `REPLAN_REQUIRED` transition. The parent supersedes the relevant
+contract/plan, makes one cohesive repair, runs affected verification, and then requires a fresh
+exact-head review of the new head before merge. It never reviews the known-broken head as a
+pre-edit remediation step, silently becomes a blocker issue, or resets the remediation cap.
 
 ## Verdict and merge handoff
 

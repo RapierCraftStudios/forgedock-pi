@@ -75,7 +75,9 @@ condition. New heads, resumes, receipt names, or target movement cannot reset al
 authorize another re-plan. Each new row still needs mechanism + counterexample/behavioral
 test + bounded non-contradictory residual risk; old approval cannot close the revision.
 
-Use separate fields:
+After the superseding records are published, the owner makes the cohesive repair, runs affected
+verification, and sends only the new head to fresh review; the re-plan itself is not a pre-edit
+review gate. Use separate fields:
 
 - `Verdict: CONFIRMED | INVALID`
 - `Route: BUILD | DECOMPOSE | TERMINAL`
@@ -171,8 +173,7 @@ For `INVALID`, use `<!-- INVESTIGATION:INVALID -->` instead of the complete sent
 remove active labels, add `workflow:invalid`, close the issue, read back closure, and
 return terminal.
 
-For a confirmed issue, use one label edit to remove `workflow:investigating` and
-`needs-validation` when applicable, add `validated`, set `workflow:ready-to-build` for
+For a confirmed issue, use one label edit to remove `workflow:investigating` and `needs-validation` when applicable, add `validated`, set `workflow:ready-to-build` for
 `BUILD`, or continue immediately to decomposition for
 `DECOMPOSE`. For BUILD, continue to the named pre-build graph records before editing.
 Do not write heartbeats, checkpoints, Gists, indexes, ledgers, dossiers, cost records or telemetry.

@@ -112,14 +112,9 @@ test("closure gaps require a superseding contract before remediation edits", asy
   assert.match(remediate, /original remediation usage/i);
   assert.match(remediate, /unrelated lanes/i);
   assert.match(remediate, /FORGE:GATED/);
-  for (const id of [
-    "finding-classification",
-    "contract-gap-preservation",
-    "bounded-replan-transition",
-    "superseding-contract-review",
-    "cap-exhaustion-gate",
-    "unrelated-lane-isolation",
-  ]) assert.match(mechanics, new RegExp(id));
+  assert.match(mechanics, /original acceptance criterion IDs,\s+text hashes,\s+or affected-boundary bindings/);
+  assert.match(mechanics, /resolve those IDs and hashes from the\s+bound issue contract/i);
+  assert.doesNotMatch(mechanics, /finding-classification|contract-gap-preservation|bounded-replan-transition|superseding-contract-review|cap-exhaustion-gate|unrelated-lane-isolation/);
 });
 
 type ContractGapLane = {

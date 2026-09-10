@@ -70,6 +70,31 @@ function fields(value, allowed, name) {
   requireThat(value && typeof value === "object" && !Array.isArray(value), `${name} must be an object`);
   for (const key of Object.keys(value)) requireThat(allowed.includes(key), `Unknown ${name} field: ${key}`);
 }
+function validateReplan(value, currentContractDigest, name = "replan") {
+  fields(value, ["token", "previousHead", "previousContractDigest", "previousRound"], name);
+  requireThat(typeof value.token === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value.token), `${name}.token is invalid`);
+  requireThat(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value.previousHead ?? ""), `${name}.previousHead is invalid`);
+  requireThat(/^sha256:[a-f0-9]{64}$/.test(value.previousContractDigest ?? ""), `${name}.previousContractDigest is invalid`);
+  integer(value.previousRound, `${name}.previousRound`, 0);
+  requireThat(/^sha256:[a-f0-9]{64}$/.test(currentContractDigest ?? ""), `${name} requires a current contract digest`);
+  requireThat(value.previousContractDigest !== currentContractDigest, `${name} must supersede a different contract digest`);
+  return value;
+}
+function bindReviewPlan(plan, policy) {
+  if (policy.contractDigest !== undefined) {
+    requireThat(plan.contractDigest === policy.contractDigest, "Review contractDigest disagrees with bound policy");
+  } else if (plan.contractDigest !== undefined) {
+    requireThat(/^sha256:[a-f0-9]{64}$/.test(plan.contractDigest), "Review contractDigest is invalid");
+  }
+  if (policy.replan !== undefined) {
+    requireThat(plan.replan !== undefined, "Review replan binding is required");
+    requireThat(canonicalJson(plan.replan) === canonicalJson(policy.replan), "Review replan binding disagrees with bound policy");
+    validateReplan(plan.replan, policy.contractDigest);
+    requireThat(plan.head !== plan.replan.previousHead, "Review replan must review a new head");
+  } else {
+    requireThat(plan.replan === undefined, "Review replan binding is not authorized by the lane policy");
+  }
+}
 function descriptor(file) {
   const resolved = path.resolve(file);
   return { path: resolved, sha256: sha(fs.readFileSync(resolved)) };
@@ -210,6 +235,7 @@ export function loadPolicy(explicit, env = process.env) {
     requireThat(policy.contract && typeof policy.contractDigest === "string", "Bound issue contract is incomplete");
     requireThat(policy.contractDigest === validateIssueContractFile(policy.contract, policy.issue).digest, "Bound issue contract is stale");
   }
+  if (policy.replan !== undefined) validateReplan(policy.replan, policy.contractDigest);
   if (policy.targetBase !== undefined || policy.packagedRoot !== undefined) {
     try {
       requireThat(policy.targetBase && policy.packagedRoot, "Bound workspace descriptors are incomplete");
@@ -224,9 +250,10 @@ export function loadPolicy(explicit, env = process.env) {
   return policy;
 }
 export function prepareSingle(plan, out, cwd = process.cwd()) {
-  fields(plan, ["number", "target", "requestStartedAt", "verification", "controlPlane", "contract"], "single policy");
+  fields(plan, ["number", "target", "requestStartedAt", "verification", "controlPlane", "contract", "replan"], "single policy");
   integer(plan.number, "issue number");
   const contract = plan.contract ? validateIssueContractFile(plan.contract, plan.number) : undefined;
+  if (plan.replan !== undefined) validateReplan(plan.replan, contract?.digest);
   validateControlPlaneDescriptor(plan.controlPlane, { helperPath: path.join(here, "dispatch.mjs"), targetRoot: cwd });
   assertNoTargetAgentShadowing(cwd, plan.controlPlane);
   requireThat(typeof plan.target === "string" && plan.target.length > 0, "Single policy needs target");
@@ -238,7 +265,8 @@ export function prepareSingle(plan, out, cwd = process.cwd()) {
   const verification = plan.verification ?? save(path.join(out, "verification.json"), json({ commands: source.config.verification?.commands ?? {}, discovery: source.config.verification?.discovery ?? {} }));
   const policy = { v: 1, key: `issue-${plan.number}`, repo: source.repo, issue: plan.number, target: plan.target,
     model: source.model, remediationLimit: source.remediationLimit, requestStartedAt: plan.requestStartedAt ?? null, config, verification, controlPlane: plan.controlPlane,
-    ...(contract ? { contract: descriptor(plan.contract.path), contractDigest: contract.digest } : {}) };
+    ...(contract ? { contract: descriptor(plan.contract.path), contractDigest: contract.digest } : {}),
+    ...(plan.replan ? { replan: plan.replan } : {}) };
   return { input: save(path.join(out, "lane.json"), json(policy)) };
 }
 function recipe(controlPlane) {
@@ -259,10 +287,11 @@ export function prepareBatch(plan, out, cwd = process.cwd()) {
   requireThat(typeof plan.requestStartedAt === "string" && Number.isFinite(Date.parse(plan.requestStartedAt)), "Plan needs the original request timestamp");
   const seen = new Set();
   for (const issue of plan.issues) {
-    fields(issue, ["number", "target", "baseCwd", "predecessors", "contract"], "issue");
+    fields(issue, ["number", "target", "baseCwd", "predecessors", "contract", "replan"], "issue");
     integer(issue.number, "issue number");
     requireThat(issue.contract, "Issue needs contract descriptor");
-    validateIssueContractFile(issue.contract, issue.number);
+    const issueContract = validateIssueContractFile(issue.contract, issue.number);
+    if (issue.replan !== undefined) validateReplan(issue.replan, issueContract.digest, `issue #${issue.number} replan`);
     requireThat(!seen.has(issue.number), "Duplicate issue");
     requireThat(typeof issue.target === "string" && issue.target.length > 0 && !issue.target.startsWith("-"), "Issue needs target branch");
     execFileSync("git", ["check-ref-format", "--branch", issue.target], { cwd, stdio: "pipe" });
@@ -289,7 +318,8 @@ export function prepareBatch(plan, out, cwd = process.cwd()) {
     const packagedRoot = packagedRootDescriptor(plan.controlPlane);
     const policy = { v: 1, key: logicalKey, batchNonce, repo: source.repo, issue: issue.number, target: issue.target, model: source.model,
       remediationLimit: source.remediationLimit, requestStartedAt: plan.requestStartedAt, config: configInput, verification, controlPlane: plan.controlPlane,
-      targetBase, packagedRoot, contract: descriptor(issue.contract.path), contractDigest: contract.digest };
+      targetBase, packagedRoot, contract: descriptor(issue.contract.path), contractDigest: contract.digest,
+      ...(issue.replan ? { replan: issue.replan } : {}) };
     const input = save(path.join(out, `${logicalKey}.json`), json(policy));
     const key = `${logicalKey}-${input.sha256}`; keys.set(issue.number, key);
     lanes.push({ key, issue: issue.number, repo: source.repo, target: issue.target, input });
@@ -309,11 +339,12 @@ export function prepareBatch(plan, out, cwd = process.cwd()) {
   return { request, requestFile: path.join(out, "request.json"), batchFile: path.join(out, "batch.json") };
 }
 export function prepareReview(plan, out, env = process.env) {
-  fields(plan, ["input", "head", "round", "roles"], "review");
+  fields(plan, ["input", "head", "round", "contractDigest", "replan", "roles"], "review");
   const policy = loadPolicy(plan.input, env);
   integer(plan.round, "review round", 0);
   requireThat(plan.round <= policy.remediationLimit, `Review round ${plan.round} exceeds bound remediation limit ${policy.remediationLimit}`);
   requireThat(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(plan.head ?? ""), "Review needs exact head");
+  bindReviewPlan(plan, policy);
   requireThat(Array.isArray(plan.roles) && plan.roles.length > 0, "Review needs selected roles");
   const used = new Set();
   const roles = plan.roles.map(role => {
