@@ -113,22 +113,36 @@ Derive exactly one next action from live state:
 | open PR with current blockers and remediation rounds available | remediate |
 | blockers remain after last authorized re-review | read-only reassessment once, then GATED with unresolved evidence; no automatic extra round |
 | issue has durable GATED prerequisite/recovery | verify its exact wake condition; resume only when satisfied |
+| open PR has a parent-dispositioned contract-invalidating blocker | enter or resume the one bounded `CONTRACT_GAP` → `REPLAN_REQUIRED` transition; preserve the reviewed work and original usage |
+| issue has completed `REPLAN_REQUIRED` transition but no superseding contract | remain GATED until the exact re-plan identity and authority are present |
 | open PR awaiting current-head review | review |
 | committed build with no PR | prepare PR |
 | completed investigation requiring build | build |
 | completed investigation requiring decomposition | decompose |
 | no completed investigation | investigate |
 
-A completed phase is never repeated. Old checkpoints and legacy comments may be read as
-compatibility evidence but are never written and never outrank live issue/PR/git state.
-Recover remediation usage from reviewed-head transitions and existing receipts, not just
-receipt count. A round includes one cohesive fix plus its complete scoped re-review; reserve
-it before editing. Complete or resume an authorized round even at the limit, including
-bounded missing-role retries; never charge it twice. A completed substantive panel closes
-that round, so its remaining blockers require a new round. Never reset usage on resume,
-reinvestigation, a new head, or names such as `final`, `last`, or `closure`. Fixing code after
-blocking review consumes a round even when called build, polish, or cleanup. Only explicit
-new authority can extend an exhausted budget; do not ask for routine extensions.
+Completed phases are never repeated; legacy evidence never outranks live state. Recover
+usage from reviewed-head transitions and receipts. A round includes one cohesive fix plus its complete scoped re-review; Complete or resume it at the limit without double-charging. Never reset
+usage on resume, reinvestigation, a new head, or names such as `final`, `last`, or `closure`;
+post-review code fixes consume a round; bounded missing-role retries never charge twice. Only explicit new authority can extend an exhausted
+budget.
+
+### Contract-gap transition
+
+`CONTRACT_GAP` is a parent-dispositioned blocker when review proves the admitted
+investigation, architecture, Builder Contract, or proof map omitted a reachable behavior.
+Implementation defects and verification gaps remain ordinary bounded remediation; stale,
+advisory, pre-existing, out-of-scope, and unrelated findings never open this route.
+
+Record exact PR head/base, worktree/branch, reviewer evidence, finding, contract digest, and
+original usage. Preserve the partial work and writer. Admit at most one lane-scoped
+`REPLAN_REQUIRED` token for a superseding investigation/architecture/contract; resume, new
+head, renamed receipt, or target movement cannot mint another token or raise the cap.
+Before editing, retain every bound criterion ID, explain the omitted row, and publish a new
+contract digest. That digest invalidates old approval and requires a fresh exact-head panel.
+If the token, identity, or allowance is unavailable, publish `FORGE:GATED` with the exact
+wake condition without closing the issue or blocking unrelated lanes. A contract gap cannot
+silently become `needs-human`, a follow-up, or a second remediation round.
 
 ## Lifecycle
 
@@ -185,13 +199,12 @@ produce a verdict or authorize merge.
 
 ### 5. Remediate when required
 
-Load `work-on/remediate.md` only for confirmed patch-caused blocking findings. The same
-work-on agent applies one cohesive fix covering all blockers on the current head, adds
-focused regression evidence, reruns affected verification, pushes one new head, and
-launches the scoped fresh re-review required by `forgedock-review-pr`.
-
-Do not create recursive blocker issues. Independent pre-existing or advisory findings may
-be grouped into explicitly valuable follow-up issues, but never delay the active PR.
+Load `work-on/remediate.md` only for parent-dispositioned confirmed patch-caused blockers.
+Classify each blocker before editing: implementation defect, verification gap, or contract
+ gap. The first two use ordinary bounded remediation; the last follows the durable
+`CONTRACT_GAP` → `REPLAN_REQUIRED` transition and cannot be patched before supersession.
+Apply one cohesive fix with focused evidence and a fresh exact-head re-review; no recursive
+blocker issues. Independent advisories/pre-existing findings never delay the active PR.
 
 ### 6. Merge
 
@@ -205,20 +218,16 @@ Merge only when:
 - ancestry and mergeability are current; and
 - merge authorization permits the action.
 
-Read back merged state and merge commit. Base movement alone does not invalidate valid review.
-If the PR remains clean and mergeable with the reviewed head unchanged, merge without
-rewriting the branch. Reconcile only when branch policy requires an up-to-date head or the
-PR conflicts. After any rewrite, compare the effective patch before and after: reuse the
-valid review when the patch is identical and target changes do not overlap its files;
-rerun affected checks and fresh review only when behavior or risk actually changed. Never
-create a competing writer or a review loop.
+Read back merged state and merge commit. Base movement alone does not invalidate valid review;
+merge unchanged clean reviewed heads without rewriting. Reconcile only for required ancestry
+or conflict, compare effective patches, and rerun checks/review only when behavior or risk
+changed. Never create a competing writer or review loop.
 
 ### 7. Close
 
 Load `work-on/close.md` once. Verify the merge, explicitly close and label the issue,
 update an actual parent tracker when present, publish one terminal receipt, and finish
 cleanup according to ownership.
-
 ## Failure behavior
 
 Prefer repair and continuation over terminal gates within the remaining remediation budget:
@@ -237,23 +246,13 @@ Never infer human authority from uncertainty, tooling failure, target movement, 
 review blocker that is safely fixable inside scope.
 
 ## Terminal output
-
-Return one compact result containing issue, PR, target, reviewed head, merge commit,
-terminal state, changed files, verification summary, reviewer roles, remediation count,
-residual risks, and cleanup ownership. In the same compact result report first-pass acceptance,
-review panels, remediation rounds/limit, elapsed wall time, and material waits from available
-native timestamps. First-pass means the initial complete panel accepted the implementation
-without blocker-driven code changes; skipped proof or a terminal gate is not first-pass success.
-Keep the configured model visible; never change routing merely to hit the time target.
-Summarize relevant history applied with representative permalinks and retrieval limitations;
-citation volume is not quality or performance proof.
-End with exactly one machine-readable line:
+Return one compact result with issue/PR/target, reviewed and merge heads, state, files,
+checks, reviewers, remediation count, risks, cleanup owner, first-pass review panels and remediation evidence,
+round limit, elapsed waits, and relevant history. Keep the configured model visible.
+End exactly with:
 
 `FORGE_WORK_ON_RESULT status=DONE|GATED|FAILED issue=<N> pr=<N|none> dependency=SATISFIED|UNSATISFIED`
 
-Use SATISFIED only with DONE and evidence that the promised prerequisite behavior is
-present on the configured target (merged implementation or verified already-fixed state).
-Invalidation without that proof, decomposition into unfinished replacements, GATED, and
-FAILED use UNSATISFIED. Closure alone never satisfies a hard dependency. Explain replacement
-or external wake conditions in the compact result; do not auto-enroll out-of-selector work.
-Do not produce extended analytics or memory artifacts unless explicitly requested.
+Use SATISFIED only for DONE with merged or verified target evidence; invalidation,
+decomposition, GATED, or FAILED use UNSATISFIED. Explain wake/replacement conditions and
+avoid analytics or memory artifacts.
