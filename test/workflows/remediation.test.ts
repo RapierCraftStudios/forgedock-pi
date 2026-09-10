@@ -93,8 +93,13 @@ const blockedResult = {
 
 test("closure gaps require a superseding contract before remediation edits", async () => {
   const review = await readFile("specs/original/commands/work-on/review.md", "utf8");
+  const reviewPr = await readFile("specs/original/commands/review-pr.md", "utf8");
+  const mechanics = await readFile("specs/mechanical-execution.md", "utf8");
   const remediate = await readFile("specs/original/commands/work-on/remediate.md", "utf8");
   assert.match(review, /CONTRACT_GAP/);
+  assert.match(reviewPr, /IMPLEMENTATION_DEFECT/);
+  assert.match(reviewPr, /VERIFICATION_GAP/);
+  assert.match(reviewPr, /REPLAN_REQUIRED/);
   assert.match(remediate, /superseding contract.*re.plan/is);
   assert.match(remediate, /caller.*invocation mode.*transitive dependency/is);
   assert.match(remediate, /closure-gap revision.*before.*edit/is);
@@ -104,6 +109,112 @@ test("closure gaps require a superseding contract before remediation edits", asy
   const gaps = discovered.filter((row) => !initial.has(row));
   assert.deepEqual(gaps, discovered);
   assert.equal("CONTRACT_GAP", "CONTRACT_GAP");
+  assert.match(remediate, /original remediation usage/i);
+  assert.match(remediate, /unrelated lanes/i);
+  assert.match(remediate, /FORGE:GATED/);
+  for (const id of [
+    "finding-classification",
+    "contract-gap-preservation",
+    "bounded-replan-transition",
+    "superseding-contract-review",
+    "cap-exhaustion-gate",
+    "unrelated-lane-isolation",
+  ]) assert.match(mechanics, new RegExp(id));
+});
+
+type ContractGapLane = {
+  lane: string;
+  reviewedHead: string;
+  worktree: string;
+  reviewerEvidence: string[];
+  contractDigest: string;
+  remediationAttempts: number;
+  remediationLimit: number;
+  replanUsed: number;
+  status: "reviewing" | "contract-gap" | "replan-required" | "gated" | "ready";
+};
+
+type BlockerKind = "IMPLEMENTATION_DEFECT" | "VERIFICATION_GAP" | "CONTRACT_GAP";
+
+function classifyBlocker(input: {
+  contractComplete: boolean;
+  proofAvailable: boolean;
+  omittedRow: boolean;
+}): BlockerKind {
+  if (input.omittedRow || !input.contractComplete) return "CONTRACT_GAP";
+  if (!input.proofAvailable) return "VERIFICATION_GAP";
+  return "IMPLEMENTATION_DEFECT";
+}
+
+function enterContractGap(lane: ContractGapLane, kind: BlockerKind): ContractGapLane {
+  if (kind !== "CONTRACT_GAP") return lane;
+  return { ...lane, status: "contract-gap" };
+}
+
+function requestReplan(lane: ContractGapLane, nextDigest: string): ContractGapLane {
+  if (lane.status !== "contract-gap" || lane.replanUsed >= 1)
+    return { ...lane, status: "gated" };
+  return { ...lane, status: "replan-required", replanUsed: lane.replanUsed + 1, contractDigest: nextDigest };
+}
+
+function finishReplan(lane: ContractGapLane, nextHead: string): ContractGapLane {
+  if (lane.status !== "replan-required" || lane.contractDigest === "old-contract")
+    return { ...lane, status: "gated" };
+  return { ...lane, status: "ready", reviewedHead: nextHead };
+}
+
+test("contract-gap transition classifies evidence and preserves one bounded replan per lane", () => {
+  assert.equal(classifyBlocker({ contractComplete: true, proofAvailable: true, omittedRow: false }), "IMPLEMENTATION_DEFECT");
+  assert.equal(classifyBlocker({ contractComplete: true, proofAvailable: false, omittedRow: false }), "VERIFICATION_GAP");
+  assert.equal(classifyBlocker({ contractComplete: true, proofAvailable: true, omittedRow: true }), "CONTRACT_GAP");
+
+  const original: ContractGapLane = {
+    lane: "issue-525",
+    reviewedHead: "reviewed-head",
+    worktree: "/prepared/issue-525",
+    reviewerEvidence: ["review-comment-1"],
+    contractDigest: "old-contract",
+    remediationAttempts: 1,
+    remediationLimit: 1,
+    replanUsed: 0,
+    status: "reviewing",
+  };
+  const gap = enterContractGap(original, "CONTRACT_GAP");
+  assert.equal(gap.status, "contract-gap");
+  assert.deepEqual(
+    { head: gap.reviewedHead, worktree: gap.worktree, evidence: gap.reviewerEvidence, attempts: gap.remediationAttempts },
+    { head: "reviewed-head", worktree: "/prepared/issue-525", evidence: ["review-comment-1"], attempts: 1 },
+  );
+  const replanned = requestReplan(gap, "new-contract");
+  assert.equal(replanned.status, "replan-required");
+  assert.equal(replanned.replanUsed, 1);
+  assert.equal(replanned.contractDigest, "new-contract");
+  assert.equal(finishReplan(replanned, "new-head").status, "ready");
+  assert.equal(requestReplan(replanned, "third-contract").status, "gated");
+});
+
+test("contract-gap cap gate is lane-local and cannot reset through a resume", () => {
+  const exhausted: ContractGapLane = {
+    lane: "exhausted",
+    reviewedHead: "head-a",
+    worktree: "/prepared/exhausted",
+    reviewerEvidence: ["review-a"],
+    contractDigest: "old-contract",
+    remediationAttempts: 1,
+    remediationLimit: 1,
+    replanUsed: 1,
+    status: "contract-gap",
+  };
+  assert.equal(requestReplan(exhausted, "new-contract").status, "gated");
+  const unrelated: ContractGapLane = {
+    ...exhausted,
+    lane: "unrelated",
+    remediationAttempts: 0,
+    replanUsed: 0,
+    status: "reviewing",
+  };
+  assert.equal(unrelated.status, "reviewing");
+  assert.equal(unrelated.replanUsed, 0);
 });
 
 test("open review-finding issues are authoritative and deduplicated per PR", async () => {

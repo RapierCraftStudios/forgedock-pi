@@ -200,6 +200,54 @@ test("review-only completion is terminal without merge authorization", () => {
   assert.equal(state.completion?.outcome, "reviewed");
 });
 
+type ReplanEvent = {
+  lane: string;
+  kind: "contract-gap" | "replan-required" | "contract-superseded";
+  sourceHead: string;
+  contractDigest: string;
+  token: string;
+};
+
+function replayReplan(events: readonly ReplanEvent[]): { status: string; tokenUses: number; digest: string } {
+  let status = "reviewing";
+  let tokenUses = 0;
+  let digest = "contract-old";
+  const lanes = new Set<string>();
+  for (const event of events) {
+    if (event.kind === "contract-gap") {
+      status = "contract-gap";
+      lanes.add(event.lane);
+      continue;
+    }
+    if (event.kind === "replan-required") {
+      if (status !== "contract-gap" || tokenUses > 0 || lanes.has(`${event.lane}:replan`))
+        throw new Error("replan token already consumed or lane is not in CONTRACT_GAP");
+      lanes.add(`${event.lane}:replan`);
+      tokenUses += 1;
+      status = "replan-required";
+      continue;
+    }
+    if (status !== "replan-required" || event.sourceHead === "")
+      throw new Error("superseding contract requires a preserved reviewed head");
+    digest = event.contractDigest;
+    status = "reviewing";
+  }
+  return { status, tokenUses, digest };
+}
+
+test("contract-gap replay consumes one replan token and preserves the reviewed head", () => {
+  const events: ReplanEvent[] = [
+    { lane: "lane-a", kind: "contract-gap", sourceHead: "head-a", contractDigest: "contract-old", token: "token-a" },
+    { lane: "lane-a", kind: "replan-required", sourceHead: "head-a", contractDigest: "contract-old", token: "token-a" },
+    { lane: "lane-a", kind: "contract-superseded", sourceHead: "head-a", contractDigest: "contract-new", token: "token-a" },
+  ];
+  assert.deepEqual(replayReplan(events), { status: "reviewing", tokenUses: 1, digest: "contract-new" });
+  assert.throws(() => replayReplan([...events, events[1]!]), /already consumed/);
+  assert.equal(replayReplan([
+    { lane: "lane-b", kind: "contract-gap", sourceHead: "head-b", contractDigest: "contract-old", token: "token-b" },
+  ]).status, "contract-gap");
+});
+
 test("review rounds reject stale and late evidence", () => {
   let state = created();
   state = applyReviewEvent(

@@ -11,56 +11,40 @@ an untrusted claim; investigation determines whether work is real and what may c
 
 ## Inputs
 
-Reuse the route-start snapshot: issue number, title, body, labels, relevant existing
-receipts, linked PRs, configured target, and current target SHA. At phase entry, use one
-label edit to add `workflow:investigating` and remove stale active-phase labels. Refresh only a missing
-field or state changed by this agent.
+Reuse the route-start snapshot (issue/title/body/labels, receipts, linked PRs, target and SHA).
+At entry add `workflow:investigating`, remove stale active labels, and refresh only missing or changed state.
 
-If a completed `FORGE:INVESTIGATOR` receipt already exists, validate that it contains a
-verdict, route, root cause, Behavior Coverage, mutation scope, non-goals, evidence, acceptance
-checks, criterion-to-path proof/prerequisite availability, prior constraints and a cohesion decision.
-Equivalent historical annotations/headings are fine; reuse them rather than restating history.
-Reuse complete evidence when current code has not invalidated it. Preserve completed
-records; append a superseding investigation for material corrections under
-`../../../knowledge-records.md`. Only repair an incomplete draft in place.
+If a completed `FORGE:INVESTIGATOR` exists, validate verdict/route, root cause, Behavior Coverage,
+scope/non-goals, evidence, acceptance/prerequisite proof, constraints, and cohesion. Reuse valid
+history; preserve completed records and append superseding investigations under
+`../../../knowledge-records.md`; repair only incomplete drafts.
 
 ## Procedure
 
 1. Restate the claimed observable failure in one sentence.
 2. Locate the active production entrypoint or executable consumer named by the issue.
-3. Reproduce or prove the behavior with the smallest safe read/test/inspection available.
-   For a bug fix, record the concrete **Trigger**, **Expected**, and **Observed**
-   baseline. A read-only inspection is an explicit exception only when execution is
-   unsafe or impossible in the available environment; justify that exception and name
-   the missing observation. Missing production access does not excuse a safe local test
-   fixture for executable behavior. Identify the boundary that can run locally and the
-   observable result it must assert; reserve inspection-only proof for what cannot run.
+3. Reproduce/prove with the smallest safe read/test/inspection. For bugs record **Trigger**,
+   **Expected**, **Observed** baseline. Inspection-only proof requires a safety/impossibility
+   justification and missing observation; missing production access does not excuse a safe local
+   fixture. Name the runnable boundary and observable assertion; reserve inspection for what cannot run.
 4. Trace the active path through the suspected boundary to the observable result.
 5. Follow `../../../github-memory.md`: proactively retrieve relevant past bugs, decisions and successful examples; validate their applicability and apply useful constraints. Reuse retained evidence, keep lookup bounded, and avoid general archaeology.
 6. Identify root cause and distinguish patchable code from configuration, external authority, pre-existing debt, or an already-fixed claim.
-7. State the behavior that must remain true. Check every relevant way behavior can be entered, continued, failed, or observed; then build a bounded closure matrix for each changed criterion. Each row
-   names producer, consumer, persisted state, reachable callers and invocation modes,
-   imported/sourced dependencies, valid/invalid input, fresh/existing state, failure/retry/
-   recovery, cancellation, and concurrency interleavings. Record sibling paths checked and
-   ruled out; mark every row `change` or `already safe` with code, configuration, or test
-   evidence. Mark every listed path `change` or `already safe` with evidence. Do not declare scope complete while a relevant path has no disposition or a reachable row lacks one; counterexamples must expose an omitted alternate caller and transitive dependency rather than generic path wording.
+7. State required behavior and build a bounded closure matrix for every changed criterion and every
+   way behavior can be entered, continued, failed, or observed. Each row names producer/consumer, persisted state,
+   callers/modes, transitive dependencies, valid/invalid and fresh/existing state, failure/retry/
+   recovery, cancellation, concurrency, and counterexample evidence. Mark every row/path `change`
+   or `already safe`; Mark every listed path `change` or `already safe` with evidence. Do not declare scope complete while a relevant path has no disposition. Counterexamples
+   must expose an omitted alternate caller and transitive dependency, not generic path wording.
 8. Define the minimal required mutation paths and behaviors, including every row marked `change`. Adjacent paths remain read-only unless compilation, runtime correctness, schema/interface consistency, or a security invariant requires them to change.
 9. Define non-goals and residual uncertainty.
-10. Compile the existing `FORGE:CONTRACT` Builder Brief as the deterministic implementation source of truth. Each accepted criterion states its observable outcome, exact in-scope
-    behavior and repository-relative files, non-goals, smallest credible behavioral proof,
-    and one compact proof link: `Mechanism: <implementation path/symbol>; Counterexample/behavioral
-    test: <test path, trigger, assertion>; Residual risk: <none or bounded non-contradictory limit>`.
-    Supporting records retain producer, consumer, persisted state, failure, retry, recovery, history, and lifecycle detail; independently recoverable data lists every recovery source,
-    capture, verification, and restore path. Do not turn ownership, scheduling, worktree
-    provisioning, hashes/digests, lineage, extra records, or review/deployment procedure into
-    Builder Contract requirements.
-
-    A criterion that is ambiguous or lacks credible proof is not accepted: stop before any repository edit and request clarification. Do not infer requirements or replace behavioral proof with source strings or
-    a broad suite. A bug proof must fail against baseline and pass after the change unless a
-    justified inspection-only exception is recorded as unverified. Contradictory residual risk
-    is `CONTRADICTED`, never `PASS`. The Acceptance Contract covers every criterion and closure
-    row; a string-presence check cannot close a runtime row. Missing mechanism, row, or test is
-    `MISSING`/`UNKNOWN`, not accepted proof; justified inspection exceptions remain unverified.
+10. Compile the existing `FORGE:CONTRACT` as deterministic source of truth: each criterion names
+    outcome/files/non-goals/proof and one compact proof link: `Mechanism: <implementation path/symbol>; Counterexample/behavioral test; Residual risk`.
+    Supporting records retain independently recoverable data and each recovery source plus state/failure/retry/recovery/history; do not turn ownership,
+    scheduling, hashes, lineage, or review procedure into Builder Contract requirements.
+    If a criterion is ambiguous, stop before any repository edit and request clarification. Baseline bugs must fail-before/pass-after
+    unless a justified inspection exception is unverified; residual risk `CONTRADICTED` is never `PASS`; contradictory risk is `CONTRADICTED`,
+    missing mechanism/row/test is `MISSING`/`UNKNOWN`, and strings cannot close runtime rows.
 11. Resolve required dependencies, environments, permissions, and evidence before editing.
     If required proof is unavailable, surface the exact condition before implementation;
     do not assume an owner will supply it after review. Separate code-merge acceptance
@@ -74,6 +58,21 @@ records; append a superseding investigation for material corrections under
 If required merge proof is unavailable and no permitted inspection exception satisfies that
 criterion, return GATED with its exact wake condition under the root lifecycle. Do not
 mark the issue ready-to-build or publish completed investigation until that gap is resolved.
+
+### Superseding investigation for `CONTRACT_GAP`
+
+A re-plan is a bounded continuation, not fresh intake or permission to erase the prior
+decision. Bind exact reviewed PR head/base, worktree, reviewer evidence, blocker, old
+contract digest, original usage, and the single `REPLAN_REQUIRED` token; preserve partial
+work while this pass is read-only.
+
+The superseding receipt identifies the omitted row and reachable siblings, retains every
+bound criterion ID/text hash, distinguishes implementation/verification/contract gaps,
+publishes revised closure matrix plus classification/context/architecture/Builder Contract
+before edits, produces a new digest, and states the token or exact `FORGE:GATED` wake
+condition. New heads, resumes, receipt names, or target movement cannot reset allowance or
+authorize another re-plan. Each new row still needs mechanism + counterexample/behavioral
+test + bounded non-contradictory residual risk; old approval cannot close the revision.
 
 Use separate fields:
 
@@ -157,6 +156,7 @@ for each accepted outcome:
 
 ### Acceptance Checks
 - <criterion and trusted check; descriptive, never executable GitHub input; linked to the proof row>
+- Re-plan: exact identities, old/new digest, usage and one token are consistent; revised contract gets fresh exact-head review.
 - Bug fix: the named counterexample/behavioral test fails against the baseline and passes after the fix; otherwise record the justified inspection-only exception as unverified.
 
 ### Residual Uncertainty

@@ -32,9 +32,33 @@ or serialization, valid/invalid input, interleavings, failure injection, retry, 
 A criterion is not proven by a source-string assertion, approval, or green aggregate row;
 required-risk integration capability marked missing or skipped remains insufficient evidence
 and is surfaced in the verdict. Preserve the existing independent fresh panel, fail-closed
-merge behavior, imperfect-intake investigation, and bounded remediation cap. If multiple
-independent patch-caused blockers remain after a cohesive round, return the evidence to a
-bounded re-plan/decomposition decision rather than normalizing repeated review.
+merge behavior, imperfect-intake investigation, and bounded remediation cap.
+
+### Finding classification and contract invalidation
+
+The complete panel supplies evidence; the issue-specific work-on parent owns the final
+classification. Every confirmed blocker is classified before remediation as exactly one of:
+
+- `IMPLEMENTATION_DEFECT`: the accepted contract and closure row are complete, but the
+  patch violates the admitted behavior; ordinary bounded remediation may address it.
+- `VERIFICATION_GAP`: the accepted contract is complete, but a required executable check,
+  capability, or before/after proof is absent, stale, or contradicted; remediation may
+  repair the evidence, otherwise the lane gates.
+- `CONTRACT_GAP`: the finding proves an omitted reachable boundary, caller, invocation
+  mode, transitive dependency, state/input transition, failure/retry/recovery path,
+  cancellation, concurrency interleaving, or outcome in the admitted contract/proof map.
+  It invalidates the contract and enters the one bounded `REPLAN_REQUIRED` transition.
+
+The disposition records the exact finding ID, frozen head/base, reviewer evidence, old
+contract digest, omitted closure row or missing capability, parent rationale, and original
+remediation usage. A reviewer label alone cannot create a transition. A contract gap is
+not an authority ambiguity, advisory, pre-existing concern, out-of-scope follow-up, or
+ordinary line fix. If multiple independent patch-caused blockers remain after a cohesive
+round, return the evidence to the bounded re-plan/decomposition decision rather than
+normalizing repeated review. Re-plan preserves the reviewed work, supersedes the contract
+with a new digest, and invalidates old approval; a complete fresh exact-head panel is
+mandatory before merge. The bounded cap is not reset or increased, and unrelated lanes
+continue normally.
 
 **NEVER use plan mode (EnterPlanMode)** during review — it breaks execution context.
 **Sub-agent dispatch tool: `Task` preferred, `Agent` is the documented fallback.** review-pr dispatches domain review agents via a sub-agent-spawning tool. Resolve which one is available ONCE per invocation, before Phase 3C, per the **Sub-Agent Dispatch Tool Resolution** rule below — do not halt to ask the operator which tool to use. Never fall back to reviewing inline in the orchestrator's own context; inline self-review is a strictly weaker substitute for an isolated fresh-context reviewer and is not a permitted fallback.
