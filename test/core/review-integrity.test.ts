@@ -30,6 +30,31 @@ test("review closure integrity names alternate callers and transitive dependenci
   assert.ok(gaps.every((row) => /producer=.*consumer=.*dependency=.*state=.*counterexample=/.test(row.detail)));
 });
 
+test("review admission rejects unresolved required capability proof with exact wake identity", async () => {
+  const review = await readFile("specs/original/commands/work-on/review.md", "utf8");
+  const verification = await readFile("specs/verification.md", "utf8");
+  assert.match(review, /exact-head verdict/);
+  assert.match(review, /criterion ID\/text hash/);
+  assert.match(review, /FORGE:VERIFICATION_BLOCKED/);
+  assert.match(review, /MISSING.*SKIPPED.*UNKNOWN.*CONTRADICTED/s);
+  assert.match(verification, /sourceHead/);
+  assert.match(verification, /wakeCondition/);
+
+  const blocked = {
+    capability: "runtime:database",
+    criterion: "required-proof-state-admission",
+    criterionTextHash: "sha256:eb56640378599468297350623fd8e5e539ffbaa7bd773a399b9a9e70616b0609",
+    sourceHead: "2".repeat(40),
+    contractDigest: "sha256:" + "3".repeat(64),
+    state: "UNKNOWN",
+    wakeCondition: "provision the bound database capability",
+  } as const;
+  const report = `<!-- FORGE:VERIFICATION_BLOCKED ${JSON.stringify(blocked)} -->`;
+  const parsed = JSON.parse(report.match(/FORGE:VERIFICATION_BLOCKED (.+) -->/)![1]!);
+  assert.deepEqual(parsed, blocked);
+  assert.notEqual(blocked.state, "PASS");
+});
+
 test("review metadata normalizes ranges and exposes typed DAG paths", () => {
   const result = normalizeReviewFindingMetadata(finding);
   assert.deepEqual(result.affectedPaths, ["src/auth.ts", "src/token.ts"]);

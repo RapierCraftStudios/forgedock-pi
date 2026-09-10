@@ -75,7 +75,24 @@ If `--prs` is absent, Phase 0 computes the bundle.
 
 ---
 
-## Missing-Config Guard (MANDATORY — runs before all phases)
+## Required-capability preflight (mandatory before any SKIP)
+
+Before configuration guards, bundle triage, or any intentional manual/no-test path, compile
+all bound acceptance criteria and contract capability metadata into the machine-readable
+records defined in `specs/verification.md`. Preserve the exact criterion ID, criterion text
+hash, source head, contract digest, proof type, and named boundary. Emit one
+`FORGE:VERIFICATION_CAPABILITY` record per required capability. A required record is PASS
+only when matching boundary proof completed at the same identity. `MISSING`, `SKIPPED`,
+`UNKNOWN`, `CONTRADICTED`, malformed, stale, unavailable, or structural-only runtime proof
+must emit `FORGE:VERIFICATION_BLOCKED` with the exact wake condition and force `BLOCK`.
+Bare PASS/SKIP output and unannotated executable criteria are not proof. Only after this
+preflight establishes that no required runtime capability is unresolved may a manual/no-test
+SKIP be emitted; a formal re-scope creates a new bound contract and never normalizes the old
+record.
+
+---
+
+## Missing-Config Guard (MANDATORY — runs after capability preflight)
 
 ```bash
 # If integration_tests is empty/absent, exit ADVISORY — never crash
@@ -236,6 +253,32 @@ fi
 echo "Runtime-testable criteria confirmed. Proceeding with provisioning."
 ```
 
+### Required-capability preflight (mandatory before any SKIP)
+
+Compile each bound acceptance criterion and its annotation/contract metadata into the
+capability record defined in `specs/verification.md`. Preserve the exact criterion ID,
+criterion text hash, source head, and contract digest. The classifier must emit one
+machine-readable record for every required capability:
+
+```text
+<!-- FORGE:VERIFICATION_CAPABILITY {"v":1,"capability":"runtime:e2e","criterion":"<id>","criterionTextHash":"sha256:<hash>","sourceHead":"<full-sha>","contractDigest":"sha256:<digest>","proofType":"runtime","boundary":"<named-boundary>","state":"PASS|MISSING|SKIPPED|UNKNOWN|CONTRADICTED","evidence":"<identity-bound-result>","wakeCondition":"<empty-for-PASS-or-exact-recovery/re-scope-condition>"} -->
+```
+
+A required capability is PASS only when its named boundary proof completed against the
+same source/contract identity. `MISSING`, `SKIPPED`, `UNKNOWN`, `CONTRADICTED`, unavailable
+services/credentials/runners, stale identity, or structural-only evidence for a runtime,
+integration, e2e, queue, database, browser, or credential capability are hard BLOCKs. Do
+not enter the intentional manual/no-test SKIP paths until this preflight proves that no
+required runtime capability is present. For every blocked capability emit:
+
+```text
+<!-- FORGE:VERIFICATION_BLOCKED {"capability":"<capability>","criterion":"<id>","criterionTextHash":"sha256:<hash>","sourceHead":"<full-sha>","contractDigest":"sha256:<digest>","state":"MISSING|SKIPPED|UNKNOWN|CONTRADICTED","wakeCondition":"<exact-capability-recovery-or-formal-contract-rescope>"} -->
+```
+
+The final result is `BLOCK`, not `PASS` or `SKIP`, when any required capability is
+unresolved. A formal re-scope creates a new bound contract; it never normalizes an old
+record to PASS. Structural checks can satisfy only explicitly structural criteria.
+
 ---
 
 ## Phase 1: Collate — Bundle PRs → Solved Issues → Acceptance Criteria
@@ -286,7 +329,7 @@ echo "$COLLATED_CRITERIA"
 
 ## Phase 2: Classify — Bucket Criteria by Test Type
 
-Bucket each acceptance criterion by `[type:api|unit|e2e|manual]` annotation. Regex fallback when unannotated.
+Bucket each acceptance criterion by `[type:api|unit|integration|e2e|queue|database|browser|credential|structural|manual]` annotation and bound contract capability metadata. Regex fallback is not allowed to silently mark executable criteria PASS: an unannotated executable criterion is `UNKNOWN` and blocks until explicitly classified.
 
 ```bash
 echo "=== Phase 2: Classifying criteria by test type ==="
@@ -605,7 +648,7 @@ fi
 
 ## Phase 6: Criteria-Adequacy Check
 
-Reconcile the executed test plan against each solved issue's acceptance criteria. For each solved issue, map individual acceptance criteria to the clusters that ran. Flag uncovered criteria (runtime-testable, no cluster maps to them) and untestable-as-written criteria (vague oracle, no deterministic verification) as distinct finding classes. Coverage gaps contribute to the BLOCK verdict.
+Reconcile the executed test plan against each solved issue's acceptance criteria. For each solved issue, map individual acceptance criteria to the clusters that ran. Flag uncovered criteria (runtime-testable, no cluster maps to them) and untestable-as-written criteria (vague oracle, no deterministic verification) as distinct finding classes. A criterion is covered only when a passing cluster emits a capability record with matching criterion/source identity and a semantically appropriate boundary. Structural/source-string checks cannot cover runtime, integration, e2e, queue, database, browser, or credential-bound capabilities. Any `MISSING`, `SKIPPED`, `UNKNOWN`, or `CONTRADICTED` required capability is a BLOCK with its exact `FORGE:VERIFICATION_BLOCKED` wake evidence. Coverage gaps contribute to the BLOCK verdict.
 
 ```bash
 echo "=== Phase 6: Criteria-adequacy check ==="

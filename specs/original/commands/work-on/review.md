@@ -53,6 +53,15 @@ report an omitted alternate caller or transitive dependency by name. String-pres
 cannot close runtime rows. A reachable omission is `CONTRACT_GAP`,
 not an advisory: remediation must supersede the contract and re-plan before editing.
 
+Before any exact-head verdict, review validates the machine-readable required capability
+records from `../../../verification.md` against the bound criterion ID/text hash, contract
+digest, source head, and named boundary. `PASS` requires completed proof at the required
+boundary. `MISSING`, `SKIPPED`, `UNKNOWN`, `CONTRADICTED`, unavailable environments, stale
+identity, and structural-only evidence for runtime-class capabilities are blocking and must
+emit `FORGE:VERIFICATION_BLOCKED` with the exact wake condition. An unresolved capability
+cannot be downgraded to an advisory, residual risk, or manual/no-test skip. A formal
+re-scope must produce a new bound contract before approval.
+
 ## Result routing
 
 - `APPROVE`, no blockers: continue to merge checks.

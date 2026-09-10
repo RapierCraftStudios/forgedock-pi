@@ -381,7 +381,7 @@ export class ReviewPrCoordinator {
       if (snapshot.state.panel?.status === "running") {
         const additionalChecks: readonly VerificationResult[] = [
           ...(mode === "staging"
-            ? [testGateVerification(input.testGateOutput)]
+            ? [testGateVerification(input.testGateOutput, route.headSha)]
             : []),
           {
             name: "material-change",
