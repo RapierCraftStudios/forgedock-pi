@@ -71,8 +71,9 @@ function fields(value, allowed, name) {
   for (const key of Object.keys(value)) requireThat(allowed.includes(key), `Unknown ${name} field: ${key}`);
 }
 function validateReplan(value, currentContractDigest, name = "replan") {
-  fields(value, ["token", "previousHead", "previousContractDigest", "previousRound"], name);
+  fields(value, ["token", "previousHead", "previousContractDigest", "previousRound", "authorizedBy"], name);
   requireThat(typeof value.token === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value.token), `${name}.token is invalid`);
+  if (value.authorizedBy !== undefined) requireThat(typeof value.authorizedBy === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value.authorizedBy), `${name}.authorizedBy is invalid`);
   requireThat(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value.previousHead ?? ""), `${name}.previousHead is invalid`);
   requireThat(/^sha256:[a-f0-9]{64}$/.test(value.previousContractDigest ?? ""), `${name}.previousContractDigest is invalid`);
   integer(value.previousRound, `${name}.previousRound`, 0);
@@ -338,6 +339,52 @@ export function prepareBatch(plan, out, cwd = process.cwd()) {
   save(path.join(out, "request.json"), json(request));
   return { request, requestFile: path.join(out, "request.json"), batchFile: path.join(out, "batch.json") };
 }
+export function prepareReplan(plan, out, cwd = process.cwd(), env = process.env) {
+  fields(plan, ["input", "contract", "replan", "authorization"], "replan");
+  const policy = loadPolicy(plan.input, env);
+  requireThat(policy.contract && policy.contractDigest, "Replan requires an original bound contract");
+  const previousContract = validateIssueContractFile(policy.contract, policy.issue);
+  const nextContract = validateIssueContractFile(plan.contract, policy.issue);
+  requireThat(nextContract.revision > previousContract.revision, "Replan contract revision must advance");
+  requireThat(nextContract.supersedes === previousContract.digest, "Replan contract must supersede the original digest");
+  for (const criterion of previousContract.criteria) {
+    const next = nextContract.criteria.find(candidate => candidate.id === criterion.id);
+    requireThat(next && next.textHash === criterion.textHash && next.proofType === criterion.proofType && criterion.affectedBoundaries.every(boundary => next.affectedBoundaries.includes(boundary)), `Replan cannot weaken original criterion ${criterion.id}`);
+  }
+  validateReplan(plan.replan, nextContract.digest);
+  if (policy.replan !== undefined) requireThat(canonicalJson(plan.replan) === canonicalJson(policy.replan), "Replan token does not match the bound allowance");
+  fields(plan.authorization, ["ownerRunId", "token"], "replan authorization");
+  const nativeRunId = env.PI_SUBAGENT_RUN_ID;
+  requireThat(typeof nativeRunId === "string" && nativeRunId === plan.authorization.ownerRunId, "Replan authorization must name the current owner run");
+  requireThat(plan.authorization.token === plan.replan.token, "Replan authorization token disagrees");
+  const worktree = policy.targetBase?.path ?? cwd;
+  requireThat(fs.realpathSync(cwd) === fs.realpathSync(worktree), "Replan worktree disagrees with the original owner binding");
+  assertRepo(policy.repo, cwd);
+  requireThat(gitHead(cwd) === plan.replan.previousHead, "Replan previous head disagrees with the existing owner worktree");
+  const authorizedReplan = { ...plan.replan, authorizedBy: plan.authorization.ownerRunId };
+  const amended = { ...policy, contract: descriptor(plan.contract.path), contractDigest: nextContract.digest, replan: authorizedReplan };
+  fs.mkdirSync(out, { recursive: true });
+  out = path.resolve(out);
+  const input = save(path.join(out, `replan-${policy.issue}.json`), json(amended));
+  const continuation = {
+    agent: FORGE_OWNER_AGENT,
+    agentScope: "user",
+    context: "fresh",
+    model: policy.model,
+    cwd: fs.realpathSync(cwd),
+    worktree: false,
+    output: false,
+    outputMode: "inline",
+    artifacts: true,
+    acceptance: acceptanceForContract(nextContract),
+    agentContract: { version: 1 },
+    gateOn: "acceptance",
+    extensionBindings: { [BINDING]: input },
+    timeoutMs: 2147483647,
+    task: `${policy.issue} --authorized-replan-continuation\n\nContinue the same ForgeDock owner lifecycle after an authorized contract supersession. The original owner run ${plan.authorization.ownerRunId} is terminal before this continuation starts. Preserve the same issue, target, worktree, model, limits, and original acceptance; repair and verify the revised contract, then review only the new head. Do not create another writer, issue, worktree, branch, or PR.`
+  };
+  return { input, previousInput: plan.input, continuation, contractDigest: nextContract.digest };
+}
 export function prepareReview(plan, out, env = process.env) {
   fields(plan, ["input", "head", "round", "contractDigest", "replan", "roles"], "review");
   const policy = loadPolicy(plan.input, env);
@@ -380,10 +427,11 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
     const [mode, a, b, c] = process.argv.slice(2);
     const result = mode === "batch" ? prepareBatch(read(a), b)
       : mode === "single" ? prepareSingle(read(a), b)
+      : mode === "replan" ? prepareReplan(read(a), b)
       : mode === "review" ? prepareReview(read(a), b)
       : mode === "identify" ? identifyLane(read(a), read(b), c)
       : mode === "context" ? (() => { const policy = loadPolicy(a ? read(a) : undefined); return policy.targetBase ? validateLaneStartup(policy) : policy; })()
-      : (() => { throw new Error("Usage: dispatch.mjs batch PLAN OUT | single PLAN OUT | review PLAN OUT | identify BATCH STATUS RUN_ID | context [INPUT_DESCRIPTOR]"); })();
+      : (() => { throw new Error("Usage: dispatch.mjs batch PLAN OUT | single PLAN OUT | replan PLAN OUT | review PLAN OUT | identify BATCH STATUS RUN_ID | context [INPUT_DESCRIPTOR]"); })();
     console.log(json(result));
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }

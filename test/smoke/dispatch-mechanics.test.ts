@@ -238,12 +238,14 @@ test("bad launch shape fails before request publication, not inside native dispa
 });
 
 test("review preparation cannot substitute a model, duplicate correctness or exceed bound rounds", async () => {
-  await fixture(async ({ root, repo, plan }) => {
+  await fixture(async ({ root, repo, repoOne, plan }) => {
     const prepared = dispatch.prepareBatch(plan, join(root, "prepared"), repo);
     const batch = JSON.parse(await readFile(prepared.batchFile, "utf8"));
-    const env = { PI_SUBAGENT_EXTENSION_BINDINGS: JSON.stringify({ [dispatch.BINDING]: batch.lanes[0].input }) };
+    const originalInput = batch.lanes[0].input;
+    const originalBytes = await readFile(originalInput.path, "utf8");
+    const env = { PI_SUBAGENT_EXTENSION_BINDINGS: JSON.stringify({ [dispatch.BINDING]: originalInput }) };
     const boundPolicy = dispatch.loadPolicy(undefined, env);
-    const review = { head: dispatch.gitHead(repo), round: 1, contractDigest: boundPolicy.contractDigest, roles: [{ role: "correctness", thinking: "high", task: "Review only" }] };
+    const review = { head: dispatch.gitHead(repoOne), round: 1, contractDigest: boundPolicy.contractDigest, roles: [{ role: "correctness", thinking: "high", task: "Review only" }] };
     assert.throws(() => dispatch.prepareReview({ ...review, round: 4 }, join(root, "over"), env), /exceeds bound remediation limit 1/);
     assert.throws(() => dispatch.prepareReview({ ...review, roles: [{ ...review.roles[0], model: "anthropic/stale" }] }, join(root, "model"), env), /Unknown role field: model/);
     assert.throws(() => dispatch.prepareReview({ ...review, contractDigest: `sha256:${"0".repeat(64)}` }, join(root, "stale-contract"), env), /contractDigest disagrees/);
@@ -261,17 +263,46 @@ test("review preparation cannot substitute a model, duplicate correctness or exc
     const revisedBytes = `${JSON.stringify(revisedContract)}\n`;
     await writeFile(revisedPath, revisedBytes, { mode: 0o400 });
     const revisedDescriptor = { path: revisedPath, sha256: createHash("sha256").update(revisedBytes).digest("hex") };
-    const previousHead = dispatch.gitHead(repo);
-    await writeFile(join(repo, "replan.txt"), "replanned\n");
-    execFileSync("git", ["add", "replan.txt"], { cwd: repo });
-    execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "replan head"], { cwd: repo });
-    const revisedHead = dispatch.gitHead(repo);
+    const previousHead = dispatch.gitHead(repoOne);
     const replan = { token: "replan-1", previousHead, previousContractDigest: oldContract.digest, previousRound: 1 };
-    const revisedSingle = dispatch.prepareSingle({ number: boundPolicy.issue, target: "staging", requestStartedAt: "2026-01-01T00:00:00Z", controlPlane, contract: revisedDescriptor, replan }, join(root, "replanned"), repo);
-    const revisedEnv = { PI_SUBAGENT_EXTENSION_BINDINGS: JSON.stringify({ [dispatch.BINDING]: revisedSingle.input }) };
-    const revisedReview = { head: revisedHead, round: 1, contractDigest: revisedContract.digest, replan, roles: [{ role: "correctness", thinking: "high", task: "Review revised head" }] };
-    assert.doesNotThrow(() => dispatch.prepareReview(revisedReview, join(root, "replanned-review"), revisedEnv));
-    assert.throws(() => dispatch.prepareReview({ ...revisedReview, head: previousHead }, join(root, "same-head"), revisedEnv), /new head/);
+    const weakenedContract = dispatch.createIssueContract(boundPolicy.issue, oldContract.criteria.slice(1), 2, oldContract.digest);
+    const weakenedPath = join(root, "weakened-contract.json");
+    const weakenedBytes = `${JSON.stringify(weakenedContract)}\n`;
+    await writeFile(weakenedPath, weakenedBytes, { mode: 0o400 });
+    const weakenedDescriptor = { path: weakenedPath, sha256: createHash("sha256").update(weakenedBytes).digest("hex") };
+    const ownerEnv = { ...env, PI_SUBAGENT_RUN_ID: "owner-a" };
+    const unauthorized = { input: originalInput, contract: revisedDescriptor, replan, authorization: { ownerRunId: "other-owner", token: replan.token } };
+    assert.throws(() => dispatch.prepareReplan(unauthorized, join(root, "unauthorized"), repoOne, ownerEnv), /current owner run/);
+    assert.throws(() => dispatch.prepareReplan({ input: originalInput, contract: weakenedDescriptor, replan, authorization: { ownerRunId: "owner-a", token: replan.token } }, join(root, "weakened"), repoOne, ownerEnv), /cannot weaken original criterion/);
+    assert.throws(() => dispatch.prepareReview({ ...review, contractDigest: revisedContract.digest }, join(root, "old-binding-revision"), ownerEnv), /contractDigest disagrees/);
+    const amended = dispatch.prepareReplan({ input: originalInput, contract: revisedDescriptor, replan, authorization: { ownerRunId: "owner-a", token: replan.token } }, join(root, "replanned"), repoOne, ownerEnv);
+    assert.equal(await readFile(originalInput.path, "utf8"), originalBytes, "original bound input must remain immutable");
+    const amendedEnv = { ...ownerEnv, PI_SUBAGENT_EXTENSION_BINDINGS: JSON.stringify({ [dispatch.BINDING]: amended.input }) };
+    const amendedPolicy = dispatch.loadPolicy(undefined, amendedEnv);
+    assert.equal(amended.previousInput.path, originalInput.path);
+    assert.equal(amendedPolicy.issue, boundPolicy.issue);
+    assert.equal(amendedPolicy.repo, boundPolicy.repo);
+    assert.equal(amendedPolicy.target, boundPolicy.target);
+    assert.equal(amendedPolicy.model, boundPolicy.model);
+    assert.equal(amendedPolicy.remediationLimit, boundPolicy.remediationLimit);
+    assert.equal(amendedPolicy.targetBase.path, boundPolicy.targetBase.path);
+    assert.equal(amendedPolicy.contractDigest, revisedContract.digest);
+    assert.equal(amended.continuation.agent, "forgedock-parent-control.forgedock-work-on-coordinator");
+    assert.equal(amended.continuation.cwd, repoOne);
+    assert.equal(amended.continuation.worktree, false);
+    assert.equal(amended.continuation.context, "fresh");
+    assert.equal(amended.continuation.model, boundPolicy.model);
+    assert.deepEqual(amended.continuation.extensionBindings[dispatch.BINDING], amended.input);
+    assert.match(amended.continuation.task, /same ForgeDock owner lifecycle/);
+
+    await writeFile(join(repoOne, "replan.txt"), "replanned\n");
+    execFileSync("git", ["add", "replan.txt"], { cwd: repoOne });
+    execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "replan head"], { cwd: repoOne });
+    const revisedHead = dispatch.gitHead(repoOne);
+    const revisedReview = { head: revisedHead, round: 1, contractDigest: revisedContract.digest, replan: amendedPolicy.replan, roles: [{ role: "correctness", thinking: "high", task: "Review revised head" }] };
+    assert.doesNotThrow(() => dispatch.prepareReview(revisedReview, join(root, "replanned-review"), amendedEnv));
+    assert.throws(() => dispatch.prepareReview({ ...revisedReview, head: previousHead }, join(root, "same-head"), amendedEnv), /new head/);
+    assert.throws(() => dispatch.prepareReview({ ...revisedReview, input: originalInput }, join(root, "explicit-old-input"), amendedEnv), /Explicit input disagrees/);
   });
 });
 

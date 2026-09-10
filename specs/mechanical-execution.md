@@ -123,6 +123,27 @@ For an authorized re-plan, include the new contract and its lane-bound `replan` 
 the returned input descriptor and pass it explicitly to subsequent helpers; do not dispatch its
 own coordinator.
 
+## Prepare an authorized same-owner replan
+
+When the existing owner adjudicates a genuine `CONTRACT_GAP`, do not overwrite the original
+input or call retained `resume` with new `extensionBindings` (the native runtime rejects that
+combination). While the original owner binding is active and its run is terminal before a new
+writer starts, write a replan plan containing the original input descriptor, a revisioned
+contract whose `supersedes` equals the original `contractDigest`, the lane-bound `replan`
+object, and `{ownerRunId: $PI_SUBAGENT_RUN_ID, token}` authorization. Run the installed helper:
+
+`node <package>/specs/helpers/dispatch.mjs replan <replan.json> <new-empty-output-dir>`
+
+The helper validates the original native binding, current owner run, repository/issue/target,
+exact existing worktree/head, original criterion IDs/text hashes/boundaries, one-token allowance,
+and contract supersession. It records the authorizing owner run in the amended binding. It writes
+a new digest-bound input without changing the old file and returns a continuation launch containing
+the same owner agent, model, issue, target, worktree, `worktree:false`, limits, and new
+`extensionBindings`. Invoke that returned continuation unchanged
+with fresh context; this is the supported same-owner handoff, not a competing writer or a new
+issue. The continuation repairs/verifies first and only then prepares fresh review for its new
+head. A mismatched token/run/head/contract or allowance is rejected before launch.
+
 ## Prepare a review
 
 The owner writes a review plan containing `head`, `round` (0 initial, 1 first remediation),

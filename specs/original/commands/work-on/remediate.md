@@ -82,6 +82,12 @@ The parent performs this transition once, with the existing issue/PR and writer 
 5. If the token is unavailable, the cap is exhausted, or identity/authority is incomplete,
    publish `FORGE:GATED` naming the exact wake condition and preserved head/worktree. Do not
    close the issue, create a blocker issue, or block unrelated lanes.
+6. With the original owner binding still active, invoke the installed `dispatch.mjs replan`
+   helper using the original input, revised superseding contract, token, and current owner run
+   authorization. Wait for the original owner run to reach its terminal handoff, then invoke the
+   returned same-agent continuation with its exact new `extensionBindings`, same worktree and
+   `worktree:false`. Do not use retained `resume` with changed bindings or construct a replacement
+   environment in a fixture.
 
 A completed re-plan cannot loop back into another re-plan for the same issue/run. Only
 explicit new authority can supply a new allowance; it must be recorded as a superseding
