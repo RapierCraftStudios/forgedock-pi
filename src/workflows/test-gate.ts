@@ -32,6 +32,15 @@ export interface VerificationBlocked {
   wakeCondition: string;
 }
 
+export interface VerificationCapabilityRequirement {
+  capability: string;
+  criterion: string;
+  criterionTextHash: `sha256:${string}`;
+  contractDigest: `sha256:${string}`;
+  proofType: string;
+  boundary: string;
+}
+
 export interface TestGateResult {
   verdict: TestGateVerdict;
   reason?: string;
@@ -57,6 +66,18 @@ const RUNTIME_TYPES = new Set([
   "database",
   "browser",
   "credential",
+]);
+const KNOWN_PROOF_TYPES = new Set([
+  "runtime",
+  "unit",
+  "api",
+  "integration",
+  "e2e",
+  "queue",
+  "database",
+  "browser",
+  "credential",
+  "structural",
 ]);
 const CAPABILITY_MARKER =
   /<!--\s*FORGE:VERIFICATION_CAPABILITY\s+(\{[^\n]*\})\s*-->/g;
@@ -106,8 +127,15 @@ function parseCapability(value: unknown): VerificationCapability | undefined {
     return undefined;
   if (state === "PASS" && (!evidence || wakeCondition)) return undefined;
   if (state !== "PASS" && !wakeCondition) return undefined;
-  const runtime = RUNTIME_TYPES.has(proofType) || /^(?:runtime|integration|e2e|queue|database|browser|credential):/.test(capability);
-  if (runtime && proofType === "structural") return undefined;
+  if (!KNOWN_PROOF_TYPES.has(proofType)) return undefined;
+  const capabilityType = capability.split(":", 1)[0] ?? "";
+  const runtime =
+    RUNTIME_TYPES.has(proofType) ||
+    RUNTIME_TYPES.has(capabilityType) ||
+    /^(?:runtime|integration|e2e|queue|database|browser|credential):/.test(capability);
+  if (runtime && !RUNTIME_TYPES.has(proofType)) return undefined;
+  if (!runtime && proofType === "structural" && capabilityType !== "structural")
+    return undefined;
   return {
     v: 1,
     capability,
@@ -129,6 +157,8 @@ function parseCapabilityMarkers(value: string): {
 } {
   const records: VerificationCapability[] = [];
   let malformed = false;
+  const markerCount = (value.match(/FORGE:VERIFICATION_CAPABILITY/g) ?? []).length;
+  if (markerCount !== [...value.matchAll(CAPABILITY_MARKER)].length) malformed = true;
   for (const match of value.matchAll(CAPABILITY_MARKER)) {
     try {
       const parsed = parseCapability(JSON.parse(match[1]!));
@@ -147,6 +177,8 @@ function parseBlockedMarkers(value: string): {
 } {
   const records: VerificationBlocked[] = [];
   let malformed = false;
+  const markerCount = (value.match(/FORGE:VERIFICATION_BLOCKED/g) ?? []).length;
+  if (markerCount !== [...value.matchAll(BLOCKED_MARKER)].length) malformed = true;
   for (const match of value.matchAll(BLOCKED_MARKER)) {
     try {
       const candidate = JSON.parse(match[1]!) as Record<string, unknown>;
@@ -162,6 +194,7 @@ function parseBlockedMarkers(value: string): {
         typeof candidate.contractDigest === "string" &&
         HASH.test(candidate.contractDigest) &&
         STATES.has(state) &&
+        candidate.state !== "PASS" &&
         typeof candidate.wakeCondition === "string" &&
         candidate.wakeCondition.length > 0
       ) {
@@ -202,6 +235,33 @@ export function parseTestGateResult(value: unknown): TestGateResult | undefined 
   };
 }
 
+function blockedMarker(
+  capability: VerificationBlocked | VerificationCapabilityRequirement | undefined,
+  expectedSourceHead?: string,
+): string {
+  const sourceHead =
+    capability && "sourceHead" in capability
+      ? capability.sourceHead
+      : expectedSourceHead && HEAD.test(expectedSourceHead)
+        ? expectedSourceHead
+        : "0".repeat(40);
+  const record =
+    capability && "state" in capability
+      ? capability
+      : {
+          capability: capability?.capability ?? "unbound-required-capability",
+          criterion: capability?.criterion ?? "unbound-required-capability",
+          criterionTextHash:
+            capability?.criterionTextHash ?? `sha256:${"0".repeat(64)}`,
+          sourceHead,
+          contractDigest:
+            capability?.contractDigest ?? `sha256:${"0".repeat(64)}`,
+          state: "UNKNOWN" as const,
+          wakeCondition: "restore the bound verification capability",
+        };
+  return `<!-- FORGE:VERIFICATION_BLOCKED ${JSON.stringify(record)} -->`;
+}
+
 /**
  * Convert a test-gate result into a required review check. Bare PASS/SKIP markers,
  * malformed or unresolved capabilities, and runtime claims with structural proof all
@@ -210,6 +270,7 @@ export function parseTestGateResult(value: unknown): TestGateResult | undefined 
 export function testGateVerification(
   value: unknown,
   expectedSourceHead?: string,
+  expectedCapabilities?: readonly VerificationCapabilityRequirement[],
 ): VerificationResult {
   const result = parseTestGateResult(value);
   if (!result) {
@@ -218,6 +279,7 @@ export function testGateVerification(
       required: true,
       status: "failed",
       exitCode: 1,
+      verificationBlocked: blockedMarker(undefined, expectedSourceHead),
     };
   }
   const validPass =
@@ -228,6 +290,19 @@ export function testGateVerification(
     result.capabilities.every((capability) => capability.state === "PASS") &&
     new Set(result.capabilities.map((capability) => capability.sourceHead)).size === 1 &&
     new Set(result.capabilities.map((capability) => capability.contractDigest)).size === 1 &&
+    Boolean(expectedCapabilities?.length) &&
+    result.capabilities.length === expectedCapabilities!.length &&
+    expectedCapabilities!.every((required) =>
+      result.capabilities.some(
+        (capability) =>
+          capability.capability === required.capability &&
+          capability.criterion === required.criterion &&
+          capability.criterionTextHash === required.criterionTextHash &&
+          capability.contractDigest === required.contractDigest &&
+          capability.proofType === required.proofType &&
+          capability.boundary === required.boundary,
+      ),
+    ) &&
     (!expectedSourceHead ||
       !HEAD.test(expectedSourceHead) ||
       result.capabilities.every(
@@ -239,6 +314,12 @@ export function testGateVerification(
       required: true,
       status: "failed",
       exitCode: 1,
+      verificationBlocked: blockedMarker(
+        result.blockedCapabilities[0] ??
+          result.capabilities[0] ??
+          expectedCapabilities?.[0],
+        expectedSourceHead,
+      ),
     };
   }
   return {

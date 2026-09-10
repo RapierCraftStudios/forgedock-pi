@@ -331,19 +331,61 @@ function finding(reviewer: string = roster.reviewers[0]) {
   };
 }
 
-const validCapabilityOutput = `<!-- FORGE:VERIFICATION_CAPABILITY ${JSON.stringify({
-  v: 1,
-  capability: "runtime:integration",
-  criterion: "required-proof-state-admission",
-  criterionTextHash: "sha256:eb56640378599468297350623fd8e5e539ffbaa7bd773a399b9a9e70616b0609",
-  sourceHead: "a".repeat(40),
-  contractDigest: "sha256:fab07dddf9e120d802565bf8bed5b29c9f090d3413401cf5b493deba987bf803",
-  proofType: "runtime",
-  boundary: "integration boundary",
-  state: "PASS",
-  evidence: "integration result at exact source",
-  wakeCondition: "",
-})} -->\n<!-- FORGE:TEST_GATE:RESULT=PASS -->`;
+const validCapabilityRequirements = [
+  {
+    capability: "runtime:compilation",
+    criterion: "required-capability-compilation",
+    criterionTextHash: "sha256:7b245bdbf26a307721362ae95086a44d1f5fa171604fc518539cc949f91225b8",
+    contractDigest: "sha256:fab07dddf9e120d802565bf8bed5b29c9f090d3413401cf5b493deba987bf803",
+    proofType: "runtime",
+    boundary: "compilation boundary",
+  },
+  {
+    capability: "runtime:state",
+    criterion: "required-proof-state-admission",
+    criterionTextHash: "sha256:eb56640378599468297350623fd8e5e539ffbaa7bd773a399b9a9e70616b0609",
+    contractDigest: "sha256:fab07dddf9e120d802565bf8bed5b29c9f090d3413401cf5b493deba987bf803",
+    proofType: "runtime",
+    boundary: "state boundary",
+  },
+  {
+    capability: "runtime:boundary",
+    criterion: "runtime-boundary-proof",
+    criterionTextHash: "sha256:8b254b430db0539f1488b005dcbc4d231a95d865bc0d5d74e15d61276826506d",
+    contractDigest: "sha256:fab07dddf9e120d802565bf8bed5b29c9f090d3413401cf5b493deba987bf803",
+    proofType: "runtime",
+    boundary: "runtime boundary",
+  },
+  {
+    capability: "runtime:report",
+    criterion: "missing-capability-report",
+    criterionTextHash: "sha256:4c4262930ed3b391d4e609cc1398581fb5435baffb9a45cbe8d00424f641802b",
+    contractDigest: "sha256:fab07dddf9e120d802565bf8bed5b29c9f090d3413401cf5b493deba987bf803",
+    proofType: "runtime",
+    boundary: "report boundary",
+  },
+  {
+    capability: "runtime:regression",
+    criterion: "required-proof-regressions",
+    criterionTextHash: "sha256:f981c3828efc14573bc2bbd2c9ca6007eb57a83e3b1c3a6dd37c051ebec4ff38",
+    contractDigest: "sha256:fab07dddf9e120d802565bf8bed5b29c9f090d3413401cf5b493deba987bf803",
+    proofType: "runtime",
+    boundary: "regression boundary",
+  },
+] as const;
+const validCapabilityOutput = `${validCapabilityRequirements
+  .map(
+    (requirement) =>
+      `<!-- FORGE:VERIFICATION_CAPABILITY ${JSON.stringify({
+        v: 1,
+        ...requirement,
+        sourceHead: "a".repeat(40),
+        state: "PASS",
+        evidence: "bound result at exact source",
+        wakeCondition: "",
+      })} -->`,
+  )
+  .join("\n")}\n<!-- FORGE:TEST_GATE:RESULT=PASS -->`;
 
 function request(overrides: Partial<ReviewPrRequest> = {}): ReviewPrRequest {
   const value: ReviewPrRequest = {
@@ -361,6 +403,7 @@ function request(overrides: Partial<ReviewPrRequest> = {}): ReviewPrRequest {
     autoMergeAuthorized: true,
     autoMergeRequested: false,
     testGateOutput: validCapabilityOutput,
+    verificationCapabilities: validCapabilityRequirements,
     authorityValid: () => true,
     ...overrides,
   };
@@ -635,50 +678,48 @@ test("staging review rejects missing commit-reachability bundle evidence", async
 });
 
 test("Phase 6.5 propagates explicit BLOCK, PASS, and SKIP results", () => {
+  const bareBlock = testGateVerification("<!-- FORGE:TEST_GATE:RESULT=BLOCK -->");
+  assert.equal(bareBlock.status, "failed");
+  assert.match(bareBlock.verificationBlocked ?? "", /FORGE:VERIFICATION_BLOCKED/);
   assert.deepEqual(
-    testGateVerification("<!-- FORGE:TEST_GATE:RESULT=BLOCK -->"),
-    { name: "test-gate", required: true, status: "failed", exitCode: 1 },
-  );
-  assert.deepEqual(testGateVerification(validCapabilityOutput), {
+    testGateVerification(validCapabilityOutput, "a".repeat(40), validCapabilityRequirements),
+    {
     name: "test-gate",
     required: true,
-    status: "passed",
-  });
-  assert.deepEqual(
-    testGateVerification("<!-- FORGE:TEST_GATE:RESULT=SKIP -->"),
-    { name: "test-gate", required: true, status: "failed", exitCode: 1 },
+      status: "passed",
+    },
   );
+  const bareSkip = testGateVerification("<!-- FORGE:TEST_GATE:RESULT=SKIP -->");
+  assert.equal(bareSkip.status, "failed");
+  assert.match(bareSkip.verificationBlocked ?? "", /FORGE:VERIFICATION_BLOCKED/);
 });
 
 test("capability admission rejects stale, malformed, and structural runtime proof", () => {
-  assert.deepEqual(
-    testGateVerification(
-      validCapabilityOutput.replace('"state":"PASS"', '"state":"MISSING"').replace('"wakeCondition":""', '"wakeCondition":"restore integration boundary"'),
-    ),
-    { name: "test-gate", required: true, status: "failed", exitCode: 1 },
+  const rejected = (output: string, expectedHead?: string) => {
+    const result = testGateVerification(output, expectedHead, validCapabilityRequirements);
+    assert.equal(result.status, "failed");
+    assert.equal(result.required, true);
+    assert.match(result.verificationBlocked ?? "", /FORGE:VERIFICATION_BLOCKED/);
+    return result;
+  };
+  rejected(
+    validCapabilityOutput.replace('"state":"PASS"', '"state":"MISSING"').replace('"wakeCondition":""', '"wakeCondition":"restore integration boundary"'),
   );
-  assert.deepEqual(
-    testGateVerification(
-      validCapabilityOutput.replace('"sourceHead":"' + "a".repeat(40), '"sourceHead":"' + "c".repeat(40)),
-      "a".repeat(40),
-    ),
-    { name: "test-gate", required: true, status: "failed", exitCode: 1 },
+  rejected(
+    validCapabilityOutput.replace('"sourceHead":"' + "a".repeat(40), '"sourceHead":"' + "c".repeat(40)),
+    "a".repeat(40),
   );
-  assert.deepEqual(
-    testGateVerification(
-      validCapabilityOutput.replace('"proofType":"runtime"', '"proofType":"structural"'),
-    ),
-    { name: "test-gate", required: true, status: "failed", exitCode: 1 },
+  rejected(
+    validCapabilityOutput.replace('"proofType":"runtime"', '"proofType":"structural"'),
   );
+  rejected(`${validCapabilityOutput}\n<!-- FORGE:VERIFICATION_CAPABILITY {broken -->`, "a".repeat(40));
 });
 
 test("missing Phase 6.5 execution is a required failed check", () => {
-  assert.deepEqual(testGateVerification(undefined), {
-    name: "test-gate",
-    required: true,
-    status: "failed",
-    exitCode: 1,
-  });
+  const result = testGateVerification(undefined);
+  assert.equal(result.status, "failed");
+  assert.equal(result.required, true);
+  assert.match(result.verificationBlocked ?? "", /unbound-required-capability/);
 });
 
 test("staging review carries every Phase 6.5 verdict into its gate", async () => {

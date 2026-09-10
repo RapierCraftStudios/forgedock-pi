@@ -75,6 +75,8 @@ export interface VerificationResult {
   required: boolean;
   status: VerificationStatus;
   exitCode?: number;
+  /** Machine-readable identity and wake evidence when required proof is blocked. */
+  verificationBlocked?: string;
 }
 
 export interface HumanAuthorityRequest {

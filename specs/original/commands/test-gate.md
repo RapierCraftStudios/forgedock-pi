@@ -90,6 +90,16 @@ preflight establishes that no required runtime capability is unresolved may a ma
 SKIP be emitted; a formal re-scope creates a new bound contract and never normalizes the old
 record.
 
+```bash
+# The compiler is bound to the issue contract; it is not regex inference from prose.
+CAPABILITY_PREFLIGHT=$(compile_bound_capabilities "$BUNDLE_PRS" "$BASE_BRANCH")
+if ! capability_records_admit "$CAPABILITY_PREFLIGHT"; then
+  printf '%s\n' "$CAPABILITY_PREFLIGHT"
+  echo '<!-- FORGE:TEST_GATE:RESULT=BLOCK -->'
+  exit 1
+fi
+```
+
 ---
 
 ## Missing-Config Guard (MANDATORY — runs after capability preflight)
@@ -253,7 +263,7 @@ fi
 echo "Runtime-testable criteria confirmed. Proceeding with provisioning."
 ```
 
-### Required-capability preflight (mandatory before any SKIP)
+### Capability record shape and blocked output (consumed by the preflight above)
 
 Compile each bound acceptance criterion and its annotation/contract metadata into the
 capability record defined in `specs/verification.md`. Preserve the exact criterion ID,
@@ -968,8 +978,12 @@ echo "============================================="
 echo ""
 echo "<!-- FORGE:TEST_GATE:RESULT=${VERDICT} -->"
 
-# Handle BLOCK verdict according to posture
+# Handle BLOCK verdict according to posture. A required capability block is never advisory or overridable.
 if [ "$VERDICT" = "BLOCK" ]; then
+  if [ "${BLOCKED_CAPABILITY_COUNT:-0}" -gt 0 ]; then
+    echo "BLOCKING posture: required verification capability is unresolved; recovery or formal contract re-scope is required."
+    exit 1
+  fi
   if [ "$GATE_POSTURE" = "advisory" ]; then
     echo ""
     echo "ADVISORY posture: BLOCK verdict surfaced but deploy is NOT prevented."
@@ -995,7 +1009,7 @@ fi
 
 ## Override Escape Hatch
 
-When a PR comment containing `verification.test_gate.override_phrase` (default: `OVERRIDE: shipping with test failures —`) is detected on the staging→main PR, the BLOCK verdict is downgraded and the deploy proceeds. Override detection is performed by the caller (`/review-pr-staging` Phase 6.5) using:
+The override escape hatch cannot downgrade a `FORGE:VERIFICATION_BLOCKED` capability record. Required capability absence, stale identity, structural-only runtime proof, and unresolved proof states require capability recovery or formal contract re-scope; they are not shipping-test-failure overrides. For non-capability test failures only, when a PR comment containing `verification.test_gate.override_phrase` (default: `OVERRIDE: shipping with test failures —`) is detected on the staging→main PR, the BLOCK verdict may be downgraded. Override detection is performed by the caller (`/review-pr-staging` Phase 6.5) using:
 
 ```bash
 OVERRIDE=$(gh pr view "$PR_NUMBER" ${GH_FLAG} \
