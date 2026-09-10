@@ -75,7 +75,24 @@ If `--prs` is absent, Phase 0 computes the bundle.
 
 ---
 
-## Missing-Config Guard (MANDATORY — runs before all phases)
+## Required-capability preflight (mandatory before any SKIP)
+
+Before configuration guards, bundle triage, or any intentional manual/no-test path, compile
+all bound acceptance criteria and contract capability metadata into the machine-readable
+records defined in `specs/verification.md`. Preserve the exact criterion ID, criterion text
+hash, source head, contract digest, proof type, and named boundary. Emit one
+`FORGE:VERIFICATION_CAPABILITY` record per required capability. A required record is PASS
+only when matching boundary proof completed at the same identity. `MISSING`, `SKIPPED`,
+`UNKNOWN`, `CONTRADICTED`, malformed, stale, unavailable, or structural-only runtime proof
+must emit `FORGE:VERIFICATION_BLOCKED` with the exact wake condition and force `BLOCK`.
+Bare PASS/SKIP output and unannotated executable criteria are not proof. Only after this
+preflight establishes that no required runtime capability is unresolved may a manual/no-test
+SKIP be emitted; a formal re-scope creates a new bound contract and never normalizes the old
+record.
+
+---
+
+## Missing-Config Guard (MANDATORY — runs after capability preflight)
 
 ```bash
 # If integration_tests is empty/absent, exit ADVISORY — never crash
