@@ -36,6 +36,7 @@ history; preserve completed records and append superseding investigations under
    recovery, cancellation, concurrency, and counterexample evidence. Mark every row/path `change`
    or `already safe`; Mark every listed path `change` or `already safe` with evidence. Do not declare scope complete while a relevant path has no disposition. Counterexamples
    must expose an omitted alternate caller and transitive dependency, not generic path wording.
+Before step 8, the typed `investigate` artifact must include complete `coverage`: `productionPath` (entrypoint → observable result), `boundaries` (producer/consumer, invocation, evidence), and `mutationScope` (path, `change|already-safe`, reason, evidence). Missing, empty, generic, or partial coverage rejects investigation completion; no Builder Contract or architecture plan may be accepted. This is one typed admission check, not a new agent or phase.
 8. Define the minimal required mutation paths and behaviors, including every row marked `change`. Adjacent paths remain read-only unless compilation, runtime correctness, schema/interface consistency, or a security invariant requires them to change.
 9. Define non-goals and residual uncertainty.
 10. Compile the existing `FORGE:CONTRACT` as deterministic source of truth: each criterion names
@@ -120,7 +121,8 @@ Publish the completed investigation with the common metadata envelope from
 
 ### Evidence and Root Cause
 <concise path/symbol/test evidence; distinguish failing-before from inspection-only proof>
-
+### Investigation Coverage
+- `productionPath`: `<entrypoint>` → `<boundary>` → `<observable result>`; `boundaries`: `<producer> | <consumer> | <invocation> | <evidence>`; `mutationScope`: `<path> | change|already-safe | <reason> | <evidence>`
 ### Prior Knowledge Applied
 - <source permalink/commit → prior lesson → current applicability/evidence → constraint or justified supersession>
 - <or no relevant history / retrieval unavailable / justified mechanical-change skip>

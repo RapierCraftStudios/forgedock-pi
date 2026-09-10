@@ -102,6 +102,11 @@ test("investigation defines scope without children or executable comments", asyn
   assert.match(investigate, /entered, continued, failed, or observed/);
   assert.match(investigate, /Mark every listed path `change` or `already\s+safe`.*evidence/s);
   assert.match(investigate, /Do not declare scope complete\s+while a relevant path has no disposition/s);
+  assert.match(investigate, /typed `investigate` artifact.*coverage/s);
+  assert.match(investigate, /productionPath/);
+  assert.match(investigate, /producer\/consumer/);
+  assert.match(investigate, /mutationScope/);
+  assert.match(investigate, /no Builder Contract or architecture plan may be accepted/);
   assert.match(investigate, /Mutation Scope/);
   assert.match(investigate, /Non-Goals/);
   assert.match(investigate, /Acceptance Checks/);
