@@ -6,15 +6,17 @@ description: Fix current-head blocking review findings cohesively and run scoped
 
 # Work On: Remediate
 
-Run only when the current reviewed head has parent-dispositioned, confirmed patch-caused
-blocking findings that are fixable inside the investigation scope. The same issue-specific
+Run only when the current reviewed head has parent-dispositioned `IMMEDIATE REPAIR` findings
+with confirmed current evidence and the fix is inside the investigation scope. The same issue-specific
 work-on parent remains the sole semantic authority and writer for the remediation round. The
 same work-on agent remains the sole writer; reviewer children never edit source.
 
 ## Preconditions
 
 - PR, issue, target, reviewed head, and blocking findings are exact and current.
-- Each blocker is CONFIRMED HIGH/CRITICAL with a concrete production scenario.
+- Each immediate-repair finding has confirmed current evidence of an unmet original acceptance
+  criterion, a reachable consequential patch-caused regression, or a material patch-caused
+  security/safety/data-integrity failure. A medium label does not waive an acceptance gap.
 - The fix does not require product, policy, legal, destructive, credential, or external
   authority.
 - Recover used/allowed rounds and any unfinished authorized round from retained work and
@@ -29,6 +31,23 @@ A stale, advisory, possible, pre-existing, out-of-scope, or unrelated finding do
 remediation. Keep only independently valuable parent-dispositioned follow-ups as non-blocking
 follow-ups; do not create blocker issues.
 
+## Finding classification before edits
+
+The parent must classify every confirmed blocker with evidence before selecting a mutation:
+
+| Classification | Evidence | Route |
+| --- | --- | --- |
+| `IMPLEMENTATION_DEFECT` | The admitted contract and closure row are complete, but the current patch violates the required behavior. | Ordinary bounded cohesive remediation. |
+| `VERIFICATION_GAP` | The contract is complete, but the required test, check, or capability evidence is missing, stale, or contradicted. | Ordinary bounded verification remediation; required unavailable proof gates. |
+| `CONTRACT_GAP` | The finding demonstrates an omitted reachable caller, invocation mode, transitive dependency, state/input transition, failure/retry/recovery path, cancellation, concurrency interleaving, or outcome from the admitted contract/proof map. | Preserve the current work and enter exactly one `REPLAN_REQUIRED` transition before any edit. |
+
+A reviewer suggestion is not enough: the parent records the exact finding, reviewed head,
+contract digest, omitted row or missing capability, causal evidence, and disposition. A
+contract gap is never silently downgraded to `IMPLEMENTATION_DEFECT`, escalated as
+`needs-human`, or moved to an independent issue merely because the current round is near
+its cap. Advisory, pre-existing, out-of-scope, and unrelated findings remain outside this
+route.
+
 ## Scope reassessment
 
 Before another edit, reassess cohesion if review reveals distinct omitted outcomes, phased
@@ -41,6 +60,38 @@ A reviewer-discovered caller, invocation mode, transitive dependency, input/stat
 failure/retry/recovery, cancellation, or concurrency row is `CONTRACT_GAP`. Before any fix,
 append a superseding contract and re-plan the complete closure matrix; never patch the reported
 line while the omitted row remains unadmitted.
+
+### Bounded `CONTRACT_GAP` → `REPLAN_REQUIRED`
+
+The parent performs this transition once, with the existing issue/PR and writer lease:
+
+1. Freeze and record the exact reviewed PR head/base, worktree/branch, reviewer comments and
+   result IDs, current contract digest, and original remediation usage. The partial work is
+   preserved; a target-branch move alone does not create a new round.
+2. Admit one lane-scoped `REPLAN_REQUIRED` token only if the configured cap and prior token
+   usage permit it. Persist the token with issue/run, reviewed head, blocker ID, old digest,
+   and an allowance bound. A resume, renamed round, new receipt, or retry cannot mint a
+   second token or increase the cap.
+3. Run the superseding investigation and architecture pass against that exact reviewed head.
+   Expand the closure matrix for the omitted row and every reachable sibling, retain all
+   original criterion IDs, and publish a new contract with a new digest before editing.
+4. Treat the old approval as stale. The revised contract requires one cohesive fix and a
+   fresh complete exact-head panel; old reviewer evidence is context and cannot authorize
+   merge. The re-plan itself does not count as a code-remediation round, but the subsequent
+   fix plus re-review does.
+5. If the token is unavailable, the cap is exhausted, or identity/authority is incomplete,
+   publish `FORGE:GATED` naming the exact wake condition and preserved head/worktree. Do not
+   close the issue, create a blocker issue, or block unrelated lanes.
+6. With the original owner binding still active, invoke the installed `dispatch.mjs replan`
+   helper using the original input, revised superseding contract, token, and current owner run
+   authorization. Wait for the original owner run to reach its terminal handoff, then invoke the
+   returned same-agent continuation with its exact new `extensionBindings`, same worktree and
+   `worktree:false`. Do not use retained `resume` with changed bindings or construct a replacement
+   environment in a fixture.
+
+A completed re-plan cannot loop back into another re-plan for the same issue/run. Only
+explicit new authority can supply a new allowance; it must be recorded as a superseding
+policy input rather than inferred from a resume.
 
 ## Cohesive fix
 
@@ -93,13 +144,14 @@ Publish at most one receipt for the new head:
 
 Invoke the same parent-owned review route with the new exact head. Use one correctness/general role
 (count an existing blocker-producing correctness role), the blocker-producing specialists, and
-security for executable changes. Every fresh reviewer must publish its own bound comment.
-Provide prior findings, parent dispositions, remediated hunks, and executable regression evidence;
-keep the full current diff available. Add another specialist only when remediation materially
-changed that specialist's risk surface.
+security for executable changes. Fresh reviewers return structured exact-head evidence to the
+parent; the parent publishes one consolidated panel record. Provide prior findings, parent
+dispositions, remediated hunks, and executable regression evidence; keep the full current diff
+available. Add another specialist only when remediation materially changed that specialist's
+risk surface.
 
 Retain valid same-head roles and retry only missing/invalid roles. Re-review passes when no
-confirmed patch-caused blocker remains. Non-blocking follow-ups do not trigger another
+confirmed immediate-repair finding remains. Non-blocking follow-ups do not trigger another
 remediation round.
 
 Base movement follows `work-on/review.md`: an unchanged clean effective patch retains its
@@ -111,6 +163,8 @@ review. Never rebase and restart re-review merely because unrelated target commi
 - Remaining in-scope blocker with rounds available: one further cohesive pass.
 - Unfinished authorized round at the cap: finish/resume its scoped re-review, including
   bounded missing-role retries; do not start another fix after its completed verdict.
+- Remaining in-scope `CONTRACT_GAP` after the bounded re-plan: read-only reassessment, then
+  GATED with the preserved identity and exact wake condition; no automatic extra re-plan.
 - Remaining blocker after the last authorized re-review: read-only reassessment, then GATED;
   no automatic extra round. A new name, head, resume, or receipt cannot reset usage.
 - Explicit prerequisite: `GATED` with wake condition.

@@ -38,12 +38,48 @@ The prepared verification catalog remains a separate read-only input. A policy c
 legacy-resume input needs explicit parent authority and a newly prepared descriptor; native
 retained bindings cannot silently be overwritten or enlarged by a child.
 
+## Bind a contract-gap re-plan
+
+A lane that receives a parent-dispositioned contract-invalidating blocker records a
+`CONTRACT_GAP` transition before any edit. The retained lane policy must bind all of:
+
+- `issue`, `repository`, `target`, `pr`, `headSha`, `baseSha`, `worktree`, and writer/lease
+  identity for the preserved partial work;
+- `findingId`, exact reviewer result/comment references, omitted closure row, and the
+  original `contractDigest` that the finding invalidated;
+- `remediationAttempts` and configured `remediationLimit` as immutable accounting values;
+- `replan: { token, previousHead, previousContractDigest, previousRound }`, bound inside the
+  lane input and validated against the superseding contract digest; and
+- the superseding investigation/architecture/contract references once the token is used.
+
+The token is lane-scoped and consumed exactly once. A resume, retry, new reviewed head,
+receipt name, or target movement cannot mint it again or increase the cap. The re-plan may
+produce a new contract digest, but it cannot mutate the original acceptance criterion IDs,
+text hashes, or affected-boundary bindings. Consumers resolve those IDs and hashes from the
+bound issue contract; this guide never hardcodes feature-specific criterion names or replaces
+them with generic names. Missing, conflicting, or stale identity is a mechanical recovery
+failure to repair or a durable `FORGE:GATED` wake condition; it is not permission to guess a
+policy or substitute a sibling lane.
+
+A superseding contract digest invalidates the prior review authorization. Review preparation
+must carry both the new digest and exact new head; the panel must be fresh, complete, and
+exact-head bound before merge. The old reviewer evidence remains context and audit history.
+The dispatcher keeps each lane's token, lease, and worktree separate, so a `CONTRACT_GAP`
+transition never pauses or rewrites an unrelated lane.
+
 ## Prepare an orchestration
 
-Write approved data—not JavaScript—to a plan file:
+Write approved data—not JavaScript—to a plan file. Before writing it, create the existing
+control-plane descriptor with `createControlPlaneDescriptor({ forgeDockRoot, piSubagentsRoot })`
+and include that exact value as top-level `controlPlane`; do not omit it or reconstruct it in
+the helper. The shape below is illustrative data with the descriptor and paths supplied by the
+parent. `controlPlane` is the complete object returned by
+`createControlPlaneDescriptor({ forgeDockRoot, piSubagentsRoot })`, not a string placeholder;
+the parent serializes that object into the JSON plan before invoking `prepareBatch`.
 
 ```json
 {
+  "controlPlane": { "v": 1, "schema": "forgedock.control-plane/v1", "forgeDock": "<complete descriptor object>", "piSubagents": "<complete descriptor object>", "digest": "sha256:<64 hex>" },
   "activeOwners": 2,
   "launchAllowance": 24,
   "requestStartedAt": "<actual original request timestamp>",
@@ -81,22 +117,59 @@ workflow body. Preparation rejects malformed data before publishing a runnable r
 fix the named plan/config field, not the native runner. Keep inputs while lanes may resume.
 
 For standalone work-on, before leaving the canonical root use `single` with a plan containing
-`number`, `target`, `requestStartedAt` and optional `verification`. Retain the returned input
-descriptor and pass it explicitly to subsequent helpers; do not dispatch its own coordinator.
+`number`, `target`, `requestStartedAt`, the same `controlPlane` descriptor, and the fresh
+`contract` descriptor when the issue has bound acceptance criteria, plus optional `verification`.
+For an authorized re-plan, include the new contract and its lane-bound `replan` object. Retain
+the returned input descriptor and pass it explicitly to subsequent helpers; do not dispatch its
+own coordinator.
+
+## Prepare an authorized same-owner replan
+
+When the existing owner adjudicates a genuine `CONTRACT_GAP`, do not overwrite the original
+input or call retained `resume` with new `extensionBindings` (the native runtime rejects that
+combination). While the original owner binding is active and its run is terminal before a new
+writer starts, write a replan plan containing the original input descriptor, a revisioned
+contract whose `supersedes` equals the original `contractDigest`, the lane-bound `replan`
+object, and `{ownerRunId: $PI_SUBAGENT_RUN_ID, token}` authorization. Run the installed helper:
+
+`node <package>/specs/helpers/dispatch.mjs replan <replan.json> <new-empty-output-dir>`
+
+The helper validates the original native binding, current owner run, repository/issue/target,
+exact existing worktree/head, original criterion IDs/text hashes/boundaries, one-token allowance,
+and contract supersession. It records the authorizing owner run in the amended binding. The
+fresh continuation receives a new native run ID; it must not impersonate `authorizedBy`. The
+helper writes a new digest-bound input without changing the old file and returns a continuation
+launch containing the same owner agent, model, issue, target, worktree, `worktree:false`, limits, and new
+`extensionBindings`. Invoke that returned continuation unchanged
+with fresh context; this is the supported same-owner handoff, not a competing writer or a new
+issue. The existing parent caller waits for the original writer's terminal handoff and retains
+responsibility for the continued issue result. The continuation repairs/verifies first and only
+then prepares fresh review for its new head. A mismatched token/run/head/contract or allowance is
+rejected before launch.
 
 ## Prepare a review
 
 The owner writes a review plan containing `head`, `round` (0 initial, 1 first remediation),
-and selected `roles`, each with `role`, `task` and `thinking`. Role tasks contain the frozen
-diff/graph context; they cannot provide a different model. Use optional `input` only for an
-explicit standalone/legacy descriptor; it must match the native binding when one exists.
+`contractDigest`, and selected `roles`, each with `role`, `task` and `thinking`. The digest must
+match the bound lane contract. For an authorized re-plan, the plan additionally carries
+`replan: {token, previousHead, previousContractDigest, previousRound}`; the helper validates
+that it matches the bound lane input and that the new head/digest differ from the preserved
+identity. This is the same validated input binding, not a side ledger. When the continuation
+input is active, forward its complete bound `replan` object—including helper-added `authorizedBy`
+unchanged into `prepareReview`; do not reconstruct the old four-field shape.
+Role tasks contain the frozen diff/graph context; they cannot provide a different model. Use
+optional `input` only for an explicit standalone/legacy descriptor; it must match the native
+binding when one exists.
 
 Run `node <package>/specs/helpers/dispatch.mjs review <review.json> <new-empty-output-dir>`.
 Invoke the exact generated request. The model and maximum round come from bound policy;
 `general` aliases correctness and cannot duplicate it. Explicit configured thinking wins;
 otherwise the role's risk-calibrated thinking suffix is added. Native budget and complete
-panel requirements still apply. The helper validates requested rounds, not semantic history:
-the owner must recover actual usage from the graph and cannot relabel another fix as round 1.
+panel requirements still apply. Each generic delegate returns structured evidence to the
+owner; it has no reviewer-comment or issue-publication capability. The owner validates and
+publishes one consolidated SHA-bound panel record. The helper validates requested rounds, not
+semantic history: the owner must recover actual usage from the graph and cannot relabel another
+fix as round 1.
 
 ## Resolve supervisor identity before acting
 

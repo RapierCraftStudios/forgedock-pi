@@ -41,10 +41,9 @@ The extension entrypoint is lexical only:
 
 The visible Pi session owns routing. `pi-subagents` supplies fresh contexts, isolation,
 concurrency, and joins; it is not the workflow engine. TypeScript may provide bounded
-safety leaves, but it does not choose phases, findings, or terminal outcomes.
-
-The old controller implementation under `src/workflows/` is dormant migration material and
-is not registered by `src/index.ts`.
+safety leaves, but it does not choose phases, findings, or terminal outcomes. The shipped
+extension registers only `registerForgePromptRouter`; retained `src/workflows/` and
+`src/agents/` controller/runtime code is not registered or authoritative.
 
 ## Authority
 
@@ -112,14 +111,19 @@ visible orchestrator → work-on agents → fresh reviewers
 The owning agent freezes full PR head/base identity, fetches the diff once, derives only
 risk-relevant roles, and launches one concurrent complete panel as fresh ordinary
 `delegate` agents. They keep full normal tool availability; role prompts focus evidence
-without introducing specialized profiles or capability ceilings.
+without introducing specialized profiles or capability ceilings. Delegates return structured
+evidence to the owner and have no reviewer-comment or issue-publication capability.
 
-The owner validates all results and publishes one consolidated SHA-bound panel artifact
-plus one official verdict. Valid same-head roles are retained; only missing/invalid roles
-retry. A partial panel never authorizes merge.
+The owner validates all results, deduplicates and reconciles findings against original
+acceptance, and publishes one consolidated SHA-bound panel artifact plus one official verdict.
+Valid same-head roles are retained; only missing/invalid roles retry. A partial panel never
+authorizes merge. One parent publication is the sole reviewer-evidence model; repeated
+per-reviewer claims are not independent proof.
 
-Confirmed patch-caused HIGH/CRITICAL incident risks block. Pre-existing, advisory, and
-non-incident findings do not. In-scope blockers receive one cohesive remediation head and
+Immediate repair requires evidence of an unmet original acceptance criterion, a reachable
+consequential patch-caused regression, or a material patch-caused security/safety/data-integrity
+failure; severity and confidence are separate axes. Pre-existing, advisory, rejected, and
+out-of-scope findings do not block. Immediate repairs receive one cohesive remediation head and
 a scoped fresh re-review.
 
 Unrelated target movement does not invalidate review when the PR remains clean/mergeable

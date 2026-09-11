@@ -33,25 +33,27 @@ head, and base arguments. That skill owns:
 - deterministic diff bundles;
 - one concurrent fresh panel;
 - complete-panel joining;
-- exact-head evidence and comment readback;
+- exact-head panel-record evidence and readback;
 - finding classification and official verdict.
 
 Each reviewer task carries acceptance invariants, test evidence/scope, bounded diff/context,
 linked classification/context/contract/plan and decision revisions, and unique role ownership.
 Fresh reviewers validate the history's current applicability rather than review historically blind.
-Each reviewer finalizes its typed result and publishes one exact-head, role/round-bound PR
-comment through the bound reviewer-comment capability. A blocker must be confirmed patch-caused
-and reachable in the supplied patch. The parent retains valid same-head roles, verifies every
-result/comment pair, retries only a missing, failed, or malformed required role, and never
-restarts a valid role for publication formatting variance.
+Each reviewer returns one exact-head structured result with a substantive summary, verified
+`path:line` behaviors, residual risks, and evidence-backed findings. Generic delegates do not
+publish comments, create issues, edit labels, or merge. The parent waits for every required
+result, validates identity, retries only a missing, failed, or malformed role, and then publishes
+one consolidated SHA-bound panel record and official verdict.
 
 Review consumes the frozen closure matrix criterion by criterion, preserving producer →
 consumer identity. Report uncovered caller, invocation-mode, transitive-dependency,
 valid/invalid input, fresh/existing state, failure/retry/recovery, cancellation, or
 concurrency rows explicitly, and verify each row's concrete counterexample or behavioral test;
 report an omitted alternate caller or transitive dependency by name. String-presence checks alone
-cannot close runtime rows. A reachable omission is `CONTRACT_GAP`,
-not an advisory: remediation must supersede the contract and re-plan before editing.
+cannot close runtime rows. A reachable omission is `CONTRACT_GAP`, not an advisory: remediation
+must supersede the contract and re-plan before editing. A finding's severity is separate from
+its disposition; the parent requires trigger, reachable path, violated acceptance/invariant,
+consequence, and patch causality or an explicit acceptance gap.
 
 ## Result routing
 
@@ -62,7 +64,7 @@ not an advisory: remediation must supersede the contract and re-plan before edit
   At the cap, use the root's `GATED` exit; never launch another panel by calling it final,
   last, or closure.
 - Explicit unresolved prerequisite: return `GATED` with exact wake condition.
-- Incomplete result/comment roster or provider failure: preserve valid roles, record
+- Incomplete result roster or provider failure: preserve valid roles, record
   `review-degraded`, and resume only missing required roles.
 - Independent follow-up: create only a valuable causal concern that the parent has explicitly
   dispositioned as `follow-up`; advisory, pre-existing, and out-of-scope findings do not block.

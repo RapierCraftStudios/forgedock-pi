@@ -115,7 +115,7 @@ test("startup rejects stale descriptors and non-descended workspaces before muta
     const unrelatedTree = execFileSync("git", ["write-tree"], { cwd: repoOne, encoding: "utf8" }).trim();
     const unrelatedCommit = execFileSync("git", ["commit-tree", unrelatedTree, "-m", "unrelated"], { cwd: repoOne, encoding: "utf8", env: { ...process.env, GIT_AUTHOR_NAME: "Fixture", GIT_AUTHOR_EMAIL: "fixture@example.test", GIT_COMMITTER_NAME: "Fixture", GIT_COMMITTER_EMAIL: "fixture@example.test" } }).trim();
     execFileSync("git", ["update-ref", "refs/heads/pi-parallel-fixture-one", unrelatedCommit], { cwd: repoOne });
-    assert.throws(() => dispatch.validateLaneStartup(policy, repoOne), /(?:not descended from target base|head disagrees with prepared target base)/);
+    assert.throws(() => dispatch.validateLaneStartup(policy, repoOne), /(?:not descended from target base|head disagrees with prepared target base|authorized continuation head)/);
   });
 });
 
@@ -238,16 +238,97 @@ test("bad launch shape fails before request publication, not inside native dispa
 });
 
 test("review preparation cannot substitute a model, duplicate correctness or exceed bound rounds", async () => {
-  await fixture(async ({ root, repo, plan }) => {
+  await fixture(async ({ root, repo, repoOne, plan }) => {
     const prepared = dispatch.prepareBatch(plan, join(root, "prepared"), repo);
     const batch = JSON.parse(await readFile(prepared.batchFile, "utf8"));
-    const env = { PI_SUBAGENT_EXTENSION_BINDINGS: JSON.stringify({ [dispatch.BINDING]: batch.lanes[0].input }) };
-    const review = { head: dispatch.gitHead(repo), round: 1, roles: [{ role: "correctness", thinking: "high", task: "Review only" }] };
+    const originalInput = batch.lanes[0].input;
+    const originalBytes = await readFile(originalInput.path, "utf8");
+    const env = { PI_SUBAGENT_EXTENSION_BINDINGS: JSON.stringify({ [dispatch.BINDING]: originalInput }) };
+    const boundPolicy = dispatch.loadPolicy(undefined, env);
+    const review = { head: dispatch.gitHead(repoOne), round: 1, contractDigest: boundPolicy.contractDigest, roles: [{ role: "correctness", thinking: "high", task: "Review only" }] };
     assert.throws(() => dispatch.prepareReview({ ...review, round: 4 }, join(root, "over"), env), /exceeds bound remediation limit 1/);
     assert.throws(() => dispatch.prepareReview({ ...review, roles: [{ ...review.roles[0], model: "anthropic/stale" }] }, join(root, "model"), env), /Unknown role field: model/);
+    assert.throws(() => dispatch.prepareReview({ ...review, contractDigest: `sha256:${"0".repeat(64)}` }, join(root, "stale-contract"), env), /contractDigest disagrees/);
     assert.throws(() => dispatch.prepareReview({ ...review, roles: [...review.roles, { role: "general", thinking: "high", task: "Duplicate" }] }, join(root, "dupe"), env), /Duplicate/);
     const valid = dispatch.prepareReview(review, join(root, "review"), env);
-    assert.match(await readFile(valid.request.workflowScriptPath, "utf8"), /openai-codex\/gpt-5.6-luna:high/);
+    const reviewScript = await readFile(valid.request.workflowScriptPath, "utf8");
+    assert.match(reviewScript, /openai-codex\/gpt-5.6-luna:high/);
+    assert.match(reviewScript, /Review transport: return one structured evidence result/);
+    assert.match(reviewScript, /parent publishes one consolidated exact-head panel record/);
+    assert.doesNotMatch(reviewScript, /forge_publish_reviewer_comment|reviewer-comment capability/);
+
+    const oldContract = dispatch.validateIssueContractFile(boundPolicy.contract, boundPolicy.issue);
+    const revisedContract = dispatch.createIssueContract(boundPolicy.issue, oldContract.criteria, 2, oldContract.digest);
+    const revisedPath = join(root, "revised-contract.json");
+    const revisedBytes = `${JSON.stringify(revisedContract)}\n`;
+    await writeFile(revisedPath, revisedBytes, { mode: 0o400 });
+    const revisedDescriptor = { path: revisedPath, sha256: createHash("sha256").update(revisedBytes).digest("hex") };
+
+    // Original build: the owner starts at H0, commits the implementation at H1, and only
+    // then requests the authorized supersession from that same owner/worktree.
+    const previousHead = dispatch.gitHead(repoOne);
+    await writeFile(join(repoOne, "original.txt"), "original implementation\n");
+    execFileSync("git", ["add", "original.txt"], { cwd: repoOne });
+    execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "original implementation"], { cwd: repoOne });
+    const builtHead = dispatch.gitHead(repoOne);
+    assert.notEqual(builtHead, previousHead);
+    assert.throws(() => dispatch.validateLaneStartup(boundPolicy, repoOne), /effective head disagrees/);
+
+    const replan = { token: "replan-1", previousHead: builtHead, previousContractDigest: oldContract.digest, previousRound: 1 };
+    const weakenedContract = dispatch.createIssueContract(boundPolicy.issue, oldContract.criteria.slice(1), 2, oldContract.digest);
+    const weakenedPath = join(root, "weakened-contract.json");
+    const weakenedBytes = `${JSON.stringify(weakenedContract)}\n`;
+    await writeFile(weakenedPath, weakenedBytes, { mode: 0o400 });
+    const weakenedDescriptor = { path: weakenedPath, sha256: createHash("sha256").update(weakenedBytes).digest("hex") };
+    const ownerEnv = { ...env, PI_SUBAGENT_RUN_ID: "owner-a", PI_SUBAGENT_PARENT_RUN_ID: "workflow-parent-a" };
+    const unauthorized = { input: originalInput, contract: revisedDescriptor, replan, authorization: { ownerRunId: "other-owner", token: replan.token } };
+    assert.throws(() => dispatch.prepareReplan(unauthorized, join(root, "unauthorized"), repoOne, ownerEnv), /current owner run/);
+    assert.throws(() => dispatch.prepareReplan({ input: originalInput, contract: weakenedDescriptor, replan, authorization: { ownerRunId: "owner-a", token: replan.token } }, join(root, "weakened"), repoOne, ownerEnv), /cannot weaken original criterion/);
+    assert.throws(() => dispatch.prepareReview({ ...review, contractDigest: revisedContract.digest }, join(root, "old-binding-revision"), ownerEnv), /contractDigest disagrees/);
+
+    // The supported transition emits a same-owner fresh continuation; it does not replace the
+    // original input or launch a competing writer. Startup validates H1 via the authorized B binding.
+    const amended = dispatch.prepareReplan({ input: originalInput, contract: revisedDescriptor, replan, authorization: { ownerRunId: "owner-a", token: replan.token } }, join(root, "replanned"), repoOne, ownerEnv);
+    assert.equal(await readFile(originalInput.path, "utf8"), originalBytes, "original bound input must remain immutable");
+    const amendedEnv = { ...ownerEnv, PI_SUBAGENT_RUN_ID: "continuation-run-b", PI_SUBAGENT_EXTENSION_BINDINGS: JSON.stringify({ [dispatch.BINDING]: amended.input }) };
+    const amendedPolicy = dispatch.loadPolicy(undefined, amendedEnv);
+    assert.doesNotThrow(() => dispatch.validateLaneStartup(amendedPolicy, repoOne));
+    assert.throws(() => dispatch.loadPolicy(undefined, { ...ownerEnv, PI_SUBAGENT_EXTENSION_BINDINGS: JSON.stringify({ [dispatch.BINDING]: amended.input }) }), /fresh native execution identity/);
+    assert.equal(amended.previousInput.path, originalInput.path);
+    assert.equal(amendedPolicy.issue, boundPolicy.issue);
+    assert.equal(amendedPolicy.repo, boundPolicy.repo);
+    assert.equal(amendedPolicy.target, boundPolicy.target);
+    assert.equal(amendedPolicy.model, boundPolicy.model);
+    assert.equal(amendedPolicy.remediationLimit, boundPolicy.remediationLimit);
+    assert.equal(amendedPolicy.targetBase.path, boundPolicy.targetBase.path);
+    assert.equal(amendedPolicy.targetBase.headSha, boundPolicy.targetBase.headSha, "original launch base identity is immutable");
+    assert.equal(amendedPolicy.continuation.expectedHeadSha, builtHead, "continuation startup uses the preserved reviewed head");
+    assert.equal(amendedPolicy.contractDigest, revisedContract.digest);
+    assert.equal(amendedPolicy.replan.authorizedBy, "owner-a");
+    assert.equal(amendedPolicy.continuation.authorizedBy, "owner-a");
+    assert.equal(amended.continuation.agent, "forgedock-parent-control.forgedock-work-on-coordinator");
+    assert.equal(amended.continuation.cwd, repoOne);
+    assert.equal(amended.continuation.worktree, false);
+    assert.equal(amended.continuation.context, "fresh");
+    assert.equal(amended.continuation.model, boundPolicy.model);
+    assert.notEqual(amendedEnv.PI_SUBAGENT_RUN_ID, amendedPolicy.replan.authorizedBy);
+    assert.deepEqual(amended.continuation.extensionBindings[dispatch.BINDING], amended.input);
+    assert.match(amended.continuation.task, /same ForgeDock owner lifecycle/);
+    assert.match(amended.continuation.task, /terminal before this continuation starts/);
+
+    // Repair commit H2, then prepare review and the owner publication record against B.
+    await writeFile(join(repoOne, "repair.txt"), "cohesive repair\n");
+    execFileSync("git", ["add", "repair.txt"], { cwd: repoOne });
+    execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "cohesive repair"], { cwd: repoOne });
+    const repairedHead = dispatch.gitHead(repoOne);
+    const revisedReview = { head: repairedHead, round: 1, contractDigest: revisedContract.digest, replan: amendedPolicy.replan, roles: [{ role: "correctness", thinking: "high", task: "Review repaired head" }] };
+    assert.doesNotThrow(() => dispatch.prepareReview(revisedReview, join(root, "replanned-review"), amendedEnv));
+    const rendered = records.renderRecord({ kind: "REVIEW-PANEL", pr: 564, input: amended.input, head: repairedHead, inputs: [], supersedes: null }, `## Evidence\n\n**Contract digest**: \`${amendedPolicy.contractDigest}\`\n**Repaired head**: \`${repairedHead}\``, { cwd: repoOne, env: amendedEnv });
+    assert.match(rendered.markdown, /FORGE:REVIEW-PANEL/);
+    assert.match(rendered.markdown, new RegExp(repairedHead));
+    assert.match(rendered.markdown, new RegExp(amendedPolicy.contractDigest));
+    assert.throws(() => dispatch.prepareReview({ ...revisedReview, head: builtHead }, join(root, "same-head"), amendedEnv), /new head/);
+    assert.throws(() => dispatch.prepareReview({ ...revisedReview, input: originalInput }, join(root, "explicit-old-input"), amendedEnv), /Explicit input disagrees/);
   });
 });
 

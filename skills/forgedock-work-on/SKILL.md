@@ -43,14 +43,14 @@ child launches pass that path as `cwd` with `worktree: false`. A stale, missing,
 workspace is an internal launch-binding failure to rebind/retry, never a human-facing gate.
 
 At review or re-review, the issue-specific parent owns the selected roster and launches
-fresh read-only reviewers concurrently. Each reviewer finalizes its exact-head typed result
-and publishes its own role/round-bound PR comment through the narrowly scoped reviewer
-comment capability. The parent waits for every required result/comment pair, validates
-identity, deduplicates and reconciles findings, and records the authoritative disposition:
-blocking, advisory, pre-existing, out-of-scope, or follow-up. Retry only a missing or invalid
-required role. Only confirmed patch-caused blockers enter the cohesive remediation round;
-independently valuable follow-ups may become separate issues, while other advisories remain
-in the consolidated report.
+fresh read-only generic `delegate` reviewers concurrently. Each reviewer returns one exact-head
+structured result with substantive evidence; reviewers do not publish comments or create
+issues. The parent waits for every required result, validates identity, deduplicates by causal
+mechanism, and records the authoritative disposition: `IMMEDIATE REPAIR`, `NON-BLOCKING
+FOLLOW-UP`, `REJECTED/NOT APPLICABLE`, or `EVIDENCE/AUTHORITY PREREQUISITE`. A finding's
+severity is separate from its blocking decision. Retry only a missing or invalid required
+role. Only evidence-backed immediate repairs enter the cohesive remediation round;
+authorized independent follow-ups become one deduplicated issue and do not hold the current batch.
 
 Base movement alone does not invalidate valid review. Preserve a clean mergeable reviewed
 head; reconcile only for conflict or required-up-to-date policy, and rerun review only when

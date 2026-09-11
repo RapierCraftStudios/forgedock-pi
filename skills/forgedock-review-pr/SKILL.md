@@ -59,7 +59,7 @@ test quality. File count and domain keywords alone do not add reviewers.
 
 Use medium thinking for documentation/templates/metadata and high for executable,
 security, auth, data, concurrency, or cross-file behavior. Thinking level never lowers the
-blocking standard.
+evidence standard.
 
 For remediation, use one correctness/general role and the blocker-producing specialists;
 an existing blocker-producing correctness role satisfies general coverage, not an extra
@@ -72,35 +72,58 @@ review. Do not blindly relaunch the previous panel.
 ## Run one panel
 
 The issue-specific work-on parent owns the selected roster and launches every role in fresh
-read-only context. Reviewers are allowed one bound PR-comment capability only: after
-finalizing their typed result, each reviewer must publish its own exact-head, role/round-bound
-comment. That capability cannot edit source, create issues, edit labels, merge, or authorize
-merge. The parent waits for every required role, validates the result/comment pair, and retries
-only a missing or invalid role.
+read-only context as ordinary generic `delegate` agents. The task gives each reviewer the
+original acceptance, accepted contract, active path, relevant history, frozen head/base,
+diff and proof. Reviewers return one structured result to the parent: a substantive summary,
+verified `path:line` behaviors, residual limits, and findings with trigger, consequence,
+scope/causality, confidence, severity, and block-view rationale. They do not edit source,
+post comments, create issues, edit labels, merge, or request a publication capability that
+this route does not provide.
 
-The parent then collates the raw panel: deduplicate equivalent behavior, preserve source
-reviewers, require verified `path:line` behaviors, reconcile disagreement against evidence, and classify each concern as blocking,
-advisory, pre-existing, out-of-scope, or follow-up. Every finding carries the reviewer's
-block view/rationale and scope view/rationale; the parent disposition is authoritative.
+The parent waits for the complete result set, validates exact-head identity, deduplicates by
+causal mechanism, reconciles disagreement against source and acceptance, and records the
+single authoritative disposition for every substantive concern. A disposition requires concise
+evidence of the trigger, reachable affected path or loaded specification, violated original
+acceptance/invariant, consequence, and patch causality or an explicit acceptance gap. Severity
+is separate from the blocking decision; a severity label alone never admits remediation.
 
-The shared typed `ReviewPrCoordinator` remains the mechanical gate for exact identity, panel
-completeness, checks, lease/authority, mergeability, and protected-branch safety. It must not
-create work-on finding issues or replace the parent disposition. Standalone/staging routes may
-retain their own issue-publication policy and may use fresh ordinary `delegate` agents with full normal tool availability. If one role is missing or invalid, launch one additional workflow containing only that role. The parent must never use `runs.host` to transfer diffs or create new reviewer capability ceilings. formatting variance alone never restarts a role or panel. After disposition, the parent publishes one SHA-bound `FORGE:REVIEW-PANEL` comment containing panel evidence and the official verdict. Blocking
-findings still require the confirmed HIGH/CRITICAL production-incident standard.
+The route owner then publishes one SHA-bound `FORGE:REVIEW-PANEL` record containing the panel
+evidence, dispositions, follow-up links, and official verdict. This is the only reviewer publication model: no per-reviewer PR comments or second semantic coordinator is required.
+If one role is missing or invalid, launch one additional workflow containing only that role;
+retry no other role. A partial panel cannot produce a verdict. Use the native helper only for
+identity, request preparation, record transport, readback, and mechanical merge/safety checks. Do not use `runs.host` to transfer diffs or invent reviewer
+capability ceilings. Formatting variance alone never restarts a valid role.
 
-## Decide
+## Finding admission and decide
 
-- Any confirmed patch-caused parent disposition of `blocking`: `CHANGES_REQUESTED`.
-- No blockers and one or more independently valuable `follow-up` dispositions:
+Classify each confirmed substantive concern as one of:
+
+- `IMMEDIATE REPAIR`: evidence shows an original acceptance criterion is unmet regardless of
+  severity, a reachable consequential regression is patch-caused or newly reachable, or a material security,
+  safety, or data-integrity failure is patch-caused. Severity and confidence inform the
+  evidence; neither substitutes for it.
+- `NON-BLOCKING FOLLOW-UP`: an independently valuable, actionable defect is confirmed but
+  policy permits it to be deferred. Deduplicate it and create one valuable independent follow-up
+  issue under existing authorization; it does not enter the current batch or hold an otherwise
+  acceptable PR.
+- `REJECTED/NOT APPLICABLE`: the observation is disproven, unsupported, stale, or unrelated;
+  retain the concise reason and create nothing.
+- `EVIDENCE/AUTHORITY PREREQUISITE`: required proof, permission, or environment is unavailable;
+  preserve the exact wake condition and do not send it through a code-remediation loop.
+
+Mechanical missing-role, stale-identity, required-check, mergeability, and authority failures
+remain real gates but are not semantic code findings. The parent must not dismiss a valid
+blocker to meet a round target or merge from repeated unsupported claims.
+
+- Any confirmed `IMMEDIATE REPAIR`: `CHANGES_REQUESTED` and one cohesive remediation round.
+- No immediate repairs and one or more authorized `NON-BLOCKING FOLLOW-UP` dispositions:
   `APPROVE_WITH_FOLLOW_UP`.
-- Advisory, pre-existing, and out-of-scope concerns remain in the consolidated report by
-  default and do not block.
-- Missing/invalid required role or comment after its bounded retry: `review-degraded`, no verdict.
+- Rejected, advisory, pre-existing, and out-of-scope context does not block.
+- Missing/invalid required role after its bounded retry: `review-degraded`, no verdict.
 
-Only parent-dispositioned follow-ups reach issue creation. Create at most one valuable independent follow-up issue per causal concern. Current-issue blockers remain on the existing
-PR/source issue and enter the cohesive remediation loop; never create recursive blocker issues
-or one issue per duplicate observation.
+Only parent-dispositioned follow-ups reach issue creation. Current-issue blockers remain on the
+existing PR/source issue and enter the cohesive remediation loop; never create recursive blocker
+issues or one issue per duplicate observation.
 
 Merge only when explicitly authorized, the current head equals the accepted reviewed head
 or a proven equivalent patch, required checks pass, the PR is mergeable, and no blocker

@@ -22,6 +22,29 @@ const investigation: InvestigationArtifact = {
   claimed: "The integration auto-merge gate lacks regression coverage.",
   observed: "The implementation exists and the focused test is absent.",
   rootCause: "An existing branch was not covered by the test matrix.",
+  coverage: {
+    productionPath: [
+      "review request entrypoint",
+      "evaluateReviewGate",
+      "needs-human decision observable",
+    ],
+    boundaries: [
+      {
+        producer: "review request handler",
+        consumer: "evaluateReviewGate",
+        invocation: "unapproved merge request",
+        evidence: "src/core/review.ts calls the gate",
+      },
+    ],
+    mutationScope: [
+      {
+        path: "test/core/review.test.ts",
+        disposition: "change",
+        reason: "Add the missing behavioral assertion.",
+        evidence: "Existing test file owns the gate coverage.",
+      },
+    ],
+  },
   affectedFiles: [
     { path: "test/core/review.test.ts", reason: "Missing focused assertion" },
   ],
@@ -169,12 +192,42 @@ test("typed phase artifacts reject marker-only Markdown substitutes", () => {
   );
 });
 
+test("investigation admission requires path, boundary, and mutation coverage", () => {
+  const missingCoverage = structuredClone(investigation) as unknown as Record<string, unknown>;
+  delete missingCoverage.coverage;
+  assert.equal(Check(FORGE_PHASE_ARTIFACT_SCHEMA, missingCoverage), false);
+  assert.equal(isPhaseArtifact(missingCoverage), false);
+
+  const missingPath = structuredClone(investigation);
+  missingPath.coverage.productionPath = [];
+  assert.equal(Check(FORGE_PHASE_ARTIFACT_SCHEMA, missingPath), false);
+  assert.equal(isPhaseArtifact(missingPath), false);
+
+  const genericCoverage = structuredClone(investigation);
+  genericCoverage.coverage.productionPath = ["entrypoint", "observable result"];
+  assert.equal(Check(FORGE_PHASE_ARTIFACT_SCHEMA, genericCoverage), true);
+  assert.equal(isPhaseArtifact(genericCoverage), false);
+
+  const missingBoundary = structuredClone(investigation);
+  missingBoundary.coverage.boundaries = [];
+  assert.equal(Check(FORGE_PHASE_ARTIFACT_SCHEMA, missingBoundary), false);
+  assert.equal(isPhaseArtifact(missingBoundary), false);
+
+  const missingMutationScope = structuredClone(investigation);
+  missingMutationScope.coverage.mutationScope = [];
+  assert.equal(Check(FORGE_PHASE_ARTIFACT_SCHEMA, missingMutationScope), false);
+  assert.equal(isPhaseArtifact(missingMutationScope), false);
+});
+
 test("investigation rendering is deterministic and never invents routing", () => {
   const first = renderPhaseArtifact(investigation);
   const second = renderPhaseArtifact(structuredClone(investigation));
   assert.equal(first, second);
   assert.match(first, /Task type \| focused unit test/);
   assert.match(first, /Complexity \| TRIVIAL/);
+  assert.match(first, /### Production Path/);
+  assert.match(first, /### Producer\/Consumer Boundaries/);
+  assert.match(first, /### Required Mutation Scope/);
   assert.match(first, /architecture: skipped — No production design change/);
   assert.match(first, /<!-- FORGE:FAST_PATH -->/);
   assert.doesNotMatch(first, /Legacy Routing Classification|NOT RECORDED/);

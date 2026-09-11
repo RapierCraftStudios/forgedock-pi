@@ -134,6 +134,34 @@ test("a new prepared head creates distinct round-two reviewer nodes", () => {
   );
 });
 
+test("a superseding contract requires a fresh exact-head review and rejects stale approval", () => {
+  const oldHead = headSha;
+  const oldContract = "contract-old";
+  const newHead = "new-head-123456";
+  const newContract = "contract-new";
+  const oldRecords = [
+    ...throughPreparedPr(),
+    completed("review-correctness", { headSha: oldHead, publishedCommentId: 101 }),
+    completed("review-security", { headSha: oldHead, publishedCommentId: 102 }),
+  ];
+  assert.equal(reviewJoinReady(oldRecords, oldHead), true);
+  const replanned = oldRecords
+    .filter((record) => record.node !== "review-correctness" && record.node !== "review-security")
+    .map((record) => ({
+      ...record,
+      ...(record.node === "prepare-pr" ? { headSha: newHead } : {}),
+    }));
+  assert.equal(reviewJoinReady(replanned, newHead), false);
+  assert.notEqual(oldContract, newContract);
+  const fresh = [
+    ...replanned,
+    completed("review-correctness", { nodeId: "review-correctness-2", headSha: newHead, publishedCommentId: 201 }),
+    completed("review-security", { nodeId: "review-security-2", headSha: newHead, publishedCommentId: 202 }),
+  ];
+  assert.equal(reviewJoinReady(fresh, newHead), true);
+  assert.equal(reviewJoinReady(fresh, oldHead), false);
+});
+
 test("summary becomes eligible only after both current-head comments are durable", () => {
   const records = [
     ...throughPreparedPr(),
