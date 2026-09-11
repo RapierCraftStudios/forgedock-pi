@@ -29,7 +29,7 @@ const renameExecutor: CommandExecutor = {
   },
 };
 
-test("dogfood authority chain binds the full diff, verdict, and remediation recovery identity", async () => {
+test("dogfood no-op lane binds the full diff, verdict, and remediation recovery identity", async () => {
   const git = new GitWorktreeManager(renameExecutor);
   const changedFiles = await git.changedFiles("/worktree", "base-sha");
   assert.deepEqual(changedFiles, [
