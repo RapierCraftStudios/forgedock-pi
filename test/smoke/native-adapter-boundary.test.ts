@@ -66,6 +66,27 @@ async function complete(executor: any, context: any, params: Record<string, unkn
   throw new Error("native async fixture did not settle");
 }
 
+function findEnvironment(value: any): any {
+  if (typeof value === "string") {
+    for (const text of [value, ...value.split("\n")]) {
+      try {
+        const found = findEnvironment(JSON.parse(text));
+        if (found) return found;
+      } catch {
+        // Non-JSON output is not an environment envelope.
+      }
+    }
+    return undefined;
+  }
+  if (!value || typeof value !== "object") return undefined;
+  if (value.PI_SUBAGENT_EXTENSION_BINDINGS) return value;
+  for (const child of Object.values(value)) {
+    const found = findEnvironment(child);
+    if (found) return found;
+  }
+  return undefined;
+}
+
 async function ownerScript(output: string | false) {
   const adapter = await readFile("specs/pi-adapter.md", "utf8");
   const script = adapter.slice(adapter.indexOf("Use one visible promise graph.")).match(/```js\n([\s\S]*?)\n```/)?.[1];
@@ -187,6 +208,79 @@ test("prepared lane policy reaches the actual native child environment", { skip:
     assert.ok(restored, `No terminal child environment result for ${row.runId}`);
     assert.equal(dispatch.loadPolicy(undefined, restored).issue, 42);
     assert.equal(restored.PI_SUBAGENT_EXTENSION_BINDINGS, received.PI_SUBAGENT_EXTENSION_BINDINGS);
+  });
+});
+
+test("native continuation assigns a fresh run identity while preserving authorized owner binding", { skip: !source, timeout: 60000 }, async () => {
+  await withAdapter(async ({ root, repo, mock, executor, context }) => {
+    const dispatch = await import(new URL("../../specs/helpers/dispatch.mjs", import.meta.url).href);
+    const records = await import(new URL("../../specs/helpers/record.mjs", import.meta.url).href);
+    execFileSync("git", ["remote", "add", "origin", "https://github.com/example/project.git"], { cwd: repo });
+    execFileSync("git", ["update-ref", "refs/remotes/origin/staging", "HEAD"], { cwd: repo });
+    const preparedRepo = join(root, "prepared-replan-repo");
+    execFileSync("git", ["worktree", "add", "-q", "-b", "pi-parallel-native-replan", preparedRepo, "HEAD"], { cwd: repo });
+    await writeFile(join(repo, "forge.yaml"), 'project: {owner: example, repo: project}\nagents: {subagent_model: "test/model"}\n');
+    await writeFile(join(repo, ".git", "info", "exclude"), "forge.yaml\n");
+    const parentRoot = fileURLToPath(new URL("../..", import.meta.url));
+    const controlPlane = dispatch.createControlPlaneDescriptor({ forgeDockRoot: parentRoot, piSubagentsRoot: realpathSync(join(parentRoot, "node_modules/pi-subagents")) });
+    const originalContract = dispatch.createIssueContract(42, [
+      { id: "product-behavior", textHash: `sha256:${"1".repeat(64)}`, proofType: "behavioral", affectedBoundaries: ["src/example.ts"] },
+    ]);
+    const originalBytes = `${JSON.stringify(originalContract)}\n`;
+    const originalPath = join(root, "original-contract.json");
+    await writeFile(originalPath, originalBytes, { mode: 0o400 });
+    const originalDescriptor = { path: originalPath, sha256: createHash("sha256").update(originalBytes).digest("hex") };
+    const prepared = dispatch.prepareBatch({ activeOwners: 1, launchAllowance: 8, requestStartedAt: "2026-01-01T00:00:00Z", controlPlane,
+      issues: [{ number: 42, target: "staging", baseCwd: preparedRepo, predecessors: [], contract: originalDescriptor }] }, join(root, "prepared-replan"), repo);
+    const script = await readFile(prepared.request.workflowScriptPath, "utf8");
+    const graph = JSON.parse(script.match(/^const issueGraph=(.+);$/m)![1]!);
+    const originalItem = { key: graph[0].key, ...graph[0].launch, acceptance: false };
+    mock.onCall({ echoEnv: ["PI_SUBAGENT_EXTENSION_BINDINGS", "PI_SUBAGENT_RUN_ID", "PI_SUBAGENT_PARENT_RUN_ID"] });
+    const first = await complete(executor, context, { workflowScript: `return await runs.all(${JSON.stringify([originalItem])});` });
+    assert.equal(first.status.state, "complete");
+    const originalEnv = findEnvironment(first.status.workflow.value[0]);
+    assert.ok(originalEnv, "original native child did not return its binding environment");
+    const originalRunId = originalEnv.PI_SUBAGENT_RUN_ID;
+    assert.ok(originalRunId);
+    const originalBinding = JSON.parse(originalEnv.PI_SUBAGENT_EXTENSION_BINDINGS)[dispatch.BINDING];
+    const originalPolicy = dispatch.loadPolicy(undefined, originalEnv);
+    const originalInputBytes = await readFile(originalBinding.path, "utf8");
+
+    await writeFile(join(preparedRepo, "original-build.ts"), "export const originalBuild = true;\n");
+    execFileSync("git", ["add", "original-build.ts"], { cwd: preparedRepo });
+    execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "original build"], { cwd: preparedRepo });
+    const builtHead = dispatch.gitHead(preparedRepo);
+    const nextContract = dispatch.createIssueContract(42, originalContract.criteria, 2, originalContract.digest);
+    const nextBytes = `${JSON.stringify(nextContract)}\n`;
+    const nextPath = join(root, "next-contract.json");
+    await writeFile(nextPath, nextBytes, { mode: 0o400 });
+    const nextDescriptor = { path: nextPath, sha256: createHash("sha256").update(nextBytes).digest("hex") };
+    const replan = { token: "native-replan-1", previousHead: builtHead, previousContractDigest: originalContract.digest, previousRound: 1 };
+    const ownerEnv = { ...originalEnv, PI_SUBAGENT_RUN_ID: originalRunId };
+    const amended = dispatch.prepareReplan({ input: originalBinding, contract: nextDescriptor, replan, authorization: { ownerRunId: originalRunId, token: replan.token } }, join(root, "native-replanned"), preparedRepo, ownerEnv);
+    assert.equal(await readFile(originalBinding.path, "utf8"), originalInputBytes);
+    assert.equal(amended.continuation.extensionBindings[dispatch.BINDING].path, amended.input.path);
+
+    mock.onCall({ echoEnv: ["PI_SUBAGENT_EXTENSION_BINDINGS", "PI_SUBAGENT_RUN_ID", "PI_SUBAGENT_PARENT_RUN_ID"] });
+    const continuation = await complete(executor, context, { workflowScript: `return await runs.all(${JSON.stringify([{ key: "same-owner-continuation", ...amended.continuation }])});` });
+    assert.equal(continuation.status.state, "complete");
+    const continuedEnv = findEnvironment(continuation.status.workflow.value[0]);
+    assert.ok(continuedEnv, "fresh continuation did not return its binding environment");
+    assert.notEqual(continuedEnv.PI_SUBAGENT_RUN_ID, originalRunId);
+    const continuedPolicy = dispatch.loadPolicy(undefined, continuedEnv);
+    assert.equal(continuedPolicy.continuation.authorizedBy, originalRunId);
+    assert.equal(continuedPolicy.continuation.expectedHeadSha, builtHead);
+    assert.doesNotThrow(() => dispatch.validateLaneStartup(continuedPolicy, preparedRepo));
+    assert.equal(continuedPolicy.targetBase.headSha, originalPolicy.targetBase.headSha);
+
+    await writeFile(join(preparedRepo, "repair.ts"), "export const repaired = true;\n");
+    execFileSync("git", ["add", "repair.ts"], { cwd: preparedRepo });
+    execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "repair"], { cwd: preparedRepo });
+    const repairedHead = dispatch.gitHead(preparedRepo);
+    const review = { head: repairedHead, round: 1, contractDigest: nextContract.digest, replan: continuedPolicy.replan, roles: [{ role: "correctness", thinking: "high", task: "Review repaired continuation head" }] };
+    assert.doesNotThrow(() => dispatch.prepareReview(review, join(root, "native-repaired-review"), continuedEnv));
+    const rendered = records.renderRecord({ kind: "REVIEW-PANEL", pr: 564, input: amended.input, head: repairedHead, inputs: [], supersedes: null }, `## Native continuation evidence\n\n**Repaired commit**: \`${repairedHead}\``, { cwd: preparedRepo, env: continuedEnv });
+    assert.match(rendered.markdown, new RegExp(repairedHead));
   });
 });
 

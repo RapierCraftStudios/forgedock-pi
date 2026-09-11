@@ -57,8 +57,8 @@ test("builder contract is explicit, fail-closed, and operationally bounded", asy
     assert.match(contract, new RegExp(requirement, "i"));
   }
   assert.match(contract, /deterministic implementation source of truth/);
-  assert.match(contract, /accepted.*Builder Contract.*immutable.*remediation.*context.*(?:cannot rewrite|do not rewrite)/is);
-  assert.match(root, /accepted Builder Contract is immutable.*reviewer\/remediation inputs.*context.*cannot rewrite/is);
+  assert.match(contract, /Builder Contract record is immutable history.*authorized.*superseding contract.*before editing/is);
+  assert.match(root, /Builder Contract record is immutable history.*authorized.*superseding contract.*before editing/is);
   assert.match(contract, /ambiguous.*stop.*before.*edit.*request clarification/is);
   assert.match(investigate, /criterion.*ambiguous.*stop.*before.*repository edit.*request clarification/is);
   assert.match(records, /Deterministic builder brief.*observable outcome.*exact.*behavior\/files.*smallest behavioral proof/is);

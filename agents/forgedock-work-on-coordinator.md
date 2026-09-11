@@ -43,12 +43,12 @@ wrong Pi workspace is rebound/retried internally, never projected as `GATED` or 
 
 At route start retain the canonical policy prepared from `agents.subagent_model`, then
 `agents.default_model`; do not re-resolve model or cap from a missing/local/borrowed file.
-Use `specs/helpers/dispatch.mjs review` for review requests: it applies that model and
-rejects rounds beyond the bound limit. Use `specs/helpers/record.mjs` to render/publish
-identity headers from the same input, not hand-typed SHAs or interpolated Markdown.
-Keep context/results compact and use native continuation/artifact APIs.
-Never pass legacy `sonnet`, `opus`, or `haiku` aliases. Re-read configuration only if
-this lane changes it; refresh issue/PR state only after a write or completion event.
+Use full provider/model identifiers from that policy only. Use `specs/helpers/dispatch.mjs
+review` for review requests: it applies that model and rejects rounds beyond the bound limit.
+Use `specs/helpers/record.mjs` to render/publish identity headers from the same input, not
+hand-typed SHAs or interpolated Markdown. Keep context/results compact and use native
+continuation/artifact APIs. Re-read configuration only if this lane changes it; refresh
+issue/PR state only after a write or completion event.
 
 Follow the named GitHub record contract from `work-on.md` and `knowledge-records.md`.
 Publish completed classification/context/contract/plan before repository edits, inline in
@@ -78,20 +78,19 @@ Review challenges completed work; it is not how you finish investigation. Do not
 phase agents, quality-gate agents, builders, or any other helper child.
 
 Give each review delegate its risk-specific role, evidence requirements, exact frozen diff,
-material graph inputs/decision links, and full normal read-only tools plus the bound one-shot
-PR-comment capability. Independent review must understand those constraints without treating
-historical approval as a safety waiver. Each reviewer finalizes its typed result and publishes
-its own exact-head, role/round-bound comment; it cannot edit source, create issues, edit labels,
-or merge. After joining the complete panel, this issue-specific work-on parent validates every
-result/comment pair, deduplicates and reconciles the findings, and publishes one consolidated
-parent disposition and official verdict. The shared ReviewPrCoordinator is mechanical only on
-this route. Do not launch nested issue orchestration, another work-on, or a second semantic
-review coordinator.
+material graph inputs/decision links, and full normal read-only tools. The native route gives
+the delegate no reviewer-comment or issue-publication capability: it returns one exact-head
+structured result to this parent. After joining the complete panel, this issue-specific
+work-on parent validates every result, deduplicates by causal mechanism, adjudicates the
+original acceptance and patch causality, and publishes one consolidated panel record and
+official verdict. Do not invoke the dormant controller implementation or invent a second
+semantic review coordinator.
 
 Route only parent-dispositioned, independently valuable follow-ups through the packaged
-`forgedock-issue` skill. Blocking findings on a work-on PR stay on its existing PR and source
-issue for cohesive remediation; they do not spawn recursive issues. Advisory, pre-existing,
-and out-of-scope concerns remain in the consolidated review unless separately authorized.
+`forgedock-issue` skill. A confirmed immediate-repair finding stays on its existing PR and
+source issue for cohesive remediation; it does not spawn a recursive blocker issue. Advisory,
+pre-existing, rejected, and out-of-scope concerns remain in the consolidated review unless
+separately authorized.
 The happy path is one complete review followed by merge, closure, and cleanup. Respect the
 root lifecycle's remediation cap. Finish or resume an authorized fix-plus-re-review round,
 including bounded missing-role retries, even at the limit. If its completed verdict still

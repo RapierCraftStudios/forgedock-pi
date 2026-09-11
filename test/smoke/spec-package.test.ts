@@ -189,11 +189,12 @@ test("review keeps exact-head quality without target-movement starvation", async
   assert.match(review, /replace `workflow:in-review` with\s+`workflow:awaiting-merge`/s);
   assert.match(adapter, /review-starvation/i);
   assert.match(reviewSkill, /one\s+additional\s+workflow containing only that role/s);
-  assert.match(reviewSkill, /one SHA-bound `FORGE:REVIEW-PANEL` comment/);
-  assert.match(reviewSkill, /never use `runs\.host`/);
+  assert.match(reviewSkill, /one SHA-bound `FORGE:REVIEW-PANEL` record/);
+  assert.match(reviewSkill, /no per-reviewer PR comments/);
+  assert.match(reviewSkill, /Do not use `runs\.host`/);
   assert.match(adapter, /`runs\.host` is not available/);
   assert.match(adapter, /Never restart a panel for JSON key casing/);
-  assert.match(reviewSkill, /formatting variance alone never restarts a role or panel/);
+  assert.match(reviewSkill, /[Ff]ormatting variance alone never restarts a valid role/);
 });
 
 test("remediated executable heads retain security review and ordinary issue review stays approving", async () => {
@@ -226,10 +227,49 @@ test("review uses generic delegates without package capability ceilings", async 
   const workOnAgent = await text("agents/forgedock-work-on-coordinator.md");
   await assert.rejects(access("agents/forgedock-reviewer.md"));
   assert.doesNotMatch(workOnAgent, /^tools:/m);
-  assert.match(reviewSkill, /fresh ordinary `delegate` agents with full normal tool\s+availability/s);
-  assert.match(adapter, /does not register a specialized reviewer profile or impose a reviewer capability ceiling/);
+  assert.match(reviewSkill, /fresh\s+read-only context as ordinary generic `delegate` agents/s);
+  assert.match(adapter, /does\s+not\s+register a specialized reviewer profile or impose a reviewer capability ceiling/);
   assert.match(reviewSkill, /verified `path:line` behaviors/);
-  assert.match(reviewSkill, /confirmed HIGH\/CRITICAL production-incident standard/);
+  assert.match(reviewSkill, /[Ss]everity\s+is separate from the blocking decision/);
+  assert.match(reviewSkill, /original acceptance criterion.*regardless of\s+severity/s);
+});
+
+test("active routes use one parent-owned evidence publication model", async () => {
+  const paths = [
+    "src/index.ts",
+    "skills/forgedock-work-on/SKILL.md",
+    "skills/forgedock-review-pr/SKILL.md",
+    "skills/forgedock-review-pr-staging/SKILL.md",
+    "skills/forgedock-test-gate/SKILL.md",
+    "skills/forgedock-issue/SKILL.md",
+    "skills/forgedock-quality-gate/SKILL.md",
+    "agents/forgedock-work-on-coordinator.md",
+    "specs/pi-adapter.md",
+    "specs/mechanical-execution.md",
+    "specs/original/commands/work-on.md",
+    "specs/original/commands/work-on/review.md",
+    "specs/original/commands/work-on/remediate.md",
+    "specs/original/commands/review-pr.md",
+    "specs/original/commands/review-pr-staging.md",
+    "specs/original/commands/test-gate.md",
+    "specs/original/commands/issue.md",
+    "specs/original/commands/quality-gate.md",
+    "specs/original/commands/orchestrate.md",
+    "specs/original/commands/orchestrate/config.md",
+  ];
+  const active = (await Promise.all(paths.map(text))).join("\n");
+  assert.match(active, /registerForgePromptRouter/);
+  assert.match(active, /IMMEDIATE REPAIR/);
+  assert.match(active, /NON-BLOCKING FOLLOW-UP/);
+  assert.match(active, /EVIDENCE\/AUTHORITY PREREQUISITE/);
+  assert.match(active, /FORGE:VERIFICATION_BLOCKED/);
+  assert.match(active, /structural-only/);
+  assert.match(active, /original acceptance/);
+  assert.match(active, /severity is separate/);
+  assert.match(active, /one consolidated/);
+  assert.doesNotMatch(active, /ReviewPrCoordinator|forge_publish_reviewer_comment/);
+  assert.doesNotMatch(active, /Task\(|Agent\(|allowed-tools|\.claude|Claude Code|OpenCode|sonnet|opus|haiku/);
+  assert.doesNotMatch(active, /each reviewer.{0,80}publish(?:es)? its own|result\/comment pair|per-role comments/i);
 });
 
 test("remediation is cohesive and re-review is scoped", async () => {
@@ -425,7 +465,7 @@ test("issue creation remains canonical for decomposition and follow-ups", async 
   for (const heading of ["## Problem", "## Root Cause", "## Affected Files", "## Expected Behavior", "## Acceptance Criteria"])
     assert.ok(issue.includes(heading), heading);
   assert.match(decompose, /forgedock-issue/);
-  assert.match(reviewSkill, /one valuable independent follow-up issue/);
+  assert.match(reviewSkill, /one valuable independent\s+follow-up\s+issue/);
 });
 
 test("prompt router remains the only active extension workflow layer", async () => {

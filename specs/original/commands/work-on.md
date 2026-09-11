@@ -113,36 +113,22 @@ Derive exactly one next action from live state:
 | open PR with current blockers and remediation rounds available | remediate |
 | blockers remain after last authorized re-review | read-only reassessment once, then GATED with unresolved evidence; no automatic extra round |
 | issue has durable GATED prerequisite/recovery | verify its exact wake condition; resume only when satisfied |
-| open PR has a parent-dispositioned contract-invalidating blocker | enter or resume the one bounded `CONTRACT_GAP` → `REPLAN_REQUIRED` transition; preserve the reviewed work and original usage |
-| issue has completed `REPLAN_REQUIRED` transition but no superseding contract | remain GATED until the exact re-plan identity and authority are present |
 | open PR awaiting current-head review | review |
 | committed build with no PR | prepare PR |
 | completed investigation requiring build | build |
 | completed investigation requiring decomposition | decompose |
 | no completed investigation | investigate |
 
-Completed phases are never repeated; legacy evidence never outranks live state. Recover
-usage from reviewed-head transitions and receipts. A round includes one cohesive fix plus its complete scoped re-review; Complete or resume it at the limit without double-charging. Never reset
-usage on resume, reinvestigation, a new head, or names such as `final`, `last`, or `closure`;
-post-review code fixes consume a round; bounded missing-role retries never charge twice. Only explicit new authority can extend an exhausted
-budget.
-
-### Contract-gap transition
-
-`CONTRACT_GAP` is a parent-dispositioned blocker when review proves the admitted
-investigation, architecture, Builder Contract, or proof map omitted a reachable behavior.
-Implementation defects and verification gaps remain ordinary bounded remediation; stale,
-advisory, pre-existing, out-of-scope, and unrelated findings never open this route.
-
-Record exact PR head/base, worktree/branch, reviewer evidence, finding, contract digest, and
-original usage. Preserve the partial work and writer. Admit at most one lane-scoped
-`REPLAN_REQUIRED` token for a superseding investigation/architecture/contract; resume, new
-head, renamed receipt, or target movement cannot mint another token or raise the cap.
-Before editing, retain every bound criterion ID, explain the omitted row, and publish a new
-contract digest. That digest invalidates old approval and requires a fresh exact-head panel.
-If the token, identity, or allowance is unavailable, publish `FORGE:GATED` with the exact
-wake condition without closing the issue or blocking unrelated lanes. A contract gap cannot
-silently become `needs-human`, a follow-up, or a second remediation round.
+A completed phase is never repeated. Old checkpoints and legacy comments may be read as
+compatibility evidence but are never written and never outrank live issue/PR/git state.
+Recover remediation usage from reviewed-head transitions and existing receipts, not just
+receipt count. A round includes one cohesive fix plus its complete scoped re-review; reserve
+it before editing. Complete or resume an authorized round even at the limit, including
+bounded missing-role retries; never charge it twice. A completed substantive panel closes
+that round, so its remaining blockers require a new round. Never reset usage on resume,
+reinvestigation, a new head, or names such as `final`, `last`, or `closure`. Fixing code after
+blocking review consumes a round even when called build, polish, or cleanup. Only explicit
+new authority can extend an exhausted budget; do not ask for routine extensions.
 
 ## Lifecycle
 
@@ -187,8 +173,9 @@ The Builder Contract is the four-part implementation brief described in `work-on
 supporting investigation/context/architecture records retain producer/consumer, state,
 failure/retry/recovery and lifecycle detail. Each criterion still carries mechanism +
 counterexample/behavioral test + residual risk; contradictory residual risk is
-`CONTRADICTED`, never `PASS`. The accepted Builder Contract is immutable for the run;
-later reviewer/remediation inputs are labeled context and cannot rewrite it.
+`CONTRADICTED`, never `PASS`. The accepted Builder Contract record is immutable history;
+an authorized material scope/proof revision appends a superseding contract before editing and
+never rewrites or erases the old record.
 
 ### 4. Prepare PR and review
 
@@ -199,12 +186,22 @@ produce a verdict or authorize merge.
 
 ### 5. Remediate when required
 
-Load `work-on/remediate.md` only for parent-dispositioned confirmed patch-caused blockers.
-Classify each blocker before editing: implementation defect, verification gap, or contract
- gap. The first two use ordinary bounded remediation; the last follows the durable
-`CONTRACT_GAP` → `REPLAN_REQUIRED` transition and cannot be patched before supersession.
-Apply one cohesive fix with focused evidence and a fresh exact-head re-review; no recursive
-blocker issues. Independent advisories/pre-existing findings never delay the active PR.
+Load `work-on/remediate.md` only for parent-dispositioned `IMMEDIATE REPAIR` findings with
+confirmed evidence of an unmet original acceptance criterion, a reachable consequential
+patch-caused regression, or a material patch-caused security/safety/data-integrity failure.
+The owner fixes the complete affected behavior cohesively, adds regression evidence, reruns
+verification, pushes one head, and launches the scoped fresh re-review.
+
+Do not create recursive blocker issues. A confirmed independent `NON-BLOCKING FOLLOW-UP` is
+deduplicated and filed once under existing authorization; pre-existing, advisory, rejected, and
+out-of-scope findings remain review context and never delay an otherwise acceptable PR.
+
+Before editing, classify an immediate-repair finding as `IMPLEMENTATION_DEFECT`,
+`VERIFICATION_GAP`, or `CONTRACT_GAP`. The first two use the bounded cohesive remediation
+route. A `CONTRACT_GAP` is an omitted reachable caller, invocation, transitive dependency, state/input transition, failure/retry/recovery path, cancellation, concurrency interleaving, or outcome: preserve the current work, supersede the contract, and enter exactly one bounded
+`REPLAN_REQUIRED` transition before editing. A resume, renamed round, or new receipt cannot
+reset the remediation cap; an unavailable token or authority produces `GATED` with its exact
+wake condition. Unrelated lanes continue.
 
 ### 6. Merge
 
@@ -218,16 +215,20 @@ Merge only when:
 - ancestry and mergeability are current; and
 - merge authorization permits the action.
 
-Read back merged state and merge commit. Base movement alone does not invalidate valid review;
-merge unchanged clean reviewed heads without rewriting. Reconcile only for required ancestry
-or conflict, compare effective patches, and rerun checks/review only when behavior or risk
-changed. Never create a competing writer or review loop.
+Read back merged state and merge commit. Base movement alone does not invalidate valid review.
+If the PR remains clean and mergeable with the reviewed head unchanged, merge without
+rewriting the branch. Reconcile only when branch policy requires an up-to-date head or the
+PR conflicts. After any rewrite, compare the effective patch before and after: reuse the
+valid review when the patch is identical and target changes do not overlap its files;
+rerun affected checks and fresh review only when behavior or risk actually changed. Never
+create a competing writer or a review loop.
 
 ### 7. Close
 
 Load `work-on/close.md` once. Verify the merge, explicitly close and label the issue,
 update an actual parent tracker when present, publish one terminal receipt, and finish
 cleanup according to ownership.
+
 ## Failure behavior
 
 Prefer repair and continuation over terminal gates within the remaining remediation budget:
@@ -246,13 +247,12 @@ Never infer human authority from uncertainty, tooling failure, target movement, 
 review blocker that is safely fixable inside scope.
 
 ## Terminal output
-Return one compact result with issue/PR/target, reviewed and merge heads, state, files,
-checks, reviewers, remediation count, risks, cleanup owner, first-pass review panels and remediation evidence,
-round limit, elapsed waits, and relevant history. Keep the configured model visible.
-End exactly with:
+
+Return a compact result with issue/PR/target/head/merge, checks, reviewers, remediation count, risks, cleanup owner, first-pass review panels/remediation, elapsed waits, configured model, relevant history/limits, and no blocker-driven edits, skipped proof, or gates counted as first-pass.
+End with exactly one machine-readable line:
 
 `FORGE_WORK_ON_RESULT status=DONE|GATED|FAILED issue=<N> pr=<N|none> dependency=SATISFIED|UNSATISFIED`
 
 Use SATISFIED only for DONE with merged or verified target evidence; invalidation,
-decomposition, GATED, or FAILED use UNSATISFIED. Explain wake/replacement conditions and
-avoid analytics or memory artifacts.
+decomposition, GATED, or FAILED use UNSATISFIED. Explain wake/replacement conditions and avoid
+analytics or memory artifacts.

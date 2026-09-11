@@ -6,15 +6,17 @@ description: Fix current-head blocking review findings cohesively and run scoped
 
 # Work On: Remediate
 
-Run only when the current reviewed head has parent-dispositioned, confirmed patch-caused
-blocking findings that are fixable inside the investigation scope. The same issue-specific
+Run only when the current reviewed head has parent-dispositioned `IMMEDIATE REPAIR` findings
+with confirmed current evidence and the fix is inside the investigation scope. The same issue-specific
 work-on parent remains the sole semantic authority and writer for the remediation round. The
 same work-on agent remains the sole writer; reviewer children never edit source.
 
 ## Preconditions
 
 - PR, issue, target, reviewed head, and blocking findings are exact and current.
-- Each blocker is CONFIRMED HIGH/CRITICAL with a concrete production scenario.
+- Each immediate-repair finding has confirmed current evidence of an unmet original acceptance
+  criterion, a reachable consequential patch-caused regression, or a material patch-caused
+  security/safety/data-integrity failure. A medium label does not waive an acceptance gap.
 - The fix does not require product, policy, legal, destructive, credential, or external
   authority.
 - Recover used/allowed rounds and any unfinished authorized round from retained work and
@@ -80,6 +82,12 @@ The parent performs this transition once, with the existing issue/PR and writer 
 5. If the token is unavailable, the cap is exhausted, or identity/authority is incomplete,
    publish `FORGE:GATED` naming the exact wake condition and preserved head/worktree. Do not
    close the issue, create a blocker issue, or block unrelated lanes.
+6. With the original owner binding still active, invoke the installed `dispatch.mjs replan`
+   helper using the original input, revised superseding contract, token, and current owner run
+   authorization. Wait for the original owner run to reach its terminal handoff, then invoke the
+   returned same-agent continuation with its exact new `extensionBindings`, same worktree and
+   `worktree:false`. Do not use retained `resume` with changed bindings or construct a replacement
+   environment in a fixture.
 
 A completed re-plan cannot loop back into another re-plan for the same issue/run. Only
 explicit new authority can supply a new allowance; it must be recorded as a superseding
@@ -136,13 +144,14 @@ Publish at most one receipt for the new head:
 
 Invoke the same parent-owned review route with the new exact head. Use one correctness/general role
 (count an existing blocker-producing correctness role), the blocker-producing specialists, and
-security for executable changes. Every fresh reviewer must publish its own bound comment.
-Provide prior findings, parent dispositions, remediated hunks, and executable regression evidence;
-keep the full current diff available. Add another specialist only when remediation materially
-changed that specialist's risk surface.
+security for executable changes. Fresh reviewers return structured exact-head evidence to the
+parent; the parent publishes one consolidated panel record. Provide prior findings, parent
+dispositions, remediated hunks, and executable regression evidence; keep the full current diff
+available. Add another specialist only when remediation materially changed that specialist's
+risk surface.
 
 Retain valid same-head roles and retry only missing/invalid roles. Re-review passes when no
-confirmed patch-caused blocker remains. Non-blocking follow-ups do not trigger another
+confirmed immediate-repair finding remains. Non-blocking follow-ups do not trigger another
 remediation round.
 
 Base movement follows `work-on/review.md`: an unchanged clean effective patch retains its
