@@ -136,13 +136,16 @@ object, and `{ownerRunId: $PI_SUBAGENT_RUN_ID, token}` authorization. Run the in
 
 The helper validates the original native binding, current owner run, repository/issue/target,
 exact existing worktree/head, original criterion IDs/text hashes/boundaries, one-token allowance,
-and contract supersession. It records the authorizing owner run in the amended binding. It writes
-a new digest-bound input without changing the old file and returns a continuation launch containing
-the same owner agent, model, issue, target, worktree, `worktree:false`, limits, and new
+and contract supersession. It records the authorizing owner run in the amended binding. The
+fresh continuation receives a new native run ID; it must not impersonate `authorizedBy`. The
+helper writes a new digest-bound input without changing the old file and returns a continuation
+launch containing the same owner agent, model, issue, target, worktree, `worktree:false`, limits, and new
 `extensionBindings`. Invoke that returned continuation unchanged
 with fresh context; this is the supported same-owner handoff, not a competing writer or a new
-issue. The continuation repairs/verifies first and only then prepares fresh review for its new
-head. A mismatched token/run/head/contract or allowance is rejected before launch.
+issue. The existing parent caller waits for the original writer's terminal handoff and retains
+responsibility for the continued issue result. The continuation repairs/verifies first and only
+then prepares fresh review for its new head. A mismatched token/run/head/contract or allowance is
+rejected before launch.
 
 ## Prepare a review
 
@@ -151,7 +154,9 @@ The owner writes a review plan containing `head`, `round` (0 initial, 1 first re
 match the bound lane contract. For an authorized re-plan, the plan additionally carries
 `replan: {token, previousHead, previousContractDigest, previousRound}`; the helper validates
 that it matches the bound lane input and that the new head/digest differ from the preserved
-identity. This is the same validated input binding, not a side ledger.
+identity. This is the same validated input binding, not a side ledger. When the continuation
+input is active, forward its complete bound `replan` object—including helper-added `authorizedBy`
+unchanged into `prepareReview`; do not reconstruct the old four-field shape.
 Role tasks contain the frozen diff/graph context; they cannot provide a different model. Use
 optional `input` only for an explicit standalone/legacy descriptor; it must match the native
 binding when one exists.

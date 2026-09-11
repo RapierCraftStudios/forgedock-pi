@@ -90,7 +90,7 @@ function validateContinuation(value, policy, env) {
   requireThat(typeof value.token === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value.token), "Continuation token is invalid");
   requireThat(policy.replan?.authorizedBy === value.authorizedBy && policy.replan?.token === value.token, "Continuation authorization disagrees with replan binding");
   requireThat(policy.replan?.previousHead === value.expectedHeadSha, "Continuation head disagrees with replan binding");
-  requireThat(env.PI_SUBAGENT_RUN_ID === value.authorizedBy, "Continuation must run under its authorized owner identity");
+  requireThat(typeof env.PI_SUBAGENT_RUN_ID === "string" && env.PI_SUBAGENT_RUN_ID.length > 0 && env.PI_SUBAGENT_RUN_ID !== value.authorizedBy, "Continuation must run under a fresh native execution identity");
   return value;
 }
 function bindReviewPlan(plan, policy) {
@@ -384,7 +384,8 @@ export function prepareReplan(plan, out, cwd = process.cwd(), env = process.env)
     token: plan.replan.token,
   };
   const amended = { ...policy, contract: descriptor(plan.contract.path), contractDigest: nextContract.digest, replan: authorizedReplan, continuation: continuationBinding };
-  validateContinuation(continuationBinding, amended, env);
+  // Preparation runs under the original owner identity; the continuation validates the
+  // fresh native run and its parent identity when the returned launch is executed.
   fs.mkdirSync(out, { recursive: true });
   out = path.resolve(out);
   const input = save(path.join(out, `replan-${policy.issue}.json`), json(amended));

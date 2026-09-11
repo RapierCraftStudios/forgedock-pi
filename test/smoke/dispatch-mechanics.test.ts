@@ -280,7 +280,7 @@ test("review preparation cannot substitute a model, duplicate correctness or exc
     const weakenedBytes = `${JSON.stringify(weakenedContract)}\n`;
     await writeFile(weakenedPath, weakenedBytes, { mode: 0o400 });
     const weakenedDescriptor = { path: weakenedPath, sha256: createHash("sha256").update(weakenedBytes).digest("hex") };
-    const ownerEnv = { ...env, PI_SUBAGENT_RUN_ID: "owner-a" };
+    const ownerEnv = { ...env, PI_SUBAGENT_RUN_ID: "owner-a", PI_SUBAGENT_PARENT_RUN_ID: "workflow-parent-a" };
     const unauthorized = { input: originalInput, contract: revisedDescriptor, replan, authorization: { ownerRunId: "other-owner", token: replan.token } };
     assert.throws(() => dispatch.prepareReplan(unauthorized, join(root, "unauthorized"), repoOne, ownerEnv), /current owner run/);
     assert.throws(() => dispatch.prepareReplan({ input: originalInput, contract: weakenedDescriptor, replan, authorization: { ownerRunId: "owner-a", token: replan.token } }, join(root, "weakened"), repoOne, ownerEnv), /cannot weaken original criterion/);
@@ -290,9 +290,10 @@ test("review preparation cannot substitute a model, duplicate correctness or exc
     // original input or launch a competing writer. Startup validates H1 via the authorized B binding.
     const amended = dispatch.prepareReplan({ input: originalInput, contract: revisedDescriptor, replan, authorization: { ownerRunId: "owner-a", token: replan.token } }, join(root, "replanned"), repoOne, ownerEnv);
     assert.equal(await readFile(originalInput.path, "utf8"), originalBytes, "original bound input must remain immutable");
-    const amendedEnv = { ...ownerEnv, PI_SUBAGENT_EXTENSION_BINDINGS: JSON.stringify({ [dispatch.BINDING]: amended.input }) };
+    const amendedEnv = { ...ownerEnv, PI_SUBAGENT_RUN_ID: "continuation-run-b", PI_SUBAGENT_EXTENSION_BINDINGS: JSON.stringify({ [dispatch.BINDING]: amended.input }) };
     const amendedPolicy = dispatch.loadPolicy(undefined, amendedEnv);
     assert.doesNotThrow(() => dispatch.validateLaneStartup(amendedPolicy, repoOne));
+    assert.throws(() => dispatch.loadPolicy(undefined, { ...ownerEnv, PI_SUBAGENT_EXTENSION_BINDINGS: JSON.stringify({ [dispatch.BINDING]: amended.input }) }), /fresh native execution identity/);
     assert.equal(amended.previousInput.path, originalInput.path);
     assert.equal(amendedPolicy.issue, boundPolicy.issue);
     assert.equal(amendedPolicy.repo, boundPolicy.repo);
@@ -304,11 +305,13 @@ test("review preparation cannot substitute a model, duplicate correctness or exc
     assert.equal(amendedPolicy.continuation.expectedHeadSha, builtHead, "continuation startup uses the preserved reviewed head");
     assert.equal(amendedPolicy.contractDigest, revisedContract.digest);
     assert.equal(amendedPolicy.replan.authorizedBy, "owner-a");
+    assert.equal(amendedPolicy.continuation.authorizedBy, "owner-a");
     assert.equal(amended.continuation.agent, "forgedock-parent-control.forgedock-work-on-coordinator");
     assert.equal(amended.continuation.cwd, repoOne);
     assert.equal(amended.continuation.worktree, false);
     assert.equal(amended.continuation.context, "fresh");
     assert.equal(amended.continuation.model, boundPolicy.model);
+    assert.notEqual(amendedEnv.PI_SUBAGENT_RUN_ID, amendedPolicy.replan.authorizedBy);
     assert.deepEqual(amended.continuation.extensionBindings[dispatch.BINDING], amended.input);
     assert.match(amended.continuation.task, /same ForgeDock owner lifecycle/);
     assert.match(amended.continuation.task, /terminal before this continuation starts/);
