@@ -11,6 +11,47 @@ const dispatch = await import(new URL("../../specs/helpers/dispatch.mjs", import
 const { assertNoTargetAgentShadowing } = await import(new URL("../../specs/helpers/control-plane.mjs", import.meta.url).href);
 const records = await import(new URL("../../specs/helpers/record.mjs", import.meta.url).href);
 const projectRoot = fileURLToPath(new URL("../..", import.meta.url));
+
+test("dogfood 567 keeps its acceptance boundary test-only", () => {
+  const contract = dispatch.createIssueContract(567, [
+    {
+      id: "dogfood-567-unit",
+      textHash: "sha256:fde086b3939e0304406a211269cfb51f92b2ac8fb8fddfcbb805569cd3d53643",
+      proofType: "unit",
+      affectedBoundaries: ["test/smoke/dispatch-mechanics.test.ts"],
+    },
+    {
+      id: "dogfood-567-scope",
+      textHash: "sha256:efe9e6c377976f9296bc7839b83502d9e48d4cc550b72a4a2733893c788db770",
+      proofType: "manual",
+      affectedBoundaries: ["test/smoke/dispatch-mechanics.test.ts"],
+    },
+  ]);
+
+  assert.deepEqual(
+    contract.criteria.map(({ id, proofType, affectedBoundaries }: {
+      id: string;
+      proofType: string;
+      affectedBoundaries: string[];
+    }) => ({
+      id,
+      proofType,
+      affectedBoundaries,
+    })),
+    [
+      {
+        id: "dogfood-567-unit",
+        proofType: "unit",
+        affectedBoundaries: ["test/smoke/dispatch-mechanics.test.ts"],
+      },
+      {
+        id: "dogfood-567-scope",
+        proofType: "manual",
+        affectedBoundaries: ["test/smoke/dispatch-mechanics.test.ts"],
+      },
+    ],
+  );
+});
 const forgeDockRoot = process.env.FORGEDOCK_PARENT_PACKAGE_ROOT ?? projectRoot;
 const piSubagentsRoot = process.env.PI_SUBAGENTS_PARENT_PACKAGE_ROOT ?? fs.realpathSync(join(projectRoot, "node_modules/pi-subagents"));
 const controlPlane = dispatch.createControlPlaneDescriptor({ forgeDockRoot, piSubagentsRoot });
