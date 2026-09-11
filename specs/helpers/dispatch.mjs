@@ -81,6 +81,18 @@ function validateReplan(value, currentContractDigest, name = "replan") {
   requireThat(value.previousContractDigest !== currentContractDigest, `${name} must supersede a different contract digest`);
   return value;
 }
+function validateContinuation(value, policy, env) {
+  fields(value, ["schema", "previousInputSha", "expectedHeadSha", "authorizedBy", "token"], "continuation");
+  requireThat(value.schema === "forgedock.replan-continuation/v1", "Continuation schema is invalid");
+  requireThat(typeof value.previousInputSha === "string" && /^[a-f0-9]{64}$/.test(value.previousInputSha), "Continuation previous input identity is invalid");
+  requireThat(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(value.expectedHeadSha ?? ""), "Continuation expected head is invalid");
+  requireThat(typeof value.authorizedBy === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value.authorizedBy), "Continuation authorization identity is invalid");
+  requireThat(typeof value.token === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value.token), "Continuation token is invalid");
+  requireThat(policy.replan?.authorizedBy === value.authorizedBy && policy.replan?.token === value.token, "Continuation authorization disagrees with replan binding");
+  requireThat(policy.replan?.previousHead === value.expectedHeadSha, "Continuation head disagrees with replan binding");
+  requireThat(env.PI_SUBAGENT_RUN_ID === value.authorizedBy, "Continuation must run under its authorized owner identity");
+  return value;
+}
 function bindReviewPlan(plan, policy) {
   if (policy.contractDigest !== undefined) {
     requireThat(plan.contractDigest === policy.contractDigest, "Review contractDigest disagrees with bound policy");
@@ -132,7 +144,7 @@ function targetBaseDescriptor(baseCwd, repository, target) {
   requireThat(descended, "Prepared target base is not descended from the configured target");
   return valueDescriptor({ path: basePath, repository, target, targetSha, headSha, branch, gitdir, commonDir, repositoryIdentity: `${commonDir}:${String(commonStat.dev)}:${String(commonStat.ino)}` });
 }
-function validateTargetBaseDescriptor(value, repository, target, runtimeCwd) {
+function validateTargetBaseDescriptor(value, repository, target, runtimeCwd, expectedRuntimeHead) {
   requireThat(value && typeof value === "object" && !Array.isArray(value), "Target-base descriptor is invalid");
   const { digest, ...content } = value;
   requireThat(typeof digest === "string" && digest === `sha256:${sha(Buffer.from(canonicalJson(content)))}`, "Target-base descriptor digest mismatch");
@@ -140,7 +152,8 @@ function validateTargetBaseDescriptor(value, repository, target, runtimeCwd) {
   try { canonicalPath = fs.realpathSync(content.path); }
   catch { throw new Error("Workspace binding failure: prepared target base is missing"); }
   requireThat(path.isAbsolute(content.path ?? "") && canonicalPath === content.path, "Target-base path is not canonical");
-  requireThat(content.repository === repository && content.target === target && /^[a-f0-9]{40}$/.test(content.targetSha ?? "") && /^[a-f0-9]{40}$/.test(content.headSha ?? ""), "Target-base identity mismatch");
+  const expectedHead = expectedRuntimeHead ?? content.headSha;
+  requireThat(content.repository === repository && content.target === target && /^[a-f0-9]{40}$/.test(content.targetSha ?? "") && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(content.headSha ?? "") && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(expectedHead ?? ""), "Target-base identity mismatch");
   requireThat(typeof content.commonDir === "string" && path.isAbsolute(content.commonDir) && typeof content.repositoryIdentity === "string" && content.repositoryIdentity.startsWith(`${content.commonDir}:`), "Target-base repository identity is missing");
   if (runtimeCwd !== undefined) {
     requireThat(fs.realpathSync(runtimeCwd) === content.path, "Workspace binding failure: effective cwd disagrees with prepared target base");
@@ -158,7 +171,7 @@ function validateTargetBaseDescriptor(value, repository, target, runtimeCwd) {
     requireThat(execFileSync("git", ["-C", runtimeCwd, "diff", "--cached", "--quiet"], { stdio: "ignore" }) === null, "Workspace binding failure: effective worktree has staged changes");
     requireThat(git(runtimeCwd, ["status", "--porcelain=v1", "--untracked-files=all"]) === "", "Workspace binding failure: effective worktree is not clean");
     const head = git(runtimeCwd, ["rev-parse", "HEAD"]);
-    requireThat(head === content.headSha, "Workspace binding failure: effective head disagrees with prepared target base");
+    requireThat(head === expectedHead, "Workspace binding failure: effective head disagrees with authorized continuation head");
     let descended = true;
     try { execFileSync("git", ["-C", runtimeCwd, "merge-base", "--is-ancestor", content.targetSha, head], { stdio: "ignore" }); }
     catch { descended = false; }
@@ -181,7 +194,7 @@ function validatePackagedRootDescriptor(value, controlPlane) {
 }
 export function validateLaneStartup(policy, runtimeCwd = process.cwd()) {
   try {
-    validateTargetBaseDescriptor(policy.targetBase, policy.repo, policy.target, runtimeCwd);
+    validateTargetBaseDescriptor(policy.targetBase, policy.repo, policy.target, runtimeCwd, policy.continuation?.expectedHeadSha);
     validatePackagedRootDescriptor(policy.packagedRoot, policy.controlPlane);
     return policy;
   } catch (error) {
@@ -237,6 +250,7 @@ export function loadPolicy(explicit, env = process.env) {
     requireThat(policy.contractDigest === validateIssueContractFile(policy.contract, policy.issue).digest, "Bound issue contract is stale");
   }
   if (policy.replan !== undefined) validateReplan(policy.replan, policy.contractDigest);
+  if (policy.continuation !== undefined) validateContinuation(policy.continuation, policy, env);
   if (policy.targetBase !== undefined || policy.packagedRoot !== undefined) {
     try {
       requireThat(policy.targetBase && policy.packagedRoot, "Bound workspace descriptors are incomplete");
@@ -362,7 +376,15 @@ export function prepareReplan(plan, out, cwd = process.cwd(), env = process.env)
   assertRepo(policy.repo, cwd);
   requireThat(gitHead(cwd) === plan.replan.previousHead, "Replan previous head disagrees with the existing owner worktree");
   const authorizedReplan = { ...plan.replan, authorizedBy: plan.authorization.ownerRunId };
-  const amended = { ...policy, contract: descriptor(plan.contract.path), contractDigest: nextContract.digest, replan: authorizedReplan };
+  const continuationBinding = {
+    schema: "forgedock.replan-continuation/v1",
+    previousInputSha: plan.input.sha256,
+    expectedHeadSha: plan.replan.previousHead,
+    authorizedBy: plan.authorization.ownerRunId,
+    token: plan.replan.token,
+  };
+  const amended = { ...policy, contract: descriptor(plan.contract.path), contractDigest: nextContract.digest, replan: authorizedReplan, continuation: continuationBinding };
+  validateContinuation(continuationBinding, amended, env);
   fs.mkdirSync(out, { recursive: true });
   out = path.resolve(out);
   const input = save(path.join(out, `replan-${policy.issue}.json`), json(amended));
