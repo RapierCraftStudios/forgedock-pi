@@ -561,7 +561,10 @@ function record(options, mode) {
   if (body.length < 8) fail("Record body must contain substantive evidence");
   if (/^<!-- FORGE:/m.test(body)) fail("Record markers are generated; remove the marker from the body file");
   const marker = `<!-- FORGE:CANDIDATE:${kind} ${JSON.stringify(identity)} -->`;
-  const markdown = `${marker}\n## ForgeDock ${kind.toLowerCase()}\n\n${body}\n`;
+  const reviewHeaders = kind === "REVIEW"
+    ? `**Reviewer role**: \`${identity.role}\`\n**Pull request**: #${identity.pullRequest}\n**Reviewed source**: \`${identity.head}\`\n**Review base**: \`${identity.baseRef}\` at \`${identity.baseSha}\`\n\n`
+    : "";
+  const markdown = `${marker}\n## ForgeDock ${kind.toLowerCase()}\n\n${reviewHeaders}${body}\n`;
   const reportFile = resolve(optionalOption(options, "report-file", join(dirname(resolve(bodyFile)), `${kind.toLowerCase()}.report.md`)));
   writeExclusive(reportFile, markdown);
   const result = { schema: "forgedock.candidate-record/v1", identity, reportFile, contentSha256: sha256(markdown) };
@@ -587,12 +590,18 @@ function sourceValue(entry) {
   return typeof entry === "string" ? entry : entry && typeof entry === "object" && typeof entry.source === "string" ? entry.source : undefined;
 }
 
-function sourceMatches(entry, source) {
-  return sourceValue(entry) === source;
+function sourceIdentity(source, configDir) {
+  if (!source) return undefined;
+  return /^(?:git:|npm:|https?:|ssh:|git@)/.test(source) ? source : resolve(configDir, source);
+}
+
+function sourceMatches(entry, source, configDir) {
+  return sourceIdentity(sourceValue(entry), configDir) === sourceIdentity(source, configDir);
 }
 
 function runPi(configDir, argv) {
-  return exec("pi", argv, { env: { ...process.env, PI_CODING_AGENT_DIR: resolve(configDir), PI_OFFLINE: "1", PI_SKIP_VERSION_CHECK: "1", PI_TELEMETRY: "0" }, timeout: 300_000 });
+  const normalized = argv.map((value, index) => index === 1 && (argv[0] === "install" || argv[0] === "remove") ? sourceIdentity(value, configDir) ?? value : value);
+  return exec("pi", normalized, { cwd: configDir, env: { ...process.env, PI_CODING_AGENT_DIR: resolve(configDir), PI_OFFLINE: "1", PI_SKIP_VERSION_CHECK: "1", PI_TELEMETRY: "0" }, timeout: 300_000 });
 }
 
 function replaceInstallation(options) {
@@ -603,7 +612,7 @@ function replaceInstallation(options) {
   if (!existsSync(settingsFile)) fail(`Missing settings file: ${settingsFile}`);
   const before = readFileSync(settingsFile, "utf8");
   const parsed = readJson(settingsFile);
-  if (!settingsPackages(parsed).some((entry) => sourceMatches(entry, oldSource))) fail("--old-source is not registered; refusing to guess a replacement");
+  if (!settingsPackages(parsed).some((entry) => sourceMatches(entry, oldSource, configDir))) fail("--old-source is not registered; refusing to guess a replacement");
   const rollbackDir = resolve(optionalOption(options, "rollback-dir", join(configDir, "forgedock-candidate-rollbacks", new Date().toISOString().replace(/[:.]/g, "-"))));
   mkdirSync(rollbackDir, { recursive: true, mode: 0o700 });
   writeFileSync(join(rollbackDir, "settings.json"), before, { mode: 0o600, flag: "wx" });
@@ -614,8 +623,8 @@ function replaceInstallation(options) {
     runPi(configDir, ["remove", oldSource, "--approve"]);
     const after = readJson(settingsFile);
     const packages = settingsPackages(after);
-    if (!packages.some((entry) => sourceMatches(entry, candidateSource))) fail("Candidate source is not registered after replacement");
-    if (packages.some((entry) => sourceMatches(entry, oldSource))) fail("Old ForgeDock source remains registered after replacement");
+    if (!packages.some((entry) => sourceMatches(entry, candidateSource, configDir))) fail("Candidate source is not registered after replacement");
+    if (packages.some((entry) => sourceMatches(entry, oldSource, configDir))) fail("Old ForgeDock source remains registered after replacement");
     const receipt = { ...manifest, status: "replaced", packageCount: packages.length };
     writeExclusive(join(rollbackDir, "receipt.json"), json(receipt));
     process.stdout.write(json(receipt));
@@ -645,7 +654,7 @@ function rollbackInstallation(options) {
   writeAtomic(resolve(manifest.settingsFile), backup);
   const restored = readJson(manifest.settingsFile);
   const packages = settingsPackages(restored);
-  if (!packages.some((entry) => sourceMatches(entry, manifest.oldSource)) || packages.some((entry) => sourceMatches(entry, manifest.candidateSource))) fail("Rollback readback found an unexpected package registration");
+  if (!packages.some((entry) => sourceMatches(entry, manifest.oldSource, configDir)) || packages.some((entry) => sourceMatches(entry, manifest.candidateSource, configDir))) fail("Rollback readback found an unexpected package registration");
   process.stdout.write(json({ ...manifest, status: "rolled-back", packageCount: packages.length }));
 }
 
