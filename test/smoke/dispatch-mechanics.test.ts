@@ -436,7 +436,7 @@ test("record rendering derives identity and treats shell metacharacters as liter
     assert.throws(() => records.renderRecord({ kind: "REVIEW-PANEL", repo: "example/project", pr: 99, baseRef: "staging", baseSha: rendered.head, head: rendered.head, round: 0, reviewerReports: [{ role: "correctness", id: 123, url: "https://github.com/example/project/pull/99#issuecomment-123", head: rendered.head, round: 0 }], inputs: [], supersedes: null, controlPlane }, body, { cwd: repo, env: { PI_SUBAGENT_EXTENSION_BINDINGS: "not-json" } }), /Native lane binding envelope is invalid/);
     const reviewFile = join(root, "review.md"); await writeFile(reviewFile, review.markdown);
     for (const mismatch of [{ headRefOid: "0".repeat(40), baseRefName: "staging" }, { headRefOid: review.head, baseRefName: "main" }]) {
-      assert.throws(() => records.publishRecord(review, reviewFile, () => JSON.stringify(mismatch)), /PR head\/(?:base|target)/);
+      assert.throws(() => records.publishRecord(review, reviewFile, () => JSON.stringify(mismatch)), /PR head\/target/);
     }
   });
 });

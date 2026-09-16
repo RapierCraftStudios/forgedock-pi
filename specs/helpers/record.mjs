@@ -130,11 +130,11 @@ function commentPages(raw) {
 function reviewerMatches(comments, authorization) {
   return comments.filter(comment => reviewerCommentMatches(comment, authorization));
 }
-function currentPullRequest(authorization, gh) {
+function currentPullRequest(authorization, gh, identityError = "PR head/base disagrees with bound reviewer identity") {
   const pull = JSON.parse(callGh(gh, ["pr", "view", String(authorization.pullRequest), "-R", authorization.repository, "--json", "headRefOid,baseRefName,baseRefOid,mergeable,mergeStateStatus"], authorization.publicationTimeoutMs));
-  check(pull.headRefOid === authorization.reviewedHead && pull.baseRefName === authorization.baseRef, "PR head/base disagrees with bound reviewer identity");
+  check(pull.headRefOid === authorization.reviewedHead && pull.baseRefName === authorization.baseRef, identityError);
   if (protectedReview(authorization.mode, authorization.baseRef)) {
-    check(pull.baseRefOid === authorization.baseSha, "PR head/base disagrees with bound reviewer identity");
+    check(pull.baseRefOid === authorization.baseSha, identityError);
   }
   const mergeable = typeof pull.mergeable === "string" ? pull.mergeable.toUpperCase() : pull.mergeable;
   const mergeState = typeof pull.mergeStateStatus === "string" ? pull.mergeStateStatus.toUpperCase() : "";
@@ -316,7 +316,7 @@ export function publishRecord(record, outputFile, gh = defaultGh) {
   check(fs.readFileSync(outputFile, "utf8") === markdown, "Publication file does not match rendered identity/body");
   if (markdown.startsWith("<!-- FORGE:REVIEW-PANEL -->")) {
     check(typeof record.baseSha === "string" && FULL_SHA_PATTERN.test(record.baseSha), "Review publication requires its frozen base SHA");
-    currentPullRequest({ pullRequest: target, repository: repo, reviewedHead: head, baseRef, baseSha: record.baseSha, mode: reviewMode(record.mode), publicationTimeoutMs: 120_000 }, gh);
+    currentPullRequest({ pullRequest: target, repository: repo, reviewedHead: head, baseRef, baseSha: record.baseSha, mode: reviewMode(record.mode), publicationTimeoutMs: 120_000 }, gh, "PR head/target disagrees with bound review identity");
   }
   const endpoint = `repos/${repo}/issues/${target}/comments`;
   const pages = JSON.parse(callGh(gh, ["api", "--paginate", "--slurp", endpoint], 120_000));
