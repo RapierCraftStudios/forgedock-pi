@@ -8,21 +8,21 @@ Qualification was run against source commit `27a6bf39a1d6fc0663a2000c2aea84640f7
 
 | Trial/check | Result | Evidence |
 | --- | --- | --- |
-| TypeScript and complete repository test suite | PASS: 414 passed, 0 failed, 6 explicit environment skips | `/tmp/forgedock-candidate-check-final-427.log` |
+| TypeScript and complete repository test suite | PASS: 414 passed, 0 failed, 6 explicit environment skips | `/tmp/forgedock-candidate-check-ebd.log` |
 | Candidate-focused tests | PASS: routing, config, exact dependency DAG, frozen review, marker publication, ambiguous-create recovery, replacement/rollback, staging evidence, source-read-only reviewer, and product-like replay | `test/candidate/*.test.ts` |
 | Product-like bug replay | PASS: real cross-file consumer failed before the producer fix and passed after it | `test/candidate/product-replay.test.ts` |
-| Packed package smoke | PASS: 28 files; no top-level `skills/`, `specs/`, or `agents/` legacy roots | `/tmp/forgedock-pack-final-427.json`, `test/smoke/package-launch-contract.test.ts` |
-| Generated native dispatch request | PASS: native `subagent` validator accepted rolling two-owner request; exact dependency and owner-recovery fields are present | `/tmp/candidate-dispatch-final-prep.json`, final generated workflow validation |
-| Generated native review request | PASS: native `subagent` validator accepted the frozen two-role request with per-role authorization | `/tmp/candidate-review-final-prep.json`, final generated workflow validation |
-| Fresh installed RPC command | PASS: `/forge-status` executed from the isolated config and reported `native subagent=available; staging tools=3/3` | `/tmp/forgedock-status-final.jsonl` |
-| Isolated install/doctor | PASS: Pi `0.85.1`, `pi-subagents` `0.60.0`, pinned commit `0931cbbb...`; candidate and subagent tree digests and settings verified | `/tmp/forgedock-verify-427d.json`, `/tmp/forgedock-doctor-427d.json` |
+| Packed package smoke | PASS: 29 files; no top-level `skills/`, `specs/`, or `agents/` legacy roots | `/tmp/forgedock-pack-ebd.json`, `test/smoke/package-launch-contract.test.ts` |
+| Generated native dispatch request | PASS: native `subagent` validator accepted rolling two-owner request; exact dependency and owner-recovery fields are present | `/tmp/candidate-dispatch-ebd.json`, final generated workflow validation |
+| Generated native review request | PASS: native `subagent` validator accepted the frozen two-role request with per-role authorization | `/tmp/candidate-review-ebd.json`, final generated workflow validation |
+| Fresh installed RPC command | PASS: `/forge-status` executed from the isolated config and reported `native subagent=available; staging tools=3/3` | `/tmp/forgedock-status-ebd.jsonl` |
+| Isolated install/doctor | PASS: Pi `0.85.1`, `pi-subagents` `0.60.0`, pinned commit `0931cbbb...`; candidate and subagent tree digests and settings verified | `/tmp/forgedock-verify-ebd.json`, `/tmp/forgedock-doctor-ebd.json` |
 | Publication fault injection | PASS: lost create response reconciled by stable marker and exact readback | `test/candidate/qualification.test.ts` |
 | Replacement and rollback | PASS: disposable Pi registration replaced and restored without changing unrelated settings | `test/candidate/qualification.test.ts` |
 
 A fresh final native child smoke was also run from the candidate checkout with one
 read-only `scout` child and no source/GitHub writes. Its output is retained in
-`/tmp/forgedock-candidate-native-child-final2.jsonl`; the run was deliberately bounded
-to one child and one session.
+`/tmp/forgedock-candidate-native-child-ebd.jsonl`; native child run id
+`f1a3cf88-5e23-4727-ab68-3047a1282623` completed successfully.
 
 ## Not claimed
 
