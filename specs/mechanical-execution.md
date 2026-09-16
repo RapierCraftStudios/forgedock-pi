@@ -47,17 +47,19 @@ repository root; it does not create an issue-owner lane or a fabricated issue. I
 
 The plan is deliberately strict and contains the installed `controlPlane` descriptor plus
 `pr`, full `head`, `baseRef`, full `baseSha`, `mode` (`standard` or `staging`), selected
-`roles`, and optional `round`/`requestStartedAt`. Repository, model, and all execution limits
+`roles`, `round`, and the request-start timestamp `requestStartedAt`. Repository, model, and all execution limits
 are resolved from that root's canonical `forge.yaml`. The output persists a standalone policy
 with the canonical config path and SHA-256 digest, explicit reviewer authorizations, and a
 native request. It sets `globalConcurrencyLimit`, reviewer/panel deadlines, publication and
 result-collection margins, and `maxSubagentSpawnsPerRun` from the retained policy only.
 
 Review defaults are bounded: reviewer timeout 900000ms, concurrency 4, publication and
-collection margins 120000ms, panel timeout 1200000ms, and standalone launch allowance two
-launches per selected role. Explicit `review.*` values win; `review.launch_allowance` must
-cover the selected roles. A six-role panel therefore admits two waves and its configured
-panel deadline must cover both waves plus publication and collection margins. Unknown runtime
+collection margins 120000ms, panel timeout 1200000ms (or the larger initial-plus-recovery
+budget for standalone), and standalone launch allowance two launches per selected role.
+Explicit `review.*` values win; `review.launch_allowance` must cover the selected roles, and an
+explicit panel timeout must cover both initial and terminal-role recovery waves. A six-role
+panel therefore admits two initial waves and its configured panel deadline must cover both
+initial and recovery waves plus publication and collection margins. Unknown runtime
 cap fields, issue-owner native bindings, missing/malformed `forge.yaml`, repository mismatch,
 or stale config fail before any reviewer starts. Never edit the generated request. A missing
 or timed-out role is recoverable only after its native child is terminal, using the same stable

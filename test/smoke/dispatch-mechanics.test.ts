@@ -602,10 +602,10 @@ test("standalone policy and corrupt descriptor handling", async () => {
 test("standalone review preparation binds canonical config, exact identity, waves, and launch cap", async () => {
   await fixture(async ({ root, repo }) => {
     const config = await readFile(join(repo, "forge.yaml"), "utf8");
-    await writeFile(join(repo, "forge.yaml"), config.replace("panel_timeout_ms: 1200000", "panel_timeout_ms: 2400000").replace("result_collection_timeout_ms: 120000}", "result_collection_timeout_ms: 120000, launch_allowance: 11}"));
+    await writeFile(join(repo, "forge.yaml"), config.replace("panel_timeout_ms: 1200000", "panel_timeout_ms: 4000000").replace("result_collection_timeout_ms: 120000}", "result_collection_timeout_ms: 120000, launch_allowance: 11}"));
     const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
     const roles = ["correctness", "security", "api", "infra", "reliability", "testing"].map(role => ({ role, task: `Review ${role}`, thinking: "medium" }));
-    const plan = { pr: 33792, head, baseRef: "staging", baseSha: head, mode: "standard", roles, requestStartedAt: "2026-01-01T00:00:00Z", controlPlane };
+    const plan = { pr: 33792, head, baseRef: "staging", baseSha: head, mode: "standard", round: 0, roles, requestStartedAt: "2026-01-01T00:00:00Z", controlPlane };
     const prepared = dispatch.prepareStandaloneReview(plan, join(root, "standalone-review"), repo, {});
     assert.equal(prepared.policy.issue, undefined, "standalone policy must not fabricate an issue");
     assert.equal(prepared.policy.repo, "example/project");
@@ -615,6 +615,7 @@ test("standalone review preparation binds canonical config, exact identity, wave
     assert.equal(prepared.request.maxSubagentSpawnsPerRun, 11);
     assert.equal(prepared.timing.waves, 2);
     assert.equal(prepared.timing.minimumPanelTimeoutMs, 2040000);
+    assert.equal(prepared.timing.panelTimeoutMs, 4000000);
     assert.equal(prepared.reviewers.length, 6);
     const authorization = JSON.parse(await readFile(prepared.reviewers[0].authorization.path, "utf8"));
     assert.equal(authorization.pullRequest, 33792);
@@ -622,6 +623,8 @@ test("standalone review preparation binds canonical config, exact identity, wave
     assert.equal(authorization.baseRef, "staging");
     assert.equal(authorization.baseSha, head);
     assert.equal(authorization.mode, "standard");
+    await writeFile(join(repo, "forge.yaml"), config.replace("panel_timeout_ms: 1200000", "panel_timeout_ms: 4000000").replace("result_collection_timeout_ms: 120000}", "result_collection_timeout_ms: 120000, launch_allowance: 11, context: changed}"));
+    assert.throws(() => dispatch.validateStandaloneReviewPolicy(prepared.input, repo, {}), /digest is stale/);
     const script = await readFile(prepared.request.workflowScriptPath, "utf8");
     assert.match(script, /const initial=await runs\.all/);
     assert.match(script, /-recovery/);
@@ -635,7 +638,7 @@ test("standalone review preparation binds canonical config, exact identity, wave
 test("standalone review preparation fails closed for missing or malformed canonical config", async () => {
   await fixture(async ({ root, repo }) => {
     const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
-    const plan = { pr: 33792, head, baseRef: "staging", baseSha: head, mode: "standard", roles: [{ role: "correctness", task: "Review", thinking: "medium" }], controlPlane };
+    const plan = { pr: 33792, head, baseRef: "staging", baseSha: head, mode: "standard", round: 0, requestStartedAt: "2026-01-01T00:00:00Z", roles: [{ role: "correctness", task: "Review", thinking: "medium" }], controlPlane };
     await rm(join(repo, "forge.yaml"));
     assert.throws(() => dispatch.prepareStandaloneReview(plan, join(root, "missing"), repo, {}), /ENOENT/);
     await writeFile(join(repo, "forge.yaml"), "project: [malformed");

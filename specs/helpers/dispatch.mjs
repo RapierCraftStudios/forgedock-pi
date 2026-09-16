@@ -141,6 +141,18 @@ export function resolveReviewLaunchAllowance(config, roleCount) {
   return { launchAllowance: allowance, configured: configured !== undefined };
 }
 
+export function resolveStandaloneReviewTiming(config, roleCount) {
+  const timing = resolveReviewTiming(config, roleCount);
+  const review = config?.review !== undefined ? config.review : config;
+  const recoveryMinimum = timing.minimumPanelTimeoutMs + timing.waves * timing.reviewerTimeoutMs;
+  const configuredPanel = review?.panel_timeout_ms;
+  if (configuredPanel !== undefined) {
+    timerInteger(configuredPanel, "review.panel_timeout_ms");
+    requireThat(configuredPanel >= recoveryMinimum, `review.panel_timeout_ms must cover initial and terminal-role recovery waves (${recoveryMinimum}ms)`);
+  }
+  return configuredPanel === undefined ? { ...timing, panelTimeoutMs: Math.max(timing.panelTimeoutMs, recoveryMinimum) } : timing;
+}
+
 export function resolveReviewTiming(config, roleCount) {
   integer(roleCount, "review role count");
   const review = config?.review !== undefined ? config.review : config;
@@ -352,6 +364,12 @@ export function readInput(input) {
   return JSON.parse(bytes.toString("utf8"));
 }
 export function gitHead(cwd = process.cwd()) { return execFileSync("git", ["rev-parse", "HEAD"], { cwd, encoding: "utf8" }).trim(); }
+function assertReviewBase(cwd, baseRef, baseSha) {
+  let fetched;
+  try { fetched = execFileSync("git", ["rev-parse", "--verify", `refs/remotes/origin/${baseRef}^{commit}`], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); }
+  catch { throw new Error(`Standalone review base ref is not fetched: ${baseRef}`); }
+  requireThat(fetched === baseSha, "Standalone review base ref disagrees with base SHA");
+}
 export function assertRepo(repo, cwd = process.cwd()) {
   const remote = execFileSync("git", ["remote", "get-url", "origin"], { cwd, encoding: "utf8" }).trim().replace(/\/$/, "");
   const match = remote.match(/[:/]([^/:]+\/[^/]+?)(?:\.git)?$/);
@@ -572,7 +590,7 @@ export function prepareReplan(plan, out, cwd = process.cwd(), env = process.env)
 function prepareReviewRequest(policy, plan, out, env, options = {}) {
   const mode = reviewMode(plan.mode);
   requireThat(Array.isArray(plan.roles) && plan.roles.length > 0, "Review needs selected roles");
-  const timing = resolveReviewTiming(policy.review, plan.roles.length);
+  const timing = options.timing ?? resolveReviewTiming(policy.review, plan.roles.length);
   const launch = options.standalone ? resolveReviewLaunchAllowance(policy.review, plan.roles.length) : undefined;
   fs.mkdirSync(out, { recursive: true }); out = path.resolve(out);
   const recordHelper = policy.controlPlane.forgeDock.files.find(file => file.id === "record")?.path;
@@ -616,8 +634,11 @@ for (let index=0; index<initial.length; index++) {
   if (result?.ok === true) continue;
   const role=reviewers[index];
   if (!role) continue;
-  const retry={...role,key:\`\${role.key}-recovery\`,task:\`\${role.task}\\nThe initial reviewer attempt is terminal and missing. Recover only this role. Reuse the same authorization and report paths; if a complete report already exists, perform transport-only publication and do not rerun analysis.\`};
-  if (result?.runId && result?.resumability?.state === "resumable") retry.resume=result.runId;
+  const status=result?.runId ? await runs.status(result.runId) : undefined;
+  const state=status?.status ?? status?.state;
+  if (result?.runId && !["complete","completed","failed","stopped","rejected"].includes(state)) continue;
+  const task=\`\${role.task}\\nThe initial reviewer attempt is terminal and missing. Recover only this role. Reuse the same authorization and report paths; if a complete report already exists, perform transport-only publication and do not rerun analysis.\`;
+  const retry=result?.runId && result?.resumability?.state === "resumable" ? {key:\`\${role.key}-recovery\`,resume:result.runId,task} : {...role,key:\`\${role.key}-recovery\`,task};
   missing.push({index,retry});
 }
 if (!missing.length) return initial;
@@ -651,9 +672,15 @@ export function validateStandaloneReviewPolicy(input, cwd = process.cwd(), env =
   const policy = readInput(input);
   fields(policy, ["v", "schema", "key", "repo", "model", "review", "remediationLimit", "requestStartedAt", "config", "pr", "head", "baseRef", "baseSha", "mode", "round", "launchAllowance", "controlPlane"], "standalone policy");
   requireThat(policy.v === 1 && policy.schema === "forgedock.standalone-review/v1", "Standalone policy schema is invalid");
+  integer(policy.pr, "standalone policy pull request");
+  fullSha(policy.head, "Standalone policy head"); fullSha(policy.baseSha, "Standalone policy base SHA");
+  safeToken(policy.baseRef, "Standalone policy base ref"); reviewMode(policy.mode); integer(policy.round, "standalone policy round", 0);
+  requireThat(typeof policy.requestStartedAt === "string" && Number.isFinite(Date.parse(policy.requestStartedAt)), "Standalone policy requestStartedAt is invalid");
+  integer(policy.launchAllowance, "standalone policy launch allowance");
   validateControlPlaneDescriptor(policy.controlPlane, { helperPath: path.join(here, "dispatch.mjs"), targetRoot: cwd });
   assertRepo(policy.repo, cwd);
   const source = configAt(cwd);
+  assertReviewBase(cwd, policy.baseRef, policy.baseSha);
   requireThat(policy.config?.path === path.resolve(cwd, "forge.yaml"), "Standalone policy config path disagrees with canonical root");
   requireThat(policy.config?.sha256 === sha(source.raw), "Standalone policy config digest is stale");
   requireThat(policy.repo === source.repo && policy.model === source.model && policy.remediationLimit === source.remediationLimit && canonicalJson(policy.review) === canonicalJson(source.review), "Standalone policy disagrees with canonical forge.yaml");
@@ -669,19 +696,21 @@ export function prepareStandaloneReview(plan, out, cwd = process.cwd(), env = pr
   fullSha(plan.head, "Standalone review head");
   safeToken(plan.baseRef, "Standalone review base ref");
   fullSha(plan.baseSha, "Standalone review base SHA");
-  const round = plan.round === undefined ? 0 : plan.round;
+  requireThat(plan.round !== undefined, "Standalone review round is required");
+  const round = plan.round;
   integer(round, "review round", 0);
   requireThat(plan.mode !== undefined, "Standalone review mode is required");
   const mode = reviewMode(plan.mode);
-  requireThat(plan.requestStartedAt === undefined || (typeof plan.requestStartedAt === "string" && Number.isFinite(Date.parse(plan.requestStartedAt))), "Standalone review requestStartedAt must be an ISO timestamp");
+  requireThat(typeof plan.requestStartedAt === "string" && Number.isFinite(Date.parse(plan.requestStartedAt)), "Standalone review requestStartedAt must be an ISO timestamp");
   requireThat(Array.isArray(plan.roles) && plan.roles.length > 0, "Standalone review needs selected roles");
   const source = configAt(cwd);
   for (const commit of [plan.head, plan.baseSha]) {
     try { execFileSync("git", ["cat-file", "-e", `${commit}^{commit}`], { cwd, stdio: "ignore" }); }
     catch { throw new Error(`Standalone review commit is not available: ${commit}`); }
   }
-  const timing = resolveReviewTiming(source.review, plan.roles.length);
-  const launch = resolveReviewLaunchAllowance(source.review, plan.roles?.length ?? 0);
+  assertReviewBase(cwd, plan.baseRef, plan.baseSha);
+  const timing = resolveStandaloneReviewTiming(source.review, plan.roles.length);
+  const launch = resolveReviewLaunchAllowance(source.review, plan.roles.length);
   const policy = {
     v: 1, schema: "forgedock.standalone-review/v1", key: `standalone-review-${plan.pr}-${plan.head.slice(0, 12)}`,
     repo: source.repo, model: source.model, review: source.review, remediationLimit: source.remediationLimit,
@@ -692,7 +721,7 @@ export function prepareStandaloneReview(plan, out, cwd = process.cwd(), env = pr
   fs.mkdirSync(out, { recursive: true }); out = path.resolve(out);
   const input = save(path.join(out, "standalone-review.json"), json(policy));
   validateStandaloneReviewPolicy(input, cwd, {});
-  return { input, policy, policyDigest: `sha256:${sha(Buffer.from(canonicalJson(policy)))}`, ...prepareReviewRequest(policy, { ...plan, round, mode }, out, env, { standalone: true, policyInput: input, cwd: fs.realpathSync(cwd) }) };
+  return { input, policy, policyDigest: `sha256:${sha(Buffer.from(canonicalJson(policy)))}`, ...prepareReviewRequest(policy, { ...plan, round, mode }, out, env, { standalone: true, policyInput: input, cwd: fs.realpathSync(cwd), timing }) };
 }
 export function identifyLane(batch, status, runId) {
   validateControlPlaneDescriptor(batch.controlPlane);

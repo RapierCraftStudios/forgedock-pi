@@ -109,7 +109,9 @@ publication, and collection margin. Defaults preserve the former 900000ms child,
 concurrency, 120000ms publication/collection margins, and 1200000ms panel budget. Standalone
 reviews additionally use `review.launch_allowance`, defaulting to two launches per selected
 role (initial admission plus one bounded terminal-role recovery); an explicit configured value
-wins and must cover the selected roles. This is the standalone request's
+wins and must cover the selected roles. Standalone panel timeout defaults to the larger of
+1200000ms and the initial-plus-recovery wave budget; an explicit shorter panel timeout is
+rejected. This is the standalone request's
 `maxSubagentSpawnsPerRun`, not permission to launch extra reviewers. The child deadline covers
 analysis and its own publication; the publication value bounds each `gh` transport operation,
 and collection is the enclosing panel margin. Issue-bound parent planning keeps its own role/
