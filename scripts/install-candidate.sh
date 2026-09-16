@@ -125,10 +125,12 @@ const relativeSource = (root) => {
   const value = relative(dirname(file), root);
   return value.startsWith(".") ? value : `./${value}`;
 };
-settings.packages = [
-  { source: sourceOf(subagentsEntry) ?? relativeSource(subagentsRoot), extensions: ["./index.ts"], skills: [], prompts: [] },
-  sourceOf(packageEntry) ? sourceOf(packageEntry) : relativeSource(packageRoot),
-];
+const candidateSource = sourceOf(packageEntry) ?? relativeSource(packageRoot);
+settings.packages = [candidateSource];
+settings.extensions = [relativeSource(`${subagentsRoot}/index.ts`)];
+settings.skills = [];
+settings.prompts = [];
+settings.themes = [];
 settings.defaultProjectTrust = "never";
 settings.enableInstallTelemetry = false;
 writeFileSync(file, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });

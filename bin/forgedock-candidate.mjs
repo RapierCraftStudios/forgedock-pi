@@ -853,9 +853,14 @@ async function doctor(options) {
         .filter((source) => source && (source.includes("forgedock-pi") || localPackageName(source, configDir) === "forgedock-pi"))
         .filter((source) => !isCandidatePackageSource(source, configDir, installManifest.candidateCommit));
       const subagentsSource = result.settingsPackages.find((source) => source.includes("pi-subagents"));
+      const subagentsExtension = Array.isArray(settings.extensions) ? settings.extensions.find((source) => typeof source === "string" && source.includes("pi-subagents/index.ts")) : undefined;
       if (subagentsSource) {
         const subagentsPath = subagentsSource.startsWith("/") ? subagentsSource : resolve(configDir, subagentsSource);
         result.piSubagents = { source: subagentsSource, path: subagentsPath, version: packageVersion(subagentsPath, ".") };
+      } else if (typeof subagentsExtension === "string") {
+        const extensionPath = subagentsExtension.startsWith("/") ? subagentsExtension : resolve(configDir, subagentsExtension);
+        const subagentsPath = dirname(extensionPath);
+        result.piSubagents = { source: subagentsExtension, path: subagentsPath, version: packageVersion(subagentsPath, ".") };
       }
     } catch (error) { result.limitations.push(`Settings unreadable: ${error instanceof Error ? error.message : String(error)}`); }
   } else result.limitations.push(`Candidate config has no settings.json: ${settingsFile}`);
@@ -933,10 +938,11 @@ async function main() {
     const isolatedSettings = readJson(isolatedSettingsFile);
     const isolatedPackages = settingsPackages(isolatedSettings);
     const isolatedSources = isolatedPackages.map((entry) => sourceValue(entry));
-    if (isolatedSettings.defaultProjectTrust !== "never" || isolatedSettings.enableInstallTelemetry !== false || isolatedPackages.length !== 2 || !isolatedSources.some((source) => sourceIdentity(source, join(installRoot, "pi-agent")) === packageRoot) || !isolatedSources.some((source) => sourceIdentity(source, join(installRoot, "pi-agent")) === subagentsRoot)) fail("Isolated Pi settings do not contain exactly the pinned candidate and pi-subagents sources");
-    const subagentsEntry = isolatedPackages.find((entry) => sourceIdentity(sourceValue(entry), join(installRoot, "pi-agent")) === subagentsRoot);
-    if (!subagentsEntry || typeof subagentsEntry !== "object" || !Array.isArray(subagentsEntry.skills) || subagentsEntry.skills.length !== 0 || !Array.isArray(subagentsEntry.prompts) || subagentsEntry.prompts.length !== 0) fail("Isolated pi-subagents settings are not filtered to its native extension");
-    process.stdout.write(json({ schema: "forgedock.candidate-install-verification/v1", installRoot, candidateCommit: manifest.candidateCommit, piSubagentsCommit: manifest.piSubagentsCommit, packageDigest: manifest.packageDigest, piSubagentsDigest: manifest.piSubagentsDigest, settingsFile: isolatedSettingsFile }));
+    const isolatedConfigDir = join(installRoot, "pi-agent");
+    const expectedSubagentExtension = join(subagentsRoot, "index.ts");
+    const configuredExtensions = Array.isArray(isolatedSettings.extensions) ? isolatedSettings.extensions : [];
+    if (isolatedSettings.defaultProjectTrust !== "never" || isolatedSettings.enableInstallTelemetry !== false || isolatedPackages.length !== 1 || !isolatedSources.some((source) => sourceIdentity(source, isolatedConfigDir) === packageRoot) || configuredExtensions.length !== 1 || sourceIdentity(configuredExtensions[0], isolatedConfigDir) !== expectedSubagentExtension || (Array.isArray(isolatedSettings.skills) && isolatedSettings.skills.length > 0) || (Array.isArray(isolatedSettings.prompts) && isolatedSettings.prompts.length > 0)) fail("Isolated Pi settings do not contain exactly the pinned candidate package and pi-subagents extension");
+    process.stdout.write(json({ schema: "forgedock.candidate-install-verification/v1", installRoot, candidateCommit: manifest.candidateCommit, piSubagentsCommit: manifest.piSubagentsCommit, packageDigest: manifest.packageDigest, piSubagentsDigest: manifest.piSubagentsDigest, settingsFile: isolatedSettingsFile, subagentExtension: expectedSubagentExtension }));
     return;
   }
   if (command === "config") {
