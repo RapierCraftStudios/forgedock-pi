@@ -47,7 +47,11 @@ if [[ -z "$THINKING" ]]; then
 fi
 [[ "$MODEL" =~ ^[^[:space:]/]+/[^[:space:]]+$ ]] || { echo "Target forge.yaml did not provide a full provider/model ID" >&2; exit 1; }
 if [[ "$MODEL" =~ :([[:alpha:]]+)$ ]]; then
-  case "${BASH_REMATCH[1]}" in off|minimal|low|medium|high|xhigh|max) ;; *) echo "Model has an unsupported thinking suffix" >&2; exit 1 ;; esac
+  MODEL_SUFFIX=${BASH_REMATCH[1],,}
+  case "$MODEL_SUFFIX" in
+    off|minimal|low|medium|high|xhigh|max) MODEL="${MODEL%:*}:$MODEL_SUFFIX" ;;
+    *) echo "Model has an unsupported thinking suffix" >&2; exit 1 ;;
+  esac
 fi
 [[ "$THINKING" =~ ^(off|minimal|low|medium|high|xhigh|max)$ ]] || { echo "Target forge.yaml did not provide a supported thinking level" >&2; exit 1; }
 

@@ -1,3 +1,4 @@
+import { existsSync, realpathSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,9 +40,17 @@ function validatePath(value: string, label: string): string {
 }
 
 function assertUnderRoot(root: string, path: string, label: string): void {
-  const distance = relative(root, path);
-  if (!distance || distance === ".." || distance.startsWith(`..${"/"}`) || resolve(root, distance) !== path) {
+  const canonicalRoot = realpathSync(root);
+  const distance = relative(canonicalRoot, path);
+  if (!distance || distance === ".." || distance.startsWith("../") || resolve(canonicalRoot, distance) !== path) {
     throw new Error(`${label} must remain under the prepared review artifact root`);
+  }
+  const parent = dirname(path);
+  if (!existsSync(parent) || realpathSync(parent) !== parent) {
+    throw new Error(`${label} has a symlinked or missing parent`);
+  }
+  if (existsSync(path) && realpathSync(path) !== path) {
+    throw new Error(`${label} is a symlink`);
   }
 }
 
