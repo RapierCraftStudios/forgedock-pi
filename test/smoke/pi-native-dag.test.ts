@@ -4,9 +4,9 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
-// Opt-in host compatibility check; executes the installed workflow engine, not models.
-// PI_SUBAGENTS_SOURCE=/path/to/pi-subagents node --import tsx --test test/smoke/pi-native-dag.test.ts
-const source = process.env.PI_SUBAGENTS_SOURCE;
+// Executes the installed workflow engine with model-free launch seams; override only to
+// qualify another pinned checkout.
+const source = process.env.PI_SUBAGENTS_SOURCE ?? resolve("node_modules/pi-subagents");
 const done = "FORGE_WORK_ON_RESULT status=DONE issue=1 pr=2 dependency=SATISFIED";
 const prelude = `const configuredModel="test/model";
 const issueA={agent:"worker",task:"A"};
@@ -19,7 +19,7 @@ const issueGraph=[
  {key:"work-on-C",predecessors:["work-on-A"],launch:issueC}
 ];\n`;
 
-test("installed Pi executor retains failure metadata and releases C before B", { skip: !source }, async () => {
+test("installed Pi executor retains failure metadata and releases C before B", async () => {
   const { runWorkflowScript } = await import(pathToFileURL(resolve(source!, "src/workflows/scripted-workflow.ts")).href);
   const spec = await readFile("specs/pi-adapter.md", "utf8");
   const snippet = spec.slice(spec.indexOf("Use one visible promise graph.")).match(/```js\n([\s\S]*?)\n```/)?.[1];
@@ -54,8 +54,55 @@ test("installed Pi executor retains failure metadata and releases C before B", {
   }
 });
 
+test("installed panel deadline preserves completed roles before one-role recovery", { timeout: 10000 }, async () => {
+  const { runWorkflowScript } = await import(pathToFileURL(resolve(source, "src/workflows/scripted-workflow.ts")).href);
+  const calls: string[] = [];
+  let stalledSettled = false;
+  const panel = runWorkflowScript({
+    script: `return await runs.all([
+      { key: "correctness", agent: "reviewer", task: "complete" },
+      { key: "security", agent: "reviewer", task: "complete" },
+      { key: "stalled", agent: "reviewer", task: "stall", timeoutMs: 1000 }
+    ]);`,
+    globalConcurrencyLimit: 3,
+    timeoutMs: 1000,
+    launch: async (key: string, _params: Record<string, unknown>, signal: AbortSignal) => {
+      calls.push(key);
+      if (key !== "stalled") return { key, ok: true, runId: `${key}-run`, output: `${key} report`, artifactPaths: [] };
+      return await new Promise((resolve) => signal.addEventListener("abort", () => {
+        stalledSettled = true;
+        resolve({ key, ok: false, runId: "stalled-run", output: "panel deadline", error: "panel deadline", timedOut: true, artifactPaths: [] });
+      }, { once: true }));
+    },
+    status: async () => { throw new Error("status polling is not part of joined panel recovery"); },
+  });
+  await assert.rejects(panel, (error: unknown) => {
+    if (!(error instanceof Error)) return false;
+    const workflowError = error as Error & { partial?: { children: Array<{ key: string }> } };
+    if (!workflowError.partial) return false;
+    assert.match(workflowError.message, /Workflow script timed out after 1000ms/);
+    assert.deepEqual(workflowError.partial.children.map((child) => child.key), ["correctness", "security"]);
+    return true;
+  });
+  assert.equal(stalledSettled, true, "the stalled role must observe panel cancellation before replacement");
+
+  let recoveryCalls = 0;
+  const recovered = await runWorkflowScript({
+    script: `return await runs.all([{ key: "stalled-recovery", agent: "reviewer", task: "recover saved report" }]);`,
+    timeoutMs: 1000,
+    launch: async (key: string) => {
+      recoveryCalls++;
+      return { key, ok: true, runId: "stalled-recovery-run", output: "saved report reconciled", artifactPaths: [] };
+    },
+    status: async () => { throw new Error("status polling is not part of joined panel recovery"); },
+  });
+  assert.equal(recoveryCalls, 1);
+  assert.equal(calls.filter((key) => key !== "stalled").length, 2, "completed roles are not rerun");
+  assert.equal((recovered.value as any[])[0].key, "stalled-recovery");
+});
+
 for (const scenario of ["gated", "decomposed", "unresumable", "detached", "stopped", "recovery-fails", "ambiguous-result", "missing-result"] as const) {
-  test(`installed Pi executor does not release C for ${scenario}`, { skip: !source }, async () => {
+  test(`installed Pi executor does not release C for ${scenario}`, async () => {
     const { runWorkflowScript } = await import(pathToFileURL(resolve(source!, "src/workflows/scripted-workflow.ts")).href);
     const spec = await readFile("specs/pi-adapter.md", "utf8");
     const snippet = spec.slice(spec.indexOf("Use one visible promise graph.")).match(/```js\n([\s\S]*?)\n```/)?.[1];

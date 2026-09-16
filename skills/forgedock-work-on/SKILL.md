@@ -4,7 +4,6 @@ description: Run or resume one issue inline through investigation, implementatio
 ---
 
 # ForgeDock Work On
-
 The visible session is the sole work-on agent and writer for one issue. GitHub issue/PR
 state and the compact receipts in `../../specs/original/commands/work-on.md` are durable
 engineering memory, not only resume position. Retrieve relevant history, validate its
@@ -41,24 +40,25 @@ Do not launch delegates, phase agents, builders, quality-gate agents, another wo
 or a review coordinator. ForgeDock owns each lane's exact isolated staging-based worktree;
 child launches pass that path as `cwd` with `worktree: false`. A stale, missing, or wrong Pi
 workspace is an internal launch-binding failure to rebind/retry, never a human-facing gate.
-
 At review or re-review, the issue-specific parent owns the selected roster and launches
-fresh read-only generic `delegate` reviewers concurrently. Each reviewer returns one exact-head
-structured result with substantive evidence; reviewers do not publish comments or create
-issues. The parent waits for every required result, validates identity, deduplicates by causal
-mechanism, and records the authoritative disposition: `IMMEDIATE REPAIR`, `NON-BLOCKING
-FOLLOW-UP`, `REJECTED/NOT APPLICABLE`, or `EVIDENCE/AUTHORITY PREREQUISITE`. A finding's
-severity is separate from its blocking decision. Retry only a missing or invalid required
-role. Only evidence-backed immediate repairs enter the cohesive remediation round;
-authorized independent follow-ups become one deduplicated issue and do not hold the current batch.
-
+fresh generic `delegate` reviewers concurrently. Each reviewer returns one exact-head
+structured result only after retaining and publishing its own complete substantive
+`FORGE:REVIEWER_REPORT` through the installed file-backed helper. The report includes the role,
+exact PR/head/base, scope and decisions considered, evidence/findings or a no-findings
+conclusion, verification limitations, and recommendation. Reviewers do not create issues, edit
+source or labels, initiate remediation, merge, or deploy. The parent waits for every required
+result and report readback, validates identity, deduplicates by causal mechanism, and records
+the authoritative disposition: `IMMEDIATE REPAIR`, `NON-BLOCKING FOLLOW-UP`,
+`REJECTED/NOT APPLICABLE`, or `EVIDENCE/AUTHORITY PREREQUISITE`. A finding's severity is
+separate from its blocking decision. Retry only a missing or invalid required role after the
+old native child is terminal, reusing its stable authorization and saved report bytes. Only
+evidence-backed immediate repairs enter the cohesive remediation round; authorized independent
+follow-ups become one deduplicated issue and do not hold the current batch.
 Base movement alone does not invalidate valid review. Preserve a clean mergeable reviewed
 head; reconcile only for conflict or required-up-to-date policy, and rerun review only when
 the effective patch or risk changed.
-
 Publish the named pre-build records and linked build/review/terminal evidence on GitHub;
 in-memory planning is not a substitute. Preserve changed decisions through superseding
 records. Do not create Gists, indexes, ledgers, dossiers, ADRs, cost priors, telemetry,
 heartbeats, checkpoints, or duplicate progress comments.
-
 Prefer repair and continuation. Use GATED for an exact technical prerequisite/recovery condition and `needs-human` only for genuine external authority with no safe default. After merge, close explicitly and perform ownership-safe cleanup once.

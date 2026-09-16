@@ -2,10 +2,10 @@
 
 A run must build knowledge for future agents, not merely consume older rich history.
 These are named, human-readable records on the issue/PR, produced inline by the existing
-owner. There is no logging agent, new database or separate workflow engine. Record material
-decisions and evidence, not raw internal thought transcripts or chain-of-thought.
-Each named record is a separate comment/permalink. Batch transport calls, not the records
-into one combined comment; preserve each stage's identity and actual publication time.
+owner or, for a review report, by the selected reviewer. There is no logging agent, new
+database or separate workflow engine. Record material decisions and evidence, not raw internal thought transcripts or chain-of-thought. Each named record is a separate
+comment/permalink. Batch transport calls, not the records into one combined comment;
+preserve each stage's identity and actual publication time.
 
 ## Records and timing
 
@@ -17,7 +17,8 @@ into one combined comment; preserve each stage's identity and actual publication
 | `FORGE:CONTRACT` | Issue, before edits | Deterministic builder brief: observable outcome, exact in-scope behavior/files, explicit non-goals, and smallest behavioral proof; link classification/context/investigation |
 | `FORGE:ARCHITECT` | Issue, before edits | Chosen approach, ordered changes, interfaces/invariants, material alternatives actually considered and why rejected; link contract/context |
 | `FORGE:BUILDER` | Issue, after verified implementation | What actually changed, deviations and their decision links, commits, tests and limitations |
-| `FORGE:REVIEW-PANEL` | PR, after complete review | Exact-head verdict, graph context considered, finding dispositions with causal evidence and justified prevention lessons |
+| `FORGE:REVIEWER_REPORT` | PR, immediately after each selected reviewer completes | Stable PR/head/base/role/round identity, reviewer scope and decisions, substantive evidence/findings or no-findings evidence, limitations, recommendation, and returned comment reference |
+| `FORGE:REVIEW-PANEL` | PR, after complete review | Exact-head verdict, links to every required individual report, graph context considered, finding dispositions with causal evidence and justified prevention lessons |
 | `FORGE:TRAJECTORY` | Issue, at terminal reconciliation | Outcome, exact release identity, links to the record chain, important corrections/lessons and remaining limitations |
 | `FORGE:GATED` | Issue, when blocked | Exact bound identity, blocker/wake condition and preserved-work references; never a delivery claim |
 
@@ -46,10 +47,22 @@ or reconstruct the envelope during each publication. GitHub's
 API supplies the actual comment ID, URL, author and created/updated timestamps; do not invent
 them or duplicate them as claimed execution times.
 
+Individual `FORGE:REVIEWER_REPORT` comments are not decisions or issue-authority grants.
+The stable identity binds repository, PR, reviewed head, base ref/SHA, role, and review round;
+an older-head report remains history and cannot satisfy a current role. The reviewer writes
+and retains the complete file before posting through the `reviewer` mode of
+`helpers/record.mjs`; a lost create response is reconciled by marker readback. The file-backed
+body uses the four sections `Scope and decisions considered`, `Evidence and findings`,
+`Verification limitations`, and `Recommendation`; a no-findings report still supplies
+substantive evidence and limitations. The parent must read back every required current report,
+preserve disagreement, and link all of them from the consolidated panel before disposition,
+issue creation, verdict, or merge.
+
 Exception: standalone PR review without a bound work-on issue retains direct file-backed
 publication. Use the frozen repository/PR/head returned by GitHub, serialize the metadata,
 write literal Markdown with the native write tool and post with `gh --body-file`/`-F body=@file`;
-read back the exact comment. Do not invent an issue or lane policy to use the helper.
+read back the exact comment. The standalone panel may use the helper's explicit PR envelope.
+Do not invent an issue or lane policy.
 
 ```markdown
 <!-- FORGE:CONTRACT -->
@@ -73,8 +86,9 @@ read back the exact comment. Do not invent an issue or lane policy to use the he
 <named executable boundary or justified inspection proof, trigger, observable assertion, and prerequisite/limitation>
 ```
 
-Every new named record uses this envelope plus the relevant content from the table. Keep
-visible links/head consistent with the JSON by generating them from the same values. A
+Every new owner-named record uses this envelope plus the relevant content from the table.
+Reviewer reports use the explicit reviewer envelope and stable identity described above.
+Keep visible links/head consistent with the JSON by generating them from the same values. A
 source head identifies the evidence/decision context; it is not a claim that implementation
 already exists. Before accepting a new record, verify parseable v1 metadata, the actual full
 source commit and returned input URLs—no unresolved placeholders or fabricated links.
@@ -117,9 +131,9 @@ pagination metadata. The following jq projection discovers named records, preser
 GitHub identities/body, and exposes new metadata without discarding legacy records:
 
 ```jq
-map(select((.body // "") | test("(?m)^<!-- FORGE:(INVESTIGATOR|CLASSIFICATION|FAST_PATH|CONTEXT|CONTRACT|ARCHITECT|BUILDER|REVIEW-PANEL|REVIEW:PANEL|REVIEW|REMEDIATION|DECOMPOSED|GATED|TRAJECTORY) -->")))
+map(select((.body // "") | test("(?m)^<!-- FORGE:(?:REVIEWER_REPORT(?: \\{.*\\})?|INVESTIGATOR|CLASSIFICATION|FAST_PATH|CONTEXT|CONTRACT|ARCHITECT|BUILDER|REVIEW-PANEL|REVIEW:PANEL|REVIEW|REMEDIATION|DECOMPOSED|GATED|TRAJECTORY) -->")))
 | map(. as $c
-  | (($c.body | capture("(?m)^<!-- FORGE:(?<kind>INVESTIGATOR|CLASSIFICATION|FAST_PATH|CONTEXT|CONTRACT|ARCHITECT|BUILDER|REVIEW-PANEL|REVIEW:PANEL|REVIEW|REMEDIATION|DECOMPOSED|GATED|TRAJECTORY) -->")).kind) as $kind
+  | (($c.body | capture("(?m)^<!-- FORGE:(?<kind>REVIEWER_REPORT|INVESTIGATOR|CLASSIFICATION|FAST_PATH|CONTEXT|CONTRACT|ARCHITECT|BUILDER|REVIEW-PANEL|REVIEW:PANEL|REVIEW|REMEDIATION|DECOMPOSED|GATED|TRAJECTORY)(?: \\{.*\\})? -->")).kind) as $kind
   | ((try (($c.body | split("\n") | .[1] // "")
       | capture("^<!-- FORGE:RECORD (?<data>.+) -->$").data | fromjson) catch null) // null) as $record
   | {id: $c.id, url: ($c.html_url // $c.url), created_at: ($c.created_at // $c.createdAt),

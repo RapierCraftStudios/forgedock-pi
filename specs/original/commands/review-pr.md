@@ -45,18 +45,24 @@ role, the specialists that produced or are affected by the blocker, and security
 changes. Thinking settings are configured policy; they never lower the blocking standard.
 
 Launch all selected roles as fresh ordinary generic `delegate` agents in one joined workflow per
-panel attempt. Pass the frozen diff/context and evidence requirements. Delegates return structured
-results with a substantive summary, verified `path:line` behaviors, residual limits, and findings.
-A finding includes its trigger, reachable path, violated acceptance/invariant, consequence,
-confidence/severity, scope and causality, and the reviewer's block rationale. Delegates are
-read-only reviewers: they do not edit source, post PR comments, create issues, edit labels, merge,
-or request a publication capability that they were not given.
+panel attempt. Pass the frozen diff/context and evidence requirements. Each reviewer returns
+structured evidence only after writing and publishing its own complete file-backed
+`FORGE:REVIEWER_REPORT` comment through the installed mechanical helper. The report includes its
+role, exact PR/head/base, scope and decisions considered, substantive evidence and findings (or
+an evidence-backed no-findings conclusion), verification limitations, and recommendation. A
+finding includes its trigger, reachable path, violated acceptance/invariant, consequence,
+confidence/severity, scope and causality, and the reviewer's block rationale. Reviewers do not
+edit source, create issues, edit labels, initiate remediation, merge, or deploy.
 
-The owner joins every required result before synthesis. Retain valid same-head roles and retry
-only a missing, failed, or malformed role. Harmless JSON/list/identity formatting differences do
-not restart a role. A partial panel cannot produce a verdict. The final publication model is one
-owner-authored, SHA-bound `FORGE:REVIEW-PANEL` record plus one official verdict; there are no
-per-reviewer comments on this route.
+The owner joins every required result and report readback before synthesis. Retain valid same-head
+roles and retry only a missing, failed, or malformed role. Before replacing a stalled role,
+reconcile the exact native child/workflow terminal state; reuse the stable report authorization
+and saved bytes. Use supported retained resume when the native status marks the child resumable;
+otherwise use a fresh same-role workflow with a new key. A wait timeout must not create a second
+live reviewer.
+Harmless JSON/list/identity formatting differences do not restart a role. A partial panel cannot
+produce a verdict. The parent publishes one owner-authored, SHA-bound `FORGE:REVIEW-PANEL` record
+linking every required individual report plus the official verdict.
 
 ## Parent disposition
 

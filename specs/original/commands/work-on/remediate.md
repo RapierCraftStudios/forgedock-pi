@@ -144,11 +144,12 @@ Publish at most one receipt for the new head:
 
 Invoke the same parent-owned review route with the new exact head. Use one correctness/general role
 (count an existing blocker-producing correctness role), the blocker-producing specialists, and
-security for executable changes. Fresh reviewers return structured exact-head evidence to the
-parent; the parent publishes one consolidated panel record. Provide prior findings, parent
-dispositions, remediated hunks, and executable regression evidence; keep the full current diff
-available. Add another specialist only when remediation materially changed that specialist's
-risk surface.
+security for executable changes. Fresh reviewers retain and publish complete exact-head
+individual reports through the installed helper, then return structured evidence to the parent.
+The parent reads back and links every report before publishing one consolidated panel record.
+Provide prior findings, parent dispositions, remediated hunks, and executable regression evidence;
+keep the full current diff available. Add another specialist only when remediation materially
+changed that specialist's risk surface.
 
 Retain valid same-head roles and retry only missing/invalid roles. Re-review passes when no
 confirmed immediate-repair finding remains. Non-blocking follow-ups do not trigger another

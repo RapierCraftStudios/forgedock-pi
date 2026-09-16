@@ -74,25 +74,30 @@ review. Do not blindly relaunch the previous panel.
 The issue-specific work-on parent owns the selected roster and launches every role in fresh
 read-only context as ordinary generic `delegate` agents. The task gives each reviewer the
 original acceptance, accepted contract, active path, relevant history, frozen head/base,
-diff and proof. Reviewers return one structured result to the parent: a substantive summary,
-verified `path:line` behaviors, residual limits, and findings with trigger, consequence,
-scope/causality, confidence, severity, and block-view rationale. They do not edit source,
-post comments, create issues, edit labels, merge, or request a publication capability that
-this route does not provide.
+diff and proof. Each reviewer writes and retains a complete substantive report, then publishes
+its own exact-head `FORGE:REVIEWER_REPORT` comment through the installed file-backed
+`record.mjs reviewer` helper before returning its structured result. The report names the role,
+PR/head/base, scope and decisions considered, verified `path:line` behaviors,
+evidence/findings or evidence-backed no findings, verification limitations, and recommendation.
+Reviewers do not edit source, create issues,
+edit labels, initiate remediation, merge, or deploy.
 
-The parent waits for the complete result set, validates exact-head identity, deduplicates by
-causal mechanism, reconciles disagreement against source and acceptance, and records the
-single authoritative disposition for every substantive concern. A disposition requires concise
-evidence of the trigger, reachable affected path or loaded specification, violated original
-acceptance/invariant, consequence, and patch causality or an explicit acceptance gap. Severity
-is separate from the blocking decision; a severity label alone never admits remediation.
+The parent waits for every required result and report readback, validates the stable PR/head/
+base/role/round identity, deduplicates by causal mechanism, reconciles disagreement against
+source and acceptance, and records the single authoritative disposition for every substantive
+concern. A disposition requires concise evidence of the trigger, reachable affected path or
+loaded specification, violated original acceptance/invariant, consequence, and patch causality
+or an explicit acceptance gap. Severity is separate from the blocking decision; a severity
+label alone never admits remediation. Every required report is linked from the one SHA-bound `FORGE:REVIEW-PANEL` record.
 
-The route owner then publishes one SHA-bound `FORGE:REVIEW-PANEL` record containing the panel
-evidence, dispositions, follow-up links, and official verdict. This is the only reviewer publication model: no per-reviewer PR comments or second semantic coordinator is required.
-If one role is missing or invalid, launch one additional workflow containing only that role;
-retry no other role. A partial panel cannot produce a verdict. Use the native helper only for
-identity, request preparation, record transport, readback, and mechanical merge/safety checks. Do not use `runs.host` to transfer diffs or invent reviewer
-capability ceilings. Formatting variance alone never restarts a valid role.
+If one role is missing, failed, or has a publication/result-delivery failure, preserve the
+saved report and native artifacts. Establish the original child/workflow terminal state before
+launching one additional workflow containing only that role under the same stable authorization
+and report bytes; use the supported retained resume when the native status marks it resumable,
+otherwise use a fresh same-role launch with a new workflow key. Retry no other role. A wait timeout never creates a
+second live reviewer. A partial panel cannot produce a verdict. Use the native helper only for
+identity, request preparation, report transport/readback, and mechanical merge/safety checks;
+do not use `runs.host` to transfer diffs or invent reviewer capability ceilings. Formatting variance alone never restarts a valid role.
 
 ## Finding admission and decide
 

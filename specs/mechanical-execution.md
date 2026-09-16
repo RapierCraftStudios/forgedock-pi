@@ -149,27 +149,37 @@ rejected before launch.
 
 ## Prepare a review
 
-The owner writes a review plan containing `head`, `round` (0 initial, 1 first remediation),
-`contractDigest`, and selected `roles`, each with `role`, `task` and `thinking`. The digest must
-match the bound lane contract. For an authorized re-plan, the plan additionally carries
-`replan: {token, previousHead, previousContractDigest, previousRound}`; the helper validates
-that it matches the bound lane input and that the new head/digest differ from the preserved
-identity. This is the same validated input binding, not a side ledger. When the continuation
-input is active, forward its complete bound `replan` object—including helper-added `authorizedBy`
-unchanged into `prepareReview`; do not reconstruct the old four-field shape.
-Role tasks contain the frozen diff/graph context; they cannot provide a different model. Use
-optional `input` only for an explicit standalone/legacy descriptor; it must match the native
-binding when one exists.
+The owner writes a review plan containing the exact `pr`, `head`, `baseSha`, `round` (0 initial,
+1 first remediation), `contractDigest`, and selected `roles`, each with `role`, `task` and
+`thinking`. The digest must match the bound lane contract. For an authorized re-plan, the plan
+additionally carries `replan: {token, previousHead, previousContractDigest, previousRound}`;
+the helper validates that it matches the bound lane input and that the new head/digest differ
+from the preserved identity. This is the same validated input binding, not a side ledger. When
+the continuation input is active, forward its complete bound `replan` object—including
+helper-added `authorizedBy` unchanged into `prepareReview`; do not reconstruct the old
+four-field shape. Role tasks contain the frozen diff/graph context; they cannot provide a
+different model.
 
 Run `node <package>/specs/helpers/dispatch.mjs review <review.json> <new-empty-output-dir>`.
 Invoke the exact generated request. The model and maximum round come from bound policy;
 `general` aliases correctness and cannot duplicate it. Explicit configured thinking wins;
 otherwise the role's risk-calibrated thinking suffix is added. Native budget and complete
-panel requirements still apply. Each generic delegate returns structured evidence to the
-owner; it has no reviewer-comment or issue-publication capability. The owner validates and
-publishes one consolidated SHA-bound panel record. The helper validates requested rounds, not
-semantic history: the owner must recover actual usage from the graph and cannot relabel another
-fix as round 1.
+panel requirements still apply. The helper writes one explicit authorization per role with
+stable PR/head/base/role/round identity plus body/report paths. Its fields are the actual
+`repository`, `pullRequest`, `reviewedHead`, `baseRef`, `baseSha`, `role`, `round`, control-plane
+binding, and publication paths; it has no issue-owner or replan identity. Each generic delegate
+returns structured evidence only after writing and publishing its own complete report through:
+
+`node <package>/specs/helpers/record.mjs reviewer AUTHORIZATION_JSON BODY_MD REPORT_MD --publish`
+
+The helper uses file-backed content and argument arrays, reconciles ambiguous creates by the
+stable marker, and returns the comment reference. A reviewer publication failure preserves the
+saved report for transport-only retry; it never reruns analysis. If a role is missing, first
+reconcile its native terminal state, then use retained resume when supported or a fresh
+same-role request with a new key; never rerun completed roles. The owner validates every
+same-head report before publishing the consolidated SHA-bound panel record. The helper
+validates requested rounds and timing, not semantic history: the owner must recover actual
+usage from the graph and cannot relabel another fix as round 1.
 
 ## Resolve supervisor identity before acting
 
@@ -200,10 +210,13 @@ The renderer obtains/validates the Git source commit, generates matching machine
 headers and writes literal Markdown safely, including backticks. `--publish` uses existing
 `gh` authentication with argument arrays, reuses an exact existing body on retry, and reads
 back the exact server comment. Review publication checks the current PR head/target.
-It never edits or deletes earlier records and never creates an issue. Standalone PR reviews
-without a bound work-on issue use the explicit direct file-backed exception in
-`knowledge-records.md`, not a fabricated issue policy. Publication still
-requires the current stage's authority; direct CLI access is not a new permission grant.
+The reviewer-specific `reviewer` mode accepts the explicit PR/head/base/role/round
+authorization and never loads issue-owner or replan policy. It writes the completed report
+before transport and reconciles a lost create response by marker readback. It never edits or
+deletes earlier records and never creates an issue. Standalone PR reviews without a bound
+work-on issue use this direct authorization/report mode and the standalone panel envelope in
+`knowledge-records.md`, never a fabricated issue policy. Publication still requires the
+current stage's authority; direct CLI access is not a new permission grant.
 
 These helpers reduce accidental policy/shape/identity/quoting mistakes. They are not an OS
 sandbox or proof that an LLM cannot bypass instructions. Canary evaluation must verify their

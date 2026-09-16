@@ -40,12 +40,15 @@ boundary.
 
 Select correctness plus only risk-justified specialists. Launch fresh ordinary generic `delegate`
 reviewers concurrently with the frozen bundle, acceptance, active paths, prior decisions, exact
-head/base, and verification evidence. Reviewers return structured evidence to the staging owner;
-they do not edit, post per-reviewer comments, create issues, edit labels, merge, or deploy. The
-owner joins every required result, retries only missing/invalid roles, deduplicates by causal
-mechanism, and applies the same dispositions as standard review: `IMMEDIATE REPAIR`,
-`NON-BLOCKING FOLLOW-UP`, `REJECTED/NOT APPLICABLE`, or `EVIDENCE/AUTHORITY PREREQUISITE`.
-Severity alone is not a disposition.
+head/base, and verification evidence. Each reviewer writes and retains a complete
+`FORGE:REVIEWER_REPORT` with role, exact PR/head/base, scope and decisions, substantive evidence
+and findings or no-findings evidence, verification limitations, and recommendation, then
+publishes it through the installed file-backed helper before returning. Reviewers do not edit,
+create issues, edit labels, initiate remediation, merge, or deploy. The owner joins every
+required result and report readback, retries only missing/invalid roles after terminal-state
+reconciliation, deduplicates by causal mechanism, and applies the same dispositions as standard
+review: `IMMEDIATE REPAIR`, `NON-BLOCKING FOLLOW-UP`, `REJECTED/NOT APPLICABLE`, or
+`EVIDENCE/AUTHORITY PREREQUISITE`. Severity alone is not a disposition.
 
 Create at most one authorized issue for each novel, independently valuable non-blocking causal
 concern. Preserve current blockers and required proof failures in the gate record instead of
@@ -61,5 +64,8 @@ SHA-bound consolidated gate record and read back its identity:
 - `FORGE:STAGING_GATE:FAIL` with precise failed checks, findings, missing proof, or wake conditions
   otherwise.
 
-A staging pass is integration evidence, not production proof. Never merge, approve, deploy, close
-source issues, mutate issue branches, publish per-reviewer comments, or clean work-on trees here.
+A staging pass is integration evidence, not production proof. The gate must link every required
+individual report from its final record. Never edit code, dispatch repair/work-on remediation,
+create repair commits, merge, approve, deploy, close source issues, mutate issue branches, or
+clean work-on trees here. A blocker yields FAIL and ends this invocation; report/transport
+recovery remains non-remediating.

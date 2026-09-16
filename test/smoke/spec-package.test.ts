@@ -190,8 +190,9 @@ test("review keeps exact-head quality without target-movement starvation", async
   assert.match(adapter, /review-starvation/i);
   assert.match(reviewSkill, /one\s+additional\s+workflow containing only that role/s);
   assert.match(reviewSkill, /one SHA-bound `FORGE:REVIEW-PANEL` record/);
-  assert.match(reviewSkill, /no per-reviewer PR comments/);
-  assert.match(reviewSkill, /Do not use `runs\.host`/);
+  assert.match(reviewSkill, /deduplicate(?:s)? by causal mechanism/);
+  assert.match(reviewSkill, /FORGE:REVIEWER_REPORT/);
+  assert.match(reviewSkill, /do not use `runs\.host`/i);
   assert.match(adapter, /`runs\.host` is not available/);
   assert.match(adapter, /Never restart a panel for JSON key casing/);
   assert.match(reviewSkill, /[Ff]ormatting variance alone never restarts a valid role/);
@@ -208,6 +209,8 @@ test("staging review is a compact generic-delegate deployment gate", async () =>
   assert.match(staging, /explicit integration-to-protected deployment or bundle PR/);
   assert.match(staging, /fresh ordinary\s+`delegate` agents with full normal tools/s);
   assert.match(staging, /FORGE:STAGING_GATE:PASS/);
+  assert.match(staging, /report.*FAIL.*ends|blocker.*FAIL.*ends/is);
+  assert.match(staging, /never create issues.*edit source.*initiate remediation|never.*initiate remediation.*merge/is);
   assert.doesNotMatch(staging, /review-pr-staging\.md|Task\(|Agent\(|allowed-tools|needs-human/);
 });
 
@@ -269,7 +272,8 @@ test("active routes use one parent-owned evidence publication model", async () =
   assert.match(active, /one consolidated/);
   assert.doesNotMatch(active, /ReviewPrCoordinator|forge_publish_reviewer_comment/);
   assert.doesNotMatch(active, /Task\(|Agent\(|allowed-tools|\.claude|Claude Code|OpenCode|sonnet|opus|haiku/);
-  assert.doesNotMatch(active, /each reviewer.{0,80}publish(?:es)? its own|result\/comment pair|per-role comments/i);
+  assert.match(active, /each reviewer.{0,120}publish(?:es)? its own|`FORGE:REVIEWER_REPORT`/i);
+  assert.doesNotMatch(active, /result\/comment pair|per-role comments/i);
 });
 
 test("remediation is cohesive and re-review is scoped", async () => {

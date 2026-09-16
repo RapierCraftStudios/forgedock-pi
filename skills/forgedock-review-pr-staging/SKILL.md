@@ -46,10 +46,18 @@ credential boundary.
 Select only roles justified by the aggregate bundle risk. Launch them as fresh ordinary
 `delegate` agents with full normal tools in one concurrent workflow. Give them the original
 acceptance, active paths, prior decisions, exact frozen head/base, bundle diff, and proof.
-Require complete structured evidence with summaries, verified behaviors, residual risks, and
-findings. Reviewers return results to the staging owner; they do not post per-reviewer comments,
-create issues, edit labels, merge, or deploy. Retain valid roles and retry only a missing or
-invalid role.
+Each reviewer writes and retains a complete report, then publishes its own exact-head
+`FORGE:REVIEWER_REPORT` comment through the installed file-backed `record.mjs reviewer` helper
+before returning. The report includes role, PR/head/base, scope and decisions, substantive
+evidence/findings or evidence-backed no findings, limitations, and recommendation. Reviewers
+never create issues, edit source or labels, initiate remediation, merge, or deploy.
+
+The staging owner retains successful same-head reports, reads back every required comment, and
+links all report references from the final gate. If a role stalls or publication/result delivery
+fails, establish the old native child/workflow terminal state first, then recover only that role
+with the same authorization and saved report bytes. Use supported retained resume when the
+native status marks it resumable; otherwise use a fresh same-role workflow with a new key. A wait timeout
+must not start a second live reviewer; a partial panel cannot pass the gate.
 
 Cluster corroborating findings by shared root cause and behavioral invariant. The owner assigns
 one of `IMMEDIATE REPAIR`, `NON-BLOCKING FOLLOW-UP`, `REJECTED/NOT APPLICABLE`, or
@@ -69,5 +77,7 @@ SHA-bound consolidated gate record:
 - `FORGE:STAGING_GATE:FAIL` with precise failed checks, findings, missing proof, or wake
   conditions otherwise.
 
-Read back that exact comment ID. Never merge, approve, deploy, close source issues, mutate
-issue branches, create per-reviewer comments, or clean work-on-owned trees.
+Read back that exact gate comment ID. Never edit code, dispatch repair agents, invoke
+work-on/remediation, create repair commits, merge, approve, deploy, close source issues,
+mutate issue branches, or clean work-on-owned trees. Reviewer/transport recovery remains
+non-remediating; a valid blocker produces FAIL and ends this invocation.

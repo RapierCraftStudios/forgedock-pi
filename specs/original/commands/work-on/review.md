@@ -39,18 +39,22 @@ head, and base arguments. That skill owns:
 Each reviewer task carries acceptance invariants, test evidence/scope, bounded diff/context,
 linked classification/context/contract/plan and decision revisions, and unique role ownership.
 Fresh reviewers validate the history's current applicability rather than review historically blind.
-Each reviewer returns one exact-head structured result with a substantive summary, verified
-`path:line` behaviors, residual risks, and evidence-backed findings. Generic delegates do not
-publish comments, create issues, edit labels, or merge. The parent waits for every required
-result, validates identity, retries only a missing, failed, or malformed role, and then publishes
-one consolidated SHA-bound panel record and official verdict.
+Each reviewer returns one exact-head structured result only after retaining and publishing
+one complete `FORGE:REVIEWER_REPORT` comment through the installed file-backed helper. The report
+contains role, exact PR/head/base, scope and decisions, substantive evidence/findings or a
+no-findings conclusion, verification limitations, and recommendation. Generic delegates do not
+create issues, edit labels, initiate remediation, edit source, merge, or deploy. The parent
+waits for every required result and report readback, validates identity, retries only a missing,
+failed, or malformed role after terminal-state reconciliation, and then publishes one
+consolidated SHA-bound panel record linking every required report and the official verdict.
 
 Review consumes the frozen closure matrix criterion by criterion, preserving producer →
-consumer identity. Report uncovered caller, invocation-mode, transitive-dependency,
-valid/invalid input, fresh/existing state, failure/retry/recovery, cancellation, or
-concurrency rows explicitly, and verify each row's concrete counterexample or behavioral test;
-report an omitted alternate caller or transitive dependency by name. String-presence checks alone
-cannot close runtime rows. A reachable omission is `CONTRACT_GAP`, not an advisory: remediation
+consumer identity. Individual reports must state the scope and decisions considered, report
+uncovered caller, invocation-mode, transitive-dependency, valid/invalid input, fresh/existing
+state, failure/retry/recovery, cancellation, or concurrency rows explicitly, and verify each
+row's concrete counterexample or behavioral test; report an omitted alternate caller or
+transitive dependency by name. String-presence checks alone cannot close runtime rows. A
+reachable omission is `CONTRACT_GAP`, not an advisory: remediation
 must supersede the contract and re-plan before editing. A finding's severity is separate from
 its disposition; the parent requires trigger, reachable path, violated acceptance/invariant,
 consequence, and patch causality or an explicit acceptance gap.
