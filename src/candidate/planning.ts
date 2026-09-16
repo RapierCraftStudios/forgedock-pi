@@ -11,6 +11,7 @@ export interface IssuePlanInput {
 export interface PlannedIssue extends IssuePlanInput {
   key: string;
   predecessors: readonly string[];
+  externalDependencies: readonly number[];
 }
 
 export type ReviewerRole = "correctness" | "security" | "specialist";
@@ -48,6 +49,9 @@ export function buildDependencyGraph(
   const predecessors = new Map<number, Set<number>>(
     issues.map((issue) => [issue.number, new Set(explicitPredecessors(issue, numbers))]),
   );
+  const externalDependencies = new Map(
+    issues.map((issue) => [issue.number, (issue.dependsOn ?? []).filter((number) => !numbers.has(number))]),
+  );
   const globalFiles = normalizedFiles(configuredGlobalFiles);
 
   for (let leftIndex = 0; leftIndex < issues.length; leftIndex += 1) {
@@ -60,7 +64,8 @@ export function buildDependencyGraph(
       const exactGlobalConflict =
         overlap(left.mutationFiles, globalFiles) && overlap(right.mutationFiles, globalFiles);
       const migrationOrder = Boolean(left.migration && right.migration);
-      if (exactMutationConflict || exactGlobalConflict || migrationOrder) {
+      const explicitOrder = (left.dependsOn ?? []).includes(right.number) || (right.dependsOn ?? []).includes(left.number);
+      if (!explicitOrder && (exactMutationConflict || exactGlobalConflict || migrationOrder)) {
         predecessors.get(right.number)?.add(left.number);
       }
     }
@@ -85,6 +90,7 @@ export function buildDependencyGraph(
     ...issue,
     key: keys.get(issue.number) as string,
     predecessors: [...(predecessors.get(issue.number) ?? [])].map((number) => keys.get(number) as string),
+    externalDependencies: externalDependencies.get(issue.number) ?? [],
   }));
 }
 

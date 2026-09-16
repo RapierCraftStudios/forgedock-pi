@@ -27,7 +27,7 @@ verification:
     test: npm test
 review:
   reviewer_timeout_ms: 1000
-  panel_timeout_ms: 3000
+  panel_timeout_ms: 4000
   publication_timeout_ms: 1000
   max_concurrent: 2
 `;

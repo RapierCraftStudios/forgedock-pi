@@ -168,7 +168,7 @@ export function parseCandidateConfig(rawText: string, configPath: string, cwd = 
   const reviewerTimeoutMs = positiveInteger(review.reviewer_timeout_ms ?? 900_000, "review.reviewer_timeout_ms", 1_000);
   const publicationTimeoutMs = positiveInteger(review.publication_timeout_ms ?? 120_000, "review.publication_timeout_ms", 1_000);
   const maxConcurrent = positiveInteger(review.max_concurrent ?? 2, "review.max_concurrent", 1, 16);
-  const minimumPanelTimeout = reviewerTimeoutMs + publicationTimeoutMs;
+  const minimumPanelTimeout = Math.ceil(3 / maxConcurrent) * reviewerTimeoutMs + publicationTimeoutMs;
   const panelTimeoutMs = positiveInteger(
     review.panel_timeout_ms ?? Math.max(1_200_000, minimumPanelTimeout),
     "review.panel_timeout_ms",

@@ -75,8 +75,10 @@ export default function registerReviewerTools(pi: ExtensionAPI): void {
       assertUnderRoot(reviewRoot, reportPath, "Reviewer report path");
       if (bodyPath === reportPath) throw new Error("Reviewer body and report paths must differ");
       let authorization: { schema?: unknown; artifactRoot?: unknown; artifactKey?: unknown; repository?: unknown; pullRequest?: unknown; head?: unknown; baseRef?: unknown; baseSha?: unknown; roles?: unknown };
+      const authorizationPath = resolve(reviewRoot, "review.json");
+      assertUnderRoot(reviewRoot, authorizationPath, "Reviewer authorization path");
       try {
-        authorization = JSON.parse(await readFile(resolve(reviewRoot, "review.json"), "utf8")) as typeof authorization;
+        authorization = JSON.parse(await readFile(authorizationPath, "utf8")) as typeof authorization;
       } catch {
         throw new Error("Reviewer artifact root is missing its prepared authorization");
       }

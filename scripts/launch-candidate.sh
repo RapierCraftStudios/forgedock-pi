@@ -38,6 +38,11 @@ PACKAGE_ROOT="$INSTALL_ROOT/package"
 BIN="$PACKAGE_ROOT/bin/forgedock-candidate.mjs"
 [[ -f "$PI_ROOT/settings.json" && -f "$BIN" ]] || { echo "Invalid candidate install: $INSTALL_ROOT" >&2; exit 1; }
 
+# A stopped/foreign parent may leave PI_SUBAGENT_* controls in its environment.
+# The candidate must start from its own settings; the native runtime repopulates
+# its child-scoped variables after launch.
+for variable in $(compgen -v | grep -E '^PI_SUBAGENTS?_' || true); do unset "$variable"; done
+
 CONFIG_JSON=$(node "$BIN" config --cwd "$REPO")
 if [[ -z "$MODEL" ]]; then
   MODEL=$(printf '%s' "$CONFIG_JSON" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s);process.stdout.write(v.ownerModel);})')

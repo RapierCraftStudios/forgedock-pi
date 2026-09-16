@@ -16,6 +16,11 @@ test("uses explicit and exact mutation conflicts, not domain proximity", () => {
   assert.deepEqual(graph.find((issue) => issue.number === 5)?.predecessors, ["issue-4"]);
 });
 
+test("retains explicit dependencies outside the selected set", () => {
+  const graph = buildDependencyGraph([{ number: 9, dependsOn: [99] }]);
+  assert.deepEqual(graph[0]?.externalDependencies, [99]);
+});
+
 test("detects cycles before dispatch", () => {
   assert.throws(
     () => buildDependencyGraph([{ number: 1, dependsOn: [2] }, { number: 2, dependsOn: [1] }]),

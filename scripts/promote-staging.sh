@@ -9,8 +9,8 @@ PR_BODY="Promotion of staging to protected main. CI runs on this branch head; re
 
 git fetch origin staging main --quiet
 git checkout -q -b "$BRANCH" origin/staging
-if [ -n "$(git merge origin/main -m 'merge: reconcile protected main history for promotion' 2>&1 | grep -c CONFLICT || true)" ]; then
-  echo "Merge conflicts reconciling main into staging — resolve them, then re-run this script with PROMOTE_SKIP_MERGE=1." >&2
+if ! git merge origin/main -m 'merge: reconcile protected main history for promotion'; then
+  echo "Merge conflicts reconciling main into staging — resolve them before re-running this script." >&2
   exit 1
 fi
 git push -q -u origin "$BRANCH"

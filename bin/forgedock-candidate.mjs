@@ -53,6 +53,12 @@ function json(value) {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  return JSON.stringify(value);
+}
+
 function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
 }
@@ -80,7 +86,7 @@ function writeAtomic(file, content, mode = 0o600) {
   const output = resolve(file);
   mkdirSync(dirname(output), { recursive: true, mode: 0o700 });
   const temporary = `${output}.tmp-${process.pid}`;
-  writeFileSync(temporary, content, { mode });
+  writeFileSync(temporary, content, { flag: "wx", mode });
   chmodSync(temporary, mode);
   renameSync(temporary, output);
   return output;
@@ -173,7 +179,8 @@ function configFromRaw(rawText, configPath, cwd) {
   const reviewerTimeoutMs = integer(review.reviewer_timeout_ms ?? 900_000, "review.reviewer_timeout_ms", 1_000);
   const publicationTimeoutMs = integer(review.publication_timeout_ms ?? 120_000, "review.publication_timeout_ms", 1_000);
   const maxConcurrent = integer(review.max_concurrent ?? 2, "review.max_concurrent", 1, 16);
-  const panelTimeoutMs = integer(review.panel_timeout_ms ?? Math.max(1_200_000, reviewerTimeoutMs + publicationTimeoutMs), "review.panel_timeout_ms", reviewerTimeoutMs + publicationTimeoutMs);
+  const minimumPanelTimeout = Math.ceil(3 / maxConcurrent) * reviewerTimeoutMs + publicationTimeoutMs;
+  const panelTimeoutMs = integer(review.panel_timeout_ms ?? Math.max(1_200_000, minimumPanelTimeout), "review.panel_timeout_ms", minimumPanelTimeout);
   const remediationMaxRounds = integer(review.remediation_max_rounds ?? 1, "review.remediation_max_rounds", 0);
   const reviewerThinking = typeof review.thinking === "string" && THINKING_LEVELS.has(review.thinking) ? review.thinking : "medium";
   const verificationCommands = {};
@@ -332,6 +339,7 @@ function buildDependencyGraph(issues, globalFiles) {
   const byNumber = new Map(issues.map((issue) => [issue.number, issue]));
   if (byNumber.size !== issues.length) fail("Issue selector contains duplicate issue numbers");
   const predecessors = new Map(issues.map((issue) => [issue.number, new Set(issue.dependsOn.filter((number) => byNumber.has(number) && number !== issue.number))]));
+  const externalDependencies = new Map(issues.map((issue) => [issue.number, issue.dependsOn.filter((number) => !byNumber.has(number))]));
   const normalizedGlobal = new Set(globalFiles);
   const overlaps = (left, right) => {
     const rightSet = new Set(right);
@@ -343,7 +351,8 @@ function buildDependencyGraph(issues, globalFiles) {
       const right = issues[rightIndex];
       const exactMutationConflict = overlaps(left.mutationFiles, right.mutationFiles);
       const exactGlobalConflict = overlaps(left.mutationFiles, [...normalizedGlobal]) && overlaps(right.mutationFiles, [...normalizedGlobal]);
-      if (exactMutationConflict || exactGlobalConflict || (left.migration && right.migration)) predecessors.get(right.number).add(left.number);
+      const explicitOrder = left.dependsOn.includes(right.number) || right.dependsOn.includes(left.number);
+      if (!explicitOrder && (exactMutationConflict || exactGlobalConflict || (left.migration && right.migration))) predecessors.get(right.number).add(left.number);
     }
   }
   const visited = new Set();
@@ -360,7 +369,7 @@ function buildDependencyGraph(issues, globalFiles) {
   }
   for (const issue of issues) visit(issue.number);
   const keys = new Map(ordered.map((issue) => [issue.number, `issue-${issue.number}`]));
-  return ordered.map((issue) => ({ ...issue, key: keys.get(issue.number), predecessors: [...predecessors.get(issue.number)].map((number) => keys.get(number)) }));
+  return ordered.map((issue) => ({ ...issue, key: keys.get(issue.number), predecessors: [...predecessors.get(issue.number)].map((number) => keys.get(number)), externalDependencies: externalDependencies.get(issue.number) ?? [] }));
 }
 
 function ownerTask(issue, config, runDir) {
@@ -405,8 +414,8 @@ function prepareDispatch(options) {
   const activeOwnership = new Set(exactWorktreeMatches.map((match) => match.issue));
   const graph = buildDependencyGraph(issues, config.globalFiles).map((issue) => ({
     ...issue,
-    admitted: issue.hasAcceptance && !activeOwnership.has(issue.number),
-    gateReason: !issue.hasAcceptance ? "missing acceptance criteria" : activeOwnership.has(issue.number) ? "exact active worktree ownership evidence" : undefined,
+    admitted: issue.hasAcceptance && !activeOwnership.has(issue.number) && issue.externalDependencies.length === 0,
+    gateReason: !issue.hasAcceptance ? "missing acceptance criteria" : activeOwnership.has(issue.number) ? "exact active worktree ownership evidence" : issue.externalDependencies.length > 0 ? `explicit dependency outside selected issue set: ${issue.externalDependencies.map((number) => `#${number}`).join(", ")}` : undefined,
   }));
   const out = resolve(optionalOption(options, "out", join(cwd, ".forge-candidate", "runs", `dispatch-${Date.now()}`)));
   mkdirSync(out, { recursive: true, mode: 0o700 });
@@ -418,7 +427,7 @@ function prepareDispatch(options) {
     projectRoot: config.projectRoot,
     config,
     ownership: { exactWorktreeMatches, nativeRunCheck: "dispatcher must confirm through the supported subagent status boundary before admission" },
-    readiness: { missingAcceptance, activeOwnership: [...activeOwnership], admittedIssues: graph.filter((issue) => issue.admitted).map((issue) => issue.number) },
+    readiness: { missingAcceptance, activeOwnership: [...activeOwnership], externalDependencies: graph.filter((issue) => issue.externalDependencies.length > 0).map((issue) => ({ issue: issue.number, dependencies: issue.externalDependencies })), admittedIssues: graph.filter((issue) => issue.admitted).map((issue) => issue.number) },
     issues: graph.map((issue) => ({ ...issue, task: ownerTask(issue, config, out) })),
   };
   const planPath = writeExclusive(join(out, "plan.json"), json(plan));
@@ -502,7 +511,9 @@ function prepareReview(options) {
     fail("Review source checkout must be clean; freeze the patch in a separate checkout");
   }
   const configRoot = realpathSync(resolve(input.configRoot ?? sourceRoot));
-  const config = input.config ?? loadConfig(configRoot);
+  const canonicalConfig = loadConfig(configRoot);
+  if (input.config !== undefined && canonicalJson(input.config) !== canonicalJson(canonicalConfig)) fail("Review input configuration does not match canonical forge.yaml");
+  const config = canonicalConfig;
   const selected = Array.isArray(input.roles) && input.roles.length > 0 ? { roles: input.roles, rationale: Array.isArray(input.rationale) ? input.rationale : [] } : roleList(input);
   if (!Array.isArray(selected.roles) || selected.roles.length < 1 || selected.roles.length > 3) fail("Review must select between one and three reviewers");
   if (new Set(selected.roles).size !== selected.roles.length) fail("Review roles must be unique");
