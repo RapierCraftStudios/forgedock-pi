@@ -54,12 +54,13 @@ SUBAGENTS_ROOT="$INSTALL_ROOT/pi-subagents"
 PI_ROOT="$INSTALL_ROOT/pi-agent"
 
 if [[ -f "$INSTALL_ROOT/manifest.json" ]]; then
-  read -r INSTALLED_CANDIDATE_SHA INSTALLED_SUBAGENTS_SHA < <(node --input-type=module - "$INSTALL_ROOT/manifest.json" <<'NODE'
+  INSTALL_IDENTITY=$(node --input-type=module - "$INSTALL_ROOT/manifest.json" <<'NODE'
 import { readFileSync } from "node:fs";
 const manifest = JSON.parse(readFileSync(process.argv[2], "utf8"));
 process.stdout.write(`${manifest.candidateCommit ?? ""} ${manifest.piSubagentsCommit ?? ""}`);
 NODE
   )
+  read -r INSTALLED_CANDIDATE_SHA INSTALLED_SUBAGENTS_SHA <<< "$INSTALL_IDENTITY"
   if [[ "$INSTALLED_CANDIDATE_SHA" != "$CANDIDATE_SHA" || "$INSTALLED_SUBAGENTS_SHA" != "$SUBAGENTS_SHA" ]]; then
     echo "Install root already contains a different candidate snapshot; choose a new --install-root." >&2
     exit 1
@@ -87,12 +88,13 @@ mkdir -p "$PI_ROOT" "$INSTALL_ROOT/sessions"
 PACKAGE_DIGEST=$(node "$PACKAGE_ROOT/bin/forgedock-candidate.mjs" digest-tree --root "$PACKAGE_ROOT")
 SUBAGENTS_DIGEST=$(node "$PACKAGE_ROOT/bin/forgedock-candidate.mjs" digest-tree --root "$SUBAGENTS_ROOT")
 if [[ -f "$INSTALL_ROOT/manifest.json" ]]; then
-  read -r EXPECTED_PACKAGE_DIGEST EXPECTED_SUBAGENTS_DIGEST < <(node --input-type=module - "$INSTALL_ROOT/manifest.json" <<'NODE'
+  DIGEST_IDENTITY=$(node --input-type=module - "$INSTALL_ROOT/manifest.json" <<'NODE'
 import { readFileSync } from "node:fs";
 const manifest = JSON.parse(readFileSync(process.argv[2], "utf8"));
 process.stdout.write(`${manifest.packageDigest ?? ""} ${manifest.piSubagentsDigest ?? ""}`);
 NODE
   )
+  read -r EXPECTED_PACKAGE_DIGEST EXPECTED_SUBAGENTS_DIGEST <<< "$DIGEST_IDENTITY"
   if [[ "$EXPECTED_PACKAGE_DIGEST" != "$PACKAGE_DIGEST" || "$EXPECTED_SUBAGENTS_DIGEST" != "$SUBAGENTS_DIGEST" ]]; then
     echo "Install root contents do not match its identity manifest; choose a new --install-root." >&2
     exit 1
