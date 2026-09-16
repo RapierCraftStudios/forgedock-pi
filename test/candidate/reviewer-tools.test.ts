@@ -11,6 +11,7 @@ test("candidate package includes a source-read-only reviewer and publication-onl
   assert.doesNotMatch(agent, /^tools:.*\b(?:bash|edit|write)\b/m);
   assert.match(tool, /name: "forge_publish_reviewer"/);
   assert.match(tool, /reviewRoot/);
+  assert.match(tool, /artifactKey/);
   assert.match(tool, /assertUnderRoot/);
   assert.match(tool, /pi\.exec\("node"/);
 });

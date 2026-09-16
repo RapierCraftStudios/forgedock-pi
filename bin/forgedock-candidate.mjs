@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync, renameSync, chmodSync } from "node:fs";
-import { dirname, join, resolve, basename } from "node:path";
+import { dirname, join, relative, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { parse as parseYaml } from "yaml";
@@ -474,7 +474,7 @@ function reviewerTask(review, config, role, out) {
     `Role rationale: ${review.rationale.find((item) => item.toLowerCase().includes(role)) ?? "Review the assigned boundary without duplicating unrelated roles."}`,
     "Trace changed behavior and relevant consumers. Require concrete observable evidence for every finding or a substantive no-findings conclusion. Do not treat source strings, generated JSON, or mocks as runtime proof.",
     `Prepare only the four report sections (Scope and decisions considered; Evidence and findings; Verification limitations; Recommendation) as the body string. Do not put an identity marker in that body.`,
-    `Call forge_publish_reviewer exactly once with repository=${review.repository}, pullRequest=${review.pullRequest}, head=${review.head}, baseRef=${review.baseRef}, baseSha=${review.baseSha}, role=${role}, bodyPath=${bodyPath}, reportPath=${reportPath}, reviewRoot=${out}, publish=${review.publish}. The tool writes the report and performs safe publication when requested.`,
+    `Call forge_publish_reviewer exactly once with repository=${review.repository}, pullRequest=${review.pullRequest}, head=${review.head}, baseRef=${review.baseRef}, baseSha=${review.baseSha}, role=${role}, bodyPath=${bodyPath}, reportPath=${reportPath}, reviewRoot=${out}, artifactKey=<read from ${join(out, "review.json")}>, publish=${review.publish}. The tool writes the report and performs safe publication when requested.`,
     "Publication is required when requested. If publication fails after analysis, preserve the saved report and return the publication error; do not rerun review. Never edit source, create issues, edit labels, merge, deploy, or initiate remediation.",
     `Return exactly one line: FORGE_REVIEW_RESULT role=${role} report=${reportPath} publication=published|saved|failed verdict=APPROVE|BLOCK|FOLLOW_UP`,
   ].join("\n");
@@ -503,13 +503,18 @@ function prepareReview(options) {
   }
   const configRoot = realpathSync(resolve(input.configRoot ?? sourceRoot));
   const config = input.config ?? loadConfig(configRoot);
-  const selected = Array.isArray(input.roles) && input.roles.length > 0 ? { roles: input.roles, rationale: input.rationale ?? [] } : roleList(input);
+  const selected = Array.isArray(input.roles) && input.roles.length > 0 ? { roles: input.roles, rationale: Array.isArray(input.rationale) ? input.rationale : [] } : roleList(input);
+  if (!Array.isArray(selected.roles) || selected.roles.length < 1 || selected.roles.length > 3) fail("Review must select between one and three reviewers");
+  if (new Set(selected.roles).size !== selected.roles.length) fail("Review roles must be unique");
   if (!selected.roles.every((role) => ["correctness", "security", "specialist"].includes(role))) fail("Review roles must be correctness, security, or specialist");
-  const out = resolve(optionalOption(options, "out", join(dirname(resolve(inputPath)), `review-${pullRequest}-${head.slice(0, 12)}`)));
+  let out = resolve(optionalOption(options, "out", join(dirname(resolve(inputPath)), `review-${pullRequest}-${head.slice(0, 12)}`)));
   mkdirSync(out, { recursive: true, mode: 0o700 });
+  out = realpathSync(out);
+  const sourceDistance = relative(sourceRoot, out);
+  if (!sourceDistance || (sourceDistance !== ".." && !sourceDistance.startsWith("../"))) fail("Review artifact output must be outside the frozen source checkout");
   const diff = exec("git", ["diff", "--no-ext-diff", `${baseSha}..${head}`], { cwd: sourceRoot, timeout: 120_000, maxBuffer: 32 * 1024 * 1024 });
   const diffPath = writeExclusive(join(out, "frozen.diff"), `${diff}\n`);
-  const review = { ...input, repository, pullRequest, head, baseSha, baseRef, sourceRoot, configRoot, config, roles: selected.roles, rationale: selected.rationale, diffPath, diffSha256: sha256(Buffer.from(`${diff}\n`)), publish: input.publish === true };
+  const review = { schema: "forgedock.candidate-review/v1", artifactRoot: out, artifactKey: randomUUID(), ...input, repository, pullRequest, head, baseSha, baseRef, sourceRoot, configRoot, config, roles: selected.roles, rationale: selected.rationale, diffPath, diffSha256: sha256(Buffer.from(`${diff}\n`)), publish: input.publish === true };
   const reviewPath = writeExclusive(join(out, "review.json"), json(review));
   const workflowPath = writeExclusive(join(out, "workflow.js"), reviewerWorkflow(review, config, out));
   const request = {
