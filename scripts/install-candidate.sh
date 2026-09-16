@@ -49,6 +49,12 @@ if [[ ! -f "$SUBAGENTS_ROOT/package.json" ]]; then
 fi
 mkdir -p "$PI_ROOT" "$INSTALL_ROOT/sessions"
 
+# Local-path package installs are intentionally immutable snapshots, so install
+# their production dependencies explicitly rather than borrowing a worktree's
+# node_modules directory.
+( cd "$SUBAGENTS_ROOT" && npm install --omit=dev --ignore-scripts --no-audit --no-fund >/dev/null )
+( cd "$PACKAGE_ROOT" && npm install --omit=dev --ignore-scripts --no-audit --no-fund >/dev/null )
+
 export PI_CODING_AGENT_DIR="$PI_ROOT"
 export PI_OFFLINE=1
 export PI_SKIP_VERSION_CHECK=1
@@ -63,13 +69,16 @@ pi install "$PACKAGE_ROOT" --approve >/dev/null
 # coding guidance. Do not copy or rewrite auth/settings files from the operator scope.
 node --input-type=module - "$PI_ROOT/settings.json" "$SUBAGENTS_ROOT" "$PACKAGE_ROOT" <<'NODE'
 import { readFileSync, writeFileSync, chmodSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 const [file, subagentsRoot, packageRoot] = process.argv.slice(2);
 const settings = JSON.parse(readFileSync(file, "utf8"));
 const sourceOf = (entry) => typeof entry === "string" ? entry : entry && typeof entry.source === "string" ? entry.source : undefined;
+const absoluteSource = (source) => source && (source.startsWith("/") ? source : resolve(dirname(file), source));
 settings.packages = (Array.isArray(settings.packages) ? settings.packages : []).map((entry) => {
   const source = sourceOf(entry);
-  if (source === subagentsRoot) return { source, extensions: ["./index.ts"], skills: [], prompts: [] };
-  if (source === packageRoot) return { source, extensions: ["./candidate/extension.ts"], skills: ["./candidate/skills"], prompts: ["./candidate/prompts"] };
+  const absolute = absoluteSource(source);
+  if (absolute === subagentsRoot) return { source, extensions: ["./index.ts"], skills: [], prompts: [] };
+  if (absolute === packageRoot) return { source, extensions: ["./candidate/extension.ts"], skills: ["./candidate/skills"], prompts: ["./candidate/prompts"] };
   return entry;
 });
 settings.defaultProjectTrust = "never";
