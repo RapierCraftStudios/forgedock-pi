@@ -570,11 +570,16 @@ function prepareReview(options) {
   out = realpathSync(out);
   const sourceDistance = relative(sourceRoot, out);
   if (!sourceDistance || (sourceDistance !== ".." && !sourceDistance.startsWith("../"))) fail("Review artifact output must be outside the frozen source checkout");
+  const baseRefSha = exec("git", ["rev-parse", `refs/remotes/origin/${baseRef}^{commit}`], { cwd: sourceRoot });
+  if (baseRefSha !== baseSha) {
+    try { execFileSync("git", ["merge-base", "--is-ancestor", baseSha, baseRefSha], { cwd: sourceRoot, stdio: "ignore" }); }
+    catch { fail(`Review base ref ${baseRef} does not contain the frozen base ${baseSha}`); }
+  }
   const diff = exec("git", ["diff", "--no-ext-diff", `${baseSha}..${head}`], { cwd: sourceRoot, timeout: 120_000, maxBuffer: 32 * 1024 * 1024 });
   const diffPath = writeExclusive(join(out, "frozen.diff"), `${diff}\n`);
   const configText = readFileSync(config.configPath, "utf8");
   const roleArtifactKeys = Object.fromEntries(selected.roles.map((role) => [role, randomUUID()]));
-  const review = { schema: "forgedock.candidate-review/v1", artifactRoot: out, artifactKey: randomUUID(), ...input, repository, pullRequest, head, baseSha, baseRef, sourceRoot, configRoot, config, configHead, configPath: config.configPath, configSha256: sha256(configText), roles: selected.roles, rationale: selected.rationale, diffPath, diffSha256: sha256(Buffer.from(`${diff}\n`)), publish: input.publish === true };
+  const review = { schema: "forgedock.candidate-review/v1", artifactRoot: out, artifactKey: randomUUID(), ...input, repository, pullRequest, head, baseSha, baseRef, sourceRoot, configRoot, config, configHead, configPath: config.configPath, configSha256: sha256(configText), baseRefSha, roles: selected.roles, rationale: selected.rationale, diffPath, diffSha256: sha256(Buffer.from(`${diff}\n`)), publish: input.publish === true };
   for (const role of selected.roles) {
     writeExclusive(join(out, `${role}.authorization.json`), json({ schema: "forgedock.candidate-review-role/v1", artifactRoot: out, artifactKey: roleArtifactKeys[role], role, repository, pullRequest, head, baseRef, baseSha, publish: review.publish }));
   }
