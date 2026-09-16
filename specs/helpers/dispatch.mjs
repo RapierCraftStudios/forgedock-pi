@@ -40,7 +40,7 @@ const FULL_SHA_PATTERN = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
 const REVIEW_MODES = new Set(["standard", "staging"]);
 
 function reviewMode(value, label = "review mode") {
-  const mode = value ?? "standard";
+  const mode = value === undefined ? "standard" : value;
   requireThat(REVIEW_MODES.has(mode), `${label} must be standard or staging`);
   return mode;
 }

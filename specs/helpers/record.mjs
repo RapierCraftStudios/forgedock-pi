@@ -20,7 +20,7 @@ const REVIEWER_SECTIONS = ["Scope and decisions considered", "Evidence and findi
 const FULL_SHA_PATTERN = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
 function check(ok, message) { if (!ok) throw new Error(message); }
 function reviewMode(value) {
-  const mode = value ?? "standard";
+  const mode = value === undefined ? "standard" : value;
   check(mode === "standard" || mode === "staging", "Review mode must be standard or staging");
   return mode;
 }
