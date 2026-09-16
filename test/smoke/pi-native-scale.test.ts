@@ -5,8 +5,8 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 
-// Real workflow + admission engines; simulated owners/reviewers, no model or live repo.
-const source = process.env.PI_SUBAGENTS_SOURCE;
+// Real installed workflow + admission engines; simulated owners/reviewers, no model or live repo.
+const source = process.env.PI_SUBAGENTS_SOURCE ?? resolve("node_modules/pi-subagents");
 type NodeSpec = { key: string; predecessors: string[]; launch: Record<string, unknown> };
 
 async function runtime() {
@@ -34,7 +34,7 @@ const nodes: NodeSpec[] = Array.from({ length: 100 }, (_, index) => {
     launch: { agent: "worker", task: `Issue ${n}`, cwd: `/simulated/issue-${n}` } };
 });
 
-test("100 issue DAG streams bounded owners and shared-budget nested reviews", { skip: !source, timeout: 45000 }, async () => {
+test("100 issue DAG streams bounded owners and shared-budget nested reviews", { timeout: 45000 }, async () => {
   const { runWorkflowScript, createRunFanoutBudget, claimRunFanoutBatch, getRunFanoutBudgetSnapshot } = await runtime();
   const budget = createRunFanoutBudget(`forge-scale-${randomUUID()}`, 920);
   const initialStarted = deferred();
@@ -129,7 +129,7 @@ test("100 issue DAG streams bounded owners and shared-budget nested reviews", { 
   }
 });
 
-test("native fanout rejects the default-64 eager batch and oversized panels atomically", { skip: !source }, async () => {
+test("native fanout rejects the default-64 eager batch and oversized panels atomically", async () => {
   const { runWorkflowScript, createRunFanoutBudget, claimRunFanoutBatch, getRunFanoutBudgetSnapshot } = await runtime();
   const budget = createRunFanoutBudget(`forge-small-${randomUUID()}`, 64);
   let launched = 0;
@@ -154,7 +154,7 @@ test("native fanout rejects the default-64 eager batch and oversized panels atom
   } finally { await rm(budget.directory, { recursive: true, force: true }); }
 });
 
-test("denied recovery keeps its original references in compact DAG rows", { skip: !source }, async () => {
+test("denied recovery keeps its original references in compact DAG rows", async () => {
   const { runWorkflowScript, createRunFanoutBudget, claimRunFanoutBatch, getRunFanoutBudgetSnapshot } = await runtime();
   const budget = createRunFanoutBudget(`forge-recovery-budget-${randomUUID()}`, 1);
   let launches = 0;
@@ -188,7 +188,7 @@ for (const invalid of [
   [{ key: "a", predecessors: ["unknown"], launch: {} }],
   [{ key: "a", predecessors: ["b"], launch: {} }, { key: "b", predecessors: ["a"], launch: {} }],
 ] satisfies NodeSpec[][]) {
-  test(`invalid DAG rejected before any owner: ${JSON.stringify(invalid.map(n => n.predecessors))}`, { skip: !source }, async () => {
+  test(`invalid DAG rejected before any owner: ${JSON.stringify(invalid.map(n => n.predecessors))}`, async () => {
     const { runWorkflowScript } = await runtime();
     let launches = 0;
     await assert.rejects(runWorkflowScript({ script: await scriptFor(invalid, 4),

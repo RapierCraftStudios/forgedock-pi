@@ -40,12 +40,14 @@ naming. Pi runtime mechanics live in [`specs/pi-adapter.md`](specs/pi-adapter.md
   superseding decisions retain the old history. Compact context never replaces that graph.
 - **Subagents provide isolation and fan-out.** Orchestrate launches one work-on agent and
   one isolated worktree per ready issue. Each agent runs its lifecycle inline and only
-  review or re-review fans out to fresh repository-capable children.
+  review or re-review fans out to fresh repository-capable children. A headless owner keeps
+  the joined panel synchronous and consumes its returned results before continuing.
 - **Review is load-bearing.** It launches risk-specific prompts on fresh ordinary
-  `delegate` agents with full normal tools. Delegates return structured evidence to the issue
-  owner, who publishes one consolidated panel result and verdict; reviewers do not publish
-  individual records. The route never approves from a partial panel or repeats review for
-  unrelated clean base movement.
+  `delegate` agents with full normal tools. Each reviewer retains and publishes one complete
+  exact-head report comment; the parent joins every required report, deduplicates and
+  disposition findings, then publishes the consolidated result and verdict. Reviewers never
+  create issues, edit source, remediate, merge, or deploy. The route never approves from a
+  partial panel or repeats review for unrelated clean base movement.
 - **Scope decisions are explicit.** Complexity signals require a cohesion assessment, not
   automatic splitting. A late decomposition proposal preserves partial work and requires
   an approved handoff/disposition before splitting an existing PR; it never resets retries.
@@ -103,7 +105,21 @@ agents:
 
 orchestration:
   max_concurrent: 12
+
+review:
+  # Optional; defaults preserve the original 15m child / 20m panel budgets.
+  reviewer_timeout_ms: 900000
+  panel_timeout_ms: 1200000
+  max_concurrent: 4
+  publication_timeout_ms: 120000
+  result_collection_timeout_ms: 120000
 ```
+
+`review.max_concurrent` is scoped to one panel workflow, not the host or provider.
+`panel_timeout_ms` must cover its admitted reviewer waves plus publication and result
+collection. A configured value that cannot cover the selected roster is rejected before
+launch; required roles are not silently removed. The active ForgeDock project promotes a
+measured 30-minute reviewer budget in its own `forge.yaml`.
 
 Learn existing project checks once under `verification.commands`; optional
 `verification.discovery` records component prefixes and defining-file fingerprints. Select
@@ -180,11 +196,12 @@ npm install
 npm run check
 ```
 
-Native qualification is opt-in against a pinned pi-subagents checkout. Set
-`PI_SUBAGENTS_SOURCE` for the workflow/fanout fixtures; also set
-`PI_SUBAGENTS_ADAPTER_SOURCE` to a checkout with its development/test dependencies installed
-for full adapter/mock-CLI recovery and async-publication tests. These launch no real models.
-Without those inputs the corresponding tests skip; do not report skips as qualification.
+The workflow/admission qualification fixtures execute the installed `pi-subagents` package
+by default; set `PI_SUBAGENTS_SOURCE` only to qualify another pinned checkout. Set
+`PI_SUBAGENTS_ADAPTER_SOURCE` to a source checkout with its development/test dependencies
+installed for the deeper adapter/mock-CLI recovery seam. These launch no real models. The
+adapter-only tests report an explicit skip when that source-only seam is unavailable; do not
+report a skip as qualification.
 
 The suite validates TypeScript, lexical routing, skill/prompt packaging, specification
 integrity, reviewer-only nesting, hard-edge DAG concurrency, and lower-level safety modules.

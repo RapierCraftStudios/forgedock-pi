@@ -42,3 +42,16 @@ branches:
   default: "main"
   staging: "staging"
   feature_pattern: "milestone/{slug}"
+
+# =============================================================================
+# REVIEW (OPTIONAL)
+# Review deadlines are native child/panel budgets. The panel value must cover
+# admitted reviewer waves plus publication and result-collection margin.
+# =============================================================================
+
+review:
+  reviewer_timeout_ms: 900000
+  panel_timeout_ms: 1200000
+  max_concurrent: 4
+  publication_timeout_ms: 120000
+  result_collection_timeout_ms: 120000

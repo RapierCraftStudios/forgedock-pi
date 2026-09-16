@@ -28,6 +28,12 @@ verification:
 
 review:
   remediation_max_rounds: 4
+  # Measured native child timeout on the prior staging panel was 900000ms.
+  reviewer_timeout_ms: 1800000
+  panel_timeout_ms: 2400000
+  max_concurrent: 4
+  publication_timeout_ms: 120000
+  result_collection_timeout_ms: 120000
   tech_stack: "TypeScript, Pi extensions, pi-subagents, GitHub"
   context: |
     ForgeDock Pi is a prompt-routed workflow package. Slash commands load skills;

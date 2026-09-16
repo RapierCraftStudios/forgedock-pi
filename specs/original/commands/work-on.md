@@ -22,12 +22,14 @@ A lower layer may not redefine topology, mutation authority, terminal state, wor
 ownership, review requirements, or merge authority.
 
 ## Topology
-
 - The work-on agent is the sole writer for its issue.
 - Investigation, decomposition decisions, planning, build, verification, PR preparation,
-  remediation, merge, close, and cleanup execute in this agent.
+  remediation, merge, close, and cleanup execute in this agent. Review children may retain and
+  publish their own report comments, but cannot mutate source or make parent decisions.
 - The `subagent` tool is forbidden before review and outside review/re-review.
-- Reviewers are fresh, read-only, risk-selected, concurrent, and fully joined.
+- Reviewers are fresh, risk-selected, concurrent, and fully joined. Each reviewer retains
+  and publishes one complete exact-head report; reviewers never create issues, edit source,
+  initiate remediation, merge, or deploy.
 - Do not launch investigation helpers, phase agents, builders, quality-gate agents,
   another work-on agent, or a review coordinator.
 
@@ -131,7 +133,6 @@ blocking review consumes a round even when called build, polish, or cleanup. Onl
 new authority can extend an exhausted budget; do not ask for routine extensions.
 
 ## Lifecycle
-
 ### 1. Investigate
 
 Load `work-on/investigate.md` once. Confirm or invalidate the claim, identify root cause,

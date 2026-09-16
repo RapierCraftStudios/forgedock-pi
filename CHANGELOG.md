@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased — Individual review reports and bounded panel recovery
+
+- Restore complete per-reviewer PR conversation reports with stable PR/head/base/role/round
+  identity, local retention, bounded ambiguous-create reconciliation, and parent-linked
+  consolidation; reviewer reports never create issues or make remediation/merge decisions.
+- Make review child, panel, publication, collection, and per-panel concurrency budgets
+  configurable from `forge.yaml`, preserving the synchronous headless owner join and
+  recovering only missing roles after native terminal-state reconciliation.
+- Diagnose the retained PR #565 native attempts: each failed child recorded
+  `Subagent timed out after 900000ms`; the available mission summaries identify the child
+  deadline, while cleaned status/event artifacts leave provider/HTTP and shutdown causes
+  unobservable historically. The active project budget is therefore 1800000ms per reviewer
+  and 2400000ms for one four-reviewer wave, with bounded transport/collection margin.
+
 ## Unreleased — Canary control candidate
 
 - Bind per-lane repository/issue/target/model/remediation policy from one canonical config

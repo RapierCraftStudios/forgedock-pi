@@ -67,62 +67,72 @@ outcome.
 
 Review roles use fresh ordinary builtin `delegate` agents with full normal tool
 availability. Role prompts focus the review and require structured evidence; ForgeDock does
-not register a specialized reviewer profile or impose a reviewer capability ceiling. The owning
-work-on agent remains responsible for joining results, semantic disposition, publication,
-verdict, remediation, merge, and closure. Generic delegates return evidence; they do not
-receive a direct publication or issue capability.
+not register a specialized reviewer profile or impose a reviewer capability ceiling. Each
+reviewer is responsible for retaining and publishing one complete report through the
+existing file-backed `helpers/record.mjs reviewer` helper. The report contains the reviewer
+role, exact PR/head/base identity, scope and decisions considered, substantive evidence and
+findings (including a no-findings conclusion), verification limitations, and recommendation.
+Reviewers do not create issues, edit source or labels, initiate remediation, merge, or deploy.
+The owning parent remains solely responsible for joining, validating, deduplicating,
+dispositioning, issue creation, verdict, remediation, merge, and closure.
 
 Prepare repository, PR, full head/base SHAs, changed files, deterministic diff bundle,
-role/persona, attempt, and invariants once. Embed the bounded diff in each task or pass one
-stable readable file path; `runs.host` is not available in raw review workflows and must
-not be used for bundle transfer. Set `output` on each child launch only when durable results
-are needed and return the installed API's output reference/artifact paths; task text is not a
-storage declaration. Keep context bounded to the frozen diff and required invariants.
-For standalone interactive review, launch with `async: true`, yield, then consume native
-completion and continue synthesis in the same owner. In a headless work-on child, keep the
-panel as one synchronous joined `workflowScript` (`await runs.all([...])`) until a tested
-nested continuation is available: headless auto-drain waits for work but is not by itself
-proof that the owner consumed the results or completed merge/closure. The outer orchestrator
-remains async and all selected reviewers run concurrently; never emit terminal DONE just
-because a panel was dispatched.
+role/persona, review round, and invariants once. Embed the bounded diff in each task or pass
+one stable readable file path; `runs.host` is not available in raw review workflows and must
+not be used for bundle transfer. Use the prepared authorization/body/report paths and invoke
+the installed helper with argument arrays; report text is always file data, never shell or
+executable markup. For standalone review, create the same explicit reviewer authorization
+from the frozen PR identity without inventing an issue. For standalone interactive review,
+launch with `async: true`, yield, then consume native completion. In a headless work-on child,
+keep the panel as one synchronous joined `workflowScript` (`await runs.all([...])`) and
+consume its returned value before continuing; headless auto-drain alone is not result
+consumption proof. Never emit terminal DONE just because a panel was dispatched.
 
 Work-on owners prepare panel data with `helpers/dispatch.mjs review`; it applies the bound
-model/cap and emits the request without rewriting workflow code. Standalone PR reviews
-without a bound work-on issue retain the same owner-publication route; never invent an issue ID.
-Each item uses:
+model, creates stable reviewer publication authorizations, and emits the request without
+rewriting workflow code. Each item uses a stable role/round/head key, `agent: "delegate"`,
+resolved full model with risk-calibrated thinking, `context: "fresh"`, `worktree: false`,
+`acceptance: false`, and the configured `reviewer_timeout_ms`. The request sets
+`globalConcurrencyLimit` only for that panel workflow. It is the maximum simultaneously
+running reviewers in that workflow, not a host-wide or provider-wide limit.
 
-- a stable role/attempt key;
-- `agent: "delegate"`;
-- the resolved full model with risk-calibrated thinking;
-- `context: "fresh"`;
-- `worktree: false`;
-- `acceptance: false`;
-- `timeoutMs: 900000`.
+The helper resolves `reviewer_timeout_ms`, `max_concurrent`, `publication_timeout_ms`,
+`result_collection_timeout_ms`, and `panel_timeout_ms` before launch. It computes admitted
+reviewer waves and rejects a panel deadline that cannot cover the waves, per-comment
+publication, and collection margin. Defaults preserve the former 900000ms child and
+1200000ms panel budgets; this repository's measured configuration uses 1800000ms per child
+and 2400000ms for one four-reviewer wave. The child deadline covers analysis and its own
+publication; the publication value bounds each `gh` transport operation, and collection is
+the enclosing panel margin. No cumulative panel spawn cap is added: parent planning keeps
+role/retry allowance separate from local active concurrency.
 
-The panel join deadline is `1200000`. Join all roles before synthesis. A partial panel
-cannot publish a verdict or authorize merge. For reviews exceeding three minutes, a
-delegate may send at most one concise `contact_supervisor` progress update with role, head,
-and current evidence step; do not publish progress to GitHub.
+Join all required roles before synthesis. Retain every valid same-head report and its
+comment reference. A missing or failed role is an incomplete panel, not PASS. Before replacing
+a timed-out role, inspect the exact native workflow/child status and process-terminal
+artifacts, confirm the old role is terminal, and recover only that role with the same
+authorization/report bytes and a new workflow key. A wait/result-delivery timeout must not
+start a second live reviewer. Never restart a panel for JSON key casing, number-versus-string
+identity echoes, equivalent list shapes, or other harmless formatting differences. If review
+completed but result delivery failed, reconcile the saved
+report and stable comment identity; do not rerun analysis.
 
-Retain each valid same-head role. Retry only when the child failed or the owning agent
-cannot recover a substantive result. Launch one additional workflow containing only that
-missing role with a new key under the same attempt. Never restart a panel for JSON key casing,
-number-versus-string identity echoes, equivalent list shapes, or other harmless formatting.
-
-Each delegate may use normal read/search tools needed for evidence, but its assignment is
-review, not implementation or workflow ownership. Bind repository, PR, head/base, attempt,
-and role from the launch record. Accept JSON or structured Markdown containing verdict,
-qualitative summary, verified `path:line` behaviors, residual risks, and findings; normalize
-harmless representation differences in the owner. The owner publishes exactly one
-consolidated SHA-bound panel record and one official verdict with exact-ID readback. No
-reviewer-authored individual record, shell-regex comment protocol, or invented publication
-tool is part of this route.
+For reviews exceeding three minutes, a delegate may send at most one concise `contact_supervisor` progress update with its role, head, and current evidence step; do not publish progress to GitHub. Use native status/completion/artifact handling, not tight polling.
+Record whether a failure is provider/transport, child deadline, tool deadline, queue/admission,
+panel deadline, publication, result delivery, or parent shutdown; the native error and
+timestamps are the boundary evidence. In the installed runtime, `Subagent timed out after
+<N>ms` with child `timedOut` is a child deadline, `Tool '<name>' timed out` is a tool deadline,
+and `Workflow script timed out after <N>ms` is the panel deadline. A `record.mjs reviewer`
+transport error is publication failure; absent completion/replay evidence is result delivery
+failure. Do not relabel one boundary as another or turn an incomplete panel into PASS. The parent publishes one consolidated SHA-bound panel/gate record linking
+every required individual report, preserves disagreements, groups findings by causal
+mechanism, and alone creates authorized deduplicated issues and makes the final decision.
 
 ## Base movement and review reuse
 
-A target-branch advance does not invalidate review while the PR head remains unchanged and
-GitHub reports it clean and mergeable. Do not rebase solely to make the latest target an
-ancestor of the feature head.
+A target-branch advance does not invalidate a `standard` review while the PR head remains
+unchanged and GitHub reports it clean and mergeable; retain the originally reviewed base SHA
+in the report. `staging`/protected-promotion review remains bound to its exact base SHA. Do not
+rebase solely to make the latest target an ancestor of the feature head.
 
 Reconcile only when branch policy requires current-base ancestry or the PR conflicts. If
 reconciliation changes the head, capture old/new effective patches and incoming target
