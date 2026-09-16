@@ -134,11 +134,16 @@ async function writeCheckReceipt(root: string, receipt: Record<string, unknown>)
 
 async function requirePassEvidence(input: RecordInput, review: Record<string, unknown>): Promise<void> {
   const roles = Array.isArray(review.roles) ? review.roles.filter((role): role is string => typeof role === "string") : [];
+  if (!roles.includes("correctness")) throw new Error("A staging PASS requires the correctness reviewer");
   if (!input.checks?.length || new Set(input.checks).size !== input.checks.length) throw new Error("A staging PASS requires unique completed check receipts");
   for (const role of roles) {
     const report = join(resolve(input.reviewRoot as string), `${role}.report.md`);
-    if (!existsSync(report) || realpathSync(report) !== report || !readFileSync(report, "utf8").includes(`<!-- FORGE:REVIEWER_REPORT`)) throw new Error(`A staging PASS requires the ${role} reviewer report`);
-    if (!readFileSync(report, "utf8").includes(String(input.head))) throw new Error(`Reviewer report for ${role} is not bound to the frozen head`);
+    if (!existsSync(report) || realpathSync(report) !== report) throw new Error(`A staging PASS requires the ${role} reviewer report`);
+    const reportText = readFileSync(report, "utf8");
+    const marker = reportText.match(/^<!-- FORGE:REVIEWER_REPORT (\{.*\}) -->$/m);
+    let identity: Record<string, unknown>;
+    try { identity = marker?.[1] ? JSON.parse(marker[1]) as Record<string, unknown> : {}; } catch { identity = {}; }
+    if (identity.repository !== input.repository || identity.pullRequest !== input.pullRequest || identity.head !== input.head || identity.baseRef !== input.baseRef || identity.baseSha !== input.baseSha || identity.role !== role) throw new Error(`Reviewer report for ${role} is not bound to the frozen role`);
   }
   for (const name of input.checks) {
     const receiptPath = join(resolve(input.reviewRoot as string), "checks", `${name}.json`);
@@ -207,8 +212,12 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       const command = configuredCommand(config, name);
       if (!command) throw new Error(`No configured verification command named '${name}'`);
       if (forbiddenStagingCheck(command)) throw new Error(`Configured check '${name}' is not a read-only verification command`);
+      const before = await pi.exec("git", ["status", "--porcelain=v1", "--untracked-files=all"], { cwd: resolve(input.sourceRoot), timeout: 20_000 });
+      if (before.code !== 0 || before.stdout.trim()) throw new Error("Configured checks require a clean frozen source checkout");
       const result = await pi.exec("sh", ["-lc", command], { cwd: resolve(input.sourceRoot), timeout: 1_200_000 });
+      const after = await pi.exec("git", ["status", "--porcelain=v1", "--untracked-files=all"], { cwd: resolve(input.sourceRoot), timeout: 20_000 });
       const output = `${result.stdout}${result.stderr ? `\n${result.stderr}` : ""}`;
+      if (after.code !== 0 || after.stdout.trim()) throw new Error(`Configured check '${name}' changed the frozen source checkout`);
       if (result.code !== 0) throw new Error(`Configured check '${name}' failed:\n${bounded(output)}`);
       const receiptPath = await writeCheckReceipt(input.reviewRoot, { schema: "forgedock.candidate-check/v1", name, status: "passed", sourceRoot: resolve(input.sourceRoot), head: input.head, configPath, configSha256: input.configSha256 });
       return { content: [{ type: "text", text: bounded(output || `${name}: passed`) }], details: { name, command, exitCode: result.code, receiptPath } };

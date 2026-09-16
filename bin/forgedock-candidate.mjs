@@ -153,7 +153,7 @@ function branch(value, label) {
 }
 
 function validateModel(model) {
-  if (!FULL_MODEL.test(model)) fail("Model must be a full provider/model ID");
+  if (!FULL_MODEL.test(model) || model.endsWith(":") || model.includes("::")) fail("Model must be a full provider/model ID");
   const suffix = model.match(/:([^:]+)$/)?.[1]?.toLowerCase();
   if (suffix && !THINKING_LEVELS.has(suffix) && !/^\d[\w.-]*$/.test(suffix)) fail(`Unsupported model thinking suffix ':${suffix}'`);
   return model;
@@ -506,7 +506,7 @@ function reviewerTask(review, config, role, out) {
     `Role rationale: ${review.rationale.find((item) => item.toLowerCase().includes(role)) ?? "Review the assigned boundary without duplicating unrelated roles."}`,
     "Trace changed behavior and relevant consumers. Require concrete observable evidence for every finding or a substantive no-findings conclusion. Do not treat source strings, generated JSON, or mocks as runtime proof.",
     `Prepare only the four report sections (Scope and decisions considered; Evidence and findings; Verification limitations; Recommendation) as the body string. Do not put an identity marker in that body.`,
-    `Call forge_publish_reviewer exactly once with repository=${review.repository}, pullRequest=${review.pullRequest}, head=${review.head}, baseRef=${review.baseRef}, baseSha=${review.baseSha}, role=${role}, bodyPath=${bodyPath}, reportPath=${reportPath}, reviewRoot=${out}, artifactKey=<read from ${join(out, "review.json")}>, publish=${review.publish}. The tool writes the report and performs safe publication when requested.`,
+    `Call forge_publish_reviewer exactly once with repository=${review.repository}, pullRequest=${review.pullRequest}, head=${review.head}, baseRef=${review.baseRef}, baseSha=${review.baseSha}, role=${role}, bodyPath=${bodyPath}, reportPath=${reportPath}, reviewRoot=${out}, authorizationPath=${join(out, `${role}.authorization.json`)}, artifactKey=<read from ${join(out, `${role}.authorization.json`)}>, publish=${review.publish}. The tool writes the report and performs safe publication when requested.`,
     "Publication is required when requested. If publication fails after analysis, preserve the saved report and return the publication error; do not rerun review. Never edit source, create issues, edit labels, merge, deploy, or initiate remediation.",
     `Return exactly one line: FORGE_REVIEW_RESULT role=${role} report=${reportPath} publication=published|saved|failed verdict=APPROVE|BLOCK|FOLLOW_UP`,
   ].join("\n");
@@ -536,6 +536,11 @@ function prepareReview(options) {
   const configRoot = realpathSync(resolve(input.configRoot ?? sourceRoot));
   const canonicalConfig = loadConfig(configRoot);
   if (canonicalConfig.repository.toLowerCase() !== repository.toLowerCase() || !canonicalConfig.repositoryMatchesRemote) fail("Review configuration repository does not match the frozen review repository");
+  const sourceCommonDir = realpathSync(resolve(sourceRoot, exec("git", ["rev-parse", "--git-common-dir"], { cwd: sourceRoot })));
+  const configCommonDir = realpathSync(resolve(configRoot, exec("git", ["rev-parse", "--git-common-dir"], { cwd: configRoot })));
+  if (sourceCommonDir !== configCommonDir) fail("Review configuration and frozen source are not worktrees of the same repository");
+  const configHead = exec("git", ["rev-parse", "HEAD"], { cwd: configRoot });
+  if (input.configHead !== undefined && input.configHead !== configHead) fail("Review input configuration checkout moved after preparation");
   if (input.config !== undefined && canonicalJson(input.config) !== canonicalJson(canonicalConfig)) fail("Review input configuration does not match canonical forge.yaml");
   const config = canonicalConfig;
   const selected = Array.isArray(input.roles) && input.roles.length > 0 ? { roles: input.roles, rationale: Array.isArray(input.rationale) ? input.rationale.filter((item) => typeof item === "string") : [] } : roleList(input);
@@ -551,8 +556,12 @@ function prepareReview(options) {
   const diff = exec("git", ["diff", "--no-ext-diff", `${baseSha}..${head}`], { cwd: sourceRoot, timeout: 120_000, maxBuffer: 32 * 1024 * 1024 });
   const diffPath = writeExclusive(join(out, "frozen.diff"), `${diff}\n`);
   const configText = readFileSync(config.configPath, "utf8");
-  const review = { schema: "forgedock.candidate-review/v1", artifactRoot: out, artifactKey: randomUUID(), ...input, repository, pullRequest, head, baseSha, baseRef, sourceRoot, configRoot, config, configSha256: sha256(configText), roles: selected.roles, rationale: selected.rationale, diffPath, diffSha256: sha256(Buffer.from(`${diff}\n`)), publish: input.publish === true };
-  const reviewPath = writeExclusive(join(out, "review.json"), json(review));
+  const roleArtifactKeys = Object.fromEntries(selected.roles.map((role) => [role, randomUUID()]));
+  const review = { schema: "forgedock.candidate-review/v1", artifactRoot: out, artifactKey: randomUUID(), ...input, repository, pullRequest, head, baseSha, baseRef, sourceRoot, configRoot, config, configHead, configSha256: sha256(configText), roles: selected.roles, rationale: selected.rationale, diffPath, diffSha256: sha256(Buffer.from(`${diff}\n`)), publish: input.publish === true };
+  for (const role of selected.roles) {
+    writeExclusive(join(out, `${role}.authorization.json`), json({ schema: "forgedock.candidate-review-role/v1", artifactRoot: out, artifactKey: roleArtifactKeys[role], role, repository, pullRequest, head, baseRef, baseSha, publish: review.publish }));
+  }
+  const reviewPath = writeExclusive(join(out, "review.json"), json({ ...review, roleArtifactKeys }));
   const workflowPath = writeExclusive(join(out, "workflow.js"), reviewerWorkflow(review, config, out));
   const request = {
     async: false,
@@ -893,7 +902,8 @@ async function main() {
     const packageRoot = resolve(installRoot, "package");
     const subagentsRoot = resolve(installRoot, "pi-subagents");
     if (manifest.packageRoot !== packageRoot || manifest.piSubagentsRoot !== subagentsRoot || manifest.installRoot !== installRoot) fail("Install manifest paths do not match its install root");
-    if (!FULL_SHA.test(manifest.candidateCommit) || !FULL_SHA.test(manifest.piSubagentsCommit) || !/^[a-f0-9]{64}$/.test(manifest.packageDigest) || !/^[a-f0-9]{64}$/.test(manifest.piSubagentsDigest)) fail("Install manifest identity/digests are incomplete");
+    if (!FULL_SHA.test(manifest.candidateCommit) || !FULL_SHA.test(manifest.piSubagentsCommit) || !/^[a-f0-9]{64}$/.test(manifest.packageDigest) || !/^[a-f0-9]{64}$/.test(manifest.piSubagentsDigest) || manifest.requiredPiVersion !== manifest.piVersion) fail("Install manifest identity/digests are incomplete");
+    if (exec("pi", ["--version"], { timeout: 10_000 }) !== manifest.piVersion) fail(`Pi version differs from the installed candidate pin ${manifest.piVersion}`);
     if (digestTree(packageRoot) !== manifest.packageDigest || digestTree(subagentsRoot) !== manifest.piSubagentsDigest) fail("Installed package contents do not match the identity manifest");
     const isolatedSettingsFile = join(installRoot, "pi-agent", "settings.json");
     const isolatedSettings = readJson(isolatedSettingsFile);

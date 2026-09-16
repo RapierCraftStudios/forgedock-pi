@@ -63,7 +63,7 @@ export default function forgedockCandidateExtension(pi: ExtensionAPI): void {
   });
   pi.on("input", (event) => {
     if (event.source === "extension") return { action: "continue" };
-    stagingGuard = stagingInput(event.text);
+    stagingGuard = stagingGuard || stagingInput(event.text);
     const rewritten = rewriteForgePromptAlias(event.text);
     return rewritten === undefined
       ? { action: "continue" }

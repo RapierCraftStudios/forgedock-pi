@@ -62,7 +62,7 @@ fi
 if [[ -z "$THINKING" ]]; then
   THINKING=$(printf '%s' "$CONFIG_JSON" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s);process.stdout.write(v.ownerThinking);})')
 fi
-[[ "$MODEL" =~ ^[^[:space:]/]+/[^[:space:]]+$ ]] || { echo "Target forge.yaml did not provide a full provider/model ID" >&2; exit 1; }
+[[ "$MODEL" =~ ^[^[:space:]/]+/[^[:space:]]+$ && "$MODEL" != *: && "$MODEL" != *::* ]] || { echo "Target forge.yaml did not provide a full provider/model ID" >&2; exit 1; }
 if [[ "$MODEL" =~ :([[:alpha:]]+)$ ]]; then
   MODEL_SUFFIX=${BASH_REMATCH[1],,}
   case "$MODEL_SUFFIX" in
