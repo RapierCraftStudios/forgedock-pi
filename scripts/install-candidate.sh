@@ -78,7 +78,9 @@ settings.packages = (Array.isArray(settings.packages) ? settings.packages : []).
   const source = sourceOf(entry);
   const absolute = absoluteSource(source);
   if (absolute === subagentsRoot) return { source, extensions: ["./index.ts"], skills: [], prompts: [] };
-  if (absolute === packageRoot) return { source, extensions: ["./candidate/extension.ts"], skills: ["./candidate/skills"], prompts: ["./candidate/prompts"] };
+  // Leave the candidate package as a manifest-driven source. Its manifest
+  // contains only candidate resource roots, so no broad package filter is needed.
+  if (absolute === packageRoot) return entry;
   return entry;
 });
 settings.defaultProjectTrust = "never";
