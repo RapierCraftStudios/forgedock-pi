@@ -677,6 +677,14 @@ export function validateStandaloneReviewPolicy(input, cwd = process.cwd(), env =
   safeToken(policy.baseRef, "Standalone policy base ref"); reviewMode(policy.mode); integer(policy.round, "standalone policy round", 0);
   requireThat(typeof policy.requestStartedAt === "string" && Number.isFinite(Date.parse(policy.requestStartedAt)), "Standalone policy requestStartedAt is invalid");
   requireThat(Array.isArray(policy.roles) && policy.roles.length > 0, "Standalone policy roles are invalid");
+  const usedRoles = new Set();
+  for (const role of policy.roles) {
+    fields(role, ["role", "task", "thinking"], "standalone policy role");
+    const name = safeReviewerRole(role.role, "standalone policy role");
+    requireThat(!usedRoles.has(name), "Standalone policy roles contain a duplicate"); usedRoles.add(name);
+    requireThat(typeof role.task === "string" && role.task.length > 0, "Standalone policy role task is invalid");
+    requireThat(["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(role.thinking), "Standalone policy role thinking is invalid");
+  }
   integer(policy.launchAllowance, "standalone policy launch allowance");
   const source = configAt(cwd);
   resolveStandaloneReviewTiming(source.review, policy.roles.length);
