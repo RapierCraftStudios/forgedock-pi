@@ -705,6 +705,13 @@ async function doctor(options) {
     const installManifestPath = join(PACKAGE_ROOT, "..", "manifest.json");
     const installManifest = existsSync(installManifestPath) ? readJson(installManifestPath) : {};
     result.candidate = { packageVersion: readJson(join(PACKAGE_ROOT, "package.json")).version, commit: installManifest.candidateCommit ?? (() => { try { return exec("git", ["rev-parse", "HEAD"], { cwd: PACKAGE_ROOT }); } catch { return null; } })(), effectiveConfig: config };
+    const provider = config.ownerModel.split("/", 1)[0];
+    try {
+      const auth = readJsonFromText(exec("pi", ["auth", "check", "--model", config.ownerModel, "--json", "--no-refresh"], { env: { ...process.env, PI_CODING_AGENT_DIR: configDir, PI_OFFLINE: "1", PI_SKIP_VERSION_CHECK: "1", PI_TELEMETRY: "0" }, timeout: 20_000 }));
+      result.providerAuth = { provider, status: auth.status === "ready" ? "ready" : "not_ready" };
+    } catch {
+      result.providerAuth = { provider, status: "not_ready" };
+    }
     if (!config.repositoryMatchesRemote) result.limitations.push(`Target origin does not match forge.yaml repository ${config.repository}`);
   } catch (error) { result.limitations.push(`Target readiness: ${error instanceof Error ? error.message : String(error)}`); }
   if (existsSync(settingsFile) && result.pi) {
@@ -722,7 +729,7 @@ async function doctor(options) {
   }
   result.limitations.push("Target-local project settings are intentionally ignored by the launcher; AGENTS.md coding guidance remains available.");
   result.limitations.push("No live provider request or GitHub write is performed by doctor.");
-  result.readiness = result.pi && result.loadedResources?.ok && result.loadedResources.missing?.length === 0 && result.loadedResources.retired?.length === 0 ? "ready-with-live-write-limitation" : "limited";
+  result.readiness = result.pi && result.providerAuth?.status === "ready" && result.loadedResources?.ok && result.loadedResources.missing?.length === 0 && result.loadedResources.retired?.length === 0 ? "ready-with-live-write-limitation" : "limited";
   process.stdout.write(json(result));
 }
 

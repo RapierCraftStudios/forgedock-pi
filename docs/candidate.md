@@ -27,9 +27,11 @@ From this checkout:
 ```bash
 PI_SUBAGENTS_SOURCE=/home/dev/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents \
 FORGEDOCK_CANDIDATE_INSTALL_ROOT=/home/dev/.cache/forgedock-pi-candidate/<candidate-sha> \
-./scripts/install-candidate.sh
+./scripts/install-candidate.sh --reuse-auth
 ```
 
+`--reuse-auth` is optional; it symlinks an already-authenticated operator `auth.json` into
+this disposable config without copying credentials. Omit it to qualify resource loading only.
 The installer snapshots both exact Git heads, installs them through Pi into
 `<install-root>/pi-agent`, sets `defaultProjectTrust: never`, and does not edit the ordinary
 `~/.pi/agent/settings.json`. It writes only package paths, versions, and policy metadata to

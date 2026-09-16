@@ -4,6 +4,8 @@ set -euo pipefail
 SOURCE_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 SUBAGENTS_SOURCE=${PI_SUBAGENTS_SOURCE:-$HOME/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents}
 INSTALL_ROOT=${FORGEDOCK_CANDIDATE_INSTALL_ROOT:-}
+REUSE_AUTH=0
+AUTH_SOURCE=${PI_AUTH_SOURCE:-$HOME/.pi/agent/auth.json}
 
 usage() {
   cat <<'EOF'
@@ -11,12 +13,17 @@ Usage: install-candidate.sh [--subagents-source DIR] [--install-root DIR]
 
 Creates an immutable candidate snapshot and installs it with pi-subagents into an
 isolated PI_CODING_AGENT_DIR. It never changes the operator's default Pi settings.
+
+Optional: --reuse-auth creates a symlink to an existing operator auth.json in
+the disposable config; it does not copy credentials.
 EOF
 }
 while (($#)); do
   case "$1" in
     --subagents-source) SUBAGENTS_SOURCE=${2:?missing path}; shift 2 ;;
     --install-root) INSTALL_ROOT=${2:?missing path}; shift 2 ;;
+    --reuse-auth) REUSE_AUTH=1; shift ;;
+    --auth-source) AUTH_SOURCE=${2:?missing path}; REUSE_AUTH=1; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -102,10 +109,15 @@ cat > "$INSTALL_ROOT/manifest.json" <<EOF
   "piConfigRoot": "$PI_ROOT",
   "sessionRoot": "$INSTALL_ROOT/sessions",
   "targetSettingsPolicy": "--no-approve; target-local project settings are ignored",
+  "authPolicy": "$([ "$REUSE_AUTH" -eq 1 ] && echo symlinked-existing-auth || echo no-auth-copied)",
   "sourceWorktree": "$SOURCE_ROOT"
 }
 EOF
 chmod 600 "$INSTALL_ROOT/manifest.json"
+if [[ "$REUSE_AUTH" -eq 1 ]]; then
+  [[ -f "$AUTH_SOURCE" && ! -L "$AUTH_SOURCE" ]] || { echo "--reuse-auth requires a regular existing auth file: $AUTH_SOURCE" >&2; exit 1; }
+  ln -sfn "$AUTH_SOURCE" "$PI_ROOT/auth.json"
+fi
 cat > "$INSTALL_ROOT/launch.sh" <<EOF
 #!/usr/bin/env bash
 exec "$PACKAGE_ROOT/scripts/launch-candidate.sh" --install-root "$INSTALL_ROOT" "\$@"
