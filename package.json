@@ -1,17 +1,15 @@
 {
   "name": "forgedock-pi",
-  "version": "0.1.0",
-  "description": "Pi-native GitHub issue orchestration with durable state, nested subagent review, and auditable ForgeDock artifacts",
+  "version": "0.2.0-candidate.1",
+  "description": "Thin Pi-native ForgeDock issue owner, dispatcher, and independent review routes",
   "type": "module",
   "keywords": [
     "pi-package",
     "pi",
     "github",
     "subagents",
-    "workflow-orchestration",
     "forgedock",
-    "code-review",
-    "autonomous-coding"
+    "code-review"
   ],
   "author": "RapierCraft Studios",
   "license": "AGPL-3.0-or-later",
@@ -24,39 +22,46 @@
     "url": "https://github.com/RapierCraftStudios/forgedock-pi/issues"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./candidate/extension.ts"
+  },
+  "bin": {
+    "forgedock-candidate": "./bin/forgedock-candidate.mjs"
   },
   "files": [
-    "src/",
-    "agents/",
-    "prompts/",
-    "skills/",
-    "specs/",
-    "templates/",
-    "DESIGN.md",
-    "CHANGELOG.md",
+    "bin/",
+    "candidate/",
+    "scripts/doctor-candidate.sh",
+    "scripts/install-candidate.sh",
+    "scripts/launch-candidate.sh",
+    "scripts/native-smoke.sh",
+    "scripts/replace-candidate.sh",
+    "scripts/rollback-candidate.sh",
+    "templates/forge.yaml",
+    "docs/candidate.md",
     "README.md",
+    "CHANGELOG.md",
     "SECURITY.md",
     "LICENSE"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "tsx --test \"test/**/*.test.ts\"",
-    "check": "npm run typecheck && npm test"
+    "check": "npm run typecheck && npm test",
+    "pack:check": "npm pack --json --ignore-scripts"
   },
   "pi": {
     "extensions": [
-      "./src/index.ts"
+      "./candidate/extension.ts"
     ],
     "prompts": [
-      "./prompts"
+      "./candidate/prompts"
     ],
     "skills": [
-      "./skills"
+      "./candidate/skills"
     ],
     "subagents": {
       "agents": [
-        "./agents"
+        "./candidate/agents"
       ]
     }
   },
@@ -64,7 +69,7 @@
     "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-tui": "*",
-    "pi-subagents": ">=0.59.0",
+    "pi-subagents": ">=0.60.0",
     "typebox": "*"
   },
   "peerDependenciesMeta": {
@@ -81,7 +86,7 @@
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^0.84.2",
     "@types/node": "^24.0.0",
-    "pi-subagents": "^0.59.0",
+    "pi-subagents": "^0.60.0",
     "tsx": "^4.20.0",
     "typebox": "^1.1.38",
     "typescript": "^5.9.0"

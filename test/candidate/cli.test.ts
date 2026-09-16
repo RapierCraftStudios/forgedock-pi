@@ -1,0 +1,79 @@
+import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import test from "node:test";
+
+const execFileAsync = promisify(execFile);
+const helper = resolve("bin/forgedock-candidate.mjs");
+
+const forgeYaml = `
+project:
+  owner: example
+  repo: product
+paths:
+  root: .
+branches:
+  default: main
+  staging: integration
+  feature_pattern: feature/{slug}
+agents:
+  subagent_model: provider/model
+orchestration:
+  max_concurrent: 2
+verification:
+  commands:
+    test: npm test
+review:
+  reviewer_timeout_ms: 1000
+  panel_timeout_ms: 3000
+  publication_timeout_ms: 1000
+  max_concurrent: 2
+`;
+
+test("generates bounded dispatch and review requests from ordinary JSON data", async () => {
+  const root = await mkdtemp("/tmp/forgedock-candidate-cli-");
+  try {
+    await execFileAsync("git", ["init", "--quiet"], { cwd: root });
+    await execFileAsync("git", ["remote", "add", "origin", "https://github.com/example/product.git"], { cwd: root });
+    await writeFile(join(root, "forge.yaml"), forgeYaml);
+    const issuesFile = join(root, "issues.json");
+    await writeFile(issuesFile, JSON.stringify({ issues: [
+      { number: 2, title: "dependent", body: "## Acceptance Criteria\n- [ ] Consumer works\n\nDepends on #1" },
+      { number: 1, title: "base", body: "## Acceptance Criteria\n- [ ] Producer works" },
+    ] }));
+    const out = join(root, "dispatch");
+    const dispatch = JSON.parse((await execFileAsync("node", [helper, "prepare-dispatch", "--selector", "#1 #2", "--cwd", root, "--issues-file", issuesFile, "--out", out])).stdout) as { requestPath: string; planPath: string };
+    const plan = JSON.parse(await readFile(dispatch.planPath, "utf8")) as { issues: Array<{ number: number; predecessors: string[] }>; readiness: { missingAcceptance: number[] } };
+    assert.deepEqual(plan.issues.map((issue) => issue.number), [1, 2]);
+    assert.deepEqual(plan.issues[1]?.predecessors, ["issue-1"]);
+    assert.deepEqual(plan.readiness.missingAcceptance, []);
+    const request = JSON.parse(await readFile(dispatch.requestPath, "utf8")) as { workflowScriptPath: string; globalConcurrencyLimit: number };
+    assert.equal(request.globalConcurrencyLimit, 2);
+    assert.match(await readFile(request.workflowScriptPath, "utf8"), /forgedock-owner/);
+
+    const reviewInput = join(root, "review.json");
+    await writeFile(reviewInput, JSON.stringify({ repository: "example/product", pullRequest: 3, head: "a".repeat(40), baseRef: "integration", baseSha: "b".repeat(40), sourceRoot: root }));
+    const review = JSON.parse((await execFileAsync("node", [helper, "prepare-review", "--input", reviewInput, "--out", join(root, "review")])).stdout) as { requestPath: string; roles: string[] };
+    assert.deepEqual(review.roles, ["correctness"]);
+    assert.equal(JSON.parse(await readFile(review.requestPath, "utf8")).maxSubagentSpawnsPerRun, 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("record helper preserves a saved reviewer report without remote writes", async () => {
+  const root = await mkdtemp("/tmp/forgedock-candidate-cli-");
+  try {
+    const body = join(root, "body.md");
+    const report = join(root, "report.md");
+    await writeFile(body, "### Scope and decisions considered\nReviewed the frozen patch.\n\n### Evidence and findings\nNo blocking findings.\n\n### Verification limitations\nNo remote write was attempted.\n\n### Recommendation\nApprove after normal parent adjudication.\n");
+    const result = JSON.parse((await execFileAsync("node", [helper, "record", "reviewer", "--repo", "example/product", "--pr", "3", "--head", "a".repeat(40), "--base-ref", "integration", "--base-sha", "b".repeat(40), "--role", "correctness", "--body-file", body, "--report-file", report])).stdout) as { publication: string; reportFile: string };
+    assert.equal(result.publication, "saved");
+    assert.equal(result.reportFile, report);
+    assert.match(await readFile(report, "utf8"), /^<!-- FORGE:CANDIDATE:REVIEW/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

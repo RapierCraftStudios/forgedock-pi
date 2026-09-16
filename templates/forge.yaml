@@ -1,0 +1,27 @@
+project:
+  name: "Product"
+  owner: "OWNER"
+  repo: "REPOSITORY"
+paths:
+  root: "."
+  worktree_base: ".forge/worktrees"
+branches:
+  default: "main"
+  staging: "staging"
+  feature_pattern: "feature/{slug}"
+agents:
+  subagent_model: "provider/full-model-id"
+  thinking: "high"
+orchestration:
+  max_concurrent: 2
+verification:
+  commands:
+    typecheck: "npm run typecheck"
+    test: "npm test"
+review:
+  thinking: "medium"
+  reviewer_timeout_ms: 900000
+  panel_timeout_ms: 1200000
+  publication_timeout_ms: 120000
+  max_concurrent: 2
+  remediation_max_rounds: 1
