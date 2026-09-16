@@ -71,7 +71,25 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     assert.deepEqual(review.roles, ["correctness"]);
     assert.equal(JSON.parse(await readFile(review.requestPath, "utf8")).maxSubagentSpawnsPerRun, 1);
     assert.match(await readFile(join(reviewOut, "workflow.js"), "utf8"), /forgedock-reviewer/);
+    const invalidRoles = join(root, "..", `${testName}-invalid-review.json`);
+    await writeFile(invalidRoles, JSON.stringify({ repository: "example/product", pullRequest: 3, head: sourceHead, baseRef: "integration", baseSha, sourceRoot: root, roles: ["security"] }));
+    await assert.rejects(execFileAsync("node", [helper, "prepare-review", "--input", invalidRoles, "--out", `${reviewOut}-invalid`]), /correctness reviewer/);
+    await rm(invalidRoles, { force: true });
     await rm(reviewOut, { recursive: true, force: true });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("staging gate records retain the exact gate marker", async () => {
+  const root = await mkdtemp("/tmp/forgedock-candidate-cli-");
+  try {
+    const body = join(root, "gate-body.md");
+    const report = join(root, "gate.report.md");
+    await writeFile(body, "The frozen promotion checks and reviewer reports are complete.");
+    const result = JSON.parse((await execFileAsync("node", [helper, "record", "--kind", "STAGING_GATE", "--repo", "example/product", "--pr", "3", "--head", "a".repeat(40), "--base-ref", "main", "--base-sha", "b".repeat(40), "--gate", "PASS", "--body-file", body, "--report-file", report])).stdout) as { publication: string };
+    assert.equal(result.publication, "saved");
+    assert.match(await readFile(report, "utf8"), /FORGE:STAGING_GATE:PASS/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

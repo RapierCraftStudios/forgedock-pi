@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import registerCandidateTools from "./tools.ts";
@@ -28,12 +29,14 @@ function stagingInput(input: string): boolean {
 function allowedStagingSubagent(input: unknown): boolean {
   if (!input || typeof input !== "object") return false;
   const candidate = input as { agent?: unknown; workflowScript?: unknown; workflowScriptPath?: unknown };
-  if (candidate.agent !== undefined) return false;
-  if (typeof candidate.workflowScript === "string") return candidate.workflowScript.includes("forgedock-reviewer") && !/forgedock-owner|worker|writer|delegate/.test(candidate.workflowScript);
+  if (candidate.agent !== undefined || typeof candidate.workflowScript !== "undefined") return false;
   if (typeof candidate.workflowScriptPath === "string") {
     try {
-      const script = readFileSync(candidate.workflowScriptPath, "utf8");
-      return script.includes("forgedock-reviewer") && !/forgedock-owner|worker|writer|delegate/.test(script);
+      const workflowPath = resolve(candidate.workflowScriptPath);
+      const reviewRoot = resolve(dirname(workflowPath));
+      const authorization = JSON.parse(readFileSync(join(reviewRoot, "review.json"), "utf8")) as { schema?: unknown; artifactRoot?: unknown; artifactKey?: unknown; roles?: unknown };
+      const script = readFileSync(workflowPath, "utf8");
+      return authorization.schema === "forgedock.candidate-review/v1" && authorization.artifactRoot === reviewRoot && typeof authorization.artifactKey === "string" && Array.isArray(authorization.roles) && authorization.roles.includes("correctness") && /agent:\s*["']forgedock-reviewer["']/.test(script) && !/agent:\s*(?!["']forgedock-reviewer["'])/.test(script) && !/forgedock-owner|worker|writer|delegate/.test(script);
     } catch {
       return false;
     }

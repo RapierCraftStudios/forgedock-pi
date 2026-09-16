@@ -3,7 +3,7 @@ set -euo pipefail
 
 SOURCE_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 SUBAGENTS_SOURCE=${PI_SUBAGENTS_SOURCE:-$HOME/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents}
-SUBAGENTS_COMMIT=${PI_SUBAGENTS_COMMIT:-}
+SUBAGENTS_COMMIT=${PI_SUBAGENTS_COMMIT:-0931cbbb98ab253177b181bd334fe02dd919dca5}
 REQUIRED_PI_VERSION=${PI_REQUIRED_VERSION:-0.85.1}
 INSTALL_ROOT=${FORGEDOCK_CANDIDATE_INSTALL_ROOT:-}
 REUSE_AUTH=0
@@ -44,7 +44,7 @@ fi
 
 CANDIDATE_SHA=$(git -C "$SOURCE_ROOT" rev-parse HEAD)
 SUBAGENTS_SHA=$(git -C "$SUBAGENTS_SOURCE" rev-parse HEAD)
-[[ -z "$SUBAGENTS_COMMIT" || "$SUBAGENTS_COMMIT" == "$SUBAGENTS_SHA" ]] || { echo "pi-subagents checkout is $SUBAGENTS_SHA, expected pinned commit $SUBAGENTS_COMMIT" >&2; exit 1; }
+[[ "$SUBAGENTS_COMMIT" == "$SUBAGENTS_SHA" ]] || { echo "pi-subagents checkout is $SUBAGENTS_SHA, expected pinned commit $SUBAGENTS_COMMIT" >&2; exit 1; }
 PI_VERSION=$(pi --version)
 [[ "$PI_VERSION" == "$REQUIRED_PI_VERSION" ]] || { echo "Pi is $PI_VERSION, expected pinned version $REQUIRED_PI_VERSION" >&2; exit 1; }
 INSTALL_ROOT=${INSTALL_ROOT:-$HOME/.cache/forgedock-pi-candidate/$CANDIDATE_SHA}

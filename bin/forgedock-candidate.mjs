@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createHash, randomUUID } from "node:crypto";
 import { execFile, execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, readdirSync, writeFileSync, renameSync, chmodSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, readdirSync, readlinkSync, writeFileSync, renameSync, chmodSync } from "node:fs";
 import { dirname, join, relative, resolve, basename } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -68,11 +68,10 @@ function digestTree(root) {
   const files = [];
   function collect(directory, prefix) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      if (entry.name === "node_modules") continue;
       const full = join(directory, entry.name);
       const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
-      if (entry.isSymbolicLink()) fail(`Install tree contains a symlink: ${full}`);
-      if (entry.isDirectory()) collect(full, relativePath);
+      if (entry.isSymbolicLink()) files.push({ path: relativePath, full, link: readlinkSync(full) });
+      else if (entry.isDirectory()) collect(full, relativePath);
       else if (entry.isFile()) files.push({ path: relativePath, full });
     }
   }
@@ -81,7 +80,8 @@ function digestTree(root) {
   for (const file of files.sort((left, right) => left.path.localeCompare(right.path))) {
     hash.update(file.path);
     hash.update("\\0");
-    hash.update(readFileSync(file.full));
+    if (file.link !== undefined) hash.update(`link:${file.link}`);
+    else hash.update(readFileSync(file.full));
   }
   return hash.digest("hex");
 }
@@ -895,7 +895,14 @@ async function main() {
     if (manifest.packageRoot !== packageRoot || manifest.piSubagentsRoot !== subagentsRoot || manifest.installRoot !== installRoot) fail("Install manifest paths do not match its install root");
     if (!FULL_SHA.test(manifest.candidateCommit) || !FULL_SHA.test(manifest.piSubagentsCommit) || !/^[a-f0-9]{64}$/.test(manifest.packageDigest) || !/^[a-f0-9]{64}$/.test(manifest.piSubagentsDigest)) fail("Install manifest identity/digests are incomplete");
     if (digestTree(packageRoot) !== manifest.packageDigest || digestTree(subagentsRoot) !== manifest.piSubagentsDigest) fail("Installed package contents do not match the identity manifest");
-    process.stdout.write(json({ schema: "forgedock.candidate-install-verification/v1", installRoot, candidateCommit: manifest.candidateCommit, piSubagentsCommit: manifest.piSubagentsCommit, packageDigest: manifest.packageDigest, piSubagentsDigest: manifest.piSubagentsDigest }));
+    const isolatedSettingsFile = join(installRoot, "pi-agent", "settings.json");
+    const isolatedSettings = readJson(isolatedSettingsFile);
+    const isolatedPackages = settingsPackages(isolatedSettings);
+    const isolatedSources = isolatedPackages.map((entry) => sourceValue(entry));
+    if (isolatedSettings.defaultProjectTrust !== "never" || isolatedSettings.enableInstallTelemetry !== false || isolatedPackages.length !== 2 || !isolatedSources.some((source) => sourceIdentity(source, join(installRoot, "pi-agent")) === packageRoot) || !isolatedSources.some((source) => sourceIdentity(source, join(installRoot, "pi-agent")) === subagentsRoot)) fail("Isolated Pi settings do not contain exactly the pinned candidate and pi-subagents sources");
+    const subagentsEntry = isolatedPackages.find((entry) => sourceIdentity(sourceValue(entry), join(installRoot, "pi-agent")) === subagentsRoot);
+    if (!subagentsEntry || typeof subagentsEntry !== "object" || !Array.isArray(subagentsEntry.skills) || subagentsEntry.skills.length !== 0 || !Array.isArray(subagentsEntry.prompts) || subagentsEntry.prompts.length !== 0) fail("Isolated pi-subagents settings are not filtered to its native extension");
+    process.stdout.write(json({ schema: "forgedock.candidate-install-verification/v1", installRoot, candidateCommit: manifest.candidateCommit, piSubagentsCommit: manifest.piSubagentsCommit, packageDigest: manifest.packageDigest, piSubagentsDigest: manifest.piSubagentsDigest, settingsFile: isolatedSettingsFile }));
     return;
   }
   if (command === "config") {

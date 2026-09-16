@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { existsSync, realpathSync } from "node:fs";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -68,6 +68,7 @@ const RECORD_INPUT = Type.Object({
   baseRef: Type.Optional(Type.String({ minLength: 1 })),
   baseSha: Type.Optional(Type.String({ pattern: "^[a-f0-9]{40,64}$" })),
   gate: Type.Optional(Type.String({ pattern: "^(?:PASS|FAIL)$" })),
+  checks: Type.Optional(Type.Array(Type.String({ pattern: "^[A-Za-z0-9_.-]+$" }))),
   body: Type.String({ minLength: 8 }),
   reviewRoot: Type.Optional(Type.String({ minLength: 1 })),
   artifactKey: Type.Optional(Type.String({ minLength: 1 })),
@@ -83,6 +84,7 @@ type RecordInput = {
   baseRef?: string;
   baseSha?: string;
   gate?: string;
+  checks?: string[];
   body: string;
   reviewRoot?: string;
   artifactKey?: string;
@@ -111,6 +113,39 @@ async function preparedReview(root: string, artifactKey: string): Promise<Record
 
 function bounded(text: string): string {
   return text.length > 50_000 ? `${text.slice(-50_000)}\n[output truncated]` : text;
+}
+
+function forbiddenStagingCheck(command: string): boolean {
+  return command.includes(">") || /\b(?:git|gh|npm)\b[^\n]*(?:push|commit|merge|rebase|reset|checkout|switch|branch\s+-D|deploy|publish|issue\s+(?:create|close|edit)|pr\s+(?:create|merge|close|edit))\b/i.test(command);
+}
+
+async function writeCheckReceipt(root: string, receipt: Record<string, unknown>): Promise<string> {
+  const directory = join(resolve(root), "checks");
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const file = join(directory, `${String(receipt.name)}.json`);
+  const content = `${JSON.stringify(receipt, null, 2)}\n`;
+  try {
+    await writeFile(file, content, { flag: "wx", mode: 0o600 });
+  } catch (error) {
+    if (await readFile(file, "utf8") !== content) throw error;
+  }
+  return file;
+}
+
+async function requirePassEvidence(input: RecordInput, review: Record<string, unknown>): Promise<void> {
+  const roles = Array.isArray(review.roles) ? review.roles.filter((role): role is string => typeof role === "string") : [];
+  if (!input.checks?.length || new Set(input.checks).size !== input.checks.length) throw new Error("A staging PASS requires unique completed check receipts");
+  for (const role of roles) {
+    const report = join(resolve(input.reviewRoot as string), `${role}.report.md`);
+    if (!existsSync(report) || realpathSync(report) !== report || !readFileSync(report, "utf8").includes(`<!-- FORGE:REVIEWER_REPORT`)) throw new Error(`A staging PASS requires the ${role} reviewer report`);
+    if (!readFileSync(report, "utf8").includes(String(input.head))) throw new Error(`Reviewer report for ${role} is not bound to the frozen head`);
+  }
+  for (const name of input.checks) {
+    const receiptPath = join(resolve(input.reviewRoot as string), "checks", `${name}.json`);
+    if (!existsSync(receiptPath) || realpathSync(receiptPath) !== receiptPath) throw new Error(`Missing completed check receipt: ${name}`);
+    const receipt = JSON.parse(readFileSync(receiptPath, "utf8")) as Record<string, unknown>;
+    if (receipt.schema !== "forgedock.candidate-check/v1" || receipt.status !== "passed" || receipt.name !== name || receipt.head !== input.head || receipt.sourceRoot !== review.sourceRoot || receipt.configPath !== review.configPath || receipt.configSha256 !== review.configSha256) throw new Error(`Check receipt is not bound to the frozen review: ${name}`);
+  }
 }
 
 async function tempArtifact(prefix: string, name: string, content: string): Promise<string> {
@@ -171,10 +206,12 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       const config = parseYaml(configText);
       const command = configuredCommand(config, name);
       if (!command) throw new Error(`No configured verification command named '${name}'`);
+      if (forbiddenStagingCheck(command)) throw new Error(`Configured check '${name}' is not a read-only verification command`);
       const result = await pi.exec("sh", ["-lc", command], { cwd: resolve(input.sourceRoot), timeout: 1_200_000 });
       const output = `${result.stdout}${result.stderr ? `\n${result.stderr}` : ""}`;
       if (result.code !== 0) throw new Error(`Configured check '${name}' failed:\n${bounded(output)}`);
-      return { content: [{ type: "text", text: bounded(output || `${name}: passed`) }], details: { name, command, exitCode: result.code } };
+      const receiptPath = await writeCheckReceipt(input.reviewRoot, { schema: "forgedock.candidate-check/v1", name, status: "passed", sourceRoot: resolve(input.sourceRoot), head: input.head, configPath, configSha256: input.configSha256 });
+      return { content: [{ type: "text", text: bounded(output || `${name}: passed`) }], details: { name, command, exitCode: result.code, receiptPath } };
     },
   });
 
@@ -186,11 +223,11 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
     async execute(_toolCallId, params) {
       const input = params as RecordInput;
       if ((input.issue === undefined) === (input.pullRequest === undefined)) throw new Error("Record needs exactly one issue or pull request destination");
-      if (input.kind === "STAGING_GATE") {
-        if (!input.reviewRoot || !input.artifactKey || !input.head || !input.baseRef || !input.baseSha || !input.gate) throw new Error("Staging gate publication requires its prepared review authorization");
-        const review = await preparedReview(input.reviewRoot, input.artifactKey);
-        if (review.repository !== input.repository || review.pullRequest !== input.pullRequest || review.head !== input.head || review.baseRef !== input.baseRef || review.baseSha !== input.baseSha || review.publish !== input.publish) throw new Error("Staging gate does not match the prepared frozen review");
-      }
+      if (input.kind !== "STAGING_GATE") throw new Error("The staging publication tool only publishes STAGING_GATE records");
+      if (!input.reviewRoot || !input.artifactKey || !input.head || !input.baseRef || !input.baseSha || !input.gate || input.pullRequest === undefined) throw new Error("Staging gate publication requires its prepared review authorization");
+      const review = await preparedReview(input.reviewRoot, input.artifactKey);
+      if (review.repository !== input.repository || review.pullRequest !== input.pullRequest || review.head !== input.head || review.baseRef !== input.baseRef || review.baseSha !== input.baseSha || review.publish !== input.publish) throw new Error("Staging gate does not match the prepared frozen review");
+      if (input.gate === "PASS") await requirePassEvidence(input, review);
       const bodyPath = await tempArtifact("forgedock-record-", "body.md", input.body);
       const reportPath = resolve(dirname(bodyPath), "record.md");
       const args = [helperPath(), "record", "--kind", input.kind, "--repo", input.repository, "--body-file", bodyPath, "--report-file", reportPath];
