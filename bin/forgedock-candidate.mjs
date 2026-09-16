@@ -694,13 +694,17 @@ async function doctor(options) {
       const settings = readJson(settingsFile);
       result.settingsPackages = settingsPackages(settings).map((entry) => sourceValue(entry)).filter(Boolean);
       const subagentsSource = result.settingsPackages.find((source) => source.includes("pi-subagents"));
-      if (subagentsSource?.startsWith("/") && existsSync(join(subagentsSource, "package.json"))) result.piSubagents = { source: subagentsSource, version: packageVersion(subagentsSource, ".") };
-      else if (subagentsSource) result.piSubagents = { source: subagentsSource, version: null };
+      if (subagentsSource) {
+        const subagentsPath = subagentsSource.startsWith("/") ? subagentsSource : resolve(configDir, subagentsSource);
+        result.piSubagents = { source: subagentsSource, path: subagentsPath, version: packageVersion(subagentsPath, ".") };
+      }
     } catch (error) { result.limitations.push(`Settings unreadable: ${error instanceof Error ? error.message : String(error)}`); }
   } else result.limitations.push(`Candidate config has no settings.json: ${settingsFile}`);
   try {
     const config = loadConfig(cwd);
-    result.candidate = { packageVersion: readJson(join(PACKAGE_ROOT, "package.json")).version, commit: (() => { try { return exec("git", ["rev-parse", "HEAD"], { cwd: PACKAGE_ROOT }); } catch { return null; } })(), effectiveConfig: config };
+    const installManifestPath = join(PACKAGE_ROOT, "..", "manifest.json");
+    const installManifest = existsSync(installManifestPath) ? readJson(installManifestPath) : {};
+    result.candidate = { packageVersion: readJson(join(PACKAGE_ROOT, "package.json")).version, commit: installManifest.candidateCommit ?? (() => { try { return exec("git", ["rev-parse", "HEAD"], { cwd: PACKAGE_ROOT }); } catch { return null; } })(), effectiveConfig: config };
     if (!config.repositoryMatchesRemote) result.limitations.push(`Target origin does not match forge.yaml repository ${config.repository}`);
   } catch (error) { result.limitations.push(`Target readiness: ${error instanceof Error ? error.message : String(error)}`); }
   if (existsSync(settingsFile) && result.pi) {
