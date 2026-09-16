@@ -65,7 +65,8 @@ export default function forgedockCandidateExtension(pi: ExtensionAPI): void {
   pi.registerCommand("forge-status", {
     description: "Show that the isolated ForgeDock candidate extension is loaded",
     handler: async (_args, ctx) => {
-      ctx.ui.notify("ForgeDock candidate extension loaded; run the external doctor for full readiness.", "info");
+      const tools = new Set(pi.getAllTools().map((tool) => tool.name));
+      ctx.ui.notify(`ForgeDock candidate loaded; native subagent=${tools.has("subagent") ? "available" : "unavailable"}; staging tools=${["forge_prepare_review", "forge_run_check", "forge_publish_record"].filter((name) => tools.has(name)).length}/3.`, "info");
     },
   });
   pi.on("input", (event) => {
