@@ -175,7 +175,7 @@ returns structured evidence only after writing and publishing its own complete r
 The helper uses file-backed content and argument arrays, reconciles ambiguous creates by the
 stable marker, and returns the comment reference. A reviewer publication failure preserves the
 saved report for transport-only retry; it never reruns analysis. A read-back comment may differ
-only by harmless line-ending/trailing-whitespace formatting; a material evidence change fails
+only by harmless line-ending/final-newline formatting; a material evidence change fails
 closed and requires explicit reconciliation. If a role is missing, first reconcile its native
 terminal state, then use retained resume when supported or a fresh same-role request with a new
 key; never rerun completed roles. The owner validates every

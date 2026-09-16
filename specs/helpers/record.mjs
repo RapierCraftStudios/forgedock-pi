@@ -80,7 +80,7 @@ function reviewerBody(draft) {
   return draft.trim();
 }
 function normalizedReportContent(value) {
-  return typeof value === "string" ? value.replace(/\r\n/g, "\n").split("\n").map(line => line.trimEnd()).join("\n").trimEnd() : "";
+  return typeof value === "string" ? value.replace(/\r\n/g, "\n").replace(/\n+$/, "") : "";
 }
 
 /** Render a complete report without loading issue-owner or replan policy. */
