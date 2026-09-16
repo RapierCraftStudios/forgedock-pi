@@ -26,6 +26,8 @@ From this checkout:
 
 ```bash
 PI_SUBAGENTS_SOURCE=/home/dev/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents \
+PI_SUBAGENTS_COMMIT=0931cbbb98ab253177b181bd334fe02dd919dca5 \
+PI_REQUIRED_VERSION=0.85.1 \
 FORGEDOCK_CANDIDATE_INSTALL_ROOT=/home/dev/.cache/forgedock-pi-candidate/<candidate-sha> \
 ./scripts/install-candidate.sh --reuse-auth
 ```

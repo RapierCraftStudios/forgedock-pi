@@ -28,7 +28,7 @@ function stagingInput(input: string): boolean {
 function allowedStagingSubagent(input: unknown): boolean {
   if (!input || typeof input !== "object") return false;
   const candidate = input as { agent?: unknown; workflowScript?: unknown; workflowScriptPath?: unknown };
-  if (candidate.agent !== undefined) return candidate.agent === "forgedock-reviewer";
+  if (candidate.agent !== undefined) return false;
   if (typeof candidate.workflowScript === "string") return candidate.workflowScript.includes("forgedock-reviewer") && !/forgedock-owner|worker|writer|delegate/.test(candidate.workflowScript);
   if (typeof candidate.workflowScriptPath === "string") {
     try {
@@ -43,7 +43,8 @@ function allowedStagingSubagent(input: unknown): boolean {
 
 /** Narrow route guard: staging may inspect/check/publish evidence, never mutate product code or deliver it. */
 export function isStagingMutationBlocked(toolName: string, input: unknown): boolean {
-  if (["edit", "write", "bash", "powershell"].includes(toolName)) return true;
+  const allowedTools = new Set(["read", "grep", "find", "ls", "forge_prepare_review", "forge_run_check", "forge_publish_record", "subagent"]);
+  if (!allowedTools.has(toolName)) return true;
   if (toolName === "subagent" && !allowedStagingSubagent(input)) return true;
   return false;
 }
