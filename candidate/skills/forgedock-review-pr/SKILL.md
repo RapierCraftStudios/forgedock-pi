@@ -21,9 +21,10 @@ question not covered by the assignments, with a short rationale in the review re
 count, labels, domains, and keywords do not allocate seats.
 
 Use `forge-candidate prepare-review` to produce one native `workflowScriptPath`, then invoke it
-with `subagent` and wait for every selected fresh ordinary `delegate`. Give each reviewer the
-original acceptance, concise plan/history, exact frozen identity, relevant evidence/limits, and
-specific risk boundary. Each reviewer must publish its own substantive exact-head
+with `subagent` and wait for every selected fresh `forgedock-reviewer`. This profile has only
+read tools plus the publication-only report tool. Give each reviewer the original acceptance,
+concise plan/history, exact frozen identity, relevant evidence/limits, and specific risk
+boundary. Each reviewer must publish its own substantive exact-head
 `FORGE:REVIEWER_REPORT` using the candidate record helper, including clean/no-findings reports.
 Reviewers do not edit source, create issues, merge, deploy, or initiate repair. If publication
 fails after analysis, retain the saved report and recover publication without rerunning review.

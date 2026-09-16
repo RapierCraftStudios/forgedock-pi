@@ -17,7 +17,8 @@ FAIL prerequisite, not permission to claim PASS. Structural checks do not substi
 required runtime boundary.
 
 Select correctness plus only concrete risk-justified specialists. Launch fresh ordinary
-read-only `delegate` reviewers through the generated native request and wait for every role.
+`forgedock-reviewer` reviewers through the generated native request and wait for every role; their
+source tools are read-only and their only mutation capability is the report publisher.
 Each reviewer publishes its own exact-head report, including a substantive clean report. No
 reviewer edits source, creates issues, merges, deploys, closes issues, or starts repair.
 

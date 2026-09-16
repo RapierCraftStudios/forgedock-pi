@@ -44,7 +44,7 @@ const THINKING_LEVELS = new Set<ThinkingLevel>([
   "max",
 ]);
 const SAFE_TOKEN = /^[A-Za-z0-9_.-]+$/;
-const FULL_MODEL = /^[^\s/]+\/[^\s]+(?::(?:off|minimal|low|medium|high|xhigh|max))?$/;
+const FULL_MODEL = /^[^\s/]+\/[^\s]+$/;
 
 function objectRecord(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -77,6 +77,15 @@ function branch(value: unknown, label: string): string {
   const result = requiredString(value, label, /^[^\s\0]+$/);
   if (result.startsWith("-")) throw new Error(`${label} cannot start with '-'`);
   return result;
+}
+
+function validateModel(value: string): string {
+  if (!FULL_MODEL.test(value)) throw new Error("Model must be a full provider/model ID");
+  const suffix = value.match(/:([A-Za-z]+)$/)?.[1]?.toLowerCase();
+  if (suffix && !THINKING_LEVELS.has(suffix as ThinkingLevel)) {
+    throw new Error(`Unsupported model thinking suffix ':${suffix}'`);
+  }
+  return value;
 }
 
 function repository(owner: unknown, name: unknown): string {
@@ -139,11 +148,11 @@ export function parseCandidateConfig(rawText: string, configPath: string, cwd = 
     throw new Error("Integration and protected branches must be distinct");
   }
 
-  const ownerModel = requiredString(
+  const ownerModel = validateModel(requiredString(
     agents.subagent_model ?? agents.default_model,
     "agents.subagent_model or agents.default_model",
     FULL_MODEL,
-  );
+  ));
   const configuredThinking = agents.thinking;
   const ownerThinking: ThinkingLevel =
     typeof configuredThinking === "string" && THINKING_LEVELS.has(configuredThinking as ThinkingLevel)

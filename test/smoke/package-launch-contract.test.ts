@@ -34,6 +34,7 @@ test("packed candidate exposes only thin resources and a bounded owner", async (
       "candidate/skills/forgedock-review-pr/SKILL.md",
       "candidate/skills/forgedock-review-pr-staging/SKILL.md",
       "candidate/agents/forgedock-owner.md",
+      "candidate/agents/forgedock-reviewer.md",
       "bin/forgedock-candidate.mjs",
       "scripts/install-candidate.sh",
     ]) assert.ok(manifest.files.some((file) => file.path === required), required);
@@ -73,6 +74,20 @@ test("packed candidate exposes only thin resources and a bounded owner", async (
     assert.equal(result.contract.tools.explicitAllowlist, true);
     assert.equal(result.contract.tools.fanoutAuthorized, true);
     assert.equal(result.contract.tools.configuredExtensions.length, 0);
+
+    const reviewerResult = await resolveSubagentLaunchContract({
+      agent: "forgedock-reviewer",
+      agentScope: "project",
+      cwd: project,
+      context: "fresh",
+      skill: false,
+      output: false,
+      artifacts: false,
+    });
+    assert.equal(reviewerResult.ok, true, reviewerResult.ok ? "" : reviewerResult.message);
+    if (!reviewerResult.ok) return;
+    assert.deepEqual(reviewerResult.contract.tools.effectiveAllowlist, ["read", "grep", "find", "ls", "forge_publish_reviewer"]);
+    assert.equal(reviewerResult.contract.tools.fanoutAuthorized, false);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

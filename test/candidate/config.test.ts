@@ -50,6 +50,18 @@ test("parses one canonical configuration and caps qualification owners", async (
   }
 });
 
+test("rejects an unrecognized thinking suffix instead of generating a double suffix", async () => {
+  const root = await mkdtemp("/tmp/forgedock-candidate-config-");
+  try {
+    const configPath = join(root, "forge.yaml");
+    const invalid = yaml.replace("provider/model", "provider/model:invalid");
+    await writeFile(configPath, invalid);
+    assert.throws(() => parseCandidateConfig(invalid, configPath, root), /Unsupported model thinking suffix/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("rejects shared integration and protected branches", async () => {
   const root = await mkdtemp("/tmp/forgedock-candidate-config-");
   try {

@@ -38,17 +38,26 @@ PACKAGE_ROOT="$INSTALL_ROOT/package"
 BIN="$PACKAGE_ROOT/bin/forgedock-candidate.mjs"
 [[ -f "$PI_ROOT/settings.json" && -f "$BIN" ]] || { echo "Invalid candidate install: $INSTALL_ROOT" >&2; exit 1; }
 
+CONFIG_JSON=$(node "$BIN" config --cwd "$REPO")
 if [[ -z "$MODEL" ]]; then
-  MODEL=$(node "$BIN" config --cwd "$REPO" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s);process.stdout.write(v.ownerModel);})')
+  MODEL=$(printf '%s' "$CONFIG_JSON" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s);process.stdout.write(v.ownerModel);})')
+fi
+if [[ -z "$THINKING" ]]; then
+  THINKING=$(printf '%s' "$CONFIG_JSON" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s);process.stdout.write(v.ownerThinking);})')
 fi
 [[ "$MODEL" =~ ^[^[:space:]/]+/[^[:space:]]+$ ]] || { echo "Target forge.yaml did not provide a full provider/model ID" >&2; exit 1; }
+if [[ "$MODEL" =~ :([[:alpha:]]+)$ ]]; then
+  case "${BASH_REMATCH[1]}" in off|minimal|low|medium|high|xhigh|max) ;; *) echo "Model has an unsupported thinking suffix" >&2; exit 1 ;; esac
+fi
+[[ "$THINKING" =~ ^(off|minimal|low|medium|high|xhigh|max)$ ]] || { echo "Target forge.yaml did not provide a supported thinking level" >&2; exit 1; }
 
-ARGS=(--offline --no-approve --session-dir "$INSTALL_ROOT/sessions" --model "$MODEL")
-if [[ -n "$THINKING" ]]; then ARGS+=(--thinking "$THINKING"); fi
+ARGS=(--offline --no-approve --session-dir "$INSTALL_ROOT/sessions" --model "$MODEL" --thinking "$THINKING")
 if [[ -n "$NAME" ]]; then ARGS+=(--name "$NAME"); else ARGS+=(--name "ForgeDock candidate: $(basename "$REPO")"); fi
 
 cd "$REPO"
 exec env \
+  -u PI_SUBAGENTS_PI_CODING_AGENT_PACKAGE_ROOT \
+  -u PI_SUBAGENT_PI_BINARY \
   PI_CODING_AGENT_DIR="$PI_ROOT" \
   PI_CODING_AGENT_SESSION_DIR="$INSTALL_ROOT/sessions" \
   PI_OFFLINE=1 PI_SKIP_VERSION_CHECK=1 PI_TELEMETRY=0 \

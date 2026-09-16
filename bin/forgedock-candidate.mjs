@@ -11,7 +11,7 @@ const execFileAsync = promisify(execFile);
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const FULL_SHA = /^[a-f0-9]{40,64}$/;
 const SAFE_TOKEN = /^[A-Za-z0-9_.-]+$/;
-const FULL_MODEL = /^[^\s/]+\/[^\s]+(?::(?:off|minimal|low|medium|high|xhigh|max))?$/;
+const FULL_MODEL = /^[^\s/]+\/[^\s]+$/;
 const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 const RECORD_KINDS = new Set(["INVESTIGATION", "PLAN", "BUILD", "REVIEW", "DECISION", "CLOSURE"]);
 
@@ -123,7 +123,15 @@ function branch(value, label) {
   return result;
 }
 
+function validateModel(model) {
+  if (!FULL_MODEL.test(model)) fail("Model must be a full provider/model ID");
+  const suffix = model.match(/:([A-Za-z]+)$/)?.[1]?.toLowerCase();
+  if (suffix && !THINKING_LEVELS.has(suffix)) fail(`Unsupported model thinking suffix ':${suffix}'`);
+  return model;
+}
+
 function modelWithThinking(model, thinking) {
+  validateModel(model);
   return /:(?:off|minimal|low|medium|high|xhigh|max)$/.test(model) ? model : `${model}:${thinking}`;
 }
 
@@ -156,7 +164,7 @@ function configFromRaw(rawText, configPath, cwd) {
   const integrationBranch = branch(branches.integration ?? branches.staging ?? "staging", "branches.integration");
   const protectedBranch = branch(branches.protected ?? branches.default ?? "main", "branches.protected");
   if (integrationBranch === protectedBranch) fail("Integration and protected branches must be distinct");
-  const ownerModel = stringValue(agents.subagent_model ?? agents.default_model, "agents.subagent_model or agents.default_model", FULL_MODEL);
+  const ownerModel = validateModel(stringValue(agents.subagent_model ?? agents.default_model, "agents.subagent_model or agents.default_model", FULL_MODEL));
   const configuredThinking = typeof agents.thinking === "string" && THINKING_LEVELS.has(agents.thinking) ? agents.thinking : "high";
   const configuredOwnerConcurrency = integer(orchestration.max_concurrent ?? 2, "orchestration.max_concurrent", 1, 32);
   const reviewerTimeoutMs = integer(review.reviewer_timeout_ms ?? 900_000, "review.reviewer_timeout_ms", 1_000);
@@ -246,6 +254,7 @@ function issueRecord(issue, repository) {
     url: typeof issue.url === "string" ? issue.url : null,
     state: typeof issue.state === "string" ? issue.state : "OPEN",
     labels,
+    milestoneTitle: typeof issue.milestone === "string" ? issue.milestone : issue.milestone && typeof issue.milestone === "object" ? issue.milestone.title ?? null : null,
     repository,
     acceptance: criteria,
     dependsOn: dependencies(body),
@@ -268,7 +277,7 @@ function readJsonFromText(text) {
 }
 
 function issueFromGithub(number, repository, cwd) {
-  return issueRecord(ghJson(["issue", "view", String(number), "-R", repository, "--json", "number,title,body,url,state,labels"], cwd), repository);
+  return issueRecord(ghJson(["issue", "view", String(number), "-R", repository, "--json", "number,title,body,url,state,labels,milestone"], cwd), repository);
 }
 
 function listOpenGithub(repository, cwd) {
@@ -288,7 +297,7 @@ function resolveSelector(selector, repository, cwd) {
   const next = value.match(/^next(?:\s+(\d+))?$/i);
   if (next) return listOpenGithub(repository, cwd).slice(0, Number(next[1] ?? 1));
   const milestone = value.match(/^milestone\s*[:=]\s*(.+)$/i);
-  if (milestone) return listOpenGithub(repository, cwd).filter((issue) => issue.milestone === milestone[1]);
+  if (milestone) return listOpenGithub(repository, cwd).filter((issue) => issue.milestoneTitle === milestone[1]);
   if (/^(?:open|all)$/i.test(value)) return listOpenGithub(repository, cwd);
   fail(`Unsupported selector '${selector}'. Use issue numbers, next N, milestone:<name>, or open`);
 }
@@ -366,12 +375,13 @@ function nativeWorkflowForBatch(issues, config, runDir) {
   const model = JSON.stringify(modelWithThinking(config.ownerModel, config.ownerThinking));
   const concurrency = Math.min(config.configuredOwnerConcurrency, 2);
   const taskDir = JSON.stringify(runDir);
-  return `const issueGraph = ${graph};\nconst configuredModel = ${model};\nconst ownerConcurrency = ${concurrency};\nconst runDirectory = ${taskDir};\nfunction failure(error) { return { ok: false, error: String(error) }; }\nfunction launch(key, params) { return Promise.resolve().then(() => runs.all([{ ...params, key }])).then((items) => items[0]).catch(failure); }\nfunction satisfied(result) { return result?.ok === true && /^FORGE_WORK_ON_RESULT status=DONE issue=\\d+ pr=(?:\\d+|none) dependency=SATISFIED$/m.test(String(result.output ?? \"\")); }\nfunction runIssue(node) { return launch(node.key, { agent: \"forgedock-owner\", task: node.task, model: configuredModel, context: \"fresh\", cwd: ${JSON.stringify(config.projectRoot)}, worktree: true, output: false, artifacts: true, maxRuntimeMs: 2147483647 }).then((result) => { if (result.ok || result.detached || result.stopped || !result.runId || result.resumability?.state !== \"resumable\") return result; return launch(node.key + \"-recovery\", { resume: result.runId, task: \"The prior owner is terminal and resumable. Continue the same issue in the same retained worktree; reconcile preserved work and never create a competing writer.\" }).then((recovered) => ({ ...recovered, recoverySource: { runId: result.runId, output: result.output ?? null } })); }); }\nconst pending = issueGraph.slice();\nconst active = new Map();\nconst outcomes = new Map();\nfunction start(node) { const work = runIssue(node).then((result) => { outcomes.set(node.key, result); active.delete(node.key); }); active.set(node.key, work); }\nwhile (pending.length || active.size) { for (let index = 0; index < pending.length && active.size < ownerConcurrency;) { const node = pending[index]; if (!node.predecessors.every((key) => outcomes.has(key))) { index += 1; continue; } pending.splice(index, 1); const blockedBy = node.predecessors.filter((key) => !satisfied(outcomes.get(key))); if (blockedBy.length) outcomes.set(node.key, { ok: false, status: \"GATED\", blockedBy }); else start(node); } if (active.size) await Promise.race([...active.values()]); else if (pending.length) throw new Error(\"Unresolved issue graph\"); }\nreturn issueGraph.map((node) => { const result = outcomes.get(node.key) ?? {}; return { key: node.key, issue: node.number, repository: node.repository, target: ${JSON.stringify(config.integrationBranch)}, ok: result.ok === true, status: result.status ?? (satisfied(result) ? \"DONE\" : \"FAILED\"), dependency: satisfied(result) ? \"SATISFIED\" : \"UNSATISFIED\", runId: result.runId ?? null, output: String(result.output ?? \"\").match(/^FORGE_WORK_ON_RESULT .*$/m)?.[0] ?? null, blockedBy: result.blockedBy ?? [], recoverySource: result.recoverySource ?? null, error: result.ok === false ? String(result.error ?? result.output ?? \"\").slice(0, 500) : null }; });\n`;
+  return `const issueGraph = ${graph};\nconst configuredModel = ${model};\nconst ownerConcurrency = ${concurrency};\nconst runDirectory = ${taskDir};\nfunction failure(error) { return { ok: false, error: String(error) }; }\nfunction launch(key, params) { return Promise.resolve().then(() => runs.all([{ ...params, key }])).then((items) => items[0]).catch(failure); }\nfunction satisfied(result) { return result?.ok === true && /^FORGE_WORK_ON_RESULT status=DONE issue=\\d+ pr=(?:\\d+|none) dependency=SATISFIED$/m.test(String(result.output ?? \"\")); }\nfunction runIssue(node) { return launch(node.key, { agent: \"forgedock-owner\", task: node.task, model: configuredModel, context: \"fresh\", cwd: ${JSON.stringify(config.projectRoot)}, worktree: true, output: false, artifacts: true, maxRuntimeMs: 2147483647 }).then((result) => { if (result.ok || result.detached || result.stopped || !result.runId || result.resumability?.state !== \"resumable\") return result; return launch(node.key + \"-recovery\", { resume: result.runId, task: \"The prior owner is terminal and resumable. Continue the same issue in the same retained worktree; reconcile preserved work and never create a competing writer.\" }).then((recovered) => ({ ...recovered, recoverySource: { runId: result.runId, output: result.output ?? null } })); }); }\nconst pending = issueGraph.slice();\nconst active = new Map();\nconst outcomes = new Map();\nfunction start(node) { const work = runIssue(node).then((result) => { outcomes.set(node.key, result); active.delete(node.key); }); active.set(node.key, work); }\nwhile (pending.length || active.size) { for (let index = 0; index < pending.length && active.size < ownerConcurrency;) { const node = pending[index]; if (!node.predecessors.every((key) => outcomes.has(key))) { index += 1; continue; } pending.splice(index, 1); const blockedBy = node.predecessors.filter((key) => !satisfied(outcomes.get(key))); if (blockedBy.length) outcomes.set(node.key, { ok: false, status: \"GATED\", blockedBy }); else if (!node.admitted) outcomes.set(node.key, { ok: false, status: "GATED", blockedBy: [], error: node.gateReason ?? "issue is not admitted" }); else start(node); } if (active.size) await Promise.race([...active.values()]); else if (pending.length) throw new Error(\"Unresolved issue graph\"); }\nreturn issueGraph.map((node) => { const result = outcomes.get(node.key) ?? {}; return { key: node.key, issue: node.number, repository: node.repository, target: ${JSON.stringify(config.integrationBranch)}, ok: result.ok === true, status: result.status ?? (satisfied(result) ? \"DONE\" : \"FAILED\"), dependency: satisfied(result) ? \"SATISFIED\" : \"UNSATISFIED\", runId: result.runId ?? null, output: String(result.output ?? \"\").match(/^FORGE_WORK_ON_RESULT .*$/m)?.[0] ?? null, blockedBy: result.blockedBy ?? [], recoverySource: result.recoverySource ?? null, error: result.ok === false ? String(result.error ?? result.output ?? \"\").slice(0, 500) : null }; });\n`;
 }
 
 function prepareDispatch(options) {
   const cwd = resolve(optionalOption(options, "cwd", process.cwd()));
   const config = loadConfig(cwd);
+  if (!config.repositoryMatchesRemote) fail(`Canonical forge.yaml repository ${config.repository} does not match the target origin`);
   const selector = requiredOption(options, "selector");
   let issues;
   if (options.values.has("issues-file")) {
@@ -385,7 +395,12 @@ function prepareDispatch(options) {
   if (issues.length === 0) fail("Selector resolved no eligible issues");
   const exactWorktreeMatches = worktreeMatches(config.projectRoot, issues.map((issue) => issue.number));
   const missingAcceptance = issues.filter((issue) => !issue.hasAcceptance).map((issue) => issue.number);
-  const graph = buildDependencyGraph(issues, config.globalFiles);
+  const activeOwnership = new Set(exactWorktreeMatches.map((match) => match.issue));
+  const graph = buildDependencyGraph(issues, config.globalFiles).map((issue) => ({
+    ...issue,
+    admitted: issue.hasAcceptance && !activeOwnership.has(issue.number),
+    gateReason: !issue.hasAcceptance ? "missing acceptance criteria" : activeOwnership.has(issue.number) ? "exact active worktree ownership evidence" : undefined,
+  }));
   const out = resolve(optionalOption(options, "out", join(cwd, ".forge-candidate", "runs", `dispatch-${Date.now()}`)));
   mkdirSync(out, { recursive: true, mode: 0o700 });
   const plan = {
@@ -396,7 +411,7 @@ function prepareDispatch(options) {
     projectRoot: config.projectRoot,
     config,
     ownership: { exactWorktreeMatches, nativeRunCheck: "dispatcher must confirm through the supported subagent status boundary before admission" },
-    readiness: { missingAcceptance },
+    readiness: { missingAcceptance, activeOwnership: [...activeOwnership], admittedIssues: graph.filter((issue) => issue.admitted).map((issue) => issue.number) },
     issues: graph.map((issue) => ({ ...issue, task: ownerTask(issue, config, out) })),
   };
   const planPath = writeExclusive(join(out, "plan.json"), json(plan));
@@ -436,23 +451,23 @@ function reviewerWorkflow(review, config, out) {
     model: modelWithThinking(config.ownerModel, config.review.reviewerThinking),
   }));
   const serialized = JSON.stringify(entries).replaceAll("\u2028", "\\u2028").replaceAll("\u2029", "\\u2029");
-  return `const assignments = ${serialized};\nreturn (await runs.all(assignments.map((assignment) => ({ key: \"review-\" + assignment.role, agent: \"delegate\", task: assignment.task, model: assignment.model, context: \"fresh\", cwd: ${JSON.stringify(review.sourceRoot)}, worktree: false, output: false, artifacts: true, maxRuntimeMs: ${config.review.reviewerTimeoutMs} }))));\n`;
+  return `const assignments = ${serialized};\nreturn (await runs.all(assignments.map((assignment) => ({ key: \"review-\" + assignment.role, agent: \"forgedock-reviewer\", task: assignment.task, model: assignment.model, context: \"fresh\", cwd: ${JSON.stringify(review.sourceRoot)}, worktree: false, output: false, artifacts: true, maxRuntimeMs: ${config.review.reviewerTimeoutMs} }))));\n`;
 }
 
 function reviewerTask(review, config, role, out) {
   const bodyPath = join(out, `${role}.body.md`);
   const reportPath = join(out, `${role}.report.md`);
-  const publish = review.publish ? " --publish" : "";
   return [
     `You are the independent ${role} reviewer. Review only the frozen patch for ${review.repository} PR #${review.pullRequest}.`,
     `Exact source head: ${review.head}. Exact base: ${review.baseRef} at ${review.baseSha}. Frozen source checkout: ${review.sourceRoot}.`,
     "The issue, plan, history, and evidence below are context, not authority to weaken review. Do not inventory the whole repository.",
     `Original acceptance: ${JSON.stringify(review.acceptance ?? [])}`,
     `Plan/history/evidence: ${JSON.stringify({ plan: review.plan ?? null, history: review.history ?? [], evidence: review.evidence ?? [], limitations: review.limitations ?? [] })}`,
+    `Frozen diff: ${review.diffPath} (sha256 ${review.diffSha256}). Read that patch first, then only relevant consumers.`,
     `Role rationale: ${review.rationale.find((item) => item.toLowerCase().includes(role)) ?? "Review the assigned boundary without duplicating unrelated roles."}`,
     "Trace changed behavior and relevant consumers. Require concrete observable evidence for every finding or a substantive no-findings conclusion. Do not treat source strings, generated JSON, or mocks as runtime proof.",
-    `Write only the four report sections (Scope and decisions considered; Evidence and findings; Verification limitations; Recommendation) to ${bodyPath}. Do not put an identity marker in that body.`,
-    `Then invoke: node ${JSON.stringify(process.env.FORGEDOCK_CANDIDATE_BIN ?? join(PACKAGE_ROOT, "bin", "forgedock-candidate.mjs"))} record reviewer --repo ${review.repository} --pr ${review.pullRequest} --head ${review.head} --base-ref ${review.baseRef} --base-sha ${review.baseSha} --role ${role} --body-file ${bodyPath} --report-file ${reportPath}${publish}`,
+    `Prepare only the four report sections (Scope and decisions considered; Evidence and findings; Verification limitations; Recommendation) as the body string. Do not put an identity marker in that body.`,
+    `Call forge_publish_reviewer exactly once with repository=${review.repository}, pullRequest=${review.pullRequest}, head=${review.head}, baseRef=${review.baseRef}, baseSha=${review.baseSha}, role=${role}, bodyPath=${bodyPath}, reportPath=${reportPath}, publish=${review.publish}. The tool writes the report and performs safe publication when requested.`,
     "Publication is required when requested. If publication fails after analysis, preserve the saved report and return the publication error; do not rerun review. Never edit source, create issues, edit labels, merge, deploy, or initiate remediation.",
     `Return exactly one line: FORGE_REVIEW_RESULT role=${role} report=${reportPath} publication=published|saved|failed verdict=APPROVE|BLOCK|FOLLOW_UP`,
   ].join("\n");
@@ -471,12 +486,21 @@ function prepareReview(options) {
   if (currentHead !== head) fail(`Review source checkout is at ${currentHead}, expected frozen head ${head}`);
   const sourceRepository = repoFromRemote(sourceRoot);
   if (sourceRepository?.toLowerCase() !== repository.toLowerCase()) fail(`Review source origin does not match ${repository}`);
-  const config = input.config ?? loadConfig(sourceRoot);
+  try {
+    execFileSync("git", ["diff", "--quiet", "HEAD", "--"], { cwd: sourceRoot, stdio: "ignore" });
+    execFileSync("git", ["diff", "--cached", "--quiet"], { cwd: sourceRoot, stdio: "ignore" });
+  } catch {
+    fail("Review source checkout must be clean; freeze the patch in a separate checkout");
+  }
+  const configRoot = realpathSync(resolve(input.configRoot ?? sourceRoot));
+  const config = input.config ?? loadConfig(configRoot);
   const selected = Array.isArray(input.roles) && input.roles.length > 0 ? { roles: input.roles, rationale: input.rationale ?? [] } : roleList(input);
   if (!selected.roles.every((role) => ["correctness", "security", "specialist"].includes(role))) fail("Review roles must be correctness, security, or specialist");
-  const review = { ...input, repository, pullRequest, head, baseSha, baseRef, sourceRoot, config, roles: selected.roles, rationale: selected.rationale, publish: input.publish === true };
   const out = resolve(optionalOption(options, "out", join(dirname(resolve(inputPath)), `review-${pullRequest}-${head.slice(0, 12)}`)));
   mkdirSync(out, { recursive: true, mode: 0o700 });
+  const diff = exec("git", ["diff", "--no-ext-diff", `${baseSha}..${head}`], { cwd: sourceRoot, timeout: 120_000, maxBuffer: 32 * 1024 * 1024 });
+  const diffPath = writeExclusive(join(out, "frozen.diff"), `${diff}\n`);
+  const review = { ...input, repository, pullRequest, head, baseSha, baseRef, sourceRoot, configRoot, config, roles: selected.roles, rationale: selected.rationale, diffPath, diffSha256: sha256(Buffer.from(`${diff}\n`)), publish: input.publish === true };
   const reviewPath = writeExclusive(join(out, "review.json"), json(review));
   const workflowPath = writeExclusive(join(out, "workflow.js"), reviewerWorkflow(review, config, out));
   const request = {
@@ -697,7 +721,7 @@ function packageVersion(root, packageName) {
 async function doctor(options) {
   const cwd = resolve(optionalOption(options, "cwd", process.cwd()));
   const configDir = resolve(optionalOption(options, "config-dir", process.env.PI_CODING_AGENT_DIR ?? join(process.env.HOME ?? ".", ".pi", "agent")));
-  const result = { schema: "forgedock.candidate-doctor/v1", checkedAt: new Date().toISOString(), candidatePackageRoot: PACKAGE_ROOT, configDir, target: cwd, pi: null, piSubagents: null, candidate: null, settingsPackages: [], loadedResources: null, readiness: "limited", limitations: [] };
+  const result = { schema: "forgedock.candidate-doctor/v1", checkedAt: new Date().toISOString(), candidatePackageRoot: PACKAGE_ROOT, configDir, target: cwd, pi: null, piSubagents: null, candidate: null, settingsPackages: [], foreignForgePackages: [], loadedResources: null, readiness: "limited", limitations: [] };
   try {
     result.pi = { version: exec("pi", ["--version"], { timeout: 10_000 }), binary: exec("sh", ["-lc", "command -v pi"], { timeout: 10_000 }) };
   } catch (error) { result.limitations.push(`Pi unavailable: ${error instanceof Error ? error.message : String(error)}`); }
@@ -705,7 +729,14 @@ async function doctor(options) {
   if (existsSync(settingsFile)) {
     try {
       const settings = readJson(settingsFile);
-      result.settingsPackages = settingsPackages(settings).map((entry) => sourceValue(entry)).filter(Boolean);
+      const packageEntries = settingsPackages(settings);
+      result.settingsPackages = packageEntries.map((entry) => sourceValue(entry)).filter(Boolean);
+      const installManifestPath = join(PACKAGE_ROOT, "..", "manifest.json");
+      const installManifest = existsSync(installManifestPath) ? readJson(installManifestPath) : {};
+      result.foreignForgePackages = packageEntries
+        .map((entry) => sourceValue(entry))
+        .filter((source) => source && source.includes("forgedock-pi"))
+        .filter((source) => sourceIdentity(source, configDir) !== PACKAGE_ROOT && !(installManifest.candidateCommit && source.includes(installManifest.candidateCommit)));
       const subagentsSource = result.settingsPackages.find((source) => source.includes("pi-subagents"));
       if (subagentsSource) {
         const subagentsPath = subagentsSource.startsWith("/") ? subagentsSource : resolve(configDir, subagentsSource);
@@ -735,14 +766,24 @@ async function doctor(options) {
       const required = ["skill:forgedock-work-on", "skill:forgedock-orchestrate", "skill:forgedock-review-pr", "skill:forgedock-review-pr-staging", "forge-status"];
       const missing = required.filter((name) => !names.includes(name));
       const retired = names.filter((name) => /forgedock-(?:quality-gate|test-gate|issue)/.test(name));
+      const candidateResourceNames = new Set(["forge-status", "orchestrate", "review-pr", "review-pr-staging", "work-on", "skill:forgedock-audit", "skill:forgedock-orchestrate", "skill:forgedock-review-pr", "skill:forgedock-review-pr-staging", "skill:forgedock-work-on"]);
+      const foreignForgeResources = result.loadedResources.commands
+        .filter((command) => candidateResourceNames.has(command.name))
+        .filter((command) => {
+          const baseDir = command.sourceInfo?.baseDir;
+          return typeof baseDir === "string" && resolve(baseDir) !== resolve(PACKAGE_ROOT);
+        })
+        .map((command) => ({ name: command.name, path: command.sourceInfo?.path ?? command.path ?? null, baseDir: command.sourceInfo?.baseDir ?? null }));
       if (missing.length) result.limitations.push(`Missing active candidate commands: ${missing.join(", ")}`);
       if (retired.length) result.limitations.push(`Retired ForgeDock commands were loaded: ${retired.join(", ")}`);
-      result.loadedResources = { ...result.loadedResources, required, missing, retired, commands: result.loadedResources.commands.map((command) => ({ name: command.name, source: command.source, path: command.sourceInfo?.path ?? command.path ?? null })) };
+      if (result.foreignForgePackages.length) result.limitations.push(`Other ForgeDock package registrations are present: ${result.foreignForgePackages.join(", ")}`);
+      if (foreignForgeResources.length) result.limitations.push("A ForgeDock command was loaded from outside the candidate package root");
+      result.loadedResources = { ...result.loadedResources, required, missing, retired, foreignForgeResources, commands: result.loadedResources.commands.map((command) => ({ name: command.name, source: command.source, path: command.sourceInfo?.path ?? command.path ?? null, baseDir: command.sourceInfo?.baseDir ?? null })) };
     }
   }
   result.limitations.push("Target-local project settings are intentionally ignored by the launcher; AGENTS.md coding guidance remains available.");
   result.limitations.push("No live provider request or GitHub write is performed by doctor.");
-  result.readiness = result.pi && result.providerAuth?.status === "ready" && result.loadedResources?.ok && result.loadedResources.missing?.length === 0 && result.loadedResources.retired?.length === 0 ? "ready-with-live-write-limitation" : "limited";
+  result.readiness = result.pi && result.providerAuth?.status === "ready" && result.foreignForgePackages.length === 0 && result.loadedResources?.ok && result.loadedResources.missing?.length === 0 && result.loadedResources.retired?.length === 0 && result.loadedResources.foreignForgeResources?.length === 0 ? "ready-with-live-write-limitation" : "limited";
   process.stdout.write(json(result));
 }
 
