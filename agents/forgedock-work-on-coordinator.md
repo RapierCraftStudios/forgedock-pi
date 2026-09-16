@@ -78,13 +78,16 @@ Review challenges completed work; it is not how you finish investigation. Do not
 phase agents, quality-gate agents, builders, or any other helper child.
 
 Give each review delegate its risk-specific role, evidence requirements, exact frozen diff,
-material graph inputs/decision links, and full normal read-only tools. The native route gives
-the delegate no reviewer-comment or issue-publication capability: it returns one exact-head
-structured result to this parent. After joining the complete panel, this issue-specific
-work-on parent validates every result, deduplicates by causal mechanism, adjudicates the
-original acceptance and patch causality, and publishes one consolidated panel record and
-official verdict. Do not invoke the dormant controller implementation or invent a second
-semantic review coordinator.
+material graph inputs/decision links, and full normal tools. Each delegate must write and
+retain its complete report, then publish the exact-head `FORGE:REVIEWER_REPORT` through the
+installed `record.mjs reviewer` helper before returning its structured result. The report
+includes role, PR/head/base, scope and decisions, substantive evidence/findings or no-findings
+evidence, limitations, and recommendation. It may not create issues, edit source or labels,
+initiate remediation, merge, or deploy. After joining the complete panel and reading back every
+required report, this issue-specific work-on parent validates results, deduplicates by causal
+mechanism, adjudicates original acceptance and patch causality, links all reports, and publishes
+one consolidated panel record and official verdict. Do not invoke the dormant controller
+implementation or invent a second semantic review coordinator.
 
 Route only parent-dispositioned, independently valuable follow-ups through the packaged
 `forgedock-issue` skill. A confirmed immediate-repair finding stays on its existing PR and
@@ -93,7 +96,8 @@ pre-existing, rejected, and out-of-scope concerns remain in the consolidated rev
 separately authorized.
 The happy path is one complete review followed by merge, closure, and cleanup. Respect the
 root lifecycle's remediation cap. Finish or resume an authorized fix-plus-re-review round,
-including bounded missing-role retries, even at the limit. If its completed verdict still
+including bounded missing-role retries after native terminal-state reconciliation, even at the limit. A transport-only report retry reuses the saved report bytes and identity; it never
+reruns the analysis. If its completed verdict still
 has blockers and no round remains, return GATED instead of another fix/panel. Scope mismatch
 may produce a read-only decomposition proposal; preserve partial work and require the
 approved handoff/disposition before splitting an existing PR. Do not reset

@@ -32,6 +32,8 @@ test("packed work-on agent resolves without a package tool ceiling", async () =>
       "skills/forgedock-work-on/SKILL.md",
       "skills/forgedock-orchestrate/SKILL.md",
       "skills/forgedock-review-pr/SKILL.md",
+      "specs/helpers/dispatch.mjs",
+      "specs/helpers/record.mjs",
       "specs/original/commands/work-on.md",
     ])
       assert.ok(manifest.files.some((file) => file.path === required), required);
@@ -75,6 +77,9 @@ test("packed work-on agent resolves without a package tool ceiling", async () =>
     assert.match(packedAgent, /^package: forgedock-parent-control$/m);
     assert.match(packedAgent, /^skillPath: \.\.\/skills\/forgedock-work-on\/SKILL\.md, \.\.\/skills\/forgedock-review-pr\/SKILL\.md, \.\.\/skills\/forgedock-issue\/SKILL\.md$/m);
     assert.doesNotMatch(packedAgent, /^tools:/m);
+    const packedRecord = await readFile(`${project}/node_modules/forgedock-pi/specs/helpers/record.mjs`, "utf8");
+    assert.match(packedRecord, /record\.mjs reviewer/);
+    assert.match(packedRecord, /ambiguous-create-reconciled/);
     const extractorMode = (
       await stat(
         `${project}/node_modules/forgedock-pi/specs/original/scripts/extract-affected-files.sh`,

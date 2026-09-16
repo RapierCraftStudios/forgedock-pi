@@ -28,7 +28,7 @@ async function fixture(run: (f: any) => Promise<void>) {
   const repoOne = join(root, "repo-one"), repoTwo = join(root, "repo-two");
   execFileSync("git", ["worktree", "add", "-q", "-b", "pi-parallel-fixture-one", repoOne, "HEAD"], { cwd: repo });
   execFileSync("git", ["worktree", "add", "-q", "-b", "pi-parallel-fixture-two", repoTwo, "HEAD"], { cwd: repo });
-  await writeFile(join(repo, "forge.yaml"), 'project: {owner: example, repo: project}\nagents: {subagent_model: "openai-codex/gpt-5.6-luna"}\norchestration: {max_concurrent: 3}\nprivate_value: do-not-print-this\n');
+  await writeFile(join(repo, "forge.yaml"), 'project: {owner: example, repo: project}\nagents: {subagent_model: "openai-codex/gpt-5.6-luna"}\norchestration: {max_concurrent: 3}\nreview: {reviewer_timeout_ms: 900000, panel_timeout_ms: 1200000, max_concurrent: 4, publication_timeout_ms: 120000, result_collection_timeout_ms: 120000}\nprivate_value: do-not-print-this\n');
   const contractDescriptors = [];
   for (const number of [33724, 33745]) {
     const contract = dispatch.createIssueContract(number, [
@@ -245,7 +245,7 @@ test("review preparation cannot substitute a model, duplicate correctness or exc
     const originalBytes = await readFile(originalInput.path, "utf8");
     const env = { PI_SUBAGENT_EXTENSION_BINDINGS: JSON.stringify({ [dispatch.BINDING]: originalInput }) };
     const boundPolicy = dispatch.loadPolicy(undefined, env);
-    const review = { head: dispatch.gitHead(repoOne), round: 1, contractDigest: boundPolicy.contractDigest, roles: [{ role: "correctness", thinking: "high", task: "Review only" }] };
+    const review = { pr: 99, head: dispatch.gitHead(repoOne), baseSha: dispatch.gitHead(repoOne), round: 1, contractDigest: boundPolicy.contractDigest, roles: [{ role: "correctness", thinking: "high", task: "Review only" }] };
     assert.throws(() => dispatch.prepareReview({ ...review, round: 4 }, join(root, "over"), env), /exceeds bound remediation limit 1/);
     assert.throws(() => dispatch.prepareReview({ ...review, roles: [{ ...review.roles[0], model: "anthropic/stale" }] }, join(root, "model"), env), /Unknown role field: model/);
     assert.throws(() => dispatch.prepareReview({ ...review, contractDigest: `sha256:${"0".repeat(64)}` }, join(root, "stale-contract"), env), /contractDigest disagrees/);
@@ -253,9 +253,19 @@ test("review preparation cannot substitute a model, duplicate correctness or exc
     const valid = dispatch.prepareReview(review, join(root, "review"), env);
     const reviewScript = await readFile(valid.request.workflowScriptPath, "utf8");
     assert.match(reviewScript, /openai-codex\/gpt-5.6-luna:high/);
-    assert.match(reviewScript, /Review transport: return one structured evidence result/);
-    assert.match(reviewScript, /parent publishes one consolidated exact-head panel record/);
-    assert.doesNotMatch(reviewScript, /forge_publish_reviewer_comment|reviewer-comment capability/);
+    assert.match(reviewScript, /publish your own complete report/);
+    assert.match(reviewScript, /record\.mjs.*reviewer/);
+    assert.match(reviewScript, /FORGE:REVIEWER_REPORT|stable identity/);
+    assert.doesNotMatch(reviewScript, /Do not post PR comments|no reviewer-comment/);
+    assert.equal(valid.request.globalConcurrencyLimit, 4);
+    assert.equal(valid.request.timeoutMs, 1200000);
+    assert.equal(Object.hasOwn(valid.request, "maxSubagentSpawnsPerRun"), false, "review retries use parent planning, not a panel-wide spawn cap");
+    assert.equal(valid.request.async, true);
+    const headless = dispatch.prepareReview(review, join(root, "headless-review"), { ...env, PI_SUBAGENT_RUN_ID: "owner-run" });
+    assert.equal(headless.request.async, false);
+    assert.equal(headless.request.timeoutMs, 1200000);
+    assert.equal(valid.reviewers.length, 1);
+    assert.equal(valid.reviewers[0].reportId, dispatch.createReviewerReportIdentity({ repository: "example/project", pullRequest: 99, reviewedHead: dispatch.gitHead(repoOne), baseRef: "staging", baseSha: dispatch.gitHead(repoOne), role: "correctness", round: 1 }).id);
 
     const oldContract = dispatch.validateIssueContractFile(boundPolicy.contract, boundPolicy.issue);
     const revisedContract = dispatch.createIssueContract(boundPolicy.issue, oldContract.criteria, 2, oldContract.digest);
@@ -321,9 +331,9 @@ test("review preparation cannot substitute a model, duplicate correctness or exc
     execFileSync("git", ["add", "repair.txt"], { cwd: repoOne });
     execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "cohesive repair"], { cwd: repoOne });
     const repairedHead = dispatch.gitHead(repoOne);
-    const revisedReview = { head: repairedHead, round: 1, contractDigest: revisedContract.digest, replan: amendedPolicy.replan, roles: [{ role: "correctness", thinking: "high", task: "Review repaired head" }] };
+    const revisedReview = { pr: 99, head: repairedHead, baseSha: boundPolicy.targetBase.headSha, round: 1, contractDigest: revisedContract.digest, replan: amendedPolicy.replan, roles: [{ role: "correctness", thinking: "high", task: "Review repaired head" }] };
     assert.doesNotThrow(() => dispatch.prepareReview(revisedReview, join(root, "replanned-review"), amendedEnv));
-    const rendered = records.renderRecord({ kind: "REVIEW-PANEL", pr: 564, input: amended.input, head: repairedHead, inputs: [], supersedes: null }, `## Evidence\n\n**Contract digest**: \`${amendedPolicy.contractDigest}\`\n**Repaired head**: \`${repairedHead}\``, { cwd: repoOne, env: amendedEnv });
+    const rendered = records.renderRecord({ kind: "REVIEW-PANEL", pr: 564, input: amended.input, head: repairedHead, baseSha: boundPolicy.targetBase.headSha, round: 1, reviewerReports: [{ role: "correctness", id: 5641, url: "https://github.com/example/project/pull/564#issuecomment-5641", head: repairedHead, round: 1 }], inputs: [], supersedes: null }, `## Evidence\n\n**Contract digest**: \`${amendedPolicy.contractDigest}\`\n**Repaired head**: \`${repairedHead}\``, { cwd: repoOne, env: amendedEnv });
     assert.match(rendered.markdown, /FORGE:REVIEW-PANEL/);
     assert.match(rendered.markdown, new RegExp(repairedHead));
     assert.match(rendered.markdown, new RegExp(amendedPolicy.contractDigest));
@@ -376,12 +386,166 @@ test("record rendering derives identity and treats shell metacharacters as liter
     const reused = records.publishRecord(rendered, output, (args: string[]) => args.includes("--slurp") ? JSON.stringify([[stored]]) : JSON.stringify(stored));
     assert.equal(reused.reused, true);
     assert.throws(() => records.publishRecord(rendered, output, (args: string[]) => args.includes("--slurp") ? "[[]]" : JSON.stringify({ ...stored, html_url: "https://github.com/example/project/issues/33724#issuecomment-123" })), /destination identity/);
-    const review = records.renderRecord({ kind: "REVIEW-PANEL", pr: 99, inputs: [] }, body, { cwd: repo, env });
+    const review = records.renderRecord({ kind: "REVIEW-PANEL", pr: 99, round: 0, baseSha: rendered.head, reviewerReports: [{ role: "correctness", id: 123, url: "https://github.com/example/project/pull/99#issuecomment-123", head: rendered.head, round: 0 }], inputs: [] }, body, { cwd: repo, env });
+    assert.equal(review.policy.issue, 33745, "native lane binding must supply the omitted draft input");
+    assert.equal(review.baseRef, "staging");
+    assert.equal(review.baseSha, rendered.head);
+    assert.throws(() => records.renderRecord({ ...review, input: batch.lanes[0].input }, body, { cwd: repo, env }), /Explicit input disagrees with native lane binding/);
+    assert.throws(() => records.renderRecord({ kind: "REVIEW-PANEL", repo: "example/project", pr: 99, baseRef: "staging", baseSha: rendered.head, head: rendered.head, round: 0, reviewerReports: [{ role: "correctness", id: 123, url: "https://github.com/example/project/pull/99#issuecomment-123", head: rendered.head, round: 0 }], inputs: [], supersedes: null, controlPlane }, body, { cwd: repo, env: { PI_SUBAGENT_EXTENSION_BINDINGS: "{}" } }), /Native lane binding/);
+    assert.throws(() => records.renderRecord({ kind: "REVIEW-PANEL", repo: "example/project", pr: 99, baseRef: "staging", baseSha: rendered.head, head: rendered.head, round: 0, reviewerReports: [{ role: "correctness", id: 123, url: "https://github.com/example/project/pull/99#issuecomment-123", head: rendered.head, round: 0 }], inputs: [], supersedes: null, controlPlane }, body, { cwd: repo, env: { PI_SUBAGENT_EXTENSION_BINDINGS: "not-json" } }), /Native lane binding envelope is invalid/);
     const reviewFile = join(root, "review.md"); await writeFile(reviewFile, review.markdown);
     for (const mismatch of [{ headRefOid: "0".repeat(40), baseRefName: "staging" }, { headRefOid: review.head, baseRefName: "main" }]) {
       assert.throws(() => records.publishRecord(review, reviewFile, () => JSON.stringify(mismatch)), /PR head\/target/);
     }
   });
+});
+
+
+test("reviewers publish complete retry-safe reports without issue-owner policy", async () => {
+  await fixture(async ({ root, repo }) => {
+    const baseHead = dispatch.gitHead(repo);
+    let currentHead = baseHead;
+    let currentBase = baseHead;
+    let mergeable: boolean | undefined = true;
+    let mergeStateStatus: string | undefined = "CLEAN";
+    const comments: any[] = [];
+    const calls: string[][] = [];
+    let nextId = 700;
+    let loseCreateResponse = false;
+    const gh = (args: string[]) => {
+      calls.push(args);
+      if (args[0] === "pr") return JSON.stringify({ headRefOid: currentHead, baseRefName: "staging", baseRefOid: currentBase, mergeable, mergeStateStatus });
+      if (args[0] === "api" && args[1] === "--paginate") return JSON.stringify([comments]);
+      if (args[0] === "api" && args[1]?.startsWith("repos/example/project/issues/comments/")) {
+        const id = Number(args[1].split("/").at(-1));
+        return JSON.stringify(comments.find(comment => comment.id === id));
+      }
+      if (args[0] === "api" && args[2] === "-F") {
+        const bodyPath = args[3]!.slice("body=@".length);
+        const comment = { id: nextId++, body: fs.readFileSync(bodyPath, "utf8"), html_url: `https://github.com/example/project/pull/99#issuecomment-${nextId - 1}` };
+        comments.push(comment);
+        if (loseCreateResponse) { loseCreateResponse = false; throw new Error("connection lost after create"); }
+        return JSON.stringify(comment);
+      }
+      throw new Error(`unexpected gh argv: ${JSON.stringify(args)}`);
+    };
+    const makeReport = async (role: string, head: string, suffix: string, bodyOverride?: string) => {
+      const authorization = dispatch.createReviewerPublicationAuthorization({
+        repository: "example/project", pullRequest: 99, reviewedHead: head, baseRef: "staging", baseSha: baseHead,
+        role, round: 0, controlPlane, bodyPath: join(root, `${suffix}.body.md`), reportPath: join(root, `${suffix}.report.md`), publicationTimeoutMs: 30_000,
+      });
+      const body = bodyOverride ?? `### Scope and decisions considered\nThe ${role} reviewer checked the frozen PR and its accepted behavior.\n\n### Evidence and findings\nNo substantive findings identified for this role; the no-findings conclusion is evidence-backed.\n\n### Verification limitations\nThe fixture does not exercise a live provider or repository service.\n\n### Recommendation\nApprove this exact head subject to the parent\'s consolidated disposition.`;
+      await writeFile(authorization.bodyPath, body);
+      const saved = records.writeReviewerReport(records.renderReviewerReport(authorization, body));
+      assert.equal(Object.hasOwn(authorization, "issue"), false);
+      return { authorization, saved };
+    };
+
+    const correctness = await makeReport("correctness", baseHead, "correctness");
+    const correctnessReceipt = records.publishReviewerReport(correctness.saved, correctness.authorization.reportPath, gh);
+    assert.equal(correctnessReceipt.reused, false);
+    assert.equal(correctnessReceipt.contentMatches, true);
+    assert.equal(correctnessReceipt.role, "correctness");
+
+    const security = await makeReport("security", baseHead, "security");
+    const securityReceipt = records.publishReviewerReport(security.saved, security.authorization.reportPath, gh);
+    assert.notEqual(securityReceipt.reportId, correctnessReceipt.reportId);
+    assert.equal(comments.length, 2);
+
+    comments[1].body += "\n";
+    const formattingOnly = records.publishReviewerReport(records.renderReviewerReport(security.authorization, fs.readFileSync(security.authorization.bodyPath, "utf8")), security.authorization.reportPath, gh);
+    assert.equal(formattingOnly.reused, true);
+    assert.equal(formattingOnly.contentMatches, false, "same identity may reconcile harmless formatting without rewriting the comment");
+    comments[1].body = comments[1].body.replace("No substantive findings identified", "A materially different finding was inserted");
+    assert.throws(() => records.publishReviewerReport(records.renderReviewerReport(security.authorization, fs.readFileSync(security.authorization.bodyPath, "utf8")), security.authorization.reportPath, gh), /differs materially/);
+    comments[1].body = security.saved.markdown;
+    const recovered = records.publishReviewerReport(records.renderReviewerReport(security.authorization, fs.readFileSync(security.authorization.bodyPath, "utf8")), security.authorization.reportPath, gh);
+    assert.equal(recovered.reused, true);
+    assert.equal(recovered.reconciliation, "existing-identity");
+    assert.equal(comments.length, 2, "retry after result delivery must not duplicate the report");
+
+    const ambiguous = await makeReport("api", baseHead, "api");
+    loseCreateResponse = true;
+    const reconciled = records.publishReviewerReport(ambiguous.saved, ambiguous.authorization.reportPath, gh);
+    assert.equal(reconciled.reused, true);
+    assert.equal(reconciled.reconciliation, "ambiguous-create-reconciled");
+    assert.equal(comments.length, 3, "lost create response must reconcile one existing comment");
+
+    const parent = records.renderRecord({ kind: "REVIEW-PANEL", repo: "example/project", pr: 99, baseRef: "staging", baseSha: baseHead, head: baseHead, round: 0, reviewerReports: [
+      { role: "correctness", id: correctnessReceipt.commentId, url: correctnessReceipt.url, head: baseHead, round: 0, reportId: correctnessReceipt.reportId },
+      { role: "security", id: securityReceipt.commentId, url: securityReceipt.url, head: baseHead, round: 0, reportId: securityReceipt.reportId },
+      { role: "api", id: reconciled.commentId, url: reconciled.url, head: baseHead, round: 0, reportId: reconciled.reportId },
+    ], inputs: [], supersedes: null, controlPlane }, "### Parent disposition\nThe parent deduplicated corroborating no-findings evidence.", { cwd: repo });
+    assert.match(parent.markdown, /Individual reviewer reports/);
+    assert.match(parent.markdown, new RegExp(correctnessReceipt.url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.throws(() => records.renderRecord({ kind: "REVIEW-PANEL", repo: "example/project", pr: 99, baseRef: "staging", baseSha: baseHead, head: baseHead, round: 0, reviewerReports: [{ role: "correctness", id: correctnessReceipt.commentId, url: correctnessReceipt.url, head: "0".repeat(40), round: 0 }], inputs: [], supersedes: null, controlPlane }, "### Parent disposition", { cwd: repo }), /current head/);
+
+    const marker = join(root, "must-not-exist");
+    const unsafe = await makeReport("literal", baseHead, "literal", `### Scope and decisions considered\nScope contains $(touch ${marker}) as literal data.\n\n### Evidence and findings\nNo finding; command text was not executed.\n\n### Verification limitations\nNo live service.\n\n### Recommendation\nParent may approve this exact head.`);
+    records.publishReviewerReport(unsafe.saved, unsafe.authorization.reportPath, gh);
+    assert.equal(fs.existsSync(marker), false);
+    assert.ok(calls.some(args => args.includes(`body=@${unsafe.authorization.reportPath}`)));
+
+    const oldHeadReport = await makeReport("old-head", baseHead, "old-head");
+    records.publishReviewerReport(oldHeadReport.saved, oldHeadReport.authorization.reportPath, gh);
+    await writeFile(join(repo, "target-advance.txt"), "unrelated target advance\n");
+    execFileSync("git", ["add", "target-advance.txt"], { cwd: repo });
+    execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "unrelated target advance"], { cwd: repo });
+    currentBase = dispatch.gitHead(repo);
+    // Ordinary review retains its frozen base identity while an unrelated,
+    // clean target advance is visible to publication and retry reconciliation.
+    const recoveredAfterTargetAdvance = records.publishReviewerReport(oldHeadReport.saved, oldHeadReport.authorization.reportPath, gh);
+    assert.equal(recoveredAfterTargetAdvance.reused, true);
+    assert.equal(recoveredAfterTargetAdvance.baseSha, baseHead);
+    const oldHeadComment = comments.find(comment => comment.body === oldHeadReport.saved.markdown);
+    assert.ok(oldHeadComment);
+    const ordinaryPanel = records.renderRecord({ kind: "REVIEW-PANEL", repo: "example/project", pr: 99, baseRef: "staging", baseSha: baseHead, head: baseHead, round: 0, reviewerReports: [{ role: "old-head", id: oldHeadComment.id, url: oldHeadComment.html_url, head: baseHead, round: 0 }], inputs: [], supersedes: null, controlPlane }, "### Parent disposition\nThe ordinary review remains valid after an unrelated target advance.", { cwd: repo });
+    const ordinaryPanelPath = join(root, "ordinary-panel.md");
+    await writeFile(ordinaryPanelPath, ordinaryPanel.markdown);
+    const panelReceipt = records.publishRecord(ordinaryPanel, ordinaryPanelPath, gh);
+    assert.equal(panelReceipt.reused, false);
+    mergeable = false;
+    mergeStateStatus = "DIRTY";
+    assert.throws(() => records.publishReviewerReport(oldHeadReport.saved, oldHeadReport.authorization.reportPath, gh), /review evidence|conflicting|mergeable/i);
+    mergeable = true;
+    mergeStateStatus = "CLEAN";
+    const protectedAuthorization = dispatch.createReviewerPublicationAuthorization({
+      repository: "example/project", pullRequest: 99, reviewedHead: baseHead, baseRef: "staging", baseSha: baseHead,
+      role: "protected", round: 0, mode: "staging", controlPlane,
+      bodyPath: join(root, "protected.body.md"), reportPath: join(root, "protected.report.md"), publicationTimeoutMs: 30_000,
+    });
+    const protectedBody = `### Scope and decisions considered\nThe protected promotion route was checked.\n\n### Evidence and findings\nNo additional finding.\n\n### Verification limitations\nThis is a local route fixture.\n\n### Recommendation\nDo not accept a moved protected base.`;
+    await writeFile(protectedAuthorization.bodyPath, protectedBody);
+    const protectedReport = records.writeReviewerReport(records.renderReviewerReport(protectedAuthorization, protectedBody));
+    assert.throws(() => records.publishReviewerReport(protectedReport, protectedAuthorization.reportPath, gh), /head\/base disagrees/i);
+    await writeFile(join(repo, "new-head.txt"), "new head\n");
+    execFileSync("git", ["add", "new-head.txt"], { cwd: repo });
+    execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "new head"], { cwd: repo });
+    currentHead = dispatch.gitHead(repo);
+    assert.throws(() => records.publishReviewerReport(oldHeadReport.saved, oldHeadReport.authorization.reportPath, gh), /head\/base disagrees/i);
+    // The old report remains history, but a new-head identity cannot reuse it.
+    const newHeadReport = await makeReport("old-head", currentHead, "new-head");
+    const newHeadReceipt = records.publishReviewerReport(newHeadReport.saved, newHeadReport.authorization.reportPath, gh);
+    assert.equal(newHeadReceipt.reused, false);
+    assert.notEqual(newHeadReceipt.reportId, oldHeadReport.authorization.id);
+  });
+});
+
+
+test("review timing keeps active, queued, publication, and collection budgets coherent", () => {
+  const measured = dispatch.resolveReviewTiming({
+    reviewer_timeout_ms: 1_800_000, panel_timeout_ms: 2_400_000, max_concurrent: 4,
+    publication_timeout_ms: 120_000, result_collection_timeout_ms: 120_000,
+  }, 4);
+  assert.deepEqual(measured, {
+    reviewerTimeoutMs: 1_800_000, publicationTimeoutMs: 120_000, resultCollectionTimeoutMs: 120_000,
+    maxConcurrent: 4, waves: 1, queueTimeoutMs: 0, minimumPanelTimeoutMs: 2_040_000, panelTimeoutMs: 2_400_000,
+  });
+  assert.throws(() => dispatch.resolveReviewTiming({ reviewer_timeout_ms: 1_800_000, panel_timeout_ms: 2_400_000, max_concurrent: 2 }, 5), /must cover/);
+  const queued = dispatch.resolveReviewTiming({ reviewer_timeout_ms: 900_000, max_concurrent: 2 }, 5);
+  assert.equal(queued.waves, 3);
+  assert.equal(queued.queueTimeoutMs, 1_800_000);
+  assert.equal(queued.panelTimeoutMs >= queued.minimumPanelTimeoutMs, true);
 });
 
 

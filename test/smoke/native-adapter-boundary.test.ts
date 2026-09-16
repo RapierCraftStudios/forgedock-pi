@@ -11,6 +11,7 @@ import test from "node:test";
 // Opt in with a pinned pi-subagents checkout that has its test dependencies installed.
 // Uses the full native adapter + mock CLI, not a real model or live repository.
 const source = process.env.PI_SUBAGENTS_ADAPTER_SOURCE;
+const adapterSkip = source ? false : "Installed npm artifact has no pi-subagents test-support seam; set PI_SUBAGENTS_ADAPTER_SOURCE to a pinned source checkout.";
 const load = (file: string) => import(pathToFileURL(resolve(source!, file)).href);
 
 async function withAdapter(run: (h: any) => Promise<void>) {
@@ -96,7 +97,7 @@ async function ownerScript(output: string | false) {
 }
 
 for (const explicitOutput of [true, false]) {
-  test(`full adapter retained recovery with declared output=${explicitOutput}`, { skip: !source, timeout: 30000 }, async () => {
+  test(`full adapter retained recovery with declared output=${explicitOutput}`, { skip: adapterSkip, timeout: 30000 }, async () => {
     await withAdapter(async ({ root, mock, executor, context }) => {
       mock.onCall({ output: "fixture terminal failure", exitCode: 1 });
       mock.onCall({ output: "FORGE_WORK_ON_RESULT status=DONE issue=1 pr=2 dependency=SATISFIED" });
@@ -117,7 +118,7 @@ for (const explicitOutput of [true, false]) {
   });
 }
 
-test("full adapter preserves original recovery references when the budget denies resume", { skip: !source, timeout: 30000 }, async () => {
+test("full adapter preserves original recovery references when the budget denies resume", { skip: adapterSkip, timeout: 30000 }, async () => {
   await withAdapter(async ({ mock, executor, context }) => {
     mock.onCall({ output: "fixture terminal failure", exitCode: 1 });
     const { status } = await complete(executor, context, { workflowScript: await ownerScript(false), maxSubagentSpawnsPerRun: 1 });
@@ -131,7 +132,7 @@ test("full adapter preserves original recovery references when the budget denies
   });
 });
 
-test("prepared lane policy reaches the actual native child environment", { skip: !source, timeout: 30000 }, async () => {
+test("prepared lane policy reaches the actual native child environment", { skip: adapterSkip, timeout: 30000 }, async () => {
   await withAdapter(async ({ root, repo, mock, executor, context }) => {
     const dispatch = await import(new URL("../../specs/helpers/dispatch.mjs", import.meta.url).href);
     execFileSync("git", ["remote", "add", "origin", "https://github.com/example/project.git"], { cwd: repo });
@@ -211,7 +212,7 @@ test("prepared lane policy reaches the actual native child environment", { skip:
   });
 });
 
-test("native continuation assigns a fresh run identity while preserving authorized owner binding", { skip: !source, timeout: 60000 }, async () => {
+test("native continuation assigns a fresh run identity while preserving authorized owner binding", { skip: adapterSkip, timeout: 60000 }, async () => {
   await withAdapter(async ({ root, repo, mock, executor, context }) => {
     const dispatch = await import(new URL("../../specs/helpers/dispatch.mjs", import.meta.url).href);
     const records = await import(new URL("../../specs/helpers/record.mjs", import.meta.url).href);
@@ -277,14 +278,14 @@ test("native continuation assigns a fresh run identity while preserving authoriz
     execFileSync("git", ["add", "repair.ts"], { cwd: preparedRepo });
     execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "repair"], { cwd: preparedRepo });
     const repairedHead = dispatch.gitHead(preparedRepo);
-    const review = { head: repairedHead, round: 1, contractDigest: nextContract.digest, replan: continuedPolicy.replan, roles: [{ role: "correctness", thinking: "high", task: "Review repaired continuation head" }] };
+    const review = { pr: 564, head: repairedHead, baseSha: dispatch.gitHead(repo), round: 1, contractDigest: nextContract.digest, replan: continuedPolicy.replan, roles: [{ role: "correctness", thinking: "high", task: "Review repaired continuation head" }] };
     assert.doesNotThrow(() => dispatch.prepareReview(review, join(root, "native-repaired-review"), continuedEnv));
-    const rendered = records.renderRecord({ kind: "REVIEW-PANEL", pr: 564, input: amended.input, head: repairedHead, inputs: [], supersedes: null }, `## Native continuation evidence\n\n**Repaired commit**: \`${repairedHead}\``, { cwd: preparedRepo, env: continuedEnv });
+    const rendered = records.renderRecord({ kind: "REVIEW-PANEL", pr: 564, input: amended.input, head: repairedHead, baseSha: continuedPolicy.targetBase.headSha, round: 1, reviewerReports: [{ role: "correctness", id: 5641, url: "https://github.com/example/project/pull/564#issuecomment-5641", head: repairedHead, round: 1 }], inputs: [], supersedes: null }, `## Native continuation evidence\n\n**Repaired commit**: \`${repairedHead}\``, { cwd: preparedRepo, env: continuedEnv });
     assert.match(rendered.markdown, new RegExp(repairedHead));
   });
 });
 
-test("full async adapter persists all 100 rows even when output preview is truncated", { skip: !source, timeout: 30000 }, async () => {
+test("full async adapter persists all 100 rows even when output preview is truncated", { skip: adapterSkip, timeout: 30000 }, async () => {
   await withAdapter(async ({ root, mock, executor, context }) => {
     const output = join(root, "preview.md");
     const rows = Array.from({ length: 100 }, (_, i) => ({ key: `issue-${i + 1}`, status: "GATED", recoverySource: { runId: `retained-${i + 1}`, artifactPaths: [`/fixture/report-${i + 1}.md`] } }));
