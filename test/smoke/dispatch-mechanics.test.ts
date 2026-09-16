@@ -372,9 +372,9 @@ test("review preparation cannot substitute a model, duplicate correctness or exc
     execFileSync("git", ["add", "repair.txt"], { cwd: repoOne });
     execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "cohesive repair"], { cwd: repoOne });
     const repairedHead = dispatch.gitHead(repoOne);
-    const revisedReview = { pr: 99, head: repairedHead, baseSha: dispatch.gitHead(repoOne), round: 1, contractDigest: revisedContract.digest, replan: amendedPolicy.replan, roles: [{ role: "correctness", thinking: "high", task: "Review repaired head" }] };
+    const revisedReview = { pr: 99, head: repairedHead, baseSha: boundPolicy.targetBase.headSha, round: 1, contractDigest: revisedContract.digest, replan: amendedPolicy.replan, roles: [{ role: "correctness", thinking: "high", task: "Review repaired head" }] };
     assert.doesNotThrow(() => dispatch.prepareReview(revisedReview, join(root, "replanned-review"), amendedEnv));
-    const rendered = records.renderRecord({ kind: "REVIEW-PANEL", pr: 564, input: amended.input, head: repairedHead, round: 1, reviewerReports: [{ role: "correctness", id: 5641, url: "https://github.com/example/project/pull/564#issuecomment-5641", head: repairedHead, round: 1 }], inputs: [], supersedes: null }, `## Evidence\n\n**Contract digest**: \`${amendedPolicy.contractDigest}\`\n**Repaired head**: \`${repairedHead}\``, { cwd: repoOne, env: amendedEnv });
+    const rendered = records.renderRecord({ kind: "REVIEW-PANEL", pr: 564, input: amended.input, head: repairedHead, baseSha: boundPolicy.targetBase.headSha, round: 1, reviewerReports: [{ role: "correctness", id: 5641, url: "https://github.com/example/project/pull/564#issuecomment-5641", head: repairedHead, round: 1 }], inputs: [], supersedes: null }, `## Evidence\n\n**Contract digest**: \`${amendedPolicy.contractDigest}\`\n**Repaired head**: \`${repairedHead}\``, { cwd: repoOne, env: amendedEnv });
     assert.match(rendered.markdown, /FORGE:REVIEW-PANEL/);
     assert.match(rendered.markdown, new RegExp(repairedHead));
     assert.match(rendered.markdown, new RegExp(amendedPolicy.contractDigest));
@@ -427,10 +427,16 @@ test("record rendering derives identity and treats shell metacharacters as liter
     const reused = records.publishRecord(rendered, output, (args: string[]) => args.includes("--slurp") ? JSON.stringify([[stored]]) : JSON.stringify(stored));
     assert.equal(reused.reused, true);
     assert.throws(() => records.publishRecord(rendered, output, (args: string[]) => args.includes("--slurp") ? "[[]]" : JSON.stringify({ ...stored, html_url: "https://github.com/example/project/issues/33724#issuecomment-123" })), /destination identity/);
-    const review = records.renderRecord({ kind: "REVIEW-PANEL", pr: 99, input: batch.lanes[1].input, round: 0, reviewerReports: [{ role: "correctness", id: 123, url: "https://github.com/example/project/pull/99#issuecomment-123", head: rendered.head, round: 0 }], inputs: [] }, body, { cwd: repo, env });
+    const review = records.renderRecord({ kind: "REVIEW-PANEL", pr: 99, round: 0, baseSha: rendered.head, reviewerReports: [{ role: "correctness", id: 123, url: "https://github.com/example/project/pull/99#issuecomment-123", head: rendered.head, round: 0 }], inputs: [] }, body, { cwd: repo, env });
+    assert.equal(review.policy.issue, 33745, "native lane binding must supply the omitted draft input");
+    assert.equal(review.baseRef, "staging");
+    assert.equal(review.baseSha, rendered.head);
+    assert.throws(() => records.renderRecord({ ...review, input: batch.lanes[0].input }, body, { cwd: repo, env }), /Explicit input disagrees with native lane binding/);
+    assert.throws(() => records.renderRecord({ kind: "REVIEW-PANEL", repo: "example/project", pr: 99, baseRef: "staging", baseSha: rendered.head, head: rendered.head, round: 0, reviewerReports: [{ role: "correctness", id: 123, url: "https://github.com/example/project/pull/99#issuecomment-123", head: rendered.head, round: 0 }], inputs: [], supersedes: null, controlPlane }, body, { cwd: repo, env: { PI_SUBAGENT_EXTENSION_BINDINGS: "{}" } }), /Native lane binding/);
+    assert.throws(() => records.renderRecord({ kind: "REVIEW-PANEL", repo: "example/project", pr: 99, baseRef: "staging", baseSha: rendered.head, head: rendered.head, round: 0, reviewerReports: [{ role: "correctness", id: 123, url: "https://github.com/example/project/pull/99#issuecomment-123", head: rendered.head, round: 0 }], inputs: [], supersedes: null, controlPlane }, body, { cwd: repo, env: { PI_SUBAGENT_EXTENSION_BINDINGS: "not-json" } }), /Native lane binding envelope is invalid/);
     const reviewFile = join(root, "review.md"); await writeFile(reviewFile, review.markdown);
     for (const mismatch of [{ headRefOid: "0".repeat(40), baseRefName: "staging" }, { headRefOid: review.head, baseRefName: "main" }]) {
-      assert.throws(() => records.publishRecord(review, reviewFile, () => JSON.stringify(mismatch)), /PR head\/target/);
+      assert.throws(() => records.publishRecord(review, reviewFile, () => JSON.stringify(mismatch)), /PR head\/(?:base|target)/);
     }
   });
 });
@@ -440,13 +446,16 @@ test("reviewers publish complete retry-safe reports without issue-owner policy",
   await fixture(async ({ root, repo }) => {
     const baseHead = dispatch.gitHead(repo);
     let currentHead = baseHead;
+    let currentBase = baseHead;
+    let mergeable: boolean | undefined = true;
+    let mergeStateStatus: string | undefined = "CLEAN";
     const comments: any[] = [];
     const calls: string[][] = [];
     let nextId = 700;
     let loseCreateResponse = false;
     const gh = (args: string[]) => {
       calls.push(args);
-      if (args[0] === "pr") return JSON.stringify({ headRefOid: currentHead, baseRefName: "staging", baseRefOid: baseHead });
+      if (args[0] === "pr") return JSON.stringify({ headRefOid: currentHead, baseRefName: "staging", baseRefOid: currentBase, mergeable, mergeStateStatus });
       if (args[0] === "api" && args[1] === "--paginate") return JSON.stringify([comments]);
       if (args[0] === "api" && args[1]?.startsWith("repos/example/project/issues/comments/")) {
         const id = Number(args[1].split("/").at(-1));
@@ -488,6 +497,8 @@ test("reviewers publish complete retry-safe reports without issue-owner policy",
     const formattingOnly = records.publishReviewerReport(records.renderReviewerReport(security.authorization, fs.readFileSync(security.authorization.bodyPath, "utf8")), security.authorization.reportPath, gh);
     assert.equal(formattingOnly.reused, true);
     assert.equal(formattingOnly.contentMatches, false, "same identity may reconcile harmless formatting without rewriting the comment");
+    comments[1].body = comments[1].body.replace("No substantive findings identified", "A materially different finding was inserted");
+    assert.throws(() => records.publishReviewerReport(records.renderReviewerReport(security.authorization, fs.readFileSync(security.authorization.bodyPath, "utf8")), security.authorization.reportPath, gh), /differs materially/);
     comments[1].body = security.saved.markdown;
     const recovered = records.publishReviewerReport(records.renderReviewerReport(security.authorization, fs.readFileSync(security.authorization.bodyPath, "utf8")), security.authorization.reportPath, gh);
     assert.equal(recovered.reused, true);
@@ -518,10 +529,41 @@ test("reviewers publish complete retry-safe reports without issue-owner policy",
 
     const oldHeadReport = await makeReport("old-head", baseHead, "old-head");
     records.publishReviewerReport(oldHeadReport.saved, oldHeadReport.authorization.reportPath, gh);
+    await writeFile(join(repo, "target-advance.txt"), "unrelated target advance\n");
+    execFileSync("git", ["add", "target-advance.txt"], { cwd: repo });
+    execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "unrelated target advance"], { cwd: repo });
+    currentBase = dispatch.gitHead(repo);
+    // Ordinary review retains its frozen base identity while an unrelated,
+    // clean target advance is visible to publication and retry reconciliation.
+    const recoveredAfterTargetAdvance = records.publishReviewerReport(oldHeadReport.saved, oldHeadReport.authorization.reportPath, gh);
+    assert.equal(recoveredAfterTargetAdvance.reused, true);
+    assert.equal(recoveredAfterTargetAdvance.baseSha, baseHead);
+    const oldHeadComment = comments.find(comment => comment.body === oldHeadReport.saved.markdown);
+    assert.ok(oldHeadComment);
+    const ordinaryPanel = records.renderRecord({ kind: "REVIEW-PANEL", repo: "example/project", pr: 99, baseRef: "staging", baseSha: baseHead, head: baseHead, round: 0, reviewerReports: [{ role: "old-head", id: oldHeadComment.id, url: oldHeadComment.html_url, head: baseHead, round: 0 }], inputs: [], supersedes: null, controlPlane }, "### Parent disposition\nThe ordinary review remains valid after an unrelated target advance.", { cwd: repo });
+    const ordinaryPanelPath = join(root, "ordinary-panel.md");
+    await writeFile(ordinaryPanelPath, ordinaryPanel.markdown);
+    const panelReceipt = records.publishRecord(ordinaryPanel, ordinaryPanelPath, gh);
+    assert.equal(panelReceipt.reused, false);
+    mergeable = false;
+    mergeStateStatus = "DIRTY";
+    assert.throws(() => records.publishReviewerReport(oldHeadReport.saved, oldHeadReport.authorization.reportPath, gh), /review evidence|conflicting|mergeable/i);
+    mergeable = true;
+    mergeStateStatus = "CLEAN";
+    const protectedAuthorization = dispatch.createReviewerPublicationAuthorization({
+      repository: "example/project", pullRequest: 99, reviewedHead: baseHead, baseRef: "staging", baseSha: baseHead,
+      role: "protected", round: 0, mode: "staging", controlPlane,
+      bodyPath: join(root, "protected.body.md"), reportPath: join(root, "protected.report.md"), publicationTimeoutMs: 30_000,
+    });
+    const protectedBody = `### Scope and decisions considered\nThe protected promotion route was checked.\n\n### Evidence and findings\nNo additional finding.\n\n### Verification limitations\nThis is a local route fixture.\n\n### Recommendation\nDo not accept a moved protected base.`;
+    await writeFile(protectedAuthorization.bodyPath, protectedBody);
+    const protectedReport = records.writeReviewerReport(records.renderReviewerReport(protectedAuthorization, protectedBody));
+    assert.throws(() => records.publishReviewerReport(protectedReport, protectedAuthorization.reportPath, gh), /head\/base disagrees/i);
     await writeFile(join(repo, "new-head.txt"), "new head\n");
     execFileSync("git", ["add", "new-head.txt"], { cwd: repo });
     execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "new head"], { cwd: repo });
     currentHead = dispatch.gitHead(repo);
+    assert.throws(() => records.publishReviewerReport(oldHeadReport.saved, oldHeadReport.authorization.reportPath, gh), /head\/base disagrees/i);
     // The old report remains history, but a new-head identity cannot reuse it.
     const newHeadReport = await makeReport("old-head", currentHead, "new-head");
     const newHeadReceipt = records.publishReviewerReport(newHeadReport.saved, newHeadReport.authorization.reportPath, gh);

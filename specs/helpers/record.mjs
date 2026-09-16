@@ -17,7 +17,18 @@ import { validateControlPlaneDescriptor } from "./control-plane.mjs";
 
 const titles = { INVESTIGATOR: "Investigation", CLASSIFICATION: "Classification", CONTEXT: "Implementation Context", CONTRACT: "Build Contract", ARCHITECT: "Implementation Plan", BUILDER: "Build Complete", "REVIEW-PANEL": "Review Panel", REMEDIATION: "Remediation Complete", DECOMPOSED: "Decomposition Complete", GATED: "Work-On Gated", TRAJECTORY: "Work-On Outcome" };
 const REVIEWER_SECTIONS = ["Scope and decisions considered", "Evidence and findings", "Verification limitations", "Recommendation"];
+const FULL_SHA_PATTERN = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
 function check(ok, message) { if (!ok) throw new Error(message); }
+function reviewMode(value) {
+  const mode = value ?? "standard";
+  check(mode === "standard" || mode === "staging", "Review mode must be standard or staging");
+  return mode;
+}
+function protectedReview(mode, baseRef) {
+  // `main` is the repository template's protected default; explicit staging
+  // mode also protects custom protected branch names from base movement.
+  return mode === "staging" || baseRef === "main";
+}
 const sha256 = value => createHash("sha256").update(value).digest("hex");
 const link = value => {
   if (typeof value !== "string" || /[\s<>]/.test(value)) return false;
@@ -68,6 +79,9 @@ function reviewerBody(draft) {
   reviewerBodyIsComplete(draft);
   return draft.trim();
 }
+function normalizedReportContent(value) {
+  return typeof value === "string" ? value.replace(/\r\n/g, "\n").split("\n").map(line => line.trimEnd()).join("\n").trimEnd() : "";
+}
 
 /** Render a complete report without loading issue-owner or replan policy. */
 export function renderReviewerReport(draft, body) {
@@ -77,7 +91,7 @@ export function renderReviewerReport(draft, body) {
   const marker = reviewerMarker(authorization);
   const pullUrl = `https://github.com/${authorization.repository}/pull/${authorization.pullRequest}`;
   const markdown = `${marker}\n## Individual Reviewer Report\n\n**Reviewer role**: \`${authorization.role}\`\n**Pull request**: [#${authorization.pullRequest}](${pullUrl})\n**Reviewed source**: \`${authorization.reviewedHead}\`\n**Review base**: \`${authorization.baseRef}\` at \`${authorization.baseSha}\`\n**Review round**: ${authorization.round}\n**Report identity**: \`${authorization.id}\`\n\n${content}\n`;
-  return { authorization, repo: authorization.repository, target: authorization.pullRequest, head: authorization.reviewedHead, baseRef: authorization.baseRef, baseSha: authorization.baseSha, marker, markdown };
+  return { authorization, repo: authorization.repository, target: authorization.pullRequest, head: authorization.reviewedHead, baseRef: authorization.baseRef, baseSha: authorization.baseSha, mode: authorization.mode, marker, markdown };
 }
 
 export function writeReviewerReport(record, outputFile = record.authorization.reportPath) {
@@ -117,8 +131,15 @@ function reviewerMatches(comments, authorization) {
   return comments.filter(comment => reviewerCommentMatches(comment, authorization));
 }
 function currentPullRequest(authorization, gh) {
-  const pull = JSON.parse(callGh(gh, ["pr", "view", String(authorization.pullRequest), "-R", authorization.repository, "--json", "headRefOid,baseRefName,baseRefOid"], authorization.publicationTimeoutMs));
-  check(pull.headRefOid === authorization.reviewedHead && pull.baseRefName === authorization.baseRef && pull.baseRefOid === authorization.baseSha, "PR head/base disagrees with bound reviewer identity");
+  const pull = JSON.parse(callGh(gh, ["pr", "view", String(authorization.pullRequest), "-R", authorization.repository, "--json", "headRefOid,baseRefName,baseRefOid,mergeable,mergeStateStatus"], authorization.publicationTimeoutMs));
+  check(pull.headRefOid === authorization.reviewedHead && pull.baseRefName === authorization.baseRef, "PR head/base disagrees with bound reviewer identity");
+  if (protectedReview(authorization.mode, authorization.baseRef)) {
+    check(pull.baseRefOid === authorization.baseSha, "PR head/base disagrees with bound reviewer identity");
+  }
+  const mergeable = typeof pull.mergeable === "string" ? pull.mergeable.toUpperCase() : pull.mergeable;
+  const mergeState = typeof pull.mergeStateStatus === "string" ? pull.mergeStateStatus.toUpperCase() : "";
+  check(mergeable !== false && mergeable !== "CONFLICTING" && !["DIRTY", "CONFLICTING"].includes(mergeState), "PR review evidence is no longer valid: current PR is conflicting or not mergeable");
+  return pull;
 }
 function listReviewerComments(authorization, gh) {
   const endpoint = `repos/${authorization.repository}/issues/${authorization.pullRequest}/comments`;
@@ -131,6 +152,7 @@ function publicationReceipt(record, stored, reused, reconciliation) {
   const { authorization } = record;
   check(reviewerCommentMatches(stored, authorization), "Published reviewer comment identity readback mismatch");
   reportLink(stored, authorization);
+  check(normalizedReportContent(stored.body) === normalizedReportContent(record.markdown), "Published reviewer comment differs materially from the saved report; reconcile explicitly");
   return {
     schema: REVIEWER_PUBLICATION_SCHEMA,
     reportId: authorization.id,
@@ -141,6 +163,7 @@ function publicationReceipt(record, stored, reused, reconciliation) {
     reviewedHead: authorization.reviewedHead,
     baseRef: authorization.baseRef,
     baseSha: authorization.baseSha,
+    mode: authorization.mode,
     commentId: stored.id,
     url: stored.html_url,
     reportPath: record.outputFile ?? authorization.reportPath,
@@ -214,32 +237,35 @@ function reviewerReportReferences(value, head, round, repo, pr) {
 }
 
 function renderStandaloneReviewPanel(draft, body, options = {}) {
-  const allowed = ["kind", "repo", "pr", "baseRef", "baseSha", "head", "round", "inputs", "supersedes", "reviewerReports", "controlPlane"];
+  const allowed = ["kind", "repo", "pr", "baseRef", "baseSha", "head", "round", "mode", "inputs", "supersedes", "reviewerReports", "controlPlane"];
   check(Object.keys(draft).every(key => allowed.includes(key)), `Unknown standalone review field: ${Object.keys(draft).find(key => !allowed.includes(key))}`);
   check(draft.kind === "REVIEW-PANEL", "Unsupported standalone record kind");
   assertInstalledDirectHelper(draft.controlPlane);
+  const mode = reviewMode(draft.mode);
   const cwd = options.cwd ?? process.cwd();
   assertRepo(draft.repo, cwd);
   check(typeof body === "string" && body.trim(), "Record needs substantive Markdown sections");
   check(!/^<!-- FORGE:|^\*\*(?:Head|Source head|Issue|Target|Model|Inputs|Supersedes|Remediation round)\*\*:/m.test(body), "Supply content sections only; common identity headers are generated");
-  check(typeof draft.head === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(draft.head), "Standalone review needs a full source commit");
+  check(typeof draft.head === "string" && FULL_SHA_PATTERN.test(draft.head), "Standalone review needs a full source commit");
   check(Number.isSafeInteger(draft.pr) && draft.pr > 0, "Standalone review record requires its exact PR");
   check(Number.isSafeInteger(draft.round) && draft.round >= 0, "Standalone review record requires its round");
   check(typeof draft.baseRef === "string" && draft.baseRef.trim() && !/[\s\0]/.test(draft.baseRef), "Standalone review record requires its base ref");
-  check(typeof draft.baseSha === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(draft.baseSha), "Standalone review record requires its base SHA");
+  check(typeof draft.baseSha === "string" && FULL_SHA_PATTERN.test(draft.baseSha), "Standalone review record requires its base SHA");
   execFileSync("git", ["cat-file", "-e", `${draft.head}^{commit}`], { cwd, stdio: "pipe" });
   check(Array.isArray(draft.inputs) && draft.inputs.every(link), "Inputs must be actual HTTPS permalinks");
   check(draft.supersedes == null || link(draft.supersedes), "Supersedes must be a permalink or null");
   const reports = reviewerReportReferences(draft.reviewerReports, draft.head, draft.round, draft.repo, draft.pr);
   const metadata = { v: 1, source_head: draft.head, inputs: draft.inputs, supersedes: draft.supersedes ?? null,
-    review: { repository: draft.repo, pull_request: draft.pr, base_ref: draft.baseRef, base_sha: draft.baseSha, round: draft.round, reports } };
+    review: { repository: draft.repo, pull_request: draft.pr, base_ref: draft.baseRef, base_sha: draft.baseSha, round: draft.round, mode, reports } };
   const markdown = `<!-- FORGE:REVIEW-PANEL -->\n<!-- FORGE:RECORD ${JSON.stringify(metadata)} -->\n## Review Panel\n\n**Pull request**: [#${draft.pr}](https://github.com/${draft.repo}/pull/${draft.pr})\n**Base**: \`${draft.baseRef}\` at \`${draft.baseSha}\`\n**Source head**: \`${draft.head}\`\n**Individual reviewer reports**:\n${reports.map(report => `- ${report.role}: [comment #${report.id}](${report.url})`).join("\n")}\n**Inputs**: ${draft.inputs.length ? draft.inputs.map((url, i) => `[source ${i + 1}](${url})`).join(", ") : "none"}\n**Supersedes**: ${draft.supersedes ? `[previous record](${draft.supersedes})` : "none"}\n\n${body.trim()}\n`;
-  return { policy: undefined, controlPlane: draft.controlPlane, repo: draft.repo, target: draft.pr, head: draft.head, baseRef: draft.baseRef, baseSha: draft.baseSha, markdown };
+  return { policy: undefined, controlPlane: draft.controlPlane, repo: draft.repo, target: draft.pr, head: draft.head, baseRef: draft.baseRef, baseSha: draft.baseSha, mode, markdown };
 }
 
 export function renderRecord(draft, body, options = {}) {
-  if (draft.kind === "REVIEW-PANEL" && draft.input === undefined) return renderStandaloneReviewPanel(draft, body, options);
-  const policy = loadPolicy(draft.input, options.env ?? process.env);
+  const env = options.env ?? process.env;
+  const nativeBindingPresent = env?.PI_SUBAGENT_EXTENSION_BINDINGS !== undefined;
+  if (draft.kind === "REVIEW-PANEL" && draft.input === undefined && !nativeBindingPresent) return renderStandaloneReviewPanel(draft, body, options);
+  const policy = loadPolicy(draft.input, env);
   assertInstalledRecordHelper(policy);
   const cwd = options.cwd ?? process.cwd(); assertRepo(policy.repo, cwd);
   check(Object.hasOwn(titles, draft.kind), "Unsupported record kind");
@@ -247,25 +273,37 @@ export function renderRecord(draft, body, options = {}) {
   // Common identity is generated, never manually restated in the body.
   check(!/^<!-- FORGE:|^\*\*(?:Head|Source head|Issue|Target|Model|Inputs|Supersedes|Remediation round)\*\*:/m.test(body), "Supply content sections only; common identity headers are generated");
   const head = draft.head ?? gitHead(cwd);
-  check(typeof head === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(head), "Record needs a full source commit");
+  check(typeof head === "string" && FULL_SHA_PATTERN.test(head), "Record needs a full source commit");
   execFileSync("git", ["cat-file", "-e", `${head}^{commit}`], { cwd, stdio: "pipe" });
   check(Array.isArray(draft.inputs) && draft.inputs.every(link), "Inputs must be actual HTTPS permalinks");
   check(draft.supersedes == null || link(draft.supersedes), "Supersedes must be a permalink or null");
   if (draft.kind === "REMEDIATION") check(Number.isSafeInteger(draft.round) && draft.round >= 1 && draft.round <= policy.remediationLimit, "Remediation round exceeds the bound policy");
-  if (draft.kind === "REVIEW-PANEL") check(Number.isSafeInteger(draft.pr) && draft.pr > 0, "Review record requires its exact PR");
-  const reports = draft.kind === "REVIEW-PANEL" ? reviewerReportReferences(draft.reviewerReports, head, draft.round ?? 0, policy.repo, draft.pr) : [];
+  if (draft.kind === "REVIEW-PANEL") {
+    check(Number.isSafeInteger(draft.pr) && draft.pr > 0, "Review record requires its exact PR");
+    check(draft.round === undefined || (Number.isSafeInteger(draft.round) && draft.round >= 0), "Review record requires its round");
+    check(draft.baseSha === undefined || (typeof draft.baseSha === "string" && FULL_SHA_PATTERN.test(draft.baseSha)), "Review record requires its base SHA");
+    if (draft.baseRef !== undefined) check(draft.baseRef === policy.target, "Review record base ref disagrees with bound target");
+  }
+  const mode = draft.kind === "REVIEW-PANEL" ? reviewMode(draft.mode) : undefined;
+  const baseRef = draft.kind === "REVIEW-PANEL" ? policy.target : undefined;
+  const baseSha = draft.kind === "REVIEW-PANEL" ? (draft.baseSha ?? policy.targetBase?.headSha) : undefined;
+  const round = draft.kind === "REVIEW-PANEL" ? (draft.round ?? 0) : undefined;
+  if (draft.kind === "REVIEW-PANEL") check(typeof baseSha === "string" && FULL_SHA_PATTERN.test(baseSha), "Review record requires its frozen base SHA");
+  const reports = draft.kind === "REVIEW-PANEL" ? reviewerReportReferences(draft.reviewerReports, head, round, policy.repo, draft.pr) : [];
   const target = draft.kind === "REVIEW-PANEL" ? draft.pr : policy.issue;
   const metadata = { v: 1, source_head: head, inputs: draft.inputs, supersedes: draft.supersedes ?? null,
     execution: { repo: policy.repo, issue: policy.issue, target: policy.target, model: policy.model, remediation_limit: policy.remediationLimit },
-    ...(reports.length ? { reviewer_reports: reports } : {}) };
+    ...(reports.length ? { reviewer_reports: reports } : {}),
+    ...(draft.kind === "REVIEW-PANEL" ? { review: { repository: policy.repo, pull_request: draft.pr, base_ref: baseRef, base_sha: baseSha, round, mode, reports } } : {}) };
   const markdown = `<!-- FORGE:${draft.kind} -->\n<!-- FORGE:RECORD ${JSON.stringify(metadata)} -->\n## ${titles[draft.kind]}\n\n`
     + `**Issue**: ${policy.repo}#${policy.issue}\n**Target**: ${policy.target}\n**Source head**: \`${head}\`\n`
+    + (draft.kind === "REVIEW-PANEL" ? `**Pull request**: [#${draft.pr}](https://github.com/${policy.repo}/pull/${draft.pr})\n**Base**: \`${baseRef}\` at \`${baseSha}\`\n` : "")
     + (draft.kind === "BUILDER" ? `**Head**: \`${head}\`\n` : "")
     + (draft.kind === "REMEDIATION" ? `**Remediation round**: ${draft.round}/${policy.remediationLimit}\n` : "")
     + (reports.length ? `**Individual reviewer reports**:\n${reports.map(report => `- ${report.role}: [comment #${report.id}](${report.url})`).join("\n")}\n` : "")
     + `**Inputs**: ${draft.inputs.length ? draft.inputs.map((url, i) => `[source ${i + 1}](${url})`).join(", ") : "none"}\n`
     + `**Supersedes**: ${draft.supersedes ? `[previous record](${draft.supersedes})` : "none"}\n\n${body.trim()}\n`;
-  return { policy, controlPlane: policy.controlPlane, repo: policy.repo, target, head, markdown };
+  return { policy, controlPlane: policy.controlPlane, repo: policy.repo, target, head, ...(draft.kind === "REVIEW-PANEL" ? { baseRef, baseSha, mode } : {}), markdown };
 }
 
 export function publishRecord(record, outputFile, gh = defaultGh) {
@@ -277,8 +315,8 @@ export function publishRecord(record, outputFile, gh = defaultGh) {
   if (policy) assertInstalledRecordHelper(policy); else assertInstalledDirectHelper(controlPlane);
   check(fs.readFileSync(outputFile, "utf8") === markdown, "Publication file does not match rendered identity/body");
   if (markdown.startsWith("<!-- FORGE:REVIEW-PANEL -->")) {
-    const pr = JSON.parse(callGh(gh, ["pr", "view", String(target), "-R", repo, "--json", "headRefOid,baseRefName,baseRefOid"], 120_000));
-    check(pr.headRefOid === head && pr.baseRefName === baseRef && (!record.baseSha || pr.baseRefOid === record.baseSha), "PR head/target disagrees with bound review identity");
+    check(typeof record.baseSha === "string" && FULL_SHA_PATTERN.test(record.baseSha), "Review publication requires its frozen base SHA");
+    currentPullRequest({ pullRequest: target, repository: repo, reviewedHead: head, baseRef, baseSha: record.baseSha, mode: reviewMode(record.mode) }, gh);
   }
   const endpoint = `repos/${repo}/issues/${target}/comments`;
   const pages = JSON.parse(callGh(gh, ["api", "--paginate", "--slurp", endpoint], 120_000));

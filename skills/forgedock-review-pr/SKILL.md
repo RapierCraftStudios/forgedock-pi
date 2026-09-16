@@ -16,9 +16,10 @@ Fetch one snapshot containing PR number/title/body/state, full head/base SHAs, m
 changed files, diff, checks, existing exact-head verdict, and linked issue. Stop only for
 closed/merged state, invalid route, or unavailable required authority.
 
-Base movement does not invalidate an unchanged clean reviewed head. Reconcile only for an
-actual conflict or required-up-to-date policy. Re-review after reconciliation only when
-the effective patch or risk changed.
+Base movement does not invalidate an unchanged clean reviewed head on the standard route.
+Use `mode: "standard"` for its report/panel authorization. Reconcile only for an actual conflict
+or required-up-to-date policy. Re-review after reconciliation only when the effective patch or
+risk changed.
 
 ## Knowledge-aware independent review
 

@@ -129,9 +129,10 @@ mechanism, and alone creates authorized deduplicated issues and makes the final 
 
 ## Base movement and review reuse
 
-A target-branch advance does not invalidate review while the PR head remains unchanged and
-GitHub reports it clean and mergeable. Do not rebase solely to make the latest target an
-ancestor of the feature head.
+A target-branch advance does not invalidate a `standard` review while the PR head remains
+unchanged and GitHub reports it clean and mergeable; retain the originally reviewed base SHA
+in the report. `staging`/protected-promotion review remains bound to its exact base SHA. Do not
+rebase solely to make the latest target an ancestor of the feature head.
 
 Reconcile only when branch policy requires current-base ancestry or the PR conflicts. If
 reconciliation changes the head, capture old/new effective patches and incoming target

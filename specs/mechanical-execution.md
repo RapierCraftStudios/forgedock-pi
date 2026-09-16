@@ -150,8 +150,8 @@ rejected before launch.
 ## Prepare a review
 
 The owner writes a review plan containing the exact `pr`, `head`, `baseSha`, `round` (0 initial,
-1 first remediation), `contractDigest`, and selected `roles`, each with `role`, `task` and
-`thinking`. The digest must match the bound lane contract. For an authorized re-plan, the plan
+1 first remediation), optional route `mode` (`standard` or `staging`), `contractDigest`, and
+selected `roles`, each with `role`, `task` and `thinking`. The digest must match the bound lane contract. For an authorized re-plan, the plan
 additionally carries `replan: {token, previousHead, previousContractDigest, previousRound}`;
 the helper validates that it matches the bound lane input and that the new head/digest differ
 from the preserved identity. This is the same validated input binding, not a side ledger. When
@@ -174,9 +174,11 @@ returns structured evidence only after writing and publishing its own complete r
 
 The helper uses file-backed content and argument arrays, reconciles ambiguous creates by the
 stable marker, and returns the comment reference. A reviewer publication failure preserves the
-saved report for transport-only retry; it never reruns analysis. If a role is missing, first
-reconcile its native terminal state, then use retained resume when supported or a fresh
-same-role request with a new key; never rerun completed roles. The owner validates every
+saved report for transport-only retry; it never reruns analysis. A read-back comment may differ
+only by harmless line-ending/trailing-whitespace formatting; a material evidence change fails
+closed and requires explicit reconciliation. If a role is missing, first reconcile its native
+terminal state, then use retained resume when supported or a fresh same-role request with a new
+key; never rerun completed roles. The owner validates every
 same-head report before publishing the consolidated SHA-bound panel record. The helper
 validates requested rounds and timing, not semantic history: the owner must recover actual
 usage from the graph and cannot relabel another fix as round 1.
@@ -201,7 +203,8 @@ merely because the child asks.
 
 Write Markdown content sections with the native `write` tool, not interpolating shell
 heredocs. Write a small draft JSON with `kind`, actual `inputs`, optional `supersedes`,
-optional frozen `head`, `round` for REMEDIATION, and `pr` for REVIEW-PANEL. The bound policy
+optional frozen `head`, `round` for REMEDIATION, and `pr`, `baseRef`, `baseSha`, and route
+`mode` for REVIEW-PANEL. Use `mode: "staging"` for an integration-to-protected gate. The bound policy
 (or explicit standalone `input`) supplies identity/model/limit; never type those headers.
 
 `node <package>/specs/helpers/record.mjs <draft.json> <body.md> <output.md> [--publish]`
@@ -217,6 +220,13 @@ deletes earlier records and never creates an issue. Standalone PR reviews withou
 work-on issue use this direct authorization/report mode and the standalone panel envelope in
 `knowledge-records.md`, never a fabricated issue policy. Publication still requires the
 current stage's authority; direct CLI access is not a new permission grant.
+
+For `standard` review, an unchanged PR head may survive an unrelated move of the integration
+base: publication retains the frozen base SHA in the report, but accepts the new base only while
+the PR remains on the same base ref and is not conflicting. `staging` review, and any review whose
+base is the protected `main` ref, requires the frozen base SHA to remain exact. A changed source
+head, retargeted PR, conflict, or other material route invalidation fails closed; it is not a
+transport retry or a reason to relabel an old report.
 
 These helpers reduce accidental policy/shape/identity/quoting mistakes. They are not an OS
 sandbox or proof that an LLM cannot bypass instructions. Canary evaluation must verify their

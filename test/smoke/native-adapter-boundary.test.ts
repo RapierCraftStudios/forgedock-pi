@@ -280,7 +280,7 @@ test("native continuation assigns a fresh run identity while preserving authoriz
     const repairedHead = dispatch.gitHead(preparedRepo);
     const review = { pr: 564, head: repairedHead, baseSha: dispatch.gitHead(repo), round: 1, contractDigest: nextContract.digest, replan: continuedPolicy.replan, roles: [{ role: "correctness", thinking: "high", task: "Review repaired continuation head" }] };
     assert.doesNotThrow(() => dispatch.prepareReview(review, join(root, "native-repaired-review"), continuedEnv));
-    const rendered = records.renderRecord({ kind: "REVIEW-PANEL", pr: 564, input: amended.input, head: repairedHead, round: 1, reviewerReports: [{ role: "correctness", id: 5641, url: "https://github.com/example/project/pull/564#issuecomment-5641", head: repairedHead, round: 1 }], inputs: [], supersedes: null }, `## Native continuation evidence\n\n**Repaired commit**: \`${repairedHead}\``, { cwd: preparedRepo, env: continuedEnv });
+    const rendered = records.renderRecord({ kind: "REVIEW-PANEL", pr: 564, input: amended.input, head: repairedHead, baseSha: continuedPolicy.targetBase.headSha, round: 1, reviewerReports: [{ role: "correctness", id: 5641, url: "https://github.com/example/project/pull/564#issuecomment-5641", head: repairedHead, round: 1 }], inputs: [], supersedes: null }, `## Native continuation evidence\n\n**Repaired commit**: \`${repairedHead}\``, { cwd: preparedRepo, env: continuedEnv });
     assert.match(rendered.markdown, new RegExp(repairedHead));
   });
 });

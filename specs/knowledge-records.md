@@ -61,8 +61,10 @@ issue creation, verdict, or merge.
 Exception: standalone PR review without a bound work-on issue retains direct file-backed
 publication. Use the frozen repository/PR/head returned by GitHub, serialize the metadata,
 write literal Markdown with the native write tool and post with `gh --body-file`/`-F body=@file`;
-read back the exact comment. The standalone panel may use the helper's explicit PR envelope.
-Do not invent an issue or lane policy.
+read back the exact comment. The standalone panel may use the helper's explicit PR envelope;
+include its exact `baseRef`, `baseSha`, and route `mode` (`standard` or `staging`). Standard
+publication may survive an unrelated integration-base advance only for an unchanged, clean PR;
+staging/protected publication requires the frozen base SHA. Do not invent an issue or lane policy.
 
 ```markdown
 <!-- FORGE:CONTRACT -->

@@ -53,8 +53,10 @@ evidence/findings or evidence-backed no findings, limitations, and recommendatio
 never create issues, edit source or labels, initiate remediation, merge, or deploy.
 
 The staging owner retains successful same-head reports, reads back every required comment, and
-links all report references from the final gate. If a role stalls or publication/result delivery
-fails, establish the old native child/workflow terminal state first, then recover only that role
+links all report references from the final gate. Use route `mode: "staging"` in each explicit
+review authorization and consolidated panel draft so a protected-base move cannot be treated as
+an ordinary transport retry. If a role stalls or publication/result delivery fails, establish the
+old native child/workflow terminal state first, then recover only that role
 with the same authorization and saved report bytes. Use supported retained resume when the
 native status marks it resumable; otherwise use a fresh same-role workflow with a new key. A wait timeout
 must not start a second live reviewer; a partial panel cannot pass the gate.
