@@ -145,6 +145,7 @@ export function resolveStandaloneReviewTiming(config, roleCount) {
   const timing = resolveReviewTiming(config, roleCount);
   const review = config?.review !== undefined ? config.review : config;
   const recoveryMinimum = timing.minimumPanelTimeoutMs + timing.waves * timing.reviewerTimeoutMs;
+  timerInteger(recoveryMinimum, "standalone recovery panel budget");
   const configuredPanel = review?.panel_timeout_ms;
   if (configuredPanel !== undefined) {
     timerInteger(configuredPanel, "review.panel_timeout_ms");
@@ -627,6 +628,7 @@ function prepareReviewRequest(policy, plan, out, env, options = {}) {
   const scriptPath = path.join(out, "review.js");
   const serializedRoles = JSON.stringify(roles);
   const recoveryScript = `const reviewers=${serializedRoles};
+// runs.all settles each child promise only after its native child is terminal.
 const initial=await runs.all(reviewers);
 const missing=[];
 for (let index=0; index<initial.length; index++) {
@@ -634,9 +636,6 @@ for (let index=0; index<initial.length; index++) {
   if (result?.ok === true) continue;
   const role=reviewers[index];
   if (!role) continue;
-  const status=result?.runId ? await runs.status(result.runId) : undefined;
-  const state=status?.status ?? status?.state;
-  if (result?.runId && !["complete","completed","failed","stopped","rejected"].includes(state)) continue;
   const task=\`\${role.task}\\nThe initial reviewer attempt is terminal and missing. Recover only this role. Reuse the same authorization and report paths; if a complete report already exists, perform transport-only publication and do not rerun analysis.\`;
   const retry=result?.runId && result?.resumability?.state === "resumable" ? {key:\`\${role.key}-recovery\`,resume:result.runId,task} : {...role,key:\`\${role.key}-recovery\`,task};
   missing.push({index,retry});
@@ -670,16 +669,25 @@ export function prepareReview(plan, out, env = process.env) {
 export function validateStandaloneReviewPolicy(input, cwd = process.cwd(), env = process.env) {
   requireThat(env?.PI_SUBAGENT_EXTENSION_BINDINGS === undefined, "Standalone review cannot use an issue-owner native binding");
   const policy = readInput(input);
-  fields(policy, ["v", "schema", "key", "repo", "model", "review", "remediationLimit", "requestStartedAt", "config", "pr", "head", "baseRef", "baseSha", "mode", "round", "launchAllowance", "controlPlane"], "standalone policy");
+  fields(policy, ["v", "schema", "key", "repo", "model", "review", "remediationLimit", "requestStartedAt", "config", "pr", "head", "baseRef", "baseSha", "mode", "round", "roles", "launchAllowance", "controlPlane"], "standalone policy");
   requireThat(policy.v === 1 && policy.schema === "forgedock.standalone-review/v1", "Standalone policy schema is invalid");
   integer(policy.pr, "standalone policy pull request");
-  fullSha(policy.head, "Standalone policy head"); fullSha(policy.baseSha, "Standalone policy base SHA");
+  fullSha(policy.head, "Standalone policy head");
+  requireThat(policy.key === `standalone-review-${policy.pr}-${policy.head.slice(0, 12)}`, "Standalone policy key is invalid"); fullSha(policy.baseSha, "Standalone policy base SHA");
   safeToken(policy.baseRef, "Standalone policy base ref"); reviewMode(policy.mode); integer(policy.round, "standalone policy round", 0);
   requireThat(typeof policy.requestStartedAt === "string" && Number.isFinite(Date.parse(policy.requestStartedAt)), "Standalone policy requestStartedAt is invalid");
+  requireThat(Array.isArray(policy.roles) && policy.roles.length > 0, "Standalone policy roles are invalid");
   integer(policy.launchAllowance, "standalone policy launch allowance");
+  const source = configAt(cwd);
+  resolveStandaloneReviewTiming(source.review, policy.roles.length);
+  const expectedLaunch = resolveReviewLaunchAllowance(source.review, policy.roles.length).launchAllowance;
+  requireThat(policy.launchAllowance === expectedLaunch, "Standalone policy launch allowance disagrees with canonical settings");
+  for (const commit of [policy.head, policy.baseSha]) {
+    try { execFileSync("git", ["cat-file", "-e", `${commit}^{commit}`], { cwd, stdio: "ignore" }); }
+    catch { throw new Error(`Standalone policy commit is not available: ${commit}`); }
+  }
   validateControlPlaneDescriptor(policy.controlPlane, { helperPath: path.join(here, "dispatch.mjs"), targetRoot: cwd });
   assertRepo(policy.repo, cwd);
-  const source = configAt(cwd);
   assertReviewBase(cwd, policy.baseRef, policy.baseSha);
   requireThat(policy.config?.path === path.resolve(cwd, "forge.yaml"), "Standalone policy config path disagrees with canonical root");
   requireThat(policy.config?.sha256 === sha(source.raw), "Standalone policy config digest is stale");
@@ -715,7 +723,7 @@ export function prepareStandaloneReview(plan, out, cwd = process.cwd(), env = pr
     v: 1, schema: "forgedock.standalone-review/v1", key: `standalone-review-${plan.pr}-${plan.head.slice(0, 12)}`,
     repo: source.repo, model: source.model, review: source.review, remediationLimit: source.remediationLimit,
     requestStartedAt: plan.requestStartedAt ?? null, config: { path: path.resolve(cwd, "forge.yaml"), sha256: sha(source.raw) },
-    pr: plan.pr, head: plan.head, baseRef: plan.baseRef, baseSha: plan.baseSha, mode, round,
+    pr: plan.pr, head: plan.head, baseRef: plan.baseRef, baseSha: plan.baseSha, mode, round, roles: plan.roles,
     launchAllowance: launch.launchAllowance, controlPlane: plan.controlPlane,
   };
   fs.mkdirSync(out, { recursive: true }); out = path.resolve(out);
