@@ -38,6 +38,7 @@
     "scripts/rollback-candidate.sh",
     "templates/forge.yaml",
     "docs/candidate.md",
+    "docs/qualification-results.md",
     "README.md",
     "CHANGELOG.md",
     "SECURITY.md",
