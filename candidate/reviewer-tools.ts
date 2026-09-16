@@ -16,6 +16,7 @@ const BODY = Type.Object({
   bodyPath: Type.String(),
   reportPath: Type.String(),
   reviewRoot: Type.String(),
+  authorizationPath: Type.String(),
   artifactKey: Type.String(),
   publish: Type.Boolean(),
 });
@@ -31,6 +32,7 @@ type ReviewerPublication = {
   bodyPath: string;
   reportPath: string;
   reviewRoot: string;
+  authorizationPath: string;
   artifactKey: string;
   publish: boolean;
 };
@@ -74,16 +76,20 @@ export default function registerReviewerTools(pi: ExtensionAPI): void {
       assertUnderRoot(reviewRoot, bodyPath, "Reviewer body path");
       assertUnderRoot(reviewRoot, reportPath, "Reviewer report path");
       if (bodyPath === reportPath) throw new Error("Reviewer body and report paths must differ");
-      let authorization: { schema?: unknown; artifactRoot?: unknown; artifactKey?: unknown; repository?: unknown; pullRequest?: unknown; head?: unknown; baseRef?: unknown; baseSha?: unknown; roles?: unknown; publish?: unknown };
-      const authorizationPath = resolve(reviewRoot, "review.json");
-      assertUnderRoot(reviewRoot, authorizationPath, "Reviewer authorization path");
+      const authorizationPath = validatePath(input.authorizationPath, "Reviewer role authorization path");
+      assertUnderRoot(reviewRoot, authorizationPath, "Reviewer role authorization path");
+      const commonPath = resolve(reviewRoot, "review.json");
+      assertUnderRoot(reviewRoot, commonPath, "Reviewer authorization path");
+      let common: { schema?: unknown; artifactRoot?: unknown; artifactKey?: unknown; repository?: unknown; pullRequest?: unknown; head?: unknown; baseRef?: unknown; baseSha?: unknown; publish?: unknown };
+      let authorization: { schema?: unknown; artifactRoot?: unknown; artifactKey?: unknown; role?: unknown; repository?: unknown; pullRequest?: unknown; head?: unknown; baseRef?: unknown; baseSha?: unknown; publish?: unknown };
       try {
+        common = JSON.parse(await readFile(commonPath, "utf8")) as typeof common;
         authorization = JSON.parse(await readFile(authorizationPath, "utf8")) as typeof authorization;
       } catch {
         throw new Error("Reviewer artifact root is missing its prepared authorization");
       }
-      if (authorization.schema !== "forgedock.candidate-review/v1" || authorization.artifactRoot !== reviewRoot || authorization.artifactKey !== input.artifactKey || authorization.repository !== input.repository || authorization.pullRequest !== input.pullRequest || authorization.head !== input.head || authorization.baseRef !== input.baseRef || authorization.baseSha !== input.baseSha || authorization.publish !== input.publish || !Array.isArray(authorization.roles) || !authorization.roles.includes(input.role)) {
-        throw new Error("Reviewer publication authorization does not match the prepared frozen review");
+      if (common.schema !== "forgedock.candidate-review/v1" || common.artifactRoot !== reviewRoot || common.repository !== input.repository || common.pullRequest !== input.pullRequest || common.head !== input.head || common.baseRef !== input.baseRef || common.baseSha !== input.baseSha || common.publish !== input.publish || authorization.schema !== "forgedock.candidate-review-role/v1" || authorization.artifactRoot !== reviewRoot || authorization.artifactKey !== input.artifactKey || authorization.role !== input.role || authorization.repository !== input.repository || authorization.pullRequest !== input.pullRequest || authorization.head !== input.head || authorization.baseRef !== input.baseRef || authorization.baseSha !== input.baseSha || authorization.publish !== input.publish) {
+        throw new Error("Reviewer publication authorization does not match the prepared frozen role");
       }
       await writeFile(bodyPath, `${input.body.trim()}\n`, { flag: "wx", mode: 0o600 }).catch(async (error) => {
         const existing = await readFile(bodyPath, "utf8");

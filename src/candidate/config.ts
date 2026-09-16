@@ -80,7 +80,7 @@ function branch(value: unknown, label: string): string {
 }
 
 function validateModel(value: string): string {
-  if (!FULL_MODEL.test(value)) throw new Error("Model must be a full provider/model ID");
+  if (!FULL_MODEL.test(value) || value.endsWith(":") || value.includes("::")) throw new Error("Model must be a full provider/model ID");
   const suffix = value.match(/:([^:]+)$/)?.[1]?.toLowerCase();
   if (suffix && !THINKING_LEVELS.has(suffix as ThinkingLevel) && !/^\d[\w.-]*$/.test(suffix)) {
     throw new Error(`Unsupported model thinking suffix ':${suffix}'`);
