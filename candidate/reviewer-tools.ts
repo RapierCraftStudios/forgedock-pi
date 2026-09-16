@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
@@ -13,6 +14,7 @@ const BODY = Type.Object({
   body: Type.String({ description: "Four substantive review sections without an identity marker" }),
   bodyPath: Type.String(),
   reportPath: Type.String(),
+  reviewRoot: Type.String(),
   publish: Type.Boolean(),
 });
 
@@ -26,6 +28,7 @@ type ReviewerPublication = {
   body: string;
   bodyPath: string;
   reportPath: string;
+  reviewRoot: string;
   publish: boolean;
 };
 
@@ -33,6 +36,13 @@ function validatePath(value: string, label: string): string {
   const path = resolve(value);
   if (path.includes("\0")) throw new Error(`${label} contains NUL`);
   return path;
+}
+
+function assertUnderRoot(root: string, path: string, label: string): void {
+  const distance = relative(root, path);
+  if (!distance || distance === ".." || distance.startsWith(`..${"/"}`) || resolve(root, distance) !== path) {
+    throw new Error(`${label} must remain under the prepared review artifact root`);
+  }
 }
 
 /** Child-only publication capability: it cannot edit source or invoke arbitrary shell. */
@@ -49,13 +59,15 @@ export default function registerReviewerTools(pi: ExtensionAPI): void {
       }
       const bodyPath = validatePath(input.bodyPath, "Reviewer body path");
       const reportPath = validatePath(input.reportPath, "Reviewer report path");
+      const reviewRoot = validatePath(input.reviewRoot, "Reviewer artifact root");
+      assertUnderRoot(reviewRoot, bodyPath, "Reviewer body path");
+      assertUnderRoot(reviewRoot, reportPath, "Reviewer report path");
       if (bodyPath === reportPath) throw new Error("Reviewer body and report paths must differ");
       await writeFile(bodyPath, `${input.body.trim()}\n`, { flag: "wx", mode: 0o600 }).catch(async (error) => {
         const existing = await readFile(bodyPath, "utf8");
         if (existing !== `${input.body.trim()}\n`) throw error;
       });
-      const helper = process.env.FORGEDOCK_CANDIDATE_BIN;
-      if (!helper) throw new Error("FORGEDOCK_CANDIDATE_BIN is missing from the pinned candidate environment");
+      const helper = process.env.FORGEDOCK_CANDIDATE_BIN ?? resolve(dirname(fileURLToPath(import.meta.url)), "../bin/forgedock-candidate.mjs");
       const args = [
         helper,
         "record",

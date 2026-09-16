@@ -76,20 +76,22 @@ pi install "$PACKAGE_ROOT" --approve >/dev/null
 # coding guidance. Do not copy or rewrite auth/settings files from the operator scope.
 node --input-type=module - "$PI_ROOT/settings.json" "$SUBAGENTS_ROOT" "$PACKAGE_ROOT" <<'NODE'
 import { readFileSync, writeFileSync, chmodSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 const [file, subagentsRoot, packageRoot] = process.argv.slice(2);
 const settings = JSON.parse(readFileSync(file, "utf8"));
 const sourceOf = (entry) => typeof entry === "string" ? entry : entry && typeof entry.source === "string" ? entry.source : undefined;
 const absoluteSource = (source) => source && (source.startsWith("/") ? source : resolve(dirname(file), source));
-settings.packages = (Array.isArray(settings.packages) ? settings.packages : []).map((entry) => {
-  const source = sourceOf(entry);
-  const absolute = absoluteSource(source);
-  if (absolute === subagentsRoot) return { source, extensions: ["./index.ts"], skills: [], prompts: [] };
-  // Leave the candidate package as a manifest-driven source. Its manifest
-  // contains only candidate resource roots, so no broad package filter is needed.
-  if (absolute === packageRoot) return entry;
-  return entry;
-});
+const entries = Array.isArray(settings.packages) ? settings.packages : [];
+const subagentsEntry = entries.find((entry) => absoluteSource(sourceOf(entry)) === subagentsRoot);
+const packageEntry = entries.find((entry) => absoluteSource(sourceOf(entry)) === packageRoot);
+const relativeSource = (root) => {
+  const value = relative(dirname(file), root);
+  return value.startsWith(".") ? value : `./${value}`;
+};
+settings.packages = [
+  { source: sourceOf(subagentsEntry) ?? relativeSource(subagentsRoot), extensions: ["./index.ts"], skills: [], prompts: [] },
+  sourceOf(packageEntry) ? sourceOf(packageEntry) : relativeSource(packageRoot),
+];
 settings.defaultProjectTrust = "never";
 settings.enableInstallTelemetry = false;
 writeFileSync(file, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });

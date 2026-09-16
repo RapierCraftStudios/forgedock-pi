@@ -132,7 +132,10 @@ function validateModel(model) {
 
 function modelWithThinking(model, thinking) {
   validateModel(model);
-  return /:(?:off|minimal|low|medium|high|xhigh|max)$/.test(model) ? model : `${model}:${thinking}`;
+  const suffix = model.match(/:([^:]+)$/)?.[1];
+  if (suffix && THINKING_LEVELS.has(suffix.toLowerCase())) return `${model.slice(0, -(suffix.length + 1))}:${suffix.toLowerCase()}`;
+  if (suffix) return model;
+  return `${model}:${thinking}`;
 }
 
 function repoFromRemote(cwd) {
@@ -311,11 +314,15 @@ function worktreeMatches(cwd, issueNumbers) {
   }
   const matches = [];
   for (const entry of output.split(/\n\n+/)) {
+    if (entry.split("\n").some((line) => line.startsWith("prunable "))) continue;
+    const worktreeLine = entry.split("\n").find((line) => line.startsWith("worktree "));
     const branchLine = entry.split("\n").find((line) => line.startsWith("branch refs/heads/"));
-    if (!branchLine) continue;
+    if (!worktreeLine || !branchLine) continue;
+    const worktreePath = worktreeLine.slice("worktree ".length);
+    if (!existsSync(worktreePath) || !statSync(worktreePath).isDirectory()) continue;
     const branchName = branchLine.slice("branch refs/heads/".length);
     for (const number of issueNumbers) {
-      if (new RegExp(`(?:issue[-/]?)${number}(?:$|[-_/])`, "i").test(branchName)) matches.push({ issue: number, branch: branchName, evidence: "exact-worktree-branch-match" });
+      if (new RegExp(`(?:issue[-/]?)${number}(?:$|[-_/])`, "i").test(branchName)) matches.push({ issue: number, branch: branchName, worktreePath, evidence: "exact-live-worktree-branch-match" });
     }
   }
   return matches;
@@ -467,7 +474,7 @@ function reviewerTask(review, config, role, out) {
     `Role rationale: ${review.rationale.find((item) => item.toLowerCase().includes(role)) ?? "Review the assigned boundary without duplicating unrelated roles."}`,
     "Trace changed behavior and relevant consumers. Require concrete observable evidence for every finding or a substantive no-findings conclusion. Do not treat source strings, generated JSON, or mocks as runtime proof.",
     `Prepare only the four report sections (Scope and decisions considered; Evidence and findings; Verification limitations; Recommendation) as the body string. Do not put an identity marker in that body.`,
-    `Call forge_publish_reviewer exactly once with repository=${review.repository}, pullRequest=${review.pullRequest}, head=${review.head}, baseRef=${review.baseRef}, baseSha=${review.baseSha}, role=${role}, bodyPath=${bodyPath}, reportPath=${reportPath}, publish=${review.publish}. The tool writes the report and performs safe publication when requested.`,
+    `Call forge_publish_reviewer exactly once with repository=${review.repository}, pullRequest=${review.pullRequest}, head=${review.head}, baseRef=${review.baseRef}, baseSha=${review.baseSha}, role=${role}, bodyPath=${bodyPath}, reportPath=${reportPath}, reviewRoot=${out}, publish=${review.publish}. The tool writes the report and performs safe publication when requested.`,
     "Publication is required when requested. If publication fails after analysis, preserve the saved report and return the publication error; do not rerun review. Never edit source, create issues, edit labels, merge, deploy, or initiate remediation.",
     `Return exactly one line: FORGE_REVIEW_RESULT role=${role} report=${reportPath} publication=published|saved|failed verdict=APPROVE|BLOCK|FOLLOW_UP`,
   ].join("\n");
@@ -489,6 +496,8 @@ function prepareReview(options) {
   try {
     execFileSync("git", ["diff", "--quiet", "HEAD", "--"], { cwd: sourceRoot, stdio: "ignore" });
     execFileSync("git", ["diff", "--cached", "--quiet"], { cwd: sourceRoot, stdio: "ignore" });
+    const status = exec("git", ["status", "--porcelain=v1", "--untracked-files=all"], { cwd: sourceRoot });
+    if (status) throw new Error("dirty");
   } catch {
     fail("Review source checkout must be clean; freeze the patch in a separate checkout");
   }
@@ -653,8 +662,12 @@ function replaceInstallation(options) {
     writeExclusive(join(rollbackDir, "receipt.json"), json(receipt));
     process.stdout.write(json(receipt));
   } catch (error) {
-    writeAtomic(settingsFile, before);
-    throw new Error(`Replacement failed and the previous settings registration was restored. Rollback evidence: ${rollbackDir}. ${error instanceof Error ? error.message : String(error)}`);
+    const recoveryErrors = [];
+    try { runPi(configDir, ["remove", candidateSource, "--approve"]); } catch (cleanupError) { recoveryErrors.push(`candidate cleanup: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`); }
+    try { runPi(configDir, ["install", oldSource, "--approve"]); } catch (restoreError) { recoveryErrors.push(`old package restore: ${restoreError instanceof Error ? restoreError.message : String(restoreError)}`); }
+    try { writeAtomic(settingsFile, before); } catch (settingsError) { recoveryErrors.push(`settings restore: ${settingsError instanceof Error ? settingsError.message : String(settingsError)}`); }
+    const suffix = recoveryErrors.length ? ` Recovery was incomplete: ${recoveryErrors.join("; ")}` : " Package registration was restored through Pi and settings bytes were restored.";
+    throw new Error(`Replacement failed. Rollback evidence: ${rollbackDir}.${suffix} ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -718,6 +731,12 @@ function packageVersion(root, packageName) {
   try { return readJson(file).version ?? null; } catch { return null; }
 }
 
+function isCandidatePackageSource(source, configDir, candidateCommit) {
+  if (sourceIdentity(source, configDir) === PACKAGE_ROOT) return true;
+  if (!candidateCommit || !source) return false;
+  return source === `git:github.com/RapierCraftStudios/forgedock-pi@${candidateCommit}` || source === `https://github.com/RapierCraftStudios/forgedock-pi@${candidateCommit}`;
+}
+
 async function doctor(options) {
   const cwd = resolve(optionalOption(options, "cwd", process.cwd()));
   const configDir = resolve(optionalOption(options, "config-dir", process.env.PI_CODING_AGENT_DIR ?? join(process.env.HOME ?? ".", ".pi", "agent")));
@@ -736,7 +755,7 @@ async function doctor(options) {
       result.foreignForgePackages = packageEntries
         .map((entry) => sourceValue(entry))
         .filter((source) => source && source.includes("forgedock-pi"))
-        .filter((source) => sourceIdentity(source, configDir) !== PACKAGE_ROOT && !(installManifest.candidateCommit && source.includes(installManifest.candidateCommit)));
+        .filter((source) => !isCandidatePackageSource(source, configDir, installManifest.candidateCommit));
       const subagentsSource = result.settingsPackages.find((source) => source.includes("pi-subagents"));
       if (subagentsSource) {
         const subagentsPath = subagentsSource.startsWith("/") ? subagentsSource : resolve(configDir, subagentsSource);

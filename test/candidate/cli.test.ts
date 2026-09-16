@@ -50,7 +50,8 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
       { number: 2, title: "dependent", body: "## Acceptance Criteria\n- [ ] Consumer works\n\nDepends on #1" },
       { number: 1, title: "base", body: "## Acceptance Criteria\n- [ ] Producer works" },
     ] }));
-    const out = join(root, "dispatch");
+    const testName = root.slice(root.lastIndexOf("/") + 1);
+    const out = join(root, "..", `${testName}-dispatch`);
     const dispatch = JSON.parse((await execFileAsync("node", [helper, "prepare-dispatch", "--selector", "#1 #2", "--cwd", root, "--issues-file", issuesFile, "--out", out])).stdout) as { requestPath: string; planPath: string };
     const plan = JSON.parse(await readFile(dispatch.planPath, "utf8")) as { issues: Array<{ number: number; predecessors: string[] }>; readiness: { missingAcceptance: number[] } };
     assert.deepEqual(plan.issues.map((issue) => issue.number), [1, 2]);
@@ -59,6 +60,7 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     const request = JSON.parse(await readFile(dispatch.requestPath, "utf8")) as { workflowScriptPath: string; globalConcurrencyLimit: number };
     assert.equal(request.globalConcurrencyLimit, 2);
     assert.match(await readFile(request.workflowScriptPath, "utf8"), /forgedock-owner/);
+    await rm(out, { recursive: true, force: true });
 
     await rm(issuesFile, { force: true });
     const reviewInput = join(root, "..", `${root.slice(root.lastIndexOf("/") + 1)}-review.json`);
