@@ -38,6 +38,9 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     await execFileAsync("git", ["init", "--quiet"], { cwd: root });
     await execFileAsync("git", ["remote", "add", "origin", "https://github.com/example/product.git"], { cwd: root });
     await writeFile(join(root, "forge.yaml"), forgeYaml);
+    await execFileAsync("git", ["add", "forge.yaml"], { cwd: root });
+    await execFileAsync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Candidate Test", "commit", "--quiet", "-m", "fixture"], { cwd: root });
+    const sourceHead = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: root })).stdout.trim();
     const issuesFile = join(root, "issues.json");
     await writeFile(issuesFile, JSON.stringify({ issues: [
       { number: 2, title: "dependent", body: "## Acceptance Criteria\n- [ ] Consumer works\n\nDepends on #1" },
@@ -54,7 +57,7 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     assert.match(await readFile(request.workflowScriptPath, "utf8"), /forgedock-owner/);
 
     const reviewInput = join(root, "review.json");
-    await writeFile(reviewInput, JSON.stringify({ repository: "example/product", pullRequest: 3, head: "a".repeat(40), baseRef: "integration", baseSha: "b".repeat(40), sourceRoot: root }));
+    await writeFile(reviewInput, JSON.stringify({ repository: "example/product", pullRequest: 3, head: sourceHead, baseRef: "integration", baseSha: "b".repeat(40), sourceRoot: root }));
     const review = JSON.parse((await execFileAsync("node", [helper, "prepare-review", "--input", reviewInput, "--out", join(root, "review")])).stdout) as { requestPath: string; roles: string[] };
     assert.deepEqual(review.roles, ["correctness"]);
     assert.equal(JSON.parse(await readFile(review.requestPath, "utf8")).maxSubagentSpawnsPerRun, 1);
