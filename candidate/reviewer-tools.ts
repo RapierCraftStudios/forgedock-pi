@@ -74,7 +74,7 @@ export default function registerReviewerTools(pi: ExtensionAPI): void {
       assertUnderRoot(reviewRoot, bodyPath, "Reviewer body path");
       assertUnderRoot(reviewRoot, reportPath, "Reviewer report path");
       if (bodyPath === reportPath) throw new Error("Reviewer body and report paths must differ");
-      let authorization: { schema?: unknown; artifactRoot?: unknown; artifactKey?: unknown; repository?: unknown; pullRequest?: unknown; head?: unknown; baseRef?: unknown; baseSha?: unknown; roles?: unknown };
+      let authorization: { schema?: unknown; artifactRoot?: unknown; artifactKey?: unknown; repository?: unknown; pullRequest?: unknown; head?: unknown; baseRef?: unknown; baseSha?: unknown; roles?: unknown; publish?: unknown };
       const authorizationPath = resolve(reviewRoot, "review.json");
       assertUnderRoot(reviewRoot, authorizationPath, "Reviewer authorization path");
       try {
@@ -82,7 +82,7 @@ export default function registerReviewerTools(pi: ExtensionAPI): void {
       } catch {
         throw new Error("Reviewer artifact root is missing its prepared authorization");
       }
-      if (authorization.schema !== "forgedock.candidate-review/v1" || authorization.artifactRoot !== reviewRoot || authorization.artifactKey !== input.artifactKey || authorization.repository !== input.repository || authorization.pullRequest !== input.pullRequest || authorization.head !== input.head || authorization.baseRef !== input.baseRef || authorization.baseSha !== input.baseSha || !Array.isArray(authorization.roles) || !authorization.roles.includes(input.role)) {
+      if (authorization.schema !== "forgedock.candidate-review/v1" || authorization.artifactRoot !== reviewRoot || authorization.artifactKey !== input.artifactKey || authorization.repository !== input.repository || authorization.pullRequest !== input.pullRequest || authorization.head !== input.head || authorization.baseRef !== input.baseRef || authorization.baseSha !== input.baseSha || authorization.publish !== input.publish || !Array.isArray(authorization.roles) || !authorization.roles.includes(input.role)) {
         throw new Error("Reviewer publication authorization does not match the prepared frozen review");
       }
       await writeFile(bodyPath, `${input.body.trim()}\n`, { flag: "wx", mode: 0o600 }).catch(async (error) => {

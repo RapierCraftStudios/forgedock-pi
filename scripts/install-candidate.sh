@@ -46,6 +46,22 @@ PACKAGE_ROOT="$INSTALL_ROOT/package"
 SUBAGENTS_ROOT="$INSTALL_ROOT/pi-subagents"
 PI_ROOT="$INSTALL_ROOT/pi-agent"
 
+if [[ -f "$INSTALL_ROOT/manifest.json" ]]; then
+  read -r INSTALLED_CANDIDATE_SHA INSTALLED_SUBAGENTS_SHA < <(node --input-type=module - "$INSTALL_ROOT/manifest.json" <<'NODE'
+import { readFileSync } from "node:fs";
+const manifest = JSON.parse(readFileSync(process.argv[2], "utf8"));
+process.stdout.write(`${manifest.candidateCommit ?? ""} ${manifest.piSubagentsCommit ?? ""}`);
+NODE
+  )
+  if [[ "$INSTALLED_CANDIDATE_SHA" != "$CANDIDATE_SHA" || "$INSTALLED_SUBAGENTS_SHA" != "$SUBAGENTS_SHA" ]]; then
+    echo "Install root already contains a different candidate snapshot; choose a new --install-root." >&2
+    exit 1
+  fi
+elif [[ -e "$PACKAGE_ROOT/package.json" || -e "$SUBAGENTS_ROOT/package.json" ]]; then
+  echo "Install root is incomplete and has no identity manifest; choose a new --install-root." >&2
+  exit 1
+fi
+
 if [[ ! -f "$PACKAGE_ROOT/package.json" ]]; then
   mkdir -p "$PACKAGE_ROOT"
   git -C "$SOURCE_ROOT" archive --format=tar "$CANDIDATE_SHA" | tar -x -C "$PACKAGE_ROOT"

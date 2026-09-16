@@ -132,7 +132,7 @@ function branch(value, label) {
 function validateModel(model) {
   if (!FULL_MODEL.test(model)) fail("Model must be a full provider/model ID");
   const suffix = model.match(/:([A-Za-z]+)$/)?.[1]?.toLowerCase();
-  if (suffix && !THINKING_LEVELS.has(suffix)) fail(`Unsupported model thinking suffix ':${suffix}'`);
+  if (suffix && !THINKING_LEVELS.has(suffix) && !/^\d[\w.-]*$/.test(suffix)) fail(`Unsupported model thinking suffix ':${suffix}'`);
   return model;
 }
 
@@ -514,7 +514,7 @@ function prepareReview(options) {
   const canonicalConfig = loadConfig(configRoot);
   if (input.config !== undefined && canonicalJson(input.config) !== canonicalJson(canonicalConfig)) fail("Review input configuration does not match canonical forge.yaml");
   const config = canonicalConfig;
-  const selected = Array.isArray(input.roles) && input.roles.length > 0 ? { roles: input.roles, rationale: Array.isArray(input.rationale) ? input.rationale : [] } : roleList(input);
+  const selected = Array.isArray(input.roles) && input.roles.length > 0 ? { roles: input.roles, rationale: Array.isArray(input.rationale) ? input.rationale.filter((item) => typeof item === "string") : [] } : roleList(input);
   if (!Array.isArray(selected.roles) || selected.roles.length < 1 || selected.roles.length > 3) fail("Review must select between one and three reviewers");
   if (new Set(selected.roles).size !== selected.roles.length) fail("Review roles must be unique");
   if (!selected.roles.every((role) => ["correctness", "security", "specialist"].includes(role))) fail("Review roles must be correctness, security, or specialist");
@@ -689,9 +689,14 @@ function replaceInstallation(options) {
 
 function rollbackInstallation(options) {
   const rollbackDir = resolve(requiredOption(options, "rollback"));
+  if (!existsSync(rollbackDir) || realpathSync(rollbackDir) !== rollbackDir) fail("Rollback directory must be a canonical existing directory");
   const manifest = readJson(join(rollbackDir, "manifest.json"));
   if (manifest.schema !== "forgedock.candidate-rollback/v1") fail("Invalid candidate rollback manifest");
   const configDir = resolve(manifest.configDir);
+  const expectedSettings = join(configDir, "settings.json");
+  const expectedBackup = join(rollbackDir, "settings.json");
+  if (manifest.settingsFile !== expectedSettings || manifest.settingsBackup !== expectedBackup) fail("Rollback manifest paths do not match its rollback/config directories");
+  if (!existsSync(configDir) || realpathSync(configDir) !== configDir || !existsSync(expectedSettings) || realpathSync(expectedSettings) !== expectedSettings || !existsSync(expectedBackup) || realpathSync(expectedBackup) !== expectedBackup) fail("Rollback manifest paths must be existing non-symlink files under their bound directories");
   try {
     runPi(configDir, ["remove", manifest.candidateSource, "--approve"]);
   } catch {
@@ -747,6 +752,13 @@ function packageVersion(root, packageName) {
   try { return readJson(file).version ?? null; } catch { return null; }
 }
 
+function localPackageName(source, configDir) {
+  if (!source || /^(?:git:|npm:|https?:|ssh:|git@)/.test(source)) return undefined;
+  const manifest = join(sourceIdentity(source, configDir), "package.json");
+  if (!existsSync(manifest)) return undefined;
+  try { return readJson(manifest).name; } catch { return undefined; }
+}
+
 function isCandidatePackageSource(source, configDir, candidateCommit) {
   if (sourceIdentity(source, configDir) === PACKAGE_ROOT) return true;
   if (!candidateCommit || !source) return false;
@@ -770,7 +782,7 @@ async function doctor(options) {
       const installManifest = existsSync(installManifestPath) ? readJson(installManifestPath) : {};
       result.foreignForgePackages = packageEntries
         .map((entry) => sourceValue(entry))
-        .filter((source) => source && source.includes("forgedock-pi"))
+        .filter((source) => source && (source.includes("forgedock-pi") || localPackageName(source, configDir) === "forgedock-pi"))
         .filter((source) => !isCandidatePackageSource(source, configDir, installManifest.candidateCommit));
       const subagentsSource = result.settingsPackages.find((source) => source.includes("pi-subagents"));
       if (subagentsSource) {
