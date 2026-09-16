@@ -41,7 +41,9 @@ function allowedStagingSubagent(input: unknown): boolean {
       const reviewRoot = resolve(dirname(workflowPath));
       const authorization = JSON.parse(readFileSync(join(reviewRoot, "review.json"), "utf8")) as { schema?: unknown; artifactRoot?: unknown; artifactKey?: unknown; workflowPath?: unknown; workflowSha256?: unknown; roles?: unknown };
       const script = readFileSync(workflowPath, "utf8");
-      return authorization.schema === "forgedock.candidate-review/v1" && authorization.artifactRoot === reviewRoot && authorization.workflowPath === workflowPath && authorization.workflowSha256 === sha256(script) && typeof authorization.artifactKey === "string" && Array.isArray(authorization.roles) && authorization.roles.includes("correctness") && /agent:\s*["']forgedock-reviewer["']/.test(script) && !/agent:\s*(?!["']forgedock-reviewer["'])/.test(script) && !/(?:forgedock-owner|worker|writer|delegate|runs\.host|[,{]\s*(?:gate|acceptance|verify)\s*:)/.test(script);
+      const agentFields = script.match(/\bagent\s*:/g) ?? [];
+      const agentValues = [...script.matchAll(/\bagent\s*:\s*(?:"([^"]+)"|'([^']+)')/g)].map((match) => match[1] ?? match[2]);
+      return authorization.schema === "forgedock.candidate-review/v1" && authorization.artifactRoot === reviewRoot && authorization.workflowPath === workflowPath && authorization.workflowSha256 === sha256(script) && typeof authorization.artifactKey === "string" && Array.isArray(authorization.roles) && authorization.roles.includes("correctness") && agentFields.length > 0 && agentFields.length === agentValues.length && agentValues.every((agent) => agent === "forgedock-reviewer") && !/(?:forgedock-owner|worker|writer|delegate|runs\.host|[,{]\s*(?:gate|acceptance|verify)\s*:)/.test(script);
     } catch {
       return false;
     }
