@@ -622,6 +622,11 @@ test("standalone review preparation binds canonical config, exact identity, wave
     assert.equal(authorization.baseRef, "staging");
     assert.equal(authorization.baseSha, head);
     assert.equal(authorization.mode, "standard");
+    const script = await readFile(prepared.request.workflowScriptPath, "utf8");
+    assert.match(script, /const initial=await runs\.all/);
+    assert.match(script, /-recovery/);
+    assert.throws(() => dispatch.prepareStandaloneReview({ ...plan, head: "f".repeat(40) }, join(root, "bad-head"), repo, {}), /commit is not available/);
+    assert.throws(() => dispatch.prepareStandaloneReview({ ...plan, mode: undefined }, join(root, "missing-mode"), repo, {}), /mode is required/);
     assert.throws(() => dispatch.prepareStandaloneReview({ ...plan, globalConcurrencyLimit: 99 }, join(root, "override"), repo, {}), /Unknown standalone review field/);
     assert.throws(() => dispatch.prepareStandaloneReview(plan, join(root, "bound"), repo, { PI_SUBAGENT_EXTENSION_BINDINGS: "{}" }), /issue-owner native binding/);
   });
@@ -635,6 +640,8 @@ test("standalone review preparation fails closed for missing or malformed canoni
     assert.throws(() => dispatch.prepareStandaloneReview(plan, join(root, "missing"), repo, {}), /ENOENT/);
     await writeFile(join(repo, "forge.yaml"), "project: [malformed");
     assert.throws(() => dispatch.prepareStandaloneReview(plan, join(root, "malformed"), repo, {}));
+    await writeFile(join(repo, "forge.yaml"), "project: {owner: example, repo: project}\nagents: {subagent_model: \"test/model\"}\nreview: {launch_allowance: null}\n");
+    assert.throws(() => dispatch.prepareStandaloneReview(plan, join(root, "null-setting"), repo, {}), /cannot be null/);
   });
 });
 
