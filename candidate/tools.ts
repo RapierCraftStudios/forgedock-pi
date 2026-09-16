@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -48,12 +49,20 @@ type ReviewInput = {
   publish?: boolean;
 };
 
-const CHECK_INPUT = Type.Object({ name: Type.String({ pattern: "^[A-Za-z0-9_.-]+$" }) });
+const CHECK_INPUT = Type.Object({
+  name: Type.String({ pattern: "^[A-Za-z0-9_.-]+$" }),
+  configPath: Type.String({ minLength: 1 }),
+  configSha256: Type.String({ pattern: "^[a-f0-9]{64}$" }),
+});
 const RECORD_INPUT = Type.Object({
   repository: REPOSITORY,
   issue: Type.Optional(Type.Integer({ minimum: 1 })),
   pullRequest: Type.Optional(Type.Integer({ minimum: 1 })),
-  kind: Type.String({ pattern: "^[A-Z]+$" }),
+  kind: Type.String({ pattern: "^[A-Z_]+$" }),
+  head: Type.Optional(Type.String({ pattern: "^[a-f0-9]{40,64}$" })),
+  baseRef: Type.Optional(Type.String({ minLength: 1 })),
+  baseSha: Type.Optional(Type.String({ pattern: "^[a-f0-9]{40,64}$" })),
+  gate: Type.Optional(Type.String({ pattern: "^(?:PASS|FAIL)$" })),
   body: Type.String({ minLength: 8 }),
   publish: Type.Boolean(),
 });
@@ -63,12 +72,20 @@ type RecordInput = {
   issue?: number;
   pullRequest?: number;
   kind: string;
+  head?: string;
+  baseRef?: string;
+  baseSha?: string;
+  gate?: string;
   body: string;
   publish: boolean;
 };
 
 function helperPath(): string {
   return process.env.FORGEDOCK_CANDIDATE_BIN ?? HELPER;
+}
+
+function digest(bytes: string): string {
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
 function bounded(text: string): string {
@@ -110,7 +127,8 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       const output = await mkdtemp(join(tmpdir(), "forgedock-review-request-"));
       const result = await pi.exec("node", [helperPath(), "prepare-review", "--input", inputPath, "--out", output], { timeout: 120_000 });
       if (result.code !== 0) throw new Error(`Review preparation failed: ${bounded(result.stderr)}`);
-      return { content: [{ type: "text", text: bounded(result.stdout) }], details: { requestDirectory: output, inputPath } };
+      const prepared = JSON.parse(await readFile(join(output, "review.json"), "utf8")) as { configPath?: string; configSha256?: string };
+      return { content: [{ type: "text", text: bounded(result.stdout) }], details: { requestDirectory: output, inputPath, configPath: prepared.configPath, configSha256: prepared.configSha256 } };
     },
   });
 
@@ -120,8 +138,13 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
     description: "Run one named verification command from the canonical forge.yaml; arbitrary commands are not accepted.",
     parameters: CHECK_INPUT,
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const name = (params as { name: string }).name;
-      const config = parseYaml(await readFile(join(ctx.cwd, "forge.yaml"), "utf8"));
+      const input = params as { name: string; configPath: string; configSha256: string };
+      const configPath = resolve(input.configPath);
+      if (configPath !== resolve(ctx.cwd, "forge.yaml")) throw new Error("Configured checks must use the current canonical configuration root");
+      const configText = await readFile(configPath, "utf8");
+      if (digest(configText) !== input.configSha256) throw new Error("Configured forge.yaml changed after review preparation");
+      const name = input.name;
+      const config = parseYaml(configText);
       const command = configuredCommand(config, name);
       if (!command) throw new Error(`No configured verification command named '${name}'`);
       const result = await pi.exec("sh", ["-lc", command], { timeout: 1_200_000 });
@@ -143,6 +166,10 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       const reportPath = resolve(dirname(bodyPath), "record.md");
       const args = [helperPath(), "record", "--kind", input.kind, "--repo", input.repository, "--body-file", bodyPath, "--report-file", reportPath];
       args.push(input.issue === undefined ? "--pr" : "--issue", String(input.issue ?? input.pullRequest));
+      if (input.kind === "STAGING_GATE") {
+        if (!input.head || !input.baseRef || !input.baseSha || !input.gate) throw new Error("Staging gate publication requires frozen head/base and PASS or FAIL");
+        args.push("--head", input.head, "--base-ref", input.baseRef, "--base-sha", input.baseSha, "--gate", input.gate);
+      }
       if (input.publish) args.push("--publish");
       const result = await pi.exec("node", args, { timeout: 120_000 });
       if (result.code !== 0) throw new Error(`Record publication failed: ${bounded(result.stderr)}`);

@@ -13,7 +13,7 @@ const FULL_SHA = /^[a-f0-9]{40,64}$/;
 const SAFE_TOKEN = /^[A-Za-z0-9_.-]+$/;
 const FULL_MODEL = /^[^\s/]+\/[^\s]+$/;
 const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
-const RECORD_KINDS = new Set(["INVESTIGATION", "PLAN", "BUILD", "REVIEW", "DECISION", "CLOSURE"]);
+const RECORD_KINDS = new Set(["INVESTIGATION", "PLAN", "BUILD", "REVIEW", "DECISION", "CLOSURE", "STAGING_GATE"]);
 
 function fail(message) {
   throw new Error(message);
@@ -153,7 +153,7 @@ function branch(value, label) {
 
 function validateModel(model) {
   if (!FULL_MODEL.test(model)) fail("Model must be a full provider/model ID");
-  const suffix = model.match(/:([A-Za-z]+)$/)?.[1]?.toLowerCase();
+  const suffix = model.match(/:([^:]+)$/)?.[1]?.toLowerCase();
   if (suffix && !THINKING_LEVELS.has(suffix) && !/^\d[\w.-]*$/.test(suffix)) fail(`Unsupported model thinking suffix ':${suffix}'`);
   return model;
 }
@@ -548,7 +548,8 @@ function prepareReview(options) {
   if (!sourceDistance || (sourceDistance !== ".." && !sourceDistance.startsWith("../"))) fail("Review artifact output must be outside the frozen source checkout");
   const diff = exec("git", ["diff", "--no-ext-diff", `${baseSha}..${head}`], { cwd: sourceRoot, timeout: 120_000, maxBuffer: 32 * 1024 * 1024 });
   const diffPath = writeExclusive(join(out, "frozen.diff"), `${diff}\n`);
-  const review = { schema: "forgedock.candidate-review/v1", artifactRoot: out, artifactKey: randomUUID(), ...input, repository, pullRequest, head, baseSha, baseRef, sourceRoot, configRoot, config, roles: selected.roles, rationale: selected.rationale, diffPath, diffSha256: sha256(Buffer.from(`${diff}\n`)), publish: input.publish === true };
+  const configText = readFileSync(config.configPath, "utf8");
+  const review = { schema: "forgedock.candidate-review/v1", artifactRoot: out, artifactKey: randomUUID(), ...input, repository, pullRequest, head, baseSha, baseRef, sourceRoot, configRoot, config, configSha256: sha256(configText), roles: selected.roles, rationale: selected.rationale, diffPath, diffSha256: sha256(Buffer.from(`${diff}\n`)), publish: input.publish === true };
   const reviewPath = writeExclusive(join(out, "review.json"), json(review));
   const workflowPath = writeExclusive(join(out, "workflow.js"), reviewerWorkflow(review, config, out));
   const request = {
@@ -587,6 +588,11 @@ function recordIdentity(options, kind) {
     identity.role = stringValue(requiredOption(options, "role"), "review role", /^[a-z][a-z0-9-]*$/);
     identity.baseRef = branch(requiredOption(options, "base-ref"), "review base ref");
     if (!identity.pullRequest || !identity.head || !identity.baseSha) fail("Reviewer record requires --pr, --head, and --base-sha");
+  }
+  if (kind === "STAGING_GATE") {
+    identity.baseRef = branch(requiredOption(options, "base-ref"), "staging base ref");
+    identity.gate = stringValue(requiredOption(options, "gate"), "staging gate", /^(?:PASS|FAIL)$/);
+    if (!identity.pullRequest || !identity.head || !identity.baseSha) fail("Staging gate record requires --pr, --head, and --base-sha");
   }
   if (!identity.issue && !identity.pullRequest) fail("Record requires --issue or --pr");
   return identity;
@@ -635,7 +641,9 @@ function record(options, mode) {
   const marker = `<!-- FORGE:CANDIDATE:${kind} ${JSON.stringify(identity)} -->`;
   const reviewHeaders = kind === "REVIEW"
     ? `**Reviewer role**: \`${identity.role}\`\n**Pull request**: #${identity.pullRequest}\n**Reviewed source**: \`${identity.head}\`\n**Review base**: \`${identity.baseRef}\` at \`${identity.baseSha}\`\n\n`
-    : "";
+    : kind === "STAGING_GATE"
+      ? `FORGE:STAGING_GATE:${identity.gate}\n**Pull request**: #${identity.pullRequest}\n**Reviewed source**: \`${identity.head}\`\n**Protected base**: \`${identity.baseRef}\` at \`${identity.baseSha}\`\n\n`
+      : "";
   const markdown = `${marker}\n## ForgeDock ${kind.toLowerCase()}\n\n${reviewHeaders}${body}\n`;
   const reportFile = resolve(optionalOption(options, "report-file", join(dirname(resolve(bodyFile)), `${kind.toLowerCase()}.report.md`)));
   writeExclusive(reportFile, markdown);

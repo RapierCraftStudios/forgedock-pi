@@ -69,7 +69,7 @@
     "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-tui": "*",
-    "pi-subagents": ">=0.60.0",
+    "pi-subagents": "0.60.0",
     "typebox": "*"
   },
   "peerDependenciesMeta": {
@@ -86,7 +86,7 @@
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^0.84.2",
     "@types/node": "^24.0.0",
-    "pi-subagents": "^0.60.0",
+    "pi-subagents": "0.60.0",
     "tsx": "^4.20.0",
     "typebox": "^1.1.38",
     "typescript": "^5.9.0"
@@ -95,6 +95,6 @@
     "node": ">=22"
   },
   "dependencies": {
-    "yaml": "^2.9.0"
+    "yaml": "2.9.0"
   }
 }
