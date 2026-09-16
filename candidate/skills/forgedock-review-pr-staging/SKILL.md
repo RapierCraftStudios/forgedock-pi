@@ -21,7 +21,9 @@ tool to create the validated frozen request, launch fresh `forgedock-reviewer` r
 that generated native request, and wait for every role; their source tools are read-only and their
 only mutation capability is the report publisher. Use `forge_run_check` for configured checks and
 `forge_publish_record` for the consolidated gate, passing `kind: STAGING_GATE`, the frozen PR/head/
-protected-base identity, and `gate: PASS` or `FAIL`; do not use bash/edit/write in this route.
+protected-base identity, and `gate: PASS` or `FAIL`; feed `configPath`, `configSha256`,
+`reviewRoot`, `artifactKey`, `sourceRoot`, and `head` from the prepared review details to each
+`forge_run_check`; do not use bash/edit/write in this route.
 Each reviewer publishes its own exact-head report, including a substantive clean report. No
 reviewer edits source, creates issues, merges, deploys, closes issues, or starts repair.
 

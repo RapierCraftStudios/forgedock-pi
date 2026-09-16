@@ -14,5 +14,7 @@ test("routes only the familiar candidate commands", () => {
   assert.equal(isStagingMutationBlocked("bash", { command: "npm test" }), true);
   assert.equal(isStagingMutationBlocked("forge_run_check", { name: "test" }), false);
   assert.equal(isStagingMutationBlocked("subagent", { agent: "forgedock-owner" }), true);
-  assert.equal(isStagingMutationBlocked("subagent", { agent: "forgedock-reviewer" }), false);
+  assert.equal(isStagingMutationBlocked("subagent", { agent: "forgedock-reviewer" }), true);
+  assert.equal(isStagingMutationBlocked("subagent", { workflowScript: 'return runs.run("review", { agent: "forgedock-reviewer" })' }), false);
+  assert.equal(isStagingMutationBlocked("unknown", {}), true);
 });

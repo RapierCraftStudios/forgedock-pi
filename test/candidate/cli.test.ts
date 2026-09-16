@@ -86,7 +86,7 @@ test("record helper preserves a saved reviewer report without remote writes", as
     const result = JSON.parse((await execFileAsync("node", [helper, "record", "reviewer", "--repo", "example/product", "--pr", "3", "--head", "a".repeat(40), "--base-ref", "integration", "--base-sha", "b".repeat(40), "--role", "correctness", "--body-file", body, "--report-file", report])).stdout) as { publication: string; reportFile: string };
     assert.equal(result.publication, "saved");
     assert.equal(result.reportFile, report);
-    assert.match(await readFile(report, "utf8"), /^<!-- FORGE:CANDIDATE:REVIEW/);
+    assert.match(await readFile(report, "utf8"), /^<!-- FORGE:REVIEWER_REPORT/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -3,13 +3,15 @@ set -euo pipefail
 
 SOURCE_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 SUBAGENTS_SOURCE=${PI_SUBAGENTS_SOURCE:-$HOME/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents}
+SUBAGENTS_COMMIT=${PI_SUBAGENTS_COMMIT:-}
+REQUIRED_PI_VERSION=${PI_REQUIRED_VERSION:-0.85.1}
 INSTALL_ROOT=${FORGEDOCK_CANDIDATE_INSTALL_ROOT:-}
 REUSE_AUTH=0
 AUTH_SOURCE=${PI_AUTH_SOURCE:-$HOME/.pi/agent/auth.json}
 
 usage() {
   cat <<'EOF'
-Usage: install-candidate.sh [--subagents-source DIR] [--install-root DIR]
+Usage: install-candidate.sh [--subagents-source DIR] [--subagents-commit SHA] [--pi-version VERSION] [--install-root DIR]
 
 Creates an immutable candidate snapshot and installs it with pi-subagents into an
 isolated PI_CODING_AGENT_DIR. It never changes the operator's default Pi settings.
@@ -21,6 +23,8 @@ EOF
 while (($#)); do
   case "$1" in
     --subagents-source) SUBAGENTS_SOURCE=${2:?missing path}; shift 2 ;;
+    --subagents-commit) SUBAGENTS_COMMIT=${2:?missing SHA}; shift 2 ;;
+    --pi-version) REQUIRED_PI_VERSION=${2:?missing version}; shift 2 ;;
     --install-root) INSTALL_ROOT=${2:?missing path}; shift 2 ;;
     --reuse-auth) REUSE_AUTH=1; shift ;;
     --auth-source) AUTH_SOURCE=${2:?missing path}; REUSE_AUTH=1; shift 2 ;;
@@ -40,6 +44,9 @@ fi
 
 CANDIDATE_SHA=$(git -C "$SOURCE_ROOT" rev-parse HEAD)
 SUBAGENTS_SHA=$(git -C "$SUBAGENTS_SOURCE" rev-parse HEAD)
+[[ -z "$SUBAGENTS_COMMIT" || "$SUBAGENTS_COMMIT" == "$SUBAGENTS_SHA" ]] || { echo "pi-subagents checkout is $SUBAGENTS_SHA, expected pinned commit $SUBAGENTS_COMMIT" >&2; exit 1; }
+PI_VERSION=$(pi --version)
+[[ "$PI_VERSION" == "$REQUIRED_PI_VERSION" ]] || { echo "Pi is $PI_VERSION, expected pinned version $REQUIRED_PI_VERSION" >&2; exit 1; }
 INSTALL_ROOT=${INSTALL_ROOT:-$HOME/.cache/forgedock-pi-candidate/$CANDIDATE_SHA}
 INSTALL_ROOT=$(mkdir -p "$INSTALL_ROOT" && cd "$INSTALL_ROOT" && pwd)
 PACKAGE_ROOT="$INSTALL_ROOT/package"
@@ -128,7 +135,6 @@ writeFileSync(file, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
 chmodSync(file, 0o600);
 NODE
 
-PI_VERSION=$(pi --version)
 cat > "$INSTALL_ROOT/manifest.json" <<EOF
 {
   "schema": "forgedock.candidate-install/v1",
@@ -137,6 +143,7 @@ cat > "$INSTALL_ROOT/manifest.json" <<EOF
   "packageDigest": "$PACKAGE_DIGEST",
   "piSubagentsDigest": "$SUBAGENTS_DIGEST",
   "piVersion": "$PI_VERSION",
+  "requiredPiVersion": "$REQUIRED_PI_VERSION",
   "installRoot": "$INSTALL_ROOT",
   "packageRoot": "$PACKAGE_ROOT",
   "piSubagentsRoot": "$SUBAGENTS_ROOT",

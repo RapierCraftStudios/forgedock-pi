@@ -47,7 +47,9 @@ export function renderCandidateRecord(identity: CandidateRecordIdentity, body: s
   if (typeof body !== "string" || body.trim().length < 8) throw new Error("Record body must contain substantive evidence");
   if (/^<!-- FORGE:/m.test(body)) throw new Error("Record markers are generated; do not include one in the body");
 
-  const marker = `<!-- FORGE:CANDIDATE:${identity.kind} ${json(identity)} -->`;
+  const marker = identity.kind === "REVIEW"
+    ? `<!-- FORGE:REVIEWER_REPORT ${json(identity)} -->`
+    : `<!-- FORGE:CANDIDATE:${identity.kind} ${json(identity)} -->`;
   const markdown = `${marker}\n## ForgeDock ${identity.kind.toLowerCase()}\n\n${body.trim()}\n`;
   return { identity, marker, markdown, contentSha256: sha256(markdown) };
 }

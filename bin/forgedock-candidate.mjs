@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, readdirSync, writeFileSync, renameSync, chmodSync } from "node:fs";
 import { dirname, join, relative, resolve, basename } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { parse as parseYaml } from "yaml";
@@ -439,7 +440,7 @@ function prepareDispatch(options) {
     admitted: issue.hasAcceptance && !activeOwnership.has(issue.number) && issue.externalDependencies.length === 0,
     gateReason: !issue.hasAcceptance ? "missing acceptance criteria" : activeOwnership.has(issue.number) ? "exact active worktree ownership evidence" : issue.externalDependencies.length > 0 ? `explicit dependency outside selected issue set: ${issue.externalDependencies.map((number) => `#${number}`).join(", ")}` : undefined,
   }));
-  const out = resolve(optionalOption(options, "out", join(cwd, ".forge-candidate", "runs", `dispatch-${Date.now()}`)));
+  const out = resolve(optionalOption(options, "out", join(process.env.FORGEDOCK_CANDIDATE_ARTIFACT_ROOT ?? tmpdir(), "forgedock-candidate", sha256(Buffer.from(config.repository)).slice(0, 12), `dispatch-${Date.now()}`)));
   mkdirSync(out, { recursive: true, mode: 0o700 });
   const plan = {
     schema: "forgedock.candidate-dispatch/v1",
@@ -540,6 +541,7 @@ function prepareReview(options) {
   const selected = Array.isArray(input.roles) && input.roles.length > 0 ? { roles: input.roles, rationale: Array.isArray(input.rationale) ? input.rationale.filter((item) => typeof item === "string") : [] } : roleList(input);
   if (!Array.isArray(selected.roles) || selected.roles.length < 1 || selected.roles.length > 3) fail("Review must select between one and three reviewers");
   if (new Set(selected.roles).size !== selected.roles.length) fail("Review roles must be unique");
+  if (!selected.roles.includes("correctness")) fail("Every review must include the correctness reviewer");
   if (!selected.roles.every((role) => ["correctness", "security", "specialist"].includes(role))) fail("Review roles must be correctness, security, or specialist");
   let out = resolve(optionalOption(options, "out", join(dirname(resolve(inputPath)), `review-${pullRequest}-${head.slice(0, 12)}`)));
   mkdirSync(out, { recursive: true, mode: 0o700 });
@@ -638,7 +640,9 @@ function record(options, mode) {
   const body = readFileSync(resolve(bodyFile), "utf8").replace(/\r\n/g, "\n").trim();
   if (body.length < 8) fail("Record body must contain substantive evidence");
   if (/^<!-- FORGE:/m.test(body)) fail("Record markers are generated; remove the marker from the body file");
-  const marker = `<!-- FORGE:CANDIDATE:${kind} ${JSON.stringify(identity)} -->`;
+  const marker = kind === "REVIEW"
+    ? `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify(identity)} -->`
+    : `<!-- FORGE:CANDIDATE:${kind} ${JSON.stringify(identity)} -->`;
   const reviewHeaders = kind === "REVIEW"
     ? `**Reviewer role**: \`${identity.role}\`\n**Pull request**: #${identity.pullRequest}\n**Reviewed source**: \`${identity.head}\`\n**Review base**: \`${identity.baseRef}\` at \`${identity.baseSha}\`\n\n`
     : kind === "STAGING_GATE"
@@ -905,7 +909,7 @@ async function main() {
     const number = integer(Number(requiredOption(options, "issue")), "issue number");
     const issue = options.values.has("issue-file") ? issueRecord(readJson(requiredOption(options, "issue-file")), config.repository) : issueFromGithub(number, config.repository, cwd);
     const output = { schema: "forgedock.candidate-intake/v1", preparedAt: new Date().toISOString(), config, issue, evidence: { history: "retrieve linked history in the owner session", verification: config.verificationCommands } };
-    const out = resolve(optionalOption(options, "out", join(cwd, ".forge-candidate", "intake", `issue-${number}.json`)));
+    const out = resolve(optionalOption(options, "out", join(process.env.FORGEDOCK_CANDIDATE_ARTIFACT_ROOT ?? tmpdir(), "forgedock-candidate", sha256(Buffer.from(config.repository)).slice(0, 12), "intake", `issue-${number}.json`)));
     writeExclusive(out, json(output));
     process.stdout.write(json({ ...output, outputPath: out }));
     return;

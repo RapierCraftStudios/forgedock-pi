@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { existsSync, realpathSync } from "node:fs";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -53,6 +54,10 @@ const CHECK_INPUT = Type.Object({
   name: Type.String({ pattern: "^[A-Za-z0-9_.-]+$" }),
   configPath: Type.String({ minLength: 1 }),
   configSha256: Type.String({ pattern: "^[a-f0-9]{64}$" }),
+  reviewRoot: Type.String({ minLength: 1 }),
+  artifactKey: Type.String({ minLength: 1 }),
+  sourceRoot: Type.String({ minLength: 1 }),
+  head: Type.String({ pattern: "^[a-f0-9]{40,64}$" }),
 });
 const RECORD_INPUT = Type.Object({
   repository: REPOSITORY,
@@ -64,6 +69,8 @@ const RECORD_INPUT = Type.Object({
   baseSha: Type.Optional(Type.String({ pattern: "^[a-f0-9]{40,64}$" })),
   gate: Type.Optional(Type.String({ pattern: "^(?:PASS|FAIL)$" })),
   body: Type.String({ minLength: 8 }),
+  reviewRoot: Type.Optional(Type.String({ minLength: 1 })),
+  artifactKey: Type.Optional(Type.String({ minLength: 1 })),
   publish: Type.Boolean(),
 });
 
@@ -77,6 +84,8 @@ type RecordInput = {
   baseSha?: string;
   gate?: string;
   body: string;
+  reviewRoot?: string;
+  artifactKey?: string;
   publish: boolean;
 };
 
@@ -86,6 +95,18 @@ function helperPath(): string {
 
 function digest(bytes: string): string {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+async function preparedReview(root: string, artifactKey: string): Promise<Record<string, unknown>> {
+  const reviewRoot = resolve(root);
+  if (!existsSync(reviewRoot) || realpathSync(reviewRoot) !== reviewRoot) throw new Error("Prepared review root must be a canonical directory");
+  const reviewPath = resolve(reviewRoot, "review.json");
+  if (!existsSync(reviewPath) || realpathSync(reviewPath) !== reviewPath) throw new Error("Prepared review authorization must be a regular file");
+  const review = JSON.parse(await readFile(reviewPath, "utf8")) as Record<string, unknown>;
+  if (review.schema !== "forgedock.candidate-review/v1" || review.artifactRoot !== reviewRoot || review.artifactKey !== artifactKey) {
+    throw new Error("Prepared review authorization is missing or does not match the artifact root");
+  }
+  return review;
 }
 
 function bounded(text: string): string {
@@ -127,8 +148,8 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       const output = await mkdtemp(join(tmpdir(), "forgedock-review-request-"));
       const result = await pi.exec("node", [helperPath(), "prepare-review", "--input", inputPath, "--out", output], { timeout: 120_000 });
       if (result.code !== 0) throw new Error(`Review preparation failed: ${bounded(result.stderr)}`);
-      const prepared = JSON.parse(await readFile(join(output, "review.json"), "utf8")) as { configPath?: string; configSha256?: string };
-      return { content: [{ type: "text", text: bounded(result.stdout) }], details: { requestDirectory: output, inputPath, configPath: prepared.configPath, configSha256: prepared.configSha256 } };
+      const prepared = JSON.parse(await readFile(join(output, "review.json"), "utf8")) as { configPath?: string; configSha256?: string; artifactKey?: string; sourceRoot?: string; head?: string };
+      return { content: [{ type: "text", text: bounded(result.stdout) }], details: { requestDirectory: output, inputPath, reviewRoot: output, artifactKey: prepared.artifactKey, sourceRoot: prepared.sourceRoot, head: prepared.head, configPath: prepared.configPath, configSha256: prepared.configSha256 } };
     },
   });
 
@@ -138,16 +159,19 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
     description: "Run one named verification command from the canonical forge.yaml; arbitrary commands are not accepted.",
     parameters: CHECK_INPUT,
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const input = params as { name: string; configPath: string; configSha256: string };
+      const input = params as { name: string; configPath: string; configSha256: string; reviewRoot: string; artifactKey: string; sourceRoot: string; head: string };
+      const review = await preparedReview(input.reviewRoot, input.artifactKey);
+      if (review.sourceRoot !== resolve(input.sourceRoot) || review.head !== input.head || review.configSha256 !== input.configSha256 || review.configPath !== resolve(input.configPath)) throw new Error("Configured check does not match the prepared frozen review");
       const configPath = resolve(input.configPath);
-      if (configPath !== resolve(ctx.cwd, "forge.yaml")) throw new Error("Configured checks must use the current canonical configuration root");
       const configText = await readFile(configPath, "utf8");
       if (digest(configText) !== input.configSha256) throw new Error("Configured forge.yaml changed after review preparation");
+      const sourceHead = await pi.exec("git", ["rev-parse", "HEAD"], { cwd: resolve(input.sourceRoot), timeout: 20_000 });
+      if (sourceHead.code !== 0 || sourceHead.stdout.trim() !== input.head) throw new Error("Configured check source checkout moved after review preparation");
       const name = input.name;
       const config = parseYaml(configText);
       const command = configuredCommand(config, name);
       if (!command) throw new Error(`No configured verification command named '${name}'`);
-      const result = await pi.exec("sh", ["-lc", command], { timeout: 1_200_000 });
+      const result = await pi.exec("sh", ["-lc", command], { cwd: resolve(input.sourceRoot), timeout: 1_200_000 });
       const output = `${result.stdout}${result.stderr ? `\n${result.stderr}` : ""}`;
       if (result.code !== 0) throw new Error(`Configured check '${name}' failed:\n${bounded(output)}`);
       return { content: [{ type: "text", text: bounded(output || `${name}: passed`) }], details: { name, command, exitCode: result.code } };
@@ -162,6 +186,11 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
     async execute(_toolCallId, params) {
       const input = params as RecordInput;
       if ((input.issue === undefined) === (input.pullRequest === undefined)) throw new Error("Record needs exactly one issue or pull request destination");
+      if (input.kind === "STAGING_GATE") {
+        if (!input.reviewRoot || !input.artifactKey || !input.head || !input.baseRef || !input.baseSha || !input.gate) throw new Error("Staging gate publication requires its prepared review authorization");
+        const review = await preparedReview(input.reviewRoot, input.artifactKey);
+        if (review.repository !== input.repository || review.pullRequest !== input.pullRequest || review.head !== input.head || review.baseRef !== input.baseRef || review.baseSha !== input.baseSha || review.publish !== input.publish) throw new Error("Staging gate does not match the prepared frozen review");
+      }
       const bodyPath = await tempArtifact("forgedock-record-", "body.md", input.body);
       const reportPath = resolve(dirname(bodyPath), "record.md");
       const args = [helperPath(), "record", "--kind", input.kind, "--repo", input.repository, "--body-file", bodyPath, "--report-file", reportPath];
