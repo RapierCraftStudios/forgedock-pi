@@ -7,8 +7,12 @@ description: Review one frozen PR with a risk-selected fresh panel, one verdict,
 
 Read the reviewer section of `../../specs/pi-adapter.md` and the authoritative
 `../../specs/original/commands/review-pr.md`; the latter defines the active proof-map and
-boundary-closure obligations. Resolve `forge.yaml`, active GitHub identity, repository, PR, and merge authorization once. A standalone PR and a
-work-on-owned PR use the same review standard.
+boundary-closure obligations. Resolve the target repository's canonical `forge.yaml`, active GitHub identity, repository, PR, and merge authorization once. A standalone PR and a
+work-on-owned PR use the same review standard. Standalone preparation must use the installed
+`dispatch.mjs standalone-review` contract: it binds exact PR/head/base/mode/roles without
+fabricating an issue and derives model, timing, concurrency, collection margin, and bounded
+launch/recovery allowance from the canonical config. Hand-authored native caps or requests are
+not supported.
 
 ## Freeze
 
@@ -96,8 +100,10 @@ saved report and native artifacts. Establish the original child/workflow termina
 launching one additional workflow containing only that role under the same stable authorization
 and report bytes; use the supported retained resume when the native status marks it resumable,
 otherwise use a fresh same-role launch with a new workflow key. Retry no other role. A wait timeout never creates a
-second live reviewer. A partial panel cannot produce a verdict. Use the native helper only for
-identity, request preparation, report transport/readback, and mechanical merge/safety checks;
+second live reviewer. A partial panel cannot produce a verdict. Standalone preparation bounds
+this recovery through `review.launch_allowance`; its documented fallback is two launches per
+selected role. Use the native helper only for identity, request preparation, report
+transport/readback, and mechanical merge/safety checks;
 do not use `runs.host` to transfer diffs or invent reviewer capability ceilings. Formatting variance alone never restarts a valid role.
 
 ## Finding admission and decide

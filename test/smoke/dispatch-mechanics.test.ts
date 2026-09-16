@@ -599,6 +599,45 @@ test("standalone policy and corrupt descriptor handling", async () => {
   });
 });
 
+test("standalone review preparation binds canonical config, exact identity, waves, and launch cap", async () => {
+  await fixture(async ({ root, repo }) => {
+    const config = await readFile(join(repo, "forge.yaml"), "utf8");
+    await writeFile(join(repo, "forge.yaml"), config.replace("panel_timeout_ms: 1200000", "panel_timeout_ms: 2400000").replace("result_collection_timeout_ms: 120000}", "result_collection_timeout_ms: 120000, launch_allowance: 11}"));
+    const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
+    const roles = ["correctness", "security", "api", "infra", "reliability", "testing"].map(role => ({ role, task: `Review ${role}`, thinking: "medium" }));
+    const plan = { pr: 33792, head, baseRef: "staging", baseSha: head, mode: "standard", roles, requestStartedAt: "2026-01-01T00:00:00Z", controlPlane };
+    const prepared = dispatch.prepareStandaloneReview(plan, join(root, "standalone-review"), repo, {});
+    assert.equal(prepared.policy.issue, undefined, "standalone policy must not fabricate an issue");
+    assert.equal(prepared.policy.repo, "example/project");
+    assert.equal(prepared.policy.config.path, join(repo, "forge.yaml"));
+    assert.match(prepared.policy.config.sha256, /^[a-f0-9]{64}$/);
+    assert.equal(prepared.request.globalConcurrencyLimit, 4);
+    assert.equal(prepared.request.maxSubagentSpawnsPerRun, 11);
+    assert.equal(prepared.timing.waves, 2);
+    assert.equal(prepared.timing.minimumPanelTimeoutMs, 2040000);
+    assert.equal(prepared.reviewers.length, 6);
+    const authorization = JSON.parse(await readFile(prepared.reviewers[0].authorization.path, "utf8"));
+    assert.equal(authorization.pullRequest, 33792);
+    assert.equal(authorization.reviewedHead, head);
+    assert.equal(authorization.baseRef, "staging");
+    assert.equal(authorization.baseSha, head);
+    assert.equal(authorization.mode, "standard");
+    assert.throws(() => dispatch.prepareStandaloneReview({ ...plan, globalConcurrencyLimit: 99 }, join(root, "override"), repo, {}), /Unknown standalone review field/);
+    assert.throws(() => dispatch.prepareStandaloneReview(plan, join(root, "bound"), repo, { PI_SUBAGENT_EXTENSION_BINDINGS: "{}" }), /issue-owner native binding/);
+  });
+});
+
+test("standalone review preparation fails closed for missing or malformed canonical config", async () => {
+  await fixture(async ({ root, repo }) => {
+    const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim();
+    const plan = { pr: 33792, head, baseRef: "staging", baseSha: head, mode: "standard", roles: [{ role: "correctness", task: "Review", thinking: "medium" }], controlPlane };
+    await rm(join(repo, "forge.yaml"));
+    assert.throws(() => dispatch.prepareStandaloneReview(plan, join(root, "missing"), repo, {}), /ENOENT/);
+    await writeFile(join(repo, "forge.yaml"), "project: [malformed");
+    assert.throws(() => dispatch.prepareStandaloneReview(plan, join(root, "malformed"), repo, {}));
+  });
+});
+
 test("unlinked standalone PR publication does not require an invented issue policy", async () => {
   const spec = await readFile("specs/knowledge-records.md", "utf8");
   assert.match(spec, /standalone PR review without a bound work-on issue retains direct file-backed/);

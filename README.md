@@ -144,7 +144,10 @@ as equivalent to `forge.yaml`.
 | `/work-on <PR> --remediate --issue <N>` | Run the bounded remediation/re-review route |
 | `/review-pr <PR selector> [flags]` | Context-aware standard review and optional guarded merge |
 | `/review-pr-staging <PR or route>` | Strict non-merging deployment/bundle review |
+| `dispatch.mjs standalone-review PLAN OUT` | Prepare a standalone exact-head review from canonical `forge.yaml` |
 | `/orchestrate <issue set> [--auto or --confirm]` | Dispatch one complete work-on lane per issue |
+
+Standalone review preparation requires the target repository root and a plan containing the exact PR, head, base ref/SHA, route mode, and selected roles. It emits a digest-bound native request; model, reviewer/panel deadlines, wave concurrency, collection margin, and `maxSubagentSpawnsPerRun` come only from that repository's canonical `forge.yaml`. Defaults are bounded and documented by the helper. Do not hand-author or override the generated native request. A partial panel never produces a verdict: after a reviewer is terminal, recover only that missing role with the same authorization and saved report bytes.
 
 `/forge:work-on`, `/forge:review-pr`, `/forge:review-pr-staging`, and
 `/forge:orchestrate` are lexical compatibility aliases for the same skills.

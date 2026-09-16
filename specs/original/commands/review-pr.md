@@ -19,6 +19,12 @@ adjudicates findings, publishes the consolidated record, and retains merge/closu
 - Resolve the configured repository, active identity, merge authority, linked issue, PR state,
   base/head SHAs, merge base, changed files, checks, and relevant existing exact-head records
   once. Use the exact frozen head/base in every reviewer task and publication.
+- Standalone PR review preparation uses `dispatch.mjs standalone-review` from the target
+  repository root. Its strict plan binds exact PR/head/base ref and SHA/mode/roles without
+  fabricating an issue-owner policy. The helper persists the canonical `forge.yaml` path and
+  digest and derives model, reviewer/panel deadlines, concurrency, collection margin, and
+  bounded launch/recovery allowance from that config; missing, malformed, stale, or conflicting
+  inputs fail before reviewer admission.
 - A target branch advance alone does not invalidate an unchanged clean, mergeable reviewed head.
   Reconcile only for a real conflict or required-up-to-date policy. If the effective patch or
   risk changes, rerun affected verification and a fresh review; do not create a starvation loop.

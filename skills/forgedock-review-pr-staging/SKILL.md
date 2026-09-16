@@ -9,8 +9,13 @@ This route is only for an explicit integration-to-protected deployment or bundle
 never replaces standard review for an ordinary issue PR, even when the integration branch
 is also the repository default.
 
-Read the staging mechanics in `../../specs/pi-adapter.md`, parse `forge.yaml` once, verify
-active GitHub/repository access, and freeze the exact PR head/base and merge base.
+Read the staging mechanics in `../../specs/pi-adapter.md`, parse the target repository's
+canonical `forge.yaml` once, verify active GitHub/repository access, and freeze the exact PR
+head/base and merge base. Standalone staging preparation uses
+`dispatch.mjs standalone-review` with exact PR/head/base/mode/roles and no fabricated issue;
+model, timing, wave concurrency, collection margin, panel deadline, and bounded launch/recovery
+allowance come from the canonical config. Missing or conflicting configuration fails before
+reviewer admission.
 
 ## Resolve the bundle
 
@@ -59,7 +64,9 @@ an ordinary transport retry. If a role stalls or publication/result delivery fai
 old native child/workflow terminal state first, then recover only that role
 with the same authorization and saved report bytes. Use supported retained resume when the
 native status marks it resumable; otherwise use a fresh same-role workflow with a new key. A wait timeout
-must not start a second live reviewer; a partial panel cannot pass the gate.
+must not start a second live reviewer; a partial panel cannot pass the gate. Standalone
+preparation bounds this recovery with `review.launch_allowance` (default: two launches per
+selected role), and retains the original authorization/report bytes.
 
 Cluster corroborating findings by shared root cause and behavioral invariant. The owner assigns
 one of `IMMEDIATE REPAIR`, `NON-BLOCKING FOLLOW-UP`, `REJECTED/NOT APPLICABLE`, or

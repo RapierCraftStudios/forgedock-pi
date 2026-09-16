@@ -81,9 +81,15 @@ role/persona, review round, and invariants once. Embed the bounded diff in each 
 one stable readable file path; `runs.host` is not available in raw review workflows and must
 not be used for bundle transfer. Use the prepared authorization/body/report paths and invoke
 the installed helper with argument arrays; report text is always file data, never shell or
-executable markup. For standalone review, create the same explicit reviewer authorization
-from the frozen PR identity without inventing an issue. For standalone interactive review,
-launch with `async: true`, yield, then consume native completion. In a headless work-on child,
+executable markup. For standalone review, invoke the installed `dispatch.mjs standalone-review` preparation
+contract from the target repository root. The plan binds only the exact PR, head, base ref/SHA,
+mode, and roles plus the installed control-plane descriptor; it never fabricates an issue-owner
+policy. Preparation reads and digests that root's canonical `forge.yaml`, and emits a native
+request whose model, reviewer/panel deadlines, wave concurrency, result-collection margin, and
+bounded launch/recovery allowance are configuration-derived. Reject missing, malformed, stale,
+or conflicting configuration and caller runtime-cap fields before reviewer admission. Use the
+same explicit reviewer authorization from the frozen PR identity. For standalone interactive
+review, launch with `async: true`, yield, then consume native completion. In a headless work-on child,
 keep the panel as one synchronous joined `workflowScript` (`await runs.all([...])`) and
 consume its returned value before continuing; headless auto-drain alone is not result
 consumption proof. Never emit terminal DONE just because a panel was dispatched.
@@ -99,12 +105,15 @@ running reviewers in that workflow, not a host-wide or provider-wide limit.
 The helper resolves `reviewer_timeout_ms`, `max_concurrent`, `publication_timeout_ms`,
 `result_collection_timeout_ms`, and `panel_timeout_ms` before launch. It computes admitted
 reviewer waves and rejects a panel deadline that cannot cover the waves, per-comment
-publication, and collection margin. Defaults preserve the former 900000ms child and
-1200000ms panel budgets; this repository's measured configuration uses 1800000ms per child
-and 2400000ms for one four-reviewer wave. The child deadline covers analysis and its own
-publication; the publication value bounds each `gh` transport operation, and collection is
-the enclosing panel margin. No cumulative panel spawn cap is added: parent planning keeps
-role/retry allowance separate from local active concurrency.
+publication, and collection margin. Defaults preserve the former 900000ms child, 4-reviewer
+concurrency, 120000ms publication/collection margins, and 1200000ms panel budget. Standalone
+reviews additionally use `review.launch_allowance`, defaulting to two launches per selected
+role (initial admission plus one bounded terminal-role recovery); an explicit configured value
+wins and must cover the selected roles. This is the standalone request's
+`maxSubagentSpawnsPerRun`, not permission to launch extra reviewers. The child deadline covers
+analysis and its own publication; the publication value bounds each `gh` transport operation,
+and collection is the enclosing panel margin. Issue-bound parent planning keeps its own role/
+retry allowance separate from local active concurrency.
 
 Join all required roles before synthesis. Retain every valid same-head report and its
 comment reference. A missing or failed role is an incomplete panel, not PASS. Before replacing

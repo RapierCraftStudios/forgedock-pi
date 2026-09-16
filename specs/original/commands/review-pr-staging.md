@@ -14,8 +14,13 @@ proof and publication contract.
 
 ## Freeze the bundle
 
-Resolve `forge.yaml`, the configured integration/protected branches, repository identity, active
-read authority, and the exact PR head/base/merge base once. Determine bundle membership from
+Resolve the target repository's canonical `forge.yaml`, the configured integration/protected
+branches, repository identity, active read authority, and the exact PR head/base/merge base
+once. Standalone staging preparation uses `dispatch.mjs standalone-review` with exact
+PR/head/base ref and SHA/mode/roles and no fabricated issue-owner policy; its model, timing,
+concurrency, collection margin, panel deadline, and bounded launch/recovery allowance come
+from the canonical config. Missing, malformed, stale, or conflicting inputs fail before
+reviewer admission. Determine bundle membership from
 same-repository commit reachability from the frozen integration head, excluding commits already
 reachable from the protected base. Reject ambiguous PR identity and repeated metadata. Do not
 infer membership from issue numbers, commit-message text, or branch guesses.
