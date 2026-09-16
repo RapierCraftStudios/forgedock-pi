@@ -45,12 +45,14 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     await execFileAsync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Candidate Test", "commit", "--quiet", "-m", "fixture"], { cwd: root });
     const sourceHead = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: root })).stdout.trim();
     const baseSha = (await execFileAsync("git", ["rev-parse", "HEAD^"], { cwd: root })).stdout.trim();
-    const issuesFile = join(root, "issues.json");
+    await execFileAsync("git", ["branch", "-M", "integration"], { cwd: root });
+    await execFileAsync("git", ["update-ref", "refs/remotes/origin/integration", sourceHead], { cwd: root });
+    const testName = root.slice(root.lastIndexOf("/") + 1);
+    const issuesFile = join(root, "..", `${testName}-issues.json`);
     await writeFile(issuesFile, JSON.stringify({ issues: [
       { number: 2, title: "dependent", body: "## Acceptance Criteria\n- [ ] Consumer works\n\nDepends on #1" },
       { number: 1, title: "base", body: "## Acceptance Criteria\n- [ ] Producer works" },
     ] }));
-    const testName = root.slice(root.lastIndexOf("/") + 1);
     const out = join(root, "..", `${testName}-dispatch`);
     const dispatch = JSON.parse((await execFileAsync("node", [helper, "prepare-dispatch", "--selector", "#1 #2", "--cwd", root, "--issues-file", issuesFile, "--out", out])).stdout) as { requestPath: string; planPath: string };
     const plan = JSON.parse(await readFile(dispatch.planPath, "utf8")) as { issues: Array<{ number: number; predecessors: string[] }>; readiness: { missingAcceptance: number[] } };
@@ -61,7 +63,6 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     assert.equal(request.globalConcurrencyLimit, 2);
     assert.match(await readFile(request.workflowScriptPath, "utf8"), /forgedock-owner/);
     await rm(out, { recursive: true, force: true });
-
     await rm(issuesFile, { force: true });
     const reviewInput = join(root, "..", `${root.slice(root.lastIndexOf("/") + 1)}-review.json`);
     const reviewOut = join(root, "..", `${root.slice(root.lastIndexOf("/") + 1)}-review-out`);

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -26,6 +27,10 @@ function stagingInput(input: string): boolean {
   return /^\/(?:forge:)?review-pr-staging(?:\s|$)/.test(input) || /^\/skill:forgedock-review-pr-staging(?:\s|$)/.test(input);
 }
 
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
 function allowedStagingSubagent(input: unknown): boolean {
   if (!input || typeof input !== "object") return false;
   const candidate = input as { agent?: unknown; workflowScript?: unknown; workflowScriptPath?: unknown };
@@ -34,9 +39,9 @@ function allowedStagingSubagent(input: unknown): boolean {
     try {
       const workflowPath = resolve(candidate.workflowScriptPath);
       const reviewRoot = resolve(dirname(workflowPath));
-      const authorization = JSON.parse(readFileSync(join(reviewRoot, "review.json"), "utf8")) as { schema?: unknown; artifactRoot?: unknown; artifactKey?: unknown; roles?: unknown };
+      const authorization = JSON.parse(readFileSync(join(reviewRoot, "review.json"), "utf8")) as { schema?: unknown; artifactRoot?: unknown; artifactKey?: unknown; workflowPath?: unknown; workflowSha256?: unknown; roles?: unknown };
       const script = readFileSync(workflowPath, "utf8");
-      return authorization.schema === "forgedock.candidate-review/v1" && authorization.artifactRoot === reviewRoot && typeof authorization.artifactKey === "string" && Array.isArray(authorization.roles) && authorization.roles.includes("correctness") && /agent:\s*["']forgedock-reviewer["']/.test(script) && !/agent:\s*(?!["']forgedock-reviewer["'])/.test(script) && !/forgedock-owner|worker|writer|delegate/.test(script);
+      return authorization.schema === "forgedock.candidate-review/v1" && authorization.artifactRoot === reviewRoot && authorization.workflowPath === workflowPath && authorization.workflowSha256 === sha256(script) && typeof authorization.artifactKey === "string" && Array.isArray(authorization.roles) && authorization.roles.includes("correctness") && /agent:\s*["']forgedock-reviewer["']/.test(script) && !/agent:\s*(?!["']forgedock-reviewer["'])/.test(script) && !/(?:forgedock-owner|worker|writer|delegate|runs\.host|[,{]\s*(?:gate|acceptance|verify)\s*:)/.test(script);
     } catch {
       return false;
     }
