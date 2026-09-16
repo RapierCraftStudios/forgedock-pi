@@ -25,8 +25,19 @@ while (($#)); do
     --thinking) THINKING=${2:?missing level}; shift 2 ;;
     --name) NAME=${2:?missing name}; shift 2 ;;
     -h|--help) usage; exit 0 ;;
-    --) shift; EXTRA+=("$@"); break ;;
-    *) EXTRA+=("$1"); shift ;;
+    --)
+      shift
+      for argument in "$@"; do
+        [[ "$argument" != -* ]] || { echo "Unsafe Pi option after --: $argument" >&2; exit 2; }
+        EXTRA+=("$argument")
+      done
+      break
+      ;;
+    *)
+      [[ "$1" != -* ]] || { echo "Unsupported launcher option: $1" >&2; exit 2; }
+      EXTRA+=("$1")
+      shift
+      ;;
   esac
 done
 
@@ -37,6 +48,7 @@ PI_ROOT="$INSTALL_ROOT/pi-agent"
 PACKAGE_ROOT="$INSTALL_ROOT/package"
 BIN="$PACKAGE_ROOT/bin/forgedock-candidate.mjs"
 [[ -f "$PI_ROOT/settings.json" && -f "$BIN" ]] || { echo "Invalid candidate install: $INSTALL_ROOT" >&2; exit 1; }
+node "$BIN" verify-install --install-root "$INSTALL_ROOT" >/dev/null
 
 # A stopped/foreign parent may leave PI_SUBAGENT_* controls in its environment.
 # The candidate must start from its own settings; the native runtime repopulates

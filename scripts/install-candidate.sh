@@ -77,6 +77,20 @@ mkdir -p "$PI_ROOT" "$INSTALL_ROOT/sessions"
 # node_modules directory.
 ( cd "$SUBAGENTS_ROOT" && npm install --omit=dev --ignore-scripts --no-audit --no-fund >/dev/null )
 ( cd "$PACKAGE_ROOT" && npm install --omit=dev --ignore-scripts --no-audit --no-fund >/dev/null )
+PACKAGE_DIGEST=$(node "$PACKAGE_ROOT/bin/forgedock-candidate.mjs" digest-tree --root "$PACKAGE_ROOT")
+SUBAGENTS_DIGEST=$(node "$PACKAGE_ROOT/bin/forgedock-candidate.mjs" digest-tree --root "$SUBAGENTS_ROOT")
+if [[ -f "$INSTALL_ROOT/manifest.json" ]]; then
+  read -r EXPECTED_PACKAGE_DIGEST EXPECTED_SUBAGENTS_DIGEST < <(node --input-type=module - "$INSTALL_ROOT/manifest.json" <<'NODE'
+import { readFileSync } from "node:fs";
+const manifest = JSON.parse(readFileSync(process.argv[2], "utf8"));
+process.stdout.write(`${manifest.packageDigest ?? ""} ${manifest.piSubagentsDigest ?? ""}`);
+NODE
+  )
+  if [[ "$EXPECTED_PACKAGE_DIGEST" != "$PACKAGE_DIGEST" || "$EXPECTED_SUBAGENTS_DIGEST" != "$SUBAGENTS_DIGEST" ]]; then
+    echo "Install root contents do not match its identity manifest; choose a new --install-root." >&2
+    exit 1
+  fi
+fi
 
 export PI_CODING_AGENT_DIR="$PI_ROOT"
 export PI_OFFLINE=1
@@ -120,6 +134,8 @@ cat > "$INSTALL_ROOT/manifest.json" <<EOF
   "schema": "forgedock.candidate-install/v1",
   "candidateCommit": "$CANDIDATE_SHA",
   "piSubagentsCommit": "$SUBAGENTS_SHA",
+  "packageDigest": "$PACKAGE_DIGEST",
+  "piSubagentsDigest": "$SUBAGENTS_DIGEST",
   "piVersion": "$PI_VERSION",
   "installRoot": "$INSTALL_ROOT",
   "packageRoot": "$PACKAGE_ROOT",

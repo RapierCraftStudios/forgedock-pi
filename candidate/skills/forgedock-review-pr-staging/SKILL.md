@@ -16,9 +16,11 @@ inputs are unchanged. Missing required runtime/integration/configuration authori
 FAIL prerequisite, not permission to claim PASS. Structural checks do not substitute for a
 required runtime boundary.
 
-Select correctness plus only concrete risk-justified specialists. Launch fresh ordinary
-`forgedock-reviewer` reviewers through the generated native request and wait for every role; their
-source tools are read-only and their only mutation capability is the report publisher.
+Select correctness plus only concrete risk-justified specialists. Use the `forge_prepare_review`
+tool to create the validated frozen request, launch fresh `forgedock-reviewer` reviewers through
+that generated native request, and wait for every role; their source tools are read-only and their
+only mutation capability is the report publisher. Use `forge_run_check` for configured checks and
+`forge_publish_record` for the consolidated gate; do not use bash/edit/write in this route.
 Each reviewer publishes its own exact-head report, including a substantive clean report. No
 reviewer edits source, creates issues, merges, deploys, closes issues, or starts repair.
 

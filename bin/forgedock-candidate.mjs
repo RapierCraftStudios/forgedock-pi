@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createHash, randomUUID } from "node:crypto";
 import { execFile, execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync, renameSync, chmodSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, readdirSync, writeFileSync, renameSync, chmodSync } from "node:fs";
 import { dirname, join, relative, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -61,6 +61,28 @@ function canonicalJson(value) {
 
 function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+function digestTree(root) {
+  const files = [];
+  function collect(directory, prefix) {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entry.name === "node_modules") continue;
+      const full = join(directory, entry.name);
+      const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isSymbolicLink()) fail(`Install tree contains a symlink: ${full}`);
+      if (entry.isDirectory()) collect(full, relativePath);
+      else if (entry.isFile()) files.push({ path: relativePath, full });
+    }
+  }
+  collect(resolve(root), "");
+  const hash = createHash("sha256");
+  for (const file of files.sort((left, right) => left.path.localeCompare(right.path))) {
+    hash.update(file.path);
+    hash.update("\\0");
+    hash.update(readFileSync(file.full));
+  }
+  return hash.digest("hex");
 }
 
 function readJson(file) {
@@ -512,6 +534,7 @@ function prepareReview(options) {
   }
   const configRoot = realpathSync(resolve(input.configRoot ?? sourceRoot));
   const canonicalConfig = loadConfig(configRoot);
+  if (canonicalConfig.repository.toLowerCase() !== repository.toLowerCase() || !canonicalConfig.repositoryMatchesRemote) fail("Review configuration repository does not match the frozen review repository");
   if (input.config !== undefined && canonicalJson(input.config) !== canonicalJson(canonicalConfig)) fail("Review input configuration does not match canonical forge.yaml");
   const config = canonicalConfig;
   const selected = Array.isArray(input.roles) && input.roles.length > 0 ? { roles: input.roles, rationale: Array.isArray(input.rationale) ? input.rationale.filter((item) => typeof item === "string") : [] } : roleList(input);
@@ -840,7 +863,7 @@ async function doctor(options) {
 }
 
 function usage() {
-  process.stdout.write(`ForgeDock candidate helper\n\nCommands:\n  doctor --cwd <repo> --config-dir <isolated-pi-dir>\n  status   (alias for doctor)\n  config --cwd <repo>\n  prepare --issue <N> --cwd <repo>\n  prepare-dispatch --selector <set> --cwd <repo> --out <dir> [--issues-file <json>]\n  prepare-review --input <json> --out <dir>\n  record reviewer --repo <org/repo> --pr <N> --head <sha> --base-ref <branch> --base-sha <sha> --role <role> --body-file <file> [--report-file <file>] [--publish]\n  record --kind <kind> --repo <org/repo> --issue <N>|--pr <N> --body-file <file> [--publish]\n  replace --config-dir <dir> --old-source <source> --candidate-source <source>\n  rollback --rollback <directory>\n`);
+  process.stdout.write(`ForgeDock candidate helper\n\nCommands:\n  doctor --cwd <repo> --config-dir <isolated-pi-dir>\n  status   (alias for doctor)\n  config --cwd <repo>\n  prepare --issue <N> --cwd <repo>\n  prepare-dispatch --selector <set> --cwd <repo> --out <dir> [--issues-file <json>]\n  prepare-review --input <json> --out <dir>\n  record reviewer --repo <org/repo> --pr <N> --head <sha> --base-ref <branch> --base-sha <sha> --role <role> --body-file <file> [--report-file <file>] [--publish]\n  record --kind <kind> --repo <org/repo> --issue <N>|--pr <N> --body-file <file> [--publish]\n  replace --config-dir <dir> --old-source <source> --candidate-source <source>\n  rollback --rollback <directory>\n  digest-tree --root <directory>\n  verify-install --install-root <directory>\n`);
 }
 
 async function main() {
@@ -848,6 +871,21 @@ async function main() {
   const options = argsOf(rest);
   if (!command || command === "--help" || command === "help") return usage();
   if (command === "doctor" || command === "status") return doctor(options);
+  if (command === "digest-tree") {
+    process.stdout.write(`${digestTree(requiredOption(options, "root"))}\n`);
+    return;
+  }
+  if (command === "verify-install") {
+    const installRoot = resolve(requiredOption(options, "install-root"));
+    const manifest = readJson(join(installRoot, "manifest.json"));
+    const packageRoot = resolve(installRoot, "package");
+    const subagentsRoot = resolve(installRoot, "pi-subagents");
+    if (manifest.packageRoot !== packageRoot || manifest.piSubagentsRoot !== subagentsRoot || manifest.installRoot !== installRoot) fail("Install manifest paths do not match its install root");
+    if (!FULL_SHA.test(manifest.candidateCommit) || !FULL_SHA.test(manifest.piSubagentsCommit) || !/^[a-f0-9]{64}$/.test(manifest.packageDigest) || !/^[a-f0-9]{64}$/.test(manifest.piSubagentsDigest)) fail("Install manifest identity/digests are incomplete");
+    if (digestTree(packageRoot) !== manifest.packageDigest || digestTree(subagentsRoot) !== manifest.piSubagentsDigest) fail("Installed package contents do not match the identity manifest");
+    process.stdout.write(json({ schema: "forgedock.candidate-install-verification/v1", installRoot, candidateCommit: manifest.candidateCommit, piSubagentsCommit: manifest.piSubagentsCommit, packageDigest: manifest.packageDigest, piSubagentsDigest: manifest.piSubagentsDigest }));
+    return;
+  }
   if (command === "config") {
     const cwd = resolve(optionalOption(options, "cwd", process.cwd()));
     process.stdout.write(json(loadConfig(cwd)));

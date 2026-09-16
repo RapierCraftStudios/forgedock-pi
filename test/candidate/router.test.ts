@@ -11,7 +11,8 @@ test("routes only the familiar candidate commands", () => {
   assert.equal(Object.keys(FORGEDOCK_ALIASES).length, 4);
   assert.equal(isStagingMutationBlocked("write", { path: "src/app.ts" }), true);
   assert.equal(isStagingMutationBlocked("bash", { command: "git push origin staging" }), true);
-  assert.equal(isStagingMutationBlocked("bash", { command: "npm test" }), false);
+  assert.equal(isStagingMutationBlocked("bash", { command: "npm test" }), true);
+  assert.equal(isStagingMutationBlocked("forge_run_check", { name: "test" }), false);
   assert.equal(isStagingMutationBlocked("subagent", { agent: "forgedock-owner" }), true);
   assert.equal(isStagingMutationBlocked("subagent", { agent: "forgedock-reviewer" }), false);
 });

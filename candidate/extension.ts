@@ -1,4 +1,7 @@
+import { readFileSync } from "node:fs";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+
+import registerCandidateTools from "./tools.ts";
 
 export const FORGEDOCK_ALIASES = Object.freeze({
   orchestrate: "forgedock-orchestrate",
@@ -22,25 +25,32 @@ function stagingInput(input: string): boolean {
   return /^\/(?:forge:)?review-pr-staging(?:\s|$)/.test(input) || /^\/skill:forgedock-review-pr-staging(?:\s|$)/.test(input);
 }
 
-function blockedStagingShell(command: string): boolean {
-  return /(?:^|\s)(?:git\s+(?:commit|push|merge|reset|rebase|checkout|switch|branch\s+-D)|gh\s+(?:pr\s+merge|issue\s+(?:create|close|edit)|deploy)|npm\s+publish|rm\s+-rf?\b|(?:mv|cp)\s+[^\n]*|>>?\s*[^\s])/.test(command);
-}
-
-function blockedStagingSubagent(input: unknown): boolean {
-  const text = JSON.stringify(input);
-  return /forgedock-owner|worker|writer|claude-code-writer|codex-exec-writer|cursor-agent-writer/.test(text);
+function allowedStagingSubagent(input: unknown): boolean {
+  if (!input || typeof input !== "object") return false;
+  const candidate = input as { agent?: unknown; workflowScript?: unknown; workflowScriptPath?: unknown };
+  if (candidate.agent !== undefined) return candidate.agent === "forgedock-reviewer";
+  if (typeof candidate.workflowScript === "string") return candidate.workflowScript.includes("forgedock-reviewer") && !/forgedock-owner|worker|writer|delegate/.test(candidate.workflowScript);
+  if (typeof candidate.workflowScriptPath === "string") {
+    try {
+      const script = readFileSync(candidate.workflowScriptPath, "utf8");
+      return script.includes("forgedock-reviewer") && !/forgedock-owner|worker|writer|delegate/.test(script);
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }
 
 /** Narrow route guard: staging may inspect/check/publish evidence, never mutate product code or deliver it. */
 export function isStagingMutationBlocked(toolName: string, input: unknown): boolean {
-  if (["edit", "write", "powershell"].includes(toolName)) return true;
-  if (toolName === "bash" && typeof input === "object" && input !== null && blockedStagingShell((input as { command?: unknown }).command as string ?? "")) return true;
-  if (toolName === "subagent" && blockedStagingSubagent(input)) return true;
+  if (["edit", "write", "bash", "powershell"].includes(toolName)) return true;
+  if (toolName === "subagent" && !allowedStagingSubagent(input)) return true;
   return false;
 }
 
 export default function forgedockCandidateExtension(pi: ExtensionAPI): void {
   let stagingGuard = false;
+  registerCandidateTools(pi);
   pi.registerCommand("forge-status", {
     description: "Show that the isolated ForgeDock candidate extension is loaded",
     handler: async (_args, ctx) => {
