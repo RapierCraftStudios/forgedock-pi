@@ -34,7 +34,8 @@ FORGEDOCK_CANDIDATE_INSTALL_ROOT=/home/dev/.cache/forgedock-pi-candidate/<candid
 
 `--reuse-auth` is optional; it symlinks an already-authenticated operator `auth.json` into
 this disposable config without copying credentials. Omit it to qualify resource loading only.
-The installer snapshots both exact Git heads, installs them through Pi into
+The installer requires Pi 0.85.1 and pi-subagents commit 0931cbbb98ab253177b181bd334fe02dd919dca5
+by default (alternate explicitly pinned values can be supplied). It snapshots both exact Git heads, installs them through Pi into
 `<install-root>/pi-agent`, sets `defaultProjectTrust: never`, and does not edit the ordinary
 `~/.pi/agent/settings.json`. It writes only package paths, versions, and policy metadata to
 `manifest.json`; credentials are not copied or printed.
@@ -80,8 +81,11 @@ $FORGEDOCK_CANDIDATE_BIN prepare-dispatch \
   --out /tmp/forgedock-candidate/dispatch-1
 ```
 
-The command writes `plan.json`, `workflow.js`, and `request.json`. The dispatcher invokes the
-request through Pi's supported `subagent` tool; it does not hand-author a native script.
+The command writes `plan.json`, `workflow.js`, and `request.json`. Before invoking the request,
+the dispatcher must query the supported native `subagent({ action: "status" })` boundary and
+correlate exact issue/worktree ownership; unavailable or ambiguous ownership gates only that
+issue. The dispatcher invokes the request through Pi's supported `subagent` tool; it does not
+hand-author a native script.
 
 Review preparation uses a JSON input with the frozen repository, PR, full head/base identities,
 source checkout, original acceptance, evidence, and risk selection:

@@ -56,12 +56,12 @@ Use subagent with the request file produced by:
 "$FORGEDOCK_CANDIDATE_BIN" prepare-review --input <review-input.json> --out <review-dir>
 ```
 
-The request uses one fresh ordinary `delegate` reviewer for correctness. Add security only
-when the change materially crosses a trust/privilege/security boundary; add a specialist only
-for a concrete question not covered by the selected roles. The parent waits for every role.
-Each reviewer inspects the frozen head and relevant consumers, writes its own substantive
-file-backed report, and publishes it through `forge-candidate record reviewer` when GitHub
-write authority is available. It must not edit source, create issues, merge, deploy, or decide
+The request uses one fresh `forgedock-reviewer` for correctness. Add security only when the
+change materially crosses a trust/privilege/security boundary; add a specialist only for a
+concrete question not covered by the selected roles. The parent waits for every role. Each
+reviewer has read-only source tools plus a publication-only capability, inspects the frozen
+head and relevant consumers, writes its own substantive file-backed report, and publishes it
+through the candidate helper when GitHub write authority is available. It must not edit source, create issues, merge, deploy, or decide
 for the parent.
 
 The parent reads every report and deduplicates by causal mechanism. Disposition each concern:

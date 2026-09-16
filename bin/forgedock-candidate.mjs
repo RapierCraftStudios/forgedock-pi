@@ -449,7 +449,7 @@ function prepareDispatch(options) {
     repository: config.repository,
     projectRoot: config.projectRoot,
     config,
-    ownership: { exactWorktreeMatches, nativeRunCheck: "dispatcher must confirm through the supported subagent status boundary before admission" },
+    ownership: { exactWorktreeMatches, nativeRunCheck: { required: true, action: "subagent({ action: \"status\" })", policy: "correlate exact issue/worktree evidence before admission; unavailable status gates the affected issue" } },
     readiness: { missingAcceptance, activeOwnership: [...activeOwnership], externalDependencies: graph.filter((issue) => issue.externalDependencies.length > 0).map((issue) => ({ issue: issue.number, dependencies: issue.externalDependencies })), admittedIssues: graph.filter((issue) => issue.admitted).map((issue) => issue.number) },
     issues: graph.map((issue) => ({ ...issue, task: ownerTask(issue, config, out) })),
   };
@@ -557,7 +557,7 @@ function prepareReview(options) {
   const diffPath = writeExclusive(join(out, "frozen.diff"), `${diff}\n`);
   const configText = readFileSync(config.configPath, "utf8");
   const roleArtifactKeys = Object.fromEntries(selected.roles.map((role) => [role, randomUUID()]));
-  const review = { schema: "forgedock.candidate-review/v1", artifactRoot: out, artifactKey: randomUUID(), ...input, repository, pullRequest, head, baseSha, baseRef, sourceRoot, configRoot, config, configHead, configSha256: sha256(configText), roles: selected.roles, rationale: selected.rationale, diffPath, diffSha256: sha256(Buffer.from(`${diff}\n`)), publish: input.publish === true };
+  const review = { schema: "forgedock.candidate-review/v1", artifactRoot: out, artifactKey: randomUUID(), ...input, repository, pullRequest, head, baseSha, baseRef, sourceRoot, configRoot, config, configHead, configPath: config.configPath, configSha256: sha256(configText), roles: selected.roles, rationale: selected.rationale, diffPath, diffSha256: sha256(Buffer.from(`${diff}\n`)), publish: input.publish === true };
   for (const role of selected.roles) {
     writeExclusive(join(out, `${role}.authorization.json`), json({ schema: "forgedock.candidate-review-role/v1", artifactRoot: out, artifactKey: roleArtifactKeys[role], role, repository, pullRequest, head, baseRef, baseSha, publish: review.publish }));
   }

@@ -14,9 +14,10 @@ investigation and mutation plans stay inside each owner.
 1. Parse the selector once. Use `"$FORGEDOCK_CANDIDATE_BIN" prepare-dispatch --selector <selector>
    --cwd "$PWD" --out <run-dir>` so pagination, original bodies, acceptance text, repository
    identity, target, verification catalog, and source/config identities are captured once.
-2. Check only concrete active ownership evidence for each issue (an exact native run/worktree
-   match). An ambiguous match is surfaced for that issue; do not perform broad process/session
-   archaeology or treat a phase label as proof.
+2. Before admitting any issue, query the supported native boundary (`subagent({ action:
+   "status" })`) and correlate it with exact issue/worktree evidence. Also use the helper's
+   live-worktree check. An ambiguous or unavailable match is surfaced/gated for that issue; do
+   not perform broad process/session archaeology or treat a phase label as proof.
 3. Build only real ordering: explicit dependency markers, exact shared declared mutation files,
    migration order, or exact configured global/high-fan-in files. Domains, directories,
    keywords, uncertainty, and cost guesses never create edges. Confirm the small plan before
