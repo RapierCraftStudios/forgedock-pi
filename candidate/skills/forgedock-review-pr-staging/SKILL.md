@@ -23,8 +23,11 @@ not promoted into this gate. Missing required runtime/integration/configuration 
 precise FAIL prerequisite, not permission to claim PASS. Structural checks do not substitute
 for a required runtime boundary.
 
-Select correctness plus only concrete risk-justified specialists. Use the `forge_prepare_review`
-tool to create the validated frozen request and its read-only repository/PR policy facts, launch
+Select at most three reviewer roles. `forge_prepare_review.roles` accepts only
+`correctness`, `security`, and `specialist`; never pass target-domain names such as `infra`,
+`database`, or `concurrency`. Combine distinct questions into one `specialist` assignment or
+omit `roles` and let the bounded helper derive the roster. Select correctness plus only concrete
+risk-justified specialists. Use the `forge_prepare_review` tool to create the validated frozen request and its read-only repository/PR policy facts, launch
 fresh `forgedock-reviewer` reviewers through that generated native request, and wait for every
 role; their source tools are read-only and their only mutation capability is the report publisher.
 Use `forge_run_check` for configured local checks only when the prepared configuration declares

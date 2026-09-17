@@ -264,16 +264,23 @@ async function failWithDiagnostic(prefix: string, detail: string): Promise<never
   throw new Error(`${prefix}: ${preview}\nFull diagnostic: ${diagnosticPath}. Do not retry the unchanged request.`);
 }
 
+function worktreePaths(porcelain: string): string[] {
+  return porcelain.split(/\n\n+/).map((entry) => entry.split("\n").find((line) => line.startsWith("worktree "))?.slice("worktree ".length)).filter((path): path is string => typeof path === "string" && path.length > 0).map((path) => resolve(path));
+}
+
+async function reviewWorktreePaths(pi: ExtensionAPI, cwd: string): Promise<string[]> {
+  const result = await pi.exec("git", ["worktree", "list", "--porcelain"], { cwd, timeout: 20_000 });
+  return result.code === 0 ? worktreePaths(result.stdout) : [];
+}
+
 async function resolveReviewSourceRoot(pi: ExtensionAPI, requestedRoot: string, head: string): Promise<{ sourceRoot: string; configRoot?: string }> {
   const requested = resolve(requestedRoot);
   const current = await pi.exec("git", ["rev-parse", "HEAD"], { cwd: requested, timeout: 20_000 });
   if (current.code !== 0 || current.stdout.trim() === head) return { sourceRoot: requested };
-  const worktrees = await pi.exec("git", ["worktree", "list", "--porcelain"], { cwd: requested, timeout: 20_000 });
-  if (worktrees.code !== 0) return { sourceRoot: requested };
-  const paths = worktrees.stdout.split(/\n\n+/).map((entry) => entry.split("\n").find((line) => line.startsWith("worktree "))?.slice("worktree ".length)).filter((path): path is string => typeof path === "string" && path.length > 0);
+  const paths = await reviewWorktreePaths(pi, requested);
+  if (paths.length === 0) return { sourceRoot: requested };
   const matches: string[] = [];
-  for (const path of paths) {
-    const actual = resolve(path);
+  for (const actual of paths) {
     const revision = await pi.exec("git", ["rev-parse", "HEAD"], { cwd: actual, timeout: 20_000 });
     if (revision.code !== 0 || revision.stdout.trim() !== head) continue;
     const status = await pi.exec("git", ["status", "--porcelain=v1", "--untracked-files=all"], { cwd: actual, timeout: 20_000 });
@@ -281,6 +288,19 @@ async function resolveReviewSourceRoot(pi: ExtensionAPI, requestedRoot: string, 
   }
   if (matches.length !== 1) throw new Error(matches.length > 1 ? `Review head ${head} has multiple clean worktrees; select one explicitly.` : `Review source checkout is not at ${head}; no clean exact-head worktree was found.`);
   return { sourceRoot: matches[0]!, ...(existsSync(join(requested, "forge.yaml")) ? { configRoot: requested } : {}) };
+}
+
+async function resolveReviewConfigRoot(pi: ExtensionAPI, requestedRoot: string, sourceRoot: string, configuredRoot?: string): Promise<string> {
+  const requested = resolve(requestedRoot);
+  const configured = configuredRoot ? resolve(configuredRoot) : undefined;
+  if (configured && existsSync(join(configured, "forge.yaml"))) return configured;
+  if (!configured && existsSync(join(requested, "forge.yaml"))) return requested;
+  if (configured && configured !== sourceRoot) throw new Error(`Review config root ${configured} has no canonical forge.yaml.`);
+  const reviewPaths = await reviewWorktreePaths(pi, sourceRoot);
+  if (reviewPaths.length === 0) return configured ?? requested;
+  const candidates = reviewPaths.filter((path) => path !== sourceRoot && !path.split(/[\\\\/]/).includes(".forge") && existsSync(join(path, "forge.yaml")));
+  if (candidates.length === 1) return candidates[0]!;
+  throw new Error(candidates.length > 1 ? "Multiple possible canonical forge.yaml worktrees found; provide configRoot explicitly." : "No canonical forge.yaml worktree found for the exact review source.");
 }
 
 function configuredCommand(raw: unknown, name: string): string | undefined {
@@ -310,7 +330,8 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       let resolvedInput: ReviewInput;
       try {
         const resolution = await resolveReviewSourceRoot(pi, input.sourceRoot, input.head);
-        resolvedInput = { ...input, sourceRoot: resolution.sourceRoot, ...(input.configRoot === undefined && resolution.configRoot ? { configRoot: resolution.configRoot } : {}) };
+        const configRoot = await resolveReviewConfigRoot(pi, input.sourceRoot, resolution.sourceRoot, input.configRoot ?? resolution.configRoot);
+        resolvedInput = { ...input, sourceRoot: resolution.sourceRoot, configRoot };
       } catch (error) {
         throw await failWithDiagnostic("Review source preparation failed", error instanceof Error ? error.message : String(error));
       }
