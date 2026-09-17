@@ -14,7 +14,57 @@ const FULL_SHA = /^[a-f0-9]{40,64}$/;
 const SAFE_TOKEN = /^[A-Za-z0-9_.-]+$/;
 const FULL_MODEL = /^[^\s/]+\/[^\s]+$/;
 const THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
-const RECORD_KINDS = new Set(["INVESTIGATION", "PLAN", "BUILD", "REVIEW", "DECISION", "CLOSURE", "STAGING_GATE"]);
+const RECORD_KINDS = new Set([
+  "INVESTIGATION", "PLAN", "BUILD", "REVIEW", "DECISION", "CLOSURE", "STAGING_GATE",
+  "INVESTIGATOR", "CLASSIFICATION", "CONTEXT", "CONTRACT", "ARCHITECT", "BUILDER",
+  "REVIEW-PANEL", "TRAJECTORY", "GATED", "REMEDIATION", "DECOMPOSED",
+]);
+const DURABLE_RECORD_KINDS = new Set([
+  "INVESTIGATOR", "CLASSIFICATION", "CONTEXT", "CONTRACT", "ARCHITECT", "BUILDER",
+  "REVIEW-PANEL", "TRAJECTORY", "GATED", "REMEDIATION", "DECOMPOSED",
+]);
+const DURABLE_RECORD_TITLES = Object.freeze({
+  INVESTIGATOR: "Investigation",
+  CLASSIFICATION: "Classification",
+  CONTEXT: "Implementation Context",
+  CONTRACT: "Build Contract",
+  ARCHITECT: "Implementation Plan",
+  BUILDER: "Build Complete",
+  "REVIEW-PANEL": "Review Panel",
+  TRAJECTORY: "Work-On Outcome",
+  GATED: "Work-On Gated",
+  REMEDIATION: "Remediation Complete",
+  DECOMPOSED: "Decomposition Complete",
+});
+const WORKFLOW_STATE_CANDIDATES = Object.freeze({
+  investigating: ["workflow:investigating"],
+  "ready-to-build": ["workflow:ready-to-build"],
+  building: ["workflow:building", "workflow:built"],
+  "in-review": ["workflow:in-review", "workflow:reviewing"],
+  "awaiting-merge": ["workflow:awaiting-merge"],
+  merged: ["workflow:merged"],
+  decomposed: ["workflow:decomposed"],
+  invalid: ["workflow:invalid"],
+  gated: ["workflow:gated"],
+  "engine-error": ["workflow:engine-error"],
+});
+const WORKFLOW_LABELS = Object.freeze([...new Set(Object.values(WORKFLOW_STATE_CANDIDATES).flat())]);
+const LABEL_DEFINITIONS = Object.freeze({
+  "workflow:investigating": { color: "1D76DB", description: "Pipeline: investigation phase in progress. Managed by ForgeDock." },
+  "workflow:ready-to-build": { color: "0075CA", description: "Pipeline: investigation complete, ready for build. Managed by ForgeDock." },
+  "workflow:building": { color: "0052CC", description: "Pipeline: implementation in progress. Managed by ForgeDock." },
+  "workflow:in-review": { color: "5319E7", description: "Pipeline: PR created, under review. Managed by ForgeDock." },
+  "workflow:awaiting-merge": { color: "FF8C00", description: "Pipeline: remediated + re-reviewed, awaiting a human merge decision. Managed by ForgeDock." },
+  "workflow:merged": { color: "0E8A16", description: "Pipeline: PR merged, issue closed. Managed by ForgeDock." },
+  "workflow:decomposed": { color: "BFD4F2", description: "Pipeline: decomposed into sub-issues. Managed by ForgeDock." },
+  "workflow:invalid": { color: "CCCCCC", description: "Pipeline: issue closed as invalid after investigation. Managed by ForgeDock." },
+  "workflow:engine-error": { color: "B60205", description: "Pipeline stalled — engine/tool failure (not a genuine human-judgment block). Managed by ForgeDock." },
+  "workflow:built": { color: "0052CC", description: "ForgeDock implementation is complete." },
+  "workflow:reviewing": { color: "0075CA", description: "Code review in progress." },
+  "workflow:gated": { color: "B60205", description: "ForgeDock issue gated on explicit prerequisite or authority." },
+});
+const RECORD_MARKER = /^<!-- FORGE:([A-Z][A-Z-]*) -->$/;
+const RECORD_METADATA_MARKER = /^<!-- FORGE:RECORD (\{.*\}) -->$/;
 
 function fail(message) {
   throw new Error(message);
@@ -467,6 +517,7 @@ function ownerTask(issue, config, runDir, targetBase, issueInputFile, orchestrat
     issue.body,
     "--- END ISSUE BODY ---",
     `Prepared intake and dispatch artifacts are under ${runDir}. Use the candidate skill and deterministic helper once; do not read sibling worktrees or retired ForgeDock specs as authority.`,
+    "Use the normal work-on label and durable-record hooks for this issue; publish distinct issue records and leave a truthful terminal or gated state for the dispatcher to discover. The dispatcher must not manufacture missing history.",
     "Finish with exactly: FORGE_WORK_ON_RESULT status=DONE|GATED|FAILED issue=<N> pr=<N|none> dependency=SATISFIED|UNSATISFIED",
   ].join("\n");
 }
@@ -655,6 +706,416 @@ function validateIdentityPart(value, label) {
   return value;
 }
 
+function safeHttpsUrl(value, label = "URL") {
+  if (typeof value !== "string" || /[\s<>]/.test(value)) fail(`${label} must be an HTTPS URL`);
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password || url.search) fail(`${label} must be an HTTPS URL without credentials or query parameters`);
+    return value;
+  } catch {
+    fail(`${label} must be an HTTPS URL`);
+  }
+}
+
+function commentEndpoint(repository, destination) {
+  return `repos/${repository}/issues/${destination}/comments`;
+}
+
+function verifyReviewPanelPullRequest(repository, pullRequest, head, baseRef, baseSha, cwd) {
+  const pull = readJsonFromText(exec("gh", ["pr", "view", String(pullRequest), "-R", repository, "--json", "headRefOid,baseRefName,baseRefOid,mergeable,mergeStateStatus"], { cwd, timeout: 120_000 }));
+  if (pull.headRefOid !== head || pull.baseRefName !== baseRef || pull.baseRefOid !== baseSha) fail("REVIEW-PANEL identity no longer matches the live pull request");
+  const mergeable = typeof pull.mergeable === "string" ? pull.mergeable.toUpperCase() : pull.mergeable;
+  const mergeState = typeof pull.mergeStateStatus === "string" ? pull.mergeStateStatus.toUpperCase() : "";
+  if (mergeable === "CONFLICTING" || ["DIRTY", "CONFLICTING"].includes(mergeState)) fail("REVIEW-PANEL cannot publish against a conflicting pull request");
+}
+
+function listComments(repository, destination, cwd) {
+  const pages = readJsonFromText(exec("gh", ["api", "--paginate", "--slurp", commentEndpoint(repository, destination)], { cwd, timeout: 120_000 }));
+  if (!Array.isArray(pages)) fail("GitHub comments returned an unexpected shape");
+  return pages.flatMap((page) => Array.isArray(page) ? page : []);
+}
+
+function commentReadback(repository, id, cwd) {
+  return readJsonFromText(exec("gh", ["api", `repos/${repository}/issues/comments/${id}`], { cwd, timeout: 120_000 }));
+}
+
+function verifiedCommentUrl(value, repository, destination, pullRequest, id, label) {
+  const url = safeHttpsUrl(value, label);
+  const parsed = new URL(url);
+  const path = `/${repository}/${pullRequest ? "pull" : "issues"}/${destination}`.toLowerCase();
+  if (parsed.pathname.toLowerCase() !== path || parsed.hash !== `#issuecomment-${id}`) fail(`${label} does not identify the expected GitHub comment`);
+  return url;
+}
+
+function durableRecordFromBody(body) {
+  if (typeof body !== "string") return undefined;
+  const lines = body.replace(/\r\n?/g, "\n").split("\n");
+  const marker = lines[0]?.match(RECORD_MARKER);
+  if (!marker || !DURABLE_RECORD_KINDS.has(marker[1])) return undefined;
+  const metadataMatch = lines[1]?.match(RECORD_METADATA_MARKER);
+  let metadata;
+  if (metadataMatch) {
+    try { metadata = JSON.parse(metadataMatch[1]); } catch { metadata = undefined; }
+  }
+  return { kind: marker[1], metadata };
+}
+
+function reviewerIdentityFromReport(body) {
+  const first = body.replace(/\r\n?/g, "\n").split("\n", 1)[0];
+  const match = first.match(/^<!-- FORGE:REVIEWER_REPORT (\{.*\}) -->$/);
+  if (!match) fail("Reviewer report file is missing its generated identity marker");
+  try { return JSON.parse(match[1]); } catch { fail("Reviewer report identity is not valid JSON"); }
+}
+
+function labelNames(repository, issue, cwd) {
+  const raw = readJsonFromText(exec("gh", ["api", "--paginate", "--slurp", `repos/${repository}/issues/${issue}/labels`], { cwd, timeout: 120_000 }));
+  if (!Array.isArray(raw)) fail("GitHub labels returned an unexpected shape");
+  return raw.flatMap((page) => Array.isArray(page) ? page : []).map((label) => typeof label === "string" ? label : label?.name).filter((label) => typeof label === "string");
+}
+
+function ensureWorkflowLabel(repository, label, cwd) {
+  const endpoint = `repos/${repository}/labels/${encodeURIComponent(label)}`;
+  try {
+    exec("gh", ["api", endpoint], { cwd, timeout: 120_000 });
+    return false;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/404|not found/i.test(message)) fail(`Unable to inspect required label '${label}': ${message}`);
+    const definition = LABEL_DEFINITIONS[label];
+    if (!definition) fail(`No canonical definition is available for required label '${label}'`);
+    try {
+      exec("gh", ["api", `repos/${repository}/labels`, "--method", "POST", "-f", `name=${label}`, "-f", `color=${definition.color}`, "-f", `description=${definition.description}`], { cwd, timeout: 120_000 });
+    } catch (error) {
+      try {
+        exec("gh", ["api", endpoint], { cwd, timeout: 120_000 });
+        return true;
+      } catch {
+        throw error;
+      }
+    }
+    return true;
+  }
+}
+
+function mutateIssueLabel(repository, issue, label, cwd, present) {
+  try {
+    if (present) addIssueLabel(repository, issue, label, cwd);
+    else removeIssueLabel(repository, issue, label, cwd);
+    return "applied";
+  } catch (error) {
+    try {
+      const recovered = labelNames(repository, issue, cwd).includes(label);
+      if (recovered === present) return "ambiguous-label-reconciled";
+    } catch {
+      // Preserve the original transport error when reconciliation is unavailable.
+    }
+    throw error;
+  }
+}
+
+function addIssueLabel(repository, issue, label, cwd) {
+  exec("gh", ["api", `repos/${repository}/issues/${issue}/labels`, "--method", "POST", "-f", `labels[]=${label}`], { cwd, timeout: 120_000 });
+}
+
+function removeIssueLabel(repository, issue, label, cwd) {
+  exec("gh", ["api", `repos/${repository}/issues/${issue}/labels/${encodeURIComponent(label)}`, "--method", "DELETE"], { cwd, timeout: 120_000 });
+}
+
+function transitionWorkflowLabel(options) {
+  const repository = validateIdentityPart(requiredOption(options, "repo"), "label repository");
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) fail("label repository is invalid");
+  const issue = integer(Number(requiredOption(options, "issue")), "label issue");
+  const state = requiredOption(options, "state").toLowerCase();
+  const candidates = WORKFLOW_STATE_CANDIDATES[state];
+  if (!candidates) fail(`Unsupported workflow label state '${state}'. Use ${Object.keys(WORKFLOW_STATE_CANDIDATES).join(", ")}`);
+  const cwd = resolve(optionalOption(options, "cwd", process.cwd()));
+  const before = labelNames(repository, issue, cwd);
+  const label = candidates.find((value) => before.includes(value)) ?? candidates[0];
+  const unrelatedBefore = new Set(before.filter((value) => !WORKFLOW_LABELS.includes(value)));
+  let created = false;
+  let changed = false;
+  const reconciliations = [];
+  if (!before.includes(label)) {
+    created = ensureWorkflowLabel(repository, label, cwd);
+    const outcome = mutateIssueLabel(repository, issue, label, cwd, true);
+    if (outcome !== "applied") reconciliations.push({ label, outcome });
+    changed = true;
+  }
+  const stale = WORKFLOW_LABELS.filter((value) => value !== label && before.includes(value));
+  for (const value of stale) {
+    const outcome = mutateIssueLabel(repository, issue, value, cwd, false);
+    if (outcome !== "applied") reconciliations.push({ label: value, outcome });
+    changed = true;
+  }
+  const after = labelNames(repository, issue, cwd);
+  if (!after.includes(label)) fail(`Workflow label transition did not retain '${label}' on issue #${issue}`);
+  for (const value of stale) if (after.includes(value)) fail(`Workflow label transition retained stale owned label '${value}' on issue #${issue}`);
+  for (const value of unrelatedBefore) if (!after.includes(value)) fail(`Workflow label transition removed unrelated label '${value}' from issue #${issue}`);
+  return { schema: "forgedock.candidate-label/v1", repository, issue, state, label, changed, created, reconciliations, before, after, unrelatedPreserved: [...unrelatedBefore].every((value) => after.includes(value)) };
+}
+
+function resolveRecordReference(value, inventory, label, lookup) {
+  if (typeof value === "string") return safeHttpsUrl(value, label);
+  if (value && typeof value === "object" && typeof value.record === "string") {
+    const resolved = inventory.get(value.record)?.url;
+    if (!resolved) fail(`${label} references a record that has not been published: ${value.record}`);
+    return resolved;
+  }
+  if (value && typeof value === "object" && value.existing && typeof value.existing === "object") {
+    const requested = value.existing;
+    const kind = String(requested.kind ?? "").toUpperCase();
+    if (!DURABLE_RECORD_KINDS.has(kind)) fail(`${label}.existing.kind is not a durable record kind`);
+    const destinations = requested.pullRequest !== undefined
+      ? [{ destination: requested.pullRequest, pullRequest: true }]
+      : requested.issue !== undefined
+        ? [{ destination: requested.issue, pullRequest: false }]
+        : [
+            { destination: lookup.destination, pullRequest: lookup.destinationIsPullRequest },
+            ...(lookup.destinationIsPullRequest && lookup.issueContext !== undefined ? [{ destination: lookup.issueContext, pullRequest: false }] : []),
+            ...(!lookup.destinationIsPullRequest && lookup.pullRequestContext !== undefined ? [{ destination: lookup.pullRequestContext, pullRequest: true }] : []),
+          ];
+    const matches = [];
+    for (const destination of destinations) {
+      const commentsKey = `${lookup.repository}:${destination.pullRequest ? "pr" : "issue"}:${destination.destination}`;
+      const comments = lookup.cache.get(commentsKey) ?? listComments(lookup.repository, destination.destination, lookup.cwd);
+      lookup.cache.set(commentsKey, comments);
+      for (const comment of comments) {
+        const parsed = durableRecordFromBody(comment?.body);
+        const metadata = parsed?.metadata;
+        if (parsed?.kind === kind
+          && (requested.sourceHead === undefined || metadata?.source_head === requested.sourceHead)
+          && (requested.recordId === undefined || metadata?.record_id === requested.recordId)) matches.push(comment);
+      }
+    }
+    if (matches.length !== 1) fail(`${label}.existing must identify exactly one published ${kind} record; found ${matches.length}`);
+    return safeHttpsUrl(matches[0].html_url, label);
+  }
+  fail(`${label} must be an HTTPS URL, a prior batch record reference, or an existing record selector`);
+}
+
+function resolveRecordReferences(values, inventory, publish, label, lookup) {
+  if (values === undefined) return [];
+  if (!Array.isArray(values)) fail(`${label} must be an array`);
+  if (!publish && values.length > 0) fail(`${label} references require --publish so they can resolve to durable HTTPS permalinks`);
+  return values.map((value, index) => resolveRecordReference(value, inventory, `${label}[${index}]`, lookup));
+}
+
+function resolveSupersedes(value, inventory, publish, lookup) {
+  if (value == null) return null;
+  return resolveRecordReference(value, inventory, "supersedes", lookup);
+}
+
+function recordConfig(cwd, repository) {
+  const config = loadConfig(cwd);
+  if (config.repository.toLowerCase() !== repository.toLowerCase() || !config.repositoryMatchesRemote) fail(`Record configuration repository does not match ${repository}`);
+  return config;
+}
+
+function currentHead(cwd, supplied) {
+  const head = supplied ?? exec("git", ["rev-parse", "HEAD"], { cwd, timeout: 20_000 });
+  if (!FULL_SHA.test(head)) fail("Record source head must be a full commit SHA");
+  exec("git", ["cat-file", "-e", `${head}^{commit}`], { cwd, timeout: 20_000 });
+  return head;
+}
+
+function reviewerReportsFor(entry, repository, pullRequest, head, baseRef, baseSha, cwd, cache) {
+  const values = entry.reviewerReports;
+  if (!Array.isArray(values) || values.length === 0) fail("REVIEW-PANEL requires every selected reviewer report reference");
+  const comments = cache.get(`pr:${pullRequest}`) ?? listComments(repository, pullRequest, cwd);
+  cache.set(`pr:${pullRequest}`, comments);
+  const roles = new Set();
+  const ids = new Set();
+  return values.map((value, index) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) fail(`reviewerReports[${index}] is invalid`);
+    const role = stringValue(value.role, `reviewerReports[${index}].role`, /^[a-z][a-z0-9-]*$/);
+    if (roles.has(role)) fail(`reviewerReports contains duplicate role '${role}'`);
+    let comment;
+    if (typeof value.reportFile === "string") {
+      const reportPath = resolve(value.reportFile);
+      const reportText = readFileSync(reportPath, "utf8").replace(/\r\n?/g, "\n");
+      const identity = reviewerIdentityFromReport(reportText);
+      if (identity.repository !== repository || Number(identity.pullRequest ?? identity.pr) !== pullRequest || (identity.head ?? identity.reviewedHead) !== head || identity.baseRef !== baseRef || identity.baseSha !== baseSha || identity.role !== role) fail(`reviewer report ${role} is not bound to the frozen PR/head/base`);
+      const marker = reportText.split("\n", 1)[0];
+      const normalizedReport = reportText.replace(/\n+$/, "");
+      const matches = comments.filter((candidate) => typeof candidate?.body === "string" && candidate.body.replace(/\r\n?/g, "\n").replace(/\n+$/, "") === normalizedReport && candidate.body.startsWith(marker));
+      if (matches.length !== 1) fail(`Published reviewer report ${role} was not found exactly once with the saved bytes on PR #${pullRequest}`);
+      comment = matches[0];
+    } else if (typeof value.url === "string") {
+      safeHttpsUrl(value.url, `reviewerReports[${index}].url`);
+      comment = comments.find((candidate) => candidate?.html_url === value.url);
+      if (!comment) fail(`Reviewer report URL for ${role} is not present on PR #${pullRequest}`);
+    } else fail(`reviewerReports[${index}] needs reportFile or url`);
+    if (!Number.isSafeInteger(comment?.id) || comment.id < 1 || ids.has(comment.id)) fail(`Reviewer report ${role} has no unique server comment identity`);
+    const url = verifiedCommentUrl(comment.html_url, repository, pullRequest, true, comment.id, `reviewerReports[${index}] permalink`);
+    const parsed = reviewerIdentityFromReport(comment.body);
+    if (parsed.repository !== repository || Number(parsed.pullRequest ?? parsed.pr) !== pullRequest || (parsed.head ?? parsed.reviewedHead) !== head || parsed.baseRef !== baseRef || parsed.baseSha !== baseSha || parsed.role !== role) fail(`Reviewer report ${role} readback identity disagrees with the frozen review`);
+    roles.add(role);
+    ids.add(comment.id);
+    return { role, id: comment.id, url, head, round: Number.isSafeInteger(parsed.round) ? parsed.round : 0, reportId: typeof parsed.id === "string" ? parsed.id : undefined };
+  });
+}
+
+function durableRecord(entry, repository, issue, pullRequest, cwd, inventory, cache, publish, boundConfig) {
+  const kind = String(entry.kind ?? "").toUpperCase();
+  if (!DURABLE_RECORD_KINDS.has(kind)) fail(`Unsupported durable record kind '${kind}'`);
+  if ((issue === undefined) === (pullRequest === undefined)) fail(`${kind} record needs exactly one issue or pull request destination`);
+  const config = boundConfig ?? recordConfig(cwd, repository);
+  const bodyFile = stringValue(entry.bodyFile, `${kind} bodyFile`);
+  const body = readFileSync(resolve(bodyFile), "utf8").replace(/\r\n/g, "\n").trim();
+  if (body.length < 8) fail(`${kind} record body must contain substantive evidence`);
+  if (/^<!-- FORGE:/m.test(body)) fail(`${kind} record body must not contain generated markers`);
+  const head = currentHead(cwd, entry.head);
+  const baseRef = kind === "REVIEW-PANEL" ? branch(entry.baseRef, "review panel baseRef") : undefined;
+  const baseSha = kind === "REVIEW-PANEL" ? stringValue(entry.baseSha, "review panel baseSha", FULL_SHA) : undefined;
+  if (kind === "REVIEW-PANEL" && pullRequest === undefined) fail("REVIEW-PANEL records require a pull request destination");
+  const destinationNumber = issue ?? pullRequest;
+  const lookup = { repository, destination: destinationNumber, destinationIsPullRequest: pullRequest !== undefined, issueContext: entry.issueContext, pullRequestContext: entry.pullRequestContext, cwd, cache };
+  const inputs = resolveRecordReferences(entry.inputs ?? [], inventory, publish, `${kind}.inputs`, lookup);
+  const supersedes = resolveSupersedes(entry.supersedes, inventory, publish, lookup);
+  if (kind === "REVIEW-PANEL") verifyReviewPanelPullRequest(repository, pullRequest, head, baseRef, baseSha, cwd);
+  const reports = kind === "REVIEW-PANEL" ? reviewerReportsFor(entry, repository, pullRequest, head, baseRef, baseSha, cwd, cache) : [];
+  const destination = issue === undefined ? { pull_request: pullRequest } : { issue };
+  const identity = { kind, repository, ...destination, source_head: head, ...(baseRef ? { base_ref: baseRef, base_sha: baseSha } : {}), inputs, supersedes, ...(reports.length ? { reviewer_reports: reports } : {}), body };
+  const recordId = `sha256:${sha256(canonicalJson(identity))}`;
+  const metadata = {
+    v: 1,
+    record_id: recordId,
+    source_head: head,
+    inputs,
+    supersedes,
+    execution: { repository, ...(issue === undefined ? { pull_request: pullRequest } : { issue }), target: config.integrationBranch, model: config.ownerModel, remediation_limit: config.review.remediationMaxRounds },
+    ...(reports.length ? { reviewer_reports: reports } : {}),
+    ...(kind === "REVIEW-PANEL" ? { review: { repository, pull_request: pullRequest, base_ref: baseRef, base_sha: baseSha, round: Number.isSafeInteger(entry.round) ? entry.round : 0, reports } } : {}),
+  };
+  const lines = [
+    `<!-- FORGE:${kind} -->`,
+    `<!-- FORGE:RECORD ${JSON.stringify(metadata)} -->`,
+    `## ${DURABLE_RECORD_TITLES[kind]}`,
+    "",
+    `**Issue**: ${issue === undefined ? `[PR #${pullRequest}](https://github.com/${repository}/pull/${pullRequest})` : `[${repository}#${issue}](https://github.com/${repository}/issues/${issue})`}`,
+    `**Source head**: \`${head}\``,
+    ...(kind === "REVIEW-PANEL" ? [`**Base**: \`${baseRef}\` at \`${baseSha}\``, "**Individual reviewer reports**:", ...reports.map((report) => `- ${report.role}: [comment #${report.id}](${report.url})`)] : []),
+    `**Inputs**: ${inputs.length ? inputs.map((url, index) => `[source ${index + 1}](${url})`).join(", ") : "none"}`,
+    `**Supersedes**: ${supersedes ? `[previous record](${supersedes})` : "none"}`,
+    "",
+    body,
+    "",
+  ];
+  return { kind, repository, issue, pullRequest, destination: destinationNumber, head, metadata, recordId, markdown: lines.join("\n"), bodyFile };
+}
+
+function publishDurableRecord(record, cwd, cache) {
+  const key = `${record.repository}:${record.pullRequest !== undefined ? "pr" : "issue"}:${record.destination}`;
+  let comments = cache.get(key) ?? listComments(record.repository, record.destination, cwd);
+  cache.set(key, comments);
+  const matching = comments.filter((comment) => durableRecordFromBody(comment?.body)?.metadata?.record_id === record.recordId);
+  if (matching.length > 1) fail(`Duplicate durable record identity already exists for ${record.kind}`);
+  const sameScope = comments.filter((comment) => {
+    const parsed = durableRecordFromBody(comment?.body);
+    return parsed?.kind === record.kind && parsed.metadata?.source_head === record.head && parsed.metadata?.record_id !== record.recordId;
+  });
+  if (matching.length === 0 && sameScope.length > 0 && !record.metadata.supersedes) fail(`A revised ${record.kind} record at the same source head requires an explicit supersedes link`);
+  let comment = matching[0];
+  let reconciliation = "existing-identity";
+  if (!comment) {
+    try {
+      comment = readJsonFromText(exec("gh", ["api", commentEndpoint(record.repository, record.destination), "--method", "POST", "-F", `body=@${resolve(record.bodyFile)}`], { cwd, timeout: 120_000 }));
+      reconciliation = "created";
+    } catch (error) {
+      comments = listComments(record.repository, record.destination, cwd);
+      cache.set(key, comments);
+      const recovered = comments.filter((candidate) => durableRecordFromBody(candidate?.body)?.metadata?.record_id === record.recordId);
+      if (recovered.length === 1) { comment = recovered[0]; reconciliation = "ambiguous-create-reconciled"; }
+      else throw error;
+    }
+  }
+  if (!Number.isSafeInteger(comment?.id) || comment.id < 1) fail(`Durable ${record.kind} publication has no server comment identity`);
+  const stored = commentReadback(record.repository, comment.id, cwd);
+  if (stored.body !== record.markdown) fail(`Durable ${record.kind} publication readback differs from saved bytes`);
+  const url = verifiedCommentUrl(stored.html_url, record.repository, record.destination, record.pullRequest !== undefined, comment.id, `Durable ${record.kind} permalink`);
+  const storedRecord = durableRecordFromBody(stored.body);
+  if (storedRecord?.metadata?.record_id !== record.recordId) fail(`Durable ${record.kind} identity readback mismatch`);
+  cache.set(key, [...comments.filter((candidate) => candidate?.id !== stored.id), stored]);
+  return { id: stored.id, url, reconciliation, createdAt: stored.created_at ?? stored.createdAt ?? null, recordId: record.recordId };
+}
+
+function parseBatchInputs(file) {
+  const input = readJson(file);
+  const records = Array.isArray(input) ? input : input.records;
+  if (!Array.isArray(records) || records.length === 0) fail("Record batch needs a non-empty records array");
+  return { input, records };
+}
+
+function recordBatch(options) {
+  const inputFile = requiredOption(options, "input");
+  const { input, records } = parseBatchInputs(inputFile);
+  const repository = validateIdentityPart(String(input.repository ?? requiredOption(options, "repo")), "record batch repository");
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) fail("record batch repository is invalid");
+  const cwd = resolve(String(input.cwd ?? optionalOption(options, "cwd", process.cwd())));
+  const publish = options.flags.has("publish") || input.publish === true;
+  const cache = new Map();
+  const inventory = new Map();
+  const config = recordConfig(cwd, repository);
+  const results = [];
+  for (let index = 0; index < records.length; index += 1) {
+    const entry = records[index];
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) fail(`Record batch entry ${index} is invalid`);
+    const id = stringValue(entry.id ?? `${String(entry.kind ?? "record").toLowerCase()}-${index + 1}`, `record batch entry ${index} id`, /^[A-Za-z0-9_.-]+$/);
+    if (inventory.has(id)) fail(`Record batch contains duplicate id '${id}'`);
+    const issue = entry.issue ?? (String(entry.kind ?? "").toUpperCase() === "REVIEW-PANEL" ? undefined : input.issue);
+    const pullRequest = entry.pullRequest ?? (String(entry.kind ?? "").toUpperCase() === "REVIEW-PANEL" ? input.pullRequest : undefined);
+    const record = durableRecord({ ...entry, issue, pullRequest, issueContext: input.issue, pullRequestContext: input.pullRequest }, repository, issue === undefined ? undefined : integer(Number(issue), `${id} issue`), pullRequest === undefined ? undefined : integer(Number(pullRequest), `${id} pull request`), cwd, inventory, cache, publish, config);
+    const reportFile = resolve(entry.reportFile ?? join(dirname(resolve(inputFile)), `${id}.record.md`));
+    writeExclusive(reportFile, record.markdown);
+    const publication = publish ? publishDurableRecord({ ...record, bodyFile: reportFile }, cwd, cache) : { reconciliation: "saved", id: null, url: null, recordId: record.recordId };
+    const result = { id, kind: record.kind, issue: record.issue ?? null, pullRequest: record.pullRequest ?? null, head: record.head, reportFile, publication: publish ? "published" : "saved", ...publication };
+    results.push(result);
+    inventory.set(id, result);
+  }
+  process.stdout.write(json({ schema: "forgedock.candidate-record-batch/v1", repository, publish, records: results }));
+}
+
+function durableRecordSingle(options) {
+  const repository = validateIdentityPart(requiredOption(options, "repo"), "record repository");
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) fail("record repository is invalid");
+  const issueValue = options.values.get("issue");
+  const pullValue = options.values.get("pr");
+  const issue = issueValue === undefined ? undefined : integer(Number(issueValue), "record issue");
+  const pullRequest = pullValue === undefined ? undefined : integer(Number(pullValue), "record pull request");
+  const cwd = resolve(requiredOption(options, "cwd"));
+  const publish = options.flags.has("publish");
+  const entry = { kind: options.values.get("kind"), issue, pullRequest, bodyFile: requiredOption(options, "body-file"), head: options.values.get("head"), baseRef: options.values.get("base-ref"), baseSha: options.values.get("base-sha"), inputs: options.values.has("inputs-file") ? readJson(requiredOption(options, "inputs-file")) : [], supersedes: options.values.get("supersedes"), round: options.values.has("round") ? Number(options.values.get("round")) : undefined, reviewerReports: options.values.has("reviewers-file") ? readJson(requiredOption(options, "reviewers-file")) : undefined };
+  const record = durableRecord(entry, repository, issue, pullRequest, cwd, new Map(), new Map(), publish);
+  const reportFile = resolve(optionalOption(options, "report-file", join(dirname(resolve(entry.bodyFile)), `${String(entry.kind).toLowerCase()}.record.md`)));
+  writeExclusive(reportFile, record.markdown);
+  const publication = publish ? { publication: "published", ...publishDurableRecord({ ...record, bodyFile: reportFile }, cwd, new Map()) } : { publication: "saved", id: null, url: null, reconciliation: "saved", recordId: record.recordId };
+  process.stdout.write(json({ schema: "forgedock.candidate-record/v1", kind: record.kind, repository, issue: issue ?? null, pullRequest: pullRequest ?? null, head: record.head, reportFile, contentSha256: sha256(record.markdown), ...publication }));
+}
+
+function discoverRecords(options) {
+  const repository = validateIdentityPart(requiredOption(options, "repo"), "discovery repository");
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) fail("discovery repository is invalid");
+  const issueValue = options.values.get("issue");
+  const pullValue = options.values.get("pr");
+  if ((issueValue === undefined) === (pullValue === undefined)) fail("Discovery needs exactly one --issue or --pr");
+  const destination = integer(Number(issueValue ?? pullValue), "discovery destination");
+  const cwd = resolve(optionalOption(options, "cwd", process.cwd()));
+  const comments = listComments(repository, destination, cwd);
+  const records = comments.map((comment) => {
+    const parsed = durableRecordFromBody(comment?.body);
+    const first = typeof comment?.body === "string" ? comment.body.replace(/\r\n?/g, "\n").split("\n", 1)[0] : "";
+    const legacy = first.match(/^<!-- FORGE:(?:CANDIDATE:)?([A-Z][A-Z_-]*)(?: (\{.*\}))? -->$/);
+    let legacyMetadata;
+    if (legacy?.[2]) { try { legacyMetadata = JSON.parse(legacy[2]); } catch { legacyMetadata = undefined; } }
+    if (!parsed && !legacy) return undefined;
+    return { id: comment.id, url: comment.html_url, createdAt: comment.created_at ?? comment.createdAt ?? null, updatedAt: comment.updated_at ?? comment.updatedAt ?? null, author: comment.user?.login ?? comment.author?.login ?? null, kind: parsed?.kind ?? legacy?.[1] ?? null, metadata: parsed?.metadata ?? legacyMetadata ?? null, body: comment.body };
+  }).filter(Boolean);
+  const result = { schema: "forgedock.candidate-record-discovery/v1", repository, destinationType: issueValue === undefined ? "pull-request" : "issue", destination, commentCount: comments.length, recordCount: records.length, records, unclassifiedComments: comments.filter((comment) => !records.some((record) => record.id === comment.id)).map((comment) => ({ id: comment.id, url: comment.html_url, createdAt: comment.created_at ?? comment.createdAt ?? null, author: comment.user?.login ?? comment.author?.login ?? null, body: comment.body })) };
+  const out = options.values.get("out");
+  if (out) writeExclusive(out, json(result));
+  process.stdout.write(json(result));
+}
+
 function recordIdentity(options, kind) {
   const repository = validateIdentityPart(requiredOption(options, "repo"), "record repository");
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) fail("record repository is invalid");
@@ -716,6 +1177,7 @@ function publishComment(repository, destination, markdown, reportFile, cwd) {
 function record(options, mode) {
   const kind = mode === "reviewer" ? "REVIEW" : String(options.values.get("kind") ?? "").toUpperCase();
   if (!RECORD_KINDS.has(kind)) fail(`Unsupported record kind '${kind}'`);
+  if (mode !== "reviewer" && DURABLE_RECORD_KINDS.has(kind)) return durableRecordSingle(options);
   const identity = recordIdentity(options, kind);
   const bodyFile = requiredOption(options, "body-file");
   const body = readFileSync(resolve(bodyFile), "utf8").replace(/\r\n/g, "\n").trim();
@@ -962,7 +1424,7 @@ async function doctor(options) {
 }
 
 function usage() {
-  process.stdout.write(`ForgeDock candidate helper\n\nCommands:\n  doctor --cwd <repo> --config-dir <isolated-pi-dir>\n  status   (alias for doctor)\n  config --cwd <repo>\n  prepare --issue <N> --cwd <repo>\n  prepare-dispatch --selector <set> --cwd <repo> --out <dir> [--issues-file <json>]\n  prepare-review --input <json> --out <dir>\n  record reviewer --repo <org/repo> --pr <N> --head <sha> --base-ref <branch> --base-sha <sha> --role <role> --body-file <file> [--report-file <file>] [--publish]\n  record --kind <kind> --repo <org/repo> --issue <N>|--pr <N> --body-file <file> [--publish]\n  replace --config-dir <dir> --old-source <source> --candidate-source <source>\n  rollback --rollback <directory>\n  digest-tree --root <directory>\n  verify-install --install-root <directory>\n`);
+  process.stdout.write(`ForgeDock candidate helper\n\nCommands:\n  doctor --cwd <repo> --config-dir <isolated-pi-dir>\n  status   (alias for doctor)\n  config --cwd <repo>\n  prepare --issue <N> --cwd <repo>\n  prepare-dispatch --selector <set> --cwd <repo> --out <dir> [--issues-file <json>]\n  prepare-review --input <json> --out <dir>\n  record reviewer --repo <org/repo> --pr <N> --head <sha> --base-ref <branch> --base-sha <sha> --role <role> --body-file <file> [--report-file <file>] [--publish]\n  record --kind <kind> --repo <org/repo> --issue <N>|--pr <N> --body-file <file> --cwd <repo> [--inputs-file <json>] [--supersedes <url>] [--publish]\n  record batch --input <json> [--publish]\n  discover --repo <org/repo> --issue <N>|--pr <N> [--cwd <repo>] [--out <file>]\n  label --repo <org/repo> --issue <N> --state <state> [--cwd <repo>]\n  replace --config-dir <dir> --old-source <source> --candidate-source <source>\n  rollback --rollback <directory>\n  digest-tree --root <directory>\n  verify-install --install-root <directory>\n`);
 }
 
 async function main() {
@@ -1043,7 +1505,15 @@ async function main() {
   }
   if (command === "prepare-dispatch") return prepareDispatch(options);
   if (command === "prepare-review") return prepareReview(options);
-  if (command === "record") return record(options, rest[0] === "reviewer" ? "reviewer" : undefined);
+  if (command === "discover") return discoverRecords(options);
+  if (command === "label") {
+    process.stdout.write(json(transitionWorkflowLabel(options)));
+    return;
+  }
+  if (command === "record") {
+    if (rest[0] === "batch") return recordBatch(options);
+    return record(options, rest[0] === "reviewer" ? "reviewer" : undefined);
+  }
   if (command === "replace") return replaceInstallation(options);
   if (command === "rollback") return rollbackInstallation(options);
   usage();

@@ -35,19 +35,22 @@ exact `FORGE_WORK_ON_RESULT ... dependency=SATISFIED` line. A failed/gated prede
 release its successor, while unrelated ready issues continue.
 
 The generated request has a finite owner/review/recovery allowance and keeps each child on the
-same candidate/native package configuration. A terminal retained technical owner may be
-resumed once after actual native termination is confirmed. This is transport recovery, not a
-new writer. Do not launch a second coordinator, investigation, builder, quality gate, or
-remediation agent.
+same candidate/native package configuration. Each owner must use the normal work-on label and
+record hooks; the dispatcher does not synthesize missing issue history. A terminal retained
+technical owner may be resumed once after actual native termination is confirmed. This is
+transport recovery, not a new writer. Do not launch a second coordinator, investigation,
+builder, quality gate, or remediation agent.
 
 ## Reconcile
 
 Use the exact native workflow result/run identities and compact owner lines, not child index or
-transport success. Preserve failed/interrupted work and exact wake conditions. A missing result
-or incomplete review is not success. Work-on owns PR review, decision, merge, closure, and
-records; the dispatcher only unblocks genuine dependencies and cleans only native-owned clean
-worktrees after terminal evidence. Do not create claims boards, leases, ledgers, telemetry,
-recursive blocker issues, or automatic follow-up admission.
+transport success. Preserve failed/interrupted work and exact wake conditions. After an owner
+returns, discover its issue records and current labels once; a missing required terminal record
+or label is a visibility failure, not permission for the dispatcher to invent a replacement.
+A missing result or incomplete review is not success. Work-on owns PR review, decision, merge,
+closure, labels, and records; the dispatcher only unblocks genuine dependencies and cleans only
+native-owned clean worktrees after terminal evidence. Do not create claims boards, leases,
+ledgers, telemetry, recursive blocker issues, or automatic follow-up admission.
 
 Report request-to-first productive work, acceptance/first-pass review, owner/reviewer usage and
 waits where native data provides them. Distinguish implemented, tested, installed, and live

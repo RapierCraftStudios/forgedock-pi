@@ -30,12 +30,14 @@ Reviewers do not edit source, create issues, merge, deploy, or initiate repair. 
 fails after analysis, retain the saved report and recover publication without rerunning review.
 
 The parent validates identity/report readback, deduplicates by causal mechanism, and publishes
-one authoritative decision: `IMMEDIATE REPAIR`, `NON-BLOCKING FOLLOW-UP`,
-`REJECTED/NOT APPLICABLE`, or `EVIDENCE/AUTHORITY PREREQUISITE`. Severity labels do not decide
-blocking. A consequential acceptance/patch defect blocks; a confirmed permitted follow-up does
-not hold the PR hostage. Missing required evidence or role is gated, never approval. Re-review
-is scoped to a genuine repair and affected conclusions; a second same-mechanism failure gets a
-concrete diagnosis and respects the configured limit.
+one `REVIEW-PANEL` PR record through the candidate record helper. The panel body carries the
+authoritative disposition: `IMMEDIATE REPAIR`, `NON-BLOCKING FOLLOW-UP`,
+`REJECTED/NOT APPLICABLE`, or `EVIDENCE/AUTHORITY PREREQUISITE`; its generated header links every
+actual individual report. Severity labels do not decide blocking. A consequential
+acceptance/patch defect blocks; a confirmed permitted follow-up does not hold the PR hostage.
+Missing required evidence or role is gated, never approval. Re-review is scoped to a genuine
+repair and affected conclusions; a second same-mechanism failure gets a concrete diagnosis and
+respects the configured limit.
 
 Merge only if explicitly authorized, the accepted reviewed head is current, required checks
 pass, and the PR is mergeable. Review never closes issues or deploys.

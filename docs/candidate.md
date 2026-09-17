@@ -112,6 +112,58 @@ $FORGEDOCK_CANDIDATE_BIN prepare-review \
 
 ## File-backed records and publication
 
+Normal live work keeps issue state visible with the exact canonical workflow labels
+`workflow:investigating`, `workflow:ready-to-build`, `workflow:building`,
+`workflow:in-review`, `workflow:awaiting-merge`, `workflow:gated`, `workflow:merged`,
+`workflow:decomposed`, `workflow:invalid`, and `workflow:engine-error` (with the existing
+`workflow:built`/`workflow:reviewing` aliases recognized when present):
+
+```bash
+$FORGEDOCK_CANDIDATE_BIN label --repo OWNER/REPO --issue 123 \
+  --state investigating --cwd /absolute/target
+```
+
+The helper inspects current labels, uses an existing canonical alias before creating anything,
+creates only a missing canonical label, changes only the owned workflow family, preserves
+independent labels, skips an already-correct transition, and verifies fresh read-back. Use
+`awaiting-merge` for code waiting on merge authorization, `gated` for a specific unmet
+prerequisite, and `engine-error` for a publication/tool failure; none is a claim of completion.
+
+Issue knowledge records are separate comments. Prepare body files and one batch JSON, then use:
+
+```json
+{
+  "repository": "OWNER/REPO",
+  "issue": 123,
+  "cwd": "/absolute/target",
+  "records": [
+    {"id":"investigator","kind":"INVESTIGATOR","bodyFile":"/tmp/investigator.md"},
+    {"id":"contract","kind":"CONTRACT","bodyFile":"/tmp/contract.md",
+     "inputs":[{"record":"investigator"}]}
+  ]
+}
+```
+
+```bash
+$FORGEDOCK_CANDIDATE_BIN record batch --input /tmp/records.json --publish
+```
+
+The batch publishes distinct `FORGE:INVESTIGATOR`, `FORGE:CLASSIFICATION`, `FORGE:CONTEXT`,
+`FORGE:CONTRACT`, `FORGE:ARCHITECT`, `FORGE:BUILDER`, `FORGE:TRAJECTORY`, or `FORGE:GATED`
+comments in order. `{ "record": "id" }` links a previous batch record and
+`{ "existing": { "kind": "BUILDER" } }` resolves one existing issue record without manual URL
+copying. `REVIEW-PANEL` targets a PR and accepts `reviewerReports` with each report's
+`reportFile`; the helper resolves the actual published reviewer permalink and renders it in the
+panel. A changed same-head record needs an explicit `supersedes` reference. Retries reuse the
+same content identity, reconcile lost create responses, and return comment IDs, URLs, and
+publication status.
+
+Discover current and legacy records without hiding ordinary comments:
+
+```bash
+$FORGEDOCK_CANDIDATE_BIN discover --repo OWNER/REPO --issue 123 --cwd /absolute/target
+```
+
 Reviewers write body sections to a local file and invoke:
 
 ```bash

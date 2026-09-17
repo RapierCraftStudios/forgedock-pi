@@ -25,10 +25,16 @@ quality-gate, remediation, or coordinator children. The only child allowed is th
 read-only review panel described by the review skill; launch it once after the complete change
 and relevant tests are ready. Reviewers never edit source, create issues, merge, or deploy.
 
-Use FORGEDOCK_CANDIDATE_BIN for deterministic preparation and record/publication helpers; the
-candidate extension also derives this path from its installed package when normal startup did
-not inherit it. For a declared local replay, use the supplied issue-file, keep publication false, and prove
-local commit/review behavior without inventing GitHub writes. In a local orchestration replay,
+Use FORGEDOCK_CANDIDATE_BIN for deterministic preparation, label transitions, record batches,
+and publication helpers; the candidate extension also derives this path from its installed
+package when normal startup did not inherit it. In normal live work, keep one current owned
+workflow label and publish the distinct issue records (`INVESTIGATOR`, `CLASSIFICATION`,
+`CONTEXT`, `CONTRACT`, `ARCHITECT`, `BUILDER`, `TRAJECTORY`, or `GATED`) through the helper's
+file-backed batch. Link the actual returned GitHub permalinks; never collapse records or use
+local paths as durable links. A publication/label transport failure is a visibility gate, not
+permission to rerun coding or review. For a declared local replay, use the supplied issue-file,
+keep publication false, and prove local commit/review behavior without inventing GitHub writes.
+In a local orchestration replay,
 fetch and fast-forward the clean native branch from `origin/<integration>` before editing, and
 push the reviewed commit to that disposable integration ref only when the task explicitly grants
 that local delivery boundary so the next dependent owner can consume it.
