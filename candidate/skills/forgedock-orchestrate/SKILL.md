@@ -17,7 +17,9 @@ investigation and mutation plans stay inside each owner.
 2. Before admitting any issue, query the supported native boundary (`subagent({ action:
    "status" })`) and correlate it with exact issue/worktree evidence. Also use the helper's
    live-worktree check. An ambiguous or unavailable match is surfaced/gated for that issue; do
-   not perform broad process/session archaeology or treat a phase label as proof.
+   not perform broad process/session archaeology or treat a phase label as proof. A readable
+   issue body without the rigid heading is retained as unstructured acceptance for the owner;
+   only an empty/unreadable body is gated.
 3. Build only real ordering: explicit dependency markers, exact shared declared mutation files,
    migration order, or exact configured global/high-fan-in files. Domains, directories,
    keywords, uncertainty, and cost guesses never create edges. Confirm the small plan before

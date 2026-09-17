@@ -34,6 +34,7 @@
     "scripts/install-candidate.sh",
     "scripts/launch-candidate.sh",
     "scripts/native-smoke.sh",
+    "scripts/prepare-integration-checkout.sh",
     "scripts/replace-candidate.sh",
     "scripts/rollback-candidate.sh",
     "templates/forge.yaml",

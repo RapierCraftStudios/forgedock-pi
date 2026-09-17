@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import registerCandidateTools from "./tools.ts";
@@ -14,6 +15,8 @@ export const FORGEDOCK_ALIASES = Object.freeze({
 
 const ALIAS_PATTERN =
   /^\/(?:forge:)?(orchestrate|work-on|review-pr|review-pr-staging)(?=$|\s)([\s\S]*)$/;
+const INSTALLED_CANDIDATE_BIN = resolve(dirname(fileURLToPath(import.meta.url)), "../bin/forgedock-candidate.mjs");
+process.env.FORGEDOCK_CANDIDATE_BIN = INSTALLED_CANDIDATE_BIN;
 
 export function rewriteForgePromptAlias(input: string): string | undefined {
   const match = input.match(ALIAS_PATTERN);
@@ -66,7 +69,7 @@ export default function forgedockCandidateExtension(pi: ExtensionAPI): void {
     description: "Show that the isolated ForgeDock candidate extension is loaded",
     handler: async (_args, ctx) => {
       const tools = new Set(pi.getAllTools().map((tool) => tool.name));
-      ctx.ui.notify(`ForgeDock candidate loaded; native subagent=${tools.has("subagent") ? "available" : "unavailable"}; staging tools=${["forge_prepare_review", "forge_run_check", "forge_publish_record"].filter((name) => tools.has(name)).length}/3.`, "info");
+      ctx.ui.notify(`ForgeDock candidate loaded; helper=${process.env.FORGEDOCK_CANDIDATE_BIN}; native subagent=${tools.has("subagent") ? "available" : "unavailable"}; staging tools=${["forge_prepare_review", "forge_run_check", "forge_publish_record"].filter((name) => tools.has(name)).length}/3.`, "info");
     },
   });
   pi.on("input", (event) => {

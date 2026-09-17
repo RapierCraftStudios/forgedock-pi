@@ -18,7 +18,9 @@ an execution guide, not a second workflow engine.
    resulting read-only intake artifact, source/config identities, verification entrypoints,
    and any explicit linked issue/PR/decision references. Missing setup is an infrastructure
    condition, not a code finding.
-3. Verify the actual owned workspace and repository identity. Preserve ordinary target coding
+3. Verify the actual owned workspace and repository identity. If the intake has an understandable
+   body but no rigid checklist heading, preserve that body as the obligation and continue; ask
+   only if the ambiguity materially changes outcome or authority. Preserve ordinary target coding
    instructions, but candidate authority controls review, merge, closure, and child use.
 
 ## Investigate and contract

@@ -246,26 +246,67 @@ function loadConfig(cwd) {
   return configFromRaw(readFileSync(configPath, "utf8"), configPath, cwd);
 }
 
+function normalizedLines(body) {
+  return body.replace(/\r\n?/g, "\n").split("\n");
+}
+
+function isHeading(line) {
+  return /^\s*#{2,6}\s+\S/.test(line);
+}
+
+function sectionLines(body, heading) {
+  const lines = normalizedLines(body);
+  const headingPattern = new RegExp(`^\\s*#{2,6}\\s+${heading}\\s*:?[ \\t]*$`, "i");
+  const start = lines.findIndex((line) => headingPattern.test(line));
+  if (start < 0) return [];
+  let end = start + 1;
+  while (end < lines.length && !isHeading(lines[end])) end += 1;
+  return lines.slice(start + 1, end);
+}
+
 function acceptanceCriteria(body) {
-  const match = body.match(/^#{2,6}\s+Acceptance Criteria\s*\n([\s\S]*?)(?=^#{2,6}\s+|$)/im);
-  if (!match) return [];
+  const lines = sectionLines(body, "Acceptance Criteria");
+  if (lines.length === 0) return [];
   const result = [];
-  for (const line of match[1].split(/\r?\n/)) {
-    const item = line.match(/^\s*(?:[-*]|\d+[.)])\s+(?:\[[ xX]\]\s*)?(.+?)\s*$/);
-    if (item?.[1]) result.push(item[1]);
+  let current = [];
+  let currentIndent = 0;
+  const flush = () => {
+    const value = current.join("\n").trim();
+    if (value) result.push(value);
+    current = [];
+  };
+  for (const line of lines) {
+    const item = line.match(/^(\s*)(?:[-*+] |\d+[.)]\s+)(?:\[[ xX]\]\s*)?(.*?)[ \t]*$/);
+    if (item && item[2].trim()) {
+      const indent = item[1].length;
+      if (current.length === 0 || indent <= currentIndent) {
+        flush();
+        currentIndent = indent;
+        current.push(item[2].trim());
+      } else {
+        current.push(line.trimEnd());
+      }
+    } else if (current.length > 0) {
+      current.push(line.trimEnd());
+    } else if (line.trim()) {
+      current.push(line.trim());
+      currentIndent = 0;
+    }
   }
+  flush();
   return result;
 }
 
 function declaredFiles(body, heading) {
-  const match = body.match(new RegExp(`^#{2,6}\\s+${heading}\\s*\\n([\\s\\S]*?)(?=^#{2,6}\\s+|$)`, "im"));
-  if (!match) return [];
   const files = [];
-  for (const line of match[1].split(/\r?\n/)) {
-    const values = line.match(/`([^`]+)`/g)?.map((value) => value.slice(1, -1)) ?? [];
-    for (const value of values) if (/^[A-Za-z0-9_./-]+(?::\d+)?$/.test(value)) files.push(value.replace(/:\d+$/, ""));
-    const plain = line.match(/(?:^|\s)([A-Za-z0-9_./-]+:\d+)(?:\s|$)/)?.[1];
-    if (plain) files.push(plain.replace(/:\d+$/, ""));
+  for (const line of sectionLines(body, heading)) {
+    const values = [...line.matchAll(/`([^`\r\n]+)`/g)].map((match) => match[1]);
+    for (const value of values) {
+      if (/^(?:[A-Za-z0-9_.@-]+\/)*[A-Za-z0-9_.@-]+(?::\d+(?:-\d+)?)?$/.test(value)) files.push(value.replace(/:\d+(?:-\d+)?$/, ""));
+    }
+    for (const match of line.matchAll(/(?:^|[\s|,])((?:\.{0,2}\/)?[A-Za-z0-9_@.-]+(?:\/[A-Za-z0-9_@.-]+)+(?::\d+(?:-\d+)?)?)(?=$|[\s|,])/g)) {
+      files.push(match[1].replace(/:\d+(?:-\d+)?$/, ""));
+    }
   }
   return [...new Set(files)];
 }
@@ -293,6 +334,8 @@ function issueRecord(issue, repository) {
     dependsOn: dependencies(body),
     mutationFiles: declaredFiles(body, "(?:Affected Files|Changed Files|Mutation Files)"),
     migration: /\b(?:database|db)\s+migration\b/i.test(body),
+    understandable: body.trim().length >= 8,
+    acceptanceFormat: criteria.length > 0 ? "structured" : body.trim().length >= 8 ? "unstructured" : "missing",
     hasAcceptance: criteria.length > 0,
   };
 }
@@ -449,12 +492,13 @@ function prepareDispatch(options) {
   }
   if (issues.length === 0) fail("Selector resolved no eligible issues");
   const exactWorktreeMatches = worktreeMatches(config.projectRoot, issues.map((issue) => issue.number));
-  const missingAcceptance = issues.filter((issue) => !issue.hasAcceptance).map((issue) => issue.number);
+  const missingAcceptance = issues.filter((issue) => !issue.understandable).map((issue) => issue.number);
+  const unstructuredAcceptance = issues.filter((issue) => issue.understandable && !issue.hasAcceptance).map((issue) => issue.number);
   const activeOwnership = new Set(exactWorktreeMatches.map((match) => match.issue));
   const graph = buildDependencyGraph(issues, config.globalFiles).map((issue) => ({
     ...issue,
-    admitted: issue.hasAcceptance && !activeOwnership.has(issue.number) && issue.externalDependencies.length === 0,
-    gateReason: !issue.hasAcceptance ? "missing acceptance criteria" : activeOwnership.has(issue.number) ? "exact active worktree ownership evidence" : issue.externalDependencies.length > 0 ? `explicit dependency outside selected issue set: ${issue.externalDependencies.map((number) => `#${number}`).join(", ")}` : undefined,
+    admitted: issue.understandable && !activeOwnership.has(issue.number) && issue.externalDependencies.length === 0,
+    gateReason: !issue.understandable ? "issue body is empty or not understandable" : activeOwnership.has(issue.number) ? "exact active worktree ownership evidence" : issue.externalDependencies.length > 0 ? `explicit dependency outside selected issue set: ${issue.externalDependencies.map((number) => `#${number}`).join(", ")}` : undefined,
   }));
   const out = resolve(optionalOption(options, "out", join(process.env.FORGEDOCK_CANDIDATE_ARTIFACT_ROOT ?? tmpdir(), "forgedock-candidate", sha256(Buffer.from(config.repository)).slice(0, 12), `dispatch-${Date.now()}`)));
   mkdirSync(out, { recursive: true, mode: 0o700 });
@@ -467,7 +511,7 @@ function prepareDispatch(options) {
     config,
     targetBase,
     ownership: { exactWorktreeMatches, nativeRunCheck: { required: true, action: "subagent({ action: \"status\" })", policy: "correlate exact issue/worktree evidence before admission; unavailable status gates the affected issue" } },
-    readiness: { missingAcceptance, activeOwnership: [...activeOwnership], externalDependencies: graph.filter((issue) => issue.externalDependencies.length > 0).map((issue) => ({ issue: issue.number, dependencies: issue.externalDependencies })), admittedIssues: graph.filter((issue) => issue.admitted).map((issue) => issue.number) },
+    readiness: { missingAcceptance, unstructuredAcceptance, activeOwnership: [...activeOwnership], externalDependencies: graph.filter((issue) => issue.externalDependencies.length > 0).map((issue) => ({ issue: issue.number, dependencies: issue.externalDependencies })), admittedIssues: graph.filter((issue) => issue.admitted).map((issue) => issue.number) },
     issues: graph.map((issue) => ({ ...issue, task: ownerTask(issue, config, out, targetBase) })),
   };
   const planPath = writeExclusive(join(out, "plan.json"), json(plan));
@@ -954,11 +998,42 @@ async function main() {
     const cwd = resolve(optionalOption(options, "cwd", process.cwd()));
     const config = loadConfig(cwd);
     const number = integer(Number(requiredOption(options, "issue")), "issue number");
-    const issue = options.values.has("issue-file") ? issueRecord(readJson(requiredOption(options, "issue-file")), config.repository) : issueFromGithub(number, config.repository, cwd);
-    const output = { schema: "forgedock.candidate-intake/v1", preparedAt: new Date().toISOString(), config, issue, evidence: { history: "retrieve linked history in the owner session", verification: config.verificationCommands } };
+    let issue;
+    if (options.values.has("issue-file")) {
+      const issueInput = readJson(requiredOption(options, "issue-file"));
+      const candidate = Array.isArray(issueInput) ? issueInput.find((value) => Number(value?.number) === number) : Array.isArray(issueInput.issues) ? issueInput.issues.find((value) => Number(value?.number) === number) : issueInput;
+      if (!candidate) fail(`Issue #${number} was not found in the issue input file`);
+      issue = issueRecord(candidate, config.repository);
+    } else {
+      issue = issueFromGithub(number, config.repository, cwd);
+    }
+    const intakeIdentity = {
+      issue: { number: issue.number, title: issue.title, body: issue.body, acceptance: issue.acceptance, dependsOn: issue.dependsOn, mutationFiles: issue.mutationFiles },
+      config: { repository: config.repository, projectRoot: config.projectRoot, configPath: config.configPath, integrationBranch: config.integrationBranch, protectedBranch: config.protectedBranch, ownerModel: config.ownerModel, ownerThinking: config.ownerThinking, verificationCommands: config.verificationCommands },
+    };
+    const inputDigest = sha256(Buffer.from(canonicalJson(intakeIdentity)));
+    const stableOutput = { schema: "forgedock.candidate-intake/v1", preparedAt: new Date().toISOString(), inputDigest, config, issue, evidence: { history: "retrieve linked history in the owner session", verification: config.verificationCommands } };
     const out = resolve(optionalOption(options, "out", join(process.env.FORGEDOCK_CANDIDATE_ARTIFACT_ROOT ?? tmpdir(), "forgedock-candidate", sha256(Buffer.from(config.repository)).slice(0, 12), "intake", `issue-${number}.json`)));
-    writeExclusive(out, json(output));
-    process.stdout.write(json({ ...output, outputPath: out }));
+    let output = stableOutput;
+    let outputPath = out;
+    let reused = false;
+    if (existsSync(out)) {
+      try {
+        const existing = readJson(out);
+        if (existing.inputDigest === inputDigest && existing.issue?.body === issue.body && existing.config?.configPath === config.configPath) {
+          output = existing;
+          reused = true;
+        } else {
+          outputPath = join(dirname(out), `${basename(out, ".json")}-${inputDigest.slice(0, 12)}-${Date.now()}.json`);
+          output = { ...stableOutput, supersedes: out };
+        }
+      } catch {
+        outputPath = join(dirname(out), `${basename(out, ".json")}-${inputDigest.slice(0, 12)}-${Date.now()}.json`);
+        output = { ...stableOutput, supersedes: out };
+      }
+    }
+    writeExclusive(outputPath, json(output));
+    process.stdout.write(json({ ...output, outputPath, reused }));
     return;
   }
   if (command === "prepare-dispatch") return prepareDispatch(options);
