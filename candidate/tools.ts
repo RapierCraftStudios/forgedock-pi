@@ -68,7 +68,7 @@ const RECORD_INPUT = Type.Object({
   baseRef: Type.Optional(Type.String({ minLength: 1 })),
   baseSha: Type.Optional(Type.String({ pattern: "^[a-f0-9]{40,64}$" })),
   gate: Type.Optional(Type.String({ pattern: "^(?:PASS|FAIL)$" })),
-  checks: Type.Optional(Type.Array(Type.String({ pattern: "^[A-Za-z0-9_.-]+$" }))),
+  checks: Type.Optional(Type.Array(Type.String({ pattern: "^[A-Za-z0-9][A-Za-z0-9_. -]*$" }))),
   body: Type.String({ minLength: 8 }),
   reviewRoot: Type.Optional(Type.String({ minLength: 1 })),
   artifactKey: Type.Optional(Type.String({ minLength: 1 })),
@@ -312,17 +312,18 @@ async function existingGateForHead(pi: ExtensionAPI, repository: string, pullReq
   try {
     const pages = JSON.parse(result.stdout);
     if (!Array.isArray(pages)) return undefined;
+    let latest: { url: string; body: string } | undefined;
     for (const comment of pages.flatMap((page: unknown) => Array.isArray(page) ? page : [])) {
       const body = typeof comment?.body === "string" ? comment.body : "";
       const marker = body.split(/\r?\n/, 1)[0]?.match(/^<!-- FORGE:(?:CANDIDATE:)?STAGING_GATE (\{.*\}) -->$/);
       if (!marker) continue;
       const identity = JSON.parse(marker[1]);
-      if ((identity.head === head || identity.source_head === head) && typeof comment.html_url === "string") return { url: comment.html_url, body };
+      if ((identity.head === head || identity.source_head === head) && typeof comment.html_url === "string") latest = { url: comment.html_url, body };
     }
+    return latest;
   } catch {
     return undefined;
   }
-  return undefined;
 }
 
 function configuredCommand(raw: unknown, name: string): string | undefined {
