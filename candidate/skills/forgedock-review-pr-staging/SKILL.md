@@ -36,7 +36,8 @@ by `forge_prepare_review` (do not echo the policy object), with `kind: STAGING_G
 PR/head/protected-base identity, and `gate: PASS` or `FAIL`; feed
 `configPath`, `configSha256`, `reviewRoot`, `artifactKey`, `sourceRoot`, and `head` from the
 prepared review details to each `forge_run_check`; do not use bash/edit/write in this route.
-Each reviewer publishes its own exact-head report, including a substantive clean report. No
+Each reviewer publishes its own exact-head report, including a substantive clean report. For
+an explicitly user-invoked review, preparation and reviewer publication use `publish: true`. No
 reviewer edits source, creates issues, merges, deploys, closes issues, or starts repair.
 
 If preparation or a configured check returns a deterministic validation error, stop after

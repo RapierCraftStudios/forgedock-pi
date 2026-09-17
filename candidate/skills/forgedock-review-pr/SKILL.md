@@ -43,6 +43,8 @@ read tools plus the publication-only report tool. Give each reviewer the origina
 concise plan/history, exact frozen identity, relevant evidence/limits, and specific risk
 boundary. Each reviewer must publish its own substantive exact-head
 `FORGE:REVIEWER_REPORT` using the candidate record helper, including clean/no-findings reports.
+For an explicitly user-invoked review, pass `publish: true`; review-only authorization does not
+permit merge, issue closure, or deployment, but it does require the evidence publication path.
 Reviewers do not edit source, create issues, merge, deploy, or initiate repair. If publication
 fails after analysis, retain the saved report and recover publication without rerunning review.
 

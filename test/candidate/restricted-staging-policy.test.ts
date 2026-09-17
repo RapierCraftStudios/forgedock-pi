@@ -151,6 +151,39 @@ async function stagedContext(f: Awaited<ReturnType<typeof fixture>>, publish = f
   return { calls, tools, artifacts };
 }
 
+test("review preparation resolves one clean exact-head worktree without replacing config root", async () => {
+  const f = await fixture();
+  const exactSource = join(f.root, "review-source");
+  try {
+    await execFileAsync("git", ["worktree", "add", "--quiet", "--detach", exactSource, f.head], { cwd: f.root });
+    await writeFile(join(f.root, "local-only.txt"), "canonical config checkout remains distinct\\n");
+    await execFileAsync("git", ["add", "local-only.txt"], { cwd: f.root });
+    await execFileAsync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Candidate Test", "commit", "--quiet", "-m", "advance-config-root"], { cwd: f.root });
+    const calls: Array<{ name: string; args: string[] }> = [];
+    const tools = toolMap(fakeExecutor(f.env, calls));
+    const prepared = await tools.get("forge_prepare_review")!.execute("prepare", {
+      repository: "example/product",
+      pullRequest: 7,
+      head: f.head,
+      baseRef: "main",
+      baseSha: f.base,
+      sourceRoot: f.root,
+      configRoot: f.root,
+      roles: ["correctness"],
+      publish: false,
+    });
+    const artifacts = modelArtifacts(prepared);
+    assert.equal(artifacts.review.sourceRoot, exactSource);
+    assert.equal(artifacts.review.configRoot, f.root);
+    assert.equal(artifacts.review.head, f.head);
+  } finally {
+    await execFileAsync("git", ["worktree", "remove", "--force", exactSource], { cwd: f.root }).catch(() => {});
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.state, { force: true });
+  }
+});
+
 test("prepared staging review separates task data from reviewer execution", async () => {
   const f = await fixture();
   let reviewRoot: string | undefined;
