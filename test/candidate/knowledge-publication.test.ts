@@ -73,7 +73,7 @@ if (method === "GET" && endpoint.endsWith("/labels")) {
   const body = readFileSync(bodyArg.slice("body=@".length), "utf8");
   if (state.denyCommentCreate) process.exit(1);
   const id = state.nextId++;
-  const destinationPath = commentKey === "7" ? "pull" : "issues";
+  const destinationPath = state.pullRequests?.[commentKey] ? "pull" : "issues";
   const comment = { id, body, html_url: "https://github.com/example/product/" + destinationPath + "/" + commentKey + "#issuecomment-" + id };
   comments.push(comment);
   state.operations.push({ method, endpoint, commentId: comment.id });
@@ -163,6 +163,69 @@ test("batch publishes distinct linked records, retries idempotently, and resolve
     assert.equal(state.comments["42"].length, 3);
     assert.equal(state.comments["7"].length, 2);
     assert.equal(state.comments["7"].filter((comment: any) => comment.body.includes("FORGE:REVIEW-PANEL")).length, 1);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+  }
+});
+
+test("standard review preserves the original base after an unrelated target advance", async () => {
+  const f = await fixture();
+  try {
+    const reportFile = join(f.root, "correctness.report.md");
+    await writeFile(reportFile, `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ v: 1, repository: "example/product", pullRequest: 7, head: f.head, baseRef: "integration", baseSha: f.base, role: "correctness" })} -->\nreview report\n`);
+    const panelBody = await body(f.root, "standard-panel", "### Disposition\nThe unchanged clean patch remains approved after target-only movement.");
+    const state = JSON.parse(await readFile(f.state, "utf8"));
+    state.pullRequests["7"].baseRefOid = "c".repeat(40);
+    await writeFile(f.state, JSON.stringify(state));
+    const input = join(f.root, "standard.json");
+    await writeFile(input, JSON.stringify({ repository: "example/product", issue: 42, cwd: f.root, publish: true, records: [{ id: "panel", kind: "REVIEW-PANEL", pullRequest: 7, bodyFile: panelBody, head: f.head, baseRef: "integration", baseSha: f.base, reviewerReports: [{ role: "correctness", reportFile }] }] }));
+    const first = await run(["record", "batch", "--input", input, "--publish"], f.env);
+    assert.equal(first.records[0].reconciliation, "created");
+    assert.match(await readFile(join(f.root, "panel.record.md"), "utf8"), new RegExp(f.base));
+    const second = await run(["record", "batch", "--input", input, "--publish"], f.env);
+    assert.equal(second.records[0].reconciliation, "existing-identity");
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+  }
+});
+
+test("review panel rejects source changes, retargeting, conflicts, and bad protected bases", async () => {
+  const cases = [
+    { name: "source", mutate: (state: any) => { state.pullRequests["7"].headRefOid = "d".repeat(40); } },
+    { name: "retarget", mutate: (state: any) => { state.pullRequests["7"].baseRefName = "other"; } },
+    { name: "conflict", mutate: (state: any) => { state.pullRequests["7"].mergeable = "CONFLICTING"; } },
+  ];
+  for (const current of cases) {
+    const f = await fixture();
+    try {
+      const reportFile = join(f.root, `${current.name}.report.md`);
+      await writeFile(reportFile, `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ v: 1, repository: "example/product", pullRequest: 7, head: f.head, baseRef: "integration", baseSha: f.base, role: "correctness" })} -->\nreview report\n`);
+      const panelBody = await body(f.root, `${current.name}-panel`, "### Disposition\nThis record must not publish for the invalid live identity.");
+      const state = JSON.parse(await readFile(f.state, "utf8"));
+      current.mutate(state);
+      await writeFile(f.state, JSON.stringify(state));
+      const input = join(f.root, `${current.name}.json`);
+      await writeFile(input, JSON.stringify({ repository: "example/product", issue: 42, cwd: f.root, publish: true, records: [{ id: "panel", kind: "REVIEW-PANEL", pullRequest: 7, bodyFile: panelBody, head: f.head, baseRef: "integration", baseSha: f.base, reviewerReports: [{ role: "correctness", reportFile }] }] }));
+      await assert.rejects(run(["record", "batch", "--input", input, "--publish"], f.env), /REVIEW-PANEL/);
+      assert.equal(JSON.parse(await readFile(f.state, "utf8")).comments["7"].length, 1);
+    } finally {
+      await rm(f.root, { recursive: true, force: true });
+    }
+  }
+
+  const f = await fixture();
+  try {
+    const state = JSON.parse(await readFile(f.state, "utf8"));
+    state.pullRequests["8"] = { headRefOid: f.head, baseRefName: "main", baseRefOid: "c".repeat(40), mergeable: "MERGEABLE", mergeStateStatus: "CLEAN" };
+    state.comments["8"] = [{ id: 10, body: `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ v: 1, repository: "example/product", pullRequest: 8, head: f.head, baseRef: "main", baseSha: f.base, role: "correctness" })} -->\nreview report\n`, html_url: "https://github.com/example/product/pull/8#issuecomment-10" }];
+    await writeFile(f.state, JSON.stringify(state));
+    const reportFile = join(f.root, "protected.report.md");
+    await writeFile(reportFile, `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ v: 1, repository: "example/product", pullRequest: 8, head: f.head, baseRef: "main", baseSha: f.base, role: "correctness" })} -->\nreview report\n`);
+    const panelBody = await body(f.root, "protected-panel", "### Disposition\nProtected promotion must retain the exact base.");
+    const input = join(f.root, "protected.json");
+    await writeFile(input, JSON.stringify({ repository: "example/product", cwd: f.root, publish: true, records: [{ id: "panel", kind: "REVIEW-PANEL", pullRequest: 8, bodyFile: panelBody, head: f.head, baseRef: "main", baseSha: f.base, mode: "staging", reviewerReports: [{ role: "correctness", reportFile }] }] }));
+    await assert.rejects(run(["record", "batch", "--input", input, "--publish"], f.env), /protected promotion base/);
+    assert.equal(JSON.parse(await readFile(f.state, "utf8")).comments["8"].length, 1);
   } finally {
     await rm(f.root, { recursive: true, force: true });
   }
@@ -285,12 +348,14 @@ test("active work-on instructions require durable labels, linked records, and no
   const skill = await readFile("candidate/skills/forgedock-work-on/SKILL.md", "utf8");
   const owner = await readFile("candidate/agents/forgedock-owner.md", "utf8");
   const orchestrate = await readFile("candidate/skills/forgedock-orchestrate/SKILL.md", "utf8");
+  const review = await readFile("candidate/skills/forgedock-review-pr/SKILL.md", "utf8");
   assert.match(skill, /discover --repo/);
   assert.match(skill, /record batch --input <records\.json> --publish/);
   assert.match(skill, /workflow:investigating/);
   assert.match(skill, /workflow:awaiting-merge/);
   assert.match(skill, /workflow:gated/);
   assert.match(skill, /REVIEW-PANEL/);
+  assert.match(review, /target-branch move alone does not invalidate/);
   assert.match(skill, /TRAJECTORY/);
   assert.match(owner, /distinct issue records/);
   assert.doesNotMatch(owner, /create investigation, builder, quality-gate, remediation, or coordinator children/);

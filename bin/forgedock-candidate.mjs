@@ -721,12 +721,23 @@ function commentEndpoint(repository, destination) {
   return `repos/${repository}/issues/${destination}/comments`;
 }
 
-function verifyReviewPanelPullRequest(repository, pullRequest, head, baseRef, baseSha, cwd) {
+function reviewPanelMode(value) {
+  const mode = value === undefined ? "standard" : String(value).toLowerCase();
+  if (mode !== "standard" && mode !== "staging") fail("REVIEW-PANEL mode must be standard or staging");
+  return mode;
+}
+
+function verifyReviewPanelPullRequest(config, repository, pullRequest, head, baseRef, baseSha, mode, cwd) {
+  const route = reviewPanelMode(mode);
+  const expectedBaseRef = route === "staging" ? config.protectedBranch : config.integrationBranch;
+  if (baseRef !== expectedBaseRef) fail(`REVIEW-PANEL ${route} route requires base ref '${expectedBaseRef}'`);
   const pull = readJsonFromText(exec("gh", ["pr", "view", String(pullRequest), "-R", repository, "--json", "headRefOid,baseRefName,baseRefOid,mergeable,mergeStateStatus"], { cwd, timeout: 120_000 }));
-  if (pull.headRefOid !== head || pull.baseRefName !== baseRef || pull.baseRefOid !== baseSha) fail("REVIEW-PANEL identity no longer matches the live pull request");
+  if (pull.headRefOid !== head || pull.baseRefName !== baseRef) fail("REVIEW-PANEL source head or base ref no longer matches the live pull request");
+  if (route === "staging" && pull.baseRefOid !== baseSha) fail("REVIEW-PANEL protected promotion base no longer matches the frozen base SHA");
   const mergeable = typeof pull.mergeable === "string" ? pull.mergeable.toUpperCase() : pull.mergeable;
   const mergeState = typeof pull.mergeStateStatus === "string" ? pull.mergeStateStatus.toUpperCase() : "";
   if (mergeable === "CONFLICTING" || ["DIRTY", "CONFLICTING"].includes(mergeState)) fail("REVIEW-PANEL cannot publish against a conflicting pull request");
+  return route;
 }
 
 function listComments(repository, destination, cwd) {
@@ -968,14 +979,15 @@ function durableRecord(entry, repository, issue, pullRequest, cwd, inventory, ca
   const baseRef = kind === "REVIEW-PANEL" ? branch(entry.baseRef, "review panel baseRef") : undefined;
   const baseSha = kind === "REVIEW-PANEL" ? stringValue(entry.baseSha, "review panel baseSha", FULL_SHA) : undefined;
   if (kind === "REVIEW-PANEL" && pullRequest === undefined) fail("REVIEW-PANEL records require a pull request destination");
+  const mode = kind === "REVIEW-PANEL" ? reviewPanelMode(entry.mode) : undefined;
   const destinationNumber = issue ?? pullRequest;
   const lookup = { repository, destination: destinationNumber, destinationIsPullRequest: pullRequest !== undefined, issueContext: entry.issueContext, pullRequestContext: entry.pullRequestContext, cwd, cache };
   const inputs = resolveRecordReferences(entry.inputs ?? [], inventory, publish, `${kind}.inputs`, lookup);
   const supersedes = resolveSupersedes(entry.supersedes, inventory, publish, lookup);
-  if (kind === "REVIEW-PANEL") verifyReviewPanelPullRequest(repository, pullRequest, head, baseRef, baseSha, cwd);
+  if (kind === "REVIEW-PANEL") verifyReviewPanelPullRequest(config, repository, pullRequest, head, baseRef, baseSha, mode, cwd);
   const reports = kind === "REVIEW-PANEL" ? reviewerReportsFor(entry, repository, pullRequest, head, baseRef, baseSha, cwd, cache) : [];
   const destination = issue === undefined ? { pull_request: pullRequest } : { issue };
-  const identity = { kind, repository, ...destination, source_head: head, ...(baseRef ? { base_ref: baseRef, base_sha: baseSha } : {}), inputs, supersedes, ...(reports.length ? { reviewer_reports: reports } : {}), body };
+  const identity = { kind, repository, ...destination, source_head: head, ...(baseRef ? { base_ref: baseRef, base_sha: baseSha, mode } : {}), inputs, supersedes, ...(reports.length ? { reviewer_reports: reports } : {}), body };
   const recordId = `sha256:${sha256(canonicalJson(identity))}`;
   const metadata = {
     v: 1,
@@ -985,7 +997,7 @@ function durableRecord(entry, repository, issue, pullRequest, cwd, inventory, ca
     supersedes,
     execution: { repository, ...(issue === undefined ? { pull_request: pullRequest } : { issue }), target: config.integrationBranch, model: config.ownerModel, remediation_limit: config.review.remediationMaxRounds },
     ...(reports.length ? { reviewer_reports: reports } : {}),
-    ...(kind === "REVIEW-PANEL" ? { review: { repository, pull_request: pullRequest, base_ref: baseRef, base_sha: baseSha, round: Number.isSafeInteger(entry.round) ? entry.round : 0, reports } } : {}),
+    ...(kind === "REVIEW-PANEL" ? { review: { repository, pull_request: pullRequest, base_ref: baseRef, base_sha: baseSha, mode, round: Number.isSafeInteger(entry.round) ? entry.round : 0, reports } } : {}),
   };
   const lines = [
     `<!-- FORGE:${kind} -->`,
@@ -994,7 +1006,7 @@ function durableRecord(entry, repository, issue, pullRequest, cwd, inventory, ca
     "",
     `**Issue**: ${issue === undefined ? `[PR #${pullRequest}](https://github.com/${repository}/pull/${pullRequest})` : `[${repository}#${issue}](https://github.com/${repository}/issues/${issue})`}`,
     `**Source head**: \`${head}\``,
-    ...(kind === "REVIEW-PANEL" ? [`**Base**: \`${baseRef}\` at \`${baseSha}\``, "**Individual reviewer reports**:", ...reports.map((report) => `- ${report.role}: [comment #${report.id}](${report.url})`)] : []),
+    ...(kind === "REVIEW-PANEL" ? [`**Review mode**: \`${mode}\``, `**Base**: \`${baseRef}\` at \`${baseSha}\``, "**Individual reviewer reports**:", ...reports.map((report) => `- ${report.role}: [comment #${report.id}](${report.url})`)] : []),
     `**Inputs**: ${inputs.length ? inputs.map((url, index) => `[source ${index + 1}](${url})`).join(", ") : "none"}`,
     `**Supersedes**: ${supersedes ? `[previous record](${supersedes})` : "none"}`,
     "",
@@ -1084,7 +1096,7 @@ function durableRecordSingle(options) {
   const pullRequest = pullValue === undefined ? undefined : integer(Number(pullValue), "record pull request");
   const cwd = resolve(requiredOption(options, "cwd"));
   const publish = options.flags.has("publish");
-  const entry = { kind: options.values.get("kind"), issue, pullRequest, bodyFile: requiredOption(options, "body-file"), head: options.values.get("head"), baseRef: options.values.get("base-ref"), baseSha: options.values.get("base-sha"), inputs: options.values.has("inputs-file") ? readJson(requiredOption(options, "inputs-file")) : [], supersedes: options.values.get("supersedes"), round: options.values.has("round") ? Number(options.values.get("round")) : undefined, reviewerReports: options.values.has("reviewers-file") ? readJson(requiredOption(options, "reviewers-file")) : undefined };
+  const entry = { kind: options.values.get("kind"), issue, pullRequest, bodyFile: requiredOption(options, "body-file"), head: options.values.get("head"), baseRef: options.values.get("base-ref"), baseSha: options.values.get("base-sha"), mode: options.values.get("mode"), inputs: options.values.has("inputs-file") ? readJson(requiredOption(options, "inputs-file")) : [], supersedes: options.values.get("supersedes"), round: options.values.has("round") ? Number(options.values.get("round")) : undefined, reviewerReports: options.values.has("reviewers-file") ? readJson(requiredOption(options, "reviewers-file")) : undefined };
   const record = durableRecord(entry, repository, issue, pullRequest, cwd, new Map(), new Map(), publish);
   const reportFile = resolve(optionalOption(options, "report-file", join(dirname(resolve(entry.bodyFile)), `${String(entry.kind).toLowerCase()}.record.md`)));
   writeExclusive(reportFile, record.markdown);
@@ -1424,7 +1436,7 @@ async function doctor(options) {
 }
 
 function usage() {
-  process.stdout.write(`ForgeDock candidate helper\n\nCommands:\n  doctor --cwd <repo> --config-dir <isolated-pi-dir>\n  status   (alias for doctor)\n  config --cwd <repo>\n  prepare --issue <N> --cwd <repo>\n  prepare-dispatch --selector <set> --cwd <repo> --out <dir> [--issues-file <json>]\n  prepare-review --input <json> --out <dir>\n  record reviewer --repo <org/repo> --pr <N> --head <sha> --base-ref <branch> --base-sha <sha> --role <role> --body-file <file> [--report-file <file>] [--publish]\n  record --kind <kind> --repo <org/repo> --issue <N>|--pr <N> --body-file <file> --cwd <repo> [--inputs-file <json>] [--supersedes <url>] [--publish]\n  record batch --input <json> [--publish]\n  discover --repo <org/repo> --issue <N>|--pr <N> [--cwd <repo>] [--out <file>]\n  label --repo <org/repo> --issue <N> --state <state> [--cwd <repo>]\n  replace --config-dir <dir> --old-source <source> --candidate-source <source>\n  rollback --rollback <directory>\n  digest-tree --root <directory>\n  verify-install --install-root <directory>\n`);
+  process.stdout.write(`ForgeDock candidate helper\n\nCommands:\n  doctor --cwd <repo> --config-dir <isolated-pi-dir>\n  status   (alias for doctor)\n  config --cwd <repo>\n  prepare --issue <N> --cwd <repo>\n  prepare-dispatch --selector <set> --cwd <repo> --out <dir> [--issues-file <json>]\n  prepare-review --input <json> --out <dir>\n  record reviewer --repo <org/repo> --pr <N> --head <sha> --base-ref <branch> --base-sha <sha> --role <role> --body-file <file> [--report-file <file>] [--publish]\n  record --kind <kind> --repo <org/repo> --issue <N>|--pr <N> --body-file <file> --cwd <repo> [--mode standard|staging] [--inputs-file <json>] [--supersedes <url>] [--publish]\n  record batch --input <json> [--publish]\n  discover --repo <org/repo> --issue <N>|--pr <N> [--cwd <repo>] [--out <file>]\n  label --repo <org/repo> --issue <N> --state <state> [--cwd <repo>]\n  replace --config-dir <dir> --old-source <source> --candidate-source <source>\n  rollback --rollback <directory>\n  digest-tree --root <directory>\n  verify-install --install-root <directory>\n`);
 }
 
 async function main() {

@@ -13,7 +13,11 @@ an ordinary issue PR targeting integration remains standard review.
 Freeze the exact source head and base. Review the patch first, then relevant consumers and
 producer/consumer boundaries. Reuse deterministic build evidence bound to the same head; run
 only missing or stale relevant checks. A target-branch move alone does not invalidate an
-unchanged clean reviewed head. Do not rebuild the entire repository map.
+unchanged clean standard-review head: its panel record retains the original base SHA while
+revalidating the live base ref, exact source head, retargeting, and conflict state. Protected
+promotion (`mode: staging`) still requires the exact frozen base SHA. Do not rebuild the entire
+repository map or rerun/rebase a completed review merely to publish its existing parent evidence;
+retain the parent's applicability decision about the advanced integration target.
 
 Select one correctness/integration reviewer by default. Add security only for a material
 changed trust, privilege, or security boundary. Add another specialist only for a concrete

@@ -154,7 +154,10 @@ comments in order. `{ "record": "id" }` links a previous batch record and
 `{ "existing": { "kind": "BUILDER" } }` resolves one existing issue record without manual URL
 copying. `REVIEW-PANEL` targets a PR and accepts `reviewerReports` with each report's
 `reportFile`; the helper resolves the actual published reviewer permalink and renders it in the
-panel. A changed same-head record needs an explicit `supersedes` reference. Retries reuse the
+panel. `REVIEW-PANEL` defaults to `mode: standard`: an unchanged, clean PR may publish after an
+unrelated advance of its configured integration target, while the original reviewed base SHA
+remains in the record. Use `mode: staging` only for the protected promotion route, which requires
+an exact live base SHA. A changed same-head record needs an explicit `supersedes` reference. Retries reuse the
 same content identity, reconcile lost create responses, and return comment IDs, URLs, and
 publication status.
 
