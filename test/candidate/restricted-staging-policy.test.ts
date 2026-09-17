@@ -176,6 +176,8 @@ test("review preparation resolves one clean exact-head worktree without replacin
     assert.equal(artifacts.review.sourceRoot, exactSource);
     assert.equal(artifacts.review.configRoot, f.root);
     assert.equal(artifacts.review.head, f.head);
+    const policyCall = calls.find((call) => call.name === "node" && call.args.includes("inspect-pr"));
+    assert.equal(policyCall?.args.at(-1), f.root);
   } finally {
     await execFileAsync("git", ["worktree", "remove", "--force", exactSource], { cwd: f.root }).catch(() => {});
     await rm(f.root, { recursive: true, force: true });

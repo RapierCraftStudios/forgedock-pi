@@ -195,7 +195,8 @@ function loadPolicyArtifact(reviewRoot: string, review: Record<string, unknown>)
 async function refreshPolicyArtifact(pi: ExtensionAPI, review: Record<string, unknown>): Promise<Record<string, unknown>> {
   const reviewRoot = String(review.artifactRoot);
   loadPolicyArtifact(reviewRoot, review);
-  const result = await pi.exec("node", [helperPath(), "inspect-pr", "--repo", String(review.repository), "--pr", String(review.pullRequest), "--cwd", String(review.sourceRoot)], { timeout: 120_000 });
+  const policyRoot = String(review.configRoot ?? review.sourceRoot);
+  const result = await pi.exec("node", [helperPath(), "inspect-pr", "--repo", String(review.repository), "--pr", String(review.pullRequest), "--cwd", policyRoot], { timeout: 120_000 });
   let current: Record<string, unknown>;
   try {
     current = result.stdout.trim() ? JSON.parse(result.stdout) as Record<string, unknown> : { schema: "forgedock.candidate-pr-policy/v1", status: "unavailable", error: result.stderr.trim() || "policy collector returned no data" };
@@ -360,8 +361,9 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       const output = await mkdtemp(join(tmpdir(), "forgedock-review-request-"));
       const result = await pi.exec("node", [helperPath(), "prepare-review", "--input", inputPath, "--out", output], { timeout: 120_000 });
       if (result.code !== 0) await failWithDiagnostic("Review preparation failed", result.stderr);
-      const prepared = JSON.parse(await readFile(join(output, "review.json"), "utf8")) as { configPath?: string; configSha256?: string; artifactKey?: string; sourceRoot?: string; head?: string; repository?: string; pullRequest?: number; baseRef?: string; baseSha?: string };
-      const policyResult = await pi.exec("node", [helperPath(), "inspect-pr", "--repo", resolvedInput.repository, "--pr", String(resolvedInput.pullRequest), "--cwd", prepared.sourceRoot ?? resolvedInput.sourceRoot], { timeout: 120_000 });
+      const prepared = JSON.parse(await readFile(join(output, "review.json"), "utf8")) as { configPath?: string; configSha256?: string; artifactKey?: string; sourceRoot?: string; configRoot?: string; head?: string; repository?: string; pullRequest?: number; baseRef?: string; baseSha?: string };
+      const policyRoot = prepared.configRoot ?? resolvedInput.configRoot ?? resolvedInput.sourceRoot;
+      const policyResult = await pi.exec("node", [helperPath(), "inspect-pr", "--repo", resolvedInput.repository, "--pr", String(resolvedInput.pullRequest), "--cwd", policyRoot], { timeout: 120_000 });
       let policy: Record<string, unknown>;
       try {
         policy = policyResult.stdout.trim() ? JSON.parse(policyResult.stdout) as Record<string, unknown> : { schema: "forgedock.candidate-pr-policy/v1", status: "unavailable", error: policyResult.stderr.trim() || "policy collector returned no data" };
