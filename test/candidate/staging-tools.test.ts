@@ -1,9 +1,40 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import test from "node:test";
 
 import registerCandidateTools from "../../candidate/tools.ts";
+
+test("preparation errors keep full diagnostics outside model context", async () => {
+  const root = await mkdtemp("/tmp/forgedock-candidate-staging-tools-");
+  const fullDiagnostic = ["orchestration.max_concurrent must be an integer from 1 through 32", "diagnostic detail ".repeat(240).trimEnd()].join("\n");
+  let diagnosticPath: string | undefined;
+  try {
+    const tools = new Map<string, { execute: (id: string, params: unknown) => Promise<unknown> }>();
+    const fakePi = {
+      registerTool(definition: { name: string; execute: (id: string, params: unknown) => Promise<unknown> }) { tools.set(definition.name, definition); },
+      async exec() { return { code: 1, stdout: "", stderr: fullDiagnostic, killed: false }; },
+    };
+    registerCandidateTools(fakePi as never);
+    const tool = tools.get("forge_prepare_review");
+    assert.ok(tool);
+    try {
+      await tool.execute("prepare", { repository: "example/product", pullRequest: 7, head: "a".repeat(40), baseRef: "main", baseSha: "b".repeat(40), sourceRoot: root, publish: false });
+      assert.fail("expected preparation to fail");
+    } catch (error) {
+      const message = String(error);
+      const savedPath = message.split("Full diagnostic: ")[1]?.split(". Do not retry")[0];
+      assert.ok(savedPath);
+      diagnosticPath = savedPath;
+      assert.match(message, /Do not retry the unchanged request/);
+      assert.ok(!message.includes("diagnostic detail ".repeat(200)));
+      assert.equal(await readFile(diagnosticPath, "utf8"), fullDiagnostic);
+    }
+  } finally {
+    if (diagnosticPath) await rm(dirname(diagnosticPath), { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("staging publication requires prepared reviewer and check evidence", async () => {
   const root = await mkdtemp("/tmp/forgedock-candidate-staging-tools-");

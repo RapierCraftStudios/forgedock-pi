@@ -1,7 +1,45 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import forgedockCandidateExtension, { FORGEDOCK_ALIASES, isStagingMutationBlocked, rewriteForgePromptAlias } from "../../candidate/extension.ts";
+
+test("automatic promotion handoff activates and settles the staging guard", async () => {
+  const reviewRoot = await mkdtemp(join(tmpdir(), "forgedock-route-guard-"));
+  try {
+    await writeFile(join(reviewRoot, "review.json"), JSON.stringify({ config: { protectedBranch: "main" } }));
+    const handlers = new Map<string, Array<(event: any) => any>>();
+    const fakePi = {
+      registerTool() {},
+      registerCommand() {},
+      getAllTools() { return []; },
+      on(name: string, handler: (event: any) => any) {
+        handlers.set(name, [...(handlers.get(name) ?? []), handler]);
+      },
+    };
+    forgedockCandidateExtension(fakePi as never);
+    const input = handlers.get("input")?.[0];
+    const result = handlers.get("tool_result")?.[0];
+    const settled = handlers.get("agent_settled")?.[0];
+    const toolCall = handlers.get("tool_call")?.[0];
+    assert.ok(input);
+    assert.ok(result);
+    assert.ok(settled);
+    assert.ok(toolCall);
+    assert.equal(input({ source: "user", text: "/review-pr 33792" })?.action, "transform");
+    assert.equal(toolCall({ toolName: "bash", input: {} }), undefined);
+    result({ toolName: "forge_prepare_review", isError: false, details: { reviewRoot, policySummary: { baseRef: "main" } } });
+    assert.equal(toolCall({ toolName: "bash", input: {} })?.block, true);
+    settled({});
+    assert.equal(toolCall({ toolName: "bash", input: {} }), undefined);
+    result({ toolName: "forge_prepare_review", isError: false, details: { reviewRoot, policySummary: { baseRef: "staging" } } });
+    assert.equal(toolCall({ toolName: "bash", input: {} }), undefined);
+  } finally {
+    await rm(reviewRoot, { recursive: true, force: true });
+  }
+});
 
 test("staging guard resets after the route settles", () => {
   const handlers = new Map<string, Array<(event: any) => any>>();

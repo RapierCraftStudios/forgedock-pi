@@ -257,6 +257,13 @@ async function tempArtifact(prefix: string, name: string, content: string): Prom
   return file;
 }
 
+async function failWithDiagnostic(prefix: string, detail: string): Promise<never> {
+  const text = detail.trim() || "no diagnostic output";
+  const diagnosticPath = await tempArtifact("forgedock-diagnostic-", "full.log", text);
+  const preview = text.length > 1_600 ? `${text.slice(0, 1_600)}\n[full diagnostic saved outside model context]` : text;
+  throw new Error(`${prefix}: ${preview}\nFull diagnostic: ${diagnosticPath}. Do not retry the unchanged request.`);
+}
+
 function configuredCommand(raw: unknown, name: string): string | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const commands = (raw as { verification?: { commands?: unknown } }).verification?.commands;
@@ -284,7 +291,7 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       const inputPath = await tempArtifact("forgedock-review-input-", "input.json", JSON.stringify(input, null, 2));
       const output = await mkdtemp(join(tmpdir(), "forgedock-review-request-"));
       const result = await pi.exec("node", [helperPath(), "prepare-review", "--input", inputPath, "--out", output], { timeout: 120_000 });
-      if (result.code !== 0) throw new Error(`Review preparation failed: ${bounded(result.stderr)}`);
+      if (result.code !== 0) await failWithDiagnostic("Review preparation failed", result.stderr);
       const prepared = JSON.parse(await readFile(join(output, "review.json"), "utf8")) as { configPath?: string; configSha256?: string; artifactKey?: string; sourceRoot?: string; head?: string; repository?: string; pullRequest?: number; baseRef?: string; baseSha?: string };
       const policyResult = await pi.exec("node", [helperPath(), "inspect-pr", "--repo", input.repository, "--pr", String(input.pullRequest), "--cwd", prepared.sourceRoot ?? input.sourceRoot], { timeout: 120_000 });
       let policy: Record<string, unknown>;
@@ -325,7 +332,7 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       const after = await pi.exec("git", ["status", "--porcelain=v1", "--untracked-files=all"], { cwd: resolve(input.sourceRoot), timeout: 20_000 });
       const output = `${result.stdout}${result.stderr ? `\n${result.stderr}` : ""}`;
       if (after.code !== 0 || after.stdout.trim()) throw new Error(`Configured check '${name}' changed the frozen source checkout`);
-      if (result.code !== 0) throw new Error(`Configured check '${name}' failed:\n${bounded(output)}`);
+      if (result.code !== 0) await failWithDiagnostic(`Configured check '${name}' failed`, output);
       const receiptPath = await writeCheckReceipt(input.reviewRoot, { schema: "forgedock.candidate-check/v1", name, status: "passed", sourceRoot: resolve(input.sourceRoot), head: input.head, configPath, configSha256: input.configSha256 });
       return { content: [{ type: "text", text: bounded(output || `${name}: passed`) }], details: { name, command, exitCode: result.code, receiptPath } };
     },

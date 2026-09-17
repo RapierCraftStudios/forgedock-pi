@@ -107,6 +107,43 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
   }
 });
 
+test("review preparation defers dispatch limits while dispatch enforces them", async () => {
+  const root = await mkdtemp("/tmp/forgedock-candidate-cli-");
+  const artifacts = await mkdtemp("/tmp/forgedock-candidate-limit-");
+  try {
+    await execFileAsync("git", ["init", "--quiet"], { cwd: root });
+    await execFileAsync("git", ["remote", "add", "origin", "https://github.com/example/product.git"], { cwd: root });
+    await writeFile(join(root, "README.md"), "fixture base\\n");
+    await execFileAsync("git", ["add", "README.md"], { cwd: root });
+    await execFileAsync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Candidate Test", "commit", "--quiet", "-m", "base"], { cwd: root });
+    const oversized = forgeYaml.replace("max_concurrent: 2", "max_concurrent: 300");
+    await writeFile(join(root, "forge.yaml"), oversized);
+    await execFileAsync("git", ["add", "forge.yaml"], { cwd: root });
+    await execFileAsync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Candidate Test", "commit", "--quiet", "-m", "fixture"], { cwd: root });
+    const sourceHead = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: root })).stdout.trim();
+    const baseSha = (await execFileAsync("git", ["rev-parse", "HEAD^"], { cwd: root })).stdout.trim();
+    await execFileAsync("git", ["branch", "-M", "integration"], { cwd: root });
+    await execFileAsync("git", ["update-ref", "refs/remotes/origin/integration", sourceHead], { cwd: root });
+    const reviewInput = join(artifacts, "review-input.json");
+    const reviewOut = join(artifacts, "review-out");
+    await writeFile(reviewInput, JSON.stringify({ repository: "example/product", pullRequest: 7, head: sourceHead, baseRef: "integration", baseSha, sourceRoot: root, acceptance: ["The review is independently observable."] }));
+    const review = JSON.parse((await execFileAsync("node", [helper, "prepare-review", "--input", reviewInput, "--out", reviewOut])).stdout) as { requestPath: string };
+    assert.equal(JSON.parse(await readFile(review.requestPath, "utf8")).globalConcurrencyLimit, 1);
+    const issuesFile = join(artifacts, "issues.json");
+    await writeFile(issuesFile, JSON.stringify({ issues: [{ number: 1, title: "one", body: "## Acceptance Criteria\\n- [ ] Works" }] }));
+    await assert.rejects(execFileAsync("node", [helper, "prepare-dispatch", "--selector", "#1", "--cwd", root, "--issues-file", issuesFile, "--out", join(artifacts, "dispatch-out")]), /orchestration\.max_concurrent must be an integer from 1 through 32/);
+    await writeFile(join(root, "forge.yaml"), oversized.replace("reviewer_timeout_ms: 1000", "reviewer_timeout_ms: 0"));
+    await execFileAsync("git", ["add", "forge.yaml"], { cwd: root });
+    await execFileAsync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Candidate Test", "commit", "--quiet", "-m", "invalid-review-fixture"], { cwd: root });
+    const invalidHead = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: root })).stdout.trim();
+    await writeFile(reviewInput, JSON.stringify({ repository: "example/product", pullRequest: 7, head: invalidHead, baseRef: "integration", baseSha, sourceRoot: root, acceptance: ["The review is independently observable."] }));
+    await assert.rejects(execFileAsync("node", [helper, "prepare-review", "--input", reviewInput, "--out", join(artifacts, "invalid-review-out")]), /review\.reviewer_timeout_ms must be an integer/);
+  } finally {
+    await rm(artifacts, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("staging gate records retain the exact gate marker", async () => {
   const root = await mkdtemp("/tmp/forgedock-candidate-cli-");
   try {
