@@ -195,9 +195,11 @@ async function main() {
     if (event.type === "tool_execution_end") return (event.result?.content ?? []).filter((part) => part.type === "text").map((part) => part.text);
     return [];
   });
-  const markers = textual.join("\n").match(/FORGE_(?:WORK_ON|REVIEW)_RESULT[^\n]*/g) ?? [];
+  const allText = textual.join("\n");
+  const markers = allText.match(/^FORGE_WORK_ON_RESULT status=(?:DONE|GATED|FAILED) issue=\d+ pr=(?:\d+|none) dependency=(?:SATISFIED|UNSATISFIED)$/gm) ?? [];
+  const reviewResults = allText.match(/^FORGE_REVIEW_RESULT role=[a-z][a-z0-9-]* report=\S+ publication=(?:published|saved|failed) verdict=(?:APPROVE|BLOCK|FOLLOW_UP)$/gm) ?? [];
   const nativeCalls = events.filter((event) => event.type === "tool_execution_start" && event.toolName === "subagent").map((event) => ({ agent: event.args?.agent ?? null, action: event.args?.action ?? null, workflowScriptPath: event.args?.workflowScriptPath ?? null, cwd: event.args?.cwd ?? null, model: event.args?.model ?? null, async: event.args?.async ?? null }));
-  const runRecords = collectRuns(events.filter((event) => event.type === "tool_execution_end" && event.toolName === "subagent").map((event) => event.result));
+  const runRecords = [...new Map(collectRuns(events.filter((event) => event.type === "tool_execution_end" && event.toolName === "subagent").map((event) => event.result)).map((record) => [`${record.runId}:${record.agent ?? ""}`, record])).values()];
   let deliveredHead = null;
   try { deliveredHead = await git(repository.remote, ["rev-parse", "refs/heads/integration"]); } catch { /* remote may remain at baseline */ }
   const sourceWorktrees = (await git(prepared.out, ["worktree", "list", "--porcelain"])).split(/\n\n+/).filter(Boolean).map((entry) => Object.fromEntries(entry.split("\n").map((line) => line.split(" ", 2)).filter(([key, value]) => key && value)));
@@ -219,7 +221,8 @@ async function main() {
     nativeCalls,
     runs: runRecords,
     markers,
-    firstPass: markers.some((marker) => /FORGE_WORK_ON_RESULT status=DONE/.test(marker)) && !markers.some((marker) => /CHANGES_REQUESTED|IMMEDIATE REPAIR/.test(marker)) ? "accepted-local" : "not-accepted-local",
+    reviewResults,
+    firstPass: (mode === "owner" ? [201] : [101, 102]).every((issue) => markers.some((marker) => new RegExp(`^FORGE_WORK_ON_RESULT status=DONE issue=${issue} pr=(?:\\d+|none) dependency=SATISFIED$`).test(marker))) && !reviewResults.some((result) => /verdict=BLOCK/.test(result)) ? "accepted-local" : "not-accepted-local",
     github: { writes: "unexecuted", fakeGhLog: github.log, reason: "No disposable remote GitHub write authority was provided" },
     sourceWorktrees,
     retainedEvidence: { directory: output, rawParentEvents: join(output, "parent.jsonl"), stderr: join(output, "parent.stderr.log") },
