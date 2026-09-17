@@ -785,7 +785,8 @@ function replaceInstallation(options) {
   writeFileSync(join(rollbackDir, "manifest.json"), json(manifest), { mode: 0o600, flag: "wx" });
   try {
     runPi(configDir, ["install", candidateSource, "--approve"]);
-    runPi(configDir, ["remove", oldSource, "--approve"]);
+    const afterInstall = readJson(settingsFile);
+    if (settingsPackages(afterInstall).some((entry) => sourceMatches(entry, oldSource, configDir))) runPi(configDir, ["remove", oldSource, "--approve"]);
     const after = readJson(settingsFile);
     const packages = settingsPackages(after);
     if (!packages.some((entry) => sourceMatches(entry, candidateSource, configDir))) fail("Candidate source is not registered after replacement");
