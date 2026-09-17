@@ -1,7 +1,31 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { FORGEDOCK_ALIASES, isStagingMutationBlocked, rewriteForgePromptAlias } from "../../candidate/extension.ts";
+import forgedockCandidateExtension, { FORGEDOCK_ALIASES, isStagingMutationBlocked, rewriteForgePromptAlias } from "../../candidate/extension.ts";
+
+test("staging guard resets after the route settles", () => {
+  const handlers = new Map<string, Array<(event: any) => any>>();
+  const fakePi = {
+    registerTool() {},
+    registerCommand() {},
+    getAllTools() { return []; },
+    on(name: string, handler: (event: any) => any) {
+      handlers.set(name, [...(handlers.get(name) ?? []), handler]);
+    },
+  };
+  forgedockCandidateExtension(fakePi as never);
+  const input = handlers.get("input")?.[0];
+  const settled = handlers.get("agent_settled")?.[0];
+  const toolCall = handlers.get("tool_call")?.[0];
+  assert.ok(input);
+  assert.ok(settled);
+  assert.ok(toolCall);
+  assert.equal(input({ source: "user", text: "/review-pr-staging 576" })?.action, "transform");
+  assert.equal(toolCall({ toolName: "bash", input: {} })?.block, true);
+  settled({});
+  assert.equal(toolCall({ toolName: "bash", input: {} }), undefined);
+  assert.equal(input({ source: "user", text: "/work-on 1" })?.action, "transform");
+});
 
 test("rejects ad hoc staging reviewer workflows", () => {
   assert.equal(isStagingMutationBlocked("subagent", { workflowScript: "return runs.all([])" }), true);
