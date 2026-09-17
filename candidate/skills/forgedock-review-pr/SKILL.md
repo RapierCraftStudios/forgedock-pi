@@ -32,13 +32,16 @@ the entire repository map or rerun/rebase a completed review merely to publish i
 parent evidence; retain the parent's applicability decision about the advanced integration
 target.
 
-Select one correctness/integration reviewer by default. Add security only for a material
-changed trust, privilege, or security boundary. Add another specialist only for a concrete
-question not covered by the assignments, with a short rationale in the review request. File
-count, labels, domains, and keywords do not allocate seats.
+Select one correctness/integration reviewer by default. `forge_prepare_review.roles` accepts at
+most three values and only `correctness`, `security`, and `specialist`; never pass target-domain
+names such as `infra`, `database`, or `concurrency`. Combine distinct questions into one
+`specialist` assignment or omit `roles` and let the bounded helper derive the roster. Add security
+only for a material changed trust, privilege, or security boundary. File count, labels, domains,
+and keywords do not allocate seats.
 
-Use `forge-candidate prepare-review` to produce one native `workflowScriptPath`, then invoke it
-with `subagent` and wait for every selected fresh `forgedock-reviewer`. This profile has only
+Use the prepared review tool to produce one native `workflowScriptPath`, then invoke it with
+`subagent` and wait for every selected fresh `forgedock-reviewer`. For a protected promotion,
+use `forge_prepare_review` so the actual policy result activates the restricted route. This profile has only
 read tools plus the publication-only report tool. Give each reviewer the original acceptance,
 concise plan/history, exact frozen identity, relevant evidence/limits, and specific risk
 boundary. Each reviewer must publish its own substantive exact-head
