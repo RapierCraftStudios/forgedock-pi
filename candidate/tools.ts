@@ -305,6 +305,25 @@ async function resolveReviewConfigRoot(pi: ExtensionAPI, requestedRoot: string, 
   throw new Error(candidates.length > 1 ? "Multiple possible canonical forge.yaml worktrees found; provide configRoot explicitly." : "No canonical forge.yaml worktree found for the exact review source.");
 }
 
+async function existingGateForHead(pi: ExtensionAPI, repository: string, pullRequest: number, head: string, cwd: string): Promise<{ url: string; body: string } | undefined> {
+  const result = await pi.exec("gh", ["api", "--paginate", "--slurp", `repos/${repository}/issues/${pullRequest}/comments`], { cwd, timeout: 120_000 });
+  if (result.code !== 0) return undefined;
+  try {
+    const pages = JSON.parse(result.stdout);
+    if (!Array.isArray(pages)) return undefined;
+    for (const comment of pages.flatMap((page: unknown) => Array.isArray(page) ? page : [])) {
+      const body = typeof comment?.body === "string" ? comment.body : "";
+      const marker = body.split(/\r?\n/, 1)[0]?.match(/^<!-- FORGE:(?:CANDIDATE:)?STAGING_GATE (\{.*\}) -->$/);
+      if (!marker) continue;
+      const identity = JSON.parse(marker[1]);
+      if ((identity.head === head || identity.source_head === head) && typeof comment.html_url === "string") return { url: comment.html_url, body };
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
 function configuredCommand(raw: unknown, name: string): string | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const commands = (raw as { verification?: { commands?: unknown } }).verification?.commands;
@@ -401,6 +420,10 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       if (review.repository !== input.repository || review.pullRequest !== input.pullRequest || review.head !== input.head || review.baseRef !== input.baseRef || review.baseSha !== input.baseSha || review.publish !== input.publish) throw new Error("Staging gate does not match the prepared frozen review");
       const policy = await refreshPolicyArtifact(pi, review);
       if (input.gate === "PASS") await requirePassEvidence(input, review, policy);
+      const priorGate = input.publish && input.pullRequest !== undefined && !input.supersedes
+        ? await existingGateForHead(pi, input.repository, input.pullRequest, input.head, String(review.sourceRoot))
+        : undefined;
+      const supersedes = input.supersedes ?? (priorGate && !priorGate.body.includes(input.body.trim()) ? priorGate.url : undefined);
       const bodyPath = await tempArtifact("forgedock-record-", "body.md", input.body);
       const reportPath = resolve(dirname(bodyPath), "record.md");
       const args = [helperPath(), "record", "--kind", input.kind, "--repo", input.repository, "--body-file", bodyPath, "--report-file", reportPath];
@@ -409,7 +432,7 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
         if (!input.head || !input.baseRef || !input.baseSha || !input.gate) throw new Error("Staging gate publication requires frozen head/base and PASS or FAIL");
         args.push("--head", input.head, "--base-ref", input.baseRef, "--base-sha", input.baseSha, "--gate", input.gate);
       }
-      if (input.supersedes) args.push("--supersedes", input.supersedes);
+      if (supersedes) args.push("--supersedes", supersedes);
       if (input.publish) args.push("--publish");
       const result = await pi.exec("node", args, { timeout: 120_000 });
       if (result.code !== 0) throw new Error(`Record publication failed: ${bounded(result.stderr)}`);

@@ -1347,16 +1347,38 @@ function recordIdentity(options, kind) {
   }
   if (kind === "REVIEW") {
     identity.role = stringValue(requiredOption(options, "role"), "review role", /^[a-z][a-z0-9-]*$/);
+    const reportId = options.values.get("report-id");
+    if (reportId !== undefined) identity.reportId = stringValue(reportId, "review report id", SAFE_TOKEN);
     identity.baseRef = branch(requiredOption(options, "base-ref"), "review base ref");
     if (!identity.pullRequest || !identity.head || !identity.baseSha) fail("Reviewer record requires --pr, --head, and --base-sha");
   }
   if (kind === "STAGING_GATE") {
     identity.baseRef = branch(requiredOption(options, "base-ref"), "staging base ref");
     identity.gate = stringValue(requiredOption(options, "gate"), "staging gate", /^(?:PASS|FAIL)$/);
+    const supersedes = options.values.get("supersedes");
+    if (supersedes !== undefined) identity.supersedes = safeHttpsUrl(supersedes, "staging gate supersedes");
     if (!identity.pullRequest || !identity.head || !identity.baseSha) fail("Staging gate record requires --pr, --head, and --base-sha");
   }
   if (!identity.issue && !identity.pullRequest) fail("Record requires --issue or --pr");
   return identity;
+}
+
+function existingGateForHead(repository, destination, head, cwd) {
+  try {
+    const pages = readJsonFromText(exec("gh", ["api", "--paginate", "--slurp", commentEndpoint(repository, destination)], { cwd, timeout: 120_000 }));
+    if (!Array.isArray(pages)) return undefined;
+    for (const comment of pages.flatMap((page) => Array.isArray(page) ? page : [])) {
+      const body = typeof comment?.body === "string" ? comment.body : "";
+      const match = body.split(/\r?\n/, 1)[0]?.match(/^<!-- FORGE:(?:CANDIDATE:)?STAGING_GATE (\{.*\}) -->$/);
+      if (!match) continue;
+      let identity;
+      try { identity = JSON.parse(match[1]); } catch { continue; }
+      if ((identity.head === head || identity.source_head === head) && typeof comment?.html_url === "string") return { url: comment.html_url, body };
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }
 
 function publishComment(repository, destination, markdown, reportFile, cwd) {
