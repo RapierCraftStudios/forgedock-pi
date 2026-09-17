@@ -119,6 +119,8 @@ export default function registerReviewerTools(pi: ExtensionAPI): void {
         input.baseSha,
         "--role",
         input.role,
+        "--report-id",
+        input.artifactKey,
         "--body-file",
         bodyPath,
         "--report-file",

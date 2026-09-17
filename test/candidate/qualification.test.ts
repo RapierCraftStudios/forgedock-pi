@@ -38,11 +38,37 @@ test("publication recovers an ambiguous create from the stable saved marker", as
     const body = join(root, "body.md");
     const report = join(root, "report.md");
     const state = join(root, "gh-state.json");
+    const head = "a".repeat(40);
+    const baseSha = "b".repeat(40);
     await writeFile(body, "### Scope and decisions considered\nThe exact frozen patch was reviewed.\n\n### Evidence and findings\nNo blocking finding was reproduced.\n\n### Verification limitations\nThe disposable publication boundary was used.\n\n### Recommendation\nApprove after parent readback.\n");
-    const result = JSON.parse((await execFileAsync("node", [helper, "record", "reviewer", "--repo", "example/product", "--pr", "7", "--head", "a".repeat(40), "--base-ref", "integration", "--base-sha", "b".repeat(40), "--role", "correctness", "--body-file", body, "--report-file", report, "--publish"], { env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, FAKE_GH_STATE: state } })).stdout) as { publication: string; reconciliation: string; url: string };
+    await writeFile(state, JSON.stringify({ id: 9, body: `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ v: 1, repository: "example/product", pullRequest: 7, head, baseSha, role: "correctness", baseRef: "integration" })} -->\nold report\n`, html_url: "https://github.com/example/product/pull/7#issuecomment-9" }));
+    const result = JSON.parse((await execFileAsync("node", [helper, "record", "reviewer", "--repo", "example/product", "--pr", "7", "--head", head, "--base-ref", "integration", "--base-sha", baseSha, "--role", "correctness", "--report-id", "report-new", "--body-file", body, "--report-file", report, "--publish"], { env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, FAKE_GH_STATE: state } })).stdout) as { publication: string; reconciliation: string; url: string };
+    assert.match(await readFile(report, "utf8"), /reportId/);
     assert.equal(result.publication, "published");
     assert.equal(result.reconciliation, "ambiguous-create-reconciled");
     assert.equal(result.url, "https://github.com/example/product/pull/7#issuecomment-77");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("same-head staging gate publication uses an explicit supersession marker", async () => {
+  const root = await mkdtemp("/tmp/forgedock-candidate-gate-publication-");
+  try {
+    const fakeBin = join(root, "bin");
+    await mkdir(fakeBin);
+    await writeFile(join(fakeBin, "gh"), fakeGh, { mode: 0o755 });
+    const body = join(root, "body.md");
+    const report = join(root, "report.md");
+    const state = join(root, "gh-state.json");
+    const head = "a".repeat(40);
+    const baseSha = "b".repeat(40);
+    await writeFile(body, "The exact staging gate evidence remains blocked by a required runtime check.");
+    await writeFile(state, JSON.stringify({ id: 9, body: `<!-- FORGE:CANDIDATE:STAGING_GATE ${JSON.stringify({ v: 1, kind: "STAGING_GATE", repository: "example/product", pullRequest: 7, head, baseSha, baseRef: "main", gate: "FAIL" })} -->\nold gate\n`, html_url: "https://github.com/example/product/pull/7#issuecomment-9" }));
+    const result = JSON.parse((await execFileAsync("node", [helper, "record", "--kind", "STAGING_GATE", "--repo", "example/product", "--pr", "7", "--head", head, "--base-ref", "main", "--base-sha", baseSha, "--gate", "FAIL", "--supersedes", "https://github.com/example/product/pull/7#issuecomment-9", "--body-file", body, "--report-file", report, "--publish"], { env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, FAKE_GH_STATE: state } })).stdout) as { publication: string; url: string };
+    assert.equal(result.publication, "published");
+    assert.equal(result.url, "https://github.com/example/product/pull/7#issuecomment-77");
+    assert.match(await readFile(report, "utf8"), /supersedes/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

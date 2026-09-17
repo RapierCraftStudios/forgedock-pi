@@ -71,6 +71,22 @@ function allowedStagingSubagent(input: unknown): boolean {
   return false;
 }
 
+function protectedPromotionPrepared(details: unknown): boolean {
+  if (!details || typeof details !== "object" || Array.isArray(details)) return false;
+  const value = details as { reviewRoot?: unknown; policySummary?: unknown };
+  if (typeof value.reviewRoot !== "string" || !value.policySummary || typeof value.policySummary !== "object" || Array.isArray(value.policySummary)) return false;
+  const summary = value.policySummary as { baseRef?: unknown };
+  if (typeof summary.baseRef !== "string") return false;
+  try {
+    const review = JSON.parse(readFileSync(join(resolve(value.reviewRoot), "review.json"), "utf8")) as { config?: unknown };
+    const config = review.config;
+    const protectedBranch = config && typeof config === "object" && !Array.isArray(config) ? (config as { protectedBranch?: unknown }).protectedBranch : undefined;
+    return typeof protectedBranch === "string" && summary.baseRef === protectedBranch;
+  } catch {
+    return false;
+  }
+}
+
 /** Narrow route guard: staging may inspect/check/publish evidence, never mutate product code or deliver it. */
 export function isStagingMutationBlocked(toolName: string, input: unknown): boolean {
   const allowedTools = new Set(["read", "grep", "find", "ls", "forge_prepare_review", "forge_run_check", "forge_publish_record", "subagent"]);
@@ -99,6 +115,9 @@ export default function forgedockCandidateExtension(pi: ExtensionAPI): void {
   });
   pi.on("agent_settled", () => {
     stagingGuard = false;
+  });
+  pi.on("tool_result", (event) => {
+    if (event.toolName === "forge_prepare_review" && !event.isError && protectedPromotionPrepared(event.details)) stagingGuard = true;
   });
   pi.on("tool_call", (event) => {
     if (stagingGuard && isStagingMutationBlocked(event.toolName, event.input)) {

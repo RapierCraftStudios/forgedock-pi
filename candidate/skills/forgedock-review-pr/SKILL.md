@@ -11,8 +11,15 @@ is an explicit integration-to-protected promotion, hand off to `forgedock-review
 an ordinary issue PR targeting integration remains standard review.
 
 Freeze the exact source head and base. Review the patch first, then relevant consumers and
-producer/consumer boundaries. Reuse deterministic build evidence bound to the same head; run
-only missing or stale relevant checks. Collect repository-driven CI facts once with
+producer/consumer boundaries. Use the prepared exact-head review checkout as `sourceRoot` and
+pass the canonical target checkout containing `forge.yaml` as `configRoot` when those roots are
+distinct; never copy a config into the frozen source checkout. Reuse deterministic build evidence bound to the same head; run
+only missing or stale relevant checks. If the resolved PR is an integration-to-protected
+promotion, hand off to the same restricted staging route used by
+`forgedock-review-pr-staging`. After the actual PR policy identifies the protected base, use
+`forge_prepare_review` (not the shell helper or a direct subagent call) so the prepared policy
+activates the route guard; do not infer this from issue, comment, branch-name, or prose mentions
+of staging. Collect repository-driven CI facts once with
 `"$FORGEDOCK_CANDIDATE_BIN" inspect-pr --repo <owner/repo> --pr <N> --cwd "$PWD"` after the
 PR identity is frozen. Prefer GitHub's evaluated active branch-rules result, retaining legacy
 protection and ruleset evidence separately. Evaluate requiredness from the returned applicable rules/protection,
@@ -25,17 +32,22 @@ the entire repository map or rerun/rebase a completed review merely to publish i
 parent evidence; retain the parent's applicability decision about the advanced integration
 target.
 
-Select one correctness/integration reviewer by default. Add security only for a material
-changed trust, privilege, or security boundary. Add another specialist only for a concrete
-question not covered by the assignments, with a short rationale in the review request. File
-count, labels, domains, and keywords do not allocate seats.
+Select one correctness/integration reviewer by default. `forge_prepare_review.roles` accepts at
+most three values and only `correctness`, `security`, and `specialist`; never pass target-domain
+names such as `infra`, `database`, or `concurrency`. Combine distinct questions into one
+`specialist` assignment or omit `roles` and let the bounded helper derive the roster. Add security
+only for a material changed trust, privilege, or security boundary. File count, labels, domains,
+and keywords do not allocate seats.
 
-Use `forge-candidate prepare-review` to produce one native `workflowScriptPath`, then invoke it
-with `subagent` and wait for every selected fresh `forgedock-reviewer`. This profile has only
+Use the prepared review tool to produce one native `workflowScriptPath`, then invoke it with
+`subagent` and wait for every selected fresh `forgedock-reviewer`. For a protected promotion,
+use `forge_prepare_review` so the actual policy result activates the restricted route. This profile has only
 read tools plus the publication-only report tool. Give each reviewer the original acceptance,
 concise plan/history, exact frozen identity, relevant evidence/limits, and specific risk
 boundary. Each reviewer must publish its own substantive exact-head
 `FORGE:REVIEWER_REPORT` using the candidate record helper, including clean/no-findings reports.
+For an explicitly user-invoked review, pass `publish: true`; review-only authorization does not
+permit merge, issue closure, or deployment, but it does require the evidence publication path.
 Reviewers do not edit source, create issues, merge, deploy, or initiate repair. If publication
 fails after analysis, retain the saved report and recover publication without rerunning review.
 
@@ -48,6 +60,12 @@ acceptance/patch defect blocks; a confirmed permitted follow-up does not hold th
 Missing required evidence or role is gated, never approval. Re-review is scoped to a genuine
 repair and affected conclusions; a second same-mechanism failure gets a concrete diagnosis and
 respects the configured limit.
+
+If a helper or configuration operation returns a deterministic validation error, stop after
+that unchanged attempt and report the exact bounded operation/error. Do not retry the same input,
+read helper implementation or sibling/old worktrees, or perform broad repository archaeology;
+resume only after a real input, identity, or configuration change. Full diagnostics remain in the
+external artifact named by the tool rather than being expanded into model context.
 
 Merge only if explicitly authorized, the accepted reviewed head is current, required checks
 pass, and the PR is mergeable. Review never closes issues or deploys.

@@ -68,10 +68,11 @@ const RECORD_INPUT = Type.Object({
   baseRef: Type.Optional(Type.String({ minLength: 1 })),
   baseSha: Type.Optional(Type.String({ pattern: "^[a-f0-9]{40,64}$" })),
   gate: Type.Optional(Type.String({ pattern: "^(?:PASS|FAIL)$" })),
-  checks: Type.Optional(Type.Array(Type.String({ pattern: "^[A-Za-z0-9_.-]+$" }))),
+  checks: Type.Optional(Type.Array(Type.String({ pattern: "^[A-Za-z0-9][A-Za-z0-9_. -]*$" }))),
   body: Type.String({ minLength: 8 }),
   reviewRoot: Type.Optional(Type.String({ minLength: 1 })),
   artifactKey: Type.Optional(Type.String({ minLength: 1 })),
+  supersedes: Type.Optional(Type.String({ minLength: 1 })),
   publish: Type.Boolean(),
 });
 
@@ -88,6 +89,7 @@ type RecordInput = {
   body: string;
   reviewRoot?: string;
   artifactKey?: string;
+  supersedes?: string;
   publish: boolean;
 };
 
@@ -193,7 +195,8 @@ function loadPolicyArtifact(reviewRoot: string, review: Record<string, unknown>)
 async function refreshPolicyArtifact(pi: ExtensionAPI, review: Record<string, unknown>): Promise<Record<string, unknown>> {
   const reviewRoot = String(review.artifactRoot);
   loadPolicyArtifact(reviewRoot, review);
-  const result = await pi.exec("node", [helperPath(), "inspect-pr", "--repo", String(review.repository), "--pr", String(review.pullRequest), "--cwd", String(review.sourceRoot)], { timeout: 120_000 });
+  const policyRoot = String(review.configRoot ?? review.sourceRoot);
+  const result = await pi.exec("node", [helperPath(), "inspect-pr", "--repo", String(review.repository), "--pr", String(review.pullRequest), "--cwd", policyRoot], { timeout: 120_000 });
   let current: Record<string, unknown>;
   try {
     current = result.stdout.trim() ? JSON.parse(result.stdout) as Record<string, unknown> : { schema: "forgedock.candidate-pr-policy/v1", status: "unavailable", error: result.stderr.trim() || "policy collector returned no data" };
@@ -257,6 +260,72 @@ async function tempArtifact(prefix: string, name: string, content: string): Prom
   return file;
 }
 
+async function failWithDiagnostic(prefix: string, detail: string): Promise<never> {
+  const text = detail.trim() || "no diagnostic output";
+  const diagnosticPath = await tempArtifact("forgedock-diagnostic-", "full.log", text);
+  const preview = text.length > 1_600 ? `${text.slice(0, 1_600)}\n[full diagnostic saved outside model context]` : text;
+  throw new Error(`${prefix}: ${preview}\nFull diagnostic: ${diagnosticPath}. Do not retry the unchanged request.`);
+}
+
+function worktreePaths(porcelain: string): string[] {
+  return porcelain.split(/\n\n+/).map((entry) => entry.split("\n").find((line) => line.startsWith("worktree "))?.slice("worktree ".length)).filter((path): path is string => typeof path === "string" && path.length > 0).map((path) => resolve(path));
+}
+
+async function reviewWorktreePaths(pi: ExtensionAPI, cwd: string): Promise<string[]> {
+  const result = await pi.exec("git", ["worktree", "list", "--porcelain"], { cwd, timeout: 20_000 });
+  return result.code === 0 ? worktreePaths(result.stdout) : [];
+}
+
+async function resolveReviewSourceRoot(pi: ExtensionAPI, requestedRoot: string, head: string): Promise<{ sourceRoot: string; configRoot?: string }> {
+  const requested = resolve(requestedRoot);
+  const current = await pi.exec("git", ["rev-parse", "HEAD"], { cwd: requested, timeout: 20_000 });
+  if (current.code !== 0 || current.stdout.trim() === head) return { sourceRoot: requested };
+  const paths = await reviewWorktreePaths(pi, requested);
+  if (paths.length === 0) return { sourceRoot: requested };
+  const matches: string[] = [];
+  for (const actual of paths) {
+    const revision = await pi.exec("git", ["rev-parse", "HEAD"], { cwd: actual, timeout: 20_000 });
+    if (revision.code !== 0 || revision.stdout.trim() !== head) continue;
+    const status = await pi.exec("git", ["status", "--porcelain=v1", "--untracked-files=all"], { cwd: actual, timeout: 20_000 });
+    if (status.code === 0 && !status.stdout.trim()) matches.push(actual);
+  }
+  if (matches.length !== 1) throw new Error(matches.length > 1 ? `Review head ${head} has multiple clean worktrees; select one explicitly.` : `Review source checkout is not at ${head}; no clean exact-head worktree was found.`);
+  return { sourceRoot: matches[0]!, ...(existsSync(join(requested, "forge.yaml")) ? { configRoot: requested } : {}) };
+}
+
+async function resolveReviewConfigRoot(pi: ExtensionAPI, requestedRoot: string, sourceRoot: string, configuredRoot?: string): Promise<string> {
+  const requested = resolve(requestedRoot);
+  const configured = configuredRoot ? resolve(configuredRoot) : undefined;
+  if (configured && existsSync(join(configured, "forge.yaml"))) return configured;
+  if (!configured && existsSync(join(requested, "forge.yaml"))) return requested;
+  if (configured && configured !== sourceRoot) throw new Error(`Review config root ${configured} has no canonical forge.yaml.`);
+  const reviewPaths = await reviewWorktreePaths(pi, sourceRoot);
+  if (reviewPaths.length === 0) return configured ?? requested;
+  const candidates = reviewPaths.filter((path) => path !== sourceRoot && !path.split(/[\\\\/]/).includes(".forge") && existsSync(join(path, "forge.yaml")));
+  if (candidates.length === 1) return candidates[0]!;
+  throw new Error(candidates.length > 1 ? "Multiple possible canonical forge.yaml worktrees found; provide configRoot explicitly." : "No canonical forge.yaml worktree found for the exact review source.");
+}
+
+async function existingGateForHead(pi: ExtensionAPI, repository: string, pullRequest: number, head: string, cwd: string): Promise<{ url: string; body: string } | undefined> {
+  const result = await pi.exec("gh", ["api", "--paginate", "--slurp", `repos/${repository}/issues/${pullRequest}/comments`], { cwd, timeout: 120_000 });
+  if (result.code !== 0) return undefined;
+  try {
+    const pages = JSON.parse(result.stdout);
+    if (!Array.isArray(pages)) return undefined;
+    let latest: { url: string; body: string } | undefined;
+    for (const comment of pages.flatMap((page: unknown) => Array.isArray(page) ? page : [])) {
+      const body = typeof comment?.body === "string" ? comment.body : "";
+      const marker = body.split(/\r?\n/, 1)[0]?.match(/^<!-- FORGE:(?:CANDIDATE:)?STAGING_GATE (\{.*\}) -->$/);
+      if (!marker) continue;
+      const identity = JSON.parse(marker[1]);
+      if ((identity.head === head || identity.source_head === head) && typeof comment.html_url === "string") latest = { url: comment.html_url, body };
+    }
+    return latest;
+  } catch {
+    return undefined;
+  }
+}
+
 function configuredCommand(raw: unknown, name: string): string | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const commands = (raw as { verification?: { commands?: unknown } }).verification?.commands;
@@ -281,19 +350,28 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
     parameters: REVIEW_INPUT,
     async execute(_toolCallId, params) {
       const input = params as ReviewInput;
-      const inputPath = await tempArtifact("forgedock-review-input-", "input.json", JSON.stringify(input, null, 2));
+      let resolvedInput: ReviewInput;
+      try {
+        const resolution = await resolveReviewSourceRoot(pi, input.sourceRoot, input.head);
+        const configRoot = await resolveReviewConfigRoot(pi, input.sourceRoot, resolution.sourceRoot, input.configRoot ?? resolution.configRoot);
+        resolvedInput = { ...input, sourceRoot: resolution.sourceRoot, configRoot };
+      } catch (error) {
+        throw await failWithDiagnostic("Review source preparation failed", error instanceof Error ? error.message : String(error));
+      }
+      const inputPath = await tempArtifact("forgedock-review-input-", "input.json", JSON.stringify(resolvedInput, null, 2));
       const output = await mkdtemp(join(tmpdir(), "forgedock-review-request-"));
       const result = await pi.exec("node", [helperPath(), "prepare-review", "--input", inputPath, "--out", output], { timeout: 120_000 });
-      if (result.code !== 0) throw new Error(`Review preparation failed: ${bounded(result.stderr)}`);
-      const prepared = JSON.parse(await readFile(join(output, "review.json"), "utf8")) as { configPath?: string; configSha256?: string; artifactKey?: string; sourceRoot?: string; head?: string; repository?: string; pullRequest?: number; baseRef?: string; baseSha?: string };
-      const policyResult = await pi.exec("node", [helperPath(), "inspect-pr", "--repo", input.repository, "--pr", String(input.pullRequest), "--cwd", prepared.sourceRoot ?? input.sourceRoot], { timeout: 120_000 });
+      if (result.code !== 0) await failWithDiagnostic("Review preparation failed", result.stderr);
+      const prepared = JSON.parse(await readFile(join(output, "review.json"), "utf8")) as { configPath?: string; configSha256?: string; artifactKey?: string; sourceRoot?: string; configRoot?: string; head?: string; repository?: string; pullRequest?: number; baseRef?: string; baseSha?: string };
+      const policyRoot = prepared.configRoot ?? resolvedInput.configRoot ?? resolvedInput.sourceRoot;
+      const policyResult = await pi.exec("node", [helperPath(), "inspect-pr", "--repo", resolvedInput.repository, "--pr", String(resolvedInput.pullRequest), "--cwd", policyRoot], { timeout: 120_000 });
       let policy: Record<string, unknown>;
       try {
         policy = policyResult.stdout.trim() ? JSON.parse(policyResult.stdout) as Record<string, unknown> : { schema: "forgedock.candidate-pr-policy/v1", status: "unavailable", error: policyResult.stderr.trim() || "policy collector returned no data" };
       } catch {
         policy = { schema: "forgedock.candidate-pr-policy/v1", status: "malformed", error: policyResult.stderr.trim() || "policy collector returned invalid JSON" };
       }
-      const policyPath = await writePolicyArtifact(output, { schema: "forgedock.candidate-policy/v1", artifactKey: prepared.artifactKey, repository: input.repository, pullRequest: input.pullRequest, head: prepared.head ?? input.head, baseRef: input.baseRef, baseSha: input.baseSha, prepared: policy, current: policy, refreshedAt: null });
+      const policyPath = await writePolicyArtifact(output, { schema: "forgedock.candidate-policy/v1", artifactKey: prepared.artifactKey, repository: resolvedInput.repository, pullRequest: resolvedInput.pullRequest, head: prepared.head ?? resolvedInput.head, baseRef: resolvedInput.baseRef, baseSha: resolvedInput.baseSha, prepared: policy, current: policy, refreshedAt: null });
       const summary = policySummary(policy);
       const handoff = `\n\nPR policy evidence saved at ${policyPath}. The existing restricted publication operation refreshes this same artifact before a gate decision; do not echo the policy object. Compact summary: ${JSON.stringify(summary)}.`;
       return { content: [{ type: "text", text: bounded(`${result.stdout.trim()}${handoff}`) }], details: { requestDirectory: output, inputPath, reviewRoot: output, artifactKey: prepared.artifactKey, sourceRoot: prepared.sourceRoot, head: prepared.head, configPath: prepared.configPath, configSha256: prepared.configSha256, policyPath, policySummary: summary } };
@@ -325,7 +403,7 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       const after = await pi.exec("git", ["status", "--porcelain=v1", "--untracked-files=all"], { cwd: resolve(input.sourceRoot), timeout: 20_000 });
       const output = `${result.stdout}${result.stderr ? `\n${result.stderr}` : ""}`;
       if (after.code !== 0 || after.stdout.trim()) throw new Error(`Configured check '${name}' changed the frozen source checkout`);
-      if (result.code !== 0) throw new Error(`Configured check '${name}' failed:\n${bounded(output)}`);
+      if (result.code !== 0) await failWithDiagnostic(`Configured check '${name}' failed`, output);
       const receiptPath = await writeCheckReceipt(input.reviewRoot, { schema: "forgedock.candidate-check/v1", name, status: "passed", sourceRoot: resolve(input.sourceRoot), head: input.head, configPath, configSha256: input.configSha256 });
       return { content: [{ type: "text", text: bounded(output || `${name}: passed`) }], details: { name, command, exitCode: result.code, receiptPath } };
     },
@@ -345,6 +423,10 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       if (review.repository !== input.repository || review.pullRequest !== input.pullRequest || review.head !== input.head || review.baseRef !== input.baseRef || review.baseSha !== input.baseSha || review.publish !== input.publish) throw new Error("Staging gate does not match the prepared frozen review");
       const policy = await refreshPolicyArtifact(pi, review);
       if (input.gate === "PASS") await requirePassEvidence(input, review, policy);
+      const priorGate = input.publish && input.pullRequest !== undefined && !input.supersedes
+        ? await existingGateForHead(pi, input.repository, input.pullRequest, input.head, String(review.sourceRoot))
+        : undefined;
+      const supersedes = input.supersedes ?? (priorGate && !priorGate.body.includes(input.body.trim()) ? priorGate.url : undefined);
       const bodyPath = await tempArtifact("forgedock-record-", "body.md", input.body);
       const reportPath = resolve(dirname(bodyPath), "record.md");
       const args = [helperPath(), "record", "--kind", input.kind, "--repo", input.repository, "--body-file", bodyPath, "--report-file", reportPath];
@@ -353,6 +435,7 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
         if (!input.head || !input.baseRef || !input.baseSha || !input.gate) throw new Error("Staging gate publication requires frozen head/base and PASS or FAIL");
         args.push("--head", input.head, "--base-ref", input.baseRef, "--base-sha", input.baseSha, "--gate", input.gate);
       }
+      if (supersedes) args.push("--supersedes", supersedes);
       if (input.publish) args.push("--publish");
       const result = await pi.exec("node", args, { timeout: 120_000 });
       if (result.code !== 0) throw new Error(`Record publication failed: ${bounded(result.stderr)}`);

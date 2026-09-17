@@ -151,6 +151,41 @@ async function stagedContext(f: Awaited<ReturnType<typeof fixture>>, publish = f
   return { calls, tools, artifacts };
 }
 
+test("review preparation resolves one clean exact-head worktree without replacing config root", async () => {
+  const f = await fixture();
+  const exactSource = join(f.root, "review-source");
+  try {
+    await execFileAsync("git", ["worktree", "add", "--quiet", "--detach", exactSource, f.head], { cwd: f.root });
+    await writeFile(join(f.root, "local-only.txt"), "canonical config checkout remains distinct\\n");
+    await execFileAsync("git", ["add", "local-only.txt"], { cwd: f.root });
+    await execFileAsync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Candidate Test", "commit", "--quiet", "-m", "advance-config-root"], { cwd: f.root });
+    const calls: Array<{ name: string; args: string[] }> = [];
+    const tools = toolMap(fakeExecutor(f.env, calls));
+    const prepared = await tools.get("forge_prepare_review")!.execute("prepare", {
+      repository: "example/product",
+      pullRequest: 7,
+      head: f.head,
+      baseRef: "main",
+      baseSha: f.base,
+      sourceRoot: f.root,
+      configRoot: f.root,
+      roles: ["correctness"],
+      publish: false,
+    });
+    const artifacts = modelArtifacts(prepared);
+    assert.equal(artifacts.review.sourceRoot, exactSource);
+    assert.equal(artifacts.review.configRoot, f.root);
+    assert.equal(artifacts.review.head, f.head);
+    const policyCall = calls.find((call) => call.name === "node" && call.args.includes("inspect-pr"));
+    assert.equal(policyCall?.args.at(-1), f.root);
+  } finally {
+    await execFileAsync("git", ["worktree", "remove", "--force", exactSource], { cwd: f.root }).catch(() => {});
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.state, { force: true });
+  }
+});
+
 test("prepared staging review separates task data from reviewer execution", async () => {
   const f = await fixture();
   let reviewRoot: string | undefined;
@@ -202,6 +237,36 @@ test("prepared staging review separates task data from reviewer execution", asyn
 function gateInput(f: Awaited<ReturnType<typeof fixture>>, artifacts: ReturnType<typeof modelArtifacts>, publish = false) {
   return { repository: "example/product", pullRequest: 7, kind: "STAGING_GATE", head: f.head, baseRef: "main", baseSha: f.base, gate: "PASS", checks: [], reviewRoot: artifacts.reviewRoot, artifactKey: artifacts.artifactKey, body: "FORGE:STAGING_GATE:PASS\\nEvidence.", publish };
 }
+
+test("published staging gates supersede the latest same-head gate", async () => {
+  const f = await fixture();
+  try {
+    const oldUrl = "https://github.com/example/product/pull/7#issuecomment-70";
+    const latestUrl = "https://github.com/example/product/pull/7#issuecomment-71";
+    const identity = { v: 1, kind: "STAGING_GATE", repository: "example/product", pullRequest: 7, head: f.head, baseSha: f.base, baseRef: "main", gate: "FAIL" };
+    const state = JSON.parse(await readFile(f.state, "utf8"));
+    state.comments = [
+      { id: 70, body: `<!-- FORGE:CANDIDATE:STAGING_GATE ${JSON.stringify(identity)} -->\nold gate\n`, html_url: oldUrl },
+      { id: 71, body: `<!-- FORGE:CANDIDATE:STAGING_GATE ${JSON.stringify({ ...identity, supersedes: oldUrl })} -->\nlatest gate\n`, html_url: latestUrl },
+    ];
+    await writeFile(f.state, JSON.stringify(state));
+    const ctx = await stagedContext(f, true);
+    const result = await ctx.tools.get("forge_publish_record")!.execute("publish", {
+      ...gateInput(f, ctx.artifacts),
+      gate: "FAIL",
+      checks: ["Shadow-Database Migration Dry Run"],
+      body: "FORGE:STAGING_GATE:FAIL\nA refreshed same-head gate remains blocked.",
+      publish: true,
+    });
+    assert.equal(result.details.publication, "published");
+    const publication = JSON.parse(result.content[0].text);
+    assert.equal(publication.identity.supersedes, latestUrl);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.state, { force: true });
+  }
+});
 
 test("restricted staging preparation exposes policy in content and PASS works with no local checks", async () => {
   const f = await fixture();

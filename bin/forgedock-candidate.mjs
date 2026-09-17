@@ -248,7 +248,9 @@ function repoFromRemote(cwd) {
   return match?.[1] ?? undefined;
 }
 
-function configFromRaw(rawText, configPath, cwd) {
+function configFromRaw(rawText, configPath, cwd, options = {}) {
+  const validateDispatch = options.validateDispatch !== false;
+  const validateReview = options.validateReview !== false;
   let parsed;
   try {
     parsed = parseYaml(rawText);
@@ -273,14 +275,28 @@ function configFromRaw(rawText, configPath, cwd) {
   if (integrationBranch === protectedBranch) fail("Integration and protected branches must be distinct");
   const ownerModel = validateModel(stringValue(agents.subagent_model ?? agents.default_model, "agents.subagent_model or agents.default_model", FULL_MODEL));
   const configuredThinking = typeof agents.thinking === "string" && THINKING_LEVELS.has(agents.thinking) ? agents.thinking : "high";
-  const configuredOwnerConcurrency = integer(orchestration.max_concurrent ?? 2, "orchestration.max_concurrent", 1, 32);
-  const reviewerTimeoutMs = integer(review.reviewer_timeout_ms ?? 900_000, "review.reviewer_timeout_ms", 1_000);
-  const publicationTimeoutMs = integer(review.publication_timeout_ms ?? 120_000, "review.publication_timeout_ms", 1_000);
-  const maxConcurrent = integer(review.max_concurrent ?? 2, "review.max_concurrent", 1, 16);
-  const minimumPanelTimeout = Math.ceil(3 / maxConcurrent) * reviewerTimeoutMs + publicationTimeoutMs;
-  const panelTimeoutMs = integer(review.panel_timeout_ms ?? Math.max(1_200_000, minimumPanelTimeout), "review.panel_timeout_ms", minimumPanelTimeout);
-  const remediationMaxRounds = integer(review.remediation_max_rounds ?? 1, "review.remediation_max_rounds", 0);
-  const reviewerThinking = typeof review.thinking === "string" && THINKING_LEVELS.has(review.thinking) ? review.thinking : "medium";
+  const configuredOwnerConcurrency = validateDispatch
+    ? integer(orchestration.max_concurrent ?? 2, "orchestration.max_concurrent", 1, 32)
+    : orchestration.max_concurrent ?? 2;
+  const reviewerTimeoutMs = validateReview
+    ? integer(review.reviewer_timeout_ms ?? 900_000, "review.reviewer_timeout_ms", 1_000)
+    : review.reviewer_timeout_ms ?? 900_000;
+  const publicationTimeoutMs = validateReview
+    ? integer(review.publication_timeout_ms ?? 120_000, "review.publication_timeout_ms", 1_000)
+    : review.publication_timeout_ms ?? 120_000;
+  const maxConcurrent = validateReview
+    ? integer(review.max_concurrent ?? 2, "review.max_concurrent", 1, 16)
+    : review.max_concurrent ?? 2;
+  const minimumPanelTimeout = validateReview && typeof maxConcurrent === "number" && typeof reviewerTimeoutMs === "number" && typeof publicationTimeoutMs === "number"
+    ? Math.ceil(3 / maxConcurrent) * reviewerTimeoutMs + publicationTimeoutMs
+    : 1_200_000;
+  const panelTimeoutMs = validateReview
+    ? integer(review.panel_timeout_ms ?? Math.max(1_200_000, minimumPanelTimeout), "review.panel_timeout_ms", minimumPanelTimeout)
+    : review.panel_timeout_ms ?? Math.max(1_200_000, minimumPanelTimeout);
+  const remediationMaxRounds = validateReview
+    ? integer(review.remediation_max_rounds ?? 1, "review.remediation_max_rounds", 0)
+    : review.remediation_max_rounds ?? 1;
+  const reviewerThinking = validateReview && typeof review.thinking === "string" && THINKING_LEVELS.has(review.thinking) ? review.thinking : "medium";
   const verificationCommands = {};
   const commands = verification.commands && typeof verification.commands === "object" && !Array.isArray(verification.commands) ? verification.commands : {};
   for (const [key, value] of Object.entries(commands)) {
@@ -306,7 +322,7 @@ function configFromRaw(rawText, configPath, cwd) {
     ownerModel,
     ownerThinking: configuredThinking,
     configuredOwnerConcurrency,
-    qualificationOwnerConcurrency: Math.min(configuredOwnerConcurrency, 2),
+    qualificationOwnerConcurrency: validateDispatch ? Math.min(configuredOwnerConcurrency, 2) : null,
     review: { reviewerTimeoutMs, panelTimeoutMs, publicationTimeoutMs, maxConcurrent, remediationMaxRounds, reviewerThinking },
     verificationCommands,
     globalFiles,
@@ -315,10 +331,10 @@ function configFromRaw(rawText, configPath, cwd) {
   };
 }
 
-function loadConfig(cwd) {
+function loadConfig(cwd, options = {}) {
   const configPath = resolve(cwd, "forge.yaml");
   if (!existsSync(configPath)) fail(`Missing canonical configuration: ${configPath}`);
-  return configFromRaw(readFileSync(configPath, "utf8"), configPath, cwd);
+  return configFromRaw(readFileSync(configPath, "utf8"), configPath, cwd, options);
 }
 
 function normalizedLines(body) {
@@ -838,7 +854,7 @@ function prepareReview(options) {
     fail("Review source checkout must be clean; freeze the patch in a separate checkout");
   }
   const configRoot = realpathSync(resolve(input.configRoot ?? sourceRoot));
-  const canonicalConfig = loadConfig(configRoot);
+  const canonicalConfig = loadConfig(configRoot, { validateDispatch: false });
   if (canonicalConfig.repository.toLowerCase() !== repository.toLowerCase() || !canonicalConfig.repositoryMatchesRemote) fail("Review configuration repository does not match the frozen review repository");
   const sourceCommonDir = realpathSync(resolve(sourceRoot, exec("git", ["rev-parse", "--git-common-dir"], { cwd: sourceRoot })));
   const configCommonDir = realpathSync(resolve(configRoot, exec("git", ["rev-parse", "--git-common-dir"], { cwd: configRoot })));
@@ -1104,7 +1120,7 @@ function resolveSupersedes(value, inventory, publish, lookup) {
 }
 
 function recordConfig(cwd, repository) {
-  const config = loadConfig(cwd);
+  const config = loadConfig(cwd, { validateDispatch: false });
   if (config.repository.toLowerCase() !== repository.toLowerCase() || !config.repositoryMatchesRemote) fail(`Record configuration repository does not match ${repository}`);
   return config;
 }
@@ -1331,16 +1347,38 @@ function recordIdentity(options, kind) {
   }
   if (kind === "REVIEW") {
     identity.role = stringValue(requiredOption(options, "role"), "review role", /^[a-z][a-z0-9-]*$/);
+    const reportId = options.values.get("report-id");
+    if (reportId !== undefined) identity.reportId = stringValue(reportId, "review report id", SAFE_TOKEN);
     identity.baseRef = branch(requiredOption(options, "base-ref"), "review base ref");
     if (!identity.pullRequest || !identity.head || !identity.baseSha) fail("Reviewer record requires --pr, --head, and --base-sha");
   }
   if (kind === "STAGING_GATE") {
     identity.baseRef = branch(requiredOption(options, "base-ref"), "staging base ref");
     identity.gate = stringValue(requiredOption(options, "gate"), "staging gate", /^(?:PASS|FAIL)$/);
+    const supersedes = options.values.get("supersedes");
+    if (supersedes !== undefined) identity.supersedes = safeHttpsUrl(supersedes, "staging gate supersedes");
     if (!identity.pullRequest || !identity.head || !identity.baseSha) fail("Staging gate record requires --pr, --head, and --base-sha");
   }
   if (!identity.issue && !identity.pullRequest) fail("Record requires --issue or --pr");
   return identity;
+}
+
+function existingGateForHead(repository, destination, head, cwd) {
+  try {
+    const pages = readJsonFromText(exec("gh", ["api", "--paginate", "--slurp", commentEndpoint(repository, destination)], { cwd, timeout: 120_000 }));
+    if (!Array.isArray(pages)) return undefined;
+    for (const comment of pages.flatMap((page) => Array.isArray(page) ? page : [])) {
+      const body = typeof comment?.body === "string" ? comment.body : "";
+      const match = body.split(/\r?\n/, 1)[0]?.match(/^<!-- FORGE:(?:CANDIDATE:)?STAGING_GATE (\{.*\}) -->$/);
+      if (!match) continue;
+      let identity;
+      try { identity = JSON.parse(match[1]); } catch { continue; }
+      if ((identity.head === head || identity.source_head === head) && typeof comment?.html_url === "string") return { url: comment.html_url, body };
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }
 
 function publishComment(repository, destination, markdown, reportFile, cwd) {
@@ -1577,7 +1615,7 @@ async function doctor(options) {
     } catch (error) { result.limitations.push(`Settings unreadable: ${error instanceof Error ? error.message : String(error)}`); }
   } else result.limitations.push(`Candidate config has no settings.json: ${settingsFile}`);
   try {
-    const config = loadConfig(cwd);
+    const config = loadConfig(cwd, { validateDispatch: false });
     const installManifestPath = join(PACKAGE_ROOT, "..", "manifest.json");
     const installManifest = existsSync(installManifestPath) ? readJson(installManifestPath) : {};
     result.candidate = { packageVersion: readJson(join(PACKAGE_ROOT, "package.json")).version, commit: installManifest.candidateCommit ?? (() => { try { return exec("git", ["rev-parse", "HEAD"], { cwd: PACKAGE_ROOT }); } catch { return null; } })(), effectiveConfig: config };
@@ -1589,6 +1627,7 @@ async function doctor(options) {
       result.providerAuth = { provider, status: "not_ready" };
     }
     if (!config.repositoryMatchesRemote) result.limitations.push(`Target origin does not match forge.yaml repository ${config.repository}`);
+    if (!Number.isSafeInteger(config.configuredOwnerConcurrency) || config.configuredOwnerConcurrency < 1 || config.configuredOwnerConcurrency > 32) result.limitations.push("Dispatch configuration invalid: orchestration.max_concurrent must be an integer from 1 through 32.");
   } catch (error) { result.limitations.push(`Target readiness: ${error instanceof Error ? error.message : String(error)}`); }
   if (existsSync(settingsFile) && result.pi) {
     result.loadedResources = await rpcProbe(configDir);
@@ -1620,7 +1659,7 @@ async function doctor(options) {
   }
   result.limitations.push("Target-local project settings are intentionally ignored by the launcher; AGENTS.md coding guidance remains available.");
   result.limitations.push("No live provider request or GitHub write is performed by doctor.");
-  result.readiness = result.pi && result.providerAuth?.status === "ready" && result.foreignForgePackages.length === 0 && result.loadedResources?.ok && result.loadedResources.missing?.length === 0 && result.loadedResources.missingProvenance?.length === 0 && result.loadedResources.retired?.length === 0 && result.loadedResources.foreignForgeResources?.length === 0 ? "ready-with-live-write-limitation" : "limited";
+  result.readiness = result.pi && result.providerAuth?.status === "ready" && !result.limitations.some((limitation) => limitation.startsWith("Dispatch configuration invalid:")) && result.foreignForgePackages.length === 0 && result.loadedResources?.ok && result.loadedResources.missing?.length === 0 && result.loadedResources.missingProvenance?.length === 0 && result.loadedResources.retired?.length === 0 && result.loadedResources.foreignForgeResources?.length === 0 ? "ready-with-live-write-limitation" : "limited";
   process.stdout.write(json(result));
 }
 
@@ -1659,12 +1698,12 @@ async function main() {
   }
   if (command === "config") {
     const cwd = resolve(optionalOption(options, "cwd", process.cwd()));
-    process.stdout.write(json(loadConfig(cwd)));
+    process.stdout.write(json(loadConfig(cwd, { validateDispatch: false, validateReview: false })));
     return;
   }
   if (command === "prepare") {
     const cwd = resolve(optionalOption(options, "cwd", process.cwd()));
-    const config = loadConfig(cwd);
+    const config = loadConfig(cwd, { validateDispatch: false, validateReview: false });
     const number = integer(Number(requiredOption(options, "issue")), "issue number");
     let issue;
     if (options.values.has("issue-file")) {
