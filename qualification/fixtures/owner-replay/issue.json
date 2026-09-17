@@ -1,0 +1,5 @@
+{
+  "number": 201,
+  "title": "Normalize profile display names at the presentation boundary",
+  "body": "# Normalize profile display names\n\n## Acceptance Criteria\n- [ ] Rendered profile display names are trimmed and lowercased at the presentation boundary.\n  The stored identifier and source profile data remain unchanged.\n\n- [ ] The existing renderProfile consumer uses the normalized display value without changing the identifier.\n\n- [ ] Add regression evidence through the real renderProfile consumer without adding a dependency.\n\n## Affected Files\n- `src/profile.mjs`\n- `src/render.mjs`\n- `test/display.test.mjs`\n\n## Relevant decision\nApply the prior decision in `docs/decisions/display-boundary.md` and mention how it affected the implementation."
+}

@@ -1,0 +1,26 @@
+project:
+  name: "Profile orchestration replay product"
+  owner: "example"
+  repo: "product"
+paths:
+  root: "."
+  worktree_base: ".forge/worktrees"
+branches:
+  default: "main"
+  staging: "integration"
+  feature_pattern: "feature/{slug}"
+agents:
+  subagent_model: "openai-codex/gpt-5.6-luna"
+  thinking: "low"
+orchestration:
+  max_concurrent: 2
+verification:
+  commands:
+    test: "npm test"
+review:
+  thinking: "low"
+  reviewer_timeout_ms: 900000
+  panel_timeout_ms: 2400000
+  publication_timeout_ms: 120000
+  max_concurrent: 2
+  remediation_max_rounds: 1

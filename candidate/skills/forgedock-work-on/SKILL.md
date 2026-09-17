@@ -38,6 +38,19 @@ an execution guide, not a second workflow engine.
 - Save the investigation/plan record with `forge-candidate record`; use stable links and
   preserve original acceptance text. Do not invent headings or duplicate history.
 
+## Local/disposable replay
+
+When the task explicitly says local replay, no GitHub PR or remote comment is fabricated. Use
+`prepare --issue <N> --issue-file <path> --cwd "$PWD"`, preserve the complete body, and keep
+publication false. Capture the pre-edit target/base SHA, run the configured failing test before
+editing, read every named prior-decision file, implement and test the outcome, then commit the
+local change. Prepare a synthetic review input with the current commit as head, the captured
+integration commit as base, `sourceRoot`/`configRoot` set to the owned checkout, the complete
+acceptance list, and `publish:false`. Invoke the generated request through one joined nested
+subagent workflow, read every per-role report, and adjudicate it. A locally committed and
+independently reviewed behavior can return `DONE` with `pr=none` for a dependency replay, while
+GitHub publication/merge/closure remains explicitly unexecuted.
+
 ## Implement and prove
 
 Implement the smallest coherent change through the real consumer. Add/update focused
