@@ -72,6 +72,7 @@ const RECORD_INPUT = Type.Object({
   body: Type.String({ minLength: 8 }),
   reviewRoot: Type.Optional(Type.String({ minLength: 1 })),
   artifactKey: Type.Optional(Type.String({ minLength: 1 })),
+  supersedes: Type.Optional(Type.String({ minLength: 1 })),
   publish: Type.Boolean(),
 });
 
@@ -88,6 +89,7 @@ type RecordInput = {
   body: string;
   reviewRoot?: string;
   artifactKey?: string;
+  supersedes?: string;
   publish: boolean;
 };
 
@@ -407,6 +409,7 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
         if (!input.head || !input.baseRef || !input.baseSha || !input.gate) throw new Error("Staging gate publication requires frozen head/base and PASS or FAIL");
         args.push("--head", input.head, "--base-ref", input.baseRef, "--base-sha", input.baseSha, "--gate", input.gate);
       }
+      if (input.supersedes) args.push("--supersedes", input.supersedes);
       if (input.publish) args.push("--publish");
       const result = await pi.exec("node", args, { timeout: 120_000 });
       if (result.code !== 0) throw new Error(`Record publication failed: ${bounded(result.stderr)}`);

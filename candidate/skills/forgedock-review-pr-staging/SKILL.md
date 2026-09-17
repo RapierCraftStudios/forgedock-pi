@@ -48,6 +48,10 @@ one unchanged attempt and report its exact bounded operation/error. Do not retry
 read helper source, sibling/old worktrees, or broad historical artifacts; full diagnostics stay
 in the external artifact path supplied by the tool.
 
+If the PR already has a published `STAGING_GATE` record for this same exact head, pass its
+permalink as `supersedes` when publishing a changed or refreshed result; preserve the earlier
+record rather than attempting an overwrite.
+
 Read back reports and publish one consolidated `FORGE:STAGING_GATE:PASS` only when every required
 check and role is complete with no immediate repair or mechanical gate. Otherwise publish
 `FORGE:STAGING_GATE:FAIL` with the exact finding, missing proof, or wake condition. A staging
