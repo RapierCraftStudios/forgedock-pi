@@ -46,7 +46,7 @@ function allowedStagingSubagent(input: unknown): boolean {
       const script = readFileSync(workflowPath, "utf8");
       const agentFields = script.match(/\bagent\s*:/g) ?? [];
       const agentValues = [...script.matchAll(/\bagent\s*:\s*(?:"([^"]+)"|'([^']+)')/g)].map((match) => match[1] ?? match[2]);
-      return authorization.schema === "forgedock.candidate-review/v1" && authorization.artifactRoot === reviewRoot && authorization.workflowPath === workflowPath && authorization.workflowSha256 === sha256(script) && typeof authorization.artifactKey === "string" && Array.isArray(authorization.roles) && authorization.roles.includes("correctness") && agentFields.length > 0 && agentFields.length === agentValues.length && agentValues.every((agent) => agent === "forgedock-reviewer") && !/(?:forgedock-owner|worker|writer|delegate|runs\.host|[,{]\s*(?:gate|acceptance|verify)\s*:)/.test(script);
+      return authorization.schema === "forgedock.candidate-review/v1" && authorization.artifactRoot === reviewRoot && authorization.workflowPath === workflowPath && authorization.workflowSha256 === sha256(script) && typeof authorization.artifactKey === "string" && Array.isArray(authorization.roles) && authorization.roles.includes("correctness") && agentFields.length > 0 && agentFields.length === agentValues.length && agentValues.every((agent) => agent === "forgedock-reviewer") && !/(?:forgedock-owner|worker|writer|delegate|runs\.host|[,{]\s*(?:gate|verify)\s*:|[,{]\s*acceptance\s*:\s*(?!false\b))/.test(script);
     } catch {
       return false;
     }

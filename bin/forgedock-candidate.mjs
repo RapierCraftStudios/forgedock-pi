@@ -555,7 +555,7 @@ function reviewerWorkflow(review, config, out) {
     model: modelWithThinking(config.ownerModel, config.review.reviewerThinking),
   }));
   const serialized = JSON.stringify(entries).replaceAll("\u2028", "\\u2028").replaceAll("\u2029", "\\u2029");
-  return `const assignments = ${serialized};\nreturn (await runs.all(assignments.map((assignment) => ({ key: \"review-\" + assignment.role, agent: \"forgedock-reviewer\", task: assignment.task, model: assignment.model, context: \"fresh\", cwd: ${JSON.stringify(review.sourceRoot)}, worktree: false, output: false, artifacts: true, maxRuntimeMs: ${config.review.reviewerTimeoutMs} }))));\n`;
+  return `const assignments = ${serialized};\nreturn (await runs.all(assignments.map((assignment) => ({ key: \"review-\" + assignment.role, agent: \"forgedock-reviewer\", task: assignment.task, model: assignment.model, context: \"fresh\", cwd: ${JSON.stringify(review.sourceRoot)}, worktree: false, output: false, artifacts: true, acceptance: false, maxRuntimeMs: ${config.review.reviewerTimeoutMs} }))));\n`;
 }
 
 function reviewerTask(review, config, role, out) {
