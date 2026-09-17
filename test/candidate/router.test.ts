@@ -1,7 +1,33 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import { FORGEDOCK_ALIASES, isStagingMutationBlocked, rewriteForgePromptAlias } from "../../candidate/extension.ts";
+
+test("accepts only a prepared read-only staging reviewer workflow", async () => {
+  const root = await mkdtemp(join(tmpdir(), "forgedock-staging-router-"));
+  try {
+    const workflowPath = join(root, "workflow.js");
+    const workflow = 'return (await runs.all([{ key: "review-correctness", agent: "forgedock-reviewer", task: "review", model: "m", context: "fresh", cwd: "/tmp", worktree: false, output: false, artifacts: true, acceptance: false, maxRuntimeMs: 1 }])));\n';
+    await writeFile(workflowPath, workflow);
+    await writeFile(join(root, "review.json"), JSON.stringify({
+      schema: "forgedock.candidate-review/v1",
+      artifactRoot: root,
+      workflowPath,
+      workflowSha256: createHash("sha256").update(workflow).digest("hex"),
+      artifactKey: "review-key",
+      roles: ["correctness"],
+    }));
+    assert.equal(isStagingMutationBlocked("subagent", { workflowScriptPath: workflowPath }), false);
+    await writeFile(workflowPath, workflow.replace("acceptance: false", "acceptance: true"));
+    assert.equal(isStagingMutationBlocked("subagent", { workflowScriptPath: workflowPath }), true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("routes only the familiar candidate commands", () => {
   assert.equal(rewriteForgePromptAlias("/work-on 42"), "/skill:forgedock-work-on 42");
