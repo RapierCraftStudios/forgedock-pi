@@ -11,7 +11,7 @@ test("accepts only a prepared read-only staging reviewer workflow", async () => 
   const root = await mkdtemp(join(tmpdir(), "forgedock-staging-router-"));
   try {
     const workflowPath = join(root, "workflow.js");
-    const workflow = 'return (await runs.all([{ key: "review-correctness", agent: "forgedock-reviewer", task: "review", model: "m", context: "fresh", cwd: "/tmp", worktree: false, output: false, artifacts: true, acceptance: false, maxRuntimeMs: 1 }])));\n';
+    const workflow = 'return (await runs.all([{ key: "review-correctness", agent: "forgedock-reviewer", task: "Review original acceptance: [\\"exact-head\\"]", model: "m", context: "fresh", cwd: "/tmp", worktree: false, output: false, artifacts: true, acceptance: false, maxRuntimeMs: 1 }])));\n';
     await writeFile(workflowPath, workflow);
     await writeFile(join(root, "review.json"), JSON.stringify({
       schema: "forgedock.candidate-review/v1",
