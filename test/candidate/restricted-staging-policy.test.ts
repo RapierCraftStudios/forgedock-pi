@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -149,6 +150,54 @@ async function stagedContext(f: Awaited<ReturnType<typeof fixture>>, publish = f
   await reviewerReport(artifacts.reviewRoot, artifacts.review);
   return { calls, tools, artifacts };
 }
+
+test("prepared staging review separates task data from reviewer execution", async () => {
+  const f = await fixture();
+  let reviewRoot: string | undefined;
+  try {
+    const calls: Array<{ name: string; args: string[] }> = [];
+    const tools = toolMap(fakeExecutor(f.env, calls));
+    const prepared = await tools.get("forge_prepare_review")!.execute("prepare", {
+      repository: "example/product",
+      pullRequest: 7,
+      head: f.head,
+      baseRef: "main",
+      baseSha: f.base,
+      sourceRoot: f.root,
+      configRoot: f.root,
+      roles: ["correctness"],
+      acceptance: ["Preserve worker cache behavior", "Keep writer output readable"],
+      history: ["An earlier delegate review discussed the same boundary"],
+      publish: false,
+    });
+    const artifacts = modelArtifacts(prepared);
+    reviewRoot = artifacts.reviewRoot;
+    const workflowPath = join(reviewRoot, "workflow.js");
+    const reviewPath = join(reviewRoot, "review.json");
+    const workflow = await readFile(workflowPath, "utf8");
+    assert.match(workflow, /worker/);
+    assert.match(workflow, /writer/);
+    assert.match(workflow, /delegate/);
+    assert.equal(isStagingMutationBlocked("subagent", { workflowScriptPath: workflowPath }), false);
+
+    const rewriteAuthorizedWorkflow = async (updatedWorkflow: string) => {
+      await writeFile(workflowPath, updatedWorkflow);
+      const review = JSON.parse(await readFile(reviewPath, "utf8"));
+      review.workflowSha256 = createHash("sha256").update(updatedWorkflow).digest("hex");
+      await writeFile(reviewPath, `${JSON.stringify(review, null, 2)}${String.fromCharCode(10)}`);
+    };
+    await rewriteAuthorizedWorkflow(workflow.replace('agent: "forgedock-reviewer"', 'agent: "forgedock-writer"'));
+    assert.equal(isStagingMutationBlocked("subagent", { workflowScriptPath: workflowPath }), true);
+    await rewriteAuthorizedWorkflow(workflow.replace("worktree: false", "worktree: true"));
+    assert.equal(isStagingMutationBlocked("subagent", { workflowScriptPath: workflowPath }), true);
+    assert.equal(isStagingMutationBlocked("subagent", { workflowScript: "return runs.run('review', { agent: 'forgedock-reviewer' })" }), true);
+  } finally {
+    if (reviewRoot) await rm(reviewRoot, { recursive: true, force: true });
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.state, { force: true });
+  }
+});
 
 function gateInput(f: Awaited<ReturnType<typeof fixture>>, artifacts: ReturnType<typeof modelArtifacts>, publish = false) {
   return { repository: "example/product", pullRequest: 7, kind: "STAGING_GATE", head: f.head, baseRef: "main", baseSha: f.base, gate: "PASS", checks: [], reviewRoot: artifacts.reviewRoot, artifactKey: artifacts.artifactKey, body: "FORGE:STAGING_GATE:PASS\\nEvidence.", publish };
