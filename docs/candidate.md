@@ -118,8 +118,11 @@ $FORGEDOCK_CANDIDATE_BIN inspect-pr --repo OWNER/REPO --pr 123 --cwd /absolute/t
 ```
 
 The result retains the exact PR head/base, `gh pr checks --required` output and exit status,
-head-associated check runs, commit statuses, ruleset listing/details, legacy branch protection,
-workflow-file identities, and repository-configured verification commands. It does not infer
+head-associated check runs, commit statuses, evaluated active branch rules from
+`/repos/{owner}/{repo}/rules/branches/{branch}`, ruleset listing/details, legacy branch protection,
+workflow-file identities, and repository-configured verification commands. The evaluated branch
+rules are preferred for applicability; unavailable evaluation remains an explicit uncertainty.
+It does not infer
 requiredness from workflow names, empty rows, or a nonzero checks command; inaccessible policy
 endpoints remain explicit limitations. Standard integration PRs and protected promotion routes
 are interpreted separately by their existing skills. The restricted staging preparation tool

@@ -30,6 +30,10 @@ if (endpoint?.includes("/branches/") && endpoint.endsWith("/protection")) {
   if (state.protectionError) { console.error(state.protectionError); process.exit(1); }
   out(state.protection ?? {});
 }
+if (endpoint?.includes("/rules/branches/")) {
+  if (state.branchRulesError) { console.error(state.branchRulesError); process.exit(1); }
+  out(state.branchRules ?? []);
+}
 if (endpoint?.includes("/check-runs")) out(state.checkRuns ?? []);
 if (endpoint?.endsWith("/status")) out(state.statuses ?? { statuses: [] });
 if (endpoint?.includes("/contents/.github/workflows")) out(state.workflowFiles ?? []);
@@ -72,6 +76,7 @@ async function fixture() {
     rulesets: [{ id: 1, name: "Promotion rules", target: "branch", enforcement: "active", conditions: { ref_name: { include: ["refs/heads/main"] } }, rules: [{ type: "required_status_checks", parameters: { required_status_checks: [{ context: "CI" }] } }] }],
     ruleDetails: { "1": { id: 1, name: "Promotion rules", target: "branch", enforcement: "active", conditions: { ref_name: { include: ["refs/heads/main"] } }, rules: [{ type: "required_status_checks", parameters: { required_status_checks: [{ context: "CI" }] } }] } },
     protection: { required_status_checks: { strict: false, contexts: ["CI"] } },
+    branchRules: [],
     checkRuns: [{ name: "stale", status: "completed", conclusion: "success", head_sha: "c".repeat(40), app: { slug: "github-actions" } }, { name: "current", status: "completed", conclusion: "neutral", head_sha: head, app: { slug: "github-actions" } }],
     statuses: { statuses: [{ context: "external", state: "success", description: "current", target_url: "https://ci.example/status", creator: { login: "ci" } }] },
     workflowFiles: [{ name: "ci.yml", path: ".github/workflows/ci.yml", sha: "d".repeat(40), html_url: "https://github.com/example/product/blob/integration/.github/workflows/ci.yml", download_url: "https://raw.example/token=secret" }],

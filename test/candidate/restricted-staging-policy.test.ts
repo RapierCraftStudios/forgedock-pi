@@ -30,6 +30,10 @@ if (endpoint?.includes("/branches/") && endpoint.endsWith("/protection")) {
   if (state.protectionError) { console.error(state.protectionError); process.exit(1); }
   output(state.protection ?? {});
 }
+if (endpoint?.includes("/rules/branches/")) {
+  if (state.branchRulesError) { console.error(state.branchRulesError); process.exit(1); }
+  output(state.branchRules ?? []);
+}
 if (endpoint?.includes("/check-runs")) output([{ check_runs: state.checkRuns ?? [] }]);
 if (endpoint?.endsWith("/status")) output(state.statuses ?? { statuses: [] });
 if (endpoint?.includes("/contents/.github/workflows")) output([]);
@@ -87,6 +91,7 @@ async function fixture(withLocalCheck = false) {
     requiredChecks: [{ name: "CI", state: "SUCCESS", bucket: "pass", workflow: "CI", link: "https://github.com/example/product/actions/runs/1" }],
     requiredExit: 0,
     rulesets: [],
+    branchRules: [],
     protection: { required_status_checks: { strict: true, contexts: ["CI"] } },
     checkRuns: [{ name: "CI", head_sha: head, status: "completed", conclusion: "success" }],
     statuses: { statuses: [] },
@@ -202,6 +207,85 @@ test("confirmed zero GitHub requirements use configured local receipts without a
     assert.equal(result.details.publication, "saved");
     const artifact = JSON.parse(await readFile(ctx.artifacts.policyPath, "utf8"));
     assert.equal(artifact.current.policy.requirements.applicability, "confirmed-none");
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.state, { force: true });
+  }
+});
+
+test("evaluated branch rules are paginated and a missing active requirement blocks PASS", async () => {
+  const f = await fixture();
+  try {
+    const state = JSON.parse(await readFile(f.state, "utf8"));
+    state.protection.required_status_checks.contexts = [];
+    state.branchRules = [
+      [{ type: "required_status_checks", parameters: { required_status_checks: [{ context: "CI" }] }, ruleset_source: "repo" }],
+      [{ type: "required_status_checks", parameters: { required_status_checks: [{ context: "Shadow" }] }, ruleset_source: "parent" }],
+    ];
+    state.requiredChecks = [{ name: "CI", state: "SUCCESS", bucket: "pass" }];
+    state.requiredExit = 0;
+    await writeFile(f.state, JSON.stringify(state));
+    const ctx = await stagedContext(f);
+    const artifact = JSON.parse(await readFile(ctx.artifacts.policyPath, "utf8"));
+    assert.equal(artifact.current.policy.requirements.applicability, "known-required-missing");
+    assert.deepEqual(artifact.current.policy.requirements.missingRequiredNames, ["Shadow"]);
+    await assert.rejects(ctx.tools.get("forge_publish_record")!.execute("publish", gateInput(f, ctx.artifacts)), /missing: Shadow/);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.state, { force: true });
+  }
+});
+
+test("disabled and evaluate branch rules do not impose requirements", async () => {
+  const f = await fixture();
+  try {
+    const state = JSON.parse(await readFile(f.state, "utf8"));
+    state.protection.required_status_checks.contexts = [];
+    state.branchRules = [[
+      { type: "required_status_checks", enforcement: "disabled", parameters: { required_status_checks: [{ context: "Disabled" }] } },
+      { type: "required_status_checks", enforcement: "evaluate", parameters: { required_status_checks: [{ context: "Evaluate" }] } },
+    ]];
+    state.requiredChecks = [];
+    state.requiredExit = 1;
+    await writeFile(f.state, JSON.stringify(state));
+    const ctx = await stagedContext(f);
+    const result = await ctx.tools.get("forge_publish_record")!.execute("publish", gateInput(f, ctx.artifacts));
+    assert.equal(result.details.publication, "saved");
+    const artifact = JSON.parse(await readFile(ctx.artifacts.policyPath, "utf8"));
+    assert.equal(artifact.current.policy.requirements.applicability, "confirmed-none");
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.state, { force: true });
+  }
+});
+
+test("GitHub resolves wildcard branch applicability while incomplete evaluation stays unknown", async () => {
+  const f = await fixture();
+  try {
+    const state = JSON.parse(await readFile(f.state, "utf8"));
+    state.protection.required_status_checks.contexts = [];
+    state.rulesets = [{ id: 1, conditions: { ref_name: { include: ["refs/heads/*"] } }, rules: [{ type: "required_status_checks", parameters: { required_status_checks: [{ context: "LocalWildcard" }] } }] }];
+    state.ruleDetails = { "1": { id: 1, conditions: { ref_name: { include: ["refs/heads/*"] } }, rules: [{ type: "required_status_checks", parameters: { required_status_checks: [{ context: "LocalWildcard" }] } }] } };
+    state.branchRules = [[{ type: "required_status_checks", parameters: { required_status_checks: [{ context: "CI" }] }, ruleset_source: "github-evaluated" }]];
+    state.requiredChecks = [{ name: "CI", state: "SUCCESS", bucket: "pass" }];
+    state.requiredExit = 0;
+    await writeFile(f.state, JSON.stringify(state));
+    const ctx = await stagedContext(f);
+    const result = await ctx.tools.get("forge_publish_record")!.execute("publish", gateInput(f, ctx.artifacts));
+    assert.equal(result.details.publication, "saved");
+    const artifact = JSON.parse(await readFile(ctx.artifacts.policyPath, "utf8"));
+    assert.equal(artifact.current.policy.requirements.applicability, "known-required");
+    assert.deepEqual(artifact.current.policy.requirements.requiredNames, ["CI"]);
+
+    const incomplete = JSON.parse(await readFile(f.state, "utf8"));
+    incomplete.branchRulesError = "HTTP 403 Resource not accessible";
+    incomplete.requiredChecks = [{ name: "CI", state: "SUCCESS", bucket: "pass" }];
+    incomplete.requiredExit = 0;
+    await writeFile(f.state, JSON.stringify(incomplete));
+    await assert.rejects(ctx.tools.get("forge_publish_record")!.execute("incomplete", gateInput(f, ctx.artifacts)), /unknown|missing|empty/);
   } finally {
     await rm(f.root, { recursive: true, force: true });
     await rm(f.bin, { recursive: true, force: true });

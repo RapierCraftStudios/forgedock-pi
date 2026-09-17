@@ -14,7 +14,8 @@ Freeze the exact source head and base. Review the patch first, then relevant con
 producer/consumer boundaries. Reuse deterministic build evidence bound to the same head; run
 only missing or stale relevant checks. Collect repository-driven CI facts once with
 `"$FORGEDOCK_CANDIDATE_BIN" inspect-pr --repo <owner/repo> --pr <N> --cwd "$PWD"` after the
-PR identity is frozen. Evaluate requiredness from the returned applicable rules/protection,
+PR identity is frozen. Prefer GitHub's evaluated active branch-rules result, retaining legacy
+protection and ruleset evidence separately. Evaluate requiredness from the returned applicable rules/protection,
 PR-associated checks/statuses, route, and repository configuration; do not infer it from
 workflow names or an empty/nonzero `gh pr checks` result. A target-branch move alone does not
 invalidate an unchanged clean standard-review head: its panel record retains the original base

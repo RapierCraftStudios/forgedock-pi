@@ -460,28 +460,44 @@ function compactWorkflowFiles(probe) {
   return { ...probe, data: files.map((file) => ({ name: file.name ?? null, path: file.path ?? null, sha: file.sha ?? null, type: file.type ?? null, htmlUrl: file.html_url ?? null })) };
 }
 
-function requiredRuleNames(probe, baseRef) {
+function enforcedRule(rule) {
+  const mode = String(rule?.enforcement ?? rule?.ruleset_enforcement ?? rule?.ruleset_status ?? "active").toLowerCase();
+  return !["disabled", "evaluate", "evaluated", "bypass"].includes(mode);
+}
+
+function ruleCheckNames(rule) {
+  const required = rule?.parameters?.required_status_checks ?? rule?.parameters?.required_checks;
+  if (!Array.isArray(required)) return { names: [], unknown: true };
+  return { names: required.map((check) => typeof check?.context === "string" ? check.context.trim() : "").filter(Boolean), unknown: required.some((check) => !check || typeof check.context !== "string" || !check.context.trim()) };
+}
+
+function requiredRuleNames(probe, baseRef, defaultBranch) {
   const names = new Set();
   let unknown = probe.status !== "available";
   for (const detail of probe.details ?? []) {
-    if (detail.status !== "available" || !detail.data) {
-      unknown = true;
+    if (detail.status !== "available" || !detail.data || !enforcedRule(detail.data)) {
+      if (detail.status !== "available") unknown = true;
       continue;
     }
     const conditions = detail.data.conditions?.ref_name;
     const include = Array.isArray(conditions?.include) ? conditions.include : [];
     const exclude = Array.isArray(conditions?.exclude) ? conditions.exclude : [];
     const ref = `refs/heads/${baseRef}`;
-    const recognizedInclude = include.length === 0 || include.includes(ref) || include.includes(baseRef);
-    const recognizedExclude = exclude.includes(ref) || exclude.includes(baseRef);
-    if (include.some((value) => typeof value !== "string" || /[*?]/.test(value)) || exclude.some((value) => typeof value !== "string" || /[*?]/.test(value))) unknown = true;
-    if (!recognizedInclude || recognizedExclude) continue;
+    const applies = include.length === 0 || include.includes("~ALL") || include.includes(ref) || include.includes(baseRef) || include.includes("~DEFAULT_BRANCH") && baseRef === defaultBranch;
+    const excluded = exclude.includes("~ALL") || exclude.includes(ref) || exclude.includes(baseRef) || exclude.includes("~DEFAULT_BRANCH") && baseRef === defaultBranch;
+    const unresolvedPattern = [...include, ...exclude].some((value) => typeof value !== "string" || /[*?]/.test(value));
+    if (unresolvedPattern) {
+      unknown = true;
+      continue;
+    }
+    if (!applies || excluded) continue;
     const rules = Array.isArray(detail.data.rules) ? detail.data.rules : [];
     for (const rule of rules) {
+      if (!enforcedRule(rule)) continue;
       if (rule?.type === "required_status_checks") {
-        const required = rule.parameters?.required_status_checks;
-        if (!Array.isArray(required)) unknown = true;
-        for (const check of required ?? []) if (typeof check?.context === "string" && check.context.trim()) names.add(check.context.trim());
+        const facts = ruleCheckNames(rule);
+        if (facts.unknown) unknown = true;
+        for (const name of facts.names) names.add(name);
       } else if (rule?.type === "required_deployments") {
         unknown = true;
       }
@@ -490,7 +506,26 @@ function requiredRuleNames(probe, baseRef) {
   return { names: [...names], unknown };
 }
 
-function policyRequirements(requiredProbe, checkRunsProbe, protectionProbe, rulesetsProbe, ruleDetails, baseRef) {
+function evaluatedBranchRuleNames(probe) {
+  const names = new Set();
+  if (probe.status !== "available") return { names: [], unknown: true };
+  const rules = compactPages(probe.data);
+  let unknown = false;
+  for (const rule of rules) {
+    if (!enforcedRule(rule)) continue;
+    if (rule?.type === "required_status_checks") {
+      const facts = ruleCheckNames(rule);
+      if (facts.unknown) unknown = true;
+      for (const name of facts.names) names.add(name);
+    } else if (rule?.type === "required_deployments") {
+      unknown = true;
+    }
+  }
+  return { names: [...names], unknown };
+}
+
+function policyRequirements(requiredProbe, checkRunsProbe, protectionProbe, rulesetsProbe, ruleDetails, branchRulesProbe, baseRef, defaultBranch) {
+  const evaluated = evaluatedBranchRuleNames(branchRulesProbe);
   const observed = requiredProbe.status === "available" && requiredProbe.exitCode === 0 && Array.isArray(requiredProbe.data)
     ? requiredProbe.data.map((row) => typeof row?.name === "string" ? row.name : "").filter(Boolean)
     : [];
@@ -500,16 +535,19 @@ function policyRequirements(requiredProbe, checkRunsProbe, protectionProbe, rule
     for (const context of protection.contexts ?? []) if (typeof context === "string" && context.trim()) protectionNames.push(context.trim());
     for (const check of protection.checks ?? []) if (typeof check?.context === "string" && check.context.trim()) protectionNames.push(check.context.trim());
   }
-  const ruleFacts = requiredRuleNames({ ...rulesetsProbe, details: ruleDetails }, baseRef);
+  const fallback = requiredRuleNames({ ...rulesetsProbe, details: ruleDetails }, baseRef, defaultBranch);
+  const ruleFacts = branchRulesProbe.status === "available" ? evaluated : fallback;
   const requiredNames = [...new Set([...protectionNames, ...ruleFacts.names])];
   const missingRequiredNames = requiredNames.filter((name) => !observed.includes(name));
   const failedWithRows = requiredProbe.status === "command-failed-with-data" && Array.isArray(requiredProbe.data) && requiredProbe.data.length > 0;
-  const policyUnknown = protectionProbe.status !== "available" || rulesetsProbe.status !== "available" || ruleFacts.unknown || ruleDetails.some((detail) => detail.status !== "available") || failedWithRows;
+  const evaluatedUnavailable = branchRulesProbe.status !== "available" || evaluated.unknown;
+  const fallbackUnknown = branchRulesProbe.status !== "available" && (fallback.unknown || ruleDetails.some((detail) => detail.status !== "available"));
+  const policyUnknown = evaluatedUnavailable || protectionProbe.status !== "available" || fallbackUnknown || failedWithRows;
   let applicability = "unknown";
-  if (requiredNames.length > 0) applicability = missingRequiredNames.length > 0 ? "known-required-missing" : "known-required";
-  else if (observed.length > 0) applicability = "known-required";
+  if (!policyUnknown && requiredNames.length > 0) applicability = missingRequiredNames.length > 0 ? "known-required-missing" : "known-required";
+  else if (!policyUnknown && observed.length > 0) applicability = "known-required";
   else if (!policyUnknown) applicability = "confirmed-none";
-  return { applicability, requiredNames, observedNames: observed, missingRequiredNames, policySources: { branchProtection: protectionProbe.status, rulesets: rulesetsProbe.status, evaluatedChecks: requiredProbe.status, currentCheckRuns: checkRunsProbe.status } };
+  return { applicability, requiredNames, observedNames: observed, missingRequiredNames, policySources: { branchRules: branchRulesProbe.status, branchProtection: protectionProbe.status, rulesets: rulesetsProbe.status, evaluatedChecks: requiredProbe.status, currentCheckRuns: checkRunsProbe.status } };
 }
 
 function inspectPullRequestPolicy(options) {
@@ -528,8 +566,9 @@ function inspectPullRequestPolicy(options) {
   const rulesets = probeJson(["api", `repos/${repository}/rulesets?includes_parents=true`], cwd, "repository rulesets");
   const ruleDetails = rulesets.status === "available" ? compactPages(rulesets.data).filter((rule) => Number.isSafeInteger(rule?.id)).map((rule) => probeJson(["api", `repos/${repository}/rulesets/${rule.id}`], cwd, `ruleset ${rule.id}`)) : [];
   const branchProtection = probeJson(["api", `repos/${repository}/branches/${encodeURIComponent(pull.baseRefName)}/protection`], cwd, "legacy branch protection");
+  const branchRules = probeJson(["api", "--paginate", "--slurp", `repos/${repository}/rules/branches/${encodeURIComponent(pull.baseRefName)}`], cwd, "evaluated branch rules");
   const workflowFiles = compactWorkflowFiles(probeJson(["api", `repos/${repository}/contents/.github/workflows?ref=${pull.baseRefName}`], cwd, "workflow file listing"));
-  const requirements = policyRequirements(checkRows, checkRuns, branchProtection, rulesets, ruleDetails, pull.baseRefName);
+  const requirements = policyRequirements(checkRows, checkRuns, branchProtection, rulesets, ruleDetails, branchRules, pull.baseRefName, config.protectedBranch);
   return {
     schema: "forgedock.candidate-pr-policy/v1",
     repository,
@@ -542,6 +581,7 @@ function inspectPullRequestPolicy(options) {
       commitStatuses: statuses,
       rulesets: { listing: rulesets, details: ruleDetails },
       legacyBranchProtection: branchProtection,
+      evaluatedBranchRules: branchRules,
       workflowFiles,
       requirements,
       interpretation: "Facts only: requiredness is not inferred from workflow names, check-row emptiness, or command exit status alone. Combine applicable GitHub policy, target route, check association, and repository verification evidence.",
