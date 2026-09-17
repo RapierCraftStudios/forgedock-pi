@@ -1,5 +1,7 @@
 # Candidate qualification results
 
+## Initial frozen-candidate qualification
+
 Qualification used the thin candidate built from merged `origin/main` commit
 `c6bf7ed7a56fd66935f04384ce1b43b8cdf17db7` and candidate runtime commit
 `2f6c4a4b7e874cc5b6b12858acb0f6bcc80c1603`. The evidence in
@@ -49,3 +51,22 @@ replay signals. They do not represent GitHub delivery.
 - **Universal first-pass reliability:** not established by these samples.
 - **Second-provider comparison:** not run; the selected configured model was
   `openai-codex/gpt-5.6-luna`.
+
+## Knowledge-restoration candidate
+
+The bounded knowledge/label restoration is implemented in candidate commit
+`0e25c4ff65a68198b40260836d13b8db446436a5` and installed separately at
+`/home/dev/.cache/forgedock-pi-candidate/0e25c4ff65a68198b40260836d13b8db446436a5`.
+Its focused publication/label suite passes 8/8; the full repository suite passes
+422 tests with 6 explicit skips.
+
+The retained AlterLab #32792 evidence was backfilled retrospectively without
+replaying product work. The issue now has separate investigator, classification,
+context, contract, architect, builder, and gated records, plus a linked PR panel:
+
+- Issue chain: [investigator](https://github.com/RapierCraftStudios/AlterLab/issues/32792#issuecomment-5709126031), [classification](https://github.com/RapierCraftStudios/AlterLab/issues/32792#issuecomment-5709126300), [context](https://github.com/RapierCraftStudios/AlterLab/issues/32792#issuecomment-5709126776), [contract](https://github.com/RapierCraftStudios/AlterLab/issues/32792#issuecomment-5709127128), [architect](https://github.com/RapierCraftStudios/AlterLab/issues/32792#issuecomment-5709127561), [builder](https://github.com/RapierCraftStudios/AlterLab/issues/32792#issuecomment-5709127987), [gated](https://github.com/RapierCraftStudios/AlterLab/issues/32792#issuecomment-5709128971)
+- PR graph: [individual report](https://github.com/RapierCraftStudios/AlterLab/pull/33795#issuecomment-5707855284), [review panel](https://github.com/RapierCraftStudios/AlterLab/pull/33795#issuecomment-5709128687), [original parent decision](https://github.com/RapierCraftStudios/AlterLab/pull/33795#issuecomment-5707861883)
+- Current issue label: `workflow:awaiting-merge`; unrelated labels preserved; issue remains open.
+
+The backfill batch was retried once and all eight records reconciled as
+`existing-identity`. It did not merge, close, deploy, or restart any backlog.
