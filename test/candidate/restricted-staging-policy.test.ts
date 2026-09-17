@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -20,9 +21,15 @@ if (args[0] === "pr" && args[1] === "view") output(state.pull);
 if (args[0] === "pr" && args[1] === "checks") output(state.requiredChecks, state.requiredExit ?? 0);
 if (args[0] !== "api") process.exit(2);
 const endpoint = args.find((value) => value.startsWith("repos/"));
-if (endpoint?.endsWith("/rulesets?includes_parents=true")) output(state.rulesets ?? []);
+if (endpoint?.endsWith("/rulesets?includes_parents=true")) {
+  if (state.rulesetsError) { console.error(state.rulesetsError); process.exit(1); }
+  output(state.rulesets ?? []);
+}
 if (endpoint?.includes("/rulesets/") && !endpoint.includes("?")) output(state.ruleDetails ?? {});
-if (endpoint?.includes("/branches/") && endpoint.endsWith("/protection")) output(state.protection ?? {});
+if (endpoint?.includes("/branches/") && endpoint.endsWith("/protection")) {
+  if (state.protectionError) { console.error(state.protectionError); process.exit(1); }
+  output(state.protection ?? {});
+}
 if (endpoint?.includes("/check-runs")) output([{ check_runs: state.checkRuns ?? [] }]);
 if (endpoint?.endsWith("/status")) output(state.statuses ?? { statuses: [] });
 if (endpoint?.includes("/contents/.github/workflows")) output([]);
@@ -57,7 +64,7 @@ review:
   remediation_max_rounds: 1
 `;
 
-async function fixture() {
+async function fixture(withLocalCheck = false) {
   const root = await mkdtemp("/tmp/forgedock-restricted-staging-");
   const bin = await mkdtemp("/tmp/forgedock-restricted-staging-bin-");
   await writeFile(join(bin, "gh"), fakeGh, { mode: 0o755 });
@@ -67,7 +74,8 @@ async function fixture() {
   await execFileAsync("git", ["add", "README.md"], { cwd: root });
   await execFileAsync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Candidate Test", "commit", "--quiet", "-m", "base"], { cwd: root });
   const base = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: root })).stdout.trim();
-  await writeFile(join(root, "forge.yaml"), config);
+  const configText = withLocalCheck ? `${config}\nverification:\n  commands:\n    test: echo configured\n` : config;
+  await writeFile(join(root, "forge.yaml"), configText);
   await execFileAsync("git", ["add", "forge.yaml"], { cwd: root });
   await execFileAsync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Candidate Test", "commit", "--quiet", "-m", "config"], { cwd: root });
   const head = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: root })).stdout.trim();
@@ -97,10 +105,55 @@ function toolMap(fakePi: { exec: (...args: any[]) => Promise<any> }) {
   return tools;
 }
 
-test("restricted staging preparation exposes policy and PASS works with no local checks", async () => {
+function modelArtifacts(prepared: any) {
+  const content = prepared.content[0].text as string;
+  const handoff = content.indexOf(String.fromCharCode(10) + String.fromCharCode(10) + "PR policy evidence saved at ");
+  assert.ok(handoff > 0);
+  const preparation = JSON.parse(content.slice(0, handoff));
+  const policyPath = content.slice(handoff).split("PR policy evidence saved at ")[1]?.split(". The existing")[0];
+  assert.ok(policyPath);
+  const reviewRoot = preparation.out as string;
+  const review = JSON.parse(readFileSync(join(reviewRoot, "review.json"), "utf8"));
+  return { content, reviewRoot, policyPath, artifactKey: review.artifactKey, review };
+}
+
+function fakeExecutor(env: NodeJS.ProcessEnv, calls: Array<{ name: string; args: string[] }>) {
+  return {
+    exec: async (name: string, args: string[] = [], options: { cwd?: string } = {}) => {
+      calls.push({ name, args });
+      try {
+        const result = await execFileAsync(name, args, { cwd: options.cwd, env });
+        return { code: 0, stdout: result.stdout, stderr: result.stderr };
+      } catch (error: any) {
+        return { code: error.code ?? 1, stdout: error.stdout ?? "", stderr: error.stderr ?? String(error) };
+      }
+    },
+  };
+}
+
+async function reviewerReport(root: string, review: any) {
+  const newline = String.fromCharCode(10);
+  await writeFile(join(root, "correctness.report.md"), `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ repository: review.repository, pullRequest: review.pullRequest, head: review.head, baseRef: review.baseRef, baseSha: review.baseSha, role: "correctness" })} -->${newline}clean reviewer report${newline}`);
+}
+
+async function stagedContext(f: Awaited<ReturnType<typeof fixture>>, publish = false) {
+  const calls: Array<{ name: string; args: string[] }> = [];
+  const tools = toolMap(fakeExecutor(f.env, calls));
+  const prepared = await tools.get("forge_prepare_review")!.execute("prepare", { repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base, sourceRoot: f.root, configRoot: f.root, roles: ["correctness"], publish });
+  const artifacts = modelArtifacts(prepared);
+  await reviewerReport(artifacts.reviewRoot, artifacts.review);
+  return { calls, tools, artifacts };
+}
+
+function gateInput(f: Awaited<ReturnType<typeof fixture>>, artifacts: ReturnType<typeof modelArtifacts>, publish = false) {
+  return { repository: "example/product", pullRequest: 7, kind: "STAGING_GATE", head: f.head, baseRef: "main", baseSha: f.base, gate: "PASS", checks: [], reviewRoot: artifacts.reviewRoot, artifactKey: artifacts.artifactKey, body: "FORGE:STAGING_GATE:PASS\\nEvidence.", publish };
+}
+
+test("restricted staging preparation exposes policy in content and PASS works with no local checks", async () => {
   const f = await fixture();
   try {
-    const fakePi = { exec: (name: string, args: string[] = [], options: { cwd?: string } = {}) => execFileAsync(name, args, { cwd: options.cwd, env: f.env }).then((result) => ({ code: 0, stdout: result.stdout, stderr: result.stderr })) };
+    const calls: Array<{ name: string; args: string[] }> = [];
+    const fakePi = fakeExecutor(f.env, calls);
     const tools = toolMap(fakePi);
     const prepare = tools.get("forge_prepare_review");
     const publish = tools.get("forge_publish_record");
@@ -111,43 +164,142 @@ test("restricted staging preparation exposes policy and PASS works with no local
     assert.equal(isStagingMutationBlocked("forge_publish_record", params), false);
     assert.equal(isStagingMutationBlocked("bash", {}), true);
     const prepared = await prepare.execute("prepare", params);
-    const details = prepared.details;
-    assert.equal(details.policy.schema, "forgedock.candidate-pr-policy/v1");
-    assert.equal(details.policy.identity.head, f.head);
-    assert.equal(details.policy.policy.evaluatedRequiredChecks.data[0].name, "CI");
-    await writeFile(join(details.reviewRoot, "correctness.report.md"), `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base, role: "correctness" })} -->\nclean reviewer report\n`);
+    const artifacts = modelArtifacts(prepared);
+    const policyArtifact = JSON.parse(await readFile(artifacts.policyPath, "utf8"));
+    assert.equal(policyArtifact.schema, "forgedock.candidate-policy/v1");
+    assert.equal(policyArtifact.current.identity.head, f.head);
+    assert.match(artifacts.content, /Compact summary:/);
+    await reviewerReport(artifacts.reviewRoot, artifacts.review);
     const result = await publish.execute("publish", {
       repository: "example/product", pullRequest: 7, kind: "STAGING_GATE", head: f.head, baseRef: "main", baseSha: f.base, gate: "PASS", checks: [],
-      reviewRoot: details.reviewRoot, artifactKey: details.artifactKey, body: "FORGE:STAGING_GATE:PASS\nGitHub checks are complete.", publish: true, policy: details.policy,
+      reviewRoot: artifacts.reviewRoot, artifactKey: artifacts.artifactKey, body: "FORGE:STAGING_GATE:PASS\nGitHub checks are complete.", publish: true,
     });
     assert.equal(result.details.publication, "published");
+    assert.equal(calls.filter((call) => call.args.includes("prepare-review")).length, 1);
+    assert.equal(calls.filter((call) => call.args.includes("inspect-pr")).length, 2);
     assert.equal(JSON.parse(await readFile(f.state, "utf8")).comments.length, 1);
   } finally {
     await rm(f.root, { recursive: true, force: true });
     await rm(f.bin, { recursive: true, force: true });
+    await rm(f.state, { force: true });
+  }
+});
+
+test("confirmed zero GitHub requirements use configured local receipts without a dummy job", async () => {
+  const f = await fixture(true);
+  try {
+    const state = JSON.parse(await readFile(f.state, "utf8"));
+    state.requiredChecks = [];
+    state.requiredExit = 1;
+    state.protection.required_status_checks = { strict: false, contexts: [] };
+    state.checkRuns = [];
+    await writeFile(f.state, JSON.stringify(state));
+    const ctx = await stagedContext(f);
+    const review = ctx.artifacts.review;
+    await mkdir(join(ctx.artifacts.reviewRoot, "checks"));
+    await writeFile(join(ctx.artifacts.reviewRoot, "checks", "test.json"), JSON.stringify({ schema: "forgedock.candidate-check/v1", name: "test", status: "passed", sourceRoot: review.sourceRoot, head: f.head, configPath: review.configPath, configSha256: review.configSha256 }));
+    const result = await ctx.tools.get("forge_publish_record")!.execute("publish", { ...gateInput(f, ctx.artifacts), checks: ["test"] });
+    assert.equal(result.details.publication, "saved");
+    const artifact = JSON.parse(await readFile(ctx.artifacts.policyPath, "utf8"));
+    assert.equal(artifact.current.policy.requirements.applicability, "confirmed-none");
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.state, { force: true });
+  }
+});
+
+test("completed skipped and neutral GitHub conclusions accepted by policy can pass", async () => {
+  const f = await fixture();
+  try {
+    const state = JSON.parse(await readFile(f.state, "utf8"));
+    state.protection.required_status_checks.contexts = ["CI", "Shadow"];
+    state.requiredChecks = [{ name: "CI", state: "SKIPPED", bucket: "pass" }, { name: "Shadow", state: "NEUTRAL", bucket: "pass" }];
+    state.requiredExit = 0;
+    await writeFile(f.state, JSON.stringify(state));
+    const ctx = await stagedContext(f);
+    const result = await ctx.tools.get("forge_publish_record")!.execute("publish", gateInput(f, ctx.artifacts));
+    assert.equal(result.details.publication, "saved");
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.state, { force: true });
+  }
+});
+
+test("two applicable required checks with one reported remain unsatisfied", async () => {
+  const f = await fixture();
+  try {
+    const state = JSON.parse(await readFile(f.state, "utf8"));
+    state.protection.required_status_checks.contexts = ["CI", "Shadow"];
+    state.requiredChecks = [{ name: "CI", state: "SUCCESS", bucket: "pass" }];
+    state.requiredExit = 0;
+    await writeFile(f.state, JSON.stringify(state));
+    const ctx = await stagedContext(f);
+    await assert.rejects(ctx.tools.get("forge_publish_record")!.execute("publish", gateInput(f, ctx.artifacts)), /missing: Shadow/);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.state, { force: true });
+  }
+});
+
+test("policy refresh observes check progress without a new review root", async () => {
+  const f = await fixture();
+  try {
+    const state = JSON.parse(await readFile(f.state, "utf8"));
+    state.requiredChecks = [{ name: "CI", state: "PENDING", bucket: "pending" }];
+    state.requiredExit = 1;
+    await writeFile(f.state, JSON.stringify(state));
+    const ctx = await stagedContext(f);
+    const reviewRoot = ctx.artifacts.reviewRoot;
+    const progressed = JSON.parse(await readFile(f.state, "utf8"));
+    progressed.requiredChecks = [{ name: "CI", state: "SUCCESS", bucket: "pass" }];
+    progressed.requiredExit = 0;
+    await writeFile(f.state, JSON.stringify(progressed));
+    const result = await ctx.tools.get("forge_publish_record")!.execute("publish", gateInput(f, ctx.artifacts));
+    assert.equal(result.details.publication, "saved");
+    assert.equal(ctx.artifacts.reviewRoot, reviewRoot);
+    assert.equal(ctx.calls.filter((call) => call.args.includes("prepare-review")).length, 1);
+    assert.equal(ctx.calls.filter((call) => call.args.includes("inspect-pr")).length, 2);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.state, { force: true });
   }
 });
 
 test("restricted PASS rejects missing or failed GitHub requirements", async () => {
   const f = await fixture();
   try {
-    const fakePi = { exec: (name: string, args: string[] = [], options: { cwd?: string } = {}) => execFileAsync(name, args, { cwd: options.cwd, env: f.env }).then((result) => ({ code: 0, stdout: result.stdout, stderr: result.stderr })) };
+    const calls: Array<{ name: string; args: string[] }> = [];
+    const fakePi = fakeExecutor(f.env, calls);
     const tools = toolMap(fakePi);
     const prepare = tools.get("forge_prepare_review")!;
     const publish = tools.get("forge_publish_record")!;
     const params = { repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base, sourceRoot: f.root, configRoot: f.root, roles: ["correctness"], publish: false };
     const prepared = await prepare.execute("prepare", params);
-    const details = prepared.details;
-    await writeFile(join(details.reviewRoot, "correctness.report.md"), `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base, role: "correctness" })} -->\nclean reviewer report\n`);
-    const base = { repository: "example/product", pullRequest: 7, kind: "STAGING_GATE", head: f.head, baseRef: "main", baseSha: f.base, gate: "PASS", checks: [], reviewRoot: details.reviewRoot, artifactKey: details.artifactKey, body: "FORGE:STAGING_GATE:PASS\nEvidence.", publish: false };
-    const missing = structuredClone(details.policy);
-    missing.policy.evaluatedRequiredChecks = { status: "unavailable", exitCode: 1, data: [] };
-    await assert.rejects(publish.execute("missing", { ...base, policy: missing }), /missing or empty/);
-    const failed = structuredClone(details.policy);
-    failed.policy.evaluatedRequiredChecks = { status: "available", exitCode: 1, data: [{ name: "CI", state: "FAILURE", bucket: "fail" }] };
-    await assert.rejects(publish.execute("failed", { ...base, policy: failed }), /not all satisfied/);
+    const artifacts = modelArtifacts(prepared);
+    await reviewerReport(artifacts.reviewRoot, artifacts.review);
+    const base = { repository: "example/product", pullRequest: 7, kind: "STAGING_GATE", head: f.head, baseRef: "main", baseSha: f.base, gate: "PASS", checks: [], reviewRoot: artifacts.reviewRoot, artifactKey: artifacts.artifactKey, body: "FORGE:STAGING_GATE:PASS\nEvidence.", publish: false };
+    const unknownState = JSON.parse(await readFile(f.state, "utf8"));
+    unknownState.rulesetsError = "HTTP 403 Resource not accessible";
+    unknownState.protectionError = "HTTP 404 Not Found";
+    unknownState.requiredChecks = [];
+    unknownState.requiredExit = 1;
+    await writeFile(f.state, JSON.stringify(unknownState));
+    await assert.rejects(publish.execute("unknown", base), /unknown|missing|empty/);
+
+    const failedState = JSON.parse(await readFile(f.state, "utf8"));
+    delete failedState.rulesetsError;
+    delete failedState.protectionError;
+    failedState.requiredChecks = [{ name: "CI", state: "FAILURE", bucket: "fail" }];
+    failedState.requiredExit = 0;
+    await writeFile(f.state, JSON.stringify(failedState));
+    await assert.rejects(publish.execute("failed", base), /not all satisfied/);
   } finally {
     await rm(f.root, { recursive: true, force: true });
     await rm(f.bin, { recursive: true, force: true });
+    await rm(f.state, { force: true });
   }
 });

@@ -30,11 +30,13 @@ test("staging publication requires prepared reviewer and check evidence", async 
     await writeFile(join(root, "correctness.report.md"), `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ repository: "example/product", pullRequest: 7, head, baseRef: "main", baseSha, role: "correctness" })} -->\nclean report\n`);
     await mkdir(join(root, "checks"));
     await writeFile(join(root, "checks", "test.json"), JSON.stringify({ schema: "forgedock.candidate-check/v1", name: "test", status: "passed", head, sourceRoot: "/tmp/example/source", configPath: "/tmp/example/forge.yaml", configSha256: "c".repeat(64) }));
+    const policy = { schema: "forgedock.candidate-pr-policy/v1", repository: "example/product", pullRequest: 7, identity: { head, baseRef: "main", baseSha }, configuration: { verificationCommands: { test: "npm test" } }, policy: { evaluatedRequiredChecks: { status: "available", exitCode: 0, data: [{ name: "CI", state: "SUCCESS", bucket: "pass" }] }, requirements: { applicability: "known-required", requiredNames: ["CI"], observedNames: ["CI"], missingRequiredNames: [] } } };
+    await writeFile(join(root, "policy.json"), JSON.stringify({ schema: "forgedock.candidate-policy/v1", artifactKey: key, repository: "example/product", pullRequest: 7, head, baseRef: "main", baseSha, prepared: policy, current: policy, refreshedAt: null }));
 
     const tools = new Map<string, { execute: (id: string, params: unknown) => Promise<unknown> }>();
     const fakePi = {
       registerTool(definition: { name: string; execute: (id: string, params: unknown) => Promise<unknown> }) { tools.set(definition.name, definition); },
-      async exec() { return { code: 0, stdout: "saved", stderr: "", killed: false }; },
+      async exec(_name: string, args: string[] = []) { return args.includes("inspect-pr") ? { code: 0, stdout: JSON.stringify(policy), stderr: "", killed: false } : { code: 0, stdout: "saved", stderr: "", killed: false }; },
     };
     registerCandidateTools(fakePi as never);
     const tool = tools.get("forge_publish_record");
@@ -52,13 +54,6 @@ test("staging publication requires prepared reviewer and check evidence", async 
       artifactKey: key,
       body: "FORGE:STAGING_GATE:PASS\nAll prepared evidence is complete.",
       publish: false,
-      policy: {
-        schema: "forgedock.candidate-pr-policy/v1",
-        repository: "example/product",
-        pullRequest: 7,
-        identity: { head, baseRef: "main", baseSha },
-        policy: { evaluatedRequiredChecks: { status: "available", exitCode: 0, data: [{ name: "CI", state: "SUCCESS", bucket: "pass" }] } },
-      },
     });
     assert.ok(result);
     await assert.rejects(
@@ -75,13 +70,6 @@ test("staging publication requires prepared reviewer and check evidence", async 
         artifactKey: key,
         body: "FORGE:STAGING_GATE:PASS\nMissing local receipt must remain unsatisfied.",
         publish: false,
-        policy: {
-          schema: "forgedock.candidate-pr-policy/v1",
-          repository: "example/product",
-          pullRequest: 7,
-          identity: { head, baseRef: "main", baseSha },
-          policy: { evaluatedRequiredChecks: { status: "available", exitCode: 0, data: [{ name: "CI", state: "SUCCESS", bucket: "pass" }] } },
-        },
       }),
       /local verification receipts are missing/,
     );

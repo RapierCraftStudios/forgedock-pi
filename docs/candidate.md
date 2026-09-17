@@ -123,9 +123,11 @@ workflow-file identities, and repository-configured verification commands. It do
 requiredness from workflow names, empty rows, or a nonzero checks command; inaccessible policy
 endpoints remain explicit limitations. Standard integration PRs and protected promotion routes
 are interpreted separately by their existing skills. The restricted staging preparation tool
-returns the same policy object; pass it unchanged to the staging publication tool. A staging
-PASS with no local commands still requires nonempty, current, passing GitHub required-check
-evidence, while every configured local command still requires its own receipt.
+writes a policy artifact bound to the prepared review and exposes its path plus a compact summary
+in model-visible content. The publication tool refreshes and validates that same artifact; the
+model does not echo the policy object. A staging PASS requires either confirmed absence of
+applicable GitHub checks with all configured local receipts, or complete current passing GitHub
+required-check evidence; an empty observation alone is never enough.
 
 ## File-backed records and publication
 

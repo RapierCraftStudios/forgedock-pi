@@ -27,8 +27,9 @@ Use `forge_run_check` for configured local checks only when the prepared configu
 them; each real local check needs its receipt, and an empty local-check set is valid only when
 the collected current GitHub required-check evidence is complete and passing. Use
 `forge_publish_record` for the consolidated
-gate, passing the policy object returned by `forge_prepare_review` unchanged, `kind:
-STAGING_GATE`, the frozen PR/head/protected-base identity, and `gate: PASS` or `FAIL`; feed
+gate, passing the existing review root and artifact key so it loads the policy artifact bound
+by `forge_prepare_review` (do not echo the policy object), with `kind: STAGING_GATE`, the frozen
+PR/head/protected-base identity, and `gate: PASS` or `FAIL`; feed
 `configPath`, `configSha256`, `reviewRoot`, `artifactKey`, `sourceRoot`, and `head` from the
 prepared review details to each `forge_run_check`; do not use bash/edit/write in this route.
 Each reviewer publishes its own exact-head report, including a substantive clean report. No

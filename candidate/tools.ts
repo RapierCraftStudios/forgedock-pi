@@ -73,7 +73,6 @@ const RECORD_INPUT = Type.Object({
   reviewRoot: Type.Optional(Type.String({ minLength: 1 })),
   artifactKey: Type.Optional(Type.String({ minLength: 1 })),
   publish: Type.Boolean(),
-  policy: Type.Optional(Type.Unknown()),
 });
 
 type RecordInput = {
@@ -90,7 +89,6 @@ type RecordInput = {
   reviewRoot?: string;
   artifactKey?: string;
   publish: boolean;
-  policy?: unknown;
 };
 
 function helperPath(): string {
@@ -138,9 +136,75 @@ function policyCheckPassed(row: Record<string, unknown>): boolean {
   const bucket = typeof row.bucket === "string" ? row.bucket.toLowerCase() : "";
   const state = typeof row.state === "string" ? row.state.toUpperCase() : "";
   const conclusion = typeof row.conclusion === "string" ? row.conclusion.toUpperCase() : "";
+  if (["pending", "fail", "cancel"].includes(bucket)) return false;
   if (["PENDING", "QUEUED", "IN_PROGRESS", "EXPECTED", "CANCELLED"].includes(state)) return false;
   if (["FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"].includes(conclusion)) return false;
-  return bucket === "pass" || state === "SUCCESS" || conclusion === "SUCCESS";
+  return bucket === "pass" || state === "SUCCESS" || conclusion === "SUCCESS" || ["SKIPPED", "NEUTRAL"].includes(state) || ["SKIPPED", "NEUTRAL"].includes(conclusion);
+}
+
+function policyArtifactPath(reviewRoot: string): string {
+  const root = resolve(reviewRoot);
+  const path = join(root, "policy.json");
+  if (!existsSync(path) || realpathSync(path) !== path) throw new Error("Prepared review policy artifact is missing or not a regular file");
+  return path;
+}
+
+async function writePolicyArtifact(reviewRoot: string, artifact: Record<string, unknown>): Promise<string> {
+  const path = join(resolve(reviewRoot), "policy.json");
+  const content = `${JSON.stringify(artifact, null, 2)}\n`;
+  try {
+    await writeFile(path, content, { flag: "wx", mode: 0o600 });
+  } catch (error) {
+    if (await readFile(path, "utf8") !== content) throw error;
+  }
+  return path;
+}
+
+function policySummary(policy: unknown): Record<string, unknown> {
+  const value = policy && typeof policy === "object" && !Array.isArray(policy) ? policy as Record<string, any> : {};
+  const required = value.policy?.evaluatedRequiredChecks;
+  const requirements = value.policy?.requirements;
+  const rows = Array.isArray(required?.data) ? required.data : [];
+  return {
+    schema: value.schema ?? null,
+    repository: value.repository ?? null,
+    pullRequest: value.pullRequest ?? null,
+    head: value.identity?.head ?? null,
+    baseRef: value.identity?.baseRef ?? null,
+    baseSha: value.identity?.baseSha ?? null,
+    applicability: requirements?.applicability ?? "unknown",
+    requiredNames: requirements?.requiredNames ?? rows.map((row: any) => row?.name).filter(Boolean),
+    observedCount: rows.length,
+    requiredStatus: required?.status ?? "unknown",
+    requiredExitCode: required?.exitCode ?? null,
+    localCommands: Object.keys(value.configuration?.verificationCommands ?? {}),
+  };
+}
+
+function loadPolicyArtifact(reviewRoot: string, review: Record<string, unknown>): Record<string, unknown> {
+  const path = policyArtifactPath(reviewRoot);
+  const artifact = JSON.parse(readFileSync(path, "utf8")) as Record<string, any>;
+  if (artifact.schema !== "forgedock.candidate-policy/v1" || artifact.artifactKey !== review.artifactKey || artifact.repository !== review.repository || artifact.pullRequest !== review.pullRequest || artifact.head !== review.head || artifact.baseRef !== review.baseRef || artifact.baseSha !== review.baseSha) throw new Error("Prepared review policy evidence is not bound to the existing review identity");
+  const policy = artifact.current;
+  if (!policy || typeof policy !== "object" || Array.isArray(policy)) throw new Error("Prepared review policy evidence has no current observation");
+  return policy;
+}
+
+async function refreshPolicyArtifact(pi: ExtensionAPI, review: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const reviewRoot = String(review.artifactRoot);
+  loadPolicyArtifact(reviewRoot, review);
+  const result = await pi.exec("node", [helperPath(), "inspect-pr", "--repo", String(review.repository), "--pr", String(review.pullRequest), "--cwd", String(review.sourceRoot)], { timeout: 120_000 });
+  let current: Record<string, unknown>;
+  try {
+    current = result.stdout.trim() ? JSON.parse(result.stdout) as Record<string, unknown> : { schema: "forgedock.candidate-pr-policy/v1", status: "unavailable", error: result.stderr.trim() || "policy collector returned no data" };
+  } catch {
+    current = { schema: "forgedock.candidate-pr-policy/v1", status: "malformed", error: result.stderr.trim() || "policy collector returned invalid JSON" };
+  }
+  const path = policyArtifactPath(reviewRoot);
+  const artifact = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+  const updated = { ...artifact, current, refreshedAt: new Date().toISOString() };
+  await writeFile(path, `${JSON.stringify(updated, null, 2)}\n`, { mode: 0o600 });
+  return current;
 }
 
 function requireGithubPolicyEvidence(policy: unknown, input: RecordInput, review: Record<string, unknown>): void {
@@ -148,13 +212,14 @@ function requireGithubPolicyEvidence(policy: unknown, input: RecordInput, review
   const value = policy as Record<string, any>;
   const identity = value.identity;
   if (!identity || identity.head !== input.head || identity.baseRef !== input.baseRef || identity.baseSha !== input.baseSha || Number(value.pullRequest) !== input.pullRequest || value.repository !== input.repository) throw new Error("PR-policy evidence is not bound to the prepared frozen review");
+  const requirements = value.policy?.requirements;
   const required = value.policy?.evaluatedRequiredChecks;
-  if (!required || required.status !== "available" || !Array.isArray(required.data) || required.data.length === 0) throw new Error("Required GitHub check evidence is missing or empty; do not infer that no requirement exists");
-  const failed = required.data.filter((row: unknown) => !row || typeof row !== "object" || !policyCheckPassed(row as Record<string, unknown>));
-  if (required.exitCode !== 0 || failed.length > 0) {
-    const names = failed.map((row: any) => String(row?.name ?? "unnamed check"));
-    throw new Error(`Required GitHub checks are not all satisfied${names.length ? `: ${names.join(", ")}` : ` (collector exit ${String(required.exitCode)})`}`);
-  }
+  if (requirements?.applicability === "unknown") throw new Error("Applicable GitHub check requirements are unknown; PASS is not safe");
+  if (requirements?.applicability === "confirmed-none" && Array.isArray(required?.data) && required.data.length > 0) throw new Error("Policy evidence contradicts its confirmed-no-requirements classification");
+  if (requirements?.applicability === "known-required-missing") throw new Error(`Required GitHub checks are missing: ${(requirements.missingRequiredNames ?? []).join(", ")}`);
+  if (requirements?.applicability !== "confirmed-none" && (!required || required.status !== "available" || required.exitCode !== 0 || !Array.isArray(required.data) || required.data.length === 0)) throw new Error("Required GitHub check evidence is missing or empty; do not infer that no requirement exists");
+  const failed = Array.isArray(required?.data) ? required.data.filter((row: unknown) => !row || typeof row !== "object" || !policyCheckPassed(row as Record<string, unknown>)) : [];
+  if (requirements?.applicability !== "confirmed-none" && failed.length > 0) throw new Error(`Required GitHub checks are not all satisfied: ${failed.map((row: any) => String(row?.name ?? "unnamed check")).join(", ")}`);
   const configured = review.config && typeof review.config === "object" && !Array.isArray(review.config) ? (review.config as Record<string, any>).verificationCommands : undefined;
   const configuredNames = configured && typeof configured === "object" && !Array.isArray(configured) ? Object.keys(configured) : [];
   const localChecks = input.checks ?? [];
@@ -162,12 +227,12 @@ function requireGithubPolicyEvidence(policy: unknown, input: RecordInput, review
   if (missingLocal.length > 0) throw new Error(`Required local verification receipts are missing: ${missingLocal.join(", ")}`);
 }
 
-async function requirePassEvidence(input: RecordInput, review: Record<string, unknown>): Promise<void> {
+async function requirePassEvidence(input: RecordInput, review: Record<string, unknown>, policy: unknown): Promise<void> {
   const roles = Array.isArray(review.roles) ? review.roles.filter((role): role is string => typeof role === "string") : [];
   if (!roles.includes("correctness")) throw new Error("A staging PASS requires the correctness reviewer");
   const localChecks = input.checks ?? [];
   if (!Array.isArray(localChecks) || new Set(localChecks).size !== localChecks.length) throw new Error("A staging PASS requires unique completed check receipts");
-  requireGithubPolicyEvidence(input.policy, input, review);
+  requireGithubPolicyEvidence(policy, input, review);
   for (const role of roles) {
     const report = join(resolve(input.reviewRoot as string), `${role}.report.md`);
     if (!existsSync(report) || realpathSync(report) !== report) throw new Error(`A staging PASS requires the ${role} reviewer report`);
@@ -220,15 +285,18 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       const output = await mkdtemp(join(tmpdir(), "forgedock-review-request-"));
       const result = await pi.exec("node", [helperPath(), "prepare-review", "--input", inputPath, "--out", output], { timeout: 120_000 });
       if (result.code !== 0) throw new Error(`Review preparation failed: ${bounded(result.stderr)}`);
-      const prepared = JSON.parse(await readFile(join(output, "review.json"), "utf8")) as { configPath?: string; configSha256?: string; artifactKey?: string; sourceRoot?: string; head?: string };
+      const prepared = JSON.parse(await readFile(join(output, "review.json"), "utf8")) as { configPath?: string; configSha256?: string; artifactKey?: string; sourceRoot?: string; head?: string; repository?: string; pullRequest?: number; baseRef?: string; baseSha?: string };
       const policyResult = await pi.exec("node", [helperPath(), "inspect-pr", "--repo", input.repository, "--pr", String(input.pullRequest), "--cwd", prepared.sourceRoot ?? input.sourceRoot], { timeout: 120_000 });
-      let policy: unknown;
+      let policy: Record<string, unknown>;
       try {
-        policy = policyResult.stdout.trim() ? JSON.parse(policyResult.stdout) : { schema: "forgedock.candidate-pr-policy/v1", status: "unavailable", error: policyResult.stderr.trim() || "policy collector returned no data" };
+        policy = policyResult.stdout.trim() ? JSON.parse(policyResult.stdout) as Record<string, unknown> : { schema: "forgedock.candidate-pr-policy/v1", status: "unavailable", error: policyResult.stderr.trim() || "policy collector returned no data" };
       } catch {
         policy = { schema: "forgedock.candidate-pr-policy/v1", status: "malformed", error: policyResult.stderr.trim() || "policy collector returned invalid JSON" };
       }
-      return { content: [{ type: "text", text: bounded(result.stdout) }], details: { requestDirectory: output, inputPath, reviewRoot: output, artifactKey: prepared.artifactKey, sourceRoot: prepared.sourceRoot, head: prepared.head, configPath: prepared.configPath, configSha256: prepared.configSha256, policy } };
+      const policyPath = await writePolicyArtifact(output, { schema: "forgedock.candidate-policy/v1", artifactKey: prepared.artifactKey, repository: input.repository, pullRequest: input.pullRequest, head: prepared.head ?? input.head, baseRef: input.baseRef, baseSha: input.baseSha, prepared: policy, current: policy, refreshedAt: null });
+      const summary = policySummary(policy);
+      const handoff = `\n\nPR policy evidence saved at ${policyPath}. The existing restricted publication operation refreshes this same artifact before a gate decision; do not echo the policy object. Compact summary: ${JSON.stringify(summary)}.`;
+      return { content: [{ type: "text", text: bounded(`${result.stdout.trim()}${handoff}`) }], details: { requestDirectory: output, inputPath, reviewRoot: output, artifactKey: prepared.artifactKey, sourceRoot: prepared.sourceRoot, head: prepared.head, configPath: prepared.configPath, configSha256: prepared.configSha256, policyPath, policySummary: summary } };
     },
   });
 
@@ -266,7 +334,7 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "forge_publish_record",
     label: "Publish candidate record",
-    description: "Save and optionally publish one file-backed candidate decision/gate record without changing source.",
+    description: "Refresh the bound PR policy, then save and optionally publish one file-backed candidate gate record without changing source.",
     parameters: RECORD_INPUT,
     async execute(_toolCallId, params) {
       const input = params as RecordInput;
@@ -275,7 +343,8 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       if (!input.reviewRoot || !input.artifactKey || !input.head || !input.baseRef || !input.baseSha || !input.gate || input.pullRequest === undefined) throw new Error("Staging gate publication requires its prepared review authorization");
       const review = await preparedReview(input.reviewRoot, input.artifactKey);
       if (review.repository !== input.repository || review.pullRequest !== input.pullRequest || review.head !== input.head || review.baseRef !== input.baseRef || review.baseSha !== input.baseSha || review.publish !== input.publish) throw new Error("Staging gate does not match the prepared frozen review");
-      if (input.gate === "PASS") await requirePassEvidence(input, review);
+      const policy = await refreshPolicyArtifact(pi, review);
+      if (input.gate === "PASS") await requirePassEvidence(input, review, policy);
       const bodyPath = await tempArtifact("forgedock-record-", "body.md", input.body);
       const reportPath = resolve(dirname(bodyPath), "record.md");
       const args = [helperPath(), "record", "--kind", input.kind, "--repo", input.repository, "--body-file", bodyPath, "--report-file", reportPath];
