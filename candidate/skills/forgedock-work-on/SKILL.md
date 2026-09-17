@@ -14,10 +14,11 @@ an execution guide, not a second workflow engine.
 1. Resolve the issue selector and target repository/configuration once. Under orchestration,
    use the supplied issue body, target, workspace, model, and dependency binding; do not read
    sibling worktrees or target-local workflow files as authority.
-2. Run `"$FORGEDOCK_CANDIDATE_BIN" prepare --issue <N> --cwd "$PWD"` once. Retain the
-   resulting read-only intake artifact, source/config identities, verification entrypoints,
-   and any explicit linked issue/PR/decision references. Missing setup is an infrastructure
-   condition, not a code finding.
+2. Run `"$FORGEDOCK_CANDIDATE_BIN" prepare --issue <N> --cwd "$PWD"` once (or add the
+   supplied `--issue-file <path>` for a local replay). Retain the resulting read-only intake
+   artifact, complete original body/acceptance, source/config identities, verification
+   entrypoints, and any explicit linked issue/PR/decision references. Missing setup is an
+   infrastructure condition, not a code finding.
 3. Verify the actual owned workspace and repository identity. If the intake has an understandable
    body but no rigid checklist heading, preserve that body as the obligation and continue; ask
    only if the ambiguity materially changes outcome or authority. Preserve ordinary target coding
@@ -80,8 +81,11 @@ the saved report, not the analysis.
 
 ## Terminal result
 
-Merge only when the accepted reviewed head is current, required checks pass, the PR is
-mergeable, and authority is explicit. Then read back the merge and close the issue explicitly.
-Absent authority, leave the PR ready and return `GATED` with its exact prerequisite. Finish
-with the required `FORGE_WORK_ON_RESULT` line and do not label a gate or invalidation as a
-successful delivery.
+For a declared local replay, no GitHub PR/merge/closure is fabricated: use the saved local
+review request with `publish:false`, retain the report files and exact commit, and record
+remote delivery as unexecuted. A locally committed, tested, independently reviewed behavior
+may return `DONE ... pr=none dependency=SATISFIED` for dependency-replay purposes, but that is
+not a GitHub delivery claim. Otherwise merge only when the accepted reviewed head is current,
+required checks pass, the PR is mergeable, and authority is explicit. Absent authority, leave
+the PR ready and return `GATED` with its exact prerequisite. Finish with the required
+`FORGE_WORK_ON_RESULT` line and do not label a gate or invalidation as a successful delivery.

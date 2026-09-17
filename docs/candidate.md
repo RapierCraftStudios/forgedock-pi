@@ -87,6 +87,21 @@ correlate exact issue/worktree ownership; unavailable or ambiguous ownership gat
 issue. The dispatcher invokes the request through Pi's supported `subagent` tool; it does not
 hand-author a native script.
 
+If the supplied repository is not on the configured integration branch, prepare a disposable
+base without touching it:
+
+```bash
+./scripts/prepare-integration-checkout.sh \
+  --source /absolute/path/to/repository \
+  --out /tmp/forgedock-integration-checkout \
+  --branch staging
+```
+
+Use the printed checkout as the target/configuration root for dispatch. The source checkout is
+required to be clean; the preparation clones/fetches the exact `origin/staging` head and makes
+one local `staging` branch in the disposable directory. `--offline` is only for fixtures with
+an already-fetched remote ref.
+
 Review preparation uses a JSON input with the frozen repository, PR, full head/base identities,
 source checkout, original acceptance, evidence, and risk selection:
 
