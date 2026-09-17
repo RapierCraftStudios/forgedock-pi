@@ -44,10 +44,26 @@ function allowedStagingSubagent(input: unknown): boolean {
       const reviewRoot = resolve(dirname(workflowPath));
       const authorization = JSON.parse(readFileSync(join(reviewRoot, "review.json"), "utf8")) as { schema?: unknown; artifactRoot?: unknown; artifactKey?: unknown; workflowPath?: unknown; workflowSha256?: unknown; roles?: unknown };
       const script = readFileSync(workflowPath, "utf8");
-      const agentFields = script.match(/\bagent\s*:/g) ?? [];
-      const agentValues = [...script.matchAll(/\bagent\s*:\s*(?:"([^"]+)"|'([^']+)')/g)].map((match) => match[1] ?? match[2]);
-      const acceptanceValues = [...script.matchAll(/[,{]\s*acceptance\s*:\s*([^\s,}\]]+)/g)].map((match) => match[1]);
-      return authorization.schema === "forgedock.candidate-review/v1" && authorization.artifactRoot === reviewRoot && authorization.workflowPath === workflowPath && authorization.workflowSha256 === sha256(script) && typeof authorization.artifactKey === "string" && Array.isArray(authorization.roles) && authorization.roles.includes("correctness") && agentFields.length > 0 && agentFields.length === agentValues.length && agentValues.every((agent) => agent === "forgedock-reviewer") && acceptanceValues.every((value) => value === "false") && !/(?:forgedock-owner|worker|writer|delegate|runs\.host|[,{]\s*(?:gate|verify)\s*:)/.test(script);
+      const prefix = "const assignments = ";
+      const executionMarker = ";\nreturn ";
+      if (!script.startsWith(prefix)) return false;
+      const marker = script.indexOf(executionMarker, prefix.length);
+      if (marker < 0) return false;
+      let assignments: unknown;
+      try {
+        assignments = JSON.parse(script.slice(prefix.length, marker));
+      } catch {
+        return false;
+      }
+      const execution = script.slice(marker + 1).trim();
+      const executionMatch = execution.match(/^return \(await runs\.all\(assignments\.map\(\(assignment\) => \(\{ key: "review-" \+ assignment\.role, agent: "([^"]+)", task: assignment\.task, model: assignment\.model, context: "([^"]+)", cwd: ("(?:\\\\.|[^"\\\\])*"), worktree: (true|false), output: (true|false), artifacts: (true|false), acceptance: (true|false), maxRuntimeMs: ([0-9]+) \}\){4};$/);
+      const roles = Array.isArray(authorization.roles) ? authorization.roles : [];
+      const assignmentsValid = Array.isArray(assignments) && roles.length > 0 && roles.every((role) => typeof role === "string") && assignments.length === roles.length && assignments.every((assignment: unknown, index) => {
+        if (!assignment || typeof assignment !== "object" || Array.isArray(assignment)) return false;
+        const record = assignment as Record<string, unknown>;
+        return Object.keys(record).sort().join(",") === "model,role,task" && record.role === roles[index] && typeof record.task === "string" && typeof record.model === "string";
+      });
+      return authorization.schema === "forgedock.candidate-review/v1" && authorization.artifactRoot === reviewRoot && authorization.workflowPath === workflowPath && authorization.workflowSha256 === sha256(script) && typeof authorization.artifactKey === "string" && roles.includes("correctness") && assignmentsValid && executionMatch !== null && executionMatch[1] === "forgedock-reviewer" && executionMatch[2] === "fresh" && executionMatch[4] === "false" && executionMatch[5] === "false" && executionMatch[6] === "true" && executionMatch[7] === "false" && Number.isSafeInteger(Number(executionMatch[8])) && Number(executionMatch[8]) > 0;
     } catch {
       return false;
     }
