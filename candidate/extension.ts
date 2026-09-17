@@ -97,6 +97,9 @@ export default function forgedockCandidateExtension(pi: ExtensionAPI): void {
       ? { action: "continue" }
       : { action: "transform", text: rewritten };
   });
+  pi.on("agent_settled", () => {
+    stagingGuard = false;
+  });
   pi.on("tool_call", (event) => {
     if (stagingGuard && isStagingMutationBlocked(event.toolName, event.input)) {
       return { block: true, reason: "The staging review route is non-mutating; use read-only inspection and configured checks." };
