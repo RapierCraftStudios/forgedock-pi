@@ -155,7 +155,7 @@ test("batch publishes distinct linked records, retries idempotently, and resolve
     assert.equal(first.records.length, 4);
     assert.match(first.records[1].url, /issuecomment-/);
     assert.match(first.records[2].url, /issuecomment-/);
-    assert.match(await readFile(join(f.root, "panel.record.md"), "utf8"), /Individual reviewer reports/);
+    assert.match(await readFile(first.records[2].reportFile, "utf8"), /Individual reviewer reports/);
 
     const second = await run(["record", "batch", "--input", input, "--publish"], f.env);
     assert.deepEqual(second.records.map((record: any) => record.reconciliation), ["existing-identity", "existing-identity", "existing-identity", "existing-identity"]);
@@ -181,7 +181,7 @@ test("standard review preserves the original base after an unrelated target adva
     await writeFile(input, JSON.stringify({ repository: "example/product", issue: 42, cwd: f.root, publish: true, records: [{ id: "panel", kind: "REVIEW-PANEL", pullRequest: 7, bodyFile: panelBody, head: f.head, baseRef: "integration", baseSha: f.base, reviewerReports: [{ role: "correctness", reportFile }] }] }));
     const first = await run(["record", "batch", "--input", input, "--publish"], f.env);
     assert.equal(first.records[0].reconciliation, "created");
-    assert.match(await readFile(join(f.root, "panel.record.md"), "utf8"), new RegExp(f.base));
+    assert.match(await readFile(first.records[0].reportFile, "utf8"), new RegExp(f.base));
     const second = await run(["record", "batch", "--input", input, "--publish"], f.env);
     assert.equal(second.records[0].reconciliation, "existing-identity");
   } finally {
@@ -355,11 +355,11 @@ test("active work-on instructions require durable labels, linked records, and no
   assert.match(skill, /workflow:awaiting-merge/);
   assert.match(skill, /workflow:gated/);
   assert.match(skill, /REVIEW-PANEL/);
-  assert.match(review, /target-branch move alone does not invalidate/);
+  assert.match(review, /target-branch move alone does not[\s\S]*invalidate/);
   assert.match(skill, /TRAJECTORY/);
   assert.match(owner, /distinct issue records/);
   assert.doesNotMatch(owner, /create investigation, builder, quality-gate, remediation, or coordinator children/);
-  assert.match(orchestrate, /discover its issue records and current labels once/);
+  assert.match(orchestrate, /discover its issue[\s\S]*records and current labels once/);
 });
 
 test("discovery returns new and legacy records without hiding ordinary comments", async () => {

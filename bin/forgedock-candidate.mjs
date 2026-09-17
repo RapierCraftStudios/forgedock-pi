@@ -165,6 +165,31 @@ function writeAtomic(file, content, mode = 0o600) {
   return output;
 }
 
+function artifactPath(sourceRoot, requested, fallback, label) {
+  const source = realpathSync(resolve(sourceRoot));
+  const output = resolve(requested ?? fallback);
+  const distance = relative(source, output);
+  const inside = !distance || (distance !== ".." && !distance.startsWith("../"));
+  if (!inside) return output;
+  const safeRoot = resolve(process.env.FORGEDOCK_SAFE_ARTIFACT_ROOT ?? join(process.env.HOME ?? tmpdir(), ".cache", "forgedock-candidate-artifacts"));
+  const alternate = join(safeRoot, `${label}-${Date.now()}-${randomUUID()}`);
+  if (requested !== undefined) fail(`${label} must be outside the source checkout; use ${alternate}`);
+  return alternate;
+}
+
+function tryExec(name, argv, options = {}) {
+  try {
+    return { exitCode: 0, stdout: execFileSync(name, argv, { cwd: options.cwd, env: options.env ?? process.env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: options.timeout ?? 30_000, maxBuffer: options.maxBuffer ?? 16 * 1024 * 1024 }).trim(), stderr: "" };
+  } catch (error) {
+    return {
+      exitCode: typeof error?.status === "number" ? error.status : 1,
+      stdout: typeof error?.stdout === "string" ? error.stdout.trim() : "",
+      stderr: typeof error?.stderr === "string" ? error.stderr.trim() : "",
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 function exec(name, argv, options = {}) {
   try {
     return execFileSync(name, argv, {
@@ -402,6 +427,74 @@ function readJsonFromText(text) {
   }
 }
 
+function probeJson(argv, cwd, label) {
+  const result = tryExec("gh", argv, { cwd, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 });
+  if (!result.stdout) return { status: result.exitCode === 0 ? "empty" : "unavailable", exitCode: result.exitCode, error: (result.stderr || result.error || `${label} returned no data`).slice(-600) };
+  try {
+    return { status: result.exitCode === 0 ? "available" : "command-failed-with-data", exitCode: result.exitCode, data: JSON.parse(result.stdout), ...(result.exitCode === 0 ? {} : { error: (result.stderr || result.error || `${label} failed`).slice(-600) }) };
+  } catch (error) {
+    return { status: "malformed", exitCode: result.exitCode, error: `${label} returned invalid JSON: ${error instanceof Error ? error.message : String(error)}`.slice(-600) };
+  }
+}
+
+function compactPages(value) {
+  if (!Array.isArray(value)) return value ? [value] : [];
+  return value.flatMap((page) => Array.isArray(page) ? page : page ? [page] : []);
+}
+
+function compactCheckRuns(probe, head) {
+  if (!probe.data) return probe;
+  const rows = compactPages(probe.data).flatMap((page) => Array.isArray(page?.check_runs) ? page.check_runs : page?.name ? [page] : []);
+  return { ...probe, ...(rows.length || Array.isArray(probe.data) ? { data: rows.map((run) => ({ name: run.name ?? null, status: run.status ?? null, conclusion: run.conclusion ?? null, headSha: run.head_sha ?? null, headMatched: run.head_sha === head, app: run.app?.slug ?? run.app?.name ?? null, startedAt: run.started_at ?? null, completedAt: run.completed_at ?? null, url: run.html_url ?? null })) } : {}) };
+}
+
+function compactCommitStatuses(probe) {
+  if (!probe.data || typeof probe.data !== "object" || Array.isArray(probe.data)) return probe;
+  const statuses = Array.isArray(probe.data.statuses) ? probe.data.statuses : [];
+  return { ...probe, ...(statuses.length >= 0 ? { data: statuses.map((status) => ({ context: status.context ?? null, state: status.state ?? null, description: status.description ?? null, creator: status.creator?.login ?? null })) } : {}) };
+}
+
+function compactWorkflowFiles(probe) {
+  if (!probe.data) return probe;
+  const files = compactPages(probe.data).filter((file) => file && typeof file === "object");
+  return { ...probe, data: files.map((file) => ({ name: file.name ?? null, path: file.path ?? null, sha: file.sha ?? null, type: file.type ?? null, htmlUrl: file.html_url ?? null })) };
+}
+
+function inspectPullRequestPolicy(options) {
+  const repository = validateIdentityPart(requiredOption(options, "repo"), "policy repository");
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) fail("policy repository is invalid");
+  const pullRequest = integer(Number(requiredOption(options, "pr")), "policy pull request");
+  const cwd = resolve(requiredOption(options, "cwd"));
+  const pullResult = probeJson(["pr", "view", String(pullRequest), "-R", repository, "--json", "headRefOid,baseRefName,baseRefOid,mergeable,mergeStateStatus,state,isDraft,url"], cwd, "pull request identity");
+  if (pullResult.status !== "available" || !pullResult.data) fail(`Unable to resolve pull request policy identity: ${pullResult.error ?? "unknown GitHub error"}`);
+  const pull = pullResult.data;
+  const config = recordConfig(cwd, repository);
+  const head = stringValue(pull.headRefOid, "policy head", FULL_SHA);
+  const checkRows = probeJson(["pr", "checks", String(pullRequest), "-R", repository, "--required", "--json", "name,state,workflow,bucket,link"], cwd, "required pull request checks");
+  const checkRuns = compactCheckRuns(probeJson(["api", "--paginate", "--slurp", `repos/${repository}/commits/${head}/check-runs?per_page=100`], cwd, "commit check runs"), head);
+  const statuses = compactCommitStatuses(probeJson(["api", `repos/${repository}/commits/${head}/status`], cwd, "commit statuses"));
+  const rulesets = probeJson(["api", `repos/${repository}/rulesets?includes_parents=true`], cwd, "repository rulesets");
+  const ruleDetails = rulesets.status === "available" ? compactPages(rulesets.data).filter((rule) => Number.isSafeInteger(rule?.id)).map((rule) => probeJson(["api", `repos/${repository}/rulesets/${rule.id}`], cwd, `ruleset ${rule.id}`)) : [];
+  const branchProtection = probeJson(["api", `repos/${repository}/branches/${encodeURIComponent(pull.baseRefName)}/protection`], cwd, "legacy branch protection");
+  const workflowFiles = compactWorkflowFiles(probeJson(["api", `repos/${repository}/contents/.github/workflows?ref=${pull.baseRefName}`], cwd, "workflow file listing"));
+  return {
+    schema: "forgedock.candidate-pr-policy/v1",
+    repository,
+    pullRequest,
+    identity: { head, baseRef: pull.baseRefName ?? null, baseSha: pull.baseRefOid ?? null, mergeable: pull.mergeable ?? null, mergeStateStatus: pull.mergeStateStatus ?? null, state: pull.state ?? null, isDraft: pull.isDraft ?? null, url: pull.url ?? null },
+    configuration: { integrationBranch: config.integrationBranch, protectedBranch: config.protectedBranch, verificationCommands: config.verificationCommands, ownerModel: config.ownerModel, ownerThinking: config.ownerThinking, review: config.review },
+    policy: {
+      evaluatedRequiredChecks: checkRows,
+      commitCheckRuns: checkRuns,
+      commitStatuses: statuses,
+      rulesets: { listing: rulesets, details: ruleDetails },
+      legacyBranchProtection: branchProtection,
+      workflowFiles,
+      interpretation: "Facts only: requiredness is not inferred from workflow names, check-row emptiness, or command exit status alone. Combine applicable GitHub policy, target route, check association, and repository verification evidence.",
+    },
+  };
+}
+
 function issueFromGithub(number, repository, cwd) {
   return issueRecord(ghJson(["issue", "view", String(number), "-R", repository, "--json", "number,title,body,url,state,labels,milestone"], cwd), repository);
 }
@@ -527,7 +620,7 @@ function nativeWorkflowForBatch(issues, config, runDir) {
   const model = JSON.stringify(modelWithThinking(config.ownerModel, config.ownerThinking));
   const concurrency = Math.min(config.configuredOwnerConcurrency, 2);
   const taskDir = JSON.stringify(runDir);
-  return `const issueGraph = ${graph};\nconst configuredModel = ${model};\nconst ownerConcurrency = ${concurrency};\nconst runDirectory = ${taskDir};\nfunction failure(error) { return { ok: false, error: String(error) }; }\nfunction launch(key, params) { return Promise.resolve().then(() => runs.all([{ ...params, key }])).then((items) => items[0]).catch(failure); }\nfunction satisfied(result, issueNumber) { const lines = String(result?.output ?? \"\").match(/^FORGE_WORK_ON_RESULT status=DONE issue=\\d+ pr=(?:\\d+|none) dependency=SATISFIED$/gm) ?? []; return result?.ok === true && lines.length === 1 && new RegExp("^FORGE_WORK_ON_RESULT status=DONE issue=" + issueNumber + " pr=(?:\\d+|none) dependency=SATISFIED$").test(lines[0]); }\nfunction runIssue(node) { return launch(node.key, { agent: \"forgedock-owner\", task: node.task, model: configuredModel, context: \"fresh\", cwd: ${JSON.stringify(config.projectRoot)}, worktree: true, output: false, artifacts: true, maxRuntimeMs: 2147483647 }).then((result) => { if (result.ok || result.detached || result.stopped || !result.runId || result.resumability?.state !== \"resumable\") return result; return launch(node.key + \"-recovery\", { resume: result.runId, task: \"The prior owner is terminal and resumable. Continue the same issue in the same retained worktree; reconcile preserved work and never create a competing writer.\" }).then((recovered) => ({ ...recovered, recoverySource: { runId: result.runId, output: result.output ?? null, outputReference: result.outputReference ?? null, artifactPaths: result.artifactPaths ?? [] } })); }); }\nconst pending = issueGraph.slice();\nconst issueByKey = new Map(issueGraph.map((node) => [node.key, node]));\nconst active = new Map();\nconst outcomes = new Map();\nfunction start(node) { const work = runIssue(node).then((result) => { outcomes.set(node.key, result); active.delete(node.key); }); active.set(node.key, work); }\nwhile (pending.length || active.size) { for (let index = 0; index < pending.length && active.size < ownerConcurrency;) { const node = pending[index]; if (!node.predecessors.every((key) => outcomes.has(key))) { index += 1; continue; } pending.splice(index, 1); const blockedBy = node.predecessors.filter((key) => !satisfied(outcomes.get(key), issueByKey.get(key)?.number)); if (blockedBy.length) outcomes.set(node.key, { ok: false, status: \"GATED\", blockedBy }); else if (!node.admitted) outcomes.set(node.key, { ok: false, status: "GATED", blockedBy: [], error: node.gateReason ?? "issue is not admitted" }); else start(node); } if (active.size) await Promise.race([...active.values()]); else if (pending.length) throw new Error(\"Unresolved issue graph\"); }\nreturn issueGraph.map((node) => { const result = outcomes.get(node.key) ?? {}; return { key: node.key, issue: node.number, repository: node.repository, target: ${JSON.stringify(config.integrationBranch)}, ok: result.ok === true, status: result.status ?? (satisfied(result, node.number) ? \"DONE\" : \"FAILED\"), dependency: satisfied(result, node.number) ? \"SATISFIED\" : \"UNSATISFIED\", runId: result.runId ?? null, output: String(result.output ?? \"\").match(/^FORGE_WORK_ON_RESULT .*$/m)?.[0] ?? null, blockedBy: result.blockedBy ?? [], recoverySource: result.recoverySource ?? null, error: result.ok === false ? String(result.error ?? result.output ?? \"\").slice(0, 500) : null }; });\n`;
+  return `const issueGraph = ${graph};\nconst configuredModel = ${model};\nconst ownerConcurrency = ${concurrency};\nconst runDirectory = ${taskDir};\nfunction failure(error) { return { ok: false, error: String(error) }; }\nfunction launch(key, params) { return Promise.resolve().then(() => runs.all([{ ...params, key }])).then((items) => items[0]).catch(failure); }\n\nfunction ownerOutcome(result, issueNumber) { if (result?.syntheticGate === true) return { valid: false, status: "GATED", dependency: "UNSATISFIED", output: null, error: String(result?.error ?? "predecessor or admission gate") }; if (result?.ok !== true || result?.detached === true || result?.stopped === true || result?.cancelled === true) return { valid: false, status: "FAILED", dependency: "UNSATISFIED", output: null, error: String(result?.error ?? result?.output ?? "native owner execution did not complete") }; const lines = String(result.output ?? "").split("\\n").filter((line) => line.startsWith("FORGE_WORK_ON_RESULT status=")); const matches = lines.map((line) => line.match(/^FORGE_WORK_ON_RESULT status=(DONE|GATED|FAILED) issue=([0-9]+) pr=([0-9]+|none) dependency=(SATISFIED|UNSATISFIED)$/)).filter(Boolean); if (lines.length !== 1 || matches.length !== 1) return { valid: false, status: "FAILED", dependency: "UNSATISFIED", output: null, error: "owner result must contain exactly one valid terminal marker" }; const match = matches[0]; if (Number(match[2]) !== issueNumber) return { valid: false, status: "FAILED", dependency: "UNSATISFIED", output: lines[0], error: "owner terminal marker is for the wrong issue" }; if (match[1] === "DONE" && match[4] !== "SATISFIED") return { valid: false, status: "FAILED", dependency: match[4], output: lines[0], error: "DONE owner result must declare SATISFIED dependency" }; return { valid: true, status: match[1], dependency: match[4], output: lines[0], error: null }; } function satisfied(result, issueNumber) { const normalized = ownerOutcome(result, issueNumber); return normalized.valid && normalized.status === "DONE" && normalized.dependency === "SATISFIED"; }\nfunction runIssue(node) { return launch(node.key, { agent: \"forgedock-owner\", task: node.task, model: configuredModel, context: \"fresh\", cwd: ${JSON.stringify(config.projectRoot)}, worktree: true, output: false, artifacts: true, maxRuntimeMs: 2147483647 }).then((result) => { if (result.ok || result.detached || result.stopped || !result.runId || result.resumability?.state !== \"resumable\") return result; return launch(node.key + \"-recovery\", { resume: result.runId, task: \"The prior owner is terminal and resumable. Continue the same issue in the same retained worktree; reconcile preserved work and never create a competing writer.\" }).then((recovered) => ({ ...recovered, recoverySource: { runId: result.runId, output: result.output ?? null, outputReference: result.outputReference ?? null, artifactPaths: result.artifactPaths ?? [] } })); }); }\nconst pending = issueGraph.slice();\nconst issueByKey = new Map(issueGraph.map((node) => [node.key, node]));\nconst active = new Map();\nconst outcomes = new Map();\nfunction start(node) { const work = runIssue(node).then((result) => { outcomes.set(node.key, result); active.delete(node.key); }); active.set(node.key, work); }\nwhile (pending.length || active.size) { for (let index = 0; index < pending.length && active.size < ownerConcurrency;) { const node = pending[index]; if (!node.predecessors.every((key) => outcomes.has(key))) { index += 1; continue; } pending.splice(index, 1); const blockedBy = node.predecessors.filter((key) => !satisfied(outcomes.get(key), issueByKey.get(key)?.number)); if (blockedBy.length) outcomes.set(node.key, { ok: false, status: \"GATED\", blockedBy, syntheticGate: true }); else if (!node.admitted) outcomes.set(node.key, { ok: false, status: "GATED", blockedBy: [], syntheticGate: true, error: node.gateReason ?? "issue is not admitted" }); else start(node); } if (active.size) await Promise.race([...active.values()]); else if (pending.length) throw new Error(\"Unresolved issue graph\"); }\nreturn issueGraph.map((node) => { const result = outcomes.get(node.key) ?? {}; const normalized = ownerOutcome(result, node.number); result.ok = normalized.valid; result.status = normalized.status; result.dependency = normalized.dependency; result.output = normalized.output ?? result.output; result.error = normalized.error; return { key: node.key, issue: node.number, repository: node.repository, target: ${JSON.stringify(config.integrationBranch)}, ok: result.ok === true, status: result.status ?? (satisfied(result, node.number) ? \"DONE\" : \"FAILED\"), dependency: satisfied(result, node.number) ? \"SATISFIED\" : \"UNSATISFIED\", runId: result.runId ?? null, output: String(result.output ?? \"\").match(/^FORGE_WORK_ON_RESULT .*$/m)?.[0] ?? null, blockedBy: result.blockedBy ?? [], recoverySource: result.recoverySource ?? null, error: result.ok === false ? String(result.error ?? result.output ?? \"\").slice(0, 500) : null }; });\n`;
 }
 
 function prepareDispatch(options) {
@@ -555,7 +648,8 @@ function prepareDispatch(options) {
     admitted: issue.understandable && !activeOwnership.has(issue.number) && issue.externalDependencies.length === 0,
     gateReason: !issue.understandable ? "issue body is empty or not understandable" : activeOwnership.has(issue.number) ? "exact active worktree ownership evidence" : issue.externalDependencies.length > 0 ? `explicit dependency outside selected issue set: ${issue.externalDependencies.map((number) => `#${number}`).join(", ")}` : undefined,
   }));
-  const out = resolve(optionalOption(options, "out", join(process.env.FORGEDOCK_CANDIDATE_ARTIFACT_ROOT ?? tmpdir(), "forgedock-candidate", sha256(Buffer.from(config.repository)).slice(0, 12), `dispatch-${Date.now()}`)));
+  const defaultOut = join(process.env.FORGEDOCK_CANDIDATE_ARTIFACT_ROOT ?? tmpdir(), "forgedock-candidate", sha256(Buffer.from(config.repository)).slice(0, 12), `dispatch-${Date.now()}`);
+  const out = artifactPath(config.projectRoot, options.values.get("out"), defaultOut, "dispatch");
   mkdirSync(out, { recursive: true, mode: 0o700 });
   const plan = {
     schema: "forgedock.candidate-dispatch/v1",
@@ -664,11 +758,10 @@ function prepareReview(options) {
   if (new Set(selected.roles).size !== selected.roles.length) fail("Review roles must be unique");
   if (!selected.roles.includes("correctness")) fail("Every review must include the correctness reviewer");
   if (!selected.roles.every((role) => ["correctness", "security", "specialist"].includes(role))) fail("Review roles must be correctness, security, or specialist");
-  let out = resolve(optionalOption(options, "out", join(dirname(resolve(inputPath)), `review-${pullRequest}-${head.slice(0, 12)}`)));
+  const defaultOut = join(process.env.FORGEDOCK_CANDIDATE_ARTIFACT_ROOT ?? tmpdir(), "forgedock-candidate", `review-${pullRequest}-${head.slice(0, 12)}-${Date.now()}`);
+  let out = artifactPath(sourceRoot, options.values.get("out"), defaultOut, "review");
   mkdirSync(out, { recursive: true, mode: 0o700 });
   out = realpathSync(out);
-  const sourceDistance = relative(sourceRoot, out);
-  if (!sourceDistance || (sourceDistance !== ".." && !sourceDistance.startsWith("../"))) fail("Review artifact output must be outside the frozen source checkout");
   const baseRefSha = exec("git", ["rev-parse", `refs/remotes/origin/${baseRef}^{commit}`], { cwd: sourceRoot });
   if (baseRefSha !== baseSha) {
     try { execFileSync("git", ["merge-base", "--is-ancestor", baseSha, baseRefSha], { cwd: sourceRoot, stdio: "ignore" }); }
@@ -1077,7 +1170,8 @@ function recordBatch(options) {
     const issue = entry.issue ?? (String(entry.kind ?? "").toUpperCase() === "REVIEW-PANEL" ? undefined : input.issue);
     const pullRequest = entry.pullRequest ?? (String(entry.kind ?? "").toUpperCase() === "REVIEW-PANEL" ? input.pullRequest : undefined);
     const record = durableRecord({ ...entry, issue, pullRequest, issueContext: input.issue, pullRequestContext: input.pullRequest }, repository, issue === undefined ? undefined : integer(Number(issue), `${id} issue`), pullRequest === undefined ? undefined : integer(Number(pullRequest), `${id} pull request`), cwd, inventory, cache, publish, config);
-    const reportFile = resolve(entry.reportFile ?? join(dirname(resolve(inputFile)), `${id}.record.md`));
+    const defaultReportFile = join(process.env.FORGEDOCK_CANDIDATE_ARTIFACT_ROOT ?? dirname(resolve(inputFile)), `${id}.record.md`);
+    const reportFile = artifactPath(cwd, entry.reportFile, defaultReportFile, `${id}-record`);
     writeExclusive(reportFile, record.markdown);
     const publication = publish ? publishDurableRecord({ ...record, bodyFile: reportFile }, cwd, cache) : { reconciliation: "saved", id: null, url: null, recordId: record.recordId };
     const result = { id, kind: record.kind, issue: record.issue ?? null, pullRequest: record.pullRequest ?? null, head: record.head, reportFile, publication: publish ? "published" : "saved", ...publication };
@@ -1098,7 +1192,8 @@ function durableRecordSingle(options) {
   const publish = options.flags.has("publish");
   const entry = { kind: options.values.get("kind"), issue, pullRequest, bodyFile: requiredOption(options, "body-file"), head: options.values.get("head"), baseRef: options.values.get("base-ref"), baseSha: options.values.get("base-sha"), mode: options.values.get("mode"), inputs: options.values.has("inputs-file") ? readJson(requiredOption(options, "inputs-file")) : [], supersedes: options.values.get("supersedes"), round: options.values.has("round") ? Number(options.values.get("round")) : undefined, reviewerReports: options.values.has("reviewers-file") ? readJson(requiredOption(options, "reviewers-file")) : undefined };
   const record = durableRecord(entry, repository, issue, pullRequest, cwd, new Map(), new Map(), publish);
-  const reportFile = resolve(optionalOption(options, "report-file", join(dirname(resolve(entry.bodyFile)), `${String(entry.kind).toLowerCase()}.record.md`)));
+  const defaultReportFile = join(process.env.FORGEDOCK_CANDIDATE_ARTIFACT_ROOT ?? dirname(resolve(entry.bodyFile)), `${String(entry.kind).toLowerCase()}.record.md`);
+  const reportFile = artifactPath(cwd, options.values.get("report-file"), defaultReportFile, `${String(entry.kind).toLowerCase()}-record`);
   writeExclusive(reportFile, record.markdown);
   const publication = publish ? { publication: "published", ...publishDurableRecord({ ...record, bodyFile: reportFile }, cwd, new Map()) } : { publication: "saved", id: null, url: null, reconciliation: "saved", recordId: record.recordId };
   process.stdout.write(json({ schema: "forgedock.candidate-record/v1", kind: record.kind, repository, issue: issue ?? null, pullRequest: pullRequest ?? null, head: record.head, reportFile, contentSha256: sha256(record.markdown), ...publication }));
@@ -1124,7 +1219,7 @@ function discoverRecords(options) {
   }).filter(Boolean);
   const result = { schema: "forgedock.candidate-record-discovery/v1", repository, destinationType: issueValue === undefined ? "pull-request" : "issue", destination, commentCount: comments.length, recordCount: records.length, records, unclassifiedComments: comments.filter((comment) => !records.some((record) => record.id === comment.id)).map((comment) => ({ id: comment.id, url: comment.html_url, createdAt: comment.created_at ?? comment.createdAt ?? null, author: comment.user?.login ?? comment.author?.login ?? null, body: comment.body })) };
   const out = options.values.get("out");
-  if (out) writeExclusive(out, json(result));
+  if (out) writeExclusive(artifactPath(cwd, out, out, "discovery"), json(result));
   process.stdout.write(json(result));
 }
 
@@ -1436,7 +1531,7 @@ async function doctor(options) {
 }
 
 function usage() {
-  process.stdout.write(`ForgeDock candidate helper\n\nCommands:\n  doctor --cwd <repo> --config-dir <isolated-pi-dir>\n  status   (alias for doctor)\n  config --cwd <repo>\n  prepare --issue <N> --cwd <repo>\n  prepare-dispatch --selector <set> --cwd <repo> --out <dir> [--issues-file <json>]\n  prepare-review --input <json> --out <dir>\n  record reviewer --repo <org/repo> --pr <N> --head <sha> --base-ref <branch> --base-sha <sha> --role <role> --body-file <file> [--report-file <file>] [--publish]\n  record --kind <kind> --repo <org/repo> --issue <N>|--pr <N> --body-file <file> --cwd <repo> [--mode standard|staging] [--inputs-file <json>] [--supersedes <url>] [--publish]\n  record batch --input <json> [--publish]\n  discover --repo <org/repo> --issue <N>|--pr <N> [--cwd <repo>] [--out <file>]\n  label --repo <org/repo> --issue <N> --state <state> [--cwd <repo>]\n  replace --config-dir <dir> --old-source <source> --candidate-source <source>\n  rollback --rollback <directory>\n  digest-tree --root <directory>\n  verify-install --install-root <directory>\n`);
+  process.stdout.write(`ForgeDock candidate helper\n\nCommands:\n  doctor --cwd <repo> --config-dir <isolated-pi-dir>\n  status   (alias for doctor)\n  config --cwd <repo>\n  prepare --issue <N> --cwd <repo>\n  prepare-dispatch --selector <set> --cwd <repo> --out <dir> [--issues-file <json>]\n  prepare-review --input <json> --out <dir>\n  record reviewer --repo <org/repo> --pr <N> --head <sha> --base-ref <branch> --base-sha <sha> --role <role> --body-file <file> [--report-file <file>] [--publish]\n  record --kind <kind> --repo <org/repo> --issue <N>|--pr <N> --body-file <file> --cwd <repo> [--mode standard|staging] [--inputs-file <json>] [--supersedes <url>] [--publish]\n  record batch --input <json> [--publish]\n  discover --repo <org/repo> --issue <N>|--pr <N> [--cwd <repo>] [--out <file>]\n  inspect-pr --repo <org/repo> --pr <N> --cwd <repo>\n  label --repo <org/repo> --issue <N> --state <state> [--cwd <repo>]\n  replace --config-dir <dir> --old-source <source> --candidate-source <source>\n  rollback --rollback <directory>\n  digest-tree --root <directory>\n  verify-install --install-root <directory>\n`);
 }
 
 async function main() {
@@ -1492,7 +1587,8 @@ async function main() {
     };
     const inputDigest = sha256(Buffer.from(canonicalJson(intakeIdentity)));
     const stableOutput = { schema: "forgedock.candidate-intake/v1", preparedAt: new Date().toISOString(), inputDigest, config, issue, evidence: { history: "retrieve linked history in the owner session", verification: config.verificationCommands } };
-    const out = resolve(optionalOption(options, "out", join(process.env.FORGEDOCK_CANDIDATE_ARTIFACT_ROOT ?? tmpdir(), "forgedock-candidate", sha256(Buffer.from(config.repository)).slice(0, 12), "intake", `issue-${number}.json`)));
+    const defaultOut = join(process.env.FORGEDOCK_CANDIDATE_ARTIFACT_ROOT ?? tmpdir(), "forgedock-candidate", sha256(Buffer.from(config.repository)).slice(0, 12), "intake", `issue-${number}.json`);
+    const out = artifactPath(config.projectRoot, options.values.get("out"), defaultOut, "intake");
     let output = stableOutput;
     let outputPath = out;
     let reused = false;
@@ -1518,6 +1614,10 @@ async function main() {
   if (command === "prepare-dispatch") return prepareDispatch(options);
   if (command === "prepare-review") return prepareReview(options);
   if (command === "discover") return discoverRecords(options);
+  if (command === "inspect-pr") {
+    process.stdout.write(json(inspectPullRequestPolicy(options)));
+    return;
+  }
   if (command === "label") {
     process.stdout.write(json(transitionWorkflowLabel(options)));
     return;

@@ -46,6 +46,10 @@ an execution guide, not a second workflow engine.
   `building` immediately before the first substantive source edit. A label is current state,
   not ownership proof; preserve unrelated labels and surface label/publication failures.
 
+## CI and delivery facts
+
+When a PR exists, run `"$FORGEDOCK_CANDIDATE_BIN" inspect-pr --repo <owner/repo> --pr <N> --cwd "$PWD"` once after its exact head/base are known. This returns structured PR identity, evaluated-required-check output, commit check runs/statuses, applicable ruleset details, legacy protection, workflow listing, and repository-configured verification commands. Treat it as evidence, not a local policy engine: empty or nonzero `gh pr checks` is not proof of either no requirement or failure. A missing/pending/failed required check is named; an optional or promotion-only check remains in its applicable stage; a local behavioral failure remains an engineering issue; merge authority and delivery remain separate. Standard issue review preserves its reviewed base when the configured integration target advances without retargeting, source change, or conflict. Protected promotion keeps exact-base requirements. Record policy visibility limitations rather than inventing a gate.
+
 ## Local/disposable replay
 
 When the task explicitly says local replay, no GitHub PR or remote comment is fabricated. Use
@@ -63,8 +67,9 @@ GitHub publication/merge/closure remains explicitly unexecuted.
 
 Implement the smallest coherent change through the real consumer. Add/update focused
 behavioral tests, including relevant caller, compatibility, failure, retry, cancellation, or
-concurrency states only when this issue reaches them. Run the configured checks that apply,
-using the actual source checkout and recording passed, failed, skipped, and unattempted checks.
+concurrency states only when this issue reaches them. Run the configured checks that apply and
+relevant repository-documented checks, recording passed, failed, skipped, and unattempted
+checks. Do not demand component jobs or promotion-only checks from a universal ForgeDock list.
 Mocks and generated JSON can supplement proof, never replace the behavior claimed.
 
 Before review, reconcile every original obligation against code, tests, and limitations. Do

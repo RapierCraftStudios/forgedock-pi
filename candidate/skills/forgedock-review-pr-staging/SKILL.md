@@ -12,9 +12,12 @@ names, or commit-message guesses. An ordinary issue PR targeting integration use
 review.
 
 Run only configured checks relevant to the frozen bundle and reuse exact-head evidence when
-inputs are unchanged. Missing required runtime/integration/configuration authority is a precise
-FAIL prerequisite, not permission to claim PASS. Structural checks do not substitute for a
-required runtime boundary.
+inputs are unchanged. Collect the actual protected-PR policy and check association with
+`inspect-pr`/the supported GitHub interfaces before deciding requiredness. A missing, pending,
+failed, or unscheduled required check is reported by name; an optional or feature-PR check is
+not promoted into this gate. Missing required runtime/integration/configuration authority is a
+precise FAIL prerequisite, not permission to claim PASS. Structural checks do not substitute
+for a required runtime boundary.
 
 Select correctness plus only concrete risk-justified specialists. Use the `forge_prepare_review`
 tool to create the validated frozen request, launch fresh `forgedock-reviewer` reviewers through

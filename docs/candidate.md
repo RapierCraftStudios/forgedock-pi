@@ -81,11 +81,12 @@ $FORGEDOCK_CANDIDATE_BIN prepare-dispatch \
   --out /tmp/forgedock-candidate/dispatch-1
 ```
 
-The command writes `plan.json`, `workflow.js`, and `request.json`. Before invoking the request,
-the dispatcher must query the supported native `subagent({ action: "status" })` boundary and
-correlate exact issue/worktree ownership; unavailable or ambiguous ownership gates only that
-issue. The dispatcher invokes the request through Pi's supported `subagent` tool; it does not
-hand-author a native script.
+The command writes `plan.json`, `workflow.js`, and `request.json` outside the target checkout.
+Explicit output paths inside the source are rejected with a safe alternate path; defaults use the
+candidate artifact root. Before invoking the request, the dispatcher must query the supported
+native `subagent({ action: "status" })` boundary and correlate exact issue/worktree ownership;
+unavailable or ambiguous ownership gates only that issue. The dispatcher invokes the request
+through Pi's supported `subagent` tool; it does not hand-author a native script.
 
 If the supplied repository is not on the configured integration branch, prepare a disposable
 base without touching it:
@@ -109,6 +110,19 @@ source checkout, original acceptance, evidence, and risk selection:
 $FORGEDOCK_CANDIDATE_BIN prepare-review \
   --input /tmp/review-input.json --out /tmp/forgedock-candidate/review-123
 ```
+
+PR policy facts are collected without a local CI evaluator:
+
+```bash
+$FORGEDOCK_CANDIDATE_BIN inspect-pr --repo OWNER/REPO --pr 123 --cwd /absolute/target
+```
+
+The result retains the exact PR head/base, `gh pr checks --required` output and exit status,
+head-associated check runs, commit statuses, ruleset listing/details, legacy branch protection,
+workflow-file identities, and repository-configured verification commands. It does not infer
+requiredness from workflow names, empty rows, or a nonzero checks command; inaccessible policy
+endpoints remain explicit limitations. Standard integration PRs and protected promotion routes
+are interpreted separately by their existing skills.
 
 ## File-backed records and publication
 
