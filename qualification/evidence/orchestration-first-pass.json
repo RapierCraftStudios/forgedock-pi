@@ -1,0 +1,20 @@
+{
+  "schema": "forgedock.qualification-evidence/v1",
+  "mode": "two-issue-orchestration",
+  "candidateRuntimeCommit": "bab7a22eb9223133869ca0a87de890329a915b80",
+  "piVersion": "0.85.1",
+  "piSubagentsCommit": "0931cbbb98ab253177b181bd334fe02dd919dca5",
+  "model": "openai-codex/gpt-5.6-luna:low",
+  "parentSessionId": "01a0acd2-503b-75c6-97eb-549bd3507b42",
+  "baseHead": "e99e8b76aa7653721db0134ce254e8a94a60d8cd",
+  "dependency": { "predecessor": 101, "successor": 102, "edge": "issue-101 -> issue-102", "successorObservedPredecessorCommit": "57fd567bbe3a2ccdd5601cc078daf052f645e75e" },
+  "owners": [
+    { "issue": 101, "runId": "c186a4a5-d92e-4ce2-8a0d-55c6b06d136b", "reviewerRunId": "cba38624-a583-4fac-bad3-856f5d523aab", "head": "57fd567bbe3a2ccdd5601cc078daf052f645e75e", "result": "DONE", "dependency": "SATISFIED", "tests": "2 passed", "review": "APPROVE" },
+    { "issue": 102, "runId": "0e11060e-72a7-42a5-af14-92494b8679fd", "initialHead": "e825335b5beaf1d0c344ea9230f889d14e352712", "repairHead": "b0b22a58b2def01dc3c94f27592dba49a1bc91b5", "initialReviewerRunId": "17daf727-027a-46ec-8d8f-67c0ab832aa8", "initialReview": "BLOCK", "initialResult": "GATED", "blocker": "profiles without team rendered an undefined suffix", "repairTests": "2 passed" }
+  ],
+  "firstPass": "failed-local",
+  "firstPassFailure": "Issue 102 required a review-driven compatibility correction; this is counted as a first-pass failure.",
+  "deliveredHeadAfterInitialBatch": "b0b22a58b2def01dc3c94f27592dba49a1bc91b5",
+  "github": "publication/PR/merge/closure unexecuted; local file:// origin only",
+  "evidenceFiles": ["orchestration-first-pass.md", "orchestration-repair.md"]
+}

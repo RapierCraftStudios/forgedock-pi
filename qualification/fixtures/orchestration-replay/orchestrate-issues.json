@@ -1,0 +1,14 @@
+{
+  "issues": [
+    {
+      "number": 101,
+      "title": "Provide normalized display text",
+      "body": "# Provide normalized display text\n\n## Acceptance Criteria\n- [ ] Export the producer behavior required by the display-boundary decision: display text trims surrounding whitespace and is lowercase while profile identifiers and source data remain unchanged.\n\n- [ ] Add focused producer regression evidence through the existing test entrypoint.\n\n## Affected Files\n- `src/profile.mjs`\n- `test/profile.test.mjs`\n\n## Relevant decision\nConsult `docs/decisions/display-boundary.md` before implementation."
+    },
+    {
+      "number": 102,
+      "title": "Integrate normalized text into profile rendering",
+      "body": "# Integrate normalized text into profile rendering\n\n## Acceptance Criteria\n- [ ] The profile renderer consumes the normalized producer behavior and includes the profile team label in its output.\n\n- [ ] The rendered identifier remains unchanged and the display text follows the prior display-boundary decision.\n\n- [ ] Add consumer regression evidence through the real renderProfile path without adding a dependency.\n\n## Affected Files\n- `src/render.mjs`\n- `test/display.test.mjs`\n\nDepends on #101\n\n## Relevant decision\nConsult `docs/decisions/display-boundary.md` before implementation."
+    }
+  ]
+}
