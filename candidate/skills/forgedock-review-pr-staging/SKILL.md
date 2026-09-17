@@ -7,12 +7,16 @@ description: Run a non-merging integration-to-protected promotion gate with evid
 
 Use this route only for an explicit integration-to-protected promotion or bundle. Resolve the
 actual promotion PR/configuration and freeze exact integration/protected head/base identities.
+The standard review route hands off here only after the prepared policy identifies the actual
+protected base; issue text, comments, branch names, and the word `staging` do not select this
+route.
 Determine included work from same-repository commit reachability, not issue numbers, branch
 names, or commit-message guesses. An ordinary issue PR targeting integration uses standard
 review.
 
 Run only configured checks relevant to the frozen bundle and reuse exact-head evidence when
-inputs are unchanged. Collect the actual protected-PR policy and check association with
+inputs are unchanged. Keep the exact promotion checkout as `sourceRoot` and the canonical
+checkout containing `forge.yaml` as `configRoot` when they differ. Collect the actual protected-PR policy and check association with
 `inspect-pr`/the supported GitHub interfaces before deciding requiredness. A missing, pending,
 failed, or unscheduled required check is reported by name; an optional or feature-PR check is
 not promoted into this gate. Missing required runtime/integration/configuration authority is a
@@ -34,6 +38,11 @@ PR/head/protected-base identity, and `gate: PASS` or `FAIL`; feed
 prepared review details to each `forge_run_check`; do not use bash/edit/write in this route.
 Each reviewer publishes its own exact-head report, including a substantive clean report. No
 reviewer edits source, creates issues, merges, deploys, closes issues, or starts repair.
+
+If preparation or a configured check returns a deterministic validation error, stop after
+one unchanged attempt and report its exact bounded operation/error. Do not retry it unchanged or
+read helper source, sibling/old worktrees, or broad historical artifacts; full diagnostics stay
+in the external artifact path supplied by the tool.
 
 Read back reports and publish one consolidated `FORGE:STAGING_GATE:PASS` only when every required
 check and role is complete with no immediate repair or mechanical gate. Otherwise publish

@@ -56,12 +56,12 @@ orchestration:
   max_concurrent: 2
 `;
 
-async function fixture() {
+async function fixture(configText = config) {
   const root = await mkdtemp("/tmp/forgedock-candidate-policy-");
   const bin = join(root, "bin");
   await mkdir(bin);
   await writeFile(join(bin, "gh"), fakeGh, { mode: 0o755 });
-  await writeFile(join(root, "forge.yaml"), config);
+  await writeFile(join(root, "forge.yaml"), configText);
   await writeFile(join(root, "README.md"), "policy\n");
   await execFileAsync("git", ["init", "--quiet"], { cwd: root });
   await execFileAsync("git", ["remote", "add", "origin", "https://github.com/example/product.git"], { cwd: root });
@@ -88,6 +88,18 @@ async function fixture() {
 async function run(f: Awaited<ReturnType<typeof fixture>>, pr = 7) {
   return JSON.parse((await execFileAsync("node", [helper, "inspect-pr", "--repo", "example/product", "--pr", String(pr), "--cwd", f.root], { env: f.env })).stdout) as Record<string, any>;
 }
+
+test("inspect-pr ignores unrelated dispatch concurrency limits", async () => {
+  const f = await fixture(config.replace("max_concurrent: 2", "max_concurrent: 300"));
+  try {
+    const result = await run(f);
+    assert.equal(result.identity.head, f.head);
+    assert.equal(result.configuration.integrationBranch, "integration");
+    assert.equal(result.configuration.protectedBranch, "main");
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+  }
+});
 
 test("inspect-pr preserves route policy facts and does not infer requiredness from empty checks", async () => {
   const f = await fixture();
@@ -132,6 +144,8 @@ test("active routes use repository-driven policy and external dispatcher artifac
   assert.match(workOn, /inspect-pr --repo/);
   assert.match(workOn, /empty\/nonzero.*not.*requirement|nonzero.*not.*proof/i);
   assert.match(review, /requiredness.*applicable.*rules/);
+  assert.match(review, /forge_prepare_review.*not.*shell helper|prepared policy.*activates the route guard/s);
+  assert.match(review, /deterministic validation error.*Do not retry/s);
   assert.match(orchestrate, /outside[\s\S]*\$PWD/);
   assert.match(orchestrate, /completed GATED owner is not a failed execution/);
 });
