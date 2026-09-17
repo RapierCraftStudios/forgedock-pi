@@ -138,8 +138,10 @@ function packedManifest(stdout: string): {
   filename: string;
   files: Array<{ path: string }>;
 } {
-  const parsed = JSON.parse(stdout) as { "forgedock-pi": { filename?: unknown; files?: Array<{ path: string }> } };
-  const value = parsed["forgedock-pi"];
+  const parsed = JSON.parse(stdout) as
+    | Array<{ filename?: unknown; files?: Array<{ path: string }> }>
+    | { "forgedock-pi": { filename?: unknown; files?: Array<{ path: string }> } };
+  const value = Array.isArray(parsed) ? parsed[0] : parsed["forgedock-pi"];
   assert.equal(typeof value?.filename, "string");
   assert.ok(value?.files);
   return value as { filename: string; files: Array<{ path: string }> };
