@@ -1,0 +1,13 @@
+{
+  "schema": "forgedock.qualification-evidence/v1",
+  "mode": "fresh-pi-session-intake-repeatability",
+  "backgroundTaskId": "bce5a4572",
+  "candidateRuntimeRef": "2f6c4a4b7e874cc5b6b12858acb0f6bcc80c1603",
+  "launchInput": "prepare issue 201 with the same issue file, cwd, and stable output path twice; no product edits or GitHub tools",
+  "first": { "reused": false, "preparedAt": "2026-09-17T01:08:27.323Z", "inputDigest": "019d756859576a5b2717a93c8a0d52ea71255dbb6d4e7802279ab76cb41ecef1" },
+  "second": { "reused": true, "preparedAt": "2026-09-17T01:08:27.323Z", "inputDigest": "019d756859576a5b2717a93c8a0d52ea71255dbb6d4e7802279ab76cb41ecef1" },
+  "sameOutputPath": true,
+  "completeRecordVerified": true,
+  "model": "openai-codex/gpt-5.6-luna",
+  "github": "no GitHub operations"
+}

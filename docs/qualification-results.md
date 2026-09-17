@@ -1,44 +1,51 @@
 # Candidate qualification results
 
-Behavioral qualification was run against implementation commit `27a6bf39a1d6fc0663a2000c2aea84640f766a28`; final candidate packaging/evidence is commit `9d0d4370132687fcf021cc51507782c42e26c413` and adds no workflow behavior. The baseline was the merged
-`origin/main` commit `c6bf7ed7a56fd66935f04384ce1b43b8cdf17db7`.
+Qualification used the thin candidate built from merged `origin/main` commit
+`c6bf7ed7a56fd66935f04384ce1b43b8cdf17db7` and candidate runtime commit
+`2f6c4a4b7e874cc5b6b12858acb0f6bcc80c1603`. The evidence in
+`qualification/evidence/` is sanitized: it contains run identities, outcomes,
+timing/usage, relevant diffs, and disposable paths only.
 
-## Results
+## Checks
 
 | Trial/check | Result | Evidence |
 | --- | --- | --- |
-| TypeScript and complete repository test suite | PASS: 414 passed, 0 failed, 6 explicit environment skips | `/tmp/forgedock-candidate-check-ebd.log` |
-| Candidate-focused tests | PASS: routing, config, exact dependency DAG, frozen review, marker publication, ambiguous-create recovery, replacement/rollback, staging evidence, source-read-only reviewer, and product-like replay | `test/candidate/*.test.ts` |
-| Product-like bug replay | PASS: real cross-file consumer failed before the producer fix and passed after it | `test/candidate/product-replay.test.ts` |
-| Packed package smoke | PASS: 29 files; no top-level `skills/`, `specs/`, or `agents/` legacy roots | `/tmp/forgedock-pack-final-final.json`, `test/smoke/package-launch-contract.test.ts` |
-| Generated native dispatch request | PASS: native `subagent` validator accepted rolling two-owner request; exact dependency and owner-recovery fields are present | `/tmp/candidate-dispatch-final-final.json`, final generated workflow validation |
-| Generated native review request | PASS: native `subagent` validator accepted the frozen two-role request with per-role authorization | `/tmp/candidate-review-final-final.json`, final generated workflow validation |
-| Fresh installed RPC command | PASS: `/forge-status` executed from the isolated config and reported `native subagent=available; staging tools=3/3` | `/tmp/forgedock-status-final.jsonl` |
-| Isolated install/doctor | PASS: Pi `0.85.1`, `pi-subagents` `0.60.0`, pinned commit `0931cbbb...`; candidate and subagent tree digests and settings verified | `/tmp/forgedock-verify-final.json`, `/tmp/forgedock-doctor-final.json` |
-| Publication fault injection | PASS: lost create response reconciled by stable marker and exact readback | `test/candidate/qualification.test.ts` |
-| Replacement and rollback | PASS: disposable Pi registration replaced and restored without changing unrelated settings | `test/candidate/qualification.test.ts` |
+| Complete repository suite and typecheck | PASS: 414 tests passed, 0 failed, 6 explicit environment skips | final check log / command output |
+| Candidate-focused suite | PASS: 19 tests passed | `test/candidate/*.test.ts` |
+| Static product-like replay | PASS: real cross-file consumer fails before the producer fix and passes after it; this is a fixture test, not agent qualification | `test/candidate/product-replay.test.ts` |
+| Fresh owner trial | PASS: owner 201 observed failing-before/passing-after `npm test`, applied the decision, committed locally, and received one independent clean correctness review | `qualification/evidence/owner-replay.*` |
+| Candidate intake | PASS: readable unstructured bodies remain owner obligations; acceptance and mutation files are preserved; empty/unreadable input gates | `qualification/evidence/intake-repeatability.md`, `test/candidate/cli.test.ts` |
+| Repeated intake in a fresh Pi session | PASS: same digest and `preparedAt`; first `reused=false`, second `reused=true` at the same output path | `qualification/evidence/intake-repeatability.md` |
+| Disposable integration checkout | PASS: clean `integration` checkout is created/replaced without changing the candidate worktree | `scripts/prepare-integration-checkout.sh` |
+| Two-issue dependency orchestration | PASS for true ordering and delivery; issue 101 completed before issue 102 and the successor consumed the predecessor commit | `qualification/evidence/orchestration-first-pass.*` |
+| Orchestration first-pass quality | **FAILURE PRESERVED**: issue 102's first reviewer found unconditional `undefined` team rendering and gated the batch | `qualification/evidence/orchestration-first-pass.json` |
+| Scoped orchestration repair | PASS: same-role fallback repaired only issue 102, received a fresh scoped clean review, and returned `DONE issue=102 pr=none dependency=SATISFIED`; first-pass failure remains counted | `qualification/evidence/orchestration-repair.md`, `qualification/evidence/repaired-render.diff` |
+| Same-repository Git-ref replacement/rollback | PASS: candidate ref `2f6c4a4...` replaced the installed ref and rollback restored the original source and unrelated settings | `qualification/evidence/replacement-rollback.*` |
+| Packed package smoke and installed RPC | PASS: package contents and fresh `/forge-status` were validated from an isolated candidate install | final package/RPC outputs |
+| Generated native workflows | PASS: native validation accepted the owner/reviewer requests, exact dependency DAG, and recovery fields | generated workflow validation output |
 
-A fresh final native child smoke was also run from the candidate checkout with one
-read-only `scout` child and no source/GitHub writes. Its output is retained in
-`/tmp/forgedock-candidate-native-child-ebd.jsonl`; native child run id
-`f1a3cf88-5e23-4727-ab68-3047a1282623` completed successfully.
+Runtime versions used for the live local trials were Pi `0.85.1`,
+`pi-subagents` `0.60.0` at commit `0931cbbb98ab253177b181bd334fe02dd919dca5`,
+and model `openai-codex/gpt-5.6-luna:low`.
+
+## First-pass accounting
+
+The single-owner issue 201 trial was accepted locally on its first owner/review
+pass. The two-issue orchestration was not: issue 102 needed a review-driven
+compatibility correction. That defect, repair commit, repair owner, and scoped
+re-review are retained in the evidence rather than rerun away or relabeled as a
+first-pass success.
+
+Local commits, `dependency=SATISFIED`, and the `DONE` marker are disposable
+replay signals. They do not represent GitHub delivery.
 
 ## Not claimed
 
-- **LIVE GITHUB LIFECYCLE QUALIFIED:** not claimed. No issue, PR, comment, merge, or
-  closure was written to a remote repository because no disposable remote write target
-  was authorized. Run the normal `/work-on` canary only after authorizing that target,
-  then exercise `/review-pr` and `/orchestrate` with `--issues-file`-equivalent replay
-  data or real disposable issues as appropriate.
-- **Direct-Pi paired quality baseline:** not run. A live model comparison would require
-  a separately approved product-like replay and would otherwise conflate provider/network
-  variance with workflow variance.
-- **Second provider:** not run. `openai-codex/gpt-5.6-luna` was the selected configured
-  model; other provider authentication was not ready in this environment.
-- **PRODUCTION RELEASE AUTHORIZED:** not granted. Automatic product merge, deployment,
-  branch-protection changes, and stopped-backlog restart were not performed.
-
-The successful local sample proves package/native mechanics and selected exception
-boundaries, not universal first-pass reliability. Review-driven code correction was not
-needed after the final bounded remediation pass; the repeated earlier review findings
-were preserved in the session evidence rather than hidden as first-pass success.
+- **Live GitHub lifecycle:** not executed. No issue, PR, comment, merge, or
+  closure was written to a remote repository; the replay used a disposable
+  local origin and fake GitHub boundary.
+- **Production release:** not authorized. Ordinary installation, deployment,
+  branch protection, and stopped-backlog restart were not changed.
+- **Universal first-pass reliability:** not established by these samples.
+- **Second-provider comparison:** not run; the selected configured model was
+  `openai-codex/gpt-5.6-luna`.

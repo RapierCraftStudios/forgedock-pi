@@ -1,0 +1,21 @@
+diff --git a/src/profile.mjs b/src/profile.mjs
+index 3e5d07f..3298e9c 100644
+--- a/src/profile.mjs
++++ b/src/profile.mjs
+@@ -1,5 +1,5 @@
+ export function displayName(profile) {
+-  return profile.name;
++  return profile.name.trim().toLowerCase();
+ }
+ 
+ export function profileId(profile) {
+diff --git a/test/display.test.mjs b/test/display.test.mjs
+index ab9bb6c..4ea6db8 100644
+--- a/test/display.test.mjs
++++ b/test/display.test.mjs
+@@ -8,4 +8,5 @@ test("rendering applies the display-boundary decision", () => {
+   assert.equal(renderProfile(profile), "USR-7:ada lovelace");
+   assert.equal(profile.id, "USR-7");
+   assert.equal(profile.name, "  Ada Lovelace  ");
++  assert.equal(renderProfile({ id: "USR-8", name: "  GRACE HOPPER " }), "USR-8:grace hopper");
+ });
