@@ -3,6 +3,11 @@ import test from "node:test";
 
 import { FORGEDOCK_ALIASES, isStagingMutationBlocked, rewriteForgePromptAlias } from "../../candidate/extension.ts";
 
+test("rejects ad hoc staging reviewer workflows", () => {
+  assert.equal(isStagingMutationBlocked("subagent", { workflowScript: "return runs.all([])" }), true);
+  assert.equal(isStagingMutationBlocked("subagent", { agent: "forgedock-writer" }), true);
+});
+
 test("routes only the familiar candidate commands", () => {
   assert.equal(rewriteForgePromptAlias("/work-on 42"), "/skill:forgedock-work-on 42");
   assert.equal(rewriteForgePromptAlias("/forge:orchestrate next 2"), "/skill:forgedock-orchestrate next 2");
