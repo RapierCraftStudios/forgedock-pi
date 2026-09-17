@@ -25,6 +25,7 @@ test("staging publication requires prepared reviewer and check evidence", async 
       roles: ["correctness"],
       configPath: "/tmp/example/forge.yaml",
       configSha256: "c".repeat(64),
+      config: { verificationCommands: { test: "npm test" } },
     }));
     await writeFile(join(root, "correctness.report.md"), `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ repository: "example/product", pullRequest: 7, head, baseRef: "main", baseSha, role: "correctness" })} -->\nclean report\n`);
     await mkdir(join(root, "checks"));
@@ -51,8 +52,39 @@ test("staging publication requires prepared reviewer and check evidence", async 
       artifactKey: key,
       body: "FORGE:STAGING_GATE:PASS\nAll prepared evidence is complete.",
       publish: false,
+      policy: {
+        schema: "forgedock.candidate-pr-policy/v1",
+        repository: "example/product",
+        pullRequest: 7,
+        identity: { head, baseRef: "main", baseSha },
+        policy: { evaluatedRequiredChecks: { status: "available", exitCode: 0, data: [{ name: "CI", state: "SUCCESS", bucket: "pass" }] } },
+      },
     });
     assert.ok(result);
+    await assert.rejects(
+      tool.execute("missing-local", {
+        repository: "example/product",
+        pullRequest: 7,
+        kind: "STAGING_GATE",
+        head,
+        baseRef: "main",
+        baseSha,
+        gate: "PASS",
+        checks: [],
+        reviewRoot: root,
+        artifactKey: key,
+        body: "FORGE:STAGING_GATE:PASS\nMissing local receipt must remain unsatisfied.",
+        publish: false,
+        policy: {
+          schema: "forgedock.candidate-pr-policy/v1",
+          repository: "example/product",
+          pullRequest: 7,
+          identity: { head, baseRef: "main", baseSha },
+          policy: { evaluatedRequiredChecks: { status: "available", exitCode: 0, data: [{ name: "CI", state: "SUCCESS", bucket: "pass" }] } },
+        },
+      }),
+      /local verification receipts are missing/,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

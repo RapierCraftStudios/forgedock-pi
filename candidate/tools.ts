@@ -73,6 +73,7 @@ const RECORD_INPUT = Type.Object({
   reviewRoot: Type.Optional(Type.String({ minLength: 1 })),
   artifactKey: Type.Optional(Type.String({ minLength: 1 })),
   publish: Type.Boolean(),
+  policy: Type.Optional(Type.Unknown()),
 });
 
 type RecordInput = {
@@ -89,6 +90,7 @@ type RecordInput = {
   reviewRoot?: string;
   artifactKey?: string;
   publish: boolean;
+  policy?: unknown;
 };
 
 function helperPath(): string {
@@ -132,10 +134,40 @@ async function writeCheckReceipt(root: string, receipt: Record<string, unknown>)
   return file;
 }
 
+function policyCheckPassed(row: Record<string, unknown>): boolean {
+  const bucket = typeof row.bucket === "string" ? row.bucket.toLowerCase() : "";
+  const state = typeof row.state === "string" ? row.state.toUpperCase() : "";
+  const conclusion = typeof row.conclusion === "string" ? row.conclusion.toUpperCase() : "";
+  if (["PENDING", "QUEUED", "IN_PROGRESS", "EXPECTED", "CANCELLED"].includes(state)) return false;
+  if (["FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"].includes(conclusion)) return false;
+  return bucket === "pass" || state === "SUCCESS" || conclusion === "SUCCESS";
+}
+
+function requireGithubPolicyEvidence(policy: unknown, input: RecordInput, review: Record<string, unknown>): void {
+  if (!policy || typeof policy !== "object" || Array.isArray(policy) || (policy as Record<string, unknown>).schema !== "forgedock.candidate-pr-policy/v1") throw new Error("A staging PASS requires repository PR-policy evidence");
+  const value = policy as Record<string, any>;
+  const identity = value.identity;
+  if (!identity || identity.head !== input.head || identity.baseRef !== input.baseRef || identity.baseSha !== input.baseSha || Number(value.pullRequest) !== input.pullRequest || value.repository !== input.repository) throw new Error("PR-policy evidence is not bound to the prepared frozen review");
+  const required = value.policy?.evaluatedRequiredChecks;
+  if (!required || required.status !== "available" || !Array.isArray(required.data) || required.data.length === 0) throw new Error("Required GitHub check evidence is missing or empty; do not infer that no requirement exists");
+  const failed = required.data.filter((row: unknown) => !row || typeof row !== "object" || !policyCheckPassed(row as Record<string, unknown>));
+  if (required.exitCode !== 0 || failed.length > 0) {
+    const names = failed.map((row: any) => String(row?.name ?? "unnamed check"));
+    throw new Error(`Required GitHub checks are not all satisfied${names.length ? `: ${names.join(", ")}` : ` (collector exit ${String(required.exitCode)})`}`);
+  }
+  const configured = review.config && typeof review.config === "object" && !Array.isArray(review.config) ? (review.config as Record<string, any>).verificationCommands : undefined;
+  const configuredNames = configured && typeof configured === "object" && !Array.isArray(configured) ? Object.keys(configured) : [];
+  const localChecks = input.checks ?? [];
+  const missingLocal = configuredNames.filter((name) => !localChecks.includes(name));
+  if (missingLocal.length > 0) throw new Error(`Required local verification receipts are missing: ${missingLocal.join(", ")}`);
+}
+
 async function requirePassEvidence(input: RecordInput, review: Record<string, unknown>): Promise<void> {
   const roles = Array.isArray(review.roles) ? review.roles.filter((role): role is string => typeof role === "string") : [];
   if (!roles.includes("correctness")) throw new Error("A staging PASS requires the correctness reviewer");
-  if (!input.checks?.length || new Set(input.checks).size !== input.checks.length) throw new Error("A staging PASS requires unique completed check receipts");
+  const localChecks = input.checks ?? [];
+  if (!Array.isArray(localChecks) || new Set(localChecks).size !== localChecks.length) throw new Error("A staging PASS requires unique completed check receipts");
+  requireGithubPolicyEvidence(input.policy, input, review);
   for (const role of roles) {
     const report = join(resolve(input.reviewRoot as string), `${role}.report.md`);
     if (!existsSync(report) || realpathSync(report) !== report) throw new Error(`A staging PASS requires the ${role} reviewer report`);
@@ -145,7 +177,7 @@ async function requirePassEvidence(input: RecordInput, review: Record<string, un
     try { identity = marker?.[1] ? JSON.parse(marker[1]) as Record<string, unknown> : {}; } catch { identity = {}; }
     if (identity.repository !== input.repository || identity.pullRequest !== input.pullRequest || identity.head !== input.head || identity.baseRef !== input.baseRef || identity.baseSha !== input.baseSha || identity.role !== role) throw new Error(`Reviewer report for ${role} is not bound to the frozen role`);
   }
-  for (const name of input.checks) {
+  for (const name of localChecks) {
     const receiptPath = join(resolve(input.reviewRoot as string), "checks", `${name}.json`);
     if (!existsSync(receiptPath) || realpathSync(receiptPath) !== receiptPath) throw new Error(`Missing completed check receipt: ${name}`);
     const receipt = JSON.parse(readFileSync(receiptPath, "utf8")) as Record<string, unknown>;
@@ -189,7 +221,14 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       const result = await pi.exec("node", [helperPath(), "prepare-review", "--input", inputPath, "--out", output], { timeout: 120_000 });
       if (result.code !== 0) throw new Error(`Review preparation failed: ${bounded(result.stderr)}`);
       const prepared = JSON.parse(await readFile(join(output, "review.json"), "utf8")) as { configPath?: string; configSha256?: string; artifactKey?: string; sourceRoot?: string; head?: string };
-      return { content: [{ type: "text", text: bounded(result.stdout) }], details: { requestDirectory: output, inputPath, reviewRoot: output, artifactKey: prepared.artifactKey, sourceRoot: prepared.sourceRoot, head: prepared.head, configPath: prepared.configPath, configSha256: prepared.configSha256 } };
+      const policyResult = await pi.exec("node", [helperPath(), "inspect-pr", "--repo", input.repository, "--pr", String(input.pullRequest), "--cwd", prepared.sourceRoot ?? input.sourceRoot], { timeout: 120_000 });
+      let policy: unknown;
+      try {
+        policy = policyResult.stdout.trim() ? JSON.parse(policyResult.stdout) : { schema: "forgedock.candidate-pr-policy/v1", status: "unavailable", error: policyResult.stderr.trim() || "policy collector returned no data" };
+      } catch {
+        policy = { schema: "forgedock.candidate-pr-policy/v1", status: "malformed", error: policyResult.stderr.trim() || "policy collector returned invalid JSON" };
+      }
+      return { content: [{ type: "text", text: bounded(result.stdout) }], details: { requestDirectory: output, inputPath, reviewRoot: output, artifactKey: prepared.artifactKey, sourceRoot: prepared.sourceRoot, head: prepared.head, configPath: prepared.configPath, configSha256: prepared.configSha256, policy } };
     },
   });
 

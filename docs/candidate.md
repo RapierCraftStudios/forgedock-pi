@@ -122,7 +122,10 @@ head-associated check runs, commit statuses, ruleset listing/details, legacy bra
 workflow-file identities, and repository-configured verification commands. It does not infer
 requiredness from workflow names, empty rows, or a nonzero checks command; inaccessible policy
 endpoints remain explicit limitations. Standard integration PRs and protected promotion routes
-are interpreted separately by their existing skills.
+are interpreted separately by their existing skills. The restricted staging preparation tool
+returns the same policy object; pass it unchanged to the staging publication tool. A staging
+PASS with no local commands still requires nonempty, current, passing GitHub required-check
+evidence, while every configured local command still requires its own receipt.
 
 ## File-backed records and publication
 

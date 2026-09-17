@@ -20,13 +20,17 @@ precise FAIL prerequisite, not permission to claim PASS. Structural checks do no
 for a required runtime boundary.
 
 Select correctness plus only concrete risk-justified specialists. Use the `forge_prepare_review`
-tool to create the validated frozen request, launch fresh `forgedock-reviewer` reviewers through
-that generated native request, and wait for every role; their source tools are read-only and their
-only mutation capability is the report publisher. Use `forge_run_check` for configured checks and
-`forge_publish_record` for the consolidated gate, passing `kind: STAGING_GATE`, the frozen PR/head/
-protected-base identity, and `gate: PASS` or `FAIL`; feed `configPath`, `configSha256`,
-`reviewRoot`, `artifactKey`, `sourceRoot`, and `head` from the prepared review details to each
-`forge_run_check`; do not use bash/edit/write in this route.
+tool to create the validated frozen request and its read-only repository/PR policy facts, launch
+fresh `forgedock-reviewer` reviewers through that generated native request, and wait for every
+role; their source tools are read-only and their only mutation capability is the report publisher.
+Use `forge_run_check` for configured local checks only when the prepared configuration declares
+them; each real local check needs its receipt, and an empty local-check set is valid only when
+the collected current GitHub required-check evidence is complete and passing. Use
+`forge_publish_record` for the consolidated
+gate, passing the policy object returned by `forge_prepare_review` unchanged, `kind:
+STAGING_GATE`, the frozen PR/head/protected-base identity, and `gate: PASS` or `FAIL`; feed
+`configPath`, `configSha256`, `reviewRoot`, `artifactKey`, `sourceRoot`, and `head` from the
+prepared review details to each `forge_run_check`; do not use bash/edit/write in this route.
 Each reviewer publishes its own exact-head report, including a substantive clean report. No
 reviewer edits source, creates issues, merges, deploys, closes issues, or starts repair.
 
