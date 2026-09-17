@@ -1,0 +1,22 @@
+{
+  "schema": "forgedock.qualification-runs/v1",
+  "launch": {
+    "ownerAgent": "forgedock-owner",
+    "reviewerAgent": "forgedock-reviewer",
+    "model": "openai-codex/gpt-5.6-luna:low",
+    "piVersion": "0.85.1",
+    "piSubagentsCommit": "0931cbbb98ab253177b181bd334fe02dd919dca5",
+    "githubWrites": false,
+    "qualificationMode": "disposable local replay; no live GitHub lifecycle"
+  },
+  "runs": [
+    { "issue": 201, "role": "owner", "runId": "d26fb95e-9168-462b-9564-11c84dfe7bff", "result": "DONE", "durationMs": 139153, "toolCount": 22, "usage": { "input": 59286, "output": 3172, "cacheRead": 207360, "costUsd": 0.0198108 } },
+    { "issue": 201, "role": "correctness-review", "runId": "f1860357-d4ab-4ae6-904d-fc9fa9300b5f", "result": "APPROVE", "durationMs": 34146, "toolCount": 11, "usage": { "input": 10920, "output": 857, "cacheRead": 6656, "costUsd": 0.00334552 } },
+    { "issue": 101, "role": "owner", "runId": "c186a4a5-d92e-4ce2-8a0d-55c6b06d136b", "result": "DONE", "durationMs": 171726, "toolCount": 31, "usage": { "input": 64965, "output": 2820, "cacheRead": 274432, "costUsd": 0.02186564 } },
+    { "issue": 101, "role": "correctness-review", "runId": "cba38624-a583-4fac-bad3-856f5d523aab", "result": "APPROVE", "durationMs": 26720, "toolCount": 10, "usage": { "input": 12019, "output": 752, "cacheRead": 2560, "costUsd": 0.0033574 } },
+    { "issue": 102, "role": "owner-first-pass", "runId": "0e11060e-72a7-42a5-af14-92494b8679fd", "result": "GATED", "durationMs": 210404, "toolCount": 40, "usage": { "input": 61013, "output": 4170, "cacheRead": 427520, "costUsd": 0.025757 } },
+    { "issue": 102, "role": "correctness-review-first-pass", "runId": "17daf727-027a-46ec-8d8f-67c0ab832aa8", "result": "BLOCK", "durationMs": 61212, "toolCount": 11, "usage": { "input": 7078, "output": 980, "cacheRead": 9728, "costUsd": 0.00278616 } },
+    { "issue": 102, "role": "owner-scoped-repair", "runId": "e8bb91f5-6734-42e5-8512-457b3acb0f1c", "result": "DONE", "durationMs": 216919, "toolCount": 20, "usage": { "input": 24931, "output": 2176, "cacheRead": 228864, "costUsd": 0.01217468 } },
+    { "issue": 102, "role": "correctness-review-repair", "runId": "b4c39cb4-2d54-41ee-8615-20f5a4857d50", "result": "APPROVE", "durationMs": 24824, "toolCount": 8, "usage": { "input": 8856, "output": 786, "cacheRead": 5632, "costUsd": 0.00282704 } }
+  ]
+}

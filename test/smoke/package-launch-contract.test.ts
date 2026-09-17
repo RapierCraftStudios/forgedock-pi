@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import test from "node:test";
 
@@ -17,7 +17,7 @@ async function registerPackedProjectPackage(project: string): Promise<void> {
   );
 }
 
-test("packed work-on agent resolves without a package tool ceiling", async () => {
+test("packed candidate exposes only thin resources and a bounded owner", async () => {
   const root = process.cwd();
   const temp = await mkdtemp("/tmp/forgedock-package-canary-");
   try {
@@ -28,67 +28,39 @@ test("packed work-on agent resolves without a package tool ceiling", async () =>
     );
     const manifest = packedManifest(stdout);
     for (const required of [
-      "agents/forgedock-work-on-coordinator.md",
-      "skills/forgedock-work-on/SKILL.md",
-      "skills/forgedock-orchestrate/SKILL.md",
-      "skills/forgedock-review-pr/SKILL.md",
-      "specs/helpers/dispatch.mjs",
-      "specs/helpers/record.mjs",
-      "specs/original/commands/work-on.md",
-    ])
-      assert.ok(manifest.files.some((file) => file.path === required), required);
-    assert.equal(
-      manifest.files.some((file) => file.path === "agents/forgedock-parent-reviewer.md"),
-      false,
-      "parent reviewer must remain installed control-plane-only",
-    );
-    assert.equal(
-      manifest.files.some((file) => file.path === "agents/forgedock-reviewer.md"),
-      false,
-      "specialized reviewer profile must not be packaged",
-    );
+      "candidate/extension.ts",
+      "candidate/skills/forgedock-work-on/SKILL.md",
+      "candidate/skills/forgedock-orchestrate/SKILL.md",
+      "candidate/skills/forgedock-review-pr/SKILL.md",
+      "candidate/skills/forgedock-review-pr-staging/SKILL.md",
+      "candidate/agents/forgedock-owner.md",
+      "candidate/agents/forgedock-reviewer.md",
+      "bin/forgedock-candidate.mjs",
+      "scripts/install-candidate.sh",
+    ]) assert.ok(manifest.files.some((file) => file.path === required), required);
+    assert.equal(manifest.files.some((file) => file.path.startsWith("skills/")), false);
+    assert.equal(manifest.files.some((file) => file.path.startsWith("specs/")), false);
+    assert.equal(manifest.files.some((file) => file.path.startsWith("agents/")), false);
 
     const project = `${temp}/project`;
     await execFileAsync(
       "npm",
-      [
-        "install",
-        "--prefix",
-        project,
-        "--no-save",
-        "--package-lock=false",
-        "--ignore-scripts",
-        "--legacy-peer-deps",
-        `${temp}/${manifest.filename}`,
-      ],
+      ["install", "--prefix", project, "--no-save", "--package-lock=false", "--ignore-scripts", "--legacy-peer-deps", `${temp}/${manifest.filename}`],
       { cwd: root, env: { ...process.env, PI_OFFLINE: "1" } },
     );
     await registerPackedProjectPackage(project);
 
     const packedAgent = await readFile(
-      `${project}/node_modules/forgedock-pi/agents/forgedock-work-on-coordinator.md`,
+      `${project}/node_modules/forgedock-pi/candidate/agents/forgedock-owner.md`,
       "utf8",
     );
-    assert.match(packedAgent, /^timeoutMs: 2147483647$/m);
-    assert.match(packedAgent, /^toolTimeoutMs: 3900000$/m);
-    assert.match(packedAgent, /^inheritProjectContext: false$/m);
-    assert.match(packedAgent, /^skills: forgedock-work-on, forgedock-review-pr, forgedock-issue$/m);
+    assert.match(packedAgent, /^name: forgedock-owner$/m);
     assert.match(packedAgent, /^allowNestedSubagents: true$/m);
-    assert.match(packedAgent, /^package: forgedock-parent-control$/m);
-    assert.match(packedAgent, /^skillPath: \.\.\/skills\/forgedock-work-on\/SKILL\.md, \.\.\/skills\/forgedock-review-pr\/SKILL\.md, \.\.\/skills\/forgedock-issue\/SKILL\.md$/m);
-    assert.doesNotMatch(packedAgent, /^tools:/m);
-    const packedRecord = await readFile(`${project}/node_modules/forgedock-pi/specs/helpers/record.mjs`, "utf8");
-    assert.match(packedRecord, /record\.mjs reviewer/);
-    assert.match(packedRecord, /ambiguous-create-reconciled/);
-    const extractorMode = (
-      await stat(
-        `${project}/node_modules/forgedock-pi/specs/original/scripts/extract-affected-files.sh`,
-      )
-    ).mode;
-    assert.notEqual(extractorMode & 0o111, 0, "affected-file helper must be executable");
+    assert.match(packedAgent, /^tools: read, grep, find, ls, bash, edit, write, subagent$/m);
+    assert.match(packedAgent, /^skillPath: \.\.\/skills$/m);
 
     const result = await resolveSubagentLaunchContract({
-      agent: "forgedock-parent-control.forgedock-work-on-coordinator",
+      agent: "forgedock-owner",
       agentScope: "project",
       cwd: project,
       context: "fresh",
@@ -99,15 +71,29 @@ test("packed work-on agent resolves without a package tool ceiling", async () =>
     assert.equal(result.ok, true, result.ok ? "" : result.message);
     if (!result.ok) return;
     assert.equal(result.contract.agent.source, "package");
-    assert.equal(result.contract.tools.explicitAllowlist, false);
+    assert.equal(result.contract.tools.explicitAllowlist, true);
     assert.equal(result.contract.tools.fanoutAuthorized, true);
     assert.equal(result.contract.tools.configuredExtensions.length, 0);
+
+    const reviewerResult = await resolveSubagentLaunchContract({
+      agent: "forgedock-reviewer",
+      agentScope: "project",
+      cwd: project,
+      context: "fresh",
+      skill: false,
+      output: false,
+      artifacts: false,
+    });
+    assert.equal(reviewerResult.ok, true, reviewerResult.ok ? "" : reviewerResult.message);
+    if (!reviewerResult.ok) return;
+    assert.deepEqual(reviewerResult.contract.tools.effectiveAllowlist, ["read", "grep", "find", "ls", "forge_publish_reviewer"]);
+    assert.equal(reviewerResult.contract.tools.fanoutAuthorized, false);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
 });
 
-test("host policy may still reject the packaged agent", async () => {
+test("host policy can reject the candidate owner without changing its package", async () => {
   const root = process.cwd();
   const temp = await mkdtemp("/tmp/forgedock-package-ceiling-");
   try {
@@ -125,7 +111,7 @@ test("host policy may still reject the packaged agent", async () => {
     );
     await registerPackedProjectPackage(project);
     const result = await resolveSubagentLaunchContract({
-      agent: "forgedock-parent-control.forgedock-work-on-coordinator",
+      agent: "forgedock-owner",
       agentScope: "project",
       cwd: project,
       context: "fresh",
@@ -152,10 +138,8 @@ function packedManifest(stdout: string): {
   filename: string;
   files: Array<{ path: string }>;
 } {
-  const parsed = JSON.parse(stdout) as
-    | Array<{ filename?: unknown; files?: Array<{ path: string }> }>
-    | { "forgedock-pi": { filename?: unknown; files?: Array<{ path: string }> } };
-  const value = Array.isArray(parsed) ? parsed[0] : parsed["forgedock-pi"];
+  const parsed = JSON.parse(stdout) as { "forgedock-pi": { filename?: unknown; files?: Array<{ path: string }> } };
+  const value = parsed["forgedock-pi"];
   assert.equal(typeof value?.filename, "string");
   assert.ok(value?.files);
   return value as { filename: string; files: Array<{ path: string }> };

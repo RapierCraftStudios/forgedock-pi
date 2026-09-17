@@ -1,0 +1,14 @@
+{
+  "schema": "forgedock.qualification-evidence/v1",
+  "mode": "disposable-same-repository-git-ref",
+  "candidateRef": "2f6c4a4b7e874cc5b6b12858acb0f6bcc80c1603",
+  "originalRef": "c6bf7ed7a56fd66935f04384ce1b43b8cdf17db7",
+  "replacementStatus": "replaced",
+  "rollbackStatus": "rolled-back",
+  "packageCount": 1,
+  "settingsRestored": true,
+  "unrelatedSettingsChanged": false,
+  "disposableRoot": "/tmp/forgedock-git-ref-replacement-2f6",
+  "github": "no remote writes",
+  "source": "scripts/replace-candidate.sh and scripts/rollback-candidate.sh"
+}

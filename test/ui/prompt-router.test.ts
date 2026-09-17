@@ -17,8 +17,6 @@ const cases = [
     "/review-pr-staging 101",
     "/skill:forgedock-review-pr-staging 101",
   ],
-  ["/audit --run-id run-123", "/skill:forgedock-audit --run-id run-123"],
-  ["/forge:audit --run-dir /tmp/run", "/skill:forgedock-audit --run-dir /tmp/run"],
 ] as const;
 
 test("friendly commands rewrite lexically to native Pi skills", () => {
@@ -37,7 +35,6 @@ test("alias rewriting preserves multiline arguments and rejects near matches", (
     "work-on 1",
     "/model",
     "/skill:forgedock-work-on 1",
-    "/audit-log 1",
   ])
     assert.equal(rewriteForgePromptAlias(input), undefined);
 });
@@ -61,39 +58,27 @@ test("input router transforms user/RPC input and never loops extension input", (
     action: "transform",
     text: "/skill:forgedock-review-pr 7",
   });
-  assert.deepEqual(handler({ source: "interactive", text: "/audit --run-id run-123" }), {
-    action: "transform",
-    text: "/skill:forgedock-audit --run-id run-123",
+  assert.deepEqual(handler({ source: "interactive", text: "/quality-gate 1" }), {
+    action: "continue",
   });
   assert.deepEqual(handler({ source: "extension", text: "/work-on 42" }), {
     action: "continue",
   });
 });
 
-test("package exposes every prompt, skill, adapter, and authoritative root spec", async () => {
+test("package exposes only the candidate prompt and skill roots", async () => {
   const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
     pi: { prompts: string[]; skills: string[] };
     files: string[];
   };
-  assert.deepEqual(packageJson.pi.prompts, ["./prompts"]);
-  assert.deepEqual(packageJson.pi.skills, ["./skills"]);
-  for (const path of ["prompts/", "skills/", "specs/"])
-    assert.ok(packageJson.files.includes(path));
+  assert.deepEqual(packageJson.pi.prompts, ["./candidate/prompts"]);
+  assert.deepEqual(packageJson.pi.skills, ["./candidate/skills"]);
+  assert.equal(packageJson.files.includes("docs/candidate.md"), true);
+  assert.equal(packageJson.files.includes("specs/"), false);
 
-  await access("specs/pi-adapter.md");
   for (const [command, skill] of Object.entries(FORGE_PROMPT_ALIASES)) {
-    await access(`prompts/${command}.md`);
-    const skillText = await readFile(`skills/${skill}/SKILL.md`, "utf8");
+    await access(`candidate/prompts/${command}.md`);
+    const skillText = await readFile(`candidate/skills/${skill}/SKILL.md`, "utf8");
     assert.ok(skillText.includes(`name: ${skill}`));
-    assert.match(skillText, /specs\/pi-adapter\.md/);
   }
-  for (const path of [
-    "specs/original/commands/orchestrate.md",
-    "specs/original/commands/work-on.md",
-    "specs/original/commands/review-pr.md",
-    "specs/original/commands/review-pr-staging.md",
-    "specs/original/commands/quality-gate.md",
-    "specs/original/commands/review-pr-agents/protocols.md",
-  ])
-    await access(path);
 });
