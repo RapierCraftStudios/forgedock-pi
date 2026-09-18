@@ -39,7 +39,7 @@ if (endpoint.includes("/issues/comments/")) {
 }
 if (endpoint.startsWith("search/issues?")) {
   const query = decodeURIComponent(endpoint.split("?q=")[1]?.split("&")[0] ?? "").toLowerCase();
-  const items = (state.issues ?? []).filter((issue) => /backup|receipt|storage/.test((issue.title + " " + issue.body).toLowerCase()) || query.includes("unrelated"));
+  const items = state.omitSearchIssues ? [] : (state.issues ?? []).filter((issue) => /backup|receipt|storage/.test((issue.title + " " + issue.body).toLowerCase()) || query.includes("unrelated"));
   output({ items });
 }
 if (endpoint.includes("/issues?")) output([state.issues ?? []]);
@@ -53,6 +53,7 @@ if (endpoint.endsWith("/issues") && method === "POST") {
   output(issue, state.issuePostFails ? 1 : 0);
 }
 if (/\\/issues\\/\\d+$/.test(endpoint)) {
+  if (state.issueReadFails) process.exit(1);
   const number = Number(endpoint.split("/").at(-1));
   const issue = (state.issues ?? []).find((entry) => entry.number === number);
   if (!issue) process.exit(1);
@@ -190,6 +191,22 @@ test("parent adjudication deduplicates duplicate observations and preserves skip
     assert.deepEqual(artifact.decisions[0].sourceObservationIds, ["correctness:F1", "security:F1"]);
     assert.match(artifact.gateBody, /REVIEW-PANEL/);
     assert.match(artifact.gateBody, /skipped/);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.reviewRoot, { recursive: true, force: true });
+  }
+});
+
+test("parent refuses a current report that omits its observations marker", async () => {
+  const f = await fixture(false);
+  try {
+    const reportPath = join(f.reviewRoot, "correctness.report.md");
+    const report = await readFile(reportPath, "utf8");
+    await writeFile(reportPath, report.replace(/<!-- FORGE:REVIEW_OBSERVATIONS .* -->\n/, ""));
+    const inputPath = join(f.reviewRoot, "adjudication.json.input");
+    await writeFile(inputPath, JSON.stringify(inputFor(f, false, false)));
+    await assert.rejects(execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } }), /missing its explicit observations array/);
   } finally {
     await rm(f.root, { recursive: true, force: true });
     await rm(f.bin, { recursive: true, force: true });
@@ -337,9 +354,50 @@ test("one review root supports pending recovery, explicit revisions, and idempot
     assert.equal(recoveredResult.tracking.C1.status, "created");
     const afterRecovery = JSON.parse(await readFile(f.statePath, "utf8"));
     const commentCount = afterRecovery.comments.length;
+    const searchCount = afterRecovery.calls.filter((args: string[]) => args.some((arg) => arg.startsWith("search/issues?"))).length;
+    const issueCreateCount = afterRecovery.calls.filter((args: string[]) => args.includes("POST") && args.some((arg) => arg.endsWith("/issues"))).length;
     const repeated = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", recoveredPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
     assert.equal(repeated.tracking.C1.status, "reused");
-    assert.equal(JSON.parse(await readFile(f.statePath, "utf8")).comments.length, commentCount);
+    const afterRepeat = JSON.parse(await readFile(f.statePath, "utf8"));
+    assert.equal(afterRepeat.comments.length, commentCount);
+    assert.equal(afterRepeat.calls.filter((args: string[]) => args.some((arg) => arg.startsWith("search/issues?"))).length, searchCount);
+    assert.equal(afterRepeat.calls.filter((args: string[]) => args.includes("POST") && args.some((arg) => arg.endsWith("/issues"))).length, issueCreateCount);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.reviewRoot, { recursive: true, force: true });
+  }
+});
+
+test("inconclusive create preserves a known issue for direct recovery without a duplicate POST", async () => {
+  const f = await fixture(true);
+  try {
+    const state = JSON.parse(await readFile(f.statePath, "utf8"));
+    state.issueReadFails = true;
+    state.omitSearchIssues = true;
+    await writeFile(f.statePath, JSON.stringify(state));
+    const firstPath = join(f.reviewRoot, "inconclusive-r0.json");
+    const first = inputFor(f, true, true);
+    first.revision = 0;
+    await writeFile(firstPath, JSON.stringify(first));
+    const firstResult = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", firstPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
+    assert.equal(firstResult.trackingPublication, "pending");
+    assert.equal(firstResult.tracking.C1.status, "pending");
+    assert.equal(firstResult.tracking.C1.knownIssue.number, 401);
+    const changed = JSON.parse(await readFile(f.statePath, "utf8"));
+    changed.issueReadFails = false;
+    changed.omitSearchIssues = false;
+    const createCount = changed.calls.filter((args: string[]) => args.includes("POST") && args.some((arg) => arg.endsWith("/issues"))).length;
+    await writeFile(f.statePath, JSON.stringify(changed));
+    const secondPath = join(f.reviewRoot, "inconclusive-r1.json");
+    const second = inputFor(f, true, true);
+    second.revision = 1;
+    second.supersedes = firstResult.panelUrl;
+    await writeFile(secondPath, JSON.stringify(second));
+    const secondResult = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", secondPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
+    assert.equal(secondResult.tracking.C1.status, "reused");
+    const after = JSON.parse(await readFile(f.statePath, "utf8"));
+    assert.equal(after.calls.filter((args: string[]) => args.includes("POST") && args.some((arg) => arg.endsWith("/issues"))).length, createCount);
   } finally {
     await rm(f.root, { recursive: true, force: true });
     await rm(f.bin, { recursive: true, force: true });
@@ -359,7 +417,8 @@ test("authorized follow-up issue creation reconciles an ambiguous response once"
     const result = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
     assert.equal(result.publication, "published");
     assert.equal(result.trackingPublication, "complete");
-    assert.equal(result.tracking.C1.status, "reused");
+    assert.equal(result.tracking.C1.status, "created");
+    assert.equal(result.tracking.C1.reconciliation, "ambiguous-create-reconciled");
     assert.equal(result.tracking.C1.issue.number, 401);
     const state = JSON.parse(await readFile(f.statePath, "utf8"));
     assert.equal(state.issues.length, 81);

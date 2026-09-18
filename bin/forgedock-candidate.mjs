@@ -1011,9 +1011,12 @@ function validateReviewObservations(value, role) {
   });
 }
 
-function reviewObservationsFromReport(body, role) {
+function reviewObservationsFromReport(body, role, required = false) {
   const line = body.replace(/\r\n?/g, "\n").split("\n").find((value) => value.startsWith("<!-- FORGE:REVIEW_OBSERVATIONS "));
-  if (!line) return [];
+  if (!line) {
+    if (required) fail(`Current reviewer report ${role} is missing its explicit observations array`);
+    return [];
+  }
   const match = line.match(/^<!-- FORGE:REVIEW_OBSERVATIONS (\[.*\]) -->$/);
   if (!match) fail(`Reviewer report ${role} observations marker is malformed`);
   try { return validateReviewObservations(JSON.parse(match[1]), role); } catch (error) { fail(error instanceof Error ? error.message : String(error)); }
@@ -1170,7 +1173,7 @@ function currentHead(cwd, supplied) {
   return head;
 }
 
-function reviewerReportsFor(entry, repository, pullRequest, head, baseRef, baseSha, cwd, cache, publish = true) {
+function reviewerReportsFor(entry, repository, pullRequest, head, baseRef, baseSha, cwd, cache, publish = true, requireObservations = false) {
   const values = entry.reviewerReports;
   if (!Array.isArray(values) || values.length === 0) fail("REVIEW-PANEL requires every selected reviewer report reference");
   const comments = cache.get(`pr:${pullRequest}`) ?? listComments(repository, pullRequest, cwd);
@@ -1202,13 +1205,13 @@ function reviewerReportsFor(entry, repository, pullRequest, head, baseRef, baseS
     if (!publish && comment?.id === null) {
       const parsed = reviewerIdentityFromReport(comment.body);
       if (parsed.repository !== repository || Number(parsed.pullRequest ?? parsed.pr) !== pullRequest || (parsed.head ?? parsed.reviewedHead) !== head || parsed.baseRef !== baseRef || parsed.baseSha !== baseSha || parsed.role !== role) fail(`Saved reviewer report ${role} identity disagrees with the frozen review`);
-      const observations = reviewObservationsFromReport(comment.body, role);
+      const observations = reviewObservationsFromReport(comment.body, role, requireObservations);
       return { role, id: null, url: null, head, round: Number.isSafeInteger(parsed.round) ? parsed.round : 0, reportId: typeof parsed.id === "string" ? parsed.id : undefined, observations };
     }
     const url = verifiedCommentUrl(comment.html_url, repository, pullRequest, true, comment.id, `reviewerReports[${index}] permalink`);
     const parsed = reviewerIdentityFromReport(comment.body);
     if (parsed.repository !== repository || Number(parsed.pullRequest ?? parsed.pr) !== pullRequest || (parsed.head ?? parsed.reviewedHead) !== head || parsed.baseRef !== baseRef || parsed.baseSha !== baseSha || parsed.role !== role) fail(`Reviewer report ${role} readback identity disagrees with the frozen review`);
-    const observations = reviewObservationsFromReport(comment.body, role);
+    const observations = reviewObservationsFromReport(comment.body, role, requireObservations);
     roles.add(role);
     ids.add(comment.id);
     return { role, id: comment.id, url, head, round: Number.isSafeInteger(parsed.round) ? parsed.round : 0, reportId: typeof parsed.id === "string" ? parsed.id : undefined, observations };
@@ -1431,26 +1434,96 @@ function verifyReviewIssue(repository, number, expectedUrl, cwd) {
   return issue;
 }
 
+function knownReviewIssue(reviewRoot, concernId) {
+  const files = readdirSync(reviewRoot).filter((file) => /^adjudication-r[0-9]+\\.json$/.test(file)).sort().reverse();
+  for (const file of files) {
+    try {
+      const artifact = readJson(join(reviewRoot, file));
+      const value = artifact.tracking?.[concernId];
+      if (value?.issue?.number) return value.issue;
+      if (value?.knownIssue?.number) return value.knownIssue;
+    } catch {
+      // Ignore incomplete historical artifacts; later bounded recovery remains explicit.
+    }
+  }
+  const publicationFiles = readdirSync(join(reviewRoot, "tracking"), { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.startsWith(`${concernId.replace(/[^A-Za-z0-9_.-]/g, "-")}-r`) && entry.name.endsWith(".publication.json")).sort().reverse();
+  for (const entry of publicationFiles) {
+    try {
+      const artifact = readJson(join(reviewRoot, "tracking", entry.name));
+      if (artifact.issue?.number) return artifact.issue;
+    } catch {
+      // Preserve incomplete publication evidence without guessing.
+    }
+  }
+  return undefined;
+}
+
+function issueArtifactShape(issue) {
+  return issue ? { number: issue.number, title: issue.title, body: issue.body, state: issue.state, url: issue.url, labels: issue.labels } : undefined;
+}
+
+function saveReviewIssuePublication(input, status, issue, error) {
+  const artifact = { schema: "forgedock.review-issue-publication/v1", repository: input.repository, pullRequest: input.pullRequest, head: input.head, concernId: input.concernId, revision: input.revision ?? 0, status, issue: issueArtifactShape(issue), error: error ?? null, marker: input.marker, fingerprint: input.fingerprint, draftPath: input.draftPath ?? null };
+  const fingerprint = sha256(canonicalJson(artifact)).slice(0, 12);
+  const path = join(input.reviewRoot, "tracking", `${input.concernId.replace(/[^A-Za-z0-9_.-]/g, "-")}-r${input.revision ?? 0}-${fingerprint}.publication.json`);
+  writeExclusive(path, json(artifact));
+  return path;
+}
+
 function publishReviewIssue(input) {
-  const matches = reviewIssueMatches(input.repository, input.pullRequest, input.head, input.concernId, input.draft, input.cwd, input.draft.linkedIssueNumbers, true);
-  const exact = matches.filter((issue) => issue.match === "exact");
-  if (exact.length > 1) fail(`Multiple review follow-up issues match ${input.concernId}; reconcile explicitly`);
-  if (exact.length === 1) return { status: "reused", issue: exact[0], marker: input.marker, fingerprint: input.fingerprint };
   const body = renderReviewIssueBody(input);
   const bodyName = `${input.concernId.replace(/[^A-Za-z0-9_.-]/g, "-")}-r${input.revision ?? 0}${input.parentDecisionUrl ? "-parent" : ""}.md`;
   const bodyPath = writeExclusive(join(input.reviewRoot, "tracking", bodyName), body);
-  if (!input.allowIssueWrites || !input.publish) return { status: "pending", issue: undefined, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, error: input.allowIssueWrites ? "publication disabled" : "explicit issue-write permission was not granted" };
+  const known = input.knownIssue;
+  if (known?.number) {
+    const direct = tryExec("gh", ["api", `repos/${input.repository}/issues/${known.number}`], { cwd: input.cwd, timeout: 120_000 });
+    if (direct.exitCode === 0 && direct.stdout) {
+      const issue = normalizeGithubIssue(JSON.parse(direct.stdout));
+      saveReviewIssuePublication({ ...input, draftPath: bodyPath }, "reused", issue);
+      return { status: "reused", issue, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, reconciliation: "direct-known-issue" };
+    }
+    saveReviewIssuePublication({ ...input, draftPath: bodyPath }, "pending", known, `Direct lookup of known issue #${known.number} was inconclusive`);
+    return { status: "pending", issue: undefined, knownIssue: known, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, error: `Direct lookup of known issue #${known.number} was inconclusive` };
+  }
+  const matches = reviewIssueMatches(input.repository, input.pullRequest, input.head, input.concernId, input.draft, input.cwd, input.draft.linkedIssueNumbers, true);
+  const exact = matches.filter((issue) => issue.match === "exact");
+  if (exact.length > 1) fail(`Multiple review follow-up issues match ${input.concernId}; reconcile explicitly`);
+  if (exact.length === 1) {
+    saveReviewIssuePublication({ ...input, draftPath: bodyPath }, "reused", exact[0]);
+    return { status: "reused", issue: exact[0], marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, reconciliation: "bounded-existing-issue" };
+  }
+  if (!input.allowIssueWrites || !input.publish) {
+    const error = input.allowIssueWrites ? "publication disabled" : "explicit issue-write permission was not granted";
+    saveReviewIssuePublication({ ...input, draftPath: bodyPath }, "pending", undefined, error);
+    return { status: "pending", issue: undefined, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, error };
+  }
   const args = ["gh", "api", `repos/${input.repository}/issues`, "--method", "POST", "-F", `title=${input.draft.title}`, "-F", `body=@${bodyPath}`];
   for (const label of input.draft.labels) args.push("-f", `labels[]=${label}`);
+  let created;
+  let ambiguousCreate = false;
   try {
-    const created = normalizeGithubIssue(readJsonFromText(exec(args[0], args.slice(1), { cwd: input.cwd, timeout: 120_000 })));
+    const transport = tryExec(args[0], args.slice(1), { cwd: input.cwd, timeout: 120_000 });
+    if (!transport.stdout) fail(transport.stderr || transport.error || "Issue creation returned no response");
+    created = normalizeGithubIssue(JSON.parse(transport.stdout));
+    ambiguousCreate = transport.exitCode !== 0;
     const readBack = verifyReviewIssue(input.repository, created.number, created.url, input.cwd);
     if (readBack.title !== input.draft.title || readBack.body !== body || input.draft.labels.some((label) => !readBack.labels.includes(label))) fail(`Review follow-up issue #${created.number} readback differs from saved draft`);
-    return { status: "created", issue: readBack, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, reconciliation: "created" };
+    saveReviewIssuePublication({ ...input, draftPath: bodyPath }, "created", readBack);
+    return { status: "created", issue: readBack, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, reconciliation: ambiguousCreate ? "ambiguous-create-reconciled" : "created" };
   } catch (error) {
     const recovered = reviewIssueMatches(input.repository, input.pullRequest, input.head, input.concernId, input.draft, input.cwd, input.draft.linkedIssueNumbers, true).filter((issue) => issue.match === "exact");
-    if (recovered.length === 1 && input.draft.labels.every((label) => recovered[0].labels.includes(label))) return { status: "reused", issue: recovered[0], marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, reconciliation: "ambiguous-create-reconciled" };
-    return { status: "pending", issue: undefined, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, error: error instanceof Error ? error.message : String(error) };
+    if (recovered.length === 1 && input.draft.labels.every((label) => recovered[0].labels.includes(label))) {
+      saveReviewIssuePublication({ ...input, draftPath: bodyPath }, "reused", recovered[0]);
+      return { status: "reused", issue: recovered[0], marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, reconciliation: "ambiguous-create-reconciled" };
+    }
+    if (created?.number) {
+      const knownError = error instanceof Error ? error.message : String(error);
+      saveReviewIssuePublication({ ...input, draftPath: bodyPath }, "pending", created, knownError);
+      return { status: "pending", issue: undefined, knownIssue: created, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, error: `Issue #${created.number} creation/readback is inconclusive: ${knownError}` };
+    }
+    const errorText = error instanceof Error ? error.message : String(error);
+    saveReviewIssuePublication({ ...input, draftPath: bodyPath }, "pending", undefined, errorText);
+    return { status: "pending", issue: undefined, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, error: errorText };
   }
 }
 
@@ -1589,7 +1662,7 @@ function recordAdjudication(options) {
   const config = recordConfig(cwd, repository);
   const cache = new Map();
   const reviewerReports = (review.roles ?? []).map((role) => ({ role, reportFile: join(reviewRoot, `${role}.report.md`) }));
-  const reports = reviewerReportsFor({ reviewerReports }, repository, Number(input.pullRequest), input.head, input.baseRef, input.baseSha, cwd, cache, publish);
+  const reports = reviewerReportsFor({ reviewerReports }, repository, Number(input.pullRequest), input.head, input.baseRef, input.baseSha, cwd, cache, publish, true);
   const validated = validateAdjudication(input, review, reports);
   const tracking = {};
   for (const decision of validated.decisions) {
@@ -1621,7 +1694,7 @@ function recordAdjudication(options) {
     const draft = reviewIssueDraft(request.draft, `${decision.id}.tracking.draft`);
     const marker = reviewIssueMarker(repository, Number(input.pullRequest), input.head, decision.id);
     const fingerprint = reviewIssueFingerprint(repository, Number(input.pullRequest), { id: decision.id, summary: draft.problem, affectedFiles: draft.affectedFiles });
-    tracking[decision.id] = publishReviewIssue({ repository, pullRequest: Number(input.pullRequest), head: input.head, concernId: decision.id, draft, marker, fingerprint, reviewRoot, cwd, revision, publish, allowIssueWrites: input.allowIssueWrites === true, parentDecisionUrl: provisionalPublication.url });
+    tracking[decision.id] = publishReviewIssue({ repository, pullRequest: Number(input.pullRequest), head: input.head, concernId: decision.id, draft, marker, fingerprint, reviewRoot, cwd, revision, knownIssue: knownReviewIssue(reviewRoot, decision.id), publish, allowIssueWrites: input.allowIssueWrites === true, parentDecisionUrl: provisionalPublication.url });
   }
   const finalBody = renderAdjudicationBody(input, review, reports, validated.decisions, tracking, provisionalPublication.url);
   const changed = finalBody !== provisionalBody;
@@ -1642,9 +1715,10 @@ function recordAdjudication(options) {
   const gateBody = `FORGE:STAGING_GATE:${input.gate}\n\n${finalBody}\n\n## Gate\n\n**Gate**: ${input.gate}\n**Next action**: ${String(input.nextAction ?? "No further action recorded.").trim()}\n`;
   const stableTracking = Object.fromEntries(Object.entries(tracking).map(([id, value]) => {
     const issue = value.issue ? { number: value.issue.number, title: value.issue.title, body: value.issue.body, state: value.issue.state, url: value.issue.url, labels: value.issue.labels } : undefined;
+    const knownIssue = value.knownIssue ? { number: value.knownIssue.number, title: value.knownIssue.title, body: value.knownIssue.body, state: value.knownIssue.state, url: value.knownIssue.url, labels: value.knownIssue.labels } : issue;
     if (value.status === "created" || value.status === "reused") return [id, { status: "existing", issue }];
     if (value.status === "existing" || value.status === "source-issue") return [id, { status: value.status, issue }];
-    return [id, { status: "pending", draftPath: value.draftPath, error: value.error }];
+    return [id, { status: "pending", draftPath: value.draftPath, knownIssue, error: value.error }];
   }));
   const artifact = { schema: "forgedock.candidate-adjudication/v1", artifactKey: review.artifactKey, revision, repository, pullRequest: Number(input.pullRequest), head: input.head, baseRef: input.baseRef, baseSha: input.baseSha, mode: input.mode, verdict: validated.verdict, gate: input.gate, roles: review.roles, reports, decisions: validated.decisions, checks: validated.checks, tracking: stableTracking, panelUrl: finalPublication.url, supersededPanelUrl: provisionalPublication.url !== finalPublication.url ? provisionalPublication.url : null, gateBody, trackingPublication: Object.values(tracking).some((value) => value.status === "pending") ? "pending" : "complete" };
   writeExclusive(decisionPath, json(artifact));
@@ -1822,6 +1896,12 @@ function publishComment(repository, destination, markdown, reportFile, cwd) {
   return { id: stored.id, url: stored.html_url, reconciliation };
 }
 
+function renderReviewObservationSummary(observations) {
+  if (observations.length === 0) return "### Structured findings\n\nNo structured observations reported.\n\n";
+  const oneLine = (value) => String(value).replace(/\r?\n/g, " ").replace(/\s+/g, " ").trim();
+  return `### Structured findings\n\n${observations.map((observation) => `- **${observation.id}** (${observation.kind}) ${oneLine(observation.summary)} — evidence: ${observation.evidence.map(oneLine).join("; ")}; proposed: ${observation.proposedDisposition}; stage: ${oneLine(observation.stage)}`).join("\n")}\n\n`;
+}
+
 function record(options, mode) {
   const kind = mode === "reviewer" ? "REVIEW" : String(options.values.get("kind") ?? "").toUpperCase();
   if (!RECORD_KINDS.has(kind)) fail(`Unsupported record kind '${kind}'`);
@@ -1838,12 +1918,13 @@ function record(options, mode) {
     ? `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify(identity)} -->`
     : `<!-- FORGE:CANDIDATE:${kind} ${JSON.stringify(identity)} -->`;
   const observationMarker = kind === "REVIEW" ? `<!-- FORGE:REVIEW_OBSERVATIONS ${JSON.stringify(observations)} -->\n` : "";
+  const observationSummary = kind === "REVIEW" ? renderReviewObservationSummary(observations) : "";
   const reviewHeaders = kind === "REVIEW"
     ? `**Reviewer role**: \`${identity.role}\`\n**Pull request**: #${identity.pullRequest}\n**Reviewed source**: \`${identity.head}\`\n**Review base**: \`${identity.baseRef}\` at \`${identity.baseSha}\`\n\n`
     : kind === "STAGING_GATE"
       ? `FORGE:STAGING_GATE:${identity.gate}\n**Pull request**: #${identity.pullRequest}\n**Reviewed source**: \`${identity.head}\`\n**Protected base**: \`${identity.baseRef}\` at \`${identity.baseSha}\`\n\n`
       : "";
-  const markdown = `${marker}\n${observationMarker}## ForgeDock ${kind.toLowerCase()}\n\n${reviewHeaders}${body}\n`;
+  const markdown = `${marker}\n${observationMarker}## ForgeDock ${kind.toLowerCase()}\n\n${reviewHeaders}${observationSummary}${body}\n`;
   const reportFile = resolve(optionalOption(options, "report-file", join(dirname(resolve(bodyFile)), `${kind.toLowerCase()}.report.md`)));
   writeExclusive(reportFile, markdown);
   const result = { schema: "forgedock.candidate-record/v1", identity, reportFile, contentSha256: sha256(markdown) };

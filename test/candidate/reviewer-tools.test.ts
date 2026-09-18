@@ -28,6 +28,7 @@ test("reviewer publication persists structured observations inside the prepared 
     });
     assert.equal(result.details.publication, "saved");
     assert.ok(callArgs.includes("--observations-file"));
+    await assert.rejects(tools.get("forge_publish_reviewer").execute("missing", { role: "correctness", body: "x".repeat(32) }), /observations array/);
     assert.match(await readFile(join(root, "correctness.observations.json"), "utf8"), /correctness:F1/);
   } finally {
     await rm(root, { recursive: true, force: true });

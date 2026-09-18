@@ -87,6 +87,8 @@ test("reviewer reports retain structured observations for parent adjudication", 
     const reportText = await readFile(report, "utf8");
     assert.match(reportText, /FORGE:REVIEW_OBSERVATIONS/);
     assert.match(reportText, /correctness:F1/);
+    assert.match(reportText, /Runtime proof is absent/);
+    assert.match(reportText, /The required check is skipped/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

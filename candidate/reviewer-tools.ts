@@ -34,7 +34,7 @@ const BODY = Type.Object({
   authorizationPath: Type.String(),
   artifactKey: Type.String(),
   publish: Type.Boolean(),
-  observations: Type.Optional(Type.Array(OBSERVATION)),
+  observations: Type.Array(OBSERVATION),
 });
 
 type ReviewerPublication = {
@@ -51,7 +51,7 @@ type ReviewerPublication = {
   authorizationPath: string;
   artifactKey: string;
   publish: boolean;
-  observations?: readonly Observation[];
+  observations: readonly Observation[];
 };
 
 type Observation = {
@@ -118,6 +118,7 @@ export default function registerReviewerTools(pi: ExtensionAPI): void {
       if (input.body.trim().length < 32 || /^<!-- FORGE:/m.test(input.body)) {
         throw new Error("Reviewer body must contain substantive sections without a generated marker");
       }
+      if (input.observations === undefined) throw new Error("Reviewer observations array is required; use [] for a clean report");
       const observations = validateObservations(input.role, input.observations);
       const bodyPath = validatePath(input.bodyPath, "Reviewer body path");
       const reportPath = validatePath(input.reportPath, "Reviewer report path");
