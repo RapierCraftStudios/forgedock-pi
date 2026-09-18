@@ -13,10 +13,11 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 const statePath = process.env.FAKE_ADJUDICATION_STATE;
 const state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : {};
 const args = process.argv.slice(2);
+state.calls = [...(state.calls ?? []), args];
 const output = (value, code = 0) => { writeFileSync(statePath, JSON.stringify(state)); process.stdout.write(JSON.stringify(value)); process.exit(code); };
 if (args[0] === "pr" && args[1] === "view") output(state.pull);
 if (args[0] !== "api") process.exit(2);
-const endpoint = args.find((value) => value.startsWith("repos/")) ?? "";
+const endpoint = args.find((value) => value.startsWith("repos/") || value.startsWith("search/")) ?? "";
 const methodIndex = args.indexOf("--method");
 const method = methodIndex >= 0 ? args[methodIndex + 1] : "GET";
 if (endpoint.includes("/issues/7/comments")) {
@@ -35,6 +36,11 @@ if (endpoint.includes("/issues/comments/")) {
   const comment = (state.comments ?? []).find((entry) => entry.id === id);
   if (!comment) process.exit(1);
   output(comment);
+}
+if (endpoint.startsWith("search/issues?")) {
+  const query = decodeURIComponent(endpoint.split("?q=")[1]?.split("&")[0] ?? "").toLowerCase();
+  const items = (state.issues ?? []).filter((issue) => /backup|receipt|storage/.test((issue.title + " " + issue.body).toLowerCase()) || query.includes("unrelated"));
+  output({ items });
 }
 if (endpoint.includes("/issues?")) output([state.issues ?? []]);
 if (endpoint.endsWith("/issues") && method === "POST") {
@@ -230,7 +236,26 @@ test("parent rejects a PASS that leaves a current-stage blocker unresolved", asy
   }
 });
 
-test("a fresh attempt cannot silently omit an applicable observation", async () => {
+test("a fresh attempt carries prior concern disposition instead of relying on role omission", async () => {
+  const f = await fixture(false);
+  try {
+    const inputPath = join(f.reviewRoot, "adjudication.json.input");
+    const input = inputFor(f, false, false);
+    input.priorConcerns = ["Prior attempt C0: unresolved backup proof was reviewed and explicitly REJECTED/NOT APPLICABLE for this current standard stage because no current-stage acceptance criterion requires it."];
+    input.decisions[0]!.sourceObservationIds = ["correctness:F1", "security:F1"];
+    await writeFile(inputPath, JSON.stringify(input));
+    const result = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
+    const artifact = JSON.parse(await readFile(result.decisionPath, "utf8"));
+    assert.match(artifact.gateBody, /Prior attempt C0/);
+    assert.match(artifact.gateBody, /REJECTED\/NOT APPLICABLE/);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.reviewRoot, { recursive: true, force: true });
+  }
+});
+
+test("current attempt rejects omission of a selected role observation", async () => {
   const f = await fixture(false);
   try {
     const inputPath = join(f.reviewRoot, "adjudication.json.input");
@@ -278,7 +303,43 @@ test("parent reuses an existing issue for an accepted obligation", async () => {
     const result = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
     assert.equal(result.tracking.C1.status, "existing");
     assert.equal(result.tracking.C1.issue.number, 33781);
+    const decisionArtifact = JSON.parse(await readFile(result.decisionPath, "utf8"));
+    assert.match(decisionArtifact.gateBody, /\[#33781\]\(https:\/\/github.com\/example\/product\/issues\/33781\)/);
+    assert.match(decisionArtifact.gateBody, /existing tracking/);
     assert.equal(JSON.parse(await readFile(f.statePath, "utf8")).issues.length, 1);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.reviewRoot, { recursive: true, force: true });
+  }
+});
+
+test("one review root supports pending recovery, explicit revisions, and idempotent repeat", async () => {
+  const f = await fixture(true);
+  try {
+    const pendingPath = join(f.reviewRoot, "pending-input.json");
+    const pending = inputFor(f, true, false);
+    pending.revision = 0;
+    await writeFile(pendingPath, JSON.stringify(pending));
+    const pendingResult = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", pendingPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
+    assert.equal(pendingResult.trackingPublication, "pending");
+    assert.ok(pendingResult.panelUrl);
+    const recoveredState = JSON.parse(await readFile(f.statePath, "utf8"));
+    recoveredState.issuePostFails = false;
+    await writeFile(f.statePath, JSON.stringify(recoveredState));
+    const recoveredPath = join(f.reviewRoot, "recovered-input.json");
+    const recovered = inputFor(f, true, true);
+    recovered.revision = 1;
+    recovered.supersedes = pendingResult.panelUrl;
+    await writeFile(recoveredPath, JSON.stringify(recovered));
+    const recoveredResult = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", recoveredPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
+    assert.equal(recoveredResult.trackingPublication, "complete");
+    assert.equal(recoveredResult.tracking.C1.status, "created");
+    const afterRecovery = JSON.parse(await readFile(f.statePath, "utf8"));
+    const commentCount = afterRecovery.comments.length;
+    const repeated = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", recoveredPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
+    assert.equal(repeated.tracking.C1.status, "reused");
+    assert.equal(JSON.parse(await readFile(f.statePath, "utf8")).comments.length, commentCount);
   } finally {
     await rm(f.root, { recursive: true, force: true });
     await rm(f.bin, { recursive: true, force: true });
@@ -289,6 +350,9 @@ test("parent reuses an existing issue for an accepted obligation", async () => {
 test("authorized follow-up issue creation reconciles an ambiguous response once", async () => {
   const f = await fixture(true);
   try {
+    const stateWithHistory = JSON.parse(await readFile(f.statePath, "utf8"));
+    stateWithHistory.issues = Array.from({ length: 80 }, (_, index) => ({ number: 500 + index, title: `Unrelated history ${index}`, body: "An unrelated repository concern.", state: index % 2 ? "closed" : "open", labels: [], html_url: `https://github.com/example/product/issues/${500 + index}` }));
+    await writeFile(f.statePath, JSON.stringify(stateWithHistory));
     const inputPath = join(f.reviewRoot, "adjudication.json.input");
     const input = inputFor(f, true, true);
     await writeFile(inputPath, JSON.stringify(input));
@@ -298,8 +362,11 @@ test("authorized follow-up issue creation reconciles an ambiguous response once"
     assert.equal(result.tracking.C1.status, "reused");
     assert.equal(result.tracking.C1.issue.number, 401);
     const state = JSON.parse(await readFile(f.statePath, "utf8"));
-    assert.equal(state.issues.length, 1);
+    assert.equal(state.issues.length, 81);
     assert.ok(state.comments.length >= 3);
+    const issueLookups = state.calls.filter((args: string[]) => args.some((arg) => arg.startsWith("search/issues?")));
+    assert.ok(issueLookups.length <= 4);
+    assert.equal(state.calls.some((args: string[]) => args.some((arg) => arg.includes("issues?state=all"))), false);
     const discovered = JSON.parse((await execFileAsync("node", [helper, "discover", "--repo", "example/product", "--pr", "7", "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
     const panel = discovered.records.filter((record: any) => record.kind === "REVIEW-PANEL").at(-1);
     assert.ok(panel);

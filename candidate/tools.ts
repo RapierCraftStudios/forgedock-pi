@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -70,6 +70,7 @@ const TRACKING_DRAFT = Type.Object({
   stage: Type.String({ minLength: 1 }),
   sourceLinks: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
   labels: Type.Optional(Type.Array(Type.String({ pattern: "^[A-Za-z0-9_.:-]+$" }))),
+  linkedIssueNumbers: Type.Optional(Type.Array(Type.Integer({ minimum: 1 }), { minItems: 1 })),
 });
 const ADJUDICATION_INPUT = Type.Object({
   repository: REPOSITORY,
@@ -115,6 +116,7 @@ const ADJUDICATION_INPUT = Type.Object({
   allowIssueWrites: Type.Boolean(),
   supersedes: Type.Optional(Type.String({ minLength: 1 })),
   round: Type.Optional(Type.Integer({ minimum: 0 })),
+  revision: Type.Optional(Type.Integer({ minimum: 0 })),
   publish: Type.Boolean(),
 });
 const TRACKING_SEARCH_INPUT = Type.Object({
@@ -141,6 +143,7 @@ const RECORD_INPUT = Type.Object({
   artifactKey: Type.Optional(Type.String({ minLength: 1 })),
   supersedes: Type.Optional(Type.String({ minLength: 1 })),
   adjudicationPath: Type.Optional(Type.String({ minLength: 1 })),
+  preReviewInfrastructure: Type.Optional(Type.Boolean()),
   publish: Type.Boolean(),
 });
 
@@ -159,6 +162,7 @@ type RecordInput = {
   artifactKey?: string;
   supersedes?: string;
   adjudicationPath?: string;
+  preReviewInfrastructure?: boolean;
   publish: boolean;
 };
 
@@ -188,6 +192,16 @@ function artifactFile(root: string, requested: string, label: string): string {
   const distance = relative(canonicalRoot, file);
   if (!distance || distance === ".." || distance.startsWith("../")) throw new Error(`${label} must remain under the prepared review artifact root`);
   return file;
+}
+
+async function revisionedJsonFile(root: string, prefix: string, revision: number, value: unknown): Promise<string> {
+  const content = `${JSON.stringify(value, null, 2)}\n`;
+  const fingerprint = digest(JSON.stringify(value)).slice(0, 12);
+  const fileName = `${prefix}-r${revision}-${fingerprint}.json`;
+  const entries = await readdir(root);
+  const priorRevisions = entries.map((entry) => entry.match(new RegExp(`^${prefix}-r([0-9]+)-`))?.[1]).filter((value): value is string => value !== undefined).map(Number);
+  if (!entries.includes(fileName) && priorRevisions.some((value) => value >= revision)) throw new Error(`${prefix} revision ${revision} must advance the existing review artifact revision`);
+  return stableJsonFile(join(root, fileName), JSON.parse(content));
 }
 
 async function stableJsonFile(path: string, value: unknown): Promise<string> {
@@ -522,7 +536,8 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       const input = params as { repository: string; pullRequest: number; head: string; concernId: string; draft: Record<string, unknown>; reviewRoot: string; artifactKey: string };
       const review = await preparedReview(input.reviewRoot, input.artifactKey);
       if (review.repository !== input.repository || review.pullRequest !== input.pullRequest || review.head !== input.head) throw new Error("Tracking search does not match the prepared frozen review");
-      const inputPath = join(resolve(input.reviewRoot), "tracking-search.json");
+      const concern = input.concernId.replace(/[^A-Za-z0-9_.-]/g, "-");
+      const inputPath = join(resolve(input.reviewRoot), `tracking-search-${concern}-${digest(JSON.stringify(input)).slice(0, 12)}.json`);
       await stableJsonFile(inputPath, input);
       const result = await pi.exec("node", [helperPath(), "review-issues", "--input", inputPath, "--cwd", String(review.configRoot ?? review.sourceRoot)], { timeout: 120_000 });
       if (result.code !== 0) throw new Error(`Review tracking search failed: ${bounded(result.stderr)}`);
@@ -539,8 +554,9 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       const input = params as Record<string, unknown>;
       const review = await preparedReview(String(input.reviewRoot), String(input.artifactKey));
       if (review.repository !== input.repository || review.pullRequest !== input.pullRequest || review.head !== input.head || review.baseRef !== input.baseRef || review.baseSha !== input.baseSha || review.publish !== input.publish) throw new Error("Adjudication does not match the prepared frozen review");
-      const inputPath = join(resolve(String(input.reviewRoot)), "adjudication-input.json");
-      await stableJsonFile(inputPath, input);
+      const revision = Number(input.revision ?? 0);
+      if (!Number.isSafeInteger(revision) || revision < 0) throw new Error("Adjudication revision must be a non-negative integer");
+      const inputPath = await revisionedJsonFile(resolve(String(input.reviewRoot)), "adjudication-input", revision, input);
       const result = await pi.exec("node", [helperPath(), "record", "adjudication", "--input", inputPath, "--cwd", String(review.configRoot ?? review.sourceRoot)], { timeout: 120_000 });
       if (result.code !== 0) throw new Error(`Parent adjudication failed: ${bounded(result.stderr)}`);
       const output = result.stdout.trim();
@@ -559,6 +575,8 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       const input = params as RecordInput;
       if ((input.issue === undefined) === (input.pullRequest === undefined)) throw new Error("Record needs exactly one issue or pull request destination");
       if (input.kind !== "STAGING_GATE") throw new Error("The staging publication tool only publishes STAGING_GATE records");
+      if (input.gate === "PASS" && !input.adjudicationPath) throw new Error("PASS requires the completed parent adjudication artifact");
+      if (input.gate === "FAIL" && !input.adjudicationPath && input.preReviewInfrastructure !== true) throw new Error("A completed review gate requires parent adjudication; mark only a pre-review infrastructure failure explicitly");
       if (!input.reviewRoot || !input.artifactKey || !input.head || !input.baseRef || !input.baseSha || !input.gate || input.pullRequest === undefined) throw new Error("Staging gate publication requires its prepared review authorization");
       const review = await preparedReview(input.reviewRoot, input.artifactKey);
       if (review.repository !== input.repository || review.pullRequest !== input.pullRequest || review.head !== input.head || review.baseRef !== input.baseRef || review.baseSha !== input.baseSha || review.publish !== input.publish) throw new Error("Staging gate does not match the prepared frozen review");
@@ -570,7 +588,12 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
         const adjudicationPath = artifactFile(String(input.reviewRoot), input.adjudicationPath, "adjudication artifact");
         adjudication = JSON.parse(await readFile(adjudicationPath, "utf8")) as Record<string, unknown>;
         if (adjudication.schema !== "forgedock.candidate-adjudication/v1" || adjudication.artifactKey !== input.artifactKey || adjudication.repository !== input.repository || adjudication.pullRequest !== input.pullRequest || adjudication.head !== input.head || adjudication.baseRef !== input.baseRef || adjudication.baseSha !== input.baseSha || adjudication.gate !== input.gate) throw new Error("Gate does not match the parent adjudication artifact");
-        if (input.publish && adjudication.panelUrl === null) throw new Error("Published gate requires a published parent adjudication");
+        const roles = Array.isArray(review.roles) ? review.roles : [];
+        const adjudicatedRoles = Array.isArray(adjudication.roles) ? adjudication.roles : [];
+        if (!Array.isArray(adjudication.reports) || adjudicatedRoles.length !== roles.length || !roles.every((role) => adjudicatedRoles.includes(role)) || !Array.isArray(adjudication.decisions) || typeof adjudication.verdict !== "string") throw new Error("Gate requires a completed parent panel decision");
+        if (input.gate === "PASS" && !["APPROVE", "APPROVE_WITH_FOLLOW_UP"].includes(String(adjudication.verdict))) throw new Error("PASS requires an approving parent adjudication");
+        if (input.gate === "PASS" && adjudication.decisions.some((decision: any) => decision.disposition === "IMMEDIATE REPAIR" || decision.blocksCurrentStage === true)) throw new Error("PASS cannot coexist with unresolved parent adjudication blockers");
+        if (input.publish && typeof adjudication.panelUrl !== "string") throw new Error("Published gate requires a published parent adjudication");
         body = String(adjudication.gateBody ?? "");
         if (body.length < 8) throw new Error("Parent adjudication artifact has no rendered gate body");
       }

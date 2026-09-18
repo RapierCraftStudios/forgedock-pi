@@ -64,7 +64,7 @@ test("staging publication requires prepared reviewer and check evidence", async 
     const policy = { schema: "forgedock.candidate-pr-policy/v1", repository: "example/product", pullRequest: 7, identity: { head, baseRef: "main", baseSha }, configuration: { verificationCommands: { test: "npm test" } }, policy: { evaluatedRequiredChecks: { status: "available", exitCode: 0, data: [{ name: "CI", state: "SUCCESS", bucket: "pass" }] }, requirements: { applicability: "known-required", requiredNames: ["CI"], observedNames: ["CI"], missingRequiredNames: [] } } };
     await writeFile(join(root, "policy.json"), JSON.stringify({ schema: "forgedock.candidate-policy/v1", artifactKey: key, repository: "example/product", pullRequest: 7, head, baseRef: "main", baseSha, prepared: policy, current: policy, refreshedAt: null }));
     const adjudicationPath = join(root, "adjudication.json");
-    await writeFile(adjudicationPath, JSON.stringify({ schema: "forgedock.candidate-adjudication/v1", artifactKey: key, repository: "example/product", pullRequest: 7, head, baseRef: "main", baseSha, gate: "PASS", panelUrl: null, trackingPublication: "complete", gateBody: "FORGE:STAGING_GATE:PASS\\n\\n## REVIEW-PANEL\\nAll selected reports and parent decisions are accounted for." }));
+    await writeFile(adjudicationPath, JSON.stringify({ schema: "forgedock.candidate-adjudication/v1", artifactKey: key, repository: "example/product", pullRequest: 7, head, baseRef: "main", baseSha, gate: "PASS", roles: ["correctness"], reports: [{ role: "correctness" }], decisions: [], verdict: "APPROVE", panelUrl: null, trackingPublication: "complete", gateBody: "FORGE:STAGING_GATE:PASS\\n\\n## REVIEW-PANEL\\nAll selected reports and parent decisions are accounted for." }));
 
     const tools = new Map<string, { execute: (id: string, params: unknown) => Promise<unknown> }>();
     const fakePi = {
@@ -91,6 +91,28 @@ test("staging publication requires prepared reviewer and check evidence", async 
     });
     assert.ok(result);
     await assert.rejects(
+      tool.execute("missing-adjudication", {
+        repository: "example/product",
+        pullRequest: 7,
+        kind: "STAGING_GATE",
+        head,
+        baseRef: "main",
+        baseSha,
+        gate: "PASS",
+        checks: ["test"],
+        reviewRoot: root,
+        artifactKey: key,
+        body: "placeholder body.",
+        publish: false,
+      }),
+      /PASS requires the completed parent adjudication artifact/,
+    );
+    const infrastructureFailure = await tool.execute("pre-review-infrastructure", {
+      repository: "example/product", pullRequest: 7, kind: "STAGING_GATE", head, baseRef: "main", baseSha,
+      gate: "FAIL", checks: [], reviewRoot: root, artifactKey: key, body: "Pre-review policy collection failed before a panel could complete.", preReviewInfrastructure: true, publish: false,
+    });
+    assert.equal((infrastructureFailure as { details: { publication: string } }).details.publication, "saved");
+    await assert.rejects(
       tool.execute("missing-local", {
         repository: "example/product",
         pullRequest: 7,
@@ -102,7 +124,8 @@ test("staging publication requires prepared reviewer and check evidence", async 
         checks: [],
         reviewRoot: root,
         artifactKey: key,
-        body: "FORGE:STAGING_GATE:PASS\nMissing local receipt must remain unsatisfied.",
+        adjudicationPath,
+        body: "placeholder body.",
         publish: false,
       }),
       /local verification receipts are missing/,

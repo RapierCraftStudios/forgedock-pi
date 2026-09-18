@@ -1320,10 +1320,23 @@ function reviewIssueFingerprint(repository, pullRequest, decision) {
   return `sha256:${sha256(value)}`;
 }
 
-function allGithubIssues(repository, cwd) {
-  const pages = readJsonFromText(exec("gh", ["api", "--paginate", "--slurp", `repos/${repository}/issues?state=all&per_page=100`], { cwd, timeout: 120_000 }));
-  if (!Array.isArray(pages)) fail("GitHub issue search returned an unexpected shape");
-  return pages.flatMap((page) => Array.isArray(page) ? page : []).filter((issue) => !issue?.pull_request);
+function boundedGithubIssueLookup(repository, cwd, draft, directIssueNumbers = [], includeClosed = true) {
+  const found = new Map();
+  for (const number of [...new Set(directIssueNumbers)].slice(0, 8)) {
+    const result = tryExec("gh", ["api", `repos/${repository}/issues/${number}`], { cwd, timeout: 120_000 });
+    if (result.exitCode !== 0 || !result.stdout) continue;
+    try { found.set(Number(number), JSON.parse(result.stdout)); } catch { /* malformed direct candidates are ignored */ }
+  }
+  const tokens = `${draft.problem} ${draft.rootCause} ${(draft.affectedFiles ?? []).join(" ")}`.toLowerCase().split(/[^a-z0-9_.-]+/).filter((token) => token.length >= 5).slice(0, 4);
+  const queryTerms = tokens.length > 0 ? tokens.map((token) => `"${token}"`).join(" ") : "review follow-up";
+  const states = includeClosed ? ["open", "closed"] : ["open"];
+  for (const state of states) {
+    const query = `repo:${repository} ${queryTerms} state:${state}`;
+    const result = readJsonFromText(exec("gh", ["api", `search/issues?q=${encodeURIComponent(query)}&per_page=20&page=1`], { cwd, timeout: 120_000 }));
+    const items = Array.isArray(result) ? result : Array.isArray(result?.items) ? result.items : [];
+    for (const item of items.slice(0, 20)) if (!item?.pull_request && Number.isSafeInteger(Number(item?.number))) found.set(Number(item.number), item);
+  }
+  return [...found.values()];
 }
 
 function normalizeGithubIssue(issue) {
@@ -1337,11 +1350,11 @@ function normalizeGithubIssue(issue) {
   };
 }
 
-function reviewIssueMatches(repository, pullRequest, head, concernId, draft, cwd) {
+function reviewIssueMatches(repository, pullRequest, head, concernId, draft, cwd, directIssueNumbers = [], includeClosed = true) {
   const marker = reviewIssueMarker(repository, pullRequest, head, concernId);
   const fingerprint = reviewIssueFingerprint(repository, pullRequest, { id: concernId, summary: draft.problem, affectedFiles: draft.affectedFiles });
   const tokens = `${draft.problem} ${draft.rootCause} ${(draft.affectedFiles ?? []).join(" ")}`.toLowerCase().split(/[^a-z0-9_.-]+/).filter((token) => token.length >= 5).slice(0, 12);
-  return allGithubIssues(repository, cwd).map(normalizeGithubIssue).map((issue) => {
+  return boundedGithubIssueLookup(repository, cwd, draft, directIssueNumbers, includeClosed).map(normalizeGithubIssue).map((issue) => {
     const text = `${issue.title}\n${issue.body}`.toLowerCase();
     const exact = issue.body.includes(marker) || issue.body.includes(`<!-- FORGE:REVIEW_FOLLOW_UP_FINGERPRINT ${fingerprint} -->`);
     const pathHit = (draft.affectedFiles ?? []).some((path) => text.includes(String(path).toLowerCase()));
@@ -1357,6 +1370,7 @@ function reviewIssueDraft(value, label) {
   const affectedFiles = Array.isArray(draft.affectedFiles) ? draft.affectedFiles.map((entry, index) => stringValue(entry, `${label}.affectedFiles[${index}]`)) : fail(`${label}.affectedFiles must be an array`);
   const evidence = Array.isArray(draft.evidence) ? draft.evidence.map((entry, index) => stringValue(entry, `${label}.evidence[${index}]`)) : fail(`${label}.evidence must be an array`);
   const sourceLinks = Array.isArray(draft.sourceLinks) ? draft.sourceLinks.map((entry, index) => safeHttpsUrl(entry, `${label}.sourceLinks[${index}]`)) : [];
+  const linkedIssueNumbers = Array.isArray(draft.linkedIssueNumbers) ? draft.linkedIssueNumbers.map((entry, index) => integer(Number(entry), `${label}.linkedIssueNumbers[${index}]`)) : [];
   if (acceptanceCriteria.length === 0 || affectedFiles.length === 0 || evidence.length === 0) fail(`${label} needs affected files, evidence, and acceptance criteria`);
   return {
     title: stringValue(draft.title, `${label}.title`).slice(0, 240),
@@ -1369,6 +1383,7 @@ function reviewIssueDraft(value, label) {
     stage: stringValue(draft.stage ?? "follow-up", `${label}.stage`),
     sourceLinks,
     labels,
+    linkedIssueNumbers,
   };
 }
 
@@ -1417,12 +1432,12 @@ function verifyReviewIssue(repository, number, expectedUrl, cwd) {
 }
 
 function publishReviewIssue(input) {
-  const matches = reviewIssueMatches(input.repository, input.pullRequest, input.head, input.concernId, input.draft, input.cwd);
+  const matches = reviewIssueMatches(input.repository, input.pullRequest, input.head, input.concernId, input.draft, input.cwd, input.draft.linkedIssueNumbers, true);
   const exact = matches.filter((issue) => issue.match === "exact");
   if (exact.length > 1) fail(`Multiple review follow-up issues match ${input.concernId}; reconcile explicitly`);
   if (exact.length === 1) return { status: "reused", issue: exact[0], marker: input.marker, fingerprint: input.fingerprint };
   const body = renderReviewIssueBody(input);
-  const bodyName = `${input.concernId.replace(/[^A-Za-z0-9_.-]/g, "-")}${input.parentDecisionUrl ? "-parent" : ""}.md`;
+  const bodyName = `${input.concernId.replace(/[^A-Za-z0-9_.-]/g, "-")}-r${input.revision ?? 0}${input.parentDecisionUrl ? "-parent" : ""}.md`;
   const bodyPath = writeExclusive(join(input.reviewRoot, "tracking", bodyName), body);
   if (!input.allowIssueWrites || !input.publish) return { status: "pending", issue: undefined, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, error: input.allowIssueWrites ? "publication disabled" : "explicit issue-write permission was not granted" };
   const args = ["gh", "api", `repos/${input.repository}/issues`, "--method", "POST", "-F", `title=${input.draft.title}`, "-F", `body=@${bodyPath}`];
@@ -1433,7 +1448,7 @@ function publishReviewIssue(input) {
     if (readBack.title !== input.draft.title || readBack.body !== body || input.draft.labels.some((label) => !readBack.labels.includes(label))) fail(`Review follow-up issue #${created.number} readback differs from saved draft`);
     return { status: "created", issue: readBack, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, reconciliation: "created" };
   } catch (error) {
-    const recovered = reviewIssueMatches(input.repository, input.pullRequest, input.head, input.concernId, input.draft, input.cwd).filter((issue) => issue.match === "exact");
+    const recovered = reviewIssueMatches(input.repository, input.pullRequest, input.head, input.concernId, input.draft, input.cwd, input.draft.linkedIssueNumbers, true).filter((issue) => issue.match === "exact");
     if (recovered.length === 1 && input.draft.labels.every((label) => recovered[0].labels.includes(label))) return { status: "reused", issue: recovered[0], marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, reconciliation: "ambiguous-create-reconciled" };
     return { status: "pending", issue: undefined, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, error: error instanceof Error ? error.message : String(error) };
   }
@@ -1503,6 +1518,8 @@ function validateAdjudication(input, review, reports) {
   }
   const verdict = stringValue(input.verdict, "adjudication verdict");
   if (!["APPROVE", "APPROVE_WITH_FOLLOW_UP", "CHANGES_REQUESTED", "GATED"].includes(verdict)) fail("Unsupported adjudication verdict");
+  const acceptedRepairs = normalized.filter((decision) => decision.disposition === "IMMEDIATE REPAIR");
+  if (acceptedRepairs.length > 0 && (input.gate === "PASS" || verdict === "APPROVE" || verdict === "APPROVE_WITH_FOLLOW_UP")) fail(`Accepted immediate repairs remain unresolved: ${acceptedRepairs.map((decision) => decision.id).join(", ")}`);
   if (verdict === "APPROVE" && normalized.some((decision) => decision.disposition === "NON-BLOCKING FOLLOW-UP")) fail("APPROVE must use APPROVE_WITH_FOLLOW_UP when a follow-up remains");
   if (verdict === "APPROVE_WITH_FOLLOW_UP" && !normalized.some((decision) => decision.disposition === "NON-BLOCKING FOLLOW-UP")) fail("APPROVE_WITH_FOLLOW_UP needs a follow-up disposition");
   if (verdict === "CHANGES_REQUESTED" && !normalized.some((decision) => decision.disposition === "IMMEDIATE REPAIR")) fail("CHANGES_REQUESTED needs an immediate-repair disposition");
@@ -1510,7 +1527,8 @@ function validateAdjudication(input, review, reports) {
 }
 
 function trackingLabel(result) {
-  if (result.status === "created" || result.status === "reused") return result.issue?.url ? `[#${result.issue.number}](${result.issue.url}) (${result.status})` : `${result.status} issue #${result.issue?.number}`;
+  if (result.status === "existing" || result.status === "source-issue") return result.issue?.url ? `[#${result.issue.number}](${result.issue.url}) (${result.status === "source-issue" ? "source issue" : "existing tracking"})` : `${result.status} issue #${result.issue?.number}`;
+  if (result.status === "created" || result.status === "reused") return result.issue?.url ? `[#${result.issue.number}](${result.issue.url}) (follow-up issue)` : `follow-up issue #${result.issue?.number}`;
   if (result.status === "pending") return `PENDING (${result.error ?? "publication not authorized"})${result.draftPath ? ` — draft: ${result.draftPath}` : ""}`;
   return "none required";
 }
@@ -1566,6 +1584,7 @@ function recordAdjudication(options) {
   const repository = stringValue(input.repository, "adjudication repository", /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/);
   const cwd = resolve(requiredOption(options, "cwd"));
   const publish = input.publish === true;
+  const revision = input.revision === undefined ? 0 : integer(Number(input.revision), "adjudication revision", 0);
   if (review.schema !== "forgedock.candidate-review/v1" || review.artifactRoot !== reviewRoot || review.artifactKey !== input.artifactKey) fail("Adjudication is not bound to the prepared review artifact");
   const config = recordConfig(cwd, repository);
   const cache = new Map();
@@ -1585,41 +1604,49 @@ function recordAdjudication(options) {
     const draft = reviewIssueDraft(request.draft, `${decision.id}.tracking.draft`);
     const marker = reviewIssueMarker(repository, Number(input.pullRequest), input.head, decision.id);
     const fingerprint = reviewIssueFingerprint(repository, Number(input.pullRequest), { id: decision.id, summary: draft.problem, affectedFiles: draft.affectedFiles });
-    const draftInput = { repository, pullRequest: Number(input.pullRequest), head: input.head, concernId: decision.id, draft, marker, fingerprint, reviewRoot, cwd, publish: false, allowIssueWrites: false };
-    const bodyPath = writeExclusive(join(reviewRoot, "tracking", `${decision.id.replace(/[^A-Za-z0-9_.-]/g, "-")}.md`), renderReviewIssueBody({ ...draftInput, parentDecisionUrl: undefined }));
+    const draftInput = { repository, pullRequest: Number(input.pullRequest), head: input.head, concernId: decision.id, draft, marker, fingerprint, reviewRoot, cwd, revision, publish: false, allowIssueWrites: false };
+    const bodyPath = writeExclusive(join(reviewRoot, "tracking", `${decision.id.replace(/[^A-Za-z0-9_.-]/g, "-")}-r${revision}.md`), renderReviewIssueBody({ ...draftInput, parentDecisionUrl: undefined }));
     tracking[decision.id] = { status: "pending", draftPath: bodyPath, error: request.status === "pending" ? "parent marked tracking pending" : "awaiting adjudication publication" };
   }
   const provisionalBody = renderAdjudicationBody(input, review, reports, validated.decisions, tracking, undefined);
-  const provisionalBodyPath = writeExclusive(join(reviewRoot, "review-panel.provisional.md"), provisionalBody);
-  const baseEntry = { kind: "REVIEW-PANEL", pullRequest: Number(input.pullRequest), head: input.head, baseRef: input.baseRef, baseSha: input.baseSha, mode: input.mode, attempt: review.artifactKey, round: Number.isSafeInteger(input.round) ? input.round : 0, bodyFile: provisionalBodyPath, reviewerReports, supersedes: input.supersedes };
+  const provisionalBodyPath = writeExclusive(join(reviewRoot, `review-panel.provisional-r${revision}.md`), provisionalBody);
+  const baseEntry = { kind: "REVIEW-PANEL", pullRequest: Number(input.pullRequest), head: input.head, baseRef: input.baseRef, baseSha: input.baseSha, mode: input.mode, attempt: review.artifactKey, revision, round: Number.isSafeInteger(input.round) ? input.round : 0, bodyFile: provisionalBodyPath, reviewerReports, supersedes: input.supersedes };
   const provisionalRecord = durableRecord(baseEntry, repository, undefined, Number(input.pullRequest), cwd, new Map(), cache, publish, config);
-  writeExclusive(join(reviewRoot, "review-panel.provisional.record.md"), provisionalRecord.markdown);
-  const provisionalPublication = publish ? publishDurableRecord({ ...provisionalRecord, bodyFile: join(reviewRoot, "review-panel.provisional.record.md") }, cwd, cache) : { id: null, url: null, reconciliation: "saved" };
+  const provisionalRecordPath = join(reviewRoot, `review-panel.provisional-r${revision}.record.md`);
+  writeExclusive(provisionalRecordPath, provisionalRecord.markdown);
+  const provisionalPublication = publish ? publishDurableRecord({ ...provisionalRecord, bodyFile: provisionalRecordPath }, cwd, cache) : { id: null, url: null, reconciliation: "saved" };
   for (const decision of validated.decisions) {
     const request = decision.tracking;
     if (request.status !== "new") continue;
     const draft = reviewIssueDraft(request.draft, `${decision.id}.tracking.draft`);
     const marker = reviewIssueMarker(repository, Number(input.pullRequest), input.head, decision.id);
     const fingerprint = reviewIssueFingerprint(repository, Number(input.pullRequest), { id: decision.id, summary: draft.problem, affectedFiles: draft.affectedFiles });
-    tracking[decision.id] = publishReviewIssue({ repository, pullRequest: Number(input.pullRequest), head: input.head, concernId: decision.id, draft, marker, fingerprint, reviewRoot, cwd, publish, allowIssueWrites: input.allowIssueWrites === true, parentDecisionUrl: provisionalPublication.url });
+    tracking[decision.id] = publishReviewIssue({ repository, pullRequest: Number(input.pullRequest), head: input.head, concernId: decision.id, draft, marker, fingerprint, reviewRoot, cwd, revision, publish, allowIssueWrites: input.allowIssueWrites === true, parentDecisionUrl: provisionalPublication.url });
   }
   const finalBody = renderAdjudicationBody(input, review, reports, validated.decisions, tracking, provisionalPublication.url);
   const changed = finalBody !== provisionalBody;
   let finalRecord = provisionalRecord;
   let finalPublication = provisionalPublication;
   if (changed && publish && provisionalPublication.url) {
-    const finalBodyPath = writeExclusive(join(reviewRoot, "review-panel.final.md"), finalBody);
+    const finalBodyPath = writeExclusive(join(reviewRoot, `review-panel.final-r${revision}.md`), finalBody);
     finalRecord = durableRecord({ ...baseEntry, bodyFile: finalBodyPath, supersedes: provisionalPublication.url }, repository, undefined, Number(input.pullRequest), cwd, new Map(), cache, publish, config);
-    writeExclusive(join(reviewRoot, "review-panel.final.record.md"), finalRecord.markdown);
-    finalPublication = publishDurableRecord({ ...finalRecord, bodyFile: join(reviewRoot, "review-panel.final.record.md") }, cwd, cache);
+    const finalRecordPath = join(reviewRoot, `review-panel.final-r${revision}.record.md`);
+    writeExclusive(finalRecordPath, finalRecord.markdown);
+    finalPublication = publishDurableRecord({ ...finalRecord, bodyFile: finalRecordPath }, cwd, cache);
   } else if (changed) {
-    const finalBodyPath = writeExclusive(join(reviewRoot, "review-panel.final.md"), finalBody);
+    const finalBodyPath = writeExclusive(join(reviewRoot, `review-panel.final-r${revision}.md`), finalBody);
     finalRecord = durableRecord({ ...baseEntry, bodyFile: finalBodyPath }, repository, undefined, Number(input.pullRequest), cwd, new Map(), cache, publish, config);
-    writeExclusive(join(reviewRoot, "review-panel.final.record.md"), finalRecord.markdown);
+    writeExclusive(join(reviewRoot, `review-panel.final-r${revision}.record.md`), finalRecord.markdown);
   }
-  const decisionPath = join(reviewRoot, "adjudication.json");
+  const decisionPath = join(reviewRoot, `adjudication-r${revision}.json`);
   const gateBody = `FORGE:STAGING_GATE:${input.gate}\n\n${finalBody}\n\n## Gate\n\n**Gate**: ${input.gate}\n**Next action**: ${String(input.nextAction ?? "No further action recorded.").trim()}\n`;
-  const artifact = { schema: "forgedock.candidate-adjudication/v1", artifactKey: review.artifactKey, repository, pullRequest: Number(input.pullRequest), head: input.head, baseRef: input.baseRef, baseSha: input.baseSha, mode: input.mode, verdict: validated.verdict, gate: input.gate, roles: review.roles, reports, decisions: validated.decisions, checks: validated.checks, tracking, panelUrl: finalPublication.url, supersededPanelUrl: provisionalPublication.url !== finalPublication.url ? provisionalPublication.url : null, gateBody, trackingPublication: Object.values(tracking).some((value) => value.status === "pending") ? "pending" : "complete" };
+  const stableTracking = Object.fromEntries(Object.entries(tracking).map(([id, value]) => {
+    const issue = value.issue ? { number: value.issue.number, title: value.issue.title, body: value.issue.body, state: value.issue.state, url: value.issue.url, labels: value.issue.labels } : undefined;
+    if (value.status === "created" || value.status === "reused") return [id, { status: "existing", issue }];
+    if (value.status === "existing" || value.status === "source-issue") return [id, { status: value.status, issue }];
+    return [id, { status: "pending", draftPath: value.draftPath, error: value.error }];
+  }));
+  const artifact = { schema: "forgedock.candidate-adjudication/v1", artifactKey: review.artifactKey, revision, repository, pullRequest: Number(input.pullRequest), head: input.head, baseRef: input.baseRef, baseSha: input.baseSha, mode: input.mode, verdict: validated.verdict, gate: input.gate, roles: review.roles, reports, decisions: validated.decisions, checks: validated.checks, tracking: stableTracking, panelUrl: finalPublication.url, supersededPanelUrl: provisionalPublication.url !== finalPublication.url ? provisionalPublication.url : null, gateBody, trackingPublication: Object.values(tracking).some((value) => value.status === "pending") ? "pending" : "complete" };
   writeExclusive(decisionPath, json(artifact));
   process.stdout.write(json({ schema: artifact.schema, decisionPath, panelUrl: finalPublication.url, provisionalPanelUrl: provisionalPublication.url, gate: input.gate, verdict: validated.verdict, tracking, gateBody, trackingPublication: artifact.trackingPublication, publication: publish ? "published" : "saved", reconciliation: finalPublication.reconciliation }));
 }
@@ -1632,7 +1659,7 @@ function reviewIssues(options) {
   const head = stringValue(input.head, "review issue head", FULL_SHA);
   const concernId = stringValue(input.concernId, "review issue concern", /^[A-Za-z][A-Za-z0-9_-]*:F[1-9][0-9]*$/);
   const draft = reviewIssueDraft(input.draft, "review issue draft");
-  const matches = reviewIssueMatches(repository, pullRequest, head, concernId, draft, cwd).map((issue) => ({ number: issue.number, title: issue.title, state: issue.state, url: issue.url, labels: issue.labels, match: issue.match }));
+  const matches = reviewIssueMatches(repository, pullRequest, head, concernId, draft, cwd, draft.linkedIssueNumbers, true).map((issue) => ({ number: issue.number, title: issue.title, state: issue.state, url: issue.url, labels: issue.labels, match: issue.match }));
   process.stdout.write(json({ schema: "forgedock.review-issue-search/v1", repository, pullRequest, head, concernId, matches }));
 }
 
