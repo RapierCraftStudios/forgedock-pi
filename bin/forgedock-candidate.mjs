@@ -826,7 +826,8 @@ function reviewerTask(review, config, role, out) {
     `Role rationale: ${review.rationale.find((item) => item.toLowerCase().includes(role)) ?? "Review the assigned boundary without duplicating unrelated roles."}`,
     "Trace changed behavior and relevant consumers. Require concrete observable evidence for every finding or a substantive no-findings conclusion. Do not treat source strings, generated JSON, or mocks as runtime proof.",
     `Prepare only the four report sections (Scope and decisions considered; Evidence and findings; Verification limitations; Recommendation) as the body string. Do not put an identity marker in that body.`,
-    `Call forge_publish_reviewer exactly once with repository=${review.repository}, pullRequest=${review.pullRequest}, head=${review.head}, baseRef=${review.baseRef}, baseSha=${review.baseSha}, role=${role}, bodyPath=${bodyPath}, reportPath=${reportPath}, reviewRoot=${out}, authorizationPath=${join(out, `${role}.authorization.json`)}, artifactKey=<read from ${join(out, `${role}.authorization.json`)}>, publish=${review.publish}. The tool writes the report and performs safe publication when requested.`,
+    "For every concrete observation, also provide one structured observations entry with an ID such as " + `${role}:F1` + ", kind code-defect, improvement, or verification-authority-prerequisite, affected behavior, optional path/policy location, evidence, trigger, consequence, why it belongs to this change, required stage, and your proposed disposition. Use an empty observations array for a clean report; do not invent findings to fill a template.",
+    `Call forge_publish_reviewer exactly once with repository=${review.repository}, pullRequest=${review.pullRequest}, head=${review.head}, baseRef=${review.baseRef}, baseSha=${review.baseSha}, role=${role}, bodyPath=${bodyPath}, reportPath=${reportPath}, reviewRoot=${out}, authorizationPath=${join(out, `${role}.authorization.json`)}, artifactKey=<read from ${join(out, `${role}.authorization.json`)}>, observations=<structured observations array>, publish=${review.publish}. The tool writes the report and performs safe publication when requested.`,
     "Publication is required when requested. If publication fails after analysis, preserve the saved report and return the publication error; do not rerun review. Never edit source, create issues, edit labels, merge, deploy, or initiate remediation.",
     `Return exactly one line: FORGE_REVIEW_RESULT role=${role} report=${reportPath} publication=published|saved|failed verdict=APPROVE|BLOCK|FOLLOW_UP`,
   ].join("\n");
@@ -981,6 +982,43 @@ function reviewerIdentityFromReport(body) {
   try { return JSON.parse(match[1]); } catch { fail("Reviewer report identity is not valid JSON"); }
 }
 
+function validateReviewObservations(value, role) {
+  if (!Array.isArray(value)) fail("Reviewer observations must be an array");
+  const seen = new Set();
+  return value.map((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) fail(`Reviewer observation ${index} is invalid`);
+    const observation = item;
+    const id = stringValue(observation.id, `Reviewer observation ${index} id`, /^[A-Za-z][A-Za-z0-9_-]*:F[1-9][0-9]*$/);
+    if (!id.startsWith(`${role}:`) || seen.has(id)) fail(`Reviewer observation ${id} is not unique to role ${role}`);
+    seen.add(id);
+    const kind = stringValue(observation.kind, `${id} kind`, /^(?:code-defect|improvement|verification-authority-prerequisite)$/);
+    const proposedDisposition = stringValue(observation.proposedDisposition, `${id} proposed disposition`, /^(?:IMMEDIATE REPAIR|NON-BLOCKING FOLLOW-UP|REJECTED\/NOT APPLICABLE|EVIDENCE\/AUTHORITY PREREQUISITE)$/);
+    const evidence = Array.isArray(observation.evidence) ? observation.evidence.map((entry, evidenceIndex) => stringValue(entry, `${id} evidence ${evidenceIndex}`)) : fail(`${id} evidence must be a non-empty array`);
+    if (evidence.length === 0) fail(`${id} evidence must be a non-empty array`);
+    return {
+      id,
+      kind,
+      summary: stringValue(observation.summary, `${id} summary`),
+      affectedBehavior: stringValue(observation.affectedBehavior, `${id} affected behavior`),
+      ...(observation.location === undefined ? {} : { location: stringValue(observation.location, `${id} location`) }),
+      evidence,
+      trigger: stringValue(observation.trigger, `${id} trigger`),
+      consequence: stringValue(observation.consequence, `${id} consequence`),
+      whyThisChange: stringValue(observation.whyThisChange, `${id} change relevance`),
+      stage: stringValue(observation.stage, `${id} stage`),
+      proposedDisposition,
+    };
+  });
+}
+
+function reviewObservationsFromReport(body, role) {
+  const line = body.replace(/\r\n?/g, "\n").split("\n").find((value) => value.startsWith("<!-- FORGE:REVIEW_OBSERVATIONS "));
+  if (!line) return [];
+  const match = line.match(/^<!-- FORGE:REVIEW_OBSERVATIONS (\[.*\]) -->$/);
+  if (!match) fail(`Reviewer report ${role} observations marker is malformed`);
+  try { return validateReviewObservations(JSON.parse(match[1]), role); } catch (error) { fail(error instanceof Error ? error.message : String(error)); }
+}
+
 function labelNames(repository, issue, cwd) {
   const raw = readJsonFromText(exec("gh", ["api", "--paginate", "--slurp", `repos/${repository}/issues/${issue}/labels`], { cwd, timeout: 120_000 }));
   if (!Array.isArray(raw)) fail("GitHub labels returned an unexpected shape");
@@ -1132,7 +1170,7 @@ function currentHead(cwd, supplied) {
   return head;
 }
 
-function reviewerReportsFor(entry, repository, pullRequest, head, baseRef, baseSha, cwd, cache) {
+function reviewerReportsFor(entry, repository, pullRequest, head, baseRef, baseSha, cwd, cache, publish = true) {
   const values = entry.reviewerReports;
   if (!Array.isArray(values) || values.length === 0) fail("REVIEW-PANEL requires every selected reviewer report reference");
   const comments = cache.get(`pr:${pullRequest}`) ?? listComments(repository, pullRequest, cwd);
@@ -1152,20 +1190,28 @@ function reviewerReportsFor(entry, repository, pullRequest, head, baseRef, baseS
       const marker = reportText.split("\n", 1)[0];
       const normalizedReport = reportText.replace(/\n+$/, "");
       const matches = comments.filter((candidate) => typeof candidate?.body === "string" && candidate.body.replace(/\r\n?/g, "\n").replace(/\n+$/, "") === normalizedReport && candidate.body.startsWith(marker));
-      if (matches.length !== 1) fail(`Published reviewer report ${role} was not found exactly once with the saved bytes on PR #${pullRequest}`);
-      comment = matches[0];
+      if (matches.length === 0 && !publish) comment = { id: null, body: reportText, html_url: null };
+      else if (matches.length !== 1) fail(`Published reviewer report ${role} was not found exactly once with the saved bytes on PR #${pullRequest}`);
+      else comment = matches[0];
     } else if (typeof value.url === "string") {
       safeHttpsUrl(value.url, `reviewerReports[${index}].url`);
       comment = comments.find((candidate) => candidate?.html_url === value.url);
       if (!comment) fail(`Reviewer report URL for ${role} is not present on PR #${pullRequest}`);
     } else fail(`reviewerReports[${index}] needs reportFile or url`);
-    if (!Number.isSafeInteger(comment?.id) || comment.id < 1 || ids.has(comment.id)) fail(`Reviewer report ${role} has no unique server comment identity`);
+    if (publish && (!Number.isSafeInteger(comment?.id) || comment.id < 1 || ids.has(comment.id))) fail(`Reviewer report ${role} has no unique server comment identity`);
+    if (!publish && comment?.id === null) {
+      const parsed = reviewerIdentityFromReport(comment.body);
+      if (parsed.repository !== repository || Number(parsed.pullRequest ?? parsed.pr) !== pullRequest || (parsed.head ?? parsed.reviewedHead) !== head || parsed.baseRef !== baseRef || parsed.baseSha !== baseSha || parsed.role !== role) fail(`Saved reviewer report ${role} identity disagrees with the frozen review`);
+      const observations = reviewObservationsFromReport(comment.body, role);
+      return { role, id: null, url: null, head, round: Number.isSafeInteger(parsed.round) ? parsed.round : 0, reportId: typeof parsed.id === "string" ? parsed.id : undefined, observations };
+    }
     const url = verifiedCommentUrl(comment.html_url, repository, pullRequest, true, comment.id, `reviewerReports[${index}] permalink`);
     const parsed = reviewerIdentityFromReport(comment.body);
     if (parsed.repository !== repository || Number(parsed.pullRequest ?? parsed.pr) !== pullRequest || (parsed.head ?? parsed.reviewedHead) !== head || parsed.baseRef !== baseRef || parsed.baseSha !== baseSha || parsed.role !== role) fail(`Reviewer report ${role} readback identity disagrees with the frozen review`);
+    const observations = reviewObservationsFromReport(comment.body, role);
     roles.add(role);
     ids.add(comment.id);
-    return { role, id: comment.id, url, head, round: Number.isSafeInteger(parsed.round) ? parsed.round : 0, reportId: typeof parsed.id === "string" ? parsed.id : undefined };
+    return { role, id: comment.id, url, head, round: Number.isSafeInteger(parsed.round) ? parsed.round : 0, reportId: typeof parsed.id === "string" ? parsed.id : undefined, observations };
   });
 }
 
@@ -1188,9 +1234,9 @@ function durableRecord(entry, repository, issue, pullRequest, cwd, inventory, ca
   const inputs = resolveRecordReferences(entry.inputs ?? [], inventory, publish, `${kind}.inputs`, lookup);
   const supersedes = resolveSupersedes(entry.supersedes, inventory, publish, lookup);
   if (kind === "REVIEW-PANEL") verifyReviewPanelPullRequest(config, repository, pullRequest, head, baseRef, baseSha, mode, cwd);
-  const reports = kind === "REVIEW-PANEL" ? reviewerReportsFor(entry, repository, pullRequest, head, baseRef, baseSha, cwd, cache) : [];
+  const reports = kind === "REVIEW-PANEL" ? reviewerReportsFor(entry, repository, pullRequest, head, baseRef, baseSha, cwd, cache, publish) : [];
   const destination = issue === undefined ? { pull_request: pullRequest } : { issue };
-  const identity = { kind, repository, ...destination, source_head: head, ...(baseRef ? { base_ref: baseRef, base_sha: baseSha, mode } : {}), inputs, supersedes, ...(reports.length ? { reviewer_reports: reports } : {}), body };
+  const identity = { kind, repository, ...destination, source_head: head, ...(baseRef ? { base_ref: baseRef, base_sha: baseSha, mode } : {}), ...(entry.attempt ? { review_attempt: entry.attempt } : {}), inputs, supersedes, ...(reports.length ? { reviewer_reports: reports } : {}), body };
   const recordId = `sha256:${sha256(canonicalJson(identity))}`;
   const metadata = {
     v: 1,
@@ -1199,6 +1245,7 @@ function durableRecord(entry, repository, issue, pullRequest, cwd, inventory, ca
     inputs,
     supersedes,
     execution: { repository, ...(issue === undefined ? { pull_request: pullRequest } : { issue }), target: config.integrationBranch, model: config.ownerModel, remediation_limit: config.review.remediationMaxRounds },
+    ...(entry.attempt ? { review_attempt: entry.attempt } : {}),
     ...(reports.length ? { reviewer_reports: reports } : {}),
     ...(kind === "REVIEW-PANEL" ? { review: { repository, pull_request: pullRequest, base_ref: baseRef, base_sha: baseSha, mode, round: Number.isSafeInteger(entry.round) ? entry.round : 0, reports } } : {}),
   };
@@ -1209,7 +1256,7 @@ function durableRecord(entry, repository, issue, pullRequest, cwd, inventory, ca
     "",
     `**Issue**: ${issue === undefined ? `[PR #${pullRequest}](https://github.com/${repository}/pull/${pullRequest})` : `[${repository}#${issue}](https://github.com/${repository}/issues/${issue})`}`,
     `**Source head**: \`${head}\``,
-    ...(kind === "REVIEW-PANEL" ? [`**Review mode**: \`${mode}\``, `**Base**: \`${baseRef}\` at \`${baseSha}\``, "**Individual reviewer reports**:", ...reports.map((report) => `- ${report.role}: [comment #${report.id}](${report.url})`)] : []),
+    ...(kind === "REVIEW-PANEL" ? [`**Review mode**: \`${mode}\``, `**Base**: \`${baseRef}\` at \`${baseSha}\``, "**Individual reviewer reports**:", ...reports.map((report) => `- ${report.role}: ${report.url ? `[comment #${report.id}](${report.url})` : "saved report (not published)"}`)] : []),
     `**Inputs**: ${inputs.length ? inputs.map((url, index) => `[source ${index + 1}](${url})`).join(", ") : "none"}`,
     `**Supersedes**: ${supersedes ? `[previous record](${supersedes})` : "none"}`,
     "",
@@ -1252,6 +1299,341 @@ function publishDurableRecord(record, cwd, cache) {
   if (storedRecord?.metadata?.record_id !== record.recordId) fail(`Durable ${record.kind} identity readback mismatch`);
   cache.set(key, [...comments.filter((candidate) => candidate?.id !== stored.id), stored]);
   return { id: stored.id, url, reconciliation, createdAt: stored.created_at ?? stored.createdAt ?? null, recordId: record.recordId };
+}
+
+const REVIEW_DISPOSITIONS = new Set(["IMMEDIATE REPAIR", "NON-BLOCKING FOLLOW-UP", "REJECTED/NOT APPLICABLE", "EVIDENCE/AUTHORITY PREREQUISITE"]);
+const REVIEW_RESOLUTIONS = new Set(["confirmed", "resolved-by-evidence", "superseded", "duplicate", "unsupported"]);
+const REVIEW_TRACKING = new Set(["none", "existing", "source-issue", "new", "pending"]);
+
+function reviewIssueMarker(repository, pullRequest, head, concernId) {
+  return `<!-- FORGE:REVIEW_FOLLOW_UP repository=${repository} pr=${pullRequest} head=${head} concern=${concernId} -->`;
+}
+
+function reviewIssueFingerprint(repository, pullRequest, decision) {
+  const value = canonicalJson({
+    repository: repository.toLowerCase(),
+    pullRequest,
+    concernId: decision.id ?? decision.concernId,
+    summary: String(decision.summary ?? decision.problem).toLowerCase().replace(/\s+/g, " ").trim(),
+    affectedFiles: [...(decision.affectedFiles ?? [])].sort(),
+  });
+  return `sha256:${sha256(value)}`;
+}
+
+function allGithubIssues(repository, cwd) {
+  const pages = readJsonFromText(exec("gh", ["api", "--paginate", "--slurp", `repos/${repository}/issues?state=all&per_page=100`], { cwd, timeout: 120_000 }));
+  if (!Array.isArray(pages)) fail("GitHub issue search returned an unexpected shape");
+  return pages.flatMap((page) => Array.isArray(page) ? page : []).filter((issue) => !issue?.pull_request);
+}
+
+function normalizeGithubIssue(issue) {
+  return {
+    number: integer(Number(issue.number), "issue number"),
+    title: typeof issue.title === "string" ? issue.title : "",
+    body: typeof issue.body === "string" ? issue.body : "",
+    state: typeof issue.state === "string" ? issue.state : "unknown",
+    url: typeof issue.html_url === "string" ? issue.html_url : typeof issue.url === "string" ? issue.url : null,
+    labels: Array.isArray(issue.labels) ? issue.labels.map((label) => typeof label === "string" ? label : label?.name).filter((label) => typeof label === "string") : [],
+  };
+}
+
+function reviewIssueMatches(repository, pullRequest, head, concernId, draft, cwd) {
+  const marker = reviewIssueMarker(repository, pullRequest, head, concernId);
+  const fingerprint = reviewIssueFingerprint(repository, pullRequest, { id: concernId, summary: draft.problem, affectedFiles: draft.affectedFiles });
+  const tokens = `${draft.problem} ${draft.rootCause} ${(draft.affectedFiles ?? []).join(" ")}`.toLowerCase().split(/[^a-z0-9_.-]+/).filter((token) => token.length >= 5).slice(0, 12);
+  return allGithubIssues(repository, cwd).map(normalizeGithubIssue).map((issue) => {
+    const text = `${issue.title}\n${issue.body}`.toLowerCase();
+    const exact = issue.body.includes(marker) || issue.body.includes(`<!-- FORGE:REVIEW_FOLLOW_UP_FINGERPRINT ${fingerprint} -->`);
+    const pathHit = (draft.affectedFiles ?? []).some((path) => text.includes(String(path).toLowerCase()));
+    const tokenHits = tokens.filter((token) => text.includes(token)).length;
+    return { ...issue, match: exact ? "exact" : pathHit && tokenHits >= 2 ? "plausible" : undefined, fingerprint, marker };
+  }).filter((issue) => issue.match);
+}
+
+function reviewIssueDraft(value, label) {
+  const draft = objectRecord(value, label);
+  const labels = draft.labels === undefined ? ["workflow:gated"] : Array.isArray(draft.labels) ? draft.labels.map((entry, index) => stringValue(entry, `${label}.labels[${index}]`, /^[A-Za-z0-9_.:-]+$/)) : fail(`${label}.labels must be an array`);
+  const acceptanceCriteria = Array.isArray(draft.acceptanceCriteria) ? draft.acceptanceCriteria.map((entry, index) => stringValue(entry, `${label}.acceptanceCriteria[${index}]`)) : fail(`${label}.acceptanceCriteria must be an array`);
+  const affectedFiles = Array.isArray(draft.affectedFiles) ? draft.affectedFiles.map((entry, index) => stringValue(entry, `${label}.affectedFiles[${index}]`)) : fail(`${label}.affectedFiles must be an array`);
+  const evidence = Array.isArray(draft.evidence) ? draft.evidence.map((entry, index) => stringValue(entry, `${label}.evidence[${index}]`)) : fail(`${label}.evidence must be an array`);
+  const sourceLinks = Array.isArray(draft.sourceLinks) ? draft.sourceLinks.map((entry, index) => safeHttpsUrl(entry, `${label}.sourceLinks[${index}]`)) : [];
+  if (acceptanceCriteria.length === 0 || affectedFiles.length === 0 || evidence.length === 0) fail(`${label} needs affected files, evidence, and acceptance criteria`);
+  return {
+    title: stringValue(draft.title, `${label}.title`).slice(0, 240),
+    problem: stringValue(draft.problem, `${label}.problem`),
+    rootCause: stringValue(draft.rootCause, `${label}.rootCause`),
+    affectedFiles,
+    expectedBehavior: stringValue(draft.expectedBehavior, `${label}.expectedBehavior`),
+    acceptanceCriteria,
+    evidence,
+    stage: stringValue(draft.stage ?? "follow-up", `${label}.stage`),
+    sourceLinks,
+    labels,
+  };
+}
+
+function renderReviewIssueBody(input) {
+  const links = input.draft.sourceLinks.length ? input.draft.sourceLinks.map((url) => `- ${url}`).join("\n") : "- No public source link was supplied.";
+  return [
+    input.marker,
+    `<!-- FORGE:REVIEW_FOLLOW_UP_FINGERPRINT ${input.fingerprint} -->`,
+    "## Problem",
+    "",
+    input.draft.problem,
+    "",
+    "## Root Cause",
+    "",
+    input.draft.rootCause,
+    "",
+    "## Affected Files",
+    "",
+    input.draft.affectedFiles.map((path) => `- ${String.fromCharCode(96)}${path}${String.fromCharCode(96)}`).join("\n"),
+    "",
+    "## Expected Behavior",
+    "",
+    input.draft.expectedBehavior,
+    "",
+    "## Acceptance Criteria",
+    "",
+    input.draft.acceptanceCriteria.map((criterion) => `- [ ] ${criterion}`).join("\n"),
+    "",
+    "### Evidence and stage",
+    "",
+    `Required stage: ${input.draft.stage}`,
+    input.draft.evidence.map((entry) => `- ${entry}`).join("\n"),
+    "",
+    "### Review references",
+    "",
+    links,
+    ...(input.parentDecisionUrl ? ["", `Parent decision: ${input.parentDecisionUrl}`] : []),
+    "",
+  ].join("\n");
+}
+
+function verifyReviewIssue(repository, number, expectedUrl, cwd) {
+  const issue = normalizeGithubIssue(readJsonFromText(exec("gh", ["api", `repos/${repository}/issues/${number}`], { cwd, timeout: 120_000 })));
+  if (issue.url !== expectedUrl && expectedUrl !== undefined) fail(`Tracking issue #${number} permalink does not match the requested repository`);
+  return issue;
+}
+
+function publishReviewIssue(input) {
+  const matches = reviewIssueMatches(input.repository, input.pullRequest, input.head, input.concernId, input.draft, input.cwd);
+  const exact = matches.filter((issue) => issue.match === "exact");
+  if (exact.length > 1) fail(`Multiple review follow-up issues match ${input.concernId}; reconcile explicitly`);
+  if (exact.length === 1) return { status: "reused", issue: exact[0], marker: input.marker, fingerprint: input.fingerprint };
+  const body = renderReviewIssueBody(input);
+  const bodyName = `${input.concernId.replace(/[^A-Za-z0-9_.-]/g, "-")}${input.parentDecisionUrl ? "-parent" : ""}.md`;
+  const bodyPath = writeExclusive(join(input.reviewRoot, "tracking", bodyName), body);
+  if (!input.allowIssueWrites || !input.publish) return { status: "pending", issue: undefined, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, error: input.allowIssueWrites ? "publication disabled" : "explicit issue-write permission was not granted" };
+  const args = ["gh", "api", `repos/${input.repository}/issues`, "--method", "POST", "-F", `title=${input.draft.title}`, "-F", `body=@${bodyPath}`];
+  for (const label of input.draft.labels) args.push("-f", `labels[]=${label}`);
+  try {
+    const created = normalizeGithubIssue(readJsonFromText(exec(args[0], args.slice(1), { cwd: input.cwd, timeout: 120_000 })));
+    const readBack = verifyReviewIssue(input.repository, created.number, created.url, input.cwd);
+    if (readBack.title !== input.draft.title || readBack.body !== body || input.draft.labels.some((label) => !readBack.labels.includes(label))) fail(`Review follow-up issue #${created.number} readback differs from saved draft`);
+    return { status: "created", issue: readBack, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, reconciliation: "created" };
+  } catch (error) {
+    const recovered = reviewIssueMatches(input.repository, input.pullRequest, input.head, input.concernId, input.draft, input.cwd).filter((issue) => issue.match === "exact");
+    if (recovered.length === 1 && input.draft.labels.every((label) => recovered[0].labels.includes(label))) return { status: "reused", issue: recovered[0], marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, reconciliation: "ambiguous-create-reconciled" };
+    return { status: "pending", issue: undefined, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function safeCell(value) {
+  return String(value ?? "").replace(/\r?\n/g, " ").replaceAll("|", "/").trim();
+}
+
+function validateAdjudication(input, review, reports) {
+  if (input.repository !== review.repository || Number(input.pullRequest) !== review.pullRequest || input.head !== review.head || input.baseRef !== review.baseRef || input.baseSha !== review.baseSha) fail("Adjudication identity does not match the prepared frozen review");
+  if (input.publish !== review.publish) fail("Adjudication publication mode does not match the prepared review");
+  if (!REVIEW_DISPOSITIONS.has(String(input.decisions?.[0]?.disposition ?? "NONE")) && Array.isArray(input.decisions) && input.decisions.length > 0) fail("Adjudication contains an unsupported disposition");
+  const observations = reports.flatMap((report) => report.observations ?? []);
+  const observationIds = new Set(observations.map((observation) => observation.id));
+  const decisions = Array.isArray(input.decisions) ? input.decisions : fail("Adjudication decisions must be an array");
+  const assigned = new Set();
+  const normalized = decisions.map((raw, index) => {
+    const decision = objectRecord(raw, `decision ${index}`);
+    const id = stringValue(decision.id, `decision ${index} id`, SAFE_TOKEN);
+    const sourceObservationIds = Array.isArray(decision.sourceObservationIds) ? decision.sourceObservationIds.map((value, sourceIndex) => stringValue(value, `${id}.sourceObservationIds[${sourceIndex}]`, /^[A-Za-z][A-Za-z0-9_-]*:F[1-9][0-9]*$/)) : fail(`${id}.sourceObservationIds must be an array`);
+    if (sourceObservationIds.length === 0) fail(`${id} must map at least one reviewer observation`);
+    for (const sourceId of sourceObservationIds) {
+      if (!observationIds.has(sourceId) || assigned.has(sourceId)) fail(`Reviewer observation ${sourceId} is missing or assigned more than once`);
+      assigned.add(sourceId);
+    }
+    const disposition = stringValue(decision.disposition, `${id}.disposition`);
+    if (!REVIEW_DISPOSITIONS.has(disposition)) fail(`${id} has an unsupported disposition`);
+    const resolution = stringValue(decision.resolution, `${id}.resolution`);
+    if (!REVIEW_RESOLUTIONS.has(resolution)) fail(`${id} has an unsupported resolution`);
+    const tracking = decision.tracking === undefined ? { status: "none" } : objectRecord(decision.tracking, `${id}.tracking`);
+    const trackingStatus = stringValue(tracking.status, `${id}.tracking.status`);
+    if (!REVIEW_TRACKING.has(trackingStatus)) fail(`${id} has unsupported tracking status`);
+    if (disposition === "NON-BLOCKING FOLLOW-UP" && trackingStatus === "none") fail(`${id} follow-up must identify existing, new, or pending tracking`);
+    return {
+      id,
+      sourceObservationIds,
+      disposition,
+      resolution,
+      summary: stringValue(decision.summary, `${id}.summary`),
+      rationale: stringValue(decision.rationale, `${id}.rationale`),
+      evidence: Array.isArray(decision.evidence) ? decision.evidence.map((value, evidenceIndex) => stringValue(value, `${id}.evidence[${evidenceIndex}]`)) : fail(`${id}.evidence must be an array`),
+      stage: stringValue(decision.stage, `${id}.stage`),
+      blocksCurrentStage: decision.blocksCurrentStage === true,
+      tracking: { ...tracking, status: trackingStatus },
+    };
+  });
+  if (assigned.size !== observationIds.size) fail(`Adjudication omitted ${[...observationIds].filter((id) => !assigned.has(id)).join(", ")}`);
+  const checks = Array.isArray(input.checks) ? input.checks.map((raw, index) => {
+    const check = objectRecord(raw, `check ${index}`);
+    return {
+      name: stringValue(check.name, `check ${index}.name`),
+      required: check.required === true,
+      conclusion: stringValue(check.conclusion, `check ${index}.conclusion`).toLowerCase(),
+      executedProof: check.executedProof === true,
+      executedProofRequired: check.executedProofRequired === true,
+      policyAccepted: check.policyAccepted === true,
+      stage: stringValue(check.stage ?? "current stage", `check ${index}.stage`),
+      evidence: Array.isArray(check.evidence) ? check.evidence.map((value, evidenceIndex) => stringValue(value, `check ${index}.evidence[${evidenceIndex}]`)) : [],
+    };
+  }) : fail("Adjudication checks must be an array");
+  const blocking = normalized.filter((decision) => decision.blocksCurrentStage || decision.disposition === "IMMEDIATE REPAIR" && decision.blocksCurrentStage);
+  if (input.gate === "PASS") {
+    if (blocking.length > 0) fail(`PASS cannot coexist with current-stage adjudication blockers: ${blocking.map((decision) => decision.id).join(", ")}`);
+    const unsatisfied = checks.filter((check) => check.required && (check.conclusion === "failed" || check.conclusion === "pending" || check.conclusion === "unknown" || check.conclusion === "not-configured" || (check.conclusion === "skipped" || check.conclusion === "neutral") && (!check.policyAccepted || check.executedProofRequired && !check.executedProof)));
+    if (unsatisfied.length > 0) fail(`PASS cannot claim unresolved required checks: ${unsatisfied.map((check) => check.name).join(", ")}`);
+  }
+  const verdict = stringValue(input.verdict, "adjudication verdict");
+  if (!["APPROVE", "APPROVE_WITH_FOLLOW_UP", "CHANGES_REQUESTED", "GATED"].includes(verdict)) fail("Unsupported adjudication verdict");
+  if (verdict === "APPROVE" && normalized.some((decision) => decision.disposition === "NON-BLOCKING FOLLOW-UP")) fail("APPROVE must use APPROVE_WITH_FOLLOW_UP when a follow-up remains");
+  if (verdict === "APPROVE_WITH_FOLLOW_UP" && !normalized.some((decision) => decision.disposition === "NON-BLOCKING FOLLOW-UP")) fail("APPROVE_WITH_FOLLOW_UP needs a follow-up disposition");
+  if (verdict === "CHANGES_REQUESTED" && !normalized.some((decision) => decision.disposition === "IMMEDIATE REPAIR")) fail("CHANGES_REQUESTED needs an immediate-repair disposition");
+  return { decisions: normalized, checks, verdict, observations };
+}
+
+function trackingLabel(result) {
+  if (result.status === "created" || result.status === "reused") return result.issue?.url ? `[#${result.issue.number}](${result.issue.url}) (${result.status})` : `${result.status} issue #${result.issue?.number}`;
+  if (result.status === "pending") return `PENDING (${result.error ?? "publication not authorized"})${result.draftPath ? ` — draft: ${result.draftPath}` : ""}`;
+  return "none required";
+}
+
+function renderAdjudicationBody(input, review, reports, decisions, tracking, panelUrl) {
+  const reportLines = reports.map((report) => `- **${report.role}**: ${report.url ? `[comment #${report.id}](${report.url})` : "saved report (not published)"}`).join("\n");
+  const rows = decisions.length === 0
+    ? "No actionable observations were submitted. Code findings: none; unresolved prerequisites: none."
+    : decisions.map((decision) => `| ${safeCell(decision.id)} | ${safeCell(decision.sourceObservationIds.join(", "))} | ${safeCell(decision.disposition)} | ${safeCell(`${decision.summary} ${decision.rationale} Evidence: ${decision.evidence.join(" ")}`)} | ${safeCell(decision.stage)} | ${safeCell(tracking[decision.id] ? trackingLabel(tracking[decision.id]) : "none required")} |`).join("\n");
+  const checkLines = input.checks.length ? input.checks.map((check) => `- **${safeCell(check.name)}**: ${safeCell(check.conclusion)}; executed proof: ${check.executedProof ? "yes" : "no"}; required: ${check.required ? "yes" : "no"}; stage: ${safeCell(check.stage)}${check.policyAccepted ? "; policy accepts conclusion" : ""}${check.evidence.length ? `; evidence: ${check.evidence.join(" ")}` : ""}`).join("\n") : "- No check conclusions were supplied.";
+  const prior = Array.isArray(input.priorConcerns) && input.priorConcerns.length ? input.priorConcerns.map((entry) => `- ${entry}`).join("\n") : "- No applicable prior concern was carried into this attempt.";
+  const limitations = Array.isArray(input.limitations) && input.limitations.length ? input.limitations.map((entry) => `- ${entry}`).join("\n") : "- None recorded.";
+  return [
+    "## REVIEW-PANEL",
+    "",
+    `**Review attempt**: ${String.fromCharCode(96)}${review.artifactKey}${String.fromCharCode(96)}`,
+    `**Current roster**: ${review.roles.join(", ")}`,
+    `**Exact identity**: PR #${review.pullRequest}, ${review.head}, ${review.baseRef}@${review.baseSha}`,
+    panelUrl ? `**Parent decision permalink**: ${panelUrl}` : "**Parent decision permalink**: pending publication",
+    "",
+    "### Individual reports",
+    "",
+    reportLines,
+    "",
+    "### Parent adjudication",
+    "",
+    "| Item | Sources | Decision | Reason/evidence | Required stage | Tracking |",
+    "| --- | --- | --- | --- | --- | --- |",
+    rows,
+    "",
+    "### Check conclusions and execution proof",
+    "",
+    checkLines,
+    "",
+    "### Prior concern disposition",
+    "",
+    prior,
+    "",
+    "### Remaining limitations and next action",
+    "",
+    limitations,
+    `Next action: ${String(input.nextAction ?? "No further action recorded.").trim()}`,
+    "",
+    `Official parent verdict: **${input.verdict}**`,
+    "",
+  ].join("\n");
+}
+
+function recordAdjudication(options) {
+  const input = readJson(requiredOption(options, "input"));
+  const reviewRoot = resolve(stringValue(input.reviewRoot, "adjudication reviewRoot"));
+  const review = readJson(join(reviewRoot, "review.json"));
+  const repository = stringValue(input.repository, "adjudication repository", /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/);
+  const cwd = resolve(requiredOption(options, "cwd"));
+  const publish = input.publish === true;
+  if (review.schema !== "forgedock.candidate-review/v1" || review.artifactRoot !== reviewRoot || review.artifactKey !== input.artifactKey) fail("Adjudication is not bound to the prepared review artifact");
+  const config = recordConfig(cwd, repository);
+  const cache = new Map();
+  const reviewerReports = (review.roles ?? []).map((role) => ({ role, reportFile: join(reviewRoot, `${role}.report.md`) }));
+  const reports = reviewerReportsFor({ reviewerReports }, repository, Number(input.pullRequest), input.head, input.baseRef, input.baseSha, cwd, cache, publish);
+  const validated = validateAdjudication(input, review, reports);
+  const tracking = {};
+  for (const decision of validated.decisions) {
+    const request = decision.tracking;
+    if (request.status === "none") { tracking[decision.id] = { status: "none" }; continue; }
+    if (request.status === "existing" || request.status === "source-issue") {
+      const issueNumber = integer(Number(request.issueNumber), `${decision.id}.tracking.issueNumber`);
+      const issue = verifyReviewIssue(repository, issueNumber, request.issueUrl, cwd);
+      tracking[decision.id] = { status: request.status, issue };
+      continue;
+    }
+    const draft = reviewIssueDraft(request.draft, `${decision.id}.tracking.draft`);
+    const marker = reviewIssueMarker(repository, Number(input.pullRequest), input.head, decision.id);
+    const fingerprint = reviewIssueFingerprint(repository, Number(input.pullRequest), { id: decision.id, summary: draft.problem, affectedFiles: draft.affectedFiles });
+    const draftInput = { repository, pullRequest: Number(input.pullRequest), head: input.head, concernId: decision.id, draft, marker, fingerprint, reviewRoot, cwd, publish: false, allowIssueWrites: false };
+    const bodyPath = writeExclusive(join(reviewRoot, "tracking", `${decision.id.replace(/[^A-Za-z0-9_.-]/g, "-")}.md`), renderReviewIssueBody({ ...draftInput, parentDecisionUrl: undefined }));
+    tracking[decision.id] = { status: "pending", draftPath: bodyPath, error: request.status === "pending" ? "parent marked tracking pending" : "awaiting adjudication publication" };
+  }
+  const provisionalBody = renderAdjudicationBody(input, review, reports, validated.decisions, tracking, undefined);
+  const provisionalBodyPath = writeExclusive(join(reviewRoot, "review-panel.provisional.md"), provisionalBody);
+  const baseEntry = { kind: "REVIEW-PANEL", pullRequest: Number(input.pullRequest), head: input.head, baseRef: input.baseRef, baseSha: input.baseSha, mode: input.mode, attempt: review.artifactKey, round: Number.isSafeInteger(input.round) ? input.round : 0, bodyFile: provisionalBodyPath, reviewerReports, supersedes: input.supersedes };
+  const provisionalRecord = durableRecord(baseEntry, repository, undefined, Number(input.pullRequest), cwd, new Map(), cache, publish, config);
+  writeExclusive(join(reviewRoot, "review-panel.provisional.record.md"), provisionalRecord.markdown);
+  const provisionalPublication = publish ? publishDurableRecord({ ...provisionalRecord, bodyFile: join(reviewRoot, "review-panel.provisional.record.md") }, cwd, cache) : { id: null, url: null, reconciliation: "saved" };
+  for (const decision of validated.decisions) {
+    const request = decision.tracking;
+    if (request.status !== "new") continue;
+    const draft = reviewIssueDraft(request.draft, `${decision.id}.tracking.draft`);
+    const marker = reviewIssueMarker(repository, Number(input.pullRequest), input.head, decision.id);
+    const fingerprint = reviewIssueFingerprint(repository, Number(input.pullRequest), { id: decision.id, summary: draft.problem, affectedFiles: draft.affectedFiles });
+    tracking[decision.id] = publishReviewIssue({ repository, pullRequest: Number(input.pullRequest), head: input.head, concernId: decision.id, draft, marker, fingerprint, reviewRoot, cwd, publish, allowIssueWrites: input.allowIssueWrites === true, parentDecisionUrl: provisionalPublication.url });
+  }
+  const finalBody = renderAdjudicationBody(input, review, reports, validated.decisions, tracking, provisionalPublication.url);
+  const changed = finalBody !== provisionalBody;
+  let finalRecord = provisionalRecord;
+  let finalPublication = provisionalPublication;
+  if (changed && publish && provisionalPublication.url) {
+    const finalBodyPath = writeExclusive(join(reviewRoot, "review-panel.final.md"), finalBody);
+    finalRecord = durableRecord({ ...baseEntry, bodyFile: finalBodyPath, supersedes: provisionalPublication.url }, repository, undefined, Number(input.pullRequest), cwd, new Map(), cache, publish, config);
+    writeExclusive(join(reviewRoot, "review-panel.final.record.md"), finalRecord.markdown);
+    finalPublication = publishDurableRecord({ ...finalRecord, bodyFile: join(reviewRoot, "review-panel.final.record.md") }, cwd, cache);
+  } else if (changed) {
+    const finalBodyPath = writeExclusive(join(reviewRoot, "review-panel.final.md"), finalBody);
+    finalRecord = durableRecord({ ...baseEntry, bodyFile: finalBodyPath }, repository, undefined, Number(input.pullRequest), cwd, new Map(), cache, publish, config);
+    writeExclusive(join(reviewRoot, "review-panel.final.record.md"), finalRecord.markdown);
+  }
+  const decisionPath = join(reviewRoot, "adjudication.json");
+  const gateBody = `FORGE:STAGING_GATE:${input.gate}\n\n${finalBody}\n\n## Gate\n\n**Gate**: ${input.gate}\n**Next action**: ${String(input.nextAction ?? "No further action recorded.").trim()}\n`;
+  const artifact = { schema: "forgedock.candidate-adjudication/v1", artifactKey: review.artifactKey, repository, pullRequest: Number(input.pullRequest), head: input.head, baseRef: input.baseRef, baseSha: input.baseSha, mode: input.mode, verdict: validated.verdict, gate: input.gate, roles: review.roles, reports, decisions: validated.decisions, checks: validated.checks, tracking, panelUrl: finalPublication.url, supersededPanelUrl: provisionalPublication.url !== finalPublication.url ? provisionalPublication.url : null, gateBody, trackingPublication: Object.values(tracking).some((value) => value.status === "pending") ? "pending" : "complete" };
+  writeExclusive(decisionPath, json(artifact));
+  process.stdout.write(json({ schema: artifact.schema, decisionPath, panelUrl: finalPublication.url, provisionalPanelUrl: provisionalPublication.url, gate: input.gate, verdict: validated.verdict, tracking, gateBody, trackingPublication: artifact.trackingPublication, publication: publish ? "published" : "saved", reconciliation: finalPublication.reconciliation }));
+}
+
+function reviewIssues(options) {
+  const input = readJson(requiredOption(options, "input"));
+  const repository = stringValue(input.repository, "review issue repository", /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/);
+  const cwd = resolve(requiredOption(options, "cwd"));
+  const pullRequest = integer(Number(input.pullRequest), "review issue pull request");
+  const head = stringValue(input.head, "review issue head", FULL_SHA);
+  const concernId = stringValue(input.concernId, "review issue concern", /^[A-Za-z][A-Za-z0-9_-]*:F[1-9][0-9]*$/);
+  const draft = reviewIssueDraft(input.draft, "review issue draft");
+  const matches = reviewIssueMatches(repository, pullRequest, head, concernId, draft, cwd).map((issue) => ({ number: issue.number, title: issue.title, state: issue.state, url: issue.url, labels: issue.labels, match: issue.match }));
+  process.stdout.write(json({ schema: "forgedock.review-issue-search/v1", repository, pullRequest, head, concernId, matches }));
 }
 
 function parseBatchInputs(file) {
@@ -1422,15 +1804,19 @@ function record(options, mode) {
   const body = readFileSync(resolve(bodyFile), "utf8").replace(/\r\n/g, "\n").trim();
   if (body.length < 8) fail("Record body must contain substantive evidence");
   if (/^<!-- FORGE:/m.test(body)) fail("Record markers are generated; remove the marker from the body file");
+  const observations = kind === "REVIEW"
+    ? validateReviewObservations(options.values.has("observations-file") ? readJson(requiredOption(options, "observations-file")) : [], identity.role)
+    : [];
   const marker = kind === "REVIEW"
     ? `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify(identity)} -->`
     : `<!-- FORGE:CANDIDATE:${kind} ${JSON.stringify(identity)} -->`;
+  const observationMarker = kind === "REVIEW" ? `<!-- FORGE:REVIEW_OBSERVATIONS ${JSON.stringify(observations)} -->\n` : "";
   const reviewHeaders = kind === "REVIEW"
     ? `**Reviewer role**: \`${identity.role}\`\n**Pull request**: #${identity.pullRequest}\n**Reviewed source**: \`${identity.head}\`\n**Review base**: \`${identity.baseRef}\` at \`${identity.baseSha}\`\n\n`
     : kind === "STAGING_GATE"
       ? `FORGE:STAGING_GATE:${identity.gate}\n**Pull request**: #${identity.pullRequest}\n**Reviewed source**: \`${identity.head}\`\n**Protected base**: \`${identity.baseRef}\` at \`${identity.baseSha}\`\n\n`
       : "";
-  const markdown = `${marker}\n## ForgeDock ${kind.toLowerCase()}\n\n${reviewHeaders}${body}\n`;
+  const markdown = `${marker}\n${observationMarker}## ForgeDock ${kind.toLowerCase()}\n\n${reviewHeaders}${body}\n`;
   const reportFile = resolve(optionalOption(options, "report-file", join(dirname(resolve(bodyFile)), `${kind.toLowerCase()}.report.md`)));
   writeExclusive(reportFile, markdown);
   const result = { schema: "forgedock.candidate-record/v1", identity, reportFile, contentSha256: sha256(markdown) };
@@ -1664,7 +2050,7 @@ async function doctor(options) {
 }
 
 function usage() {
-  process.stdout.write(`ForgeDock candidate helper\n\nCommands:\n  doctor --cwd <repo> --config-dir <isolated-pi-dir>\n  status   (alias for doctor)\n  config --cwd <repo>\n  prepare --issue <N> --cwd <repo>\n  prepare-dispatch --selector <set> --cwd <repo> --out <dir> [--issues-file <json>]\n  prepare-review --input <json> --out <dir>\n  record reviewer --repo <org/repo> --pr <N> --head <sha> --base-ref <branch> --base-sha <sha> --role <role> --body-file <file> [--report-file <file>] [--publish]\n  record --kind <kind> --repo <org/repo> --issue <N>|--pr <N> --body-file <file> --cwd <repo> [--mode standard|staging] [--inputs-file <json>] [--supersedes <url>] [--publish]\n  record batch --input <json> [--publish]\n  discover --repo <org/repo> --issue <N>|--pr <N> [--cwd <repo>] [--out <file>]\n  inspect-pr --repo <org/repo> --pr <N> --cwd <repo>\n  label --repo <org/repo> --issue <N> --state <state> [--cwd <repo>]\n  replace --config-dir <dir> --old-source <source> --candidate-source <source>\n  rollback --rollback <directory>\n  digest-tree --root <directory>\n  verify-install --install-root <directory>\n`);
+  process.stdout.write(`ForgeDock candidate helper\n\nCommands:\n  doctor --cwd <repo> --config-dir <isolated-pi-dir>\n  status   (alias for doctor)\n  config --cwd <repo>\n  prepare --issue <N> --cwd <repo>\n  prepare-dispatch --selector <set> --cwd <repo> --out <dir> [--issues-file <json>]\n  prepare-review --input <json> --out <dir>\n  record reviewer --repo <org/repo> --pr <N> --head <sha> --base-ref <branch> --base-sha <sha> --role <role> --body-file <file> [--observations-file <json>] [--report-file <file>] [--publish]\n  record adjudication --input <json> --cwd <canonical-config-root>\n  record --kind <kind> --repo <org/repo> --issue <N>|--pr <N> --body-file <file> --cwd <repo> [--mode standard|staging] [--inputs-file <json>] [--supersedes <url>] [--publish]\n  record batch --input <json> [--publish]\n  discover --repo <org/repo> --issue <N>|--pr <N> [--cwd <repo>] [--out <file>]\n  inspect-pr --repo <org/repo> --pr <N> --cwd <repo>\n  label --repo <org/repo> --issue <N> --state <state> [--cwd <repo>]\n  replace --config-dir <dir> --old-source <source> --candidate-source <source>\n  rollback --rollback <directory>\n  digest-tree --root <directory>\n  verify-install --install-root <directory>\n`);
 }
 
 async function main() {
@@ -1747,6 +2133,7 @@ async function main() {
   if (command === "prepare-dispatch") return prepareDispatch(options);
   if (command === "prepare-review") return prepareReview(options);
   if (command === "discover") return discoverRecords(options);
+  if (command === "review-issues") return reviewIssues(options);
   if (command === "inspect-pr") {
     process.stdout.write(json(inspectPullRequestPolicy(options)));
     return;
@@ -1757,6 +2144,7 @@ async function main() {
   }
   if (command === "record") {
     if (rest[0] === "batch") return recordBatch(options);
+    if (rest[0] === "adjudication") return recordAdjudication(options);
     return record(options, rest[0] === "reviewer" ? "reviewer" : undefined);
   }
   if (command === "replace") return replaceInstallation(options);

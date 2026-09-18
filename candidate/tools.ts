@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -59,6 +59,73 @@ const CHECK_INPUT = Type.Object({
   sourceRoot: Type.String({ minLength: 1 }),
   head: Type.String({ pattern: "^[a-f0-9]{40,64}$" }),
 });
+const TRACKING_DRAFT = Type.Object({
+  title: Type.String({ minLength: 1, maxLength: 240 }),
+  problem: Type.String({ minLength: 1 }),
+  rootCause: Type.String({ minLength: 1 }),
+  affectedFiles: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
+  expectedBehavior: Type.String({ minLength: 1 }),
+  acceptanceCriteria: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
+  evidence: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
+  stage: Type.String({ minLength: 1 }),
+  sourceLinks: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+  labels: Type.Optional(Type.Array(Type.String({ pattern: "^[A-Za-z0-9_.:-]+$" }))),
+});
+const ADJUDICATION_INPUT = Type.Object({
+  repository: REPOSITORY,
+  pullRequest: Type.Integer({ minimum: 1 }),
+  head: SHA,
+  baseRef: Type.String({ minLength: 1 }),
+  baseSha: SHA,
+  mode: Type.String({ pattern: "^(?:standard|staging)$" }),
+  reviewRoot: Type.String({ minLength: 1 }),
+  artifactKey: Type.String({ minLength: 1 }),
+  verdict: Type.String({ pattern: "^(?:APPROVE|APPROVE_WITH_FOLLOW_UP|CHANGES_REQUESTED|GATED)$" }),
+  gate: Type.String({ pattern: "^(?:PASS|FAIL)$" }),
+  decisions: Type.Array(Type.Object({
+    id: Type.String({ pattern: "^[A-Za-z][A-Za-z0-9_.-]*$" }),
+    sourceObservationIds: Type.Array(Type.String({ pattern: "^[A-Za-z][A-Za-z0-9_-]*:F[1-9][0-9]*$" }), { minItems: 1 }),
+    disposition: Type.String({ pattern: "^(?:IMMEDIATE REPAIR|NON-BLOCKING FOLLOW-UP|REJECTED/NOT APPLICABLE|EVIDENCE/AUTHORITY PREREQUISITE)$" }),
+    resolution: Type.String({ pattern: "^(?:confirmed|resolved-by-evidence|superseded|duplicate|unsupported)$" }),
+    summary: Type.String({ minLength: 1 }),
+    rationale: Type.String({ minLength: 1 }),
+    evidence: Type.Array(Type.String({ minLength: 1 })),
+    stage: Type.String({ minLength: 1 }),
+    blocksCurrentStage: Type.Boolean(),
+    tracking: Type.Optional(Type.Object({
+      status: Type.String({ pattern: "^(?:none|existing|source-issue|new|pending)$" }),
+      issueNumber: Type.Optional(Type.Integer({ minimum: 1 })),
+      issueUrl: Type.Optional(Type.String({ minLength: 1 })),
+      draft: Type.Optional(TRACKING_DRAFT),
+    })),
+  })),
+  checks: Type.Array(Type.Object({
+    name: Type.String({ minLength: 1 }),
+    required: Type.Boolean(),
+    conclusion: Type.String({ minLength: 1 }),
+    executedProof: Type.Boolean(),
+    executedProofRequired: Type.Boolean(),
+    policyAccepted: Type.Boolean(),
+    stage: Type.String({ minLength: 1 }),
+    evidence: Type.Array(Type.String({ minLength: 1 })),
+  })),
+  priorConcerns: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+  limitations: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+  nextAction: Type.String({ minLength: 1 }),
+  allowIssueWrites: Type.Boolean(),
+  supersedes: Type.Optional(Type.String({ minLength: 1 })),
+  round: Type.Optional(Type.Integer({ minimum: 0 })),
+  publish: Type.Boolean(),
+});
+const TRACKING_SEARCH_INPUT = Type.Object({
+  repository: REPOSITORY,
+  pullRequest: Type.Integer({ minimum: 1 }),
+  head: SHA,
+  concernId: Type.String({ pattern: "^[A-Za-z][A-Za-z0-9_-]*:F[1-9][0-9]*$" }),
+  draft: TRACKING_DRAFT,
+  reviewRoot: Type.String({ minLength: 1 }),
+  artifactKey: Type.String({ minLength: 1 }),
+});
 const RECORD_INPUT = Type.Object({
   repository: REPOSITORY,
   issue: Type.Optional(Type.Integer({ minimum: 1 })),
@@ -73,6 +140,7 @@ const RECORD_INPUT = Type.Object({
   reviewRoot: Type.Optional(Type.String({ minLength: 1 })),
   artifactKey: Type.Optional(Type.String({ minLength: 1 })),
   supersedes: Type.Optional(Type.String({ minLength: 1 })),
+  adjudicationPath: Type.Optional(Type.String({ minLength: 1 })),
   publish: Type.Boolean(),
 });
 
@@ -90,6 +158,7 @@ type RecordInput = {
   reviewRoot?: string;
   artifactKey?: string;
   supersedes?: string;
+  adjudicationPath?: string;
   publish: boolean;
 };
 
@@ -111,6 +180,24 @@ async function preparedReview(root: string, artifactKey: string): Promise<Record
     throw new Error("Prepared review authorization is missing or does not match the artifact root");
   }
   return review;
+}
+
+function artifactFile(root: string, requested: string, label: string): string {
+  const canonicalRoot = resolve(root);
+  const file = resolve(requested);
+  const distance = relative(canonicalRoot, file);
+  if (!distance || distance === ".." || distance.startsWith("../")) throw new Error(`${label} must remain under the prepared review artifact root`);
+  return file;
+}
+
+async function stableJsonFile(path: string, value: unknown): Promise<string> {
+  const content = `${JSON.stringify(value, null, 2)}\n`;
+  try {
+    await writeFile(path, content, { flag: "wx", mode: 0o600 });
+  } catch (error) {
+    if (await readFile(path, "utf8") !== content) throw error;
+  }
+  return path;
 }
 
 function bounded(text: string): string {
@@ -410,6 +497,60 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
+    name: "forge_discover_review_records",
+    label: "Discover prior review records",
+    description: "Read the bounded prior review records for this PR so the parent can carry applicable concerns into the current attempt.",
+    parameters: Type.Object({
+      repository: REPOSITORY,
+      pullRequest: Type.Integer({ minimum: 1 }),
+      cwd: Type.String({ minLength: 1 }),
+    }),
+    async execute(_toolCallId, params) {
+      const input = params as { repository: string; pullRequest: number; cwd: string };
+      const result = await pi.exec("node", [helperPath(), "discover", "--repo", input.repository, "--pr", String(input.pullRequest), "--cwd", resolve(input.cwd)], { timeout: 120_000 });
+      if (result.code !== 0) throw new Error(`Prior review discovery failed: ${bounded(result.stderr)}`);
+      return { content: [{ type: "text", text: bounded(result.stdout) }], details: { repository: input.repository, pullRequest: input.pullRequest } };
+    },
+  });
+
+  pi.registerTool({
+    name: "forge_resolve_review_tracking",
+    label: "Resolve review tracking",
+    description: "Search all target-repository issues, including closed issues, for plausible or exact causal tracking before the parent publishes a follow-up.",
+    parameters: TRACKING_SEARCH_INPUT,
+    async execute(_toolCallId, params) {
+      const input = params as { repository: string; pullRequest: number; head: string; concernId: string; draft: Record<string, unknown>; reviewRoot: string; artifactKey: string };
+      const review = await preparedReview(input.reviewRoot, input.artifactKey);
+      if (review.repository !== input.repository || review.pullRequest !== input.pullRequest || review.head !== input.head) throw new Error("Tracking search does not match the prepared frozen review");
+      const inputPath = join(resolve(input.reviewRoot), "tracking-search.json");
+      await stableJsonFile(inputPath, input);
+      const result = await pi.exec("node", [helperPath(), "review-issues", "--input", inputPath, "--cwd", String(review.configRoot ?? review.sourceRoot)], { timeout: 120_000 });
+      if (result.code !== 0) throw new Error(`Review tracking search failed: ${bounded(result.stderr)}`);
+      return { content: [{ type: "text", text: bounded(result.stdout) }], details: { inputPath } };
+    },
+  });
+
+  pi.registerTool({
+    name: "forge_publish_adjudication",
+    label: "Publish parent adjudication",
+    description: "Validate every current reviewer observation, publish one parent REVIEW-PANEL decision, and publish only explicitly authorized deduplicated follow-up issues.",
+    parameters: ADJUDICATION_INPUT,
+    async execute(_toolCallId, params) {
+      const input = params as Record<string, unknown>;
+      const review = await preparedReview(String(input.reviewRoot), String(input.artifactKey));
+      if (review.repository !== input.repository || review.pullRequest !== input.pullRequest || review.head !== input.head || review.baseRef !== input.baseRef || review.baseSha !== input.baseSha || review.publish !== input.publish) throw new Error("Adjudication does not match the prepared frozen review");
+      const inputPath = join(resolve(String(input.reviewRoot)), "adjudication-input.json");
+      await stableJsonFile(inputPath, input);
+      const result = await pi.exec("node", [helperPath(), "record", "adjudication", "--input", inputPath, "--cwd", String(review.configRoot ?? review.sourceRoot)], { timeout: 120_000 });
+      if (result.code !== 0) throw new Error(`Parent adjudication failed: ${bounded(result.stderr)}`);
+      const output = result.stdout.trim();
+      let details: Record<string, unknown> = {};
+      try { details = JSON.parse(output) as Record<string, unknown>; } catch { /* bounded text remains model-visible */ }
+      return { content: [{ type: "text", text: bounded(output) }], details: { ...details, inputPath } };
+    },
+  });
+
+  pi.registerTool({
     name: "forge_publish_record",
     label: "Publish candidate record",
     description: "Refresh the bound PR policy, then save and optionally publish one file-backed candidate gate record without changing source.",
@@ -423,11 +564,21 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       if (review.repository !== input.repository || review.pullRequest !== input.pullRequest || review.head !== input.head || review.baseRef !== input.baseRef || review.baseSha !== input.baseSha || review.publish !== input.publish) throw new Error("Staging gate does not match the prepared frozen review");
       const policy = await refreshPolicyArtifact(pi, review);
       if (input.gate === "PASS") await requirePassEvidence(input, review, policy);
+      let body = input.body;
+      let adjudication: Record<string, unknown> | undefined;
+      if (input.adjudicationPath) {
+        const adjudicationPath = artifactFile(String(input.reviewRoot), input.adjudicationPath, "adjudication artifact");
+        adjudication = JSON.parse(await readFile(adjudicationPath, "utf8")) as Record<string, unknown>;
+        if (adjudication.schema !== "forgedock.candidate-adjudication/v1" || adjudication.artifactKey !== input.artifactKey || adjudication.repository !== input.repository || adjudication.pullRequest !== input.pullRequest || adjudication.head !== input.head || adjudication.baseRef !== input.baseRef || adjudication.baseSha !== input.baseSha || adjudication.gate !== input.gate) throw new Error("Gate does not match the parent adjudication artifact");
+        if (input.publish && adjudication.panelUrl === null) throw new Error("Published gate requires a published parent adjudication");
+        body = String(adjudication.gateBody ?? "");
+        if (body.length < 8) throw new Error("Parent adjudication artifact has no rendered gate body");
+      }
       const priorGate = input.publish && input.pullRequest !== undefined && !input.supersedes
         ? await existingGateForHead(pi, input.repository, input.pullRequest, input.head, String(review.sourceRoot))
         : undefined;
-      const supersedes = input.supersedes ?? (priorGate && !priorGate.body.includes(input.body.trim()) ? priorGate.url : undefined);
-      const bodyPath = await tempArtifact("forgedock-record-", "body.md", input.body);
+      const supersedes = input.supersedes ?? (priorGate && !priorGate.body.includes(body.trim()) ? priorGate.url : undefined);
+      const bodyPath = await tempArtifact("forgedock-record-", "body.md", body);
       const reportPath = resolve(dirname(bodyPath), "record.md");
       const args = [helperPath(), "record", "--kind", input.kind, "--repo", input.repository, "--body-file", bodyPath, "--report-file", reportPath];
       args.push(input.issue === undefined ? "--pr" : "--issue", String(input.issue ?? input.pullRequest));
@@ -439,7 +590,7 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       if (input.publish) args.push("--publish");
       const result = await pi.exec("node", args, { timeout: 120_000 });
       if (result.code !== 0) throw new Error(`Record publication failed: ${bounded(result.stderr)}`);
-      return { content: [{ type: "text", text: bounded(result.stdout) }], details: { reportPath, publication: input.publish ? "published" : "saved" } };
+      return { content: [{ type: "text", text: bounded(result.stdout) }], details: { reportPath, publication: input.publish ? "published" : "saved", ...(adjudication ? { panelUrl: adjudication.panelUrl, trackingPublication: adjudication.trackingPublication } : {}) } };
     },
   });
 }

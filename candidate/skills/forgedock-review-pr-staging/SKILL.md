@@ -32,11 +32,19 @@ fresh `forgedock-reviewer` reviewers through that generated native request, and 
 role; their source tools are read-only and their only mutation capability is the report publisher.
 Use `forge_run_check` for configured local checks only when the prepared configuration declares
 them; each real local check needs its receipt, and an empty local-check set is valid only when
-the collected current GitHub required-check evidence is complete and passing. Use
-`forge_publish_record` for the consolidated
-gate, passing the existing review root and artifact key so it loads the policy artifact bound
-by `forge_prepare_review` (do not echo the policy object), with `kind: STAGING_GATE`, the frozen
-PR/head/protected-base identity, and `gate: PASS` or `FAIL`; feed
+the collected current GitHub required-check evidence is complete and passing. Use `forge_discover_review_records` once for relevant same-head history, then use
+`forge_publish_adjudication` after every selected report is read back. The parent must map every
+structured observation ID to one explicit disposition, preserve duplicates/resolutions, and state
+whether a prerequisite applies to this promotion stage. For a non-blocking follow-up, use
+`forge_resolve_review_tracking` first; reuse a verified existing issue or provide one actionable
+draft. Set `allowIssueWrites` only when explicitly authorized. The parent tool is the only issue
+publication capability and records pending drafts on permission/transport failure.
+
+The adjudication tool writes one shared decision artifact. Pass its `decisionPath` as
+`adjudicationPath` to `forge_publish_record`; the gate tool renders the `REVIEW-PANEL` section,
+report links, dispositions, tracking results, check conclusions, and next action from that same
+artifact. Do not write a second independently authored gate body. Use `forge_publish_record` with
+`kind: STAGING_GATE`, the frozen PR/head/protected-base identity, and `gate: PASS` or `FAIL`; feed
 `configPath`, `configSha256`, `reviewRoot`, `artifactKey`, `sourceRoot`, and `head` from the
 prepared review details to each `forge_run_check`; do not use bash/edit/write in this route.
 Each reviewer publishes its own exact-head report, including a substantive clean report. For

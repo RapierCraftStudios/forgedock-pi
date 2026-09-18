@@ -51,12 +51,27 @@ permit merge, issue closure, or deployment, but it does require the evidence pub
 Reviewers do not edit source, create issues, merge, deploy, or initiate repair. If publication
 fails after analysis, retain the saved report and recover publication without rerunning review.
 
-The parent validates identity/report readback, deduplicates by causal mechanism, and publishes
-one `REVIEW-PANEL` PR record through the candidate record helper. The panel body carries the
-authoritative disposition: `IMMEDIATE REPAIR`, `NON-BLOCKING FOLLOW-UP`,
-`REJECTED/NOT APPLICABLE`, or `EVIDENCE/AUTHORITY PREREQUISITE`; its generated header links every
-actual individual report. Severity labels do not decide blocking. A consequential
-acceptance/patch defect blocks; a confirmed permitted follow-up does not hold the PR hostage.
+Before parent publication, call `forge_discover_review_records` once for relevant same-head
+history and carry applicable unresolved observations explicitly; an older report is history, not
+an automatic verdict, and a newer clean report does not silently resolve it. Every reviewer report
+must have a complete structured observation list (or an explicit empty list). The parent then
+calls `forge_publish_adjudication` with one decision for every observation ID, grouping duplicate
+causes explicitly and retaining every contributing source ID. Each decision must state the
+resolution (`confirmed`, `resolved-by-evidence`, `superseded`, `duplicate`, or `unsupported`),
+one of `IMMEDIATE REPAIR`, `NON-BLOCKING FOLLOW-UP`, `REJECTED/NOT APPLICABLE`, or
+`EVIDENCE/AUTHORITY PREREQUISITE`, the evidence/rationale, required stage, and whether it blocks
+this stage. A clean panel is valid: use an empty decision list and state code findings and
+unresolved prerequisites are none.
+
+For an accepted non-blocking follow-up, call `forge_resolve_review_tracking` before publication,
+including closed plausible matches. Reuse a verified existing issue when it owns the same causal
+behavior; otherwise include one actionable draft in the adjudication. Set `allowIssueWrites` only
+when the current parent has explicit permission. The bounded parent tool publishes at most one
+issue per deduplicated decision, reconciles ambiguous create responses, and records an exact
+pending draft when permission or transport is unavailable. Reviewers never receive these tools.
+
+The parent tool publishes the single authoritative `REVIEW-PANEL` record from the same structured
+decision used for tracking. Severity labels and reviewer verdict strings never decide blocking.
 Missing required evidence or role is gated, never approval. Re-review is scoped to a genuine
 repair and affected conclusions; a second same-mechanism failure gets a concrete diagnosis and
 respects the configured limit.
