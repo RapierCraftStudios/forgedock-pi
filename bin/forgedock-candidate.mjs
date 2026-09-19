@@ -149,7 +149,7 @@ function writeExclusive(file, content, mode = 0o600) {
   mkdirSync(dirname(output), { recursive: true, mode: 0o700 });
   if (existsSync(output)) {
     const existing = readFileSync(output, "utf8");
-    if (readFileSync(output, "utf8") !== content) fail(`Refusing to overwrite existing artifact with different content: ${output}`);
+    if (existing !== content) fail(`Refusing to overwrite existing artifact with different content: ${output}`);
     return output;
   }
   writeFileSync(output, content, { flag: "wx", mode });
@@ -1436,6 +1436,7 @@ function verifyReviewIssue(repository, number, expectedUrl, cwd) {
 }
 
 function knownReviewIssue(reviewRoot, concernId) {
+  let attempted = false;
   const files = readdirSync(reviewRoot).filter((file) => /^adjudication-r[0-9]+\\.json$/.test(file)).sort().reverse();
   for (const file of files) {
     try {
@@ -1443,7 +1444,7 @@ function knownReviewIssue(reviewRoot, concernId) {
       const value = artifact.tracking?.[concernId];
       if (value?.issue?.number) return { issue: value.issue, attempted: true };
       if (value?.knownIssue?.number) return { issue: value.knownIssue, attempted: true };
-      if (value?.attempted === true) return { attempted: true };
+      attempted = attempted || value?.attempted === true;
     } catch {
       // Ignore incomplete historical artifacts; later bounded recovery remains explicit.
     }
@@ -1453,12 +1454,12 @@ function knownReviewIssue(reviewRoot, concernId) {
     try {
       const artifact = readJson(join(reviewRoot, "tracking", entry.name));
       if (artifact.issue?.number) return { issue: artifact.issue, attempted: true };
-      if (artifact.attempted === true) return { attempted: true };
+      attempted = attempted || artifact.attempted === true;
     } catch {
       // Preserve incomplete publication evidence without guessing.
     }
   }
-  return undefined;
+  return attempted ? { attempted: true } : undefined;
 }
 
 function issueArtifactShape(issue) {
