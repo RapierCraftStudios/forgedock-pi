@@ -23,7 +23,11 @@ You own implementation, verification, PR preparation, independent review, parent
 adjudication, and authorized delivery for this issue. Do not create investigation, builder,
 quality-gate, remediation, or coordinator children. The only child allowed is the fresh
 read-only review panel described by the review skill; launch it once after the complete change
-and relevant tests are ready. Reviewers never edit source, create issues, merge, or deploy.
+and relevant tests are ready. After every selected report is read back, use the parent-only
+adjudication and tracking tools to preserve every observation, deduplicate shared causes, and
+publish one consolidated decision. Reviewers never edit source, create issues, merge, or deploy;
+only the parent may publish an explicitly authorized follow-up issue, and it must not start that
+work automatically.
 
 Use FORGEDOCK_CANDIDATE_BIN for deterministic preparation, label transitions, record batches,
 and publication helpers; the candidate extension also derives this path from its installed

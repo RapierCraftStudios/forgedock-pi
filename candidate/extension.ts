@@ -89,7 +89,7 @@ function protectedPromotionPrepared(details: unknown): boolean {
 
 /** Narrow route guard: staging may inspect/check/publish evidence, never mutate product code or deliver it. */
 export function isStagingMutationBlocked(toolName: string, input: unknown): boolean {
-  const allowedTools = new Set(["read", "grep", "find", "ls", "forge_prepare_review", "forge_run_check", "forge_publish_record", "subagent"]);
+  const allowedTools = new Set(["read", "grep", "find", "ls", "forge_prepare_review", "forge_run_check", "forge_discover_review_records", "forge_resolve_review_tracking", "forge_publish_adjudication", "forge_publish_record", "subagent"]);
   if (!allowedTools.has(toolName)) return true;
   if (toolName === "subagent" && !allowedStagingSubagent(input)) return true;
   return false;
@@ -102,7 +102,7 @@ export default function forgedockCandidateExtension(pi: ExtensionAPI): void {
     description: "Show that the isolated ForgeDock candidate extension is loaded",
     handler: async (_args, ctx) => {
       const tools = new Set(pi.getAllTools().map((tool) => tool.name));
-      ctx.ui.notify(`ForgeDock candidate loaded; helper=${process.env.FORGEDOCK_CANDIDATE_BIN}; native subagent=${tools.has("subagent") ? "available" : "unavailable"}; staging tools=${["forge_prepare_review", "forge_run_check", "forge_publish_record"].filter((name) => tools.has(name)).length}/3.`, "info");
+      ctx.ui.notify(`ForgeDock candidate loaded; helper=${process.env.FORGEDOCK_CANDIDATE_BIN}; native subagent=${tools.has("subagent") ? "available" : "unavailable"}; staging tools=${["forge_prepare_review", "forge_run_check", "forge_discover_review_records", "forge_resolve_review_tracking", "forge_publish_adjudication", "forge_publish_record"].filter((name) => tools.has(name)).length}/6.`, "info");
     },
   });
   pi.on("input", (event) => {

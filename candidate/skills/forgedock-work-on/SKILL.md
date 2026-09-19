@@ -96,16 +96,19 @@ own substantive file-backed report, and publishes it through the candidate helpe
 write authority is available. It must not edit source, create issues, edit labels, merge, deploy,
 or decide for the parent.
 
-The parent reads every report and deduplicates by causal mechanism. Disposition each concern:
-`IMMEDIATE REPAIR` for a demonstrated original-acceptance failure or consequential
-patch-caused defect; `NON-BLOCKING FOLLOW-UP` for an independently useful permitted item;
+The parent reads every report and carries applicable same-head history once. Each report's
+structured observation must appear exactly once in the parent `forge_publish_adjudication` input;
+corroborating observations are grouped by causal mechanism, with all source IDs retained. Use
+`IMMEDIATE REPAIR` for a demonstrated original-acceptance failure or consequential patch-caused
+defect; `NON-BLOCKING FOLLOW-UP` for an independently useful permitted item;
 `REJECTED/NOT APPLICABLE` for disproven/unrelated concerns with a reason; or
-`EVIDENCE/AUTHORITY PREREQUISITE` for missing proof or authority. Severity is not disposition.
-After every required report is read back, publish one SHA-bound `REVIEW-PANEL` PR record
-with `record batch`; pass each report's `reportFile` under `reviewerReports` so the helper finds
-its actual published permalink, and link the current `BUILDER`/contract/context records. The
-panel body is the parent's disposition and evidence, not another review. A missing report or
-publication is gated, not approval.
+`EVIDENCE/AUTHORITY PREREQUISITE` for missing proof or authority. Record resolution and required
+stage; severity is not disposition. Use `forge_resolve_review_tracking` before an accepted
+follow-up, reuse an existing issue when it owns the same cause, and set explicit issue-write
+permission before publishing one actionable new issue. A transport/permission failure leaves the
+draft visibly pending and does not change the code verdict or start work. The adjudication tool
+publishes one SHA-bound `REVIEW-PANEL` record linking every current report and decision. A missing
+report or publication is gated, not approval.
 
 A genuine blocker is repaired by this same owner with a regression and scoped re-review. A
 second failure of the same mechanism gets an executable diagnosis and respects the configured

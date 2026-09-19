@@ -201,7 +201,16 @@ $FORGEDOCK_CANDIDATE_BIN record reviewer \
 Add `--publish` only when the target and GitHub write authority are explicitly authorized.
 Publication lists comments once, reuses one matching stable marker, reconciles an ambiguous
 create response by readback, and requires exact saved-byte/permalink readback. A saved report
-survives a publication failure; review analysis is not rerun.
+survives a publication failure; review analysis is not rerun. Reports may also carry a
+`FORGE:REVIEW_OBSERVATIONS` marker containing stable role-scoped observation IDs. The parent
+reads every current report and uses the restricted `forge_publish_adjudication` tool to map each
+observation exactly once to an explicit disposition. Duplicate causes retain all source IDs;
+clean reports use an empty observation list. `forge_resolve_review_tracking` searches open and
+closed issues before an authorized parent publishes one actionable follow-up. Permission or
+transport failure leaves the draft pending and does not change the review verdict or start work.
+For staging, `forge_publish_record` accepts the adjudication `decisionPath` and renders the
+`REVIEW-PANEL` section and gate from the same artifact, preserving check conclusion versus
+executed-proof semantics.
 
 ## Opt-in replacement
 

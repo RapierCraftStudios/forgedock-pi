@@ -120,7 +120,7 @@ function modelArtifacts(prepared: any) {
   assert.ok(policyPath);
   const reviewRoot = preparation.out as string;
   const review = JSON.parse(readFileSync(join(reviewRoot, "review.json"), "utf8"));
-  return { content, reviewRoot, policyPath, artifactKey: review.artifactKey, review };
+  return { content, reviewRoot, policyPath, artifactKey: review.artifactKey, adjudicationPath: join(reviewRoot, "adjudication.json"), review };
 }
 
 function fakeExecutor(env: NodeJS.ProcessEnv, calls: Array<{ name: string; args: string[] }>) {
@@ -148,6 +148,7 @@ async function stagedContext(f: Awaited<ReturnType<typeof fixture>>, publish = f
   const prepared = await tools.get("forge_prepare_review")!.execute("prepare", { repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base, sourceRoot: f.root, configRoot: f.root, roles: ["correctness"], publish });
   const artifacts = modelArtifacts(prepared);
   await reviewerReport(artifacts.reviewRoot, artifacts.review);
+  await writeFile(artifacts.adjudicationPath, JSON.stringify({ schema: "forgedock.candidate-adjudication/v1", artifactKey: artifacts.artifactKey, repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base, gate: "PASS", roles: ["correctness"], reports: [{ role: "correctness" }], decisions: [], verdict: "APPROVE", panelUrl: publish ? "https://github.com/example/product/pull/7#issuecomment-99" : null, trackingPublication: "complete", gateBody: "FORGE:STAGING_GATE:PASS\\n\\n## REVIEW-PANEL\\nPrepared parent decision." }));
   return { calls, tools, artifacts };
 }
 
@@ -235,7 +236,7 @@ test("prepared staging review separates task data from reviewer execution", asyn
 });
 
 function gateInput(f: Awaited<ReturnType<typeof fixture>>, artifacts: ReturnType<typeof modelArtifacts>, publish = false) {
-  return { repository: "example/product", pullRequest: 7, kind: "STAGING_GATE", head: f.head, baseRef: "main", baseSha: f.base, gate: "PASS", checks: [], reviewRoot: artifacts.reviewRoot, artifactKey: artifacts.artifactKey, body: "FORGE:STAGING_GATE:PASS\\nEvidence.", publish };
+  return { repository: "example/product", pullRequest: 7, kind: "STAGING_GATE", head: f.head, baseRef: "main", baseSha: f.base, gate: "PASS", checks: [], reviewRoot: artifacts.reviewRoot, artifactKey: artifacts.artifactKey, adjudicationPath: artifacts.adjudicationPath, body: "placeholder body replaced by adjudication.", publish };
 }
 
 test("published staging gates supersede the latest same-head gate", async () => {
@@ -251,11 +252,14 @@ test("published staging gates supersede the latest same-head gate", async () => 
     ];
     await writeFile(f.state, JSON.stringify(state));
     const ctx = await stagedContext(f, true);
+    const adjudicationPath = join(ctx.artifacts.reviewRoot, "adjudication-gate.json");
+    await writeFile(adjudicationPath, JSON.stringify({ schema: "forgedock.candidate-adjudication/v1", artifactKey: ctx.artifacts.artifactKey, repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base, gate: "FAIL", roles: ["correctness"], reports: [{ role: "correctness" }], decisions: [], verdict: "GATED", panelUrl: "https://github.com/example/product/pull/7#issuecomment-99", trackingPublication: "complete", gateBody: "FORGE:STAGING_GATE:FAIL\n\n## REVIEW-PANEL\nA refreshed parent decision remains blocked." }));
     const result = await ctx.tools.get("forge_publish_record")!.execute("publish", {
       ...gateInput(f, ctx.artifacts),
       gate: "FAIL",
       checks: ["Shadow-Database Migration Dry Run"],
-      body: "FORGE:STAGING_GATE:FAIL\nA refreshed same-head gate remains blocked.",
+      body: "placeholder body replaced by adjudication.",
+      adjudicationPath,
       publish: true,
     });
     assert.equal(result.details.publication, "published");
@@ -289,9 +293,10 @@ test("restricted staging preparation exposes policy in content and PASS works wi
     assert.equal(policyArtifact.current.identity.head, f.head);
     assert.match(artifacts.content, /Compact summary:/);
     await reviewerReport(artifacts.reviewRoot, artifacts.review);
+    await writeFile(artifacts.adjudicationPath, JSON.stringify({ schema: "forgedock.candidate-adjudication/v1", artifactKey: artifacts.artifactKey, repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base, gate: "PASS", roles: ["correctness"], reports: [{ role: "correctness" }], decisions: [], verdict: "APPROVE", panelUrl: "https://github.com/example/product/pull/7#issuecomment-99", trackingPublication: "complete", gateBody: "FORGE:STAGING_GATE:PASS\n\n## REVIEW-PANEL\nGitHub checks are complete." }));
     const result = await publish.execute("publish", {
       repository: "example/product", pullRequest: 7, kind: "STAGING_GATE", head: f.head, baseRef: "main", baseSha: f.base, gate: "PASS", checks: [],
-      reviewRoot: artifacts.reviewRoot, artifactKey: artifacts.artifactKey, body: "FORGE:STAGING_GATE:PASS\nGitHub checks are complete.", publish: true,
+      reviewRoot: artifacts.reviewRoot, artifactKey: artifacts.artifactKey, adjudicationPath: artifacts.adjudicationPath, body: "placeholder body.", publish: true,
     });
     assert.equal(result.details.publication, "published");
     assert.equal(calls.filter((call) => call.args.includes("prepare-review")).length, 1);
@@ -479,7 +484,8 @@ test("restricted PASS rejects missing or failed GitHub requirements", async () =
     const prepared = await prepare.execute("prepare", params);
     const artifacts = modelArtifacts(prepared);
     await reviewerReport(artifacts.reviewRoot, artifacts.review);
-    const base = { repository: "example/product", pullRequest: 7, kind: "STAGING_GATE", head: f.head, baseRef: "main", baseSha: f.base, gate: "PASS", checks: [], reviewRoot: artifacts.reviewRoot, artifactKey: artifacts.artifactKey, body: "FORGE:STAGING_GATE:PASS\nEvidence.", publish: false };
+    await writeFile(artifacts.adjudicationPath, JSON.stringify({ schema: "forgedock.candidate-adjudication/v1", artifactKey: artifacts.artifactKey, repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base, gate: "PASS", roles: ["correctness"], reports: [{ role: "correctness" }], decisions: [], verdict: "APPROVE", panelUrl: null, trackingPublication: "complete", gateBody: "FORGE:STAGING_GATE:PASS\n\n## REVIEW-PANEL\nEvidence." }));
+    const base = { repository: "example/product", pullRequest: 7, kind: "STAGING_GATE", head: f.head, baseRef: "main", baseSha: f.base, gate: "PASS", checks: [], reviewRoot: artifacts.reviewRoot, artifactKey: artifacts.artifactKey, adjudicationPath: artifacts.adjudicationPath, body: "placeholder body.", publish: false };
     const unknownState = JSON.parse(await readFile(f.state, "utf8"));
     unknownState.rulesetsError = "HTTP 403 Resource not accessible";
     unknownState.protectionError = "HTTP 404 Not Found";
