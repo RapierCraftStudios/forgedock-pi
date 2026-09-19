@@ -6,7 +6,10 @@ description: Independently review one frozen issue pull request and publish an e
 # ForgeDock review-pr
 
 This route is a read/review owner, not a builder. Resolve the actual repository, PR, base/head,
-linked issue, and route identity once. A branch name in prose is not route identity. If the PR
+linked issue, and route identity once. A bare positive PR number is resolved against the
+canonical `forge.yaml` in the current target checkout (`project.owner/repo`); do not ask for a
+URL or repository when that identity is available. Ask for clarification only when the configured
+repository or PR identity cannot be resolved unambiguously. A branch name in prose is not route identity. If the PR
 is an explicit integration-to-protected promotion, hand off to `forgedock-review-pr-staging`;
 an ordinary issue PR targeting integration remains standard review.
 
