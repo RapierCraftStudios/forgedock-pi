@@ -50,6 +50,7 @@ if (endpoint.endsWith("/issues") && method === "POST") {
   const issue = { number, title: titleArg.slice("title=".length), body: readFileSync(bodyArg.slice("body=@".length), "utf8"), state: "open", labels: args.filter((value) => value.startsWith("labels[]=")).map((value) => value.slice("labels[]=".length)), html_url: "https://github.com/example/product/issues/" + number };
   state.nextIssue = number + 1;
   state.issues = [...(state.issues ?? []), issue];
+  if (state.emptyIssuePostResponse) { writeFileSync(statePath, JSON.stringify(state)); process.exit(1); }
   output(issue, state.issuePostFails ? 1 : 0);
 }
 if (/\\/issues\\/\\d+$/.test(endpoint)) {
@@ -353,6 +354,8 @@ test("one review root supports pending recovery, explicit revisions, and idempot
     assert.equal(recoveredResult.trackingPublication, "complete");
     assert.equal(recoveredResult.tracking.C1.status, "created");
     const afterRecovery = JSON.parse(await readFile(f.statePath, "utf8"));
+    afterRecovery.omitSearchIssues = true;
+    await writeFile(f.statePath, JSON.stringify(afterRecovery));
     const commentCount = afterRecovery.comments.length;
     const searchCount = afterRecovery.calls.filter((args: string[]) => args.some((arg) => arg.startsWith("search/issues?"))).length;
     const issueCreateCount = afterRecovery.calls.filter((args: string[]) => args.includes("POST") && args.some((arg) => arg.endsWith("/issues"))).length;
@@ -362,6 +365,50 @@ test("one review root supports pending recovery, explicit revisions, and idempot
     assert.equal(afterRepeat.comments.length, commentCount);
     assert.equal(afterRepeat.calls.filter((args: string[]) => args.some((arg) => arg.startsWith("search/issues?"))).length, searchCount);
     assert.equal(afterRepeat.calls.filter((args: string[]) => args.includes("POST") && args.some((arg) => arg.endsWith("/issues"))).length, issueCreateCount);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.reviewRoot, { recursive: true, force: true });
+  }
+});
+
+test("empty lost response stays pending, then late bounded reconciliation recovers without a second POST", async () => {
+  const f = await fixture(true);
+  try {
+    const state = JSON.parse(await readFile(f.statePath, "utf8"));
+    state.emptyIssuePostResponse = true;
+    state.omitSearchIssues = true;
+    await writeFile(f.statePath, JSON.stringify(state));
+    const firstPath = join(f.reviewRoot, "lost-r0.json");
+    const first = inputFor(f, true, true);
+    first.revision = 0;
+    await writeFile(firstPath, JSON.stringify(first));
+    const firstResult = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", firstPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
+    assert.equal(firstResult.trackingPublication, "pending");
+    assert.equal(firstResult.tracking.C1.attempted, true);
+    const afterFirst = JSON.parse(await readFile(f.statePath, "utf8"));
+    assert.equal(afterFirst.issues.length, 1);
+    const postCount = afterFirst.calls.filter((args: string[]) => args.includes("POST") && args.some((arg) => arg.endsWith("/issues"))).length;
+    const retryPath = join(f.reviewRoot, "lost-r1.json");
+    const retry = inputFor(f, true, true);
+    retry.revision = 1;
+    retry.supersedes = firstResult.panelUrl;
+    await writeFile(retryPath, JSON.stringify(retry));
+    const retryResult = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", retryPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
+    assert.equal(retryResult.trackingPublication, "pending");
+    const afterRetry = JSON.parse(await readFile(f.statePath, "utf8"));
+    assert.equal(afterRetry.calls.filter((args: string[]) => args.includes("POST") && args.some((arg) => arg.endsWith("/issues"))).length, postCount);
+    afterRetry.omitSearchIssues = false;
+    afterRetry.emptyIssuePostResponse = false;
+    await writeFile(f.statePath, JSON.stringify(afterRetry));
+    const latePath = join(f.reviewRoot, "lost-r2.json");
+    const late = inputFor(f, true, true);
+    late.revision = 2;
+    late.supersedes = retryResult.panelUrl;
+    await writeFile(latePath, JSON.stringify(late));
+    const lateResult = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", latePath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
+    assert.equal(lateResult.tracking.C1.status, "reused");
+    assert.equal(JSON.parse(await readFile(f.statePath, "utf8")).calls.filter((args: string[]) => args.includes("POST") && args.some((arg) => arg.endsWith("/issues"))).length, postCount);
   } finally {
     await rm(f.root, { recursive: true, force: true });
     await rm(f.bin, { recursive: true, force: true });

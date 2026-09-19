@@ -148,6 +148,7 @@ function writeExclusive(file, content, mode = 0o600) {
   const output = resolve(file);
   mkdirSync(dirname(output), { recursive: true, mode: 0o700 });
   if (existsSync(output)) {
+    const existing = readFileSync(output, "utf8");
     if (readFileSync(output, "utf8") !== content) fail(`Refusing to overwrite existing artifact with different content: ${output}`);
     return output;
   }
@@ -1440,8 +1441,9 @@ function knownReviewIssue(reviewRoot, concernId) {
     try {
       const artifact = readJson(join(reviewRoot, file));
       const value = artifact.tracking?.[concernId];
-      if (value?.issue?.number) return value.issue;
-      if (value?.knownIssue?.number) return value.knownIssue;
+      if (value?.issue?.number) return { issue: value.issue, attempted: true };
+      if (value?.knownIssue?.number) return { issue: value.knownIssue, attempted: true };
+      if (value?.attempted === true) return { attempted: true };
     } catch {
       // Ignore incomplete historical artifacts; later bounded recovery remains explicit.
     }
@@ -1450,7 +1452,8 @@ function knownReviewIssue(reviewRoot, concernId) {
   for (const entry of publicationFiles) {
     try {
       const artifact = readJson(join(reviewRoot, "tracking", entry.name));
-      if (artifact.issue?.number) return artifact.issue;
+      if (artifact.issue?.number) return { issue: artifact.issue, attempted: true };
+      if (artifact.attempted === true) return { attempted: true };
     } catch {
       // Preserve incomplete publication evidence without guessing.
     }
@@ -1463,7 +1466,7 @@ function issueArtifactShape(issue) {
 }
 
 function saveReviewIssuePublication(input, status, issue, error) {
-  const artifact = { schema: "forgedock.review-issue-publication/v1", repository: input.repository, pullRequest: input.pullRequest, head: input.head, concernId: input.concernId, revision: input.revision ?? 0, status, issue: issueArtifactShape(issue), error: error ?? null, marker: input.marker, fingerprint: input.fingerprint, draftPath: input.draftPath ?? null };
+  const artifact = { schema: "forgedock.review-issue-publication/v1", repository: input.repository, pullRequest: input.pullRequest, head: input.head, concernId: input.concernId, revision: input.revision ?? 0, status, attempted: input.attempted === true, issue: issueArtifactShape(issue), error: error ?? null, marker: input.marker, fingerprint: input.fingerprint, draftPath: input.draftPath ?? null };
   const fingerprint = sha256(canonicalJson(artifact)).slice(0, 12);
   const path = join(input.reviewRoot, "tracking", `${input.concernId.replace(/[^A-Za-z0-9_.-]/g, "-")}-r${input.revision ?? 0}-${fingerprint}.publication.json`);
   writeExclusive(path, json(artifact));
@@ -1474,16 +1477,32 @@ function publishReviewIssue(input) {
   const body = renderReviewIssueBody(input);
   const bodyName = `${input.concernId.replace(/[^A-Za-z0-9_.-]/g, "-")}-r${input.revision ?? 0}${input.parentDecisionUrl ? "-parent" : ""}.md`;
   const bodyPath = writeExclusive(join(input.reviewRoot, "tracking", bodyName), body);
-  const known = input.knownIssue;
-  if (known?.number) {
-    const direct = tryExec("gh", ["api", `repos/${input.repository}/issues/${known.number}`], { cwd: input.cwd, timeout: 120_000 });
+  const known = input.knownPublication;
+  if (known?.issue?.number) {
+    const direct = tryExec("gh", ["api", `repos/${input.repository}/issues/${known.issue.number}`], { cwd: input.cwd, timeout: 120_000 });
     if (direct.exitCode === 0 && direct.stdout) {
       const issue = normalizeGithubIssue(JSON.parse(direct.stdout));
-      saveReviewIssuePublication({ ...input, draftPath: bodyPath }, "reused", issue);
+      saveReviewIssuePublication({ ...input, draftPath: bodyPath, attempted: true }, "reused", issue);
       return { status: "reused", issue, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, reconciliation: "direct-known-issue" };
     }
-    saveReviewIssuePublication({ ...input, draftPath: bodyPath }, "pending", known, `Direct lookup of known issue #${known.number} was inconclusive`);
-    return { status: "pending", issue: undefined, knownIssue: known, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, error: `Direct lookup of known issue #${known.number} was inconclusive` };
+    saveReviewIssuePublication({ ...input, draftPath: bodyPath, attempted: true }, "pending", known.issue, `Direct lookup of known issue #${known.issue.number} was inconclusive`);
+    return { status: "pending", issue: undefined, knownIssue: known.issue, attempted: true, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, error: `Direct lookup of known issue #${known.issue.number} was inconclusive` };
+  }
+  if (known?.attempted) {
+    let recovered = [];
+    let reconciliationError;
+    try {
+      recovered = reviewIssueMatches(input.repository, input.pullRequest, input.head, input.concernId, input.draft, input.cwd, input.draft.linkedIssueNumbers, true).filter((issue) => issue.match === "exact");
+    } catch (error) {
+      reconciliationError = error instanceof Error ? error.message : String(error);
+    }
+    if (recovered.length === 1 && input.draft.labels.every((label) => recovered[0].labels.includes(label))) {
+      saveReviewIssuePublication({ ...input, draftPath: bodyPath, attempted: true }, "reused", recovered[0]);
+      return { status: "reused", issue: recovered[0], attempted: true, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, reconciliation: "bounded-late-reconciled" };
+    }
+    const error = reconciliationError ?? "Prior issue creation outcome remains unknown; no second POST is authorized";
+    saveReviewIssuePublication({ ...input, draftPath: bodyPath, attempted: true }, "pending", undefined, error);
+    return { status: "pending", issue: undefined, attempted: true, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, error };
   }
   const matches = reviewIssueMatches(input.repository, input.pullRequest, input.head, input.concernId, input.draft, input.cwd, input.draft.linkedIssueNumbers, true);
   const exact = matches.filter((issue) => issue.match === "exact");
@@ -1494,11 +1513,12 @@ function publishReviewIssue(input) {
   }
   if (!input.allowIssueWrites || !input.publish) {
     const error = input.allowIssueWrites ? "publication disabled" : "explicit issue-write permission was not granted";
-    saveReviewIssuePublication({ ...input, draftPath: bodyPath }, "pending", undefined, error);
+    saveReviewIssuePublication({ ...input, draftPath: bodyPath, attempted: false }, "pending", undefined, error);
     return { status: "pending", issue: undefined, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, error };
   }
   const args = ["gh", "api", `repos/${input.repository}/issues`, "--method", "POST", "-F", `title=${input.draft.title}`, "-F", `body=@${bodyPath}`];
   for (const label of input.draft.labels) args.push("-f", `labels[]=${label}`);
+  saveReviewIssuePublication({ ...input, draftPath: bodyPath, attempted: true }, "outcome-unknown", undefined, "Issue POST is about to begin; outcome is not yet known");
   let created;
   let ambiguousCreate = false;
   try {
@@ -1506,24 +1526,33 @@ function publishReviewIssue(input) {
     if (!transport.stdout) fail(transport.stderr || transport.error || "Issue creation returned no response");
     created = normalizeGithubIssue(JSON.parse(transport.stdout));
     ambiguousCreate = transport.exitCode !== 0;
+    saveReviewIssuePublication({ ...input, draftPath: bodyPath, attempted: true }, "outcome-unknown", created, "Server identity returned; readback is pending");
     const readBack = verifyReviewIssue(input.repository, created.number, created.url, input.cwd);
     if (readBack.title !== input.draft.title || readBack.body !== body || input.draft.labels.some((label) => !readBack.labels.includes(label))) fail(`Review follow-up issue #${created.number} readback differs from saved draft`);
     saveReviewIssuePublication({ ...input, draftPath: bodyPath }, "created", readBack);
     return { status: "created", issue: readBack, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, reconciliation: ambiguousCreate ? "ambiguous-create-reconciled" : "created" };
   } catch (error) {
-    const recovered = reviewIssueMatches(input.repository, input.pullRequest, input.head, input.concernId, input.draft, input.cwd, input.draft.linkedIssueNumbers, true).filter((issue) => issue.match === "exact");
+    let recovered = [];
+    let reconciliationError;
+    try {
+      recovered = reviewIssueMatches(input.repository, input.pullRequest, input.head, input.concernId, input.draft, input.cwd, input.draft.linkedIssueNumbers, true).filter((issue) => issue.match === "exact");
+    } catch (searchError) {
+      reconciliationError = searchError instanceof Error ? searchError.message : String(searchError);
+    }
     if (recovered.length === 1 && input.draft.labels.every((label) => recovered[0].labels.includes(label))) {
       saveReviewIssuePublication({ ...input, draftPath: bodyPath }, "reused", recovered[0]);
       return { status: "reused", issue: recovered[0], marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, reconciliation: "ambiguous-create-reconciled" };
     }
     if (created?.number) {
       const knownError = error instanceof Error ? error.message : String(error);
-      saveReviewIssuePublication({ ...input, draftPath: bodyPath }, "pending", created, knownError);
-      return { status: "pending", issue: undefined, knownIssue: created, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, error: `Issue #${created.number} creation/readback is inconclusive: ${knownError}` };
+      const combinedError = reconciliationError ? `${knownError}; reconciliation inconclusive: ${reconciliationError}` : knownError;
+      saveReviewIssuePublication({ ...input, draftPath: bodyPath, attempted: true }, "pending", created, combinedError);
+      return { status: "pending", issue: undefined, knownIssue: created, attempted: true, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, error: `Issue #${created.number} creation/readback is inconclusive: ${combinedError}` };
     }
     const errorText = error instanceof Error ? error.message : String(error);
-    saveReviewIssuePublication({ ...input, draftPath: bodyPath }, "pending", undefined, errorText);
-    return { status: "pending", issue: undefined, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, error: errorText };
+    const combinedError = reconciliationError ? `${errorText}; reconciliation inconclusive: ${reconciliationError}` : errorText;
+    saveReviewIssuePublication({ ...input, draftPath: bodyPath, attempted: true }, "pending", undefined, combinedError);
+    return { status: "pending", issue: undefined, attempted: true, marker: input.marker, fingerprint: input.fingerprint, draftPath: bodyPath, error: combinedError };
   }
 }
 
@@ -1694,7 +1723,7 @@ function recordAdjudication(options) {
     const draft = reviewIssueDraft(request.draft, `${decision.id}.tracking.draft`);
     const marker = reviewIssueMarker(repository, Number(input.pullRequest), input.head, decision.id);
     const fingerprint = reviewIssueFingerprint(repository, Number(input.pullRequest), { id: decision.id, summary: draft.problem, affectedFiles: draft.affectedFiles });
-    tracking[decision.id] = publishReviewIssue({ repository, pullRequest: Number(input.pullRequest), head: input.head, concernId: decision.id, draft, marker, fingerprint, reviewRoot, cwd, revision, knownIssue: knownReviewIssue(reviewRoot, decision.id), publish, allowIssueWrites: input.allowIssueWrites === true, parentDecisionUrl: provisionalPublication.url });
+    tracking[decision.id] = publishReviewIssue({ repository, pullRequest: Number(input.pullRequest), head: input.head, concernId: decision.id, draft, marker, fingerprint, reviewRoot, cwd, revision, knownPublication: knownReviewIssue(reviewRoot, decision.id), publish, allowIssueWrites: input.allowIssueWrites === true, parentDecisionUrl: provisionalPublication.url });
   }
   const finalBody = renderAdjudicationBody(input, review, reports, validated.decisions, tracking, provisionalPublication.url);
   const changed = finalBody !== provisionalBody;
@@ -1718,7 +1747,7 @@ function recordAdjudication(options) {
     const knownIssue = value.knownIssue ? { number: value.knownIssue.number, title: value.knownIssue.title, body: value.knownIssue.body, state: value.knownIssue.state, url: value.knownIssue.url, labels: value.knownIssue.labels } : issue;
     if (value.status === "created" || value.status === "reused") return [id, { status: "existing", issue }];
     if (value.status === "existing" || value.status === "source-issue") return [id, { status: value.status, issue }];
-    return [id, { status: "pending", draftPath: value.draftPath, knownIssue, error: value.error }];
+    return [id, { status: "pending", attempted: value.attempted === true, draftPath: value.draftPath, knownIssue, error: value.error }];
   }));
   const artifact = { schema: "forgedock.candidate-adjudication/v1", artifactKey: review.artifactKey, revision, repository, pullRequest: Number(input.pullRequest), head: input.head, baseRef: input.baseRef, baseSha: input.baseSha, mode: input.mode, verdict: validated.verdict, gate: input.gate, roles: review.roles, reports, decisions: validated.decisions, checks: validated.checks, tracking: stableTracking, panelUrl: finalPublication.url, supersededPanelUrl: provisionalPublication.url !== finalPublication.url ? provisionalPublication.url : null, gateBody, trackingPublication: Object.values(tracking).some((value) => value.status === "pending") ? "pending" : "complete" };
   writeExclusive(decisionPath, json(artifact));
