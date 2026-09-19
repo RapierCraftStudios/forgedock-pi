@@ -19,9 +19,12 @@ inputs are unchanged. Keep the exact promotion checkout as `sourceRoot` and the 
 checkout containing `forge.yaml` as `configRoot` when they differ. Collect the actual protected-PR policy and check association with
 `inspect-pr`/the supported GitHub interfaces before deciding requiredness. A missing, pending,
 failed, or unscheduled required check is reported by name; an optional or feature-PR check is
-not promoted into this gate. Missing required runtime/integration/configuration authority is a
-precise FAIL prerequisite, not permission to claim PASS. Structural checks do not substitute
-for a required runtime boundary.
+not promoted into this gate. A policy-accepted `SKIPPED` or `NEUTRAL` conclusion satisfies the
+merge-status requirement without claiming that the job executed. Do not gate on `required +
+skipped` alone: it becomes an `EVIDENCE/AUTHORITY PREREQUISITE` only when explicit acceptance,
+stage policy, or a configured runtime obligation requires executed proof. Missing required
+runtime/integration/configuration authority is a precise FAIL prerequisite, not permission to
+claim PASS. Structural checks do not substitute for a required runtime boundary.
 
 Select at most three reviewer roles. `forge_prepare_review.roles` accepts only
 `correctness`, `security`, and `specialist`; never pass target-domain names such as `infra`,
