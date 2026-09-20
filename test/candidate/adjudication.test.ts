@@ -239,6 +239,74 @@ test("clean reports produce a justified approval without invented tracking", asy
   }
 });
 
+test("current and historical follow-ups both require tracking", async () => {
+  const currentFixture = await fixture(false);
+  try {
+    const inputPath = join(currentFixture.reviewRoot, "adjudication.json.input");
+    const input = inputFor(currentFixture, false, false);
+    input.decisions[0]!.tracking = { status: "none" };
+    await writeFile(inputPath, JSON.stringify(input));
+    await assert.rejects(execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", currentFixture.root], { env: { ...process.env, PATH: `${currentFixture.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: currentFixture.statePath } }), /follow-up must identify/);
+  } finally {
+    await rm(currentFixture.root, { recursive: true, force: true });
+    await rm(currentFixture.bin, { recursive: true, force: true });
+    await rm(currentFixture.reviewRoot, { recursive: true, force: true });
+  }
+  const historicalFixture = await fixture(false);
+  try {
+    const inputPath = join(historicalFixture.reviewRoot, "adjudication.json.input");
+    const input = inputFor(historicalFixture, false, false);
+    input.historicalDecisions = [{ id: "prior-follow-up", sourceReference: "https://github.com/example/product/pull/7#issuecomment-prior", disposition: "NON-BLOCKING FOLLOW-UP", resolution: "confirmed", summary: "Historical follow-up remains useful", rationale: "The parent retains the same actionable non-blocking work.", evidence: ["The prior report remains applicable."], stage: "later validation", blocksCurrentStage: false, tracking: { status: "none" } }];
+    await writeFile(inputPath, JSON.stringify(input));
+    await assert.rejects(execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", historicalFixture.root], { env: { ...process.env, PATH: `${historicalFixture.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: historicalFixture.statePath } }), /follow-up must identify/);
+  } finally {
+    await rm(historicalFixture.root, { recursive: true, force: true });
+    await rm(historicalFixture.bin, { recursive: true, force: true });
+    await rm(historicalFixture.reviewRoot, { recursive: true, force: true });
+  }
+});
+
+test("historical follow-ups render verified links or pending drafts", async () => {
+  const existingFixture = await fixture(false);
+  try {
+    const state = JSON.parse(await readFile(existingFixture.statePath, "utf8"));
+    state.issues = [{ number: 33781, title: "Existing tracking", body: "## Problem\nExisting obligation", state: "open", labels: ["workflow:gated"], html_url: "https://github.com/example/product/issues/33781" }];
+    await writeFile(existingFixture.statePath, JSON.stringify(state));
+    const inputPath = join(existingFixture.reviewRoot, "adjudication.json.input");
+    const input = inputFor(existingFixture, false, false);
+    input.verdict = "APPROVE_WITH_FOLLOW_UP";
+    input.decisions[0]!.disposition = "REJECTED/NOT APPLICABLE";
+    input.decisions[0]!.resolution = "unsupported";
+    input.decisions[0]!.tracking = { status: "none" };
+    input.historicalDecisions = [{ id: "prior-follow-up", sourceReference: "https://github.com/example/product/pull/7#issuecomment-prior", disposition: "NON-BLOCKING FOLLOW-UP", resolution: "confirmed", summary: "Historical obligation remains useful", rationale: "The parent retains the actionable follow-up without blocking this stage.", evidence: ["The original report remains applicable."], stage: "later validation", blocksCurrentStage: false, tracking: { status: "existing", issueNumber: 33781, issueUrl: "https://github.com/example/product/issues/33781" } }];
+    await writeFile(inputPath, JSON.stringify(input));
+    const result = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", existingFixture.root], { env: { ...process.env, PATH: `${existingFixture.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: existingFixture.statePath } })).stdout);
+    assert.match(result.gateBody, /\[#33781\]\(https:\/\/github.com\/example\/product\/issues\/33781\)/);
+  } finally {
+    await rm(existingFixture.root, { recursive: true, force: true });
+    await rm(existingFixture.bin, { recursive: true, force: true });
+    await rm(existingFixture.reviewRoot, { recursive: true, force: true });
+  }
+  const pendingFixture = await fixture(false);
+  try {
+    const inputPath = join(pendingFixture.reviewRoot, "adjudication.json.input");
+    const input = inputFor(pendingFixture, false, false);
+    const pendingDraft = input.decisions[0]!.tracking.draft;
+    input.verdict = "APPROVE_WITH_FOLLOW_UP";
+    input.decisions[0]!.disposition = "REJECTED/NOT APPLICABLE";
+    input.decisions[0]!.resolution = "unsupported";
+    input.decisions[0]!.tracking = { status: "none" };
+    input.historicalDecisions = [{ id: "prior-pending", sourceReference: "https://github.com/example/product/pull/7#issuecomment-prior", disposition: "NON-BLOCKING FOLLOW-UP", resolution: "confirmed", summary: "Historical work awaits permission", rationale: "The draft is actionable but issue publication is not authorized.", evidence: ["The original report remains applicable."], stage: "later validation", blocksCurrentStage: false, tracking: { status: "pending", draft: pendingDraft } }];
+    await writeFile(inputPath, JSON.stringify(input));
+    const result = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", pendingFixture.root], { env: { ...process.env, PATH: `${pendingFixture.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: pendingFixture.statePath } })).stdout);
+    assert.match(result.gateBody, /PENDING/);
+  } finally {
+    await rm(pendingFixture.root, { recursive: true, force: true });
+    await rm(pendingFixture.bin, { recursive: true, force: true });
+    await rm(pendingFixture.reviewRoot, { recursive: true, force: true });
+  }
+});
+
 test("historical concerns enter the same decision path with explicit rejection evidence", async () => {
   const f = await fixture(false);
   try {
