@@ -21,8 +21,9 @@ checkout containing `forge.yaml` as `configRoot` when they differ. Collect the a
 failed, or unscheduled required check is reported by name; an optional or feature-PR check is
 not promoted into this gate. A policy-accepted `SKIPPED` or `NEUTRAL` conclusion satisfies the
 merge-status requirement without claiming that the job executed. Do not gate on `required +
-skipped` alone: it becomes an `EVIDENCE/AUTHORITY PREREQUISITE` only when explicit acceptance,
-stage policy, or a configured runtime obligation requires executed proof. Missing required
+skipped` alone: it becomes an `EVIDENCE/AUTHORITY PREREQUISITE` only when an identified
+acceptance/policy source or a concrete demonstrated defect requires executed proof; record that
+source in the adjudication. Missing required
 runtime/integration/configuration authority is a precise FAIL prerequisite, not permission to
 claim PASS. Structural checks do not substitute for a required runtime boundary.
 
@@ -38,7 +39,11 @@ them; each real local check needs its receipt, and an empty local-check set is v
 the collected current GitHub required-check evidence is complete and passing. Use `forge_discover_review_records` once for relevant same-head history, then use
 `forge_publish_adjudication` after every selected report is read back. The parent must map every
 structured observation ID to one explicit disposition, preserve duplicates/resolutions, and state
-whether a prerequisite applies to this promotion stage. For a non-blocking follow-up, use
+whether a prerequisite applies to this promotion stage. Every accepted `IMMEDIATE REPAIR`
+needs verified existing/source tracking, one authorized deduplicated issue, or a saved actionable
+pending draft; rejected findings and clean reviews use no tracking. Historical applicable concerns
+must enter this same decision/tracking path with their original report/attempt reference; do not
+inherit their authority from age or same-head identity. For a non-blocking follow-up, use
 `forge_resolve_review_tracking` first; reuse a verified existing issue or provide one actionable
 draft. Set `allowIssueWrites` only when explicitly authorized. The parent tool is the only issue
 publication capability and records pending drafts on permission/transport failure.

@@ -84,7 +84,7 @@ review:
   max_concurrent: 2
 `;
 
-async function fixture(publish: boolean) {
+async function fixture(publish: boolean, staging = false) {
   const root = await mkdtemp("/tmp/forgedock-adjudication-repo-");
   const bin = await mkdtemp("/tmp/forgedock-adjudication-bin-");
   const reviewRoot = await mkdtemp("/tmp/forgedock-adjudication-review-");
@@ -102,8 +102,9 @@ async function fixture(publish: boolean) {
   const head = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: root })).stdout.trim();
   await execFileAsync("git", ["branch", "-M", "integration"], { cwd: root });
   await execFileAsync("git", ["update-ref", "refs/remotes/origin/integration", base], { cwd: root });
+  if (staging) await execFileAsync("git", ["update-ref", "refs/remotes/origin/main", base], { cwd: root });
   await writeFile(statePath, JSON.stringify({
-    pull: { headRefOid: head, baseRefName: "integration", baseRefOid: base, mergeable: "MERGEABLE", mergeStateStatus: "CLEAN", state: "OPEN", isDraft: false, url: "https://github.com/example/product/pull/7" },
+    pull: { headRefOid: head, baseRefName: staging ? "main" : "integration", baseRefOid: base, mergeable: "MERGEABLE", mergeStateStatus: "CLEAN", state: "OPEN", isDraft: false, url: "https://github.com/example/product/pull/7" },
     comments: [],
     issues: [],
     nextComment: 100,
@@ -116,7 +117,7 @@ async function fixture(publish: boolean) {
     security: [{ id: "security:F1", kind: "verification-authority-prerequisite", summary: "Backup rehearsal proof is absent", affectedBehavior: "Promotion backup safety", location: "docs/backup.md", evidence: ["The same missing receipt is visible at the protected boundary."], trigger: "The exact-head rehearsal receipt is unavailable.", consequence: "The evidence gap remains until the rehearsal is run.", whyThisChange: "The promotion changes the storage boundary.", stage: "before promotion", proposedDisposition: "NON-BLOCKING FOLLOW-UP" }],
   };
   for (const role of roles) {
-    const identity = { v: 1, kind: "REVIEW", repository: "example/product", pullRequest: 7, head, baseSha: base, role, reportId: `${role}-attempt`, baseRef: "integration" };
+    const identity = { v: 1, kind: "REVIEW", repository: "example/product", pullRequest: 7, head, baseSha: base, role, reportId: `${role}-attempt`, baseRef: staging ? "main" : "integration" };
     const observationsMarker = `<!-- FORGE:REVIEW_OBSERVATIONS ${JSON.stringify(observations[role])} -->`;
     const body = `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify(identity)} -->\n${observationsMarker}\n## ForgeDock review\n\n### Scope and decisions considered\nThe exact patch was reviewed.\n\n### Evidence and findings\nThe structured observation is recorded.\n\n### Verification limitations\nNo independent rehearsal was available.\n\n### Recommendation\nFollow up after the parent decision.\n`;
     await writeFile(join(reviewRoot, `${role}.report.md`), body);
@@ -127,8 +128,9 @@ async function fixture(publish: boolean) {
     for (const [index, role] of roles.entries()) state.comments.push({ id: 11 + index, body: await readFile(join(reviewRoot, `${role}.report.md`), "utf8"), html_url: `https://github.com/example/product/pull/7#issuecomment-${11 + index}` });
     await writeFile(statePath, JSON.stringify(state));
   }
-  await writeFile(join(reviewRoot, "review.json"), JSON.stringify({ schema: "forgedock.candidate-review/v1", artifactRoot: reviewRoot, artifactKey: "attempt-1", repository: "example/product", pullRequest: 7, head, baseRef: "integration", baseSha: base, sourceRoot: root, configRoot: root, publish, roles }));
-  return { root, bin, reviewRoot, statePath, head, base, roles };
+  const baseRef = staging ? "main" : "integration";
+  await writeFile(join(reviewRoot, "review.json"), JSON.stringify({ schema: "forgedock.candidate-review/v1", artifactRoot: reviewRoot, artifactKey: "attempt-1", repository: "example/product", pullRequest: 7, head, baseRef, baseSha: base, sourceRoot: root, configRoot: root, publish, roles, mode: staging ? "staging" : "standard" }));
+  return { root, bin, reviewRoot, statePath, head, base, baseRef, mode: staging ? "staging" : "standard", roles };
 }
 
 function inputFor(f: Awaited<ReturnType<typeof fixture>>, publish: boolean, allowIssueWrites: boolean): any {
@@ -137,9 +139,9 @@ function inputFor(f: Awaited<ReturnType<typeof fixture>>, publish: boolean, allo
     repository: "example/product",
     pullRequest: 7,
     head: f.head,
-    baseRef: "integration",
+    baseRef: f.baseRef,
     baseSha: f.base,
-    mode: "standard",
+    mode: f.mode,
     reviewRoot: f.reviewRoot,
     artifactKey: "attempt-1",
     verdict: "APPROVE_WITH_FOLLOW_UP",
@@ -171,7 +173,7 @@ function inputFor(f: Awaited<ReturnType<typeof fixture>>, publish: boolean, allo
       },
     }],
     checks: [{ name: "Shadow Database Migration Dry Run", required: true, conclusion: "skipped", executedProof: false, executedProofRequired: false, policyAccepted: true, stage: "merge status", evidence: ["GitHub accepted the skipped conclusion."] }],
-    priorConcerns: ["A prior same-head attempt raised the same missing proof; this attempt groups it explicitly."],
+    priorConcerns: [],
     limitations: ["The follow-up issue is metadata only; this review does not implement it."],
     nextAction: "Proceed with the current review decision; require the rehearsal before protected promotion.",
     allowIssueWrites,
@@ -237,6 +239,64 @@ test("clean reports produce a justified approval without invented tracking", asy
   }
 });
 
+test("historical concerns enter the same decision path with explicit rejection evidence", async () => {
+  const f = await fixture(false);
+  try {
+    const inputPath = join(f.reviewRoot, "adjudication.json.input");
+    const input = inputFor(f, false, false);
+    input.historicalDecisions = [{ id: "prior-merge-result", sourceReference: "https://github.com/example/product/pull/7#issuecomment-previous", disposition: "REJECTED/NOT APPLICABLE", resolution: "resolved-by-evidence", summary: "The merge result preserves the changelog blob", rationale: "The proposed merge resolves the base-versus-head snapshot difference without deleting the artifact.", evidence: ["The reviewed merge blob is identical to the protected-base blob."], stage: "before promotion", blocksCurrentStage: false, tracking: { status: "none" } }];
+    await writeFile(inputPath, JSON.stringify(input));
+    const result = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
+    const artifact = JSON.parse(await readFile(result.decisionPath, "utf8"));
+    assert.ok(artifact.decisions.some((decision: any) => decision.id === "prior-merge-result"));
+    assert.match(artifact.gateBody, /prior-merge-result/);
+    assert.match(artifact.gateBody, /REJECTED\/NOT APPLICABLE/);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.reviewRoot, { recursive: true, force: true });
+  }
+});
+
+test("accepted staging repair records pending tracking instead of none", async () => {
+  const f = await fixture(false, true);
+  try {
+    const inputPath = join(f.reviewRoot, "adjudication.json.input");
+    const input = inputFor(f, false, false);
+    input.verdict = "CHANGES_REQUESTED";
+    input.gate = "FAIL";
+    input.decisions[0]!.disposition = "IMMEDIATE REPAIR";
+    input.decisions[0]!.resolution = "confirmed";
+    input.decisions[0]!.blocksCurrentStage = true;
+    input.decisions[0]!.tracking = { status: "pending", draft: input.decisions[0]!.tracking.draft };
+    await writeFile(inputPath, JSON.stringify(input));
+    const result = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
+    assert.equal(result.gate, "FAIL");
+    assert.equal(result.trackingPublication, "pending");
+    assert.match(result.gateBody, /PENDING/);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.reviewRoot, { recursive: true, force: true });
+  }
+});
+
+test("executed-proof requirements need an identified source", async () => {
+  const f = await fixture(false);
+  try {
+    const inputPath = join(f.reviewRoot, "adjudication.json.input");
+    const input = inputFor(f, false, false);
+    input.checks[0]!.executedProofRequired = true;
+    delete input.checks[0]!.proofSource;
+    await writeFile(inputPath, JSON.stringify(input));
+    await assert.rejects(execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } }), /executed-proof requirement needs an applicable acceptance or policy source/);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.reviewRoot, { recursive: true, force: true });
+  }
+});
+
 test("parent rejects a PASS that leaves a current-stage blocker unresolved", async () => {
   const f = await fixture(false);
   try {
@@ -259,12 +319,12 @@ test("a fresh attempt carries prior concern disposition instead of relying on ro
   try {
     const inputPath = join(f.reviewRoot, "adjudication.json.input");
     const input = inputFor(f, false, false);
-    input.priorConcerns = ["Prior attempt C0: unresolved backup proof was reviewed and explicitly REJECTED/NOT APPLICABLE for this current standard stage because no current-stage acceptance criterion requires it."];
+    input.historicalDecisions = [{ id: "prior-attempt-C0", sourceReference: "https://github.com/example/product/pull/7#issuecomment-prior", disposition: "REJECTED/NOT APPLICABLE", resolution: "resolved-by-evidence", summary: "Prior backup-proof concern is not required at this standard stage", rationale: "The current stage has no accepted executed-proof obligation for this concern.", evidence: ["The current stage policy accepts the no-op status."], stage: "current standard review", blocksCurrentStage: false, tracking: { status: "none" } }];
     input.decisions[0]!.sourceObservationIds = ["correctness:F1", "security:F1"];
     await writeFile(inputPath, JSON.stringify(input));
     const result = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
     const artifact = JSON.parse(await readFile(result.decisionPath, "utf8"));
-    assert.match(artifact.gateBody, /Prior attempt C0/);
+    assert.match(artifact.gateBody, /prior-attempt-C0/);
     assert.match(artifact.gateBody, /REJECTED\/NOT APPLICABLE/);
   } finally {
     await rm(f.root, { recursive: true, force: true });

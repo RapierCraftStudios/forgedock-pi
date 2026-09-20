@@ -72,6 +72,24 @@ const TRACKING_DRAFT = Type.Object({
   labels: Type.Optional(Type.Array(Type.String({ pattern: "^[A-Za-z0-9_.:-]+$" }))),
   linkedIssueNumbers: Type.Optional(Type.Array(Type.Integer({ minimum: 1 }), { minItems: 1 })),
 });
+const HISTORICAL_DECISION = Type.Object({
+  id: Type.String({ pattern: "^[A-Za-z][A-Za-z0-9_.-]*$" }),
+  sourceReference: Type.String({ minLength: 1 }),
+  disposition: Type.String({ pattern: "^(?:IMMEDIATE REPAIR|NON-BLOCKING FOLLOW-UP|REJECTED/NOT APPLICABLE|EVIDENCE/AUTHORITY PREREQUISITE)$" }),
+  resolution: Type.String({ pattern: "^(?:confirmed|resolved-by-evidence|superseded|duplicate|unsupported)$" }),
+  summary: Type.String({ minLength: 1 }),
+  rationale: Type.String({ minLength: 1 }),
+  evidence: Type.Array(Type.String({ minLength: 1 })),
+  stage: Type.String({ minLength: 1 }),
+  proofSource: Type.Optional(Type.String({ minLength: 1 })),
+  blocksCurrentStage: Type.Boolean(),
+  tracking: Type.Optional(Type.Object({
+    status: Type.String({ pattern: "^(?:none|existing|source-issue|new|pending)$" }),
+    issueNumber: Type.Optional(Type.Integer({ minimum: 1 })),
+    issueUrl: Type.Optional(Type.String({ minLength: 1 })),
+    draft: Type.Optional(TRACKING_DRAFT),
+  })),
+});
 const ADJUDICATION_INPUT = Type.Object({
   repository: REPOSITORY,
   pullRequest: Type.Integer({ minimum: 1 }),
@@ -100,6 +118,7 @@ const ADJUDICATION_INPUT = Type.Object({
       draft: Type.Optional(TRACKING_DRAFT),
     })),
   })),
+  historicalDecisions: Type.Optional(Type.Array(HISTORICAL_DECISION)),
   checks: Type.Array(Type.Object({
     name: Type.String({ minLength: 1 }),
     required: Type.Boolean(),
@@ -107,6 +126,7 @@ const ADJUDICATION_INPUT = Type.Object({
     executedProof: Type.Boolean(),
     executedProofRequired: Type.Boolean(),
     policyAccepted: Type.Boolean(),
+    proofSource: Type.Optional(Type.String({ minLength: 1 })),
     stage: Type.String({ minLength: 1 }),
     evidence: Type.Array(Type.String({ minLength: 1 })),
   })),

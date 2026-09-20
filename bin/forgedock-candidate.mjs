@@ -1586,6 +1586,7 @@ function validateAdjudication(input, review, reports) {
     const trackingStatus = stringValue(tracking.status, `${id}.tracking.status`);
     if (!REVIEW_TRACKING.has(trackingStatus)) fail(`${id} has unsupported tracking status`);
     if (disposition === "NON-BLOCKING FOLLOW-UP" && trackingStatus === "none") fail(`${id} follow-up must identify existing, new, or pending tracking`);
+    if (input.mode === "staging" && disposition === "IMMEDIATE REPAIR" && trackingStatus === "none") fail(`${id} staging repair must identify existing/source tracking or pending issue publication`);
     return {
       id,
       sourceObservationIds,
@@ -1600,6 +1601,22 @@ function validateAdjudication(input, review, reports) {
     };
   });
   if (assigned.size !== observationIds.size) fail(`Adjudication omitted ${[...observationIds].filter((id) => !assigned.has(id)).join(", ")}`);
+  const historicalDecisions = (Array.isArray(input.historicalDecisions) ? input.historicalDecisions : []).map((raw, index) => {
+    const decision = objectRecord(raw, `historical decision ${index}`);
+    const id = stringValue(decision.id, `historical decision ${index} id`, SAFE_TOKEN);
+    const sourceReference = stringValue(decision.sourceReference, `${id}.sourceReference`);
+    const disposition = stringValue(decision.disposition, `${id}.disposition`);
+    const resolution = stringValue(decision.resolution, `${id}.resolution`);
+    if (!REVIEW_DISPOSITIONS.has(disposition)) fail(`${id} has an unsupported historical disposition`);
+    if (!REVIEW_RESOLUTIONS.has(resolution)) fail(`${id} has an unsupported historical resolution`);
+    const tracking = decision.tracking === undefined ? { status: "none" } : objectRecord(decision.tracking, `${id}.tracking`);
+    const trackingStatus = stringValue(tracking.status, `${id}.tracking.status`);
+    if (!REVIEW_TRACKING.has(trackingStatus)) fail(`${id} has unsupported historical tracking status`);
+    if (input.mode === "staging" && disposition === "IMMEDIATE REPAIR" && trackingStatus === "none") fail(`${id} staging repair must identify existing/source tracking or pending issue publication`);
+    if (disposition === "EVIDENCE/AUTHORITY PREREQUISITE" && decision.blocksCurrentStage === true && typeof decision.proofSource !== "string") fail(`${id} executed-proof prerequisite needs an applicable acceptance or policy source`);
+    return { id, sourceObservationIds: [sourceReference], historical: true, proofSource: decision.proofSource === undefined ? undefined : stringValue(decision.proofSource, `${id}.proofSource`), disposition, resolution, summary: stringValue(decision.summary, `${id}.summary`), rationale: stringValue(decision.rationale, `${id}.rationale`), evidence: Array.isArray(decision.evidence) ? decision.evidence.map((value, evidenceIndex) => stringValue(value, `${id}.evidence[${evidenceIndex}]`)) : fail(`${id}.evidence must be an array`), stage: stringValue(decision.stage, `${id}.stage`), blocksCurrentStage: decision.blocksCurrentStage === true, tracking: { ...tracking, status: trackingStatus } };
+  });
+  if (Array.isArray(input.priorConcerns) && input.priorConcerns.length > 0 && historicalDecisions.length === 0) fail("Prior concerns must be represented by structured historical decisions");
   const checks = Array.isArray(input.checks) ? input.checks.map((raw, index) => {
     const check = objectRecord(raw, `check ${index}`);
     return {
@@ -1609,11 +1626,14 @@ function validateAdjudication(input, review, reports) {
       executedProof: check.executedProof === true,
       executedProofRequired: check.executedProofRequired === true,
       policyAccepted: check.policyAccepted === true,
+      proofSource: check.proofSource === undefined ? undefined : stringValue(check.proofSource, `check ${index}.proofSource`),
       stage: stringValue(check.stage ?? "current stage", `check ${index}.stage`),
       evidence: Array.isArray(check.evidence) ? check.evidence.map((value, evidenceIndex) => stringValue(value, `check ${index}.evidence[${evidenceIndex}]`)) : [],
     };
   }) : fail("Adjudication checks must be an array");
-  const blocking = normalized.filter((decision) => decision.blocksCurrentStage || decision.disposition === "IMMEDIATE REPAIR" && decision.blocksCurrentStage);
+  const allDecisions = [...normalized, ...historicalDecisions];
+  if (checks.some((check) => check.executedProofRequired && !check.proofSource)) fail("An executed-proof requirement needs an applicable acceptance or policy source");
+  const blocking = allDecisions.filter((decision) => decision.blocksCurrentStage || decision.disposition === "IMMEDIATE REPAIR" && decision.blocksCurrentStage);
   if (input.gate === "PASS") {
     if (blocking.length > 0) fail(`PASS cannot coexist with current-stage adjudication blockers: ${blocking.map((decision) => decision.id).join(", ")}`);
     const unsatisfied = checks.filter((check) => check.required && (check.conclusion === "failed" || check.conclusion === "pending" || check.conclusion === "unknown" || check.conclusion === "not-configured" || (check.conclusion === "skipped" || check.conclusion === "neutral") && (!check.policyAccepted || check.executedProofRequired && !check.executedProof)));
@@ -1621,12 +1641,12 @@ function validateAdjudication(input, review, reports) {
   }
   const verdict = stringValue(input.verdict, "adjudication verdict");
   if (!["APPROVE", "APPROVE_WITH_FOLLOW_UP", "CHANGES_REQUESTED", "GATED"].includes(verdict)) fail("Unsupported adjudication verdict");
-  const acceptedRepairs = normalized.filter((decision) => decision.disposition === "IMMEDIATE REPAIR");
+  const acceptedRepairs = allDecisions.filter((decision) => decision.disposition === "IMMEDIATE REPAIR");
   if (acceptedRepairs.length > 0 && (input.gate === "PASS" || verdict === "APPROVE" || verdict === "APPROVE_WITH_FOLLOW_UP")) fail(`Accepted immediate repairs remain unresolved: ${acceptedRepairs.map((decision) => decision.id).join(", ")}`);
-  if (verdict === "APPROVE" && normalized.some((decision) => decision.disposition === "NON-BLOCKING FOLLOW-UP")) fail("APPROVE must use APPROVE_WITH_FOLLOW_UP when a follow-up remains");
-  if (verdict === "APPROVE_WITH_FOLLOW_UP" && !normalized.some((decision) => decision.disposition === "NON-BLOCKING FOLLOW-UP")) fail("APPROVE_WITH_FOLLOW_UP needs a follow-up disposition");
-  if (verdict === "CHANGES_REQUESTED" && !normalized.some((decision) => decision.disposition === "IMMEDIATE REPAIR")) fail("CHANGES_REQUESTED needs an immediate-repair disposition");
-  return { decisions: normalized, checks, verdict, observations };
+  if (verdict === "APPROVE" && allDecisions.some((decision) => decision.disposition === "NON-BLOCKING FOLLOW-UP")) fail("APPROVE must use APPROVE_WITH_FOLLOW_UP when a follow-up remains");
+  if (verdict === "APPROVE_WITH_FOLLOW_UP" && !allDecisions.some((decision) => decision.disposition === "NON-BLOCKING FOLLOW-UP")) fail("APPROVE_WITH_FOLLOW_UP needs a follow-up disposition");
+  if (verdict === "CHANGES_REQUESTED" && !allDecisions.some((decision) => decision.disposition === "IMMEDIATE REPAIR")) fail("CHANGES_REQUESTED needs an immediate-repair disposition");
+  return { decisions: allDecisions, checks, verdict, observations, historicalDecisions };
 }
 
 function trackingLabel(result) {
@@ -1641,7 +1661,7 @@ function renderAdjudicationBody(input, review, reports, decisions, tracking, pan
   const rows = decisions.length === 0
     ? "No actionable observations were submitted. Code findings: none; unresolved prerequisites: none."
     : decisions.map((decision) => `| ${safeCell(decision.id)} | ${safeCell(decision.sourceObservationIds.join(", "))} | ${safeCell(decision.disposition)} | ${safeCell(`${decision.summary} ${decision.rationale} Evidence: ${decision.evidence.join(" ")}`)} | ${safeCell(decision.stage)} | ${safeCell(tracking[decision.id] ? trackingLabel(tracking[decision.id]) : "none required")} |`).join("\n");
-  const checkLines = input.checks.length ? input.checks.map((check) => `- **${safeCell(check.name)}**: ${safeCell(check.conclusion)}; executed proof: ${check.executedProof ? "yes" : "no"}; required: ${check.required ? "yes" : "no"}; stage: ${safeCell(check.stage)}${check.policyAccepted ? "; policy accepts conclusion" : ""}${check.evidence.length ? `; evidence: ${check.evidence.join(" ")}` : ""}`).join("\n") : "- No check conclusions were supplied.";
+  const checkLines = input.checks.length ? input.checks.map((check) => `- **${safeCell(check.name)}**: ${safeCell(check.conclusion)}; executed proof: ${check.executedProof ? "yes" : "no"}; required: ${check.required ? "yes" : "no"}; stage: ${safeCell(check.stage)}${check.policyAccepted ? "; policy accepts conclusion" : ""}${check.executedProofRequired ? `; proof source: ${check.proofSource}` : ""}${check.evidence.length ? `; evidence: ${check.evidence.join(" ")}` : ""}`).join("\n") : "- No check conclusions were supplied.";
   const prior = Array.isArray(input.priorConcerns) && input.priorConcerns.length ? input.priorConcerns.map((entry) => `- ${entry}`).join("\n") : "- No applicable prior concern was carried into this attempt.";
   const limitations = Array.isArray(input.limitations) && input.limitations.length ? input.limitations.map((entry) => `- ${entry}`).join("\n") : "- None recorded.";
   return [
