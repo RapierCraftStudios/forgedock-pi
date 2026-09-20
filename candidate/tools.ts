@@ -110,6 +110,7 @@ const ADJUDICATION_INPUT = Type.Object({
     rationale: Type.String({ minLength: 1 }),
     evidence: Type.Array(Type.String({ minLength: 1 })),
     stage: Type.String({ minLength: 1 }),
+    proofSource: Type.Optional(Type.String({ minLength: 1 })),
     blocksCurrentStage: Type.Boolean(),
     tracking: Type.Optional(Type.Object({
       status: Type.String({ pattern: "^(?:none|existing|source-issue|new|pending)$" }),

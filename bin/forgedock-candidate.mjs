@@ -1587,6 +1587,7 @@ function validateAdjudication(input, review, reports) {
     if (!REVIEW_TRACKING.has(trackingStatus)) fail(`${id} has unsupported tracking status`);
     if (disposition === "NON-BLOCKING FOLLOW-UP" && trackingStatus === "none") fail(`${id} follow-up must identify existing, new, or pending tracking`);
     if (input.mode === "staging" && disposition === "IMMEDIATE REPAIR" && trackingStatus === "none") fail(`${id} staging repair must identify existing/source tracking or pending issue publication`);
+    if (disposition === "EVIDENCE/AUTHORITY PREREQUISITE" && decision.blocksCurrentStage === true && typeof decision.proofSource !== "string") fail(`${id} executed-proof prerequisite needs an applicable acceptance or policy source`);
     return {
       id,
       sourceObservationIds,
@@ -1596,6 +1597,7 @@ function validateAdjudication(input, review, reports) {
       rationale: stringValue(decision.rationale, `${id}.rationale`),
       evidence: Array.isArray(decision.evidence) ? decision.evidence.map((value, evidenceIndex) => stringValue(value, `${id}.evidence[${evidenceIndex}]`)) : fail(`${id}.evidence must be an array`),
       stage: stringValue(decision.stage, `${id}.stage`),
+      proofSource: decision.proofSource === undefined ? undefined : stringValue(decision.proofSource, `${id}.proofSource`),
       blocksCurrentStage: decision.blocksCurrentStage === true,
       tracking: { ...tracking, status: trackingStatus },
     };
@@ -1660,7 +1662,7 @@ function renderAdjudicationBody(input, review, reports, decisions, tracking, pan
   const reportLines = reports.map((report) => `- **${report.role}**: ${report.url ? `[comment #${report.id}](${report.url})` : "saved report (not published)"}`).join("\n");
   const rows = decisions.length === 0
     ? "No actionable observations were submitted. Code findings: none; unresolved prerequisites: none."
-    : decisions.map((decision) => `| ${safeCell(decision.id)} | ${safeCell(decision.sourceObservationIds.join(", "))} | ${safeCell(decision.disposition)} | ${safeCell(`${decision.summary} ${decision.rationale} Evidence: ${decision.evidence.join(" ")}`)} | ${safeCell(decision.stage)} | ${safeCell(tracking[decision.id] ? trackingLabel(tracking[decision.id]) : "none required")} |`).join("\n");
+    : decisions.map((decision) => `| ${safeCell(decision.id)} | ${safeCell(decision.sourceObservationIds.join(", "))} | ${safeCell(decision.disposition)} | ${safeCell(`${decision.summary} ${decision.rationale}${decision.proofSource ? ` Proof source: ${decision.proofSource}` : ""} Evidence: ${decision.evidence.join(" ")}`)} | ${safeCell(decision.stage)} | ${safeCell(tracking[decision.id] ? trackingLabel(tracking[decision.id]) : "none required")} |`).join("\n");
   const checkLines = input.checks.length ? input.checks.map((check) => `- **${safeCell(check.name)}**: ${safeCell(check.conclusion)}; executed proof: ${check.executedProof ? "yes" : "no"}; required: ${check.required ? "yes" : "no"}; stage: ${safeCell(check.stage)}${check.policyAccepted ? "; policy accepts conclusion" : ""}${check.executedProofRequired ? `; proof source: ${check.proofSource}` : ""}${check.evidence.length ? `; evidence: ${check.evidence.join(" ")}` : ""}`).join("\n") : "- No check conclusions were supplied.";
   const prior = Array.isArray(input.priorConcerns) && input.priorConcerns.length ? input.priorConcerns.map((entry) => `- ${entry}`).join("\n") : "- No applicable prior concern was carried into this attempt.";
   const limitations = Array.isArray(input.limitations) && input.limitations.length ? input.limitations.map((entry) => `- ${entry}`).join("\n") : "- None recorded.";

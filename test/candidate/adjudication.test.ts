@@ -297,6 +297,30 @@ test("executed-proof requirements need an identified source", async () => {
   }
 });
 
+test("current evidence prerequisites use the same source requirement as historical ones", async () => {
+  const f = await fixture(false);
+  try {
+    const inputPath = join(f.reviewRoot, "adjudication.json.input");
+    const input = inputFor(f, false, false);
+    input.verdict = "GATED";
+    input.gate = "FAIL";
+    input.decisions[0]!.disposition = "EVIDENCE/AUTHORITY PREREQUISITE";
+    input.decisions[0]!.blocksCurrentStage = true;
+    input.decisions[0]!.tracking = { status: "pending", draft: input.decisions[0]!.tracking.draft };
+    await writeFile(inputPath, JSON.stringify(input));
+    await assert.rejects(execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } }), /executed-proof prerequisite needs/);
+    input.decisions[0]!.proofSource = "acceptance:restore-contract#backup-proof";
+    await writeFile(inputPath, JSON.stringify(input));
+    const result = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
+    assert.equal(result.gate, "FAIL");
+    assert.match(result.gateBody, /acceptance:restore-contract#backup-proof/);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.reviewRoot, { recursive: true, force: true });
+  }
+});
+
 test("parent rejects a PASS that leaves a current-stage blocker unresolved", async () => {
   const f = await fixture(false);
   try {
@@ -306,7 +330,7 @@ test("parent rejects a PASS that leaves a current-stage blocker unresolved", asy
     input.decisions[0]!.tracking = { status: "none" };
     input.decisions[0]!.blocksCurrentStage = true;
     await writeFile(inputPath, JSON.stringify(input));
-    await assert.rejects(execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } }), /PASS cannot coexist/);
+    await assert.rejects(execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } }), /PASS cannot coexist|executed-proof prerequisite/);
   } finally {
     await rm(f.root, { recursive: true, force: true });
     await rm(f.bin, { recursive: true, force: true });
