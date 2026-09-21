@@ -36,8 +36,11 @@ fresh `forgedock-reviewer` reviewers through that generated native request, and 
 role; their source tools are read-only and their only mutation capability is the report publisher.
 Use `forge_run_check` for configured local checks only when the prepared configuration declares
 them; each real local check needs its receipt, and an empty local-check set is valid only when
-the collected current GitHub required-check evidence is complete and passing. Use `forge_discover_review_records` once for relevant same-head history, then use
-`forge_publish_adjudication` after every selected report is read back. The parent must map every
+the collected current GitHub required-check evidence is complete and passing. Use `forge_discover_review_records` once with the prepared `reviewRoot` and `artifactKey`.
+It returns a compact bounded index plus readable `bodyPath` files for selected full records; read
+those paths before carrying a historical concern. Do not use truncated tail JSON as evidence.
+Current reviewers must inspect primary workflow/source evidence rather than independently repeating
+supplied reviewer prose. Then use `forge_publish_adjudication` after every selected report is read back. The parent must map every
 structured observation ID to one explicit disposition, preserve duplicates/resolutions, and state
 whether a prerequisite applies to this promotion stage. Every accepted `IMMEDIATE REPAIR`
 needs verified existing/source tracking, one authorized deduplicated issue, or a saved actionable

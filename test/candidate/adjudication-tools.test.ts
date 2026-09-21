@@ -33,13 +33,23 @@ test("parent-only adjudication tools expose bounded review and tracking operatio
     const calls: string[][] = [];
     const tools = toolsFor(async (_name: string, args: string[] = []) => {
       calls.push(args);
-      if (args.includes("discover")) return { code: 0, stdout: JSON.stringify({ records: [] }), stderr: "" };
+      if (args.includes("discover")) {
+        const outIndex = args.indexOf("--out");
+        const discovery = { commentCount: 1, recordCount: 1, unclassifiedComments: [], records: [{ id: 9, url: "https://github.com/example/product/pull/7#issuecomment-9", createdAt: "now", kind: "REVIEW-PANEL", record: { v: 1 }, body: "FULL SELECTED RECORD" }] };
+        if (outIndex >= 0) await writeFile(args[outIndex + 1]!, JSON.stringify(discovery));
+        return { code: 0, stdout: JSON.stringify(discovery), stderr: "" };
+      }
       if (args.includes("review-issues")) return { code: 0, stdout: JSON.stringify({ matches: [] }), stderr: "" };
       return { code: 0, stdout: JSON.stringify({ schema: "forgedock.candidate-adjudication/v1", decisionPath: join(root, "adjudication.json"), panelUrl: null, gate: "PASS", verdict: "APPROVE", trackingPublication: "complete", gateBody: "FORGE:STAGING_GATE:PASS\n## REVIEW-PANEL" }), stderr: "" };
     });
     const common = { repository: "example/product", pullRequest: 7, head: review.head, baseRef: "integration", baseSha: review.baseSha, reviewRoot: root, artifactKey: review.artifactKey };
-    const discovered = await tools.get("forge_discover_review_records")!.execute("discover", { repository: "example/product", pullRequest: 7, cwd: root });
-    assert.match(discovered.content[0].text, /records/);
+    const discovered = await tools.get("forge_discover_review_records")!.execute("discover", { repository: "example/product", pullRequest: 7, cwd: root, reviewRoot: root, artifactKey: review.artifactKey });
+    assert.match(discovered.content[0].text, /historyIndexPath|records/);
+    const historyIndexPath = discovered.details.historyIndexPath;
+    assert.equal(typeof historyIndexPath, "string");
+    const historyIndex = JSON.parse(await readFile(historyIndexPath as string, "utf8"));
+    assert.equal(historyIndex.records.length, 1);
+    assert.equal(await readFile(historyIndex.records[0].bodyPath, "utf8"), "FULL SELECTED RECORD");
     const firstDraft = { title: "Follow up", problem: "A missing proof", rootCause: "No receipt", affectedFiles: ["docs/proof.md"], expectedBehavior: "A receipt exists", acceptanceCriteria: ["Publish it"], evidence: ["Report"], stage: "before promotion" };
     const searched = await tools.get("forge_resolve_review_tracking")!.execute("search", { ...common, concernId: "correctness:F1", draft: firstDraft });
     const searchedSecond = await tools.get("forge_resolve_review_tracking")!.execute("search", { ...common, concernId: "security:F1", draft: { ...firstDraft, problem: "A second proof is missing", affectedFiles: ["docs/security.md"] } });

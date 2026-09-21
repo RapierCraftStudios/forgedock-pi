@@ -539,12 +539,35 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       repository: REPOSITORY,
       pullRequest: Type.Integer({ minimum: 1 }),
       cwd: Type.String({ minLength: 1 }),
+      reviewRoot: Type.Optional(Type.String({ minLength: 1 })),
+      artifactKey: Type.Optional(Type.String({ minLength: 1 })),
     }),
     async execute(_toolCallId, params) {
-      const input = params as { repository: string; pullRequest: number; cwd: string };
-      const result = await pi.exec("node", [helperPath(), "discover", "--repo", input.repository, "--pr", String(input.pullRequest), "--cwd", resolve(input.cwd)], { timeout: 120_000 });
+      const input = params as { repository: string; pullRequest: number; cwd: string; reviewRoot?: string; artifactKey?: string };
+      if ((input.reviewRoot === undefined) !== (input.artifactKey === undefined)) throw new Error("Prior review discovery needs both reviewRoot and artifactKey when bound to a prepared review");
+      if (input.reviewRoot) await preparedReview(input.reviewRoot, input.artifactKey!);
+      const root = input.reviewRoot ? resolve(input.reviewRoot) : undefined;
+      const digest = createHash("sha256").update(`${input.repository}:${input.pullRequest}`).digest("hex").slice(0, 12);
+      const sourcePath = root ? join(root, `review-history-source-${digest}.json`) : undefined;
+      const fullPath = root ? join(root, `review-history-${digest}.json`) : undefined;
+      const historyIndexPath: string | null = fullPath ?? null;
+      const args = [helperPath(), "discover", "--repo", input.repository, "--pr", String(input.pullRequest), "--cwd", resolve(input.cwd)];
+      if (sourcePath) args.push("--out", sourcePath);
+      const result = await pi.exec("node", args, { timeout: 120_000 });
       if (result.code !== 0) throw new Error(`Prior review discovery failed: ${bounded(result.stderr)}`);
-      return { content: [{ type: "text", text: bounded(result.stdout) }], details: { repository: input.repository, pullRequest: input.pullRequest } };
+      let raw: Record<string, any>;
+      try { raw = JSON.parse(result.stdout) as Record<string, any>; } catch { throw new Error("Prior review discovery returned invalid JSON"); }
+      if (!root || !fullPath) return { content: [{ type: "text", text: bounded(JSON.stringify({ schema: "forgedock.candidate-review-history-index/v1", repository: input.repository, pullRequest: input.pullRequest, completeness: { commentCount: raw.commentCount ?? null, recordCount: raw.recordCount ?? null, unclassifiedCount: Array.isArray(raw.unclassifiedComments) ? raw.unclassifiedComments.length : null }, records: Array.isArray(raw.records) ? raw.records.map((record: any) => ({ id: record.id, url: record.url, createdAt: record.createdAt, kind: record.kind, record: record.record })) : [] }, null, 2)) }], details: { repository: input.repository, pullRequest: input.pullRequest, historyIndexPath, recordCount: Array.isArray(raw.records) ? raw.records.length : 0 } };
+      const historyDir = join(root, "review-history");
+      await mkdir(historyDir, { recursive: true, mode: 0o700 });
+      const records = Array.isArray(raw.records) ? await Promise.all(raw.records.map(async (record: any) => {
+        const bodyPath = join(historyDir, `comment-${String(record.id)}.md`);
+        await writeFile(bodyPath, `${typeof record.body === "string" ? record.body : ""}`, { flag: "wx", mode: 0o600 }).catch(async (error) => { if (await readFile(bodyPath, "utf8") !== String(record.body ?? "")) throw error; });
+        return { id: record.id, url: record.url, createdAt: record.createdAt, kind: record.kind, record: record.record, bodyPath };
+      })) : [];
+      const index = { schema: "forgedock.candidate-review-history-index/v1", repository: input.repository, pullRequest: input.pullRequest, artifactKey: input.artifactKey, completeness: { commentCount: raw.commentCount ?? null, recordCount: raw.recordCount ?? null, unclassifiedCount: Array.isArray(raw.unclassifiedComments) ? raw.unclassifiedComments.length : null, sourceArtifact: sourcePath }, records };
+      await stableJsonFile(fullPath, index);
+      return { content: [{ type: "text", text: bounded(JSON.stringify(index, null, 2)) }], details: { repository: input.repository, pullRequest: input.pullRequest, historyIndexPath, recordCount: records.length } };
     },
   });
 

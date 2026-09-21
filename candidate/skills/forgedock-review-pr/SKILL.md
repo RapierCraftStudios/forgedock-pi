@@ -54,9 +54,11 @@ permit merge, issue closure, or deployment, but it does require the evidence pub
 Reviewers do not edit source, create issues, merge, deploy, or initiate repair. If publication
 fails after analysis, retain the saved report and recover publication without rerunning review.
 
-Before parent publication, call `forge_discover_review_records` once for relevant same-head
-history and carry applicable unresolved observations explicitly; an older report is history, not
-an automatic verdict, and a newer clean report does not silently resolve it. Every reviewer report
+Before parent publication, call `forge_discover_review_records` once with the prepared
+`reviewRoot` and `artifactKey`; use its compact bounded index and read selected `bodyPath` files
+for full historical records. An older report is history, not an automatic verdict, and a newer
+clean report does not silently resolve it. Reviewers must inspect primary source/workflow evidence
+rather than independently repeating supplied claims. Every reviewer report
 must have a complete structured observation list (or an explicit empty list). The parent then
 calls `forge_publish_adjudication` with one decision for every observation ID, grouping duplicate
 causes explicitly and retaining every contributing source ID. Each decision must state the
