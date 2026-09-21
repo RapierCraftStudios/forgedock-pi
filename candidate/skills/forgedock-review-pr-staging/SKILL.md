@@ -20,10 +20,13 @@ checkout containing `forge.yaml` as `configRoot` when they differ. Collect the a
 `inspect-pr`/the supported GitHub interfaces before deciding requiredness. A missing, pending,
 failed, or unscheduled required check is reported by name; an optional or feature-PR check is
 not promoted into this gate. A policy-accepted `SKIPPED` or `NEUTRAL` conclusion satisfies the
-merge-status requirement without claiming that the job executed. Do not gate on `required +
-skipped` alone: it becomes an `EVIDENCE/AUTHORITY PREREQUISITE` only when an identified
-acceptance/policy source or a concrete demonstrated defect requires executed proof; record that
-source in the adjudication. Missing required
+merge-status requirement without claiming that the job executed. Inspect the primary workflow
+condition and detector result at the frozen head before deciding that execution is separately
+required. Do not gate on `required + skipped` alone: it becomes an
+`EVIDENCE/AUTHORITY PREREQUISITE` only when an identified acceptance/policy source or a concrete
+demonstrated defect requires executed proof; a policy.json path, check URL, or earlier reviewer
+demand alone is not that source. Record the source and contrary/confirming evidence in the
+adjudication. Missing required
 runtime/integration/configuration authority is a precise FAIL prerequisite, not permission to
 claim PASS. Structural checks do not substitute for a required runtime boundary.
 
