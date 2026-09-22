@@ -292,6 +292,7 @@ test("restricted staging preparation exposes policy in content and PASS works wi
     assert.equal(policyArtifact.schema, "forgedock.candidate-policy/v1");
     assert.equal(policyArtifact.current.identity.head, f.head);
     assert.match(artifacts.content, /Compact summary:/);
+    assert.match(artifacts.content, /caller-supplied acceptance\/history\/evidence\/limitations are review context/);
     await reviewerReport(artifacts.reviewRoot, artifacts.review);
     await writeFile(artifacts.adjudicationPath, JSON.stringify({ schema: "forgedock.candidate-adjudication/v1", artifactKey: artifacts.artifactKey, repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base, gate: "PASS", roles: ["correctness"], reports: [{ role: "correctness" }], decisions: [], verdict: "APPROVE", panelUrl: "https://github.com/example/product/pull/7#issuecomment-99", trackingPublication: "complete", gateBody: "FORGE:STAGING_GATE:PASS\n\n## REVIEW-PANEL\nGitHub checks are complete." }));
     const result = await publish.execute("publish", {
