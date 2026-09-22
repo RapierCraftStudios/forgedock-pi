@@ -173,7 +173,7 @@ function inputFor(f: Awaited<ReturnType<typeof fixture>>, publish: boolean, allo
       },
     }],
     checks: [{ name: "Shadow Database Migration Dry Run", required: true, conclusion: "skipped", executedProof: false, executedProofRequired: false, policyAccepted: true, stage: "merge status", evidence: ["GitHub accepted the skipped conclusion."] }],
-    priorConcerns: [],
+    historicalDecisions: [],
     limitations: ["The follow-up issue is metadata only; this review does not implement it."],
     nextAction: "Proceed with the current review decision; require the rehearsal before protected promotion.",
     allowIssueWrites,
@@ -194,6 +194,34 @@ test("parent adjudication deduplicates duplicate observations and preserves skip
     assert.deepEqual(artifact.decisions[0].sourceObservationIds, ["correctness:F1", "security:F1"]);
     assert.match(artifact.gateBody, /REVIEW-PANEL/);
     assert.match(artifact.gateBody, /skipped/);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.reviewRoot, { recursive: true, force: true });
+  }
+});
+
+test("legacy prose concerns fail actionably and a revised structured request remains valid", async () => {
+  const f = await fixture(false);
+  try {
+    const failedPath = join(f.reviewRoot, "adjudication-input-r0.json");
+    const failed = inputFor(f, false, false) as any;
+    failed.priorConcerns = ["A prior allegation requires adjudication."];
+    await writeFile(failedPath, JSON.stringify(failed));
+    await assert.rejects(
+      execFileAsync("node", [helper, "record", "adjudication", "--input", failedPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } }),
+      /Legacy priorConcerns prose.*historicalDecisions.*sourceReference/,
+    );
+    const revisedPath = join(f.reviewRoot, "adjudication-input-r1.json");
+    const revised = inputFor(f, false, false) as any;
+    revised.historicalDecisions = [{ id: "prior-allegation", sourceReference: "https://github.com/example/product/pull/7#issuecomment-prior", disposition: "REJECTED/NOT APPLICABLE", resolution: "resolved-by-evidence", summary: "The allegation is contradicted by current primary evidence", rationale: "The exact-head evidence preserves the artifact.", evidence: ["The current report and source evidence preserve the artifact."], stage: "current review", blocksCurrentStage: false, tracking: { status: "none" } }];
+    revised.revision = 1;
+    await writeFile(revisedPath, JSON.stringify(revised));
+    const result = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", revisedPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
+    assert.equal(result.publication, "saved");
+    assert.match(await readFile(failedPath, "utf8"), /priorConcerns/);
+    const artifact = JSON.parse(await readFile(result.decisionPath, "utf8"));
+    assert.ok(artifact.decisions.some((decision: any) => decision.id === "prior-allegation"));
   } finally {
     await rm(f.root, { recursive: true, force: true });
     await rm(f.bin, { recursive: true, force: true });

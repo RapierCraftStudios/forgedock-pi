@@ -45,7 +45,12 @@ those paths before carrying a historical concern. Do not use truncated tail JSON
 Current reviewers must inspect primary workflow/source evidence rather than independently repeating
 supplied reviewer prose. Then use `forge_publish_adjudication` after every selected report is read back. The parent must map every
 structured observation ID to one explicit disposition, preserve duplicates/resolutions, and state
-whether a prerequisite applies to this promotion stage. Every accepted `IMMEDIATE REPAIR`
+whether a prerequisite applies to this promotion stage. `decisions` covers current reviewer
+observations only. Put every applicable historical concern in the required
+`historicalDecisions` array with its original source reference, explicit disposition, rationale,
+evidence, stage, blocking status, and tracking; a rejected allegation still gets an explicit
+`REJECTED/NOT APPLICABLE` record. Use `historicalDecisions: []` when none apply, never legacy
+`priorConcerns` prose. Every accepted `IMMEDIATE REPAIR`
 needs verified existing/source tracking, one authorized deduplicated issue, or a saved actionable
 pending draft; rejected findings and clean reviews use no tracking. Historical applicable concerns
 must enter this same decision/tracking path with their original report/attempt reference; do not

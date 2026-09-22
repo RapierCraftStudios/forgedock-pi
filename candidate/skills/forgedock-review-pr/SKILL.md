@@ -61,7 +61,12 @@ clean report does not silently resolve it. Reviewers must inspect primary source
 rather than independently repeating supplied claims. Every reviewer report
 must have a complete structured observation list (or an explicit empty list). The parent then
 calls `forge_publish_adjudication` with one decision for every observation ID, grouping duplicate
-causes explicitly and retaining every contributing source ID. Each decision must state the
+causes explicitly and retaining every contributing source ID. `decisions` is only for current
+reviewer observations. Historical concerns use the required `historicalDecisions` array as the
+single representation: retain the original `sourceReference`, explicit disposition, resolution,
+rationale, evidence, stage, blocking status, and applicable tracking. A disproven historical
+allegation still needs a `REJECTED/NOT APPLICABLE` record; when no historical concern applies,
+pass `historicalDecisions: []`. Do not pass legacy prose such as `priorConcerns`. Each decision must state the
 resolution (`confirmed`, `resolved-by-evidence`, `superseded`, `duplicate`, or `unsupported`),
 one of `IMMEDIATE REPAIR`, `NON-BLOCKING FOLLOW-UP`, `REJECTED/NOT APPLICABLE`, or
 `EVIDENCE/AUTHORITY PREREQUISITE`, the evidence/rationale, required stage, and whether it blocks

@@ -1622,7 +1622,7 @@ function validateAdjudication(input, review, reports) {
     if (disposition === "EVIDENCE/AUTHORITY PREREQUISITE" && decision.blocksCurrentStage === true && typeof decision.proofSource !== "string") fail(`${id} executed-proof prerequisite needs an applicable acceptance or policy source`);
     return { id, sourceObservationIds: [sourceReference], historical: true, proofSource: decision.proofSource === undefined ? undefined : stringValue(decision.proofSource, `${id}.proofSource`), disposition, resolution, summary: stringValue(decision.summary, `${id}.summary`), rationale: stringValue(decision.rationale, `${id}.rationale`), evidence: Array.isArray(decision.evidence) ? decision.evidence.map((value, evidenceIndex) => stringValue(value, `${id}.evidence[${evidenceIndex}]`)) : fail(`${id}.evidence must be an array`), stage: stringValue(decision.stage, `${id}.stage`), blocksCurrentStage: decision.blocksCurrentStage === true, tracking: { ...tracking, status: trackingStatus } };
   });
-  if (Array.isArray(input.priorConcerns) && input.priorConcerns.length > 0 && historicalDecisions.length === 0) fail("Prior concerns must be represented by structured historical decisions");
+  if (Object.prototype.hasOwnProperty.call(input, "priorConcerns")) fail("Legacy priorConcerns prose is not accepted in a new adjudication request; omit it and provide historicalDecisions as one structured record per prior concern (or historicalDecisions: [] when none apply), including sourceReference, disposition, resolution, summary, rationale, evidence, stage, blocksCurrentStage, and applicable tracking");
   const checks = Array.isArray(input.checks) ? input.checks.map((raw, index) => {
     const check = objectRecord(raw, `check ${index}`);
     return {

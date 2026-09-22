@@ -76,8 +76,8 @@ const TRACKING_DRAFT = Type.Object({
 });
 const HISTORICAL_DECISION = Type.Object({
   id: Type.String({ pattern: "^[A-Za-z][A-Za-z0-9_.-]*$" }),
-  sourceReference: Type.String({ minLength: 1 }),
-  disposition: Type.String({ pattern: "^(?:IMMEDIATE REPAIR|NON-BLOCKING FOLLOW-UP|REJECTED/NOT APPLICABLE|EVIDENCE/AUTHORITY PREREQUISITE)$" }),
+  sourceReference: Type.String({ minLength: 1, description: "Original report, comment, or record that raised this historical concern." }),
+  disposition: Type.String({ pattern: "^(?:IMMEDIATE REPAIR|NON-BLOCKING FOLLOW-UP|REJECTED/NOT APPLICABLE|EVIDENCE/AUTHORITY PREREQUISITE)$", description: "The current parent disposition; a disproven historical allegation must use REJECTED/NOT APPLICABLE." }),
   resolution: Type.String({ pattern: "^(?:confirmed|resolved-by-evidence|superseded|duplicate|unsupported)$" }),
   summary: Type.String({ minLength: 1 }),
   rationale: Type.String({ minLength: 1 }),
@@ -91,7 +91,7 @@ const HISTORICAL_DECISION = Type.Object({
     issueUrl: Type.Optional(Type.String({ minLength: 1 })),
     draft: Type.Optional(TRACKING_DRAFT),
   })),
-});
+}, { description: "One explicit current-attempt adjudication of a prior concern, including source, disposition, rationale, evidence, stage, and applicable tracking." });
 const ADJUDICATION_INPUT = Type.Object({
   repository: REPOSITORY,
   pullRequest: Type.Integer({ minimum: 1 }),
@@ -120,8 +120,8 @@ const ADJUDICATION_INPUT = Type.Object({
       issueUrl: Type.Optional(Type.String({ minLength: 1 })),
       draft: Type.Optional(TRACKING_DRAFT),
     })),
-  })),
-  historicalDecisions: Type.Optional(Type.Array(HISTORICAL_DECISION)),
+  }), { description: "Map every current reviewer observation ID to one explicit disposition; duplicate observations may be grouped while retaining all source IDs." }),
+  historicalDecisions: Type.Array(HISTORICAL_DECISION, { description: "The only representation of prior concerns. Re-adjudicate each applicable historical concern with an explicit record; use [] when history has no applicable concerns. Do not pass legacy prose priorConcerns." }),
   checks: Type.Array(Type.Object({
     name: Type.String({ minLength: 1 }),
     required: Type.Boolean(),
@@ -133,7 +133,6 @@ const ADJUDICATION_INPUT = Type.Object({
     stage: Type.String({ minLength: 1 }),
     evidence: Type.Array(Type.String({ minLength: 1 })),
   })),
-  priorConcerns: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
   limitations: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
   nextAction: Type.String({ minLength: 1 }),
   allowIssueWrites: Type.Boolean(),
@@ -603,7 +602,7 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "forge_publish_adjudication",
     label: "Publish parent adjudication",
-    description: "Validate every current reviewer observation, publish one parent REVIEW-PANEL decision, and publish only explicitly authorized deduplicated follow-up issues.",
+    description: "Validate every current reviewer observation and publish one parent REVIEW-PANEL decision. decisions maps current reviewer observations; historicalDecisions is the only model-facing representation of prior concerns and must contain an explicit sourceReference, disposition, rationale, evidence, stage, and applicable tracking for each concern. Use historicalDecisions: [] when there are none. A rejected historical allegation still requires an explicit rejection record; do not pass legacy prose priorConcerns.",
     parameters: ADJUDICATION_INPUT,
     async execute(_toolCallId, params) {
       const input = params as Record<string, unknown>;
