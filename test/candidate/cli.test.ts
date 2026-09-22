@@ -96,7 +96,11 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     await rm(reviewInput, { force: true });
     assert.deepEqual(review.roles, ["correctness"]);
     assert.equal(JSON.parse(await readFile(review.requestPath, "utf8")).maxSubagentSpawnsPerRun, 1);
-    assert.match(await readFile(join(reviewOut, "workflow.js"), "utf8"), /forgedock-reviewer/);
+    const workflowText = await readFile(join(reviewOut, "workflow.js"), "utf8");
+    assert.match(workflowText, /forgedock-reviewer/);
+    assert.match(workflowText, /Caller-supplied review context \(not authoritative acceptance\)/);
+    assert.doesNotMatch(workflowText, /Original acceptance:/);
+    assert.match(workflowText, /Prepared policy facts/);
     const invalidRoles = join(root, "..", `${testName}-invalid-review.json`);
     await writeFile(invalidRoles, JSON.stringify({ repository: "example/product", pullRequest: 3, head: sourceHead, baseRef: "integration", baseSha, sourceRoot: root, roles: ["security"] }));
     await assert.rejects(execFileAsync("node", [helper, "prepare-review", "--input", invalidRoles, "--out", `${reviewOut}-invalid`]), /correctness reviewer/);
