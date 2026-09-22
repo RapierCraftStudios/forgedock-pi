@@ -31,11 +31,15 @@ test("parent-only adjudication tools expose bounded review and tracking operatio
     };
     await writeFile(join(root, "review.json"), JSON.stringify(review));
     const calls: string[][] = [];
+    let largeHistory = false;
     const tools = toolsFor(async (_name: string, args: string[] = []) => {
       calls.push(args);
       if (args.includes("discover")) {
         const outIndex = args.indexOf("--out");
-        const discovery = { commentCount: 1, recordCount: 1, unclassifiedComments: [], records: [{ id: 9, url: "https://github.com/example/product/pull/7#issuecomment-9", createdAt: "now", kind: "REVIEW-PANEL", record: { v: 1 }, body: "FULL SELECTED RECORD" }] };
+        const records = largeHistory
+          ? Array.from({ length: 120 }, (_, index) => ({ id: index + 1, url: `https://github.com/example/product/pull/8#issuecomment-${index + 1}`, createdAt: "now", kind: "REVIEW-PANEL", metadata: { v: 1, source_head: `head-${index}`, supersedes: index ? `https://example.invalid/${index}` : null, review_attempt: `attempt-${index}`, review: { base_ref: "main", base_sha: `base-${index}`, mode: "staging" } }, body: `FULL SELECTED RECORD ${index}` }))
+          : [{ id: 9, url: "https://github.com/example/product/pull/7#issuecomment-9", createdAt: "now", kind: "REVIEW-PANEL", metadata: { v: 1, source_head: "head-9", supersedes: null, review_attempt: "attempt-9", review: { base_ref: "main", base_sha: "base-9", mode: "standard" } }, body: "FULL SELECTED RECORD" }];
+        const discovery = { commentCount: records.length, recordCount: records.length, unclassifiedComments: [], records };
         if (outIndex >= 0) await writeFile(args[outIndex + 1]!, JSON.stringify(discovery));
         return { code: 0, stdout: JSON.stringify(discovery), stderr: "" };
       }
@@ -45,11 +49,25 @@ test("parent-only adjudication tools expose bounded review and tracking operatio
     const common = { repository: "example/product", pullRequest: 7, head: review.head, baseRef: "integration", baseSha: review.baseSha, reviewRoot: root, artifactKey: review.artifactKey };
     const discovered = await tools.get("forge_discover_review_records")!.execute("discover", { repository: "example/product", pullRequest: 7, cwd: root, reviewRoot: root, artifactKey: review.artifactKey });
     assert.match(discovered.content[0].text, /historyIndexPath|records/);
-    const historyIndexPath = discovered.details.historyIndexPath;
+    const discoveredSummary = JSON.parse(discovered.content[0].text);
+    const historyIndexPath = discoveredSummary.historyIndexPath;
     assert.equal(typeof historyIndexPath, "string");
     const historyIndex = JSON.parse(await readFile(historyIndexPath as string, "utf8"));
     assert.equal(historyIndex.records.length, 1);
     assert.equal(await readFile(historyIndex.records[0].bodyPath, "utf8"), "FULL SELECTED RECORD");
+    largeHistory = true;
+    const large = await tools.get("forge_discover_review_records")!.execute("discover-large", { repository: "example/product", pullRequest: 8, cwd: root, reviewRoot: root, artifactKey: review.artifactKey });
+    const compact = JSON.parse(large.content[0].text);
+    assert.equal(compact.completeness.totalRecords, 120);
+    assert.equal(compact.completeness.displayedRecords, 24);
+    assert.ok(compact.historyIndexPath);
+    const fullIndex = JSON.parse(await readFile(compact.historyIndexPath, "utf8"));
+    assert.equal(fullIndex.records.length, 120);
+    const selected = fullIndex.records.find((record: any) => record.id === 1);
+    assert.ok(selected);
+    assert.match(await readFile(selected.bodyPath, "utf8"), /FULL SELECTED RECORD 0/);
+    assert.equal(selected.record.sourceHead, "head-0");
+    assert.equal(selected.record.reviewAttempt, "attempt-0");
     const firstDraft = { title: "Follow up", problem: "A missing proof", rootCause: "No receipt", affectedFiles: ["docs/proof.md"], expectedBehavior: "A receipt exists", acceptanceCriteria: ["Publish it"], evidence: ["Report"], stage: "before promotion" };
     const searched = await tools.get("forge_resolve_review_tracking")!.execute("search", { ...common, concernId: "correctness:F1", draft: firstDraft });
     const searchedSecond = await tools.get("forge_resolve_review_tracking")!.execute("search", { ...common, concernId: "security:F1", draft: { ...firstDraft, problem: "A second proof is missing", affectedFiles: ["docs/security.md"] } });

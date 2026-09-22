@@ -557,17 +557,26 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       if (result.code !== 0) throw new Error(`Prior review discovery failed: ${bounded(result.stderr)}`);
       let raw: Record<string, any>;
       try { raw = JSON.parse(result.stdout) as Record<string, any>; } catch { throw new Error("Prior review discovery returned invalid JSON"); }
-      if (!root || !fullPath) return { content: [{ type: "text", text: bounded(JSON.stringify({ schema: "forgedock.candidate-review-history-index/v1", repository: input.repository, pullRequest: input.pullRequest, completeness: { commentCount: raw.commentCount ?? null, recordCount: raw.recordCount ?? null, unclassifiedCount: Array.isArray(raw.unclassifiedComments) ? raw.unclassifiedComments.length : null }, records: Array.isArray(raw.records) ? raw.records.map((record: any) => ({ id: record.id, url: record.url, createdAt: record.createdAt, kind: record.kind, record: record.record })) : [] }, null, 2)) }], details: { repository: input.repository, pullRequest: input.pullRequest, historyIndexPath, recordCount: Array.isArray(raw.records) ? raw.records.length : 0 } };
-      const historyDir = join(root, "review-history");
+      const rawRecords = Array.isArray(raw.records) ? raw.records : [];
+      const compactRecord = (record: any) => {
+        const metadata = record.metadata ?? {};
+        const review = metadata.review ?? {};
+        return { id: record.id, url: record.url, createdAt: record.createdAt, kind: record.kind, sourceHead: metadata.source_head ?? null, baseRef: review.base_ref ?? null, baseSha: review.base_sha ?? null, mode: review.mode ?? null, reviewAttempt: metadata.review_attempt ?? null, supersedes: metadata.supersedes ?? null };
+      };
+      const allCompactRecords = rawRecords.map(compactRecord);
+      const displayedRecords = allCompactRecords.length <= 24 ? allCompactRecords : [...allCompactRecords.slice(0, 12), ...allCompactRecords.slice(-12)];
+      const summary = { schema: "forgedock.candidate-review-history-index/v1", repository: input.repository, pullRequest: input.pullRequest, historyIndexPath, sourceArtifactPath: sourcePath, completeness: { totalComments: raw.commentCount ?? null, totalRecords: raw.recordCount ?? rawRecords.length, unclassifiedRecords: Array.isArray(raw.unclassifiedComments) ? raw.unclassifiedComments.length : null, displayedRecords: displayedRecords.length }, records: displayedRecords };
+      if (!root || !fullPath) return { content: [{ type: "text", text: JSON.stringify(summary, null, 2) }], details: { repository: input.repository, pullRequest: input.pullRequest, historyIndexPath, sourceArtifactPath: sourcePath, recordCount: rawRecords.length, displayedRecords: displayedRecords.length } };
+      const historyDir = join(root, `review-history-${digest}`);
       await mkdir(historyDir, { recursive: true, mode: 0o700 });
-      const records = Array.isArray(raw.records) ? await Promise.all(raw.records.map(async (record: any) => {
+      const records = await Promise.all(rawRecords.map(async (record: any) => {
         const bodyPath = join(historyDir, `comment-${String(record.id)}.md`);
         await writeFile(bodyPath, `${typeof record.body === "string" ? record.body : ""}`, { flag: "wx", mode: 0o600 }).catch(async (error) => { if (await readFile(bodyPath, "utf8") !== String(record.body ?? "")) throw error; });
-        return { id: record.id, url: record.url, createdAt: record.createdAt, kind: record.kind, record: record.record, bodyPath };
-      })) : [];
-      const index = { schema: "forgedock.candidate-review-history-index/v1", repository: input.repository, pullRequest: input.pullRequest, artifactKey: input.artifactKey, completeness: { commentCount: raw.commentCount ?? null, recordCount: raw.recordCount ?? null, unclassifiedCount: Array.isArray(raw.unclassifiedComments) ? raw.unclassifiedComments.length : null, sourceArtifact: sourcePath }, records };
+        return { id: record.id, url: record.url, createdAt: record.createdAt, kind: record.kind, record: compactRecord(record), bodyPath };
+      }));
+      const index = { schema: "forgedock.candidate-review-history-index/v1", repository: input.repository, pullRequest: input.pullRequest, artifactKey: input.artifactKey, completeness: { totalComments: raw.commentCount ?? null, totalRecords: raw.recordCount ?? records.length, unclassifiedRecords: Array.isArray(raw.unclassifiedComments) ? raw.unclassifiedComments.length : null }, records };
       await stableJsonFile(fullPath, index);
-      return { content: [{ type: "text", text: bounded(JSON.stringify(index, null, 2)) }], details: { repository: input.repository, pullRequest: input.pullRequest, historyIndexPath, recordCount: records.length } };
+      return { content: [{ type: "text", text: JSON.stringify({ ...summary, historyIndexPath: fullPath, sourceArtifactPath: sourcePath }, null, 2) }], details: { repository: input.repository, pullRequest: input.pullRequest, historyIndexPath: fullPath, sourceArtifactPath: sourcePath, recordCount: records.length, displayedRecords: displayedRecords.length } };
     },
   });
 
