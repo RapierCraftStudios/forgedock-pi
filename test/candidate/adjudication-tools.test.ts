@@ -36,9 +36,17 @@ test("parent-only adjudication tools expose bounded review and tracking operatio
       calls.push(args);
       if (args.includes("discover")) {
         const outIndex = args.indexOf("--out");
-        const records = largeHistory
-          ? Array.from({ length: 120 }, (_, index) => ({ id: index + 1, url: `https://github.com/example/product/pull/8#issuecomment-${index + 1}`, createdAt: "now", kind: "REVIEW-PANEL", metadata: { v: 1, source_head: `head-${index}`, supersedes: index ? `https://example.invalid/${index}` : null, review_attempt: `attempt-${index}`, review: { base_ref: "main", base_sha: `base-${index}`, mode: "staging" } }, body: `FULL SELECTED RECORD ${index}` }))
-          : [{ id: 9, url: "https://github.com/example/product/pull/7#issuecomment-9", createdAt: "now", kind: "REVIEW-PANEL", metadata: { v: 1, source_head: "head-9", supersedes: null, review_attempt: "attempt-9", review: { base_ref: "main", base_sha: "base-9", mode: "standard" } }, body: "FULL SELECTED RECORD" }];
+        const makeRecord = (index: number, large: boolean) => {
+          const panel = index % 3 === 0;
+          const reviewer = index % 3 === 1;
+          const metadata = panel
+            ? { v: 1, source_head: `head-${index}`, supersedes: index ? `https://example.invalid/${index}` : null, review_attempt: `attempt-${index}`, review: { base_ref: "main", base_sha: `base-${index}`, mode: "staging" } }
+            : reviewer
+              ? { v: 1, head: `head-${index}`, baseRef: "staging", baseSha: `base-${index}`, reportId: `report-${index}`, role: "correctness" }
+              : { v: 1, head: `head-${index}`, baseRef: "main", baseSha: `base-${index}`, gate: "FAIL" };
+          return { id: index + 1, url: `https://github.com/example/product/pull/${large ? 8 : 7}#issuecomment-${index + 1}`, createdAt: "now", kind: panel ? "REVIEW-PANEL" : reviewer ? "REVIEW" : "STAGING_GATE", metadata, body: `FULL SELECTED RECORD ${index}` };
+        };
+        const records = Array.from({ length: largeHistory ? 120 : 3 }, (_, index) => makeRecord(index, largeHistory));
         const discovery = { commentCount: records.length, recordCount: records.length, unclassifiedComments: [], records };
         if (outIndex >= 0) await writeFile(args[outIndex + 1]!, JSON.stringify(discovery));
         return { code: 0, stdout: JSON.stringify(discovery), stderr: "" };
@@ -53,8 +61,12 @@ test("parent-only adjudication tools expose bounded review and tracking operatio
     const historyIndexPath = discoveredSummary.historyIndexPath;
     assert.equal(typeof historyIndexPath, "string");
     const historyIndex = JSON.parse(await readFile(historyIndexPath as string, "utf8"));
-    assert.equal(historyIndex.records.length, 1);
-    assert.equal(await readFile(historyIndex.records[0].bodyPath, "utf8"), "FULL SELECTED RECORD");
+    assert.equal(historyIndex.records.length, 3);
+    assert.equal(await readFile(historyIndex.records[0].bodyPath, "utf8"), "FULL SELECTED RECORD 0");
+    assert.equal(historyIndex.records[0].record.sourceHead, "head-0");
+    assert.equal(historyIndex.records[1].record.sourceHead, "head-1");
+    assert.equal(historyIndex.records[1].record.baseRef, "staging");
+    assert.equal(historyIndex.records[2].record.baseRef, "main");
     largeHistory = true;
     const large = await tools.get("forge_discover_review_records")!.execute("discover-large", { repository: "example/product", pullRequest: 8, cwd: root, reviewRoot: root, artifactKey: review.artifactKey });
     const compact = JSON.parse(large.content[0].text);

@@ -26,6 +26,7 @@ const REVIEW_INPUT = Type.Object({
   history: Type.Optional(Type.Array(Type.String())),
   evidence: Type.Optional(Type.Array(Type.String())),
   limitations: Type.Optional(Type.Array(Type.String())),
+  acceptanceSources: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
   materialSecurityBoundary: Type.Optional(Type.Boolean()),
   specialistQuestion: Type.Optional(Type.String()),
   publish: Type.Optional(Type.Boolean()),
@@ -45,6 +46,7 @@ type ReviewInput = {
   history?: string[];
   evidence?: string[];
   limitations?: string[];
+  acceptanceSources?: string[];
   materialSecurityBoundary?: boolean;
   specialistQuestion?: string;
   publish?: boolean;
@@ -561,7 +563,7 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       const compactRecord = (record: any) => {
         const metadata = record.metadata ?? {};
         const review = metadata.review ?? {};
-        return { id: record.id, url: record.url, createdAt: record.createdAt, kind: record.kind, sourceHead: metadata.source_head ?? null, baseRef: review.base_ref ?? null, baseSha: review.base_sha ?? null, mode: review.mode ?? null, reviewAttempt: metadata.review_attempt ?? null, supersedes: metadata.supersedes ?? null };
+        return { id: record.id, url: record.url, createdAt: record.createdAt, kind: record.kind, sourceHead: metadata.source_head ?? metadata.head ?? null, baseRef: review.base_ref ?? metadata.baseRef ?? null, baseSha: review.base_sha ?? metadata.baseSha ?? null, mode: review.mode ?? metadata.mode ?? null, reviewAttempt: metadata.review_attempt ?? metadata.reportId ?? null, supersedes: metadata.supersedes ?? null };
       };
       const allCompactRecords = rawRecords.map(compactRecord);
       const displayedRecords = allCompactRecords.length <= 24 ? allCompactRecords : [...allCompactRecords.slice(0, 12), ...allCompactRecords.slice(-12)];
