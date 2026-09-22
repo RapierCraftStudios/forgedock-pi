@@ -54,7 +54,10 @@ inherit their authority from age or same-head identity. For a non-blocking follo
 draft. Set `allowIssueWrites` only when explicitly authorized. The parent tool is the only issue
 publication capability and records pending drafts on permission/transport failure.
 
-The adjudication tool writes one shared decision artifact. Pass its `decisionPath` as
+The adjudication tool writes one shared decision artifact. Use the common `artifactKey` returned
+by `forge_prepare_review`, not a child role authorization key. A successful adjudication result
+is terminal for that revision; do not repeat unchanged publication, and use only a returned HTTPS
+panel permalink (never a record ID) for `supersedes`. Pass its `decisionPath` as
 `adjudicationPath` to `forge_publish_record`; the gate tool renders the `REVIEW-PANEL` section,
 report links, dispositions, tracking results, check conclusions, and next action from that same
 artifact. Do not write a second independently authored gate body. Use `forge_publish_record` with

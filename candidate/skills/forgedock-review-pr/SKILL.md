@@ -76,7 +76,10 @@ issue per deduplicated decision, reconciles ambiguous create responses, and reco
 pending draft when permission or transport is unavailable. Reviewers never receive these tools.
 
 The parent tool publishes the single authoritative `REVIEW-PANEL` record from the same structured
-decision used for tracking. Severity labels and reviewer verdict strings never decide blocking.
+decision used for tracking. Use the common `artifactKey` returned by `forge_prepare_review`, not
+any child role authorization key. A successful adjudication result is terminal for that revision;
+do not repeat an unchanged publication or use a record ID where a returned HTTPS panel permalink
+is required for `supersedes`. Severity labels and reviewer verdict strings never decide blocking.
 Missing required evidence or role is gated, never approval. Re-review is scoped to a genuine
 repair and affected conclusions; a second same-mechanism failure gets a concrete diagnosis and
 respects the configured limit.

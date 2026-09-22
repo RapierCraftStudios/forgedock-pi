@@ -495,7 +495,7 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       }
       const policyPath = await writePolicyArtifact(output, { schema: "forgedock.candidate-policy/v1", artifactKey: prepared.artifactKey, repository: resolvedInput.repository, pullRequest: resolvedInput.pullRequest, head: prepared.head ?? resolvedInput.head, baseRef: resolvedInput.baseRef, baseSha: resolvedInput.baseSha, prepared: policy, current: policy, refreshedAt: null });
       const summary = policySummary(policy);
-      const handoff = `\n\nPR policy evidence saved at ${policyPath}. The existing restricted publication operation refreshes this same artifact before a gate decision; do not echo the policy object. Compact summary: ${JSON.stringify(summary)}. Provenance rule: caller-supplied acceptance/history/evidence/limitations are review context, not authority to invent execution obligations; establish check applicability from this policy artifact plus primary source/workflow evidence. A policy-accepted SKIPPED or NEUTRAL status is not executed proof and does not block by itself.`;
+      const handoff = `\n\nPR policy evidence saved at ${policyPath}. The existing restricted publication operation refreshes this same artifact before a gate decision; do not echo the policy object. Compact summary: ${JSON.stringify(summary)}. Parent binding: artifactKey=${prepared.artifactKey}; role authorization keys are child-only and must not be passed to parent tools. Provenance rule: caller-supplied acceptance/history/evidence/limitations are review context, not authority to invent execution obligations; establish check applicability from this policy artifact plus primary source/workflow evidence. A policy-accepted SKIPPED or NEUTRAL status is not executed proof and does not block by itself.`;
       return { content: [{ type: "text", text: bounded(`${result.stdout.trim()}${handoff}`) }], details: { requestDirectory: output, inputPath, reviewRoot: output, artifactKey: prepared.artifactKey, sourceRoot: prepared.sourceRoot, head: prepared.head, configPath: prepared.configPath, configSha256: prepared.configSha256, policyPath, policySummary: summary } };
     },
   });
@@ -615,7 +615,8 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       const output = result.stdout.trim();
       let details: Record<string, unknown> = {};
       try { details = JSON.parse(output) as Record<string, unknown>; } catch { /* bounded text remains model-visible */ }
-      return { content: [{ type: "text", text: bounded(output) }], details: { ...details, inputPath } };
+      const terminal = details.publication === "published" || details.publication === "saved" ? "ADJUDICATION_RESULT: terminal publication returned; do not repeat the unchanged revision. Use a new revision only for a real decision change." : "";
+      return { content: [{ type: "text", text: bounded(`${output}${terminal ? `\n${terminal}` : ""}`) }], details: { ...details, inputPath } };
     },
   });
 
