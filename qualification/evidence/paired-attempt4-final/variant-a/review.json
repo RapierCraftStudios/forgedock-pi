@@ -1,0 +1,58 @@
+{
+  "schema": "forgedock.candidate-review/v1",
+  "artifactRoot": "/tmp/forgedock-review-request-MiW8Br",
+  "artifactKey": "d6d6add5-6bc1-4165-8357-67e0dd84c269",
+  "repository": "example/product",
+  "pullRequest": 7,
+  "head": "35bd791d82bc85c5e22d54d1cf877188c5919985",
+  "baseRef": "main",
+  "baseSha": "e3fc7e99e5f8165b2996ad304a29e4a7d56fa6ac",
+  "sourceRoot": "/home/dev/.cache/forgedock-evidence-paired-trials-20260920T140000Z/variant-a/repo",
+  "configRoot": "/home/dev/.cache/forgedock-evidence-paired-trials-20260920T140000Z/variant-a/repo",
+  "rationale": [
+    "Correctness/integration coverage is required for every review."
+  ],
+  "evidence": [
+    "inspect-pr completed for example/product#7; required checks CI and Shadow-Database Migration Dry Run are known-required and passing.",
+    "PR identity is OPEN, non-draft, MERGEABLE, CLEAN."
+  ],
+  "publish": true,
+  "config": {
+    "repository": "example/product",
+    "projectRoot": "/home/dev/.cache/forgedock-evidence-paired-trials-20260920T140000Z/variant-a/repo",
+    "configPath": "/home/dev/.cache/forgedock-evidence-paired-trials-20260920T140000Z/variant-a/repo/forge.yaml",
+    "integrationBranch": "integration",
+    "protectedBranch": "main",
+    "featurePattern": "feature/{slug}",
+    "ownerModel": "openai-codex/gpt-5.6-luna",
+    "ownerThinking": "low",
+    "configuredOwnerConcurrency": 2,
+    "qualificationOwnerConcurrency": null,
+    "review": {
+      "reviewerTimeoutMs": 180000,
+      "panelTimeoutMs": 900000,
+      "publicationTimeoutMs": 120000,
+      "maxConcurrent": 2,
+      "remediationMaxRounds": 1,
+      "reviewerThinking": "medium"
+    },
+    "verificationCommands": {},
+    "globalFiles": [],
+    "remoteRepository": "example/product",
+    "repositoryMatchesRemote": true
+  },
+  "configHead": "35bd791d82bc85c5e22d54d1cf877188c5919985",
+  "configPath": "/home/dev/.cache/forgedock-evidence-paired-trials-20260920T140000Z/variant-a/repo/forge.yaml",
+  "configSha256": "c668f0da9e1ada63564927501a9d31ad8ed5aafc003ca190ba9919712cb0257f",
+  "baseRefSha": "e3fc7e99e5f8165b2996ad304a29e4a7d56fa6ac",
+  "roles": [
+    "correctness"
+  ],
+  "diffPath": "/tmp/forgedock-review-request-MiW8Br/frozen.diff",
+  "diffSha256": "58d6a640960de2311aab927738fd6c31d56ca72d66df310e4eac775926b98183",
+  "workflowPath": "/tmp/forgedock-review-request-MiW8Br/workflow.js",
+  "workflowSha256": "95857249a505684f5504548a569933352a1037e610ff9623b97b8524db661e3f",
+  "roleArtifactKeys": {
+    "correctness": "4d3d9f3d-1fb7-4b61-b721-02b0ebcba0f8"
+  }
+}

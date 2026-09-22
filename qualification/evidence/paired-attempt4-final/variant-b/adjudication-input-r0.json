@@ -1,0 +1,95 @@
+{
+  "repository": "example/product",
+  "pullRequest": 7,
+  "head": "4eae364aee63e3bab1244fb6992b563f0af9af7a",
+  "baseRef": "main",
+  "baseSha": "e3fc7e99e5f8165b2996ad304a29e4a7d56fa6ac",
+  "mode": "standard",
+  "reviewRoot": "/tmp/forgedock-review-request-8xp5cf",
+  "artifactKey": "70db0b69-7271-4e1f-9618-eb6f0da5b587",
+  "verdict": "CHANGES_REQUESTED",
+  "gate": "PASS",
+  "decisions": [
+    {
+      "id": "correctness-F1",
+      "sourceObservationIds": [
+        "correctness:F1"
+      ],
+      "disposition": "IMMEDIATE REPAIR",
+      "resolution": "confirmed",
+      "summary": "restore drops the input marker",
+      "rationale": "The frozen patch removes marker: input.marker from src/restore.mjs, so restore({marker:'m',payload:'p'}) returns an object without marker, violating the explicit marker-and-payload acceptance requirement.",
+      "evidence": [
+        "Frozen diff at src/restore.mjs changes return { marker: input.marker, payload: input.payload }; to return { payload: input.payload };.",
+        "The reviewer report confirms the behavior for an input containing marker 'm' and payload 'p'.",
+        "The PR body explicitly requires preserving the input marker and payload."
+      ],
+      "stage": "pre-merge correctness review",
+      "proofSource": "https://github.com/example/product/pull/7#issuecomment-100",
+      "blocksCurrentStage": true,
+      "tracking": {
+        "status": "none"
+      }
+    }
+  ],
+  "historicalDecisions": [
+    {
+      "id": "prior-artifact-allegation",
+      "sourceReference": "https://github.com/example/product/pull/7#issuecomment-50",
+      "disposition": "REJECTED/NOT APPLICABLE",
+      "resolution": "unsupported",
+      "summary": "Prior allegation that the artifact was deleted is not applicable to this review.",
+      "rationale": "The bounded review history records contrary primary evidence that docs/evidence/detector-result.md and the merge artifact are preserved; the current frozen checkout also contains the detector evidence used by the reviewer.",
+      "evidence": [
+        "Prior REVIEW-PANEL record states: \"Prior changelog allegation: artifact was deleted.\"",
+        "The same record identifies docs/evidence/detector-result.md and the merge artifact as preserved.",
+        "The current reviewer report cites docs/evidence/detector-result.md and confirms the conditional workflow evidence is available."
+      ],
+      "stage": "historical concern re-adjudication",
+      "proofSource": "https://github.com/example/product/pull/7#issuecomment-50",
+      "blocksCurrentStage": false,
+      "tracking": {
+        "status": "none"
+      }
+    }
+  ],
+  "checks": [
+    {
+      "name": "CI",
+      "required": true,
+      "conclusion": "SUCCESS",
+      "executedProof": true,
+      "executedProofRequired": true,
+      "policyAccepted": true,
+      "proofSource": "inspect-pr evaluated required checks; CI=SUCCESS",
+      "stage": "pre-merge policy gate",
+      "evidence": [
+        "inspect-pr reports CI state SUCCESS, bucket pass.",
+        "gh pr checks reports CI SUCCESS."
+      ]
+    },
+    {
+      "name": "Shadow-Database Migration Dry Run",
+      "required": true,
+      "conclusion": "SKIPPED (policy-accepted conditional skip)",
+      "executedProof": false,
+      "executedProofRequired": false,
+      "policyAccepted": true,
+      "proofSource": "inspect-pr policy and reviewer report",
+      "stage": "pre-merge policy gate",
+      "evidence": [
+        "inspect-pr reports Shadow-Database Migration Dry Run state SKIPPED, bucket pass, with no missing required names.",
+        "Reviewer found migrations=false in docs/evidence/detector-result.md and no separate migration-shadow execution obligation applies to this fixture."
+      ]
+    }
+  ],
+  "limitations": [
+    "No executable test command is configured or present in the reviewed fixture.",
+    "The conditional shadow job is policy-accepted as skipped because the detector reports no infra/migrations changes; this is not treated as executed proof."
+  ],
+  "nextAction": "Repair src/restore.mjs to preserve input.marker alongside input.payload, then submit a genuine repair for re-review.",
+  "allowIssueWrites": false,
+  "round": 0,
+  "revision": 0,
+  "publish": true
+}

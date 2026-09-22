@@ -1,0 +1,10 @@
+{
+  "accepted": true,
+  "terminal": "agent-terminal",
+  "terminalEvent": {
+    "type": "agent_end"
+  },
+  "exitCode": 0,
+  "cleanup": "graceful-exit",
+  "elapsedSeconds": 88.13924078491982
+}

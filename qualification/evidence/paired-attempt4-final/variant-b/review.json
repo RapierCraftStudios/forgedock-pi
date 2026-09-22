@@ -1,0 +1,69 @@
+{
+  "schema": "forgedock.candidate-review/v1",
+  "artifactRoot": "/tmp/forgedock-review-request-8xp5cf",
+  "artifactKey": "70db0b69-7271-4e1f-9618-eb6f0da5b587",
+  "repository": "example/product",
+  "pullRequest": 7,
+  "head": "4eae364aee63e3bab1244fb6992b563f0af9af7a",
+  "baseRef": "main",
+  "baseSha": "e3fc7e99e5f8165b2996ad304a29e4a7d56fa6ac",
+  "sourceRoot": "/home/dev/.cache/forgedock-evidence-paired-attempt4-20260922T160000Z/variant-b/repo",
+  "configRoot": "/home/dev/.cache/forgedock-evidence-paired-attempt4-20260922T160000Z/variant-b/repo",
+  "acceptance": [
+    "The policy-accepted conditional shadow skip is not executed when the detector reports no infra/migrations changes.",
+    "The restore result must preserve the input marker and payload.",
+    "No separate migration-shadow execution obligation applies to this fixture."
+  ],
+  "roles": [
+    "correctness"
+  ],
+  "rationale": [
+    "PR body defines the review contract and acceptance requirements."
+  ],
+  "history": [],
+  "evidence": [
+    "inspect-pr: evaluated required checks CI=SUCCESS and Shadow-Database Migration Dry Run=SKIPPED/pass; no missing required names.",
+    "PR head 4eae364aee63e3bab1244fb6992b563f0af9af7a; base main at e3fc7e9.",
+    "Patch changes src/restore.mjs to omit marker from returned object."
+  ],
+  "limitations": [],
+  "acceptanceSources": [
+    "https://github.com/example/product/pull/7"
+  ],
+  "publish": true,
+  "config": {
+    "repository": "example/product",
+    "projectRoot": "/home/dev/.cache/forgedock-evidence-paired-attempt4-20260922T160000Z/variant-b/repo",
+    "configPath": "/home/dev/.cache/forgedock-evidence-paired-attempt4-20260922T160000Z/variant-b/repo/forge.yaml",
+    "integrationBranch": "integration",
+    "protectedBranch": "main",
+    "featurePattern": "feature/{slug}",
+    "ownerModel": "openai-codex/gpt-5.6-luna",
+    "ownerThinking": "low",
+    "configuredOwnerConcurrency": 2,
+    "qualificationOwnerConcurrency": null,
+    "review": {
+      "reviewerTimeoutMs": 180000,
+      "panelTimeoutMs": 900000,
+      "publicationTimeoutMs": 120000,
+      "maxConcurrent": 2,
+      "remediationMaxRounds": 1,
+      "reviewerThinking": "medium"
+    },
+    "verificationCommands": {},
+    "globalFiles": [],
+    "remoteRepository": "example/product",
+    "repositoryMatchesRemote": true
+  },
+  "configHead": "4eae364aee63e3bab1244fb6992b563f0af9af7a",
+  "configPath": "/home/dev/.cache/forgedock-evidence-paired-attempt4-20260922T160000Z/variant-b/repo/forge.yaml",
+  "configSha256": "c668f0da9e1ada63564927501a9d31ad8ed5aafc003ca190ba9919712cb0257f",
+  "baseRefSha": "e3fc7e99e5f8165b2996ad304a29e4a7d56fa6ac",
+  "diffPath": "/tmp/forgedock-review-request-8xp5cf/frozen.diff",
+  "diffSha256": "1db7912f9709a9af55200d7dbc37768b481b19506f6e806a4b1ac3746d68c1a9",
+  "workflowPath": "/tmp/forgedock-review-request-8xp5cf/workflow.js",
+  "workflowSha256": "124b4f22cfe09d5d60cf789b10fbee7f77bdaf1c96aa99bb42ed868ad43026fe",
+  "roleArtifactKeys": {
+    "correctness": "c2ca5e34-84c9-48e1-9f61-8f42f7ff3138"
+  }
+}

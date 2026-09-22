@@ -1,0 +1,17 @@
+{
+  "schema": "forgedock.candidate-install/v1",
+  "candidateCommit": "d7d06783df386148e6196ab00f8b466351f5e515",
+  "piSubagentsCommit": "0931cbbb98ab253177b181bd334fe02dd919dca5",
+  "packageDigest": "5bf5ab2d7a1b009b1c772d25292d1b2137d8f44e86c7954d523c81906c01253a",
+  "piSubagentsDigest": "d920744c4fa7d160fd860d802b978db37c3ef392fa2f2604567276b03d706c91",
+  "piVersion": "0.85.1",
+  "requiredPiVersion": "0.85.1",
+  "installRoot": "/home/dev/.cache/forgedock-pi-candidate/d7d06783df386148e6196ab00f8b466351f5e515-auth",
+  "packageRoot": "/home/dev/.cache/forgedock-pi-candidate/d7d06783df386148e6196ab00f8b466351f5e515-auth/package",
+  "piSubagentsRoot": "/home/dev/.cache/forgedock-pi-candidate/d7d06783df386148e6196ab00f8b466351f5e515-auth/pi-subagents",
+  "piConfigRoot": "/home/dev/.cache/forgedock-pi-candidate/d7d06783df386148e6196ab00f8b466351f5e515-auth/pi-agent",
+  "sessionRoot": "/home/dev/.cache/forgedock-pi-candidate/d7d06783df386148e6196ab00f8b466351f5e515-auth/sessions",
+  "targetSettingsPolicy": "--no-approve; target-local project settings are ignored",
+  "authPolicy": "symlinked-existing-auth",
+  "sourceWorktree": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z"
+}

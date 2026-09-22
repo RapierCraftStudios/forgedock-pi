@@ -1,0 +1,118 @@
+{
+  "schema": "forgedock-pr583-paired-qualification-diagnostics/v1",
+  "createdAt": "2026-09-22T14:50:32Z",
+  "sourceCorrection": "d7d06783df386148e6196ab00f8b466351f5e515",
+  "remotePrHead": "d7d06783df386148e6196ab00f8b466351f5e515",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 405,
+      "sha256": "47a8ef43e85a99d8180f67a9a4c4201f159124bfb82789ef1180f79424bb942b"
+    },
+    {
+      "path": "RESULT.md",
+      "bytes": 1693,
+      "sha256": "650092ace53546f04035ff2d59569e51453fb7f0023ab7b51126095be0373f26"
+    },
+    {
+      "path": "continuation-events.jsonl",
+      "bytes": 73394,
+      "sha256": "8d343273402c4346b0bbbf02e2a1c56b0175d0486c4080942c5999c7c6b81403"
+    },
+    {
+      "path": "driver-correction.md",
+      "bytes": 938,
+      "sha256": "13d2d527e298706a1abe34c24a8452df7cea53bc3b275f45ab64386d0c3a155f"
+    },
+    {
+      "path": "forge-dock-install-manifest.json",
+      "bytes": 1211,
+      "sha256": "52c1f8f1d8826e250daccfd0c4b1cb7312fd4866a9e892f2fd5230f6f17148b9"
+    },
+    {
+      "path": "runtime-identities.json",
+      "bytes": 755,
+      "sha256": "752dc1c433351e4cf0faec9545f3250a8b73cff26076cb09b28d76246f857603"
+    },
+    {
+      "path": "source-correction-d7d06783.patch",
+      "bytes": 19942,
+      "sha256": "2359ef198b9184497408780ebf57e1e4128121c54da7bd029256e8f76ee6403f"
+    },
+    {
+      "path": "variant-a/adjudication-input-r0.json",
+      "bytes": 2198,
+      "sha256": "faad73f4e9741996c0300e2da2d5a87148fe37a04c479d772fb3b81fb4f3a170"
+    },
+    {
+      "path": "variant-a/adjudication-input-r1.json",
+      "bytes": 3624,
+      "sha256": "4e41d4cae780c8133239de20ef508dcade047635cb1902cfe7c7814e11aa53f0"
+    },
+    {
+      "path": "variant-a/adjudication-r2.json",
+      "bytes": 7008,
+      "sha256": "272b19e5bf301d4320acbcb79aea3332bb0ce1c9a6cc4555ec87c6eff2f62eeb"
+    },
+    {
+      "path": "variant-a/correctness.report.md",
+      "bytes": 1813,
+      "sha256": "57c8ec38ede4313892465ebd2624811c33930cd17c66bc873c882739a3583822"
+    },
+    {
+      "path": "variant-a/parent-process-result.json",
+      "bytes": 190,
+      "sha256": "f00433cfdfad6a000de60b502d25e1dfc3ab870e41fba182cce5a3747c16e3ca"
+    },
+    {
+      "path": "variant-a/review.json",
+      "bytes": 2524,
+      "sha256": "ab34767547054891f8fc2d6a074315fa6565badc7329273d3656c64a1fd6713b"
+    },
+    {
+      "path": "variant-b/adjudication-input-r0.json",
+      "bytes": 4229,
+      "sha256": "a9e5860cafac3bcec36e303fb12a8ae6eb94309f4925e1992acb73244d458c6d"
+    },
+    {
+      "path": "variant-b/adjudication-input-r1.json",
+      "bytes": 5486,
+      "sha256": "83bebe6c90a44cd66233284bb2d0c8f209c0c1b041ecaa3525a71cf2bce95e70"
+    },
+    {
+      "path": "variant-b/adjudication-input-r2.json",
+      "bytes": 5370,
+      "sha256": "8431c3bd62d828fddc69d98015b8071192300d6f8b419c7064887fb7729cbfcb"
+    },
+    {
+      "path": "variant-b/adjudication-r2.json",
+      "bytes": 10507,
+      "sha256": "ced6e86a1bbd42ccdd7c8f8a3ef31aeaf738b025297af7b9a8aae063807ee9fb"
+    },
+    {
+      "path": "variant-b/correctness-F1-r2.pending.md",
+      "bytes": 1182,
+      "sha256": "a892643017150d969a69c278402965baf82952bed9c72e4746b95e706908551a"
+    },
+    {
+      "path": "variant-b/correctness.report.md",
+      "bytes": 3233,
+      "sha256": "11272726ae95e9a9a012bcb12b393fc6c2bc458c08584507592609c805e0cde8"
+    },
+    {
+      "path": "variant-b/first-pass-process-result.json",
+      "bytes": 191,
+      "sha256": "e6a734021aff069b99b47dd2e23ef99af48e1d4fa705495d1bd80c5768928183"
+    },
+    {
+      "path": "variant-b/parent-process-result.json",
+      "bytes": 191,
+      "sha256": "219b96edd75d0cc3c0cfeeb202139a2ca7c86593197f8ba6141dc13f90b30280"
+    },
+    {
+      "path": "variant-b/review.json",
+      "bytes": 3039,
+      "sha256": "577c3d23038d2b1120bb941cba164e139561398fd47a765c9e8d41bb48f06f56"
+    }
+  ]
+}

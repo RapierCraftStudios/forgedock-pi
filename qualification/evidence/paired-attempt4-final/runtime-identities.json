@@ -1,0 +1,21 @@
+{
+  "pi": "0.85.1",
+  "piSubagents": "0.60.0",
+  "piSubagentsCommit": "0931cbbb98ab253177b181bd334fe02dd919dca5",
+  "reviewerBaseline": "6cc86be8699b6e608465c840098742f101eeec57",
+  "parentCorrection": "d7d06783df386148e6196ab00f8b466351f5e515",
+  "variantA": {
+    "parentModel": "openai-codex/gpt-5.6-luna",
+    "parentThinking": "high",
+    "reviewerThinking": "medium",
+    "reviewerChild": "18859029-ff5e-4063-a437-3257106e4ef1",
+    "parentSession": "01a0c88d-f8c0-73b7-862b-d533e90d70b6"
+  },
+  "variantB": {
+    "parentModel": "openai-codex/gpt-5.6-luna",
+    "parentThinking": "high",
+    "reviewerThinking": "medium",
+    "reviewerChild": "f103abb6-a233-494d-b599-ae71efcd83d1",
+    "parentSession": "01a0c944-4d8f-758d-b998-6977f731b5d9"
+  }
+}

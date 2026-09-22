@@ -1,0 +1,54 @@
+{
+  "repository": "example/product",
+  "pullRequest": 7,
+  "head": "35bd791d82bc85c5e22d54d1cf877188c5919985",
+  "baseRef": "main",
+  "baseSha": "e3fc7e99e5f8165b2996ad304a29e4a7d56fa6ac",
+  "mode": "standard",
+  "reviewRoot": "/tmp/forgedock-review-request-MiW8Br",
+  "artifactKey": "d6d6add5-6bc1-4165-8357-67e0dd84c269",
+  "verdict": "APPROVE",
+  "gate": "PASS",
+  "decisions": [],
+  "checks": [
+    {
+      "name": "CI",
+      "required": true,
+      "conclusion": "SUCCESS",
+      "executedProof": true,
+      "executedProofRequired": true,
+      "policyAccepted": true,
+      "proofSource": "inspect-pr policy evaluated check; CI SUCCESS on frozen head 35bd791d82bc85c5e22d54d1cf877188c5919985",
+      "stage": "review",
+      "evidence": [
+        "Required by evaluated branch rules and legacy protection.",
+        "Observed SUCCESS for the frozen source head."
+      ]
+    },
+    {
+      "name": "Shadow-Database Migration Dry Run",
+      "required": true,
+      "conclusion": "SKIPPED (condition not applicable)",
+      "executedProof": false,
+      "executedProofRequired": false,
+      "policyAccepted": true,
+      "proofSource": "inspect-pr policy plus reviewer inspection of the frozen workflow and detector evidence",
+      "stage": "review",
+      "evidence": [
+        "Required check name is present in applicable policy.",
+        "The workflow condition detects infra/migrations; frozen evidence reports migrations=false, so skip is expected and accepted by policy.",
+        "No separate execution obligation was identified for this documentation-only patch."
+      ]
+    }
+  ],
+  "priorConcerns": [
+    "Prior REVIEW-PANEL record alleged the artifact was deleted; current primary evidence and the reviewer report indicate the evidence is preserved, and no current observation remains."
+  ],
+  "limitations": [
+    "No local tests were executed; the patch is a one-line documentation-only change.",
+    "Review relied on the frozen workflow/detector evidence and repository-driven CI facts."
+  ],
+  "nextAction": "Approve PR #7; no repair, issue follow-up, merge, closure, or deployment action is authorized by this review.",
+  "allowIssueWrites": false,
+  "publish": true
+}

@@ -1,0 +1,75 @@
+{
+  "repository": "example/product",
+  "pullRequest": 7,
+  "head": "35bd791d82bc85c5e22d54d1cf877188c5919985",
+  "baseRef": "main",
+  "baseSha": "e3fc7e99e5f8165b2996ad304a29e4a7d56fa6ac",
+  "mode": "standard",
+  "reviewRoot": "/tmp/forgedock-review-request-MiW8Br",
+  "artifactKey": "d6d6add5-6bc1-4165-8357-67e0dd84c269",
+  "verdict": "APPROVE",
+  "gate": "PASS",
+  "decisions": [],
+  "historicalDecisions": [
+    {
+      "id": "prior-artifact-deleted",
+      "sourceReference": "https://github.com/example/product/pull/7#issuecomment-50 (prior REVIEW-PANEL record)",
+      "disposition": "REJECTED/NOT APPLICABLE",
+      "resolution": "unsupported",
+      "summary": "Prior allegation that the artifact was deleted is not supported by the retained primary evidence.",
+      "rationale": "The bounded history records the allegation alongside contrary evidence; the current frozen reviewer report found no issue and confirms the relevant detector evidence is preserved.",
+      "evidence": [
+        "/tmp/forgedock-review-request-MiW8Br/review-history-source-92b8f2ff1bda.json record id 50 preserves the contrary primary-evidence statement.",
+        "/tmp/forgedock-review-request-MiW8Br/correctness.report.md, reportId 4d3d9f3d-1fb7-4b61-b721-02b0ebcba0f8, reports no structured observations and confirms the frozen detector evidence was inspected.",
+        "Current frozen identity is head 35bd791d82bc85c5e22d54d1cf877188c5919985 against main at e3fc7e99e5f8165b2996ad304a29e4a7d56fa6ac."
+      ],
+      "stage": "review",
+      "proofSource": "/tmp/forgedock-review-request-MiW8Br/review-history-source-92b8f2ff1bda.json and /tmp/forgedock-review-request-MiW8Br/correctness.report.md",
+      "blocksCurrentStage": false,
+      "tracking": {
+        "status": "none"
+      }
+    }
+  ],
+  "checks": [
+    {
+      "name": "CI",
+      "required": true,
+      "conclusion": "SUCCESS",
+      "executedProof": true,
+      "executedProofRequired": true,
+      "policyAccepted": true,
+      "proofSource": "inspect-pr policy evaluated check; CI SUCCESS on frozen head 35bd791d82bc85c5e22d54d1cf877188c5919985",
+      "stage": "review",
+      "evidence": [
+        "Required by evaluated branch rules and legacy protection.",
+        "Observed SUCCESS for the frozen source head."
+      ]
+    },
+    {
+      "name": "Shadow-Database Migration Dry Run",
+      "required": true,
+      "conclusion": "SKIPPED (condition not applicable)",
+      "executedProof": false,
+      "executedProofRequired": false,
+      "policyAccepted": true,
+      "proofSource": "inspect-pr policy plus reviewer inspection of the frozen workflow and detector evidence",
+      "stage": "review",
+      "evidence": [
+        "Required check name is present in applicable policy.",
+        "The workflow condition detects infra/migrations; frozen evidence reports migrations=false, so skip is expected and accepted by policy.",
+        "No separate execution obligation was identified for this documentation-only patch."
+      ]
+    }
+  ],
+  "limitations": [
+    "No local tests were executed; the patch is a one-line documentation-only change.",
+    "Review relied on the frozen workflow/detector evidence and repository-driven CI facts.",
+    "Correctness reviewer report 4d3d9f3d-1fb7-4b61-b721-02b0ebcba0f8 is reused from /tmp/forgedock-review-request-MiW8Br/correctness.report.md; its structured observation list is explicitly empty."
+  ],
+  "nextAction": "Approve PR #7; no repair, issue follow-up, merge, closure, or deployment action is authorized by this review.",
+  "allowIssueWrites": false,
+  "round": 0,
+  "revision": 1,
+  "publish": true
+}
