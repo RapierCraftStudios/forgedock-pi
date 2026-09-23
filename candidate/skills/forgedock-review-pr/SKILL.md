@@ -42,17 +42,43 @@ names such as `infra`, `database`, or `concurrency`. Combine distinct questions 
 only for a material changed trust, privilege, or security boundary. File count, labels, domains,
 and keywords do not allocate seats.
 
-Use the prepared review tool to produce one native `workflowScriptPath`, then invoke it with
-`subagent` and wait for every selected fresh `forgedock-reviewer`. For a protected promotion,
-use `forge_prepare_review` so the actual policy result activates the restricted route. This profile has only
-read tools plus the publication-only report tool. Give each reviewer the original acceptance,
+Use `forge_prepare_review` to produce `reviewRoot`, read its exact `request.json`, and invoke
+`subagent` with that whole request unchanged. The generated request fixes the selected role roster,
+concurrency (at most two), timeouts, and hashed native workflow; do not reconstruct or edit it.
+Wait for every selected fresh `forgedock-reviewer`. For a protected promotion, the actual policy
+result activates the restricted route. This profile has only read tools plus the publication-only
+report tool. Give each reviewer the original acceptance,
 concise plan/history, exact frozen identity, relevant evidence/limits, and specific risk
 boundary. Each reviewer must publish its own substantive exact-head
 `FORGE:REVIEWER_REPORT` using the candidate record helper, including clean/no-findings reports.
 For an explicitly user-invoked review, pass `publish: true`; review-only authorization does not
 permit merge, issue closure, or deployment, but it does require the evidence publication path.
-Reviewers do not edit source, create issues, merge, deploy, or initiate repair. If publication
-fails after analysis, retain the saved report and recover publication without rerunning review.
+Reviewers do not edit source, create issues, merge, deploy, or initiate repair. The workflow
+returns one compact native result per role (`key`, `runId`, terminal state, exit code, bounded
+output/error, artifact references, exact report path, and recovery-input path). Delivery stays
+unverified until the exact report file is read back.
+
+Before parent publication, read each selected role's `reportPath` and verify its
+`FORGE:REVIEWER_REPORT` identity and structured observations match the prepared repository, PR,
+head, base, and role. A local marker alone is insufficient: the report must match retained authored
+body/observations and, when `publish: true`, exact remote comment readback. The adjudication tool
+independently verifies every selected report before writing adjudication input.
+
+If delivery is absent or uncertain, never rerun/resume the reviewer. Call
+`forge_recover_reviewer_publication` with the exact selected role, native `runId`, common review
+`artifactKey`, frozen identity, and the native terminal result. A completed role with available
+role-bound authored input may use at most one parent publication attempt. Once a claim or attempt
+exists, the same tool becomes readback/finalization only: it verifies local canonical report bytes
+and the remote stable comment without another POST. Outer cancellation, interruption, timeout, or
+an unresolved claim is not mislabeled as publication failure or exhaustion. A missing native
+terminal outcome is `nonterminal`, not `failed`; preserve it and do not recover until the exact role
+is terminal. Preserve completed roles. Use `forge_publish_incomplete_review` only when delivery remains unverified; it must retain
+the observed claim/attempt state and precise next prerequisite. If a completed role has unused
+authorized recovery, perform that normal recovery instead of publishing GATED; the explicit
+`execution-limit` blocker is reserved for an observed parent execution limit and does not consume a
+recovery attempt. This GATED record is not a verdict, code finding, or pre-review infrastructure
+failure. If later readback verifies delivery, proceed to adjudication; the tool automatically
+supersedes the matching published incomplete-delivery record in the REVIEW-PANEL record.
 
 Before parent publication, call `forge_discover_review_records` once with the prepared
 `reviewRoot` and `artifactKey`; use its compact bounded index and read selected `bodyPath` files

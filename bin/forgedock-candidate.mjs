@@ -809,9 +809,11 @@ function reviewerWorkflow(review, config, out) {
     role,
     task: reviewerTask(review, config, role, out),
     model: modelWithThinking(config.ownerModel, config.review.reviewerThinking),
+    reportPath: join(out, `${role}.report.md`),
+    recoveryPath: join(out, `${role}.publication-recovery.json`),
   }));
   const serialized = JSON.stringify(entries).replaceAll("\u2028", "\\u2028").replaceAll("\u2029", "\\u2029");
-  return `const assignments = ${serialized};\nreturn (await runs.all(assignments.map((assignment) => ({ key: \"review-\" + assignment.role, agent: \"forgedock-reviewer\", task: assignment.task, model: assignment.model, context: \"fresh\", cwd: ${JSON.stringify(review.sourceRoot)}, worktree: false, output: false, artifacts: true, acceptance: false, maxRuntimeMs: ${config.review.reviewerTimeoutMs} }))));\n`;
+  return `const assignments = ${serialized};\nconst results = await runs.all(assignments.map((assignment) => ({ key: \"review-\" + assignment.role, agent: \"forgedock-reviewer\", task: assignment.task, model: assignment.model, context: \"fresh\", cwd: ${JSON.stringify(review.sourceRoot)}, worktree: false, output: false, artifacts: true, acceptance: false, maxRuntimeMs: ${config.review.reviewerTimeoutMs} })));\nreturn assignments.map((assignment, index) => { const result = results[index] ?? {}; const children = Array.isArray(result.results) ? result.results : []; const child = children.length === 1 ? children[0] : {}; const stopped = result.stopped === true || children.some((entry) => entry?.stopped === true); const interrupted = result.interrupted === true || children.some((entry) => entry?.interrupted === true); const detached = result.detached === true || children.some((entry) => entry?.detached === true); const timedOut = result.timedOut === true || result.terminalOutcome?.reason === \"timeout\" || children.some((entry) => entry?.timedOut === true || entry?.terminalOutcome?.reason === \"timeout\"); const executionLimit = result.terminalOutcome?.reason === \"budget_exhausted\" || children.some((entry) => entry?.terminalOutcome?.reason === \"budget_exhausted\" || entry?.turnBudgetExceeded === true || entry?.toolBudgetBlocked === true); const exitCode = result.exitCode ?? child?.exitCode ?? null; const terminalFailure = [result.exitCode, child?.exitCode].some((code) => Number.isInteger(code) && code !== 0) || result.terminalOutcome?.state === \"failed\" || child?.terminalOutcome?.state === \"failed\"; const terminalSuccess = result.exitCode === 0 || child?.exitCode === 0 || result.terminalOutcome?.state === \"completed\" || child?.terminalOutcome?.state === \"completed\"; const nativeStatus = stopped ? \"stopped\" : interrupted ? \"interrupted\" : detached ? \"detached\" : timedOut ? \"timed-out\" : executionLimit ? \"execution-limit\" : terminalFailure ? \"failed\" : terminalSuccess ? \"completed\" : \"nonterminal\"; return { role: assignment.role, nativeRunId: result.runId ?? null, nativeStatus, nativeFlags: { timedOut, stopped, interrupted, detached, executionLimit }, exitCode, terminalOutcome: result.terminalOutcome ?? child?.terminalOutcome ?? null, publicationState: \"unverified\", reportPath: assignment.reportPath, recoveryPath: assignment.recoveryPath, output: typeof result.output === \"string\" ? result.output.slice(-2000) : \"\", error: typeof result.error === \"string\" ? result.error.slice(0, 500) : typeof child?.error === \"string\" ? child.error.slice(0, 500) : null, artifactPaths: Array.isArray(result.artifactPaths) ? result.artifactPaths : [] }; });\n`;
 }
 
 function reviewerTask(review, config, role, out) {
@@ -868,6 +870,8 @@ function prepareReview(options) {
   if (input.configHead !== undefined && input.configHead !== configHead) fail("Review input configuration checkout moved after preparation");
   if (input.config !== undefined && canonicalJson(input.config) !== canonicalJson(canonicalConfig)) fail("Review input configuration does not match canonical forge.yaml");
   const config = canonicalConfig;
+  const mode = baseRef === config.protectedBranch ? "staging" : baseRef === config.integrationBranch ? "standard" : undefined;
+  if (!mode) fail(`Review base ref ${baseRef} must match configured integration or protected branch`);
   const selected = Array.isArray(input.roles) && input.roles.length > 0 ? { roles: input.roles, rationale: Array.isArray(input.rationale) ? input.rationale.filter((item) => typeof item === "string") : [] } : roleList(input);
   if (!Array.isArray(selected.roles) || selected.roles.length < 1 || selected.roles.length > 3) fail("Review must select between one and three reviewers");
   if (new Set(selected.roles).size !== selected.roles.length) fail("Review roles must be unique");
@@ -886,7 +890,7 @@ function prepareReview(options) {
   const diffPath = writeExclusive(join(out, "frozen.diff"), `${diff}\n`);
   const configText = readFileSync(config.configPath, "utf8");
   const roleArtifactKeys = Object.fromEntries(selected.roles.map((role) => [role, randomUUID()]));
-  const review = { schema: "forgedock.candidate-review/v1", artifactRoot: out, artifactKey: randomUUID(), ...input, repository, pullRequest, head, baseSha, baseRef, sourceRoot, configRoot, config, configHead, configPath: config.configPath, configSha256: sha256(configText), baseRefSha, roles: selected.roles, rationale: selected.rationale, diffPath, diffSha256: sha256(Buffer.from(`${diff}\n`)), publish: input.publish === true };
+  const review = { schema: "forgedock.candidate-review/v1", artifactRoot: out, artifactKey: randomUUID(), ...input, repository, pullRequest, head, baseSha, baseRef, mode, sourceRoot, configRoot, config, configHead, configPath: config.configPath, configSha256: sha256(configText), baseRefSha, roles: selected.roles, rationale: selected.rationale, diffPath, diffSha256: sha256(Buffer.from(`${diff}\n`)), publish: input.publish === true };
   for (const role of selected.roles) {
     writeExclusive(join(out, `${role}.authorization.json`), json({ schema: "forgedock.candidate-review-role/v1", artifactRoot: out, artifactKey: roleArtifactKeys[role], role, repository, pullRequest, head, baseRef, baseSha, publish: review.publish }));
   }
@@ -932,6 +936,14 @@ function commentEndpoint(repository, destination) {
 function reviewPanelMode(value) {
   const mode = value === undefined ? "standard" : String(value).toLowerCase();
   if (mode !== "standard" && mode !== "staging") fail("REVIEW-PANEL mode must be standard or staging");
+  return mode;
+}
+
+function preparedReviewMode(review) {
+  const config = review.config && typeof review.config === "object" && !Array.isArray(review.config) ? review.config : {};
+  const derived = review.baseRef === config.protectedBranch ? "staging" : review.baseRef === config.integrationBranch ? "standard" : undefined;
+  const mode = derived ?? (review.config === undefined && (review.mode === "standard" || review.mode === "staging") ? review.mode : undefined);
+  if (!mode || review.mode !== undefined && review.mode !== mode) fail("Prepared review route does not match its canonical base branch");
   return mode;
 }
 
@@ -1191,12 +1203,11 @@ function reviewerReportsFor(entry, repository, pullRequest, head, baseRef, baseS
     let comment;
     if (typeof value.reportFile === "string") {
       const reportPath = resolve(value.reportFile);
-      const reportText = readFileSync(reportPath, "utf8").replace(/\r\n?/g, "\n");
+      const reportText = readFileSync(reportPath, "utf8");
       const identity = reviewerIdentityFromReport(reportText);
       if (identity.repository !== repository || Number(identity.pullRequest ?? identity.pr) !== pullRequest || (identity.head ?? identity.reviewedHead) !== head || identity.baseRef !== baseRef || identity.baseSha !== baseSha || identity.role !== role) fail(`reviewer report ${role} is not bound to the frozen PR/head/base`);
       const marker = reportText.split("\n", 1)[0];
-      const normalizedReport = reportText.replace(/\n+$/, "");
-      const matches = comments.filter((candidate) => typeof candidate?.body === "string" && candidate.body.replace(/\r\n?/g, "\n").replace(/\n+$/, "") === normalizedReport && candidate.body.startsWith(marker));
+      const matches = comments.filter((candidate) => typeof candidate?.body === "string" && candidate.body === reportText && candidate.body.startsWith(marker));
       if (matches.length === 0 && !publish) comment = { id: null, body: reportText, html_url: null };
       else if (matches.length !== 1) fail(`Published reviewer report ${role} was not found exactly once with the saved bytes on PR #${pullRequest}`);
       else comment = matches[0];
@@ -1210,7 +1221,7 @@ function reviewerReportsFor(entry, repository, pullRequest, head, baseRef, baseS
       const parsed = reviewerIdentityFromReport(comment.body);
       if (parsed.repository !== repository || Number(parsed.pullRequest ?? parsed.pr) !== pullRequest || (parsed.head ?? parsed.reviewedHead) !== head || parsed.baseRef !== baseRef || parsed.baseSha !== baseSha || parsed.role !== role) fail(`Saved reviewer report ${role} identity disagrees with the frozen review`);
       const observations = reviewObservationsFromReport(comment.body, role, requireObservations);
-      return { role, id: null, url: null, head, round: Number.isSafeInteger(parsed.round) ? parsed.round : 0, reportId: typeof parsed.id === "string" ? parsed.id : undefined, observations };
+      return { role, id: null, url: null, head, round: Number.isSafeInteger(parsed.round) ? parsed.round : 0, reportId: typeof parsed.reportId === "string" ? parsed.reportId : undefined, observations };
     }
     const url = verifiedCommentUrl(comment.html_url, repository, pullRequest, true, comment.id, `reviewerReports[${index}] permalink`);
     const parsed = reviewerIdentityFromReport(comment.body);
@@ -1218,8 +1229,68 @@ function reviewerReportsFor(entry, repository, pullRequest, head, baseRef, baseS
     const observations = reviewObservationsFromReport(comment.body, role, requireObservations);
     roles.add(role);
     ids.add(comment.id);
-    return { role, id: comment.id, url, head, round: Number.isSafeInteger(parsed.round) ? parsed.round : 0, reportId: typeof parsed.id === "string" ? parsed.id : undefined, observations };
+    return { role, id: comment.id, url, head, round: Number.isSafeInteger(parsed.round) ? parsed.round : 0, reportId: typeof parsed.reportId === "string" ? parsed.reportId : undefined, observations };
   });
+}
+
+function validateReviewerAuthoredEvidence(reviewRoot, review, role) {
+  const roleKey = review.roleArtifactKeys?.[role];
+  if (typeof roleKey !== "string" || !roleKey) fail(`Prepared review has no role authorization key for ${role}`);
+  const authorizationPath = join(reviewRoot, `${role}.authorization.json`);
+  const recoveryPath = join(reviewRoot, `${role}.publication-recovery.json`);
+  const bodyPath = join(reviewRoot, `${role}.body.md`);
+  const reportPath = join(reviewRoot, `${role}.report.md`);
+  const observationsPath = join(reviewRoot, `${role}.observations.json`);
+  for (const [path, label] of [[authorizationPath, "role authorization"], [recoveryPath, "authored recovery"], [bodyPath, "authored body"], [reportPath, "role report"], [observationsPath, "authored observations"]]) {
+    if (!existsSync(path) || realpathSync(path) !== path) fail(`Reviewer ${label} for ${role} is missing or not a regular file`);
+  }
+  const authorization = readJson(authorizationPath);
+  if (authorization.schema !== "forgedock.candidate-review-role/v1" || authorization.artifactRoot !== reviewRoot || authorization.artifactKey !== roleKey || authorization.role !== role || authorization.repository !== review.repository || authorization.pullRequest !== review.pullRequest || authorization.head !== review.head || authorization.baseRef !== review.baseRef || authorization.baseSha !== review.baseSha || authorization.publish !== review.publish) fail(`Reviewer authorization for ${role} does not match the prepared frozen role`);
+  const recovery = readJson(recoveryPath);
+  if (recovery.schema !== "forgedock.candidate-review-publication-recovery/v1" || recovery.reviewArtifactKey !== review.artifactKey || recovery.roleArtifactKey !== roleKey || recovery.repository !== review.repository || recovery.pullRequest !== review.pullRequest || recovery.head !== review.head || recovery.baseRef !== review.baseRef || recovery.baseSha !== review.baseSha || recovery.role !== role || recovery.publish !== review.publish || typeof recovery.nativeRunId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(recovery.nativeRunId) || recovery.bodyPath !== bodyPath || recovery.reportPath !== reportPath || recovery.observationsPath !== observationsPath || typeof recovery.body !== "string" || recovery.body.trim().length < 32 || !Array.isArray(recovery.observations) || typeof recovery.bodySha256 !== "string" || typeof recovery.observationsSha256 !== "string") fail(`Authored recovery evidence for ${role} does not match the prepared role`);
+  const executionPath = join(reviewRoot, "reviewer-execution.json");
+  if (!existsSync(executionPath) || realpathSync(executionPath) !== executionPath) fail(`Native reviewer execution receipt for ${role} is missing or not a regular file`);
+  const execution = readJson(executionPath);
+  const executionRoles = Array.isArray(review.roles) ? review.roles : [];
+  const executionResults = execution.roleResults;
+  const validStatuses = new Set(["completed", "failed", "stopped", "interrupted", "timed-out", "detached", "execution-limit", "nonterminal"]);
+  if (execution.schema !== "forgedock.candidate-review-execution/v1" || execution.repository !== review.repository || execution.pullRequest !== review.pullRequest || execution.head !== review.head || execution.baseRef !== review.baseRef || execution.baseSha !== review.baseSha || execution.artifactKey !== review.artifactKey || execution.mode !== review.mode || execution.workflowPath !== review.workflowPath || execution.workflowSha256 !== review.workflowSha256 || typeof execution.workflowRunId !== "string" || typeof execution.toolCallId !== "string" || typeof execution.completedAt !== "string" || !Array.isArray(executionResults) || executionResults.length !== executionRoles.length) fail(`Native reviewer execution receipt for ${role} does not match the prepared workflow`);
+  let nativeResult;
+  for (let index = 0; index < executionRoles.length; index += 1) {
+    const executionRole = executionRoles[index];
+    const result = executionResults[index];
+    if (!result || typeof result !== "object" || Array.isArray(result) || result.role !== executionRole || !validStatuses.has(String(result.nativeStatus)) || !(result.nativeRunId === null || typeof result.nativeRunId === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(result.nativeRunId)) || result.reportPath !== join(reviewRoot, `${executionRole}.report.md`) || result.recoveryPath !== join(reviewRoot, `${executionRole}.publication-recovery.json`) || !(result.exitCode === null || Number.isSafeInteger(result.exitCode))) fail(`Native reviewer execution receipt for ${role} has an invalid role result`);
+    if (executionRole === role) nativeResult = result;
+  }
+  if (!nativeResult || nativeResult.nativeRunId !== recovery.nativeRunId) fail(`Native run identity for ${role} does not match its authored recovery sidecar`);
+  const body = recovery.body.trim();
+  const bodyBytes = `${body}\n`;
+  const observationsBytes = `${JSON.stringify(recovery.observations, null, 2)}\n`;
+  if (sha256(bodyBytes) !== recovery.bodySha256 || sha256(observationsBytes) !== recovery.observationsSha256 || readFileSync(bodyPath, "utf8") !== bodyBytes || readFileSync(observationsPath, "utf8") !== observationsBytes) fail(`Authored body/observations hashes for ${role} do not verify`);
+  const observations = validateReviewObservations(recovery.observations, role);
+  if (JSON.stringify(observations) !== JSON.stringify(recovery.observations)) fail(`Authored observations for ${role} are not in canonical validated form`);
+  const report = readFileSync(reportPath, "utf8");
+  const identity = reviewerIdentityFromReport(report);
+  const expectedIdentity = { v: 1, kind: "REVIEW", repository: review.repository, pullRequest: review.pullRequest, head: review.head, baseSha: review.baseSha, role, reportId: roleKey, baseRef: review.baseRef };
+  if (JSON.stringify(identity) !== JSON.stringify(expectedIdentity)) fail(`Reviewer report identity for ${role} does not match its prepared role authorization`);
+  const reportObservations = reviewObservationsFromReport(report, role, true);
+  if (JSON.stringify(reportObservations) !== JSON.stringify(observations)) fail(`Reviewer observations for ${role} do not match retained authored evidence`);
+  if (report !== renderReviewerReportMarkdown(expectedIdentity, body, reportObservations)) fail(`Reviewer report ${role} does not match its retained authored body/observations`);
+}
+
+function verifyReviewerPublication(options) {
+  const repository = stringValue(requiredOption(options, "repo"), "review repository", /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/);
+  const pullRequest = integer(Number(requiredOption(options, "pr")), "review pull request");
+  const head = stringValue(requiredOption(options, "head"), "review head", FULL_SHA);
+  const baseRef = branch(requiredOption(options, "base-ref"), "review base ref");
+  const baseSha = stringValue(requiredOption(options, "base-sha"), "review base SHA", FULL_SHA);
+  const role = stringValue(requiredOption(options, "role"), "review role", /^[a-z][a-z0-9-]*$/);
+  const reportId = stringValue(requiredOption(options, "report-id"), "review report id", SAFE_TOKEN);
+  const reportFile = resolve(requiredOption(options, "report-file"));
+  const cwd = resolve(requiredOption(options, "cwd"));
+  const report = reviewerReportsFor({ reviewerReports: [{ role, reportFile }] }, repository, pullRequest, head, baseRef, baseSha, cwd, new Map(), true, true)[0];
+  if (!report || report.reportId !== reportId) fail(`Published reviewer report ${role} does not match its prepared role authorization`);
+  process.stdout.write(json({ schema: "forgedock.candidate-review-report-verification/v1", publication: "published", repository, pullRequest, head, baseRef, baseSha, role, reportId, commentId: report.id, url: report.url, observations: report.observations }));
 }
 
 function durableRecord(entry, repository, issue, pullRequest, cwd, inventory, cache, publish, boundConfig) {
@@ -1236,6 +1307,16 @@ function durableRecord(entry, repository, issue, pullRequest, cwd, inventory, ca
   const baseSha = kind === "REVIEW-PANEL" ? stringValue(entry.baseSha, "review panel baseSha", FULL_SHA) : undefined;
   if (kind === "REVIEW-PANEL" && pullRequest === undefined) fail("REVIEW-PANEL records require a pull request destination");
   const mode = kind === "REVIEW-PANEL" ? reviewPanelMode(entry.mode) : undefined;
+  if (kind === "REVIEW-PANEL") {
+    const preparedReviewRoot = resolve(stringValue(entry.reviewRoot, "REVIEW-PANEL prepared reviewRoot"));
+    const artifactKey = stringValue(entry.artifactKey, "REVIEW-PANEL prepared artifactKey", SAFE_TOKEN);
+    if (!existsSync(preparedReviewRoot) || realpathSync(preparedReviewRoot) !== preparedReviewRoot) fail("REVIEW-PANEL prepared review root is missing or not canonical");
+    const prepared = readJson(join(preparedReviewRoot, "review.json"));
+    const workflowPath = typeof prepared.workflowPath === "string" ? resolve(prepared.workflowPath) : undefined;
+    if (prepared.schema !== "forgedock.candidate-review/v1" || prepared.artifactRoot !== preparedReviewRoot || prepared.artifactKey !== artifactKey || prepared.repository !== repository || prepared.pullRequest !== pullRequest || prepared.head !== head || prepared.baseRef !== baseRef || prepared.baseSha !== baseSha || prepared.mode !== mode || prepared.publish !== publish || !Array.isArray(prepared.roles) || !workflowPath || resolve(dirname(workflowPath)) !== preparedReviewRoot || !existsSync(workflowPath) || realpathSync(workflowPath) !== workflowPath || typeof prepared.workflowSha256 !== "string" || sha256(readFileSync(workflowPath, "utf8")) !== prepared.workflowSha256) fail("REVIEW-PANEL must match a valid prepared review artifact and publication authorization");
+    if (!Array.isArray(entry.reviewerReports) || entry.reviewerReports.length !== prepared.roles.length || entry.reviewerReports.some((report, index) => !report || report.role !== prepared.roles[index] || resolve(String(report.reportFile ?? "")) !== join(preparedReviewRoot, `${prepared.roles[index]}.report.md`))) fail("REVIEW-PANEL reviewer report references must match every selected prepared role");
+    for (const role of prepared.roles) validateReviewerAuthoredEvidence(preparedReviewRoot, prepared, role);
+  }
   const destinationNumber = issue ?? pullRequest;
   const lookup = { repository, destination: destinationNumber, destinationIsPullRequest: pullRequest !== undefined, issueContext: entry.issueContext, pullRequestContext: entry.pullRequestContext, cwd, cache };
   const inputs = resolveRecordReferences(entry.inputs ?? [], inventory, publish, `${kind}.inputs`, lookup);
@@ -1715,10 +1796,17 @@ function recordAdjudication(options) {
   const publish = input.publish === true;
   const revision = input.revision === undefined ? 0 : integer(Number(input.revision), "adjudication revision", 0);
   if (review.schema !== "forgedock.candidate-review/v1" || review.artifactRoot !== reviewRoot || review.artifactKey !== input.artifactKey) fail("Adjudication is not bound to the prepared review artifact");
+  if (review.repository !== repository || review.pullRequest !== Number(input.pullRequest) || review.head !== input.head || review.baseRef !== input.baseRef || review.baseSha !== input.baseSha || review.publish !== publish) fail("Adjudication source/publish identity does not match the prepared review");
+  const mode = preparedReviewMode(review);
+  if (input.mode !== mode) fail("Adjudication mode does not match the route derived from the prepared review base");
   const config = recordConfig(cwd, repository);
   const cache = new Map();
   const reviewerReports = (review.roles ?? []).map((role) => ({ role, reportFile: join(reviewRoot, `${role}.report.md`) }));
+  for (const role of review.roles ?? []) validateReviewerAuthoredEvidence(reviewRoot, review, role);
   const reports = reviewerReportsFor({ reviewerReports }, repository, Number(input.pullRequest), input.head, input.baseRef, input.baseSha, cwd, cache, publish, true);
+  for (const report of reports) {
+    if (report.reportId !== review.roleArtifactKeys?.[report.role]) fail(`Reviewer report ${report.role} does not match its prepared role authorization`);
+  }
   const validated = validateAdjudication(input, review, reports);
   const tracking = {};
   for (const decision of validated.decisions) {
@@ -1739,7 +1827,7 @@ function recordAdjudication(options) {
   }
   const provisionalBody = renderAdjudicationBody(input, review, reports, validated.decisions, tracking, undefined);
   const provisionalBodyPath = writeExclusive(join(reviewRoot, `review-panel.provisional-r${revision}.md`), provisionalBody);
-  const baseEntry = { kind: "REVIEW-PANEL", pullRequest: Number(input.pullRequest), head: input.head, baseRef: input.baseRef, baseSha: input.baseSha, mode: input.mode, attempt: review.artifactKey, revision, round: Number.isSafeInteger(input.round) ? input.round : 0, bodyFile: provisionalBodyPath, reviewerReports, supersedes: input.supersedes };
+  const baseEntry = { kind: "REVIEW-PANEL", pullRequest: Number(input.pullRequest), head: input.head, baseRef: input.baseRef, baseSha: input.baseSha, mode: input.mode, attempt: review.artifactKey, revision, round: Number.isSafeInteger(input.round) ? input.round : 0, bodyFile: provisionalBodyPath, reviewerReports, reviewRoot, artifactKey: review.artifactKey, supersedes: input.supersedes };
   const provisionalRecord = durableRecord(baseEntry, repository, undefined, Number(input.pullRequest), cwd, new Map(), cache, publish, config);
   const provisionalRecordPath = join(reviewRoot, `review-panel.provisional-r${revision}.record.md`);
   writeExclusive(provisionalRecordPath, provisionalRecord.markdown);
@@ -1818,7 +1906,7 @@ function recordBatch(options) {
     if (inventory.has(id)) fail(`Record batch contains duplicate id '${id}'`);
     const issue = entry.issue ?? (String(entry.kind ?? "").toUpperCase() === "REVIEW-PANEL" ? undefined : input.issue);
     const pullRequest = entry.pullRequest ?? (String(entry.kind ?? "").toUpperCase() === "REVIEW-PANEL" ? input.pullRequest : undefined);
-    const record = durableRecord({ ...entry, issue, pullRequest, issueContext: input.issue, pullRequestContext: input.pullRequest }, repository, issue === undefined ? undefined : integer(Number(issue), `${id} issue`), pullRequest === undefined ? undefined : integer(Number(pullRequest), `${id} pull request`), cwd, inventory, cache, publish, config);
+    const record = durableRecord({ ...entry, reviewRoot: entry.reviewRoot ?? input.reviewRoot, artifactKey: entry.artifactKey ?? input.artifactKey, issue, pullRequest, issueContext: input.issue, pullRequestContext: input.pullRequest }, repository, issue === undefined ? undefined : integer(Number(issue), `${id} issue`), pullRequest === undefined ? undefined : integer(Number(pullRequest), `${id} pull request`), cwd, inventory, cache, publish, config);
     const defaultReportFile = join(process.env.FORGEDOCK_CANDIDATE_ARTIFACT_ROOT ?? dirname(resolve(inputFile)), `${id}.record.md`);
     const reportFile = artifactPath(cwd, entry.reportFile, defaultReportFile, `${id}-record`);
     writeExclusive(reportFile, record.markdown);
@@ -1840,6 +1928,8 @@ function durableRecordSingle(options) {
   const cwd = resolve(requiredOption(options, "cwd"));
   const publish = options.flags.has("publish");
   const entry = { kind: options.values.get("kind"), issue, pullRequest, bodyFile: requiredOption(options, "body-file"), head: options.values.get("head"), baseRef: options.values.get("base-ref"), baseSha: options.values.get("base-sha"), mode: options.values.get("mode"), inputs: options.values.has("inputs-file") ? readJson(requiredOption(options, "inputs-file")) : [], supersedes: options.values.get("supersedes"), round: options.values.has("round") ? Number(options.values.get("round")) : undefined, reviewerReports: options.values.has("reviewers-file") ? readJson(requiredOption(options, "reviewers-file")) : undefined };
+  entry.reviewRoot = options.values.get("review-root");
+  entry.artifactKey = options.values.get("artifact-key");
   const record = durableRecord(entry, repository, issue, pullRequest, cwd, new Map(), new Map(), publish);
   const defaultReportFile = join(process.env.FORGEDOCK_CANDIDATE_ARTIFACT_ROOT ?? dirname(resolve(entry.bodyFile)), `${String(entry.kind).toLowerCase()}.record.md`);
   const reportFile = artifactPath(cwd, options.values.get("report-file"), defaultReportFile, `${String(entry.kind).toLowerCase()}-record`);
@@ -1958,6 +2048,13 @@ function renderReviewObservationSummary(observations) {
   return `### Structured findings\n\n${observations.map((observation) => `- **${observation.id}** (${observation.kind}) ${oneLine(observation.summary)} — evidence: ${observation.evidence.map(oneLine).join("; ")}; proposed: ${observation.proposedDisposition}; stage: ${oneLine(observation.stage)}`).join("\n")}\n\n`;
 }
 
+function renderReviewerReportMarkdown(identity, body, observations) {
+  const marker = `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify(identity)} -->`;
+  const observationMarker = `<!-- FORGE:REVIEW_OBSERVATIONS ${JSON.stringify(observations)} -->\n`;
+  const headers = `**Reviewer role**: \`${identity.role}\`\n**Pull request**: #${identity.pullRequest}\n**Reviewed source**: \`${identity.head}\`\n**Review base**: \`${identity.baseRef}\` at \`${identity.baseSha}\`\n\n`;
+  return `${marker}\n${observationMarker}## ForgeDock review\n\n${headers}${renderReviewObservationSummary(observations)}${body.trim()}\n`;
+}
+
 function record(options, mode) {
   const kind = mode === "reviewer" ? "REVIEW" : String(options.values.get("kind") ?? "").toUpperCase();
   if (!RECORD_KINDS.has(kind)) fail(`Unsupported record kind '${kind}'`);
@@ -1980,7 +2077,7 @@ function record(options, mode) {
     : kind === "STAGING_GATE"
       ? `FORGE:STAGING_GATE:${identity.gate}\n**Pull request**: #${identity.pullRequest}\n**Reviewed source**: \`${identity.head}\`\n**Protected base**: \`${identity.baseRef}\` at \`${identity.baseSha}\`\n\n`
       : "";
-  const markdown = `${marker}\n${observationMarker}## ForgeDock ${kind.toLowerCase()}\n\n${reviewHeaders}${observationSummary}${body}\n`;
+  const markdown = kind === "REVIEW" ? renderReviewerReportMarkdown(identity, body, observations) : `${marker}\n${observationMarker}## ForgeDock ${kind.toLowerCase()}\n\n${reviewHeaders}${observationSummary}${body}\n`;
   const reportFile = resolve(optionalOption(options, "report-file", join(dirname(resolve(bodyFile)), `${kind.toLowerCase()}.report.md`)));
   writeExclusive(reportFile, markdown);
   const result = { schema: "forgedock.candidate-record/v1", identity, reportFile, contentSha256: sha256(markdown) };
@@ -2214,7 +2311,7 @@ async function doctor(options) {
 }
 
 function usage() {
-  process.stdout.write(`ForgeDock candidate helper\n\nCommands:\n  doctor --cwd <repo> --config-dir <isolated-pi-dir>\n  status   (alias for doctor)\n  config --cwd <repo>\n  prepare --issue <N> --cwd <repo>\n  prepare-dispatch --selector <set> --cwd <repo> --out <dir> [--issues-file <json>]\n  prepare-review --input <json> --out <dir>\n  record reviewer --repo <org/repo> --pr <N> --head <sha> --base-ref <branch> --base-sha <sha> --role <role> --body-file <file> [--observations-file <json>] [--report-file <file>] [--publish]\n  record adjudication --input <json> --cwd <canonical-config-root>\n  record --kind <kind> --repo <org/repo> --issue <N>|--pr <N> --body-file <file> --cwd <repo> [--mode standard|staging] [--inputs-file <json>] [--supersedes <url>] [--publish]\n  record batch --input <json> [--publish]\n  discover --repo <org/repo> --issue <N>|--pr <N> [--cwd <repo>] [--out <file>]\n  inspect-pr --repo <org/repo> --pr <N> --cwd <repo>\n  label --repo <org/repo> --issue <N> --state <state> [--cwd <repo>]\n  replace --config-dir <dir> --old-source <source> --candidate-source <source>\n  rollback --rollback <directory>\n  digest-tree --root <directory>\n  verify-install --install-root <directory>\n`);
+  process.stdout.write(`ForgeDock candidate helper\n\nCommands:\n  doctor --cwd <repo> --config-dir <isolated-pi-dir>\n  status   (alias for doctor)\n  config --cwd <repo>\n  prepare --issue <N> --cwd <repo>\n  prepare-dispatch --selector <set> --cwd <repo> --out <dir> [--issues-file <json>]\n  prepare-review --input <json> --out <dir>\n  record reviewer --repo <org/repo> --pr <N> --head <sha> --base-ref <branch> --base-sha <sha> --role <role> --body-file <file> [--observations-file <json>] [--report-file <file>] [--publish]\n  verify-reviewer --repo <org/repo> --pr <N> --head <sha> --base-ref <branch> --base-sha <sha> --role <role> --report-id <id> --report-file <file> --cwd <repo>\n  record adjudication --input <json> --cwd <canonical-config-root>\n  record --kind <kind> --repo <org/repo> --issue <N>|--pr <N> --body-file <file> --cwd <repo> [--mode standard|staging] [--inputs-file <json>] [--supersedes <url>] [--publish] (REVIEW-PANEL also requires --review-root and --artifact-key)\n  record batch --input <json> [--publish]\n  discover --repo <org/repo> --issue <N>|--pr <N> [--cwd <repo>] [--out <file>]\n  inspect-pr --repo <org/repo> --pr <N> --cwd <repo>\n  label --repo <org/repo> --issue <N> --state <state> [--cwd <repo>]\n  replace --config-dir <dir> --old-source <source> --candidate-source <source>\n  rollback --rollback <directory>\n  digest-tree --root <directory>\n  verify-install --install-root <directory>\n`);
 }
 
 async function main() {
@@ -2297,6 +2394,7 @@ async function main() {
   if (command === "prepare-dispatch") return prepareDispatch(options);
   if (command === "prepare-review") return prepareReview(options);
   if (command === "discover") return discoverRecords(options);
+  if (command === "verify-reviewer") return verifyReviewerPublication(options);
   if (command === "review-issues") return reviewIssues(options);
   if (command === "inspect-pr") {
     process.stdout.write(json(inspectPullRequestPolicy(options)));

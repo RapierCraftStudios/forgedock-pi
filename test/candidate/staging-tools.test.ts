@@ -53,18 +53,20 @@ test("staging publication requires prepared reviewer and check evidence", async 
       baseSha,
       sourceRoot: "/tmp/example/source",
       publish: false,
+      mode: "staging",
       roles: ["correctness"],
+      roleArtifactKeys: { correctness: "correctness-role-key" },
       configPath: "/tmp/example/forge.yaml",
       configSha256: "c".repeat(64),
-      config: { verificationCommands: { test: "npm test" } },
+      config: { integrationBranch: "integration", protectedBranch: "main", verificationCommands: { test: "npm test" } },
     }));
-    await writeFile(join(root, "correctness.report.md"), `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ repository: "example/product", pullRequest: 7, head, baseRef: "main", baseSha, role: "correctness" })} -->\nclean report\n`);
+    await writeFile(join(root, "correctness.report.md"), `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ repository: "example/product", pullRequest: 7, head, baseRef: "main", baseSha, role: "correctness", reportId: "correctness-role-key" })} -->\nclean report\n`);
     await mkdir(join(root, "checks"));
     await writeFile(join(root, "checks", "test.json"), JSON.stringify({ schema: "forgedock.candidate-check/v1", name: "test", status: "passed", head, sourceRoot: "/tmp/example/source", configPath: "/tmp/example/forge.yaml", configSha256: "c".repeat(64) }));
     const policy = { schema: "forgedock.candidate-pr-policy/v1", repository: "example/product", pullRequest: 7, identity: { head, baseRef: "main", baseSha }, configuration: { verificationCommands: { test: "npm test" } }, policy: { evaluatedRequiredChecks: { status: "available", exitCode: 0, data: [{ name: "CI", state: "SUCCESS", bucket: "pass" }] }, requirements: { applicability: "known-required", requiredNames: ["CI"], observedNames: ["CI"], missingRequiredNames: [] } } };
     await writeFile(join(root, "policy.json"), JSON.stringify({ schema: "forgedock.candidate-policy/v1", artifactKey: key, repository: "example/product", pullRequest: 7, head, baseRef: "main", baseSha, prepared: policy, current: policy, refreshedAt: null }));
     const adjudicationPath = join(root, "adjudication.json");
-    await writeFile(adjudicationPath, JSON.stringify({ schema: "forgedock.candidate-adjudication/v1", artifactKey: key, repository: "example/product", pullRequest: 7, head, baseRef: "main", baseSha, gate: "PASS", roles: ["correctness"], reports: [{ role: "correctness" }], decisions: [], verdict: "APPROVE", panelUrl: null, trackingPublication: "complete", gateBody: "FORGE:STAGING_GATE:PASS\\n\\n## REVIEW-PANEL\\nAll selected reports and parent decisions are accounted for." }));
+    await writeFile(adjudicationPath, JSON.stringify({ schema: "forgedock.candidate-adjudication/v1", artifactKey: key, repository: "example/product", pullRequest: 7, head, baseRef: "main", baseSha, mode: "staging", gate: "PASS", roles: ["correctness"], reports: [{ role: "correctness", reportId: "correctness-role-key" }], decisions: [], verdict: "APPROVE", panelUrl: null, trackingPublication: "complete", gateBody: "FORGE:STAGING_GATE:PASS\\n\\n## REVIEW-PANEL\\nAll selected reports and parent decisions are accounted for." }));
 
     const tools = new Map<string, { execute: (id: string, params: unknown) => Promise<unknown> }>();
     const fakePi = {

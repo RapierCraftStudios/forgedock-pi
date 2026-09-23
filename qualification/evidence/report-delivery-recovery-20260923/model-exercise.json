@@ -1,0 +1,30 @@
+{
+  "schema": "forgedock.report-delivery-model-result/v1",
+  "taskId": "bfcb88b08",
+  "outcome": "completed",
+  "parentExitCode": 0,
+  "bareCommand": "/review-pr 33800",
+  "supplementalRecoveryInstructions": false,
+  "parentModel": {"id": "openai-codex/gpt-5.6-luna", "thinking": "high"},
+  "runtime": {"pi": "0.87.1", "node": "v26.7.0", "piSubagentsVersion": "0.60.0", "piSubagentsCommit": "0931cbbb98ab253177b181bd334fe02dd919dca5"},
+  "candidate": {"base": "d7d06783df386148e6196ab00f8b466351f5e515", "patchSha256AtLaunch": "7a967c6613a6a2e529ba0811c67aad0a6c44ad41917c37b4a1296220947ca93d"},
+  "target": {"repository": "example/product", "pullRequest": 33800, "head": "156e36e1898aa9bb3a0711ab70608b94572140c4", "baseRef": "main", "baseSha": "7543b8b1aa1f67ebaa54f330fb95edb0a0cc5083", "route": "staging"},
+  "settings": {"roles": ["correctness", "security", "specialist"], "maxConcurrent": 2, "maxSubagentSpawnsPerRun": 3, "reviewerModel": "openai-codex/gpt-5.6-luna:medium", "reviewerTimeoutMs": 240000, "panelTimeoutMs": 600000, "publicationTimeoutMs": 120000, "configuredCheck": "node --test"},
+  "timing": {"startedAt": "2026-09-23T06:59:52Z", "finishedAt": "2026-09-23T07:05:06Z", "elapsedMs": 313742},
+  "parentTelemetry": {"tokensInput": 92213, "tokensOutput": 5729, "cacheRead": 413696, "totalTokens": 511638, "reportedCostUsd": 0.03359132, "toolCalls": 33, "toolFailures": 3},
+  "nativeResults": [
+    {"role": "correctness", "nativeRunId": "5bc6766f-b70e-4240-bdd9-3406f4509919", "nativeStatus": "completed", "exitCode": 0, "processSignal": "SIGTERM", "durationMs": 64388, "model": "openai-codex/gpt-5.6-luna:medium", "turns": 6, "toolCount": 12, "reportId": "d300b6e8-38db-44c2-a469-8069cd6ef9cf", "reportSha256": "e76ccc806cdde5367418c4db7df38b429050d1835101b152c3f9dc5e46a75994", "publication": "published", "recoveryAttempts": 0, "fakeCommentId": 900},
+    {"role": "security", "nativeRunId": "8ee1c06f-f95c-4e52-bd7b-046405692915", "nativeStatus": "completed", "exitCode": 0, "processSignal": "SIGTERM", "durationMs": 53493, "model": "openai-codex/gpt-5.6-luna:medium", "turns": 5, "toolCount": 10, "reportId": "1f411289-8fba-4a10-821a-17cce990a4c6", "reportSha256": "ef2d2d33c0d18f2f1bc91a33c367db92bc9c9d800845291e3b6039d41249171a", "publication": "first POST rejected before commit; exact-run recovery read back published bytes", "recoveryAttempts": 1, "fakeCommentId": 902},
+    {"role": "specialist", "nativeRunId": "cd6508c2-1e54-4432-98f0-59c8ce63e3ac", "nativeStatus": "completed", "exitCode": 0, "processSignal": "SIGTERM", "durationMs": 67025, "model": "openai-codex/gpt-5.6-luna:medium", "turns": 6, "toolCount": 13, "reportId": "cc60ba99-f1ee-43eb-980a-783683d3a48e", "reportSha256": "d2abc39a177f3bc60c5130dfb77070dc28868383064a48c18709ee3a5e0f0172", "publication": "published", "recoveryAttempts": 0, "fakeCommentId": 901}
+  ],
+  "delivery": {"workflowLaunches": 1, "recoverReviewerPublicationCalls": 1, "completedRolesReused": ["correctness", "specialist"], "firstFailedPostRole": "security", "postAttemptsByRole": {"security": 2, "correctness": 1, "specialist": 1}, "reviewerCommentCount": 3, "fakeGithubCommentCount": 6, "fakeIssueCount": 0, "externalGithubWrites": false},
+  "adjudication": {"verdict": "CHANGES_REQUESTED", "stagingGate": "FAIL", "deduplicatedFindingId": "issuer-known-issuer-validation", "sourceObservationIds": ["correctness:F1", "specialist:F1"], "tracking": "pending draft only", "publishedPanelIds": [903, 904], "finalPanelSupersedes": 903, "fakeGateId": 905, "merge": false, "deploy": false},
+  "verification": {"command": "node --test", "passed": 3, "failed": 0, "policyApplicability": "confirmed-none", "policyCommandExit": 1, "sourcePolicy": "available-empty branch protection/rules/rulesets; no required names"},
+  "capabilityObservations": {"stagingBashCallsBlocked": 2, "readOnlySubagentListCallBlocked": 1, "exactPreparedWorkflowAccepted": true, "finalSourcePatchAllowsReadOnlySubagentList": true},
+  "notes": [
+    "The security reviewer completed once; its first fake GitHub POST failed before comment commit. The parent reused that native run and exact saved report/role key for one bounded recovery; the remote-byte readback succeeded without relaunching a reviewer.",
+    "The fixture intentionally contains an arbitrary-nonblank-issuer defect. The parent correctly deduplicated the correctness/specialist blocker, returned CHANGES_REQUESTED, marked tracking pending without creating an issue, and published a FAIL gate.",
+    "All publication and policy APIs were served by the local fake gh process; git operations used a local disposable repository and network/history-mutation guard. No AlterLab, live GitHub, CI dispatch, merge, or deploy was used.",
+    "The exact processSignal field was SIGTERM while each terminal projection was completed with exitCode 0 and no timedOut/stopped/interrupted flag; it is retained as raw lifecycle metadata, not reclassified as timeout."
+  ]
+}

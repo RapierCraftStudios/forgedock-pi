@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -18,9 +19,49 @@ function toolsFor(exec: (...args: any[]) => Promise<any>) {
   return tools;
 }
 
+async function writeRecoverySidecar(root: string, review: Record<string, any>, role: string, body: string): Promise<void> {
+  const observations: unknown[] = [];
+  const bodyBytes = `${body.trim()}\n`;
+  const observationsBytes = `${JSON.stringify(observations, null, 2)}\n`;
+  const bodyPath = join(root, `${role}.body.md`);
+  const observationsPath = join(root, `${role}.observations.json`);
+  await writeFile(bodyPath, bodyBytes);
+  await writeFile(observationsPath, observationsBytes);
+  await writeFile(join(root, `${role}.authorization.json`), JSON.stringify({ schema: "forgedock.candidate-review-role/v1", artifactRoot: root, artifactKey: review.roleArtifactKeys[role], role, repository: review.repository, pullRequest: review.pullRequest, head: review.head, baseRef: review.baseRef, baseSha: review.baseSha, publish: review.publish }));
+  await writeFile(join(root, `${role}.publication-recovery.json`), JSON.stringify({
+    schema: "forgedock.candidate-review-publication-recovery/v1",
+    state: "saved",
+    recoveryAttempts: 0,
+    nativeRunId: "native-correctness-run-1",
+    reviewArtifactKey: review.artifactKey,
+    roleArtifactKey: review.roleArtifactKeys[role],
+    suppliedArtifactKey: review.roleArtifactKeys[role],
+    repository: review.repository,
+    pullRequest: review.pullRequest,
+    head: review.head,
+    baseRef: review.baseRef,
+    baseSha: review.baseSha,
+    role,
+    publish: review.publish,
+    bodyPath,
+    reportPath: join(root, `${role}.report.md`),
+    observationsPath,
+    body: body.trim(),
+    observations,
+    bodySha256: createHash("sha256").update(bodyBytes).digest("hex"),
+    observationsSha256: createHash("sha256").update(observationsBytes).digest("hex"),
+  }));
+  const roleResults = (review.roles as string[]).map((selectedRole) => ({ role: selectedRole, nativeRunId: "native-correctness-run-1", nativeStatus: "completed", reportPath: join(root, `${selectedRole}.report.md`), recoveryPath: join(root, `${selectedRole}.publication-recovery.json`), exitCode: 0 }));
+  await writeFile(join(root, "reviewer-execution.json"), JSON.stringify({ schema: "forgedock.candidate-review-execution/v1", repository: review.repository, pullRequest: review.pullRequest, head: review.head, baseRef: review.baseRef, baseSha: review.baseSha, artifactKey: review.artifactKey, mode: review.mode, workflowPath: review.workflowPath, workflowSha256: review.workflowSha256, toolCallId: "test-reviewer-tool-call", workflowRunId: "test-workflow-run", completedAt: new Date().toISOString(), roleResults }));
+}
+
 test("parent-only adjudication tools expose bounded review and tracking operations", async () => {
   const root = await mkdtemp("/tmp/forgedock-adjudication-tools-");
   try {
+    const workflowPath = join(root, "workflow.js");
+    const workflowText = "const assignments = [];\nreturn assignments;\n";
+    await writeFile(workflowPath, workflowText);
+    const workflowSha256 = createHash("sha256").update(workflowText).digest("hex");
     const review = {
       schema: "forgedock.candidate-review/v1",
       artifactRoot: root,
@@ -34,8 +75,14 @@ test("parent-only adjudication tools expose bounded review and tracking operatio
       configRoot: root,
       publish: false,
       roles: ["correctness"],
+      roleArtifactKeys: { correctness: "correctness-attempt" },
+      workflowPath,
+      workflowSha256,
+      mode: "standard",
     };
     await writeFile(join(root, "review.json"), JSON.stringify(review));
+    await writeFile(join(root, "correctness.report.md"), `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ repository: review.repository, pullRequest: review.pullRequest, head: review.head, baseRef: review.baseRef, baseSha: review.baseSha, role: "correctness", reportId: review.roleArtifactKeys.correctness })} -->\n<!-- FORGE:REVIEW_OBSERVATIONS [] -->\n## ForgeDock review\n`);
+    await writeRecoverySidecar(root, review, "correctness", "## ForgeDock review\n\nClean report.");
     const calls: string[][] = [];
     let largeHistory = false;
     const tools = toolsFor(async (_name: string, args: string[] = []) => {
@@ -129,6 +176,10 @@ test("registered parent contract preserves failed prose input and requires struc
     const head = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: root })).stdout.trim();
     const livePull = JSON.stringify({ headRefOid: head, baseRefName: "integration" });
     await writeFile(join(root, "gh"), `#!/usr/bin/env node\nconst args = process.argv.slice(2);\nif (args[0] === "pr" && args[1] === "view") process.stdout.write(${JSON.stringify(livePull)});\nelse process.stdout.write("[]");\n`, { mode: 0o755 });
+    const workflowPath = join(root, "workflow.js");
+    const workflowText = "const assignments = [];\nreturn assignments;\n";
+    await writeFile(workflowPath, workflowText);
+    const workflowSha256 = createHash("sha256").update(workflowText).digest("hex");
     const review = {
       schema: "forgedock.candidate-review/v1",
       artifactRoot: root,
@@ -142,9 +193,13 @@ test("registered parent contract preserves failed prose input and requires struc
       configRoot: root,
       publish: false,
       roles: ["correctness"],
+      roleArtifactKeys: { correctness: "contract-report" },
+      workflowPath,
+      workflowSha256,
+      mode: "standard",
     };
     await writeFile(join(root, "review.json"), JSON.stringify(review));
-    await writeFile(join(root, "correctness.report.md"), `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ v: 1, kind: "REVIEW", repository: "example/product", pullRequest: 7, head: review.head, baseSha: review.baseSha, role: "correctness", reportId: "contract-report", baseRef: "integration" })} -->\n<!-- FORGE:REVIEW_OBSERVATIONS [] -->\n## ForgeDock review\n\nClean report.\n`);
+    await writeRecoverySidecar(root, review, "correctness", "## ForgeDock review\n\nClean report.");
     const calls: string[][] = [];
     const tools = toolsFor(async (name: string, args: string[]) => {
       calls.push(args);

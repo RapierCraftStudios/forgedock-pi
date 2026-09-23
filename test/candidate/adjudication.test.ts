@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
@@ -84,6 +85,15 @@ review:
   max_concurrent: 2
 `;
 
+function reviewerReportMarkdown(identity: Record<string, unknown>, body: string, observations: any[]): string {
+  const oneLine = (value: unknown) => String(value).replace(/\r?\n/g, " ").replace(/\s+/g, " ").trim();
+  const summary = observations.length === 0
+    ? "### Structured findings\n\nNo structured observations reported.\n\n"
+    : `### Structured findings\n\n${observations.map((item) => `- **${item.id}** (${item.kind}) ${oneLine(item.summary)} — evidence: ${item.evidence.map(oneLine).join("; ")}; proposed: ${item.proposedDisposition}; stage: ${oneLine(item.stage)}`).join("\n")}\n\n`;
+  const headers = `**Reviewer role**: \`${identity.role}\`\n**Pull request**: #${identity.pullRequest}\n**Reviewed source**: \`${identity.head}\`\n**Review base**: \`${identity.baseRef}\` at \`${identity.baseSha}\`\n\n`;
+  return `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify(identity)} -->\n<!-- FORGE:REVIEW_OBSERVATIONS ${JSON.stringify(observations)} -->\n## ForgeDock review\n\n${headers}${summary}${body.trim()}\n`;
+}
+
 async function fixture(publish: boolean, staging = false) {
   const root = await mkdtemp("/tmp/forgedock-adjudication-repo-");
   const bin = await mkdtemp("/tmp/forgedock-adjudication-bin-");
@@ -112,24 +122,46 @@ async function fixture(publish: boolean, staging = false) {
     issuePostFails: true,
   }));
   const roles = ["correctness", "security"];
+  const roleArtifactKeys = Object.fromEntries(roles.map((role) => [role, `${role}-attempt`]));
+  const workflowPath = join(reviewRoot, "workflow.js");
+  const workflowText = `const assignments = ${JSON.stringify(roles.map((role) => ({ role, reportPath: join(reviewRoot, `${role}.report.md`), recoveryPath: join(reviewRoot, `${role}.publication-recovery.json`) })))};\nreturn assignments;\n`;
+  await writeFile(workflowPath, workflowText);
+  const workflowSha256 = createHash("sha256").update(workflowText).digest("hex");
   const observations: Record<string, any[]> = {
     correctness: [{ id: "correctness:F1", kind: "verification-authority-prerequisite", summary: "Backup rehearsal proof is absent", affectedBehavior: "Promotion backup safety", location: "docs/backup.md", evidence: ["No exact-head rehearsal receipt exists."], trigger: "The promotion has no independent backup rehearsal receipt.", consequence: "The protected promotion cannot claim the backup obligation is discharged.", whyThisChange: "The changed storage path is part of this promotion.", stage: "before promotion", proposedDisposition: "NON-BLOCKING FOLLOW-UP" }],
     security: [{ id: "security:F1", kind: "verification-authority-prerequisite", summary: "Backup rehearsal proof is absent", affectedBehavior: "Promotion backup safety", location: "docs/backup.md", evidence: ["The same missing receipt is visible at the protected boundary."], trigger: "The exact-head rehearsal receipt is unavailable.", consequence: "The evidence gap remains until the rehearsal is run.", whyThisChange: "The promotion changes the storage boundary.", stage: "before promotion", proposedDisposition: "NON-BLOCKING FOLLOW-UP" }],
   };
+  const baseRef = staging ? "main" : "integration";
+  const review = { schema: "forgedock.candidate-review/v1", artifactRoot: reviewRoot, artifactKey: "attempt-1", repository: "example/product", pullRequest: 7, head, baseRef, baseSha: base, sourceRoot: root, configRoot: root, publish, roles, roleArtifactKeys, mode: staging ? "staging" : "standard", workflowPath, workflowSha256 };
+  await writeFile(join(reviewRoot, "review.json"), JSON.stringify(review));
   for (const role of roles) {
-    const identity = { v: 1, kind: "REVIEW", repository: "example/product", pullRequest: 7, head, baseSha: base, role, reportId: `${role}-attempt`, baseRef: staging ? "main" : "integration" };
-    const observationsMarker = `<!-- FORGE:REVIEW_OBSERVATIONS ${JSON.stringify(observations[role])} -->`;
-    const body = `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify(identity)} -->\n${observationsMarker}\n## ForgeDock review\n\n### Scope and decisions considered\nThe exact patch was reviewed.\n\n### Evidence and findings\nThe structured observation is recorded.\n\n### Verification limitations\nNo independent rehearsal was available.\n\n### Recommendation\nFollow up after the parent decision.\n`;
-    await writeFile(join(reviewRoot, `${role}.report.md`), body);
+    const identity = { v: 1, kind: "REVIEW", repository: "example/product", pullRequest: 7, head, baseSha: base, role, reportId: roleArtifactKeys[role]!, baseRef };
+    const body = ["### Scope and decisions considered", "The exact patch was reviewed.", "### Evidence and findings", "The structured observation is recorded.", "### Verification limitations", "No independent rehearsal was available.", "### Recommendation", "Follow up after the parent decision."].join("\n\n");
+    const bodyBytes = `${body}\n`;
+    const observationsBytes = `${JSON.stringify(observations[role], null, 2)}\n`;
+    const bodyPath = join(reviewRoot, `${role}.body.md`);
+    const reportPath = join(reviewRoot, `${role}.report.md`);
+    const observationsPath = join(reviewRoot, `${role}.observations.json`);
+    await writeFile(bodyPath, bodyBytes);
+    await writeFile(observationsPath, observationsBytes);
+    await writeFile(join(reviewRoot, `${role}.authorization.json`), JSON.stringify({ schema: "forgedock.candidate-review-role/v1", artifactRoot: reviewRoot, artifactKey: roleArtifactKeys[role], role, repository: review.repository, pullRequest: 7, head, baseRef, baseSha: base, publish }));
+    await writeFile(join(reviewRoot, `${role}.publication-recovery.json`), JSON.stringify({
+      schema: "forgedock.candidate-review-publication-recovery/v1", state: publish ? "published" : "saved", recoveryAttempts: 0,
+      nativeRunId: `native-${role}-run-33800`, reviewArtifactKey: review.artifactKey, roleArtifactKey: roleArtifactKeys[role], suppliedArtifactKey: roleArtifactKeys[role],
+      repository: review.repository, pullRequest: 7, head, baseRef, baseSha: base, role, publish,
+      bodyPath, reportPath, observationsPath, body, observations: observations[role],
+      bodySha256: createHash("sha256").update(bodyBytes).digest("hex"), observationsSha256: createHash("sha256").update(observationsBytes).digest("hex"),
+    }, null, 2));
+    await writeFile(reportPath, reviewerReportMarkdown(identity, body, observations[role]!));
   }
+  const roleResults = roles.map((role) => ({ role, nativeRunId: `native-${role}-run-33800`, nativeStatus: "completed", reportPath: join(reviewRoot, `${role}.report.md`), recoveryPath: join(reviewRoot, `${role}.publication-recovery.json`), exitCode: 0 }));
+  await writeFile(join(reviewRoot, "reviewer-execution.json"), JSON.stringify({ schema: "forgedock.candidate-review-execution/v1", repository: review.repository, pullRequest: review.pullRequest, head, baseRef, baseSha: base, artifactKey: review.artifactKey, mode: review.mode, workflowPath, workflowSha256, toolCallId: "fixture-reviewer-tool-call", workflowRunId: "fixture-workflow-run", completedAt: new Date().toISOString(), roleResults }, null, 2));
   const state = JSON.parse(await readFile(statePath, "utf8"));
   if (publish) {
     state.comments = [];
     for (const [index, role] of roles.entries()) state.comments.push({ id: 11 + index, body: await readFile(join(reviewRoot, `${role}.report.md`), "utf8"), html_url: `https://github.com/example/product/pull/7#issuecomment-${11 + index}` });
     await writeFile(statePath, JSON.stringify(state));
   }
-  const baseRef = staging ? "main" : "integration";
-  await writeFile(join(reviewRoot, "review.json"), JSON.stringify({ schema: "forgedock.candidate-review/v1", artifactRoot: reviewRoot, artifactKey: "attempt-1", repository: "example/product", pullRequest: 7, head, baseRef, baseSha: base, sourceRoot: root, configRoot: root, publish, roles, mode: staging ? "staging" : "standard" }));
   return { root, bin, reviewRoot, statePath, head, base, baseRef, mode: staging ? "staging" : "standard", roles };
 }
 
@@ -180,6 +212,91 @@ function inputFor(f: Awaited<ReturnType<typeof fixture>>, publish: boolean, allo
     publish,
   };
 }
+
+test("CLI adjudication binds route mode and every report to the prepared role key", async () => {
+  const f = await fixture(false);
+  try {
+    const inputPath = join(f.reviewRoot, "route-and-report-identity.json");
+    const input = inputFor(f, false, false);
+    input.mode = "staging";
+    await writeFile(inputPath, JSON.stringify(input));
+    await assert.rejects(execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } }), /Adjudication mode does not match the route/);
+
+    input.mode = f.mode;
+    const reportPath = join(f.reviewRoot, "correctness.report.md");
+    const report = await readFile(reportPath, "utf8");
+    await writeFile(reportPath, report.replace("correctness-attempt", "wrong-role-key"));
+    await writeFile(inputPath, JSON.stringify(input));
+    await assert.rejects(execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } }), /does not match its prepared role authorization/);
+    await writeFile(reportPath, report);
+    const state = JSON.parse(await readFile(f.statePath, "utf8"));
+    assert.equal(state.comments.length, 0);
+    assert.equal(state.issues.length, 0);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.reviewRoot, { recursive: true, force: true });
+  }
+});
+
+test("standalone and batch REVIEW-PANEL CLI routes require prepared adjudication", async () => {
+  const f = await fixture(false);
+  try {
+    const bodyFile = join(f.reviewRoot, "manual-panel.md");
+    const reportsFile = join(f.reviewRoot, "manual-reviewers.json");
+    const batchFile = join(f.reviewRoot, "manual-panel-batch.json");
+    await writeFile(bodyFile, "A manually supplied parent decision.\n");
+    await writeFile(reportsFile, JSON.stringify(f.roles.map((role) => ({ role, reportFile: join(f.reviewRoot, `${role}.report.md`) }))));
+    await assert.rejects(execFileAsync("node", [helper, "record", "--kind", "REVIEW-PANEL", "--repo", "example/product", "--pr", "7", "--head", f.head, "--base-ref", f.baseRef, "--base-sha", f.base, "--mode", f.mode, "--body-file", bodyFile, "--reviewers-file", reportsFile, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } }), /REVIEW-PANEL prepared reviewRoot must be a non-empty string/);
+    await writeFile(batchFile, JSON.stringify({ repository: "example/product", cwd: f.root, records: [{ kind: "REVIEW-PANEL", pullRequest: 7, head: f.head, baseRef: f.baseRef, baseSha: f.base, bodyFile, reviewerReports: f.roles.map((role) => ({ role, reportFile: join(f.reviewRoot, `${role}.report.md`) })) }] }));
+    await assert.rejects(execFileAsync("node", [helper, "record", "batch", "--input", batchFile], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } }), /REVIEW-PANEL prepared reviewRoot must be a non-empty string/);
+    const saved = JSON.parse((await execFileAsync("node", [helper, "record", "--kind", "REVIEW-PANEL", "--repo", "example/product", "--pr", "7", "--head", f.head, "--base-ref", f.baseRef, "--base-sha", f.base, "--mode", f.mode, "--body-file", bodyFile, "--reviewers-file", reportsFile, "--review-root", f.reviewRoot, "--artifact-key", "attempt-1", "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
+    assert.equal(saved.kind, "REVIEW-PANEL");
+    assert.equal(saved.publication, "saved");
+    const state = JSON.parse(await readFile(f.statePath, "utf8"));
+    assert.equal(state.comments.length, 0);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.reviewRoot, { recursive: true, force: true });
+  }
+});
+
+test("direct adjudication requires byte-exact remote reviewer report readback", async () => {
+  const f = await fixture(true);
+  try {
+    const state = JSON.parse(await readFile(f.statePath, "utf8"));
+    state.comments[0].body += "\n";
+    await writeFile(f.statePath, JSON.stringify(state));
+    const inputPath = join(f.reviewRoot, "remote-report-bytes.json");
+    await writeFile(inputPath, JSON.stringify(inputFor(f, true, false)));
+    await assert.rejects(execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } }), /was not found exactly once with the saved bytes/);
+    const after = JSON.parse(await readFile(f.statePath, "utf8"));
+    assert.equal(after.comments.length, 2);
+    assert.equal(after.comments.some((comment: any) => comment.body.includes("REVIEW-PANEL")), false);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.reviewRoot, { recursive: true, force: true });
+  }
+});
+
+test("direct adjudication rejects noncanonical local report line endings", async () => {
+  const f = await fixture(false);
+  try {
+    const reportPath = join(f.reviewRoot, "correctness.report.md");
+    const report = await readFile(reportPath, "utf8");
+    await writeFile(reportPath, report.replace(/\n/g, "\r\n"));
+    const inputPath = join(f.reviewRoot, "noncanonical-report.json");
+    await writeFile(inputPath, JSON.stringify(inputFor(f, false, false)));
+    await assert.rejects(execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } }), /does not match its retained authored body\/observations/);
+    assert.equal((await readdir(f.reviewRoot)).some((name) => name.startsWith("review-panel.provisional-r0")), false);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.reviewRoot, { recursive: true, force: true });
+  }
+});
 
 test("parent adjudication deduplicates duplicate observations and preserves skipped semantics", async () => {
   const f = await fixture(false);
@@ -248,8 +365,23 @@ test("parent refuses a current report that omits its observations marker", async
 test("clean reports produce a justified approval without invented tracking", async () => {
   const f = await fixture(false);
   try {
+    const review = JSON.parse(await readFile(join(f.reviewRoot, "review.json"), "utf8"));
     for (const role of f.roles) {
-      await writeFile(join(f.reviewRoot, `${role}.report.md`), `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ v: 1, kind: "REVIEW", repository: "example/product", pullRequest: 7, head: f.head, baseSha: f.base, role, reportId: `${role}-attempt`, baseRef: "integration" })} -->\n<!-- FORGE:REVIEW_OBSERVATIONS [] -->\n## ForgeDock review\n\n### Scope and decisions considered\nThe exact patch was reviewed.\n\n### Evidence and findings\nCode findings: none.\n\n### Verification limitations\nNo unresolved prerequisite was found.\n\n### Recommendation\nApprove after parent adjudication.\n`);
+      const body = ["### Scope and decisions considered", "The exact patch was reviewed.", "### Evidence and findings", "Code findings: none.", "### Verification limitations", "No unresolved prerequisite was found.", "### Recommendation", "Approve after parent adjudication."].join("\n\n");
+      const observations: any[] = [];
+      const bodyBytes = `${body}\n`;
+      const observationsBytes = `${JSON.stringify(observations, null, 2)}\n`;
+      const recoveryPath = join(f.reviewRoot, `${role}.publication-recovery.json`);
+      const recovery = JSON.parse(await readFile(recoveryPath, "utf8"));
+      recovery.body = body;
+      recovery.observations = observations;
+      recovery.bodySha256 = createHash("sha256").update(bodyBytes).digest("hex");
+      recovery.observationsSha256 = createHash("sha256").update(observationsBytes).digest("hex");
+      await writeFile(recovery.bodyPath, bodyBytes);
+      await writeFile(recovery.observationsPath, observationsBytes);
+      await writeFile(recoveryPath, JSON.stringify(recovery));
+      const identity = { v: 1, kind: "REVIEW", repository: "example/product", pullRequest: 7, head: f.head, baseSha: f.base, role, reportId: review.roleArtifactKeys[role], baseRef: "integration" };
+      await writeFile(join(f.reviewRoot, `${role}.report.md`), reviewerReportMarkdown(identity, body, observations));
     }
     const inputPath = join(f.reviewRoot, "adjudication.json.input");
     const input = inputFor(f, false, false);

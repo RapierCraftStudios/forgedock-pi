@@ -200,10 +200,28 @@ $FORGEDOCK_CANDIDATE_BIN record reviewer \
 
 Add `--publish` only when the target and GitHub write authority are explicitly authorized.
 Publication lists comments once, reuses one matching stable marker, reconciles an ambiguous
-create response by readback, and requires exact saved-byte/permalink readback. A saved report
-survives a publication failure; review analysis is not rerun. Reports may also carry a
-`FORGE:REVIEW_OBSERVATIONS` marker containing stable role-scoped observation IDs. The parent
-reads every current report and uses the restricted `forge_publish_adjudication` tool to map each
+create response by readback, and requires exact saved-byte/permalink readback. Each reviewer
+workflow returns a bounded result per role with native run ID/terminal state, report path,
+recovery-input path, and artifact references; delivery remains unverified until the parent reads
+the exact report. The protected-route roster has a durable one-launch claim: the prepared
+workflow cannot be replayed, and the panel cannot be re-prepared after launch in the same turn.
+The child publisher saves a hash-checked role/run-bound recovery sidecar before publication. A
+single `forge_recover_reviewer_publication` operation can make at most one role-only publish call,
+and only for an exact completed native role run with its prepared authorization. Once an
+operation is claimed, repeated calls are readback/finalization only: they verify canonical local
+authored content and exact remote comment bytes/permalink through the existing helper without
+clearing the claim or issuing another POST. Timeout, cancellation, detachment, execution limit, and
+unknown delivery remain distinct outcomes. `forge_publish_incomplete_review` can record truthful
+post-review `GATED` status without consuming an unused recovery attempt when recovery is
+unavailable or the parent reports an execution limit. It cannot preempt an available completed-role
+recovery, cancel an active claim, or describe an unresolved claim as exhausted. If a later readback
+verifies delivery, the parent adjudication automatically supersedes the published incomplete
+record using the existing durable-record mechanism. GATED is not a verdict or pre-review
+infrastructure failure. The parent tool rejects missing, altered, misbound, or undelivered reports
+before writing adjudication input.
+Reports may also carry a `FORGE:REVIEW_OBSERVATIONS` marker containing stable role-scoped
+observation IDs. The parent reads every current report and uses the restricted
+`forge_publish_adjudication` tool to map each
 observation exactly once to an explicit disposition. Duplicate causes retain all source IDs;
 clean reports use an empty observation list. `forge_resolve_review_tracking` searches open and
 closed issues before an authorized parent publishes one actionable follow-up. Permission or

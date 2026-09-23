@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -92,6 +92,34 @@ const HISTORICAL_DECISION = Type.Object({
     draft: Type.Optional(TRACKING_DRAFT),
   })),
 }, { description: "One explicit current-attempt adjudication of a prior concern, including source, disposition, rationale, evidence, stage, and applicable tracking." });
+const REVIEW_RECOVERY_INPUT = Type.Object({
+  repository: REPOSITORY,
+  pullRequest: Type.Integer({ minimum: 1 }),
+  head: SHA,
+  baseRef: Type.String({ minLength: 1 }),
+  baseSha: SHA,
+  reviewRoot: Type.String({ minLength: 1 }),
+  artifactKey: Type.String({ minLength: 1 }),
+  role: ROLE,
+  nativeRunId: Type.String({ pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$" }),
+  nativeTerminal: Type.String({ pattern: "^(?:completed|failed|stopped|interrupted|timed-out|detached|execution-limit|nonterminal|unknown)$" }),
+});
+const INCOMPLETE_REVIEW_INPUT = Type.Object({
+  repository: REPOSITORY,
+  pullRequest: Type.Integer({ minimum: 1 }),
+  head: SHA,
+  baseRef: Type.String({ minLength: 1 }),
+  baseSha: SHA,
+  reviewRoot: Type.String({ minLength: 1 }),
+  artifactKey: Type.String({ minLength: 1 }),
+  role: ROLE,
+  nativeRunId: Type.Optional(Type.String({ pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$" })),
+  nativeTerminal: Type.String({ pattern: "^(?:completed|failed|stopped|interrupted|timed-out|detached|execution-limit|nonterminal|unknown)$" }),
+  deliveryError: Type.String({ minLength: 1, maxLength: 1000 }),
+  recoveryBlocker: Type.Optional(Type.Literal("execution-limit")),
+  blockerEvidence: Type.Optional(Type.String({ minLength: 1, maxLength: 1000 })),
+  publish: Type.Boolean(),
+});
 const ADJUDICATION_INPUT = Type.Object({
   repository: REPOSITORY,
   pullRequest: Type.Integer({ minimum: 1 }),
@@ -208,6 +236,175 @@ async function preparedReview(root: string, artifactKey: string): Promise<Record
   return review;
 }
 
+function reviewRoles(review: Record<string, unknown>): string[] {
+  if (!Array.isArray(review.roles) || review.roles.length < 1 || review.roles.length > 3 || review.roles.some((role) => typeof role !== "string" || !/^[a-z][a-z0-9-]*$/.test(role))) throw new Error("Prepared review has no valid selected reviewer roster");
+  return [...review.roles] as string[];
+}
+
+function roleArtifactKey(review: Record<string, unknown>, role: string): string {
+  const keys = review.roleArtifactKeys;
+  const key = keys && typeof keys === "object" && !Array.isArray(keys) ? (keys as Record<string, unknown>)[role] : undefined;
+  if (typeof key !== "string" || !key.trim()) throw new Error(`Prepared review has no role authorization key for ${role}`);
+  return key;
+}
+
+function preparedReviewMode(review: Record<string, unknown>): "standard" | "staging" {
+  const config = review.config && typeof review.config === "object" && !Array.isArray(review.config) ? review.config as Record<string, unknown> : {};
+  const baseRef = review.baseRef;
+  const derived = baseRef === config.protectedBranch ? "staging" : baseRef === config.integrationBranch ? "standard" : undefined;
+  const mode = derived ?? (review.config === undefined && (review.mode === "standard" || review.mode === "staging") ? review.mode : undefined);
+  if (!mode || review.mode !== undefined && review.mode !== mode) throw new Error("Prepared review route does not match its canonical base branch");
+  return mode;
+}
+
+function reviewerReportIdentity(path: string): Record<string, unknown> | undefined {
+  if (!existsSync(path) || realpathSync(path) !== path) return undefined;
+  const report = readFileSync(path, "utf8");
+  const marker = report.match(/^<!-- FORGE:REVIEWER_REPORT (\{.*\}) -->$/m);
+  if (!marker?.[1]) return undefined;
+  try { return JSON.parse(marker[1]) as Record<string, unknown>; } catch { return undefined; }
+}
+
+async function requireReviewerReports(pi: ExtensionAPI, review: Record<string, unknown>, input: Record<string, unknown>): Promise<Array<{ role: string; path: string; reportId: string }>> {
+  const root = resolve(String(input.reviewRoot));
+  const missing: string[] = [];
+  const invalid: string[] = [];
+  const undelivered: string[] = [];
+  const reports: Array<{ role: string; path: string; reportId: string }> = [];
+  const roles = reviewRoles(review);
+  for (const role of roles) {
+    const authorizationPath = join(root, `${role}.authorization.json`);
+    let authorizedRole = false;
+    try {
+      const authorization = JSON.parse(await readFile(authorizationPath, "utf8")) as Record<string, unknown>;
+      authorizedRole = existsSync(authorizationPath) && realpathSync(authorizationPath) === authorizationPath && authorization.schema === "forgedock.candidate-review-role/v1" && authorization.artifactRoot === root && authorization.artifactKey === roleArtifactKey(review, role) && authorization.role === role && authorization.repository === review.repository && authorization.pullRequest === review.pullRequest && authorization.head === review.head && authorization.baseRef === review.baseRef && authorization.baseSha === review.baseSha && authorization.publish === review.publish;
+    } catch { authorizedRole = false; }
+    if (!authorizedRole) invalid.push(role);
+  }
+  if (invalid.length) throw new Error(`Reviewer report or authored recovery content does not match its prepared role: ${invalid.join(", ")}`);
+  const recoveryByRole = new Map<string, Record<string, unknown>>();
+  for (const role of roles) {
+    const recoveryPath = join(root, `${role}.publication-recovery.json`);
+    let recovery: Record<string, unknown>;
+    try {
+      if (!existsSync(recoveryPath) || realpathSync(recoveryPath) !== recoveryPath) throw new Error("recovery sidecar is missing or not a regular file");
+      recovery = JSON.parse(await readFile(recoveryPath, "utf8")) as Record<string, unknown>;
+    } catch { invalid.push(role); continue; }
+    const bodyPath = join(root, `${role}.body.md`);
+    const reportPath = join(root, `${role}.report.md`);
+    const observationsPath = join(root, `${role}.observations.json`);
+    const execution = await verifiedReviewerExecutionResult(root, review, role);
+    const body = typeof recovery.body === "string" ? `${recovery.body.trim()}\n` : "";
+    const observations = Array.isArray(recovery.observations) ? `${JSON.stringify(recovery.observations, null, 2)}\n` : "";
+    const materializedBodyMatches = !existsSync(bodyPath) || realpathSync(bodyPath) === bodyPath && await readFile(bodyPath, "utf8") === body;
+    const materializedObservationsMatch = !existsSync(observationsPath) || realpathSync(observationsPath) === observationsPath && await readFile(observationsPath, "utf8") === observations;
+    if (recovery.schema !== "forgedock.candidate-review-publication-recovery/v1" || recovery.reviewArtifactKey !== review.artifactKey || recovery.roleArtifactKey !== roleArtifactKey(review, role) || recovery.repository !== review.repository || recovery.pullRequest !== review.pullRequest || recovery.head !== review.head || recovery.baseRef !== review.baseRef || recovery.baseSha !== review.baseSha || recovery.role !== role || recovery.publish !== review.publish || typeof recovery.nativeRunId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(recovery.nativeRunId) || recovery.bodyPath !== bodyPath || recovery.reportPath !== reportPath || recovery.observationsPath !== observationsPath || !body || body.trim().length < 32 || !observations || digest(body) !== recovery.bodySha256 || digest(observations) !== recovery.observationsSha256 || !execution || execution.nativeRunId !== recovery.nativeRunId || !materializedBodyMatches || !materializedObservationsMatch) { invalid.push(role); continue; }
+    recoveryByRole.set(role, recovery);
+  }
+  if (invalid.length) throw new Error(`Reviewer report or authored recovery content does not match its prepared role: ${invalid.join(", ")}`);
+  for (const role of roles) {
+    const path = join(root, `${role}.report.md`);
+    const recovery = recoveryByRole.get(role)!;
+    const delivery = await verifyReviewerReportDelivery(pi, review, root, role, recovery);
+    if (delivery.outcome === "missing") { missing.push(role); continue; }
+    if (delivery.outcome === "invalid" || delivery.reportId !== roleArtifactKey(review, role) || delivery.authoredEvidence !== "verified") { invalid.push(role); continue; }
+    if (review.publish === true && delivery.outcome !== "published" || review.publish !== true && delivery.outcome !== "saved") { undelivered.push(role); continue; }
+    reports.push({ role, path: delivery.reportPath, reportId: roleArtifactKey(review, role) });
+  }
+  if (invalid.length) throw new Error(`Reviewer report or authored recovery content does not match its prepared role: ${invalid.join(", ")}`);
+  if (missing.length) {
+    const recovery = missing.map((role) => `${role}=${join(root, `${role}.publication-recovery.json`)}`).join(", ");
+    throw new Error(`Adjudication was not attempted: required reviewer report missing for role ${missing.join(", ")}. Preserve the current verdict semantics and use only exact-run readback/recovery when its bound input and native result permit. Recovery artifacts: ${recovery}`);
+  }
+  if (undelivered.length) throw new Error(`Adjudication was not attempted: exact authored report exists but publication is not verified for role ${undelivered.join(", ")}. Use only the bounded exact-run recovery/finalization path; do not relaunch reviewers.`);
+  return reports;
+}
+
+async function stableTextArtifact(path: string, content: string): Promise<void> {
+  try { await writeFile(path, content, { flag: "wx", mode: 0o600 }); }
+  catch (error) { if (await readFile(path, "utf8") !== content) throw error; }
+}
+
+async function verifyReviewerReportDelivery(pi: ExtensionAPI, review: Record<string, unknown>, root: string, role: string, recovery?: Record<string, unknown>): Promise<{ outcome: "published" | "saved" | "unverified" | "missing" | "invalid"; reportPath: string; reportId?: string; url?: string; error?: string; authoredEvidence: "verified" | "unavailable" | "mismatch" }> {
+  const reportPath = join(root, `${role}.report.md`);
+  const bodyPath = join(root, `${role}.body.md`);
+  const observationsPath = join(root, `${role}.observations.json`);
+  const roleKey = roleArtifactKey(review, role);
+  let authoredEvidence: "verified" | "unavailable" | "mismatch" = "unavailable";
+  if (recovery && (recovery.schema !== "forgedock.candidate-review-publication-recovery/v1" || recovery.reviewArtifactKey !== review.artifactKey || recovery.roleArtifactKey !== roleKey || recovery.repository !== review.repository || recovery.pullRequest !== review.pullRequest || recovery.head !== review.head || recovery.baseRef !== review.baseRef || recovery.baseSha !== review.baseSha || recovery.role !== role || recovery.publish !== review.publish)) return { outcome: "invalid", reportPath, error: "recovery input does not match the prepared role and frozen source", authoredEvidence: "mismatch" };
+  const hasAuthoredEvidence = recovery && typeof recovery.body === "string" && Array.isArray(recovery.observations) && typeof recovery.bodySha256 === "string" && typeof recovery.observationsSha256 === "string";
+  if (hasAuthoredEvidence) {
+    const body = `${String(recovery.body).trim()}\n`;
+    const observations = `${JSON.stringify(recovery.observations, null, 2)}\n`;
+    if (digest(body) !== recovery.bodySha256 || digest(observations) !== recovery.observationsSha256) return { outcome: "invalid", reportPath, error: "retained authored body/observations failed their recorded digest check", authoredEvidence: "mismatch" };
+    try {
+      await stableTextArtifact(bodyPath, body);
+      await stableTextArtifact(observationsPath, observations);
+    } catch (error) {
+      return { outcome: "invalid", reportPath, error: `retained authored artifacts do not match the recovery input: ${error instanceof Error ? error.message : String(error)}`, authoredEvidence: "mismatch" };
+    }
+    const render = await pi.exec("node", [helperPath(), "record", "reviewer", "--repo", String(review.repository), "--pr", String(review.pullRequest), "--head", String(review.head), "--base-ref", String(review.baseRef), "--base-sha", String(review.baseSha), "--role", role, "--report-id", roleKey, "--body-file", bodyPath, "--report-file", reportPath, "--observations-file", observationsPath, "--cwd", String(review.configRoot ?? review.sourceRoot)], { timeout: 120_000 });
+    if (render.code !== 0) return { outcome: "invalid", reportPath, error: bounded(render.stderr), authoredEvidence: "mismatch" };
+    authoredEvidence = "verified";
+  }
+  const identity = reviewerReportIdentity(reportPath);
+  if (!identity) return { outcome: existsSync(reportPath) ? "invalid" : "missing", reportPath, error: existsSync(reportPath) ? "report file is not a canonical regular role report" : undefined, authoredEvidence };
+  if (identity.repository !== review.repository || identity.pullRequest !== review.pullRequest || identity.head !== review.head || identity.baseRef !== review.baseRef || identity.baseSha !== review.baseSha || identity.role !== role || identity.reportId !== roleKey) return { outcome: "invalid", reportPath, error: "report identity does not match the prepared role and frozen source", authoredEvidence };
+  if (review.publish !== true) return { outcome: "saved", reportPath, reportId: roleKey, authoredEvidence };
+  const verification = await pi.exec("node", [helperPath(), "verify-reviewer", "--repo", String(review.repository), "--pr", String(review.pullRequest), "--head", String(review.head), "--base-ref", String(review.baseRef), "--base-sha", String(review.baseSha), "--role", role, "--report-id", roleKey, "--report-file", reportPath, "--cwd", String(review.configRoot ?? review.sourceRoot)], { timeout: 120_000 });
+  if (verification.code !== 0) return { outcome: "unverified", reportPath, reportId: roleKey, error: bounded(verification.stderr) || "exact published comment was not found", authoredEvidence };
+  try {
+    const result = JSON.parse(verification.stdout) as Record<string, unknown>;
+    if (result.schema !== "forgedock.candidate-review-report-verification/v1" || result.publication !== "published" || result.repository !== review.repository || result.pullRequest !== review.pullRequest || result.head !== review.head || result.baseRef !== review.baseRef || result.baseSha !== review.baseSha || result.role !== role || result.reportId !== roleKey || typeof result.url !== "string") throw new Error("readback identity mismatch");
+    return { outcome: "published", reportPath, reportId: roleKey, url: result.url, authoredEvidence };
+  } catch (error) {
+    return { outcome: "unverified", reportPath, reportId: roleKey, error: `report publication readback could not be validated: ${error instanceof Error ? error.message : String(error)}`, authoredEvidence };
+  }
+}
+
+async function verifiedReviewerExecutionResult(root: string, review: Record<string, unknown>, role: string): Promise<Record<string, unknown> | undefined> {
+  const path = join(root, "reviewer-execution.json");
+  if (!existsSync(path) || realpathSync(path) !== path) return undefined;
+  try {
+    const receipt = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+    const roles = reviewRoles(review);
+    const validStatuses = new Set(["completed", "failed", "stopped", "interrupted", "timed-out", "detached", "execution-limit", "nonterminal"]);
+    if (receipt.schema !== "forgedock.candidate-review-execution/v1" || receipt.repository !== review.repository || receipt.pullRequest !== review.pullRequest || receipt.head !== review.head || receipt.baseRef !== review.baseRef || receipt.baseSha !== review.baseSha || receipt.artifactKey !== review.artifactKey || receipt.mode !== preparedReviewMode(review) || receipt.workflowPath !== review.workflowPath || receipt.workflowSha256 !== review.workflowSha256 || typeof receipt.workflowRunId !== "string" || typeof receipt.toolCallId !== "string" || typeof receipt.completedAt !== "string" || !Array.isArray(receipt.roleResults) || receipt.roleResults.length !== roles.length) return undefined;
+    let selected: Record<string, unknown> | undefined;
+    for (let index = 0; index < roles.length; index++) {
+      const row = receipt.roleResults[index];
+      if (!row || typeof row !== "object" || Array.isArray(row)) return undefined;
+      const result = row as Record<string, unknown>;
+      if (result.role !== roles[index] || !validStatuses.has(String(result.nativeStatus)) || !(result.nativeRunId === null || typeof result.nativeRunId === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(result.nativeRunId)) || result.reportPath !== join(root, `${roles[index]}.report.md`) || result.recoveryPath !== join(root, `${roles[index]}.publication-recovery.json`) || !(result.exitCode === null || Number.isSafeInteger(result.exitCode))) return undefined;
+      if (roles[index] === role) selected = result;
+    }
+    return selected;
+  } catch { return undefined; }
+}
+
+async function publishedIncompleteDeliverySupersedes(root: string, review: Record<string, unknown>): Promise<string | undefined> {
+  const found: Array<{ url: string; role: string }> = [];
+  for (const role of reviewRoles(review)) {
+    const prefix = `review-delivery-incomplete-${role}-`;
+    for (const name of await readdir(root)) {
+      if (!name.startsWith(prefix) || !name.endsWith(".receipt.json")) continue;
+      const path = join(root, name);
+      if (realpathSync(path) !== path) continue;
+      let receipt: Record<string, unknown>;
+      try { receipt = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>; } catch { continue; }
+      if (receipt.schema !== "forgedock.candidate-review-delivery-receipt/v1" || receipt.repository !== review.repository || receipt.pullRequest !== review.pullRequest || receipt.head !== review.head || receipt.baseRef !== review.baseRef || receipt.baseSha !== review.baseSha || receipt.role !== role || receipt.artifactKey !== review.artifactKey || !(receipt.nativeRunId === null || typeof receipt.nativeRunId === "string") || typeof receipt.recordUrl !== "string") continue;
+      found.push({ url: receipt.recordUrl, role });
+    }
+  }
+  const unique = [...new Map(found.map((record) => [record.url, record])).values()];
+  if (unique.length > 1) throw new Error("Multiple published incomplete-delivery records exist; explicitly resolve their supersession before adjudication");
+  return unique[0]?.url;
+}
+
+function sanitizedOneLine(value: string): string {
+  return value.replace(/[\r\n\u0000-\u001f<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, 600);
+}
+
 function artifactFile(root: string, requested: string, label: string): string {
   const canonicalRoot = resolve(root);
   const file = resolve(requested);
@@ -234,6 +431,16 @@ async function stableJsonFile(path: string, value: unknown): Promise<string> {
     if (await readFile(path, "utf8") !== content) throw error;
   }
   return path;
+}
+
+async function atomicallyReplaceJson(path: string, value: unknown): Promise<void> {
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+    await rename(temporary, path);
+  } finally {
+    await unlink(temporary).catch(() => {});
+  }
 }
 
 function bounded(text: string): string {
@@ -366,7 +573,7 @@ async function requirePassEvidence(input: RecordInput, review: Record<string, un
     const marker = reportText.match(/^<!-- FORGE:REVIEWER_REPORT (\{.*\}) -->$/m);
     let identity: Record<string, unknown>;
     try { identity = marker?.[1] ? JSON.parse(marker[1]) as Record<string, unknown> : {}; } catch { identity = {}; }
-    if (identity.repository !== input.repository || identity.pullRequest !== input.pullRequest || identity.head !== input.head || identity.baseRef !== input.baseRef || identity.baseSha !== input.baseSha || identity.role !== role) throw new Error(`Reviewer report for ${role} is not bound to the frozen role`);
+    if (identity.repository !== input.repository || identity.pullRequest !== input.pullRequest || identity.head !== input.head || identity.baseRef !== input.baseRef || identity.baseSha !== input.baseSha || identity.role !== role || identity.reportId !== roleArtifactKey(review, role)) throw new Error(`Reviewer report for ${role} is not bound to the frozen role and authorization`);
   }
   for (const name of localChecks) {
     const receiptPath = join(resolve(input.reviewRoot as string), "checks", `${name}.json`);
@@ -600,6 +807,195 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
+    name: "forge_recover_reviewer_publication",
+    label: "Recover one reviewer report",
+    description: "Make at most one parent-side publication attempt from an existing, exact-run reviewer recovery input; it cannot launch or resume a reviewer.",
+    parameters: REVIEW_RECOVERY_INPUT,
+    async execute(_toolCallId, params) {
+      const input = params as { repository: string; pullRequest: number; head: string; baseRef: string; baseSha: string; reviewRoot: string; artifactKey: string; role: string; nativeRunId: string; nativeTerminal: string };
+      const root = resolve(input.reviewRoot);
+      const review = await preparedReview(root, input.artifactKey);
+      if (review.repository !== input.repository || review.pullRequest !== input.pullRequest || review.head !== input.head || review.baseRef !== input.baseRef || review.baseSha !== input.baseSha || typeof review.publish !== "boolean") throw new Error("Reviewer recovery does not match the prepared frozen review");
+      if (!reviewRoles(review).includes(input.role)) throw new Error("Reviewer recovery role was not selected for this prepared review");
+      const expectedRoleKey = roleArtifactKey(review, input.role);
+      const authorizationPath = join(root, `${input.role}.authorization.json`);
+      if (!existsSync(authorizationPath) || realpathSync(authorizationPath) !== authorizationPath) throw new Error("Prepared role authorization is missing or not a regular file");
+      const authorization = JSON.parse(await readFile(authorizationPath, "utf8")) as Record<string, unknown>;
+      const recoveryPath = join(root, `${input.role}.publication-recovery.json`);
+      if (!existsSync(recoveryPath) || realpathSync(recoveryPath) !== recoveryPath) throw new Error(`No role-bound publication recovery input exists for ${input.role}`);
+      const recovery = JSON.parse(await readFile(recoveryPath, "utf8")) as Record<string, unknown>;
+      const bodyPath = join(root, `${input.role}.body.md`);
+      const reportPath = join(root, `${input.role}.report.md`);
+      const observationsPath = join(root, `${input.role}.observations.json`);
+      const expected = recovery.schema === "forgedock.candidate-review-publication-recovery/v1" && recovery.repository === input.repository && recovery.pullRequest === input.pullRequest && recovery.head === input.head && recovery.baseRef === input.baseRef && recovery.baseSha === input.baseSha && recovery.role === input.role && recovery.reviewArtifactKey === input.artifactKey && recovery.roleArtifactKey === expectedRoleKey && recovery.roleArtifactKey === authorization.artifactKey && authorization.schema === "forgedock.candidate-review-role/v1" && authorization.artifactRoot === root && authorization.artifactKey === expectedRoleKey && authorization.role === input.role && authorization.repository === input.repository && authorization.pullRequest === input.pullRequest && authorization.head === input.head && authorization.baseRef === input.baseRef && authorization.baseSha === input.baseSha && authorization.publish === review.publish && recovery.nativeRunId === input.nativeRunId && recovery.bodyPath === bodyPath && recovery.reportPath === reportPath && recovery.observationsPath === observationsPath && recovery.publish === review.publish;
+      if (!expected) throw new Error("Reviewer recovery input does not match the exact prepared role, frozen head/base, report destinations, or native run identity");
+      const executionResult = await verifiedReviewerExecutionResult(root, review, input.role);
+      const claimPath = join(root, `${input.role}.publication-recovery.lock`);
+      const claimExists = existsSync(claimPath);
+      const recoveryStarted = claimExists || Number(recovery.recoveryAttempts) > 0 || ["publication-attempted", "recovery-attempted", "recovery-unresolved", "recovery-failed"].includes(String(recovery.state));
+      const canStartRecovery = recovery.state === "recovery-available" && recovery.recoveryAttempts === 0 && !recoveryStarted && input.nativeTerminal === "completed" && executionResult?.nativeRunId === input.nativeRunId && executionResult.nativeStatus === "completed";
+      if (!canStartRecovery) {
+        const readback = await verifyReviewerReportDelivery(pi, review, root, input.role, recovery);
+        if (readback.outcome === "published" || readback.outcome === "saved") {
+          const latest = JSON.parse(await readFile(recoveryPath, "utf8")) as Record<string, unknown>;
+          const finalized = { ...latest, state: "recovered", publication: readback.outcome, recoveryReadbackAt: new Date().toISOString(), recoveryReadback: { outcome: readback.outcome, reportId: readback.reportId, url: readback.url ?? null, authoredEvidence: readback.authoredEvidence } };
+          await atomicallyReplaceJson(recoveryPath, finalized);
+          return { content: [{ type: "text", text: `Readback verified ${input.role} report delivery for native run ${input.nativeRunId}; no publisher was invoked during finalization. ${readback.url ?? readback.reportPath}` }], details: { role: input.role, nativeRunId: input.nativeRunId, recoveryPath, reportPath: readback.reportPath, publication: readback.outcome, deliveryVerified: true, authoredEvidence: readback.authoredEvidence, operationState: "finalized", repeated: true, recovered: true, error: null as string | null } };
+        }
+        return { content: [{ type: "text", text: `No second publication attempt was made for ${input.role}. Readback is ${readback.outcome}; the original claim/outcome remains ${String(recovery.state)} and is not treated as exhausted or cancelled. ${readback.error ?? ""}` }], details: { role: input.role, nativeRunId: input.nativeRunId, recoveryPath, reportPath: readback.reportPath, publication: "unverified", deliveryVerified: false, authoredEvidence: readback.authoredEvidence, operationState: claimExists ? "claimed-or-active" : String(recovery.state), repeated: true, recovered: false, error: readback.error ?? null } };
+      }
+      if (typeof recovery.body !== "string" || recovery.body.trim().length < 32 || !Array.isArray(recovery.observations)) throw new Error("Reviewer recovery input has no complete authored body and observations");
+      const body = `${recovery.body.trim()}\n`;
+      const observations = `${JSON.stringify(recovery.observations, null, 2)}\n`;
+      if (digest(body) !== recovery.bodySha256 || digest(observations) !== recovery.observationsSha256) throw new Error("Reviewer recovery input failed its authored-content digest check");
+      await stableTextArtifact(bodyPath, body);
+      await stableTextArtifact(observationsPath, observations);
+      try { await mkdir(claimPath, { mode: 0o700 }); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+          const readback = await verifyReviewerReportDelivery(pi, review, root, input.role, recovery);
+          return { content: [{ type: "text", text: `Another exact-run recovery claim exists; no second publisher was invoked. Readback is ${readback.outcome}. ${readback.error ?? ""}` }], details: { role: input.role, nativeRunId: input.nativeRunId, recoveryPath, reportPath: readback.reportPath, publication: readback.outcome === "published" ? "published" : "unverified", deliveryVerified: readback.outcome === "published", authoredEvidence: readback.authoredEvidence, operationState: "claimed-or-active", repeated: true, recovered: readback.outcome === "published", error: readback.error ?? null } };
+        }
+        throw error;
+      }
+      const attempted = { ...recovery, state: "recovery-attempted", recoveryAttempts: 1, recoveryClaimedAt: new Date().toISOString() };
+      await atomicallyReplaceJson(recoveryPath, attempted);
+      const args = [helperPath(), "record", "reviewer", "--repo", input.repository, "--pr", String(input.pullRequest), "--head", input.head, "--base-ref", input.baseRef, "--base-sha", input.baseSha, "--role", input.role, "--report-id", String(authorization.artifactKey), "--body-file", bodyPath, "--report-file", reportPath, "--observations-file", observationsPath, "--cwd", String(review.configRoot ?? review.sourceRoot)];
+      if (review.publish) args.push("--publish");
+      let publisherError: string | undefined;
+      let publisherOutput = "";
+      try {
+        const result = await pi.exec("node", args, { timeout: 120_000 });
+        publisherOutput = result.stdout.trim();
+        if (result.code !== 0) publisherError = result.stderr.trim().slice(-500) || `helper exited ${result.code}`;
+      } catch (error) {
+        publisherError = error instanceof Error ? error.message : String(error);
+      }
+      const readback = await verifyReviewerReportDelivery(pi, review, root, input.role, attempted);
+      if (readback.outcome === "published" || readback.outcome === "saved") {
+        const latest = JSON.parse(await readFile(recoveryPath, "utf8")) as Record<string, unknown>;
+        const recovered = { ...latest, state: "recovered", recoveryAttempts: 1, publication: readback.outcome, publicationResult: publisherOutput, recoveryReadbackAt: new Date().toISOString(), recoveryReadback: { outcome: readback.outcome, reportId: readback.reportId, url: readback.url ?? null, authoredEvidence: readback.authoredEvidence } };
+        await atomicallyReplaceJson(recoveryPath, recovered);
+        return { content: [{ type: "text", text: `Recovered and read back ${input.role} report for native run ${input.nativeRunId}; no additional publisher attempt will be made. ${readback.url ?? publisherOutput}` }], details: { role: input.role, nativeRunId: input.nativeRunId, recoveryPath, reportPath: readback.reportPath, publication: readback.outcome, deliveryVerified: true, authoredEvidence: readback.authoredEvidence, operationState: "finalized", repeated: false, recovered: true, error: publisherError ?? null } };
+      }
+      const latest = JSON.parse(await readFile(recoveryPath, "utf8")) as Record<string, unknown>;
+      const unresolved = { ...latest, state: "recovery-unresolved", recoveryAttempts: 1, recoveryError: publisherError ?? readback.error ?? "report delivery was not verified", recoveryReadbackAt: new Date().toISOString(), recoveryReadback: { outcome: readback.outcome, reportId: readback.reportId ?? null, url: readback.url ?? null, authoredEvidence: readback.authoredEvidence } };
+      await atomicallyReplaceJson(recoveryPath, unresolved);
+      return { content: [{ type: "text", text: `The single authorized ${input.role} recovery operation returned without verified delivery. No reviewer or publisher will be retried. Record honest incompleteness and preserve the claim for readback. ${publisherError ?? readback.error ?? ""}` }], details: { role: input.role, nativeRunId: input.nativeRunId, recoveryPath, reportPath: readback.reportPath, publication: "unverified", deliveryVerified: false, authoredEvidence: readback.authoredEvidence, operationState: "recovery-unresolved", repeated: false, recovered: false, error: publisherError ?? readback.error ?? null } };
+    },
+  });
+
+  pi.registerTool({
+    name: "forge_publish_incomplete_review",
+    label: "Record incomplete review",
+    description: "Publish a truthful GATED delivery record when a selected reviewer report is absent or its publication remains unverified after permitted recovery; it is not a verdict or pre-review infrastructure classification.",
+    parameters: INCOMPLETE_REVIEW_INPUT,
+    async execute(_toolCallId, params) {
+      const input = params as { repository: string; pullRequest: number; head: string; baseRef: string; baseSha: string; reviewRoot: string; artifactKey: string; role: string; nativeRunId?: string; nativeTerminal: string; deliveryError: string; recoveryBlocker?: "execution-limit"; blockerEvidence?: string; publish: boolean };
+      const root = resolve(input.reviewRoot);
+      const review = await preparedReview(root, input.artifactKey);
+      if (review.repository !== input.repository || review.pullRequest !== input.pullRequest || review.head !== input.head || review.baseRef !== input.baseRef || review.baseSha !== input.baseSha || review.publish !== input.publish) throw new Error("Incomplete-review record does not match the prepared frozen review");
+      if (!reviewRoles(review).includes(input.role)) throw new Error("Incomplete-review role was not selected for this prepared review");
+      const reportPath = join(root, `${input.role}.report.md`);
+      const recoveryPath = join(root, `${input.role}.publication-recovery.json`);
+      let recovery: Record<string, unknown> | undefined;
+      let recoveryProblem: string | undefined;
+      if (existsSync(recoveryPath)) {
+        try {
+          if (realpathSync(recoveryPath) !== recoveryPath) throw new Error("recovery evidence path is not a regular file");
+          recovery = JSON.parse(await readFile(recoveryPath, "utf8")) as Record<string, unknown>;
+          if (recovery.schema !== "forgedock.candidate-review-publication-recovery/v1" || recovery.reviewArtifactKey !== input.artifactKey || recovery.roleArtifactKey !== roleArtifactKey(review, input.role) || recovery.repository !== input.repository || recovery.pullRequest !== input.pullRequest || recovery.head !== input.head || recovery.baseRef !== input.baseRef || recovery.baseSha !== input.baseSha || recovery.role !== input.role || recovery.publish !== review.publish || typeof recovery.nativeRunId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(recovery.nativeRunId) || (input.nativeRunId !== undefined && recovery.nativeRunId !== input.nativeRunId)) throw new Error("recovery evidence does not match the prepared role/run identity");
+        } catch (error) {
+          recoveryProblem = error instanceof Error ? error.message : String(error);
+          recovery = undefined;
+        }
+      }
+      const authorizationPath = join(root, `${input.role}.authorization.json`);
+      let authorizedRole = false;
+      try {
+        const authorization = JSON.parse(await readFile(authorizationPath, "utf8")) as Record<string, unknown>;
+        authorizedRole = realpathSync(authorizationPath) === authorizationPath && authorization.schema === "forgedock.candidate-review-role/v1" && authorization.artifactRoot === root && authorization.artifactKey === roleArtifactKey(review, input.role) && authorization.role === input.role && authorization.repository === input.repository && authorization.pullRequest === input.pullRequest && authorization.head === input.head && authorization.baseRef === input.baseRef && authorization.baseSha === input.baseSha && authorization.publish === review.publish;
+      } catch { authorizedRole = false; }
+      const executionResult = await verifiedReviewerExecutionResult(root, review, input.role);
+      const reportIdentity = reviewerReportIdentity(reportPath);
+      if (!executionResult && recovery === undefined) throw new Error("Incomplete-review GATED record requires a completed per-role native execution receipt or exact role-bound publication recovery input; preparation, launch claims, or local reports alone are pre-review");
+      if (executionResult && recovery && executionResult.nativeRunId !== null && executionResult.nativeRunId !== recovery.nativeRunId) throw new Error("Native execution and reviewer publication evidence disagree on the role run identity");
+      const evidencedRunId = executionResult ? executionResult.nativeRunId : recovery?.nativeRunId;
+      if (input.nativeRunId !== undefined && input.nativeRunId !== evidencedRunId) throw new Error("Incomplete-review native run ID does not match durable role execution/publication evidence");
+      const nativeRunId = typeof evidencedRunId === "string" ? evidencedRunId : undefined;
+      if (executionResult ? input.nativeTerminal !== executionResult.nativeStatus : input.nativeTerminal !== "unknown") throw new Error("Incomplete-review native terminal state must match the durable role execution receipt or be unknown when no receipt exists");
+      const claimPath = join(root, `${input.role}.publication-recovery.lock`);
+      const claimExists = existsSync(claimPath);
+      if (Boolean(input.recoveryBlocker) !== Boolean(input.blockerEvidence)) throw new Error("A recovery blocker requires specific evidence, and blocker evidence requires a blocker classification");
+      const recoveryBody = recovery && typeof recovery.body === "string" ? `${recovery.body.trim()}\n` : "";
+      const recoveryObservations = recovery && Array.isArray(recovery.observations) ? `${JSON.stringify(recovery.observations, null, 2)}\n` : "";
+      const recoveryContentValid = Boolean(recoveryBody && recoveryObservations && digest(recoveryBody) === recovery?.bodySha256 && digest(recoveryObservations) === recovery?.observationsSha256);
+      const recoveryAvailable = authorizedRole && recovery !== undefined && executionResult?.nativeStatus === "completed" && nativeRunId !== undefined && recovery.nativeRunId === nativeRunId && recovery.state === "recovery-available" && recovery.recoveryAttempts === 0 && !claimExists && recoveryContentValid;
+      if (recoveryAvailable && !input.recoveryBlocker) throw new Error(`The exact completed ${input.role} role has authorized unused recovery; use forge_recover_reviewer_publication before recording GATED delivery`);
+      const readback = await verifyReviewerReportDelivery(pi, review, root, input.role, recovery);
+      if (readback.outcome === "published" || readback.outcome === "saved") throw new Error(`The ${input.role} report delivery is verified; do not record incomplete review delivery`);
+      if (input.recoveryBlocker && !recoveryAvailable) throw new Error("A recovery blocker may be recorded only while the exact authorized recovery remains available");
+      const identity = reportIdentity;
+      const savedButUndelivered = Boolean(identity && readback.authoredEvidence === "verified" && readback.outcome !== "invalid" && readback.outcome !== "missing");
+      const reportEvidence = savedButUndelivered
+        ? `- ${input.role}: canonical role-bound report saved at \`${reportPath}\` (reportId=\`${String(identity?.reportId)}\`); published readback is ${readback.outcome}`
+        : readback.outcome === "invalid"
+          ? `- ${input.role}: local report/evidence is preserved but did not pass content/identity verification (${readback.error ?? "unspecified mismatch"}); it is not counted as an authored report`
+          : `- ${input.role}: no verified report delivery at \`${reportPath}\`; readback=${readback.outcome}${readback.error ? ` (${sanitizedOneLine(readback.error)})` : ""}`;
+      const roleStatus = reviewRoles(review).map((role) => {
+        if (role === input.role) return reportEvidence;
+        const otherPath = join(root, `${role}.report.md`);
+        const other = reviewerReportIdentity(otherPath);
+        if (!other) return `- ${role}: required report missing at \`${otherPath}\``;
+        if (other.repository !== input.repository || other.pullRequest !== input.pullRequest || other.head !== input.head || other.baseRef !== input.baseRef || other.baseSha !== input.baseSha || other.role !== role || other.reportId !== roleArtifactKey(review, role)) return `- ${role}: report file preserved but identity/content has not been verified at \`${otherPath}\``;
+        return `- ${role}: prepared role-bound report saved at \`${otherPath}\` (reportId=\`${String(other.reportId)}\`); delivery is not adjudicated by this record`;
+      }).join("\n");
+      const runLabel = nativeRunId ?? "(native run id unavailable)";
+      const unresolvedClaim = claimExists || ["publication-attempted", "recovery-attempted", "recovery-unresolved", "recovery-failed"].includes(String(recovery?.state));
+      const claimState = unresolvedClaim ? "A durable recovery claim exists or a publisher operation was recorded; its result is unresolved. This record does not clear the claim or call the attempt exhausted." : recoveryProblem ? `Recovery evidence is unavailable or misbound (${sanitizedOneLine(recoveryProblem)}); no recovery attempt was started.` : recoveryAvailable ? `One exact role-only recovery remains authorized and unconsumed (attempts=${String(recovery?.recoveryAttempts)}); parent reported this execution limit: ${sanitizedOneLine(input.blockerEvidence ?? "")}.` : input.nativeTerminal === "completed" ? "No currently authorized exact-run recovery input is available." : `Native role result is ${input.nativeTerminal}; recovery is not permitted until an exact completed native run is established.`;
+      const nextPrerequisite = unresolvedClaim
+        ? "Use exact-run readback/finalization only. Do not clear the claim, retry publication, resume, or relaunch the reviewer. If delivery becomes verified, complete adjudication and supersede this GATED record."
+        : recoveryAvailable
+          ? "The bounded role-only recovery remains available but was not attempted because of the reported execution limit. Resolve that limit, then use the same exact run; do not rerun the panel."
+          : input.nativeTerminal !== "completed" || !nativeRunId
+            ? "Establish the exact native run's terminal outcome or obtain explicit operator authorization; do not invent a run id or rerun the panel."
+            : "A role authorization or valid authored recovery input is unavailable; preserve evidence and obtain operator resolution without rerunning the reviewer.";
+      const error = sanitizedOneLine(input.deliveryError);
+      const body = [
+        "## Review report delivery incomplete (not a verdict)",
+        "",
+        `**Pull request**: #${input.pullRequest} in ${input.repository}`,
+        `**Frozen source**: \`${input.head}\``,
+        `**Frozen base**: \`${input.baseRef}\` at \`${input.baseSha}\``,
+        `**Native reviewer result**: ${input.nativeTerminal}; run ${runLabel}`,
+        "",
+        "### Per-role delivery",
+        roleStatus,
+        "",
+        claimState,
+        savedButUndelivered && recovery ? `Authored body and observations passed recorded SHA-256 checks in \`${recoveryPath}\` (body=${recovery.bodySha256}; observations=${recovery.observationsSha256}).` : `Authored body/observation verification: ${readback.authoredEvidence}${recoveryProblem ? `; sidecar issue: ${sanitizedOneLine(recoveryProblem)}` : ""}.`,
+        `Last reported delivery error: ${error || "(none supplied)"}.`,
+        nextPrerequisite,
+        "",
+        "No parent adjudication, approval, gate PASS/FAIL, issue, or code-defect finding is claimed by this record. It records post-review delivery state only, is not a pre-review infrastructure failure, and never clears merge authorization or starts another reviewer.",
+      ].join("\n");
+      const deliveryKey = nativeRunId ?? "run-unavailable";
+      const bodyPath = join(root, `review-delivery-incomplete-${input.role}-${digest(deliveryKey).slice(0, 12)}.md`);
+      const gatedReportPath = join(root, `review-delivery-incomplete-${input.role}-${digest(deliveryKey).slice(0, 12)}.record.md`);
+      const receiptPath = join(root, `review-delivery-incomplete-${input.role}-${digest(deliveryKey).slice(0, 12)}.receipt.json`);
+      await stableTextArtifact(bodyPath, `${body}\n`);
+      const args = [helperPath(), "record", "--kind", "GATED", "--repo", input.repository, "--pr", String(input.pullRequest), "--head", input.head, "--body-file", bodyPath, "--report-file", gatedReportPath, "--cwd", String(review.configRoot ?? review.sourceRoot)];
+      if (input.publish) args.push("--publish");
+      const result = await pi.exec("node", args, { timeout: 120_000 });
+      if (result.code !== 0) throw new Error(`Incomplete-review GATED record failed: ${bounded(result.stderr)}`);
+      let publication: Record<string, unknown> = {};
+      try { publication = JSON.parse(result.stdout) as Record<string, unknown>; } catch { /* output remains model-visible */ }
+      if (publication.publication === "published" && typeof publication.url === "string") await stableJsonFile(receiptPath, { schema: "forgedock.candidate-review-delivery-receipt/v1", repository: input.repository, pullRequest: input.pullRequest, head: input.head, baseRef: input.baseRef, baseSha: input.baseSha, role: input.role, nativeRunId: nativeRunId ?? null, artifactKey: input.artifactKey, recordUrl: publication.url, recordId: publication.recordId ?? null, deliveryState: readback.outcome, recoveryState: recovery?.state ?? (claimExists ? "claim-unresolved" : "unavailable") });
+      return { content: [{ type: "text", text: bounded(result.stdout) }], details: { role: input.role, nativeRunId: nativeRunId ?? null, reportPath, bodyPath, recordPath: gatedReportPath, receiptPath: publication.publication === "published" ? receiptPath : null, recordKind: "GATED", adjudicationPublished: false, deliveryState: readback.outcome, recoveryState: recovery?.state ?? (claimExists ? "claim-unresolved" : "unavailable"), recordUrl: publication.url ?? null, publication: input.publish ? "published" : "saved" } };
+    },
+  });
+
+  pi.registerTool({
     name: "forge_publish_adjudication",
     label: "Publish parent adjudication",
     description: "Validate every current reviewer observation and publish one parent REVIEW-PANEL decision. decisions maps current reviewer observations; historicalDecisions is the only model-facing representation of prior concerns and must contain an explicit sourceReference, disposition, rationale, evidence, stage, and applicable tracking for each concern. Use historicalDecisions: [] when there are none. A rejected historical allegation still requires an explicit rejection record; do not pass legacy prose priorConcerns.",
@@ -608,9 +1004,14 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       const input = params as Record<string, unknown>;
       const review = await preparedReview(String(input.reviewRoot), String(input.artifactKey));
       if (review.repository !== input.repository || review.pullRequest !== input.pullRequest || review.head !== input.head || review.baseRef !== input.baseRef || review.baseSha !== input.baseSha || review.publish !== input.publish) throw new Error("Adjudication does not match the prepared frozen review");
+      if (input.mode !== preparedReviewMode(review)) throw new Error("Adjudication mode does not match the route derived from the prepared review base");
+      await requireReviewerReports(pi, review, input);
       const revision = Number(input.revision ?? 0);
       if (!Number.isSafeInteger(revision) || revision < 0) throw new Error("Adjudication revision must be a non-negative integer");
-      const inputPath = await revisionedJsonFile(resolve(String(input.reviewRoot)), "adjudication-input", revision, input);
+      const supersededIncomplete = await publishedIncompleteDeliverySupersedes(resolve(String(input.reviewRoot)), review);
+      if (supersededIncomplete && input.supersedes !== undefined && input.supersedes !== supersededIncomplete) throw new Error("Adjudication must supersede the published incomplete-delivery record from this prepared review");
+      const effectiveInput = supersededIncomplete ? { ...input, supersedes: supersededIncomplete } : input;
+      const inputPath = await revisionedJsonFile(resolve(String(input.reviewRoot)), "adjudication-input", revision, effectiveInput);
       const result = await pi.exec("node", [helperPath(), "record", "adjudication", "--input", inputPath, "--cwd", String(review.configRoot ?? review.sourceRoot)], { timeout: 120_000 });
       if (result.code !== 0) throw new Error(`Parent adjudication failed: ${bounded(result.stderr)}`);
       const output = result.stdout.trim();
@@ -635,6 +1036,7 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       if (!input.reviewRoot || !input.artifactKey || !input.head || !input.baseRef || !input.baseSha || !input.gate || input.pullRequest === undefined) throw new Error("Staging gate publication requires its prepared review authorization");
       const review = await preparedReview(input.reviewRoot, input.artifactKey);
       if (review.repository !== input.repository || review.pullRequest !== input.pullRequest || review.head !== input.head || review.baseRef !== input.baseRef || review.baseSha !== input.baseSha || review.publish !== input.publish) throw new Error("Staging gate does not match the prepared frozen review");
+      if (preparedReviewMode(review) !== "staging") throw new Error("A STAGING_GATE record requires a prepared protected-branch review");
       const policy = await refreshPolicyArtifact(pi, review);
       if (input.gate === "PASS") await requirePassEvidence(input, review, policy);
       let body = input.body;
@@ -642,10 +1044,12 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       if (input.adjudicationPath) {
         const adjudicationPath = artifactFile(String(input.reviewRoot), input.adjudicationPath, "adjudication artifact");
         adjudication = JSON.parse(await readFile(adjudicationPath, "utf8")) as Record<string, unknown>;
-        if (adjudication.schema !== "forgedock.candidate-adjudication/v1" || adjudication.artifactKey !== input.artifactKey || adjudication.repository !== input.repository || adjudication.pullRequest !== input.pullRequest || adjudication.head !== input.head || adjudication.baseRef !== input.baseRef || adjudication.baseSha !== input.baseSha || adjudication.gate !== input.gate) throw new Error("Gate does not match the parent adjudication artifact");
+        if (adjudication.schema !== "forgedock.candidate-adjudication/v1" || adjudication.artifactKey !== input.artifactKey || adjudication.repository !== input.repository || adjudication.pullRequest !== input.pullRequest || adjudication.head !== input.head || adjudication.baseRef !== input.baseRef || adjudication.baseSha !== input.baseSha || adjudication.mode !== "staging" || adjudication.gate !== input.gate) throw new Error("Gate does not match the prepared protected-route parent adjudication artifact");
         const roles = Array.isArray(review.roles) ? review.roles : [];
         const adjudicatedRoles = Array.isArray(adjudication.roles) ? adjudication.roles : [];
-        if (!Array.isArray(adjudication.reports) || adjudicatedRoles.length !== roles.length || !roles.every((role) => adjudicatedRoles.includes(role)) || !Array.isArray(adjudication.decisions) || typeof adjudication.verdict !== "string") throw new Error("Gate requires a completed parent panel decision");
+        const adjudicationReports = adjudication && Array.isArray(adjudication.reports) ? adjudication.reports as Array<Record<string, unknown>> : [];
+        const reportsMatch = adjudicationReports.length === roles.length && roles.every((role) => adjudicationReports.filter((report) => report.role === role && report.reportId === roleArtifactKey(review, String(role))).length === 1);
+        if (!Array.isArray(adjudication.reports) || !reportsMatch || adjudicatedRoles.length !== roles.length || !roles.every((role) => adjudicatedRoles.includes(role)) || !Array.isArray(adjudication.decisions) || typeof adjudication.verdict !== "string") throw new Error("Gate requires a completed parent panel decision with every prepared role report");
         if (input.gate === "PASS" && !["APPROVE", "APPROVE_WITH_FOLLOW_UP"].includes(String(adjudication.verdict))) throw new Error("PASS requires an approving parent adjudication");
         if (input.gate === "PASS" && adjudication.decisions.some((decision: any) => decision.disposition === "IMMEDIATE REPAIR" || decision.blocksCurrentStage === true)) throw new Error("PASS cannot coexist with unresolved parent adjudication blockers");
         if (input.publish && typeof adjudication.panelUrl !== "string") throw new Error("Published gate requires a published parent adjudication");

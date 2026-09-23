@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -110,19 +111,57 @@ async function fixture() {
   await mkdir(fakeBin);
   await writeFile(join(fakeBin, "gh"), fakeGh, { mode: 0o755 });
   await writeFile(join(root, "README.md"), "knowledge fixture\n");
+  await writeFile(join(root, ".gitignore"), "bin/\ngh-state.json\n");
   await execFileAsync("git", ["init", "--quiet"], { cwd: root });
   await execFileAsync("git", ["remote", "add", "origin", "https://github.com/example/product.git"], { cwd: root });
-  await execFileAsync("git", ["add", "README.md"], { cwd: root });
+  await execFileAsync("git", ["add", "README.md", ".gitignore"], { cwd: root });
   await execFileAsync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Candidate Test", "commit", "--quiet", "-m", "base"], { cwd: root });
   await writeFile(join(root, "forge.yaml"), forgeYaml);
   await execFileAsync("git", ["add", "forge.yaml"], { cwd: root });
   await execFileAsync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Candidate Test", "commit", "--quiet", "-m", "fixture"], { cwd: root });
   const head = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: root })).stdout.trim();
   const base = (await execFileAsync("git", ["rev-parse", "HEAD^"], { cwd: root })).stdout.trim();
+  await execFileAsync("git", ["branch", "-M", "integration"], { cwd: root });
+  await execFileAsync("git", ["update-ref", "refs/remotes/origin/integration", base], { cwd: root });
   const state = join(root, "gh-state.json");
-  await writeFile(state, JSON.stringify({ labels: ["bug", "priority:P1", "needs-human"], comments: { "42": [], "7": [{ id: 9, body: `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ v: 1, repository: "example/product", pullRequest: 7, head, baseRef: "integration", baseSha: base, role: "correctness" })} -->\nreview report`, html_url: "https://github.com/example/product/pull/7#issuecomment-9" }] }, pullRequests: { "7": { headRefOid: head, baseRefName: "integration", baseRefOid: base, mergeable: "MERGEABLE", mergeStateStatus: "CLEAN" } }, nextId: 100, operations: [] }));
-  const env = { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, FAKE_GH_STATE: state };
-  return { root, state, head, base, env };
+  await writeFile(state, JSON.stringify({ labels: ["bug", "priority:P1", "needs-human"], comments: { "42": [], "7": [] }, pullRequests: { "7": { headRefOid: head, baseRefName: "integration", baseRefOid: base, mergeable: "MERGEABLE", mergeStateStatus: "CLEAN" } }, nextId: 100, operations: [] }));
+  const env = { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, FAKE_GH_STATE: state, FORGEDOCK_CANDIDATE_ARTIFACT_ROOT: join(root, ".git"), FORGEDOCK_SAFE_ARTIFACT_ROOT: join(root, ".git", "candidate-artifacts") };
+  const preparedReviewer = await preparedReviewerArtifact(root, env, 7, head, "integration", base);
+  return { root, state, head, base, env, ...preparedReviewer };
+}
+
+async function preparedReviewerArtifact(root: string, env: NodeJS.ProcessEnv, pullRequest: number, head: string, baseRef: string, baseSha: string) {
+  const inputPath = join(root, ".git", `review-input-${pullRequest}-${baseRef}.json`);
+  await writeFile(inputPath, JSON.stringify({ repository: "example/product", pullRequest, head, baseRef, baseSha, sourceRoot: root, configRoot: root, roles: ["correctness"], publish: true }));
+  const prepared = JSON.parse((await execFileAsync("node", [helper, "prepare-review", "--input", inputPath], { cwd: root, env })).stdout);
+  const reviewRoot = prepared.out as string;
+  const review = JSON.parse(await readFile(join(reviewRoot, "review.json"), "utf8"));
+  const role = "correctness";
+  const roleKey = review.roleArtifactKeys[role] as string;
+  const bodyText = ["### Scope and decisions considered", `Reviewed the exact prepared PR #${pullRequest} source and base.`, "### Evidence and findings", "No unstructured conclusion replaces the report evidence.", "### Verification limitations", "This knowledge fixture uses a controlled fake GitHub transport.", "### Recommendation", "Use this exact role-bound report in the parent panel."].join("\n\n");
+  const observations: unknown[] = [];
+  const bodyBytes = `${bodyText}\n`;
+  const observationsBytes = `${JSON.stringify(observations, null, 2)}\n`;
+  const bodyPath = join(reviewRoot, `${role}.body.md`);
+  const reportPath = join(reviewRoot, `${role}.report.md`);
+  const observationsPath = join(reviewRoot, `${role}.observations.json`);
+  await writeFile(bodyPath, bodyBytes);
+  await writeFile(observationsPath, observationsBytes);
+  await writeFile(join(reviewRoot, `${role}.publication-recovery.json`), `${JSON.stringify({
+    schema: "forgedock.candidate-review-publication-recovery/v1", state: "published", recoveryAttempts: 0,
+    nativeRunId: `native-knowledge-${pullRequest}-run`, reviewArtifactKey: review.artifactKey, roleArtifactKey: roleKey, suppliedArtifactKey: roleKey,
+    repository: review.repository, pullRequest, head, baseRef, baseSha, role, publish: true,
+    bodyPath, reportPath, observationsPath, body: bodyText, observations,
+    bodySha256: createHash("sha256").update(bodyBytes).digest("hex"), observationsSha256: createHash("sha256").update(observationsBytes).digest("hex"),
+  }, null, 2)}\n`);
+  await execFileAsync("node", [helper, "record", "reviewer", "--repo", "example/product", "--pr", String(pullRequest), "--head", head, "--base-ref", baseRef, "--base-sha", baseSha, "--role", role, "--report-id", roleKey, "--body-file", bodyPath, "--report-file", reportPath, "--observations-file", observationsPath, "--cwd", root, "--publish"], { cwd: root, env });
+  await writeFile(join(reviewRoot, "reviewer-execution.json"), JSON.stringify({
+    schema: "forgedock.candidate-review-execution/v1", repository: review.repository, pullRequest, head, baseRef, baseSha,
+    artifactKey: review.artifactKey, mode: review.mode, workflowPath: review.workflowPath, workflowSha256: review.workflowSha256,
+    toolCallId: `knowledge-review-${pullRequest}`, workflowRunId: `knowledge-workflow-${pullRequest}`, completedAt: new Date().toISOString(),
+    roleResults: [{ role, nativeRunId: `native-knowledge-${pullRequest}-run`, nativeStatus: "completed", reportPath, recoveryPath: join(reviewRoot, `${role}.publication-recovery.json`), exitCode: 0 }],
+  }, null, 2));
+  return { reviewRoot, artifactKey: review.artifactKey, reportPath };
 }
 
 async function body(root: string, name: string, content: string) {
@@ -142,13 +181,12 @@ test("batch publishes distinct linked records, retries idempotently, and resolve
     const classification = await body(f.root, "classification", "### Classification\nBug fix; one cohesive route-boundary change.");
     const panelBody = await body(f.root, "panel", "### Disposition\nNo blocking correctness finding; retain post-rollout observation.");
     const trajectoryBody = await body(f.root, "trajectory", "### Outcome\nReviewed code is ready for the authorized merge decision.");
-    const reportFile = join(f.root, "correctness.report.md");
-    await writeFile(reportFile, `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ v: 1, repository: "example/product", pullRequest: 7, head: f.head, baseRef: "integration", baseSha: f.base, role: "correctness" })} -->\nreview report\n`);
+    const reportFile = f.reportPath;
     const input = join(f.root, "records.json");
     await writeFile(input, JSON.stringify({ repository: "example/product", issue: 42, cwd: f.root, publish: true, records: [
       { id: "investigator", kind: "INVESTIGATOR", bodyFile: investigator, head: f.head },
       { id: "classification", kind: "CLASSIFICATION", bodyFile: classification, head: f.head, inputs: [{ record: "investigator" }] },
-      { id: "panel", kind: "REVIEW-PANEL", pullRequest: 7, bodyFile: panelBody, head: f.head, baseRef: "integration", baseSha: f.base, inputs: [{ existing: { kind: "CLASSIFICATION" } }], reviewerReports: [{ role: "correctness", reportFile }] },
+      { id: "panel", kind: "REVIEW-PANEL", pullRequest: 7, bodyFile: panelBody, head: f.head, baseRef: "integration", baseSha: f.base, reviewRoot: f.reviewRoot, artifactKey: f.artifactKey, inputs: [{ existing: { kind: "CLASSIFICATION" } }], reviewerReports: [{ role: "correctness", reportFile }] },
       { id: "trajectory", kind: "TRAJECTORY", bodyFile: trajectoryBody, head: f.head, inputs: [{ existing: { kind: "INVESTIGATOR" } }, { existing: { kind: "REVIEW-PANEL", pullRequest: 7 } }] },
     ] }));
     const first = await run(["record", "batch", "--input", input, "--publish"], f.env);
@@ -171,14 +209,13 @@ test("batch publishes distinct linked records, retries idempotently, and resolve
 test("standard review preserves the original base after an unrelated target advance", async () => {
   const f = await fixture();
   try {
-    const reportFile = join(f.root, "correctness.report.md");
-    await writeFile(reportFile, `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ v: 1, repository: "example/product", pullRequest: 7, head: f.head, baseRef: "integration", baseSha: f.base, role: "correctness" })} -->\nreview report\n`);
+    const reportFile = f.reportPath;
     const panelBody = await body(f.root, "standard-panel", "### Disposition\nThe unchanged clean patch remains approved after target-only movement.");
     const state = JSON.parse(await readFile(f.state, "utf8"));
     state.pullRequests["7"].baseRefOid = "c".repeat(40);
     await writeFile(f.state, JSON.stringify(state));
     const input = join(f.root, "standard.json");
-    await writeFile(input, JSON.stringify({ repository: "example/product", issue: 42, cwd: f.root, publish: true, records: [{ id: "panel", kind: "REVIEW-PANEL", pullRequest: 7, bodyFile: panelBody, head: f.head, baseRef: "integration", baseSha: f.base, reviewerReports: [{ role: "correctness", reportFile }] }] }));
+    await writeFile(input, JSON.stringify({ repository: "example/product", issue: 42, cwd: f.root, publish: true, records: [{ id: "panel", kind: "REVIEW-PANEL", pullRequest: 7, bodyFile: panelBody, head: f.head, baseRef: "integration", baseSha: f.base, reviewRoot: f.reviewRoot, artifactKey: f.artifactKey, reviewerReports: [{ role: "correctness", reportFile }] }] }));
     const first = await run(["record", "batch", "--input", input, "--publish"], f.env);
     assert.equal(first.records[0].reconciliation, "created");
     assert.match(await readFile(first.records[0].reportFile, "utf8"), new RegExp(f.base));
@@ -198,14 +235,13 @@ test("review panel rejects source changes, retargeting, conflicts, and bad prote
   for (const current of cases) {
     const f = await fixture();
     try {
-      const reportFile = join(f.root, `${current.name}.report.md`);
-      await writeFile(reportFile, `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ v: 1, repository: "example/product", pullRequest: 7, head: f.head, baseRef: "integration", baseSha: f.base, role: "correctness" })} -->\nreview report\n`);
+      const reportFile = f.reportPath;
       const panelBody = await body(f.root, `${current.name}-panel`, "### Disposition\nThis record must not publish for the invalid live identity.");
       const state = JSON.parse(await readFile(f.state, "utf8"));
       current.mutate(state);
       await writeFile(f.state, JSON.stringify(state));
       const input = join(f.root, `${current.name}.json`);
-      await writeFile(input, JSON.stringify({ repository: "example/product", issue: 42, cwd: f.root, publish: true, records: [{ id: "panel", kind: "REVIEW-PANEL", pullRequest: 7, bodyFile: panelBody, head: f.head, baseRef: "integration", baseSha: f.base, reviewerReports: [{ role: "correctness", reportFile }] }] }));
+      await writeFile(input, JSON.stringify({ repository: "example/product", issue: 42, cwd: f.root, publish: true, records: [{ id: "panel", kind: "REVIEW-PANEL", pullRequest: 7, bodyFile: panelBody, head: f.head, baseRef: "integration", baseSha: f.base, reviewRoot: f.reviewRoot, artifactKey: f.artifactKey, reviewerReports: [{ role: "correctness", reportFile }] }] }));
       await assert.rejects(run(["record", "batch", "--input", input, "--publish"], f.env), /REVIEW-PANEL/);
       assert.equal(JSON.parse(await readFile(f.state, "utf8")).comments["7"].length, 1);
     } finally {
@@ -217,13 +253,14 @@ test("review panel rejects source changes, retargeting, conflicts, and bad prote
   try {
     const state = JSON.parse(await readFile(f.state, "utf8"));
     state.pullRequests["8"] = { headRefOid: f.head, baseRefName: "main", baseRefOid: "c".repeat(40), mergeable: "MERGEABLE", mergeStateStatus: "CLEAN" };
-    state.comments["8"] = [{ id: 10, body: `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ v: 1, repository: "example/product", pullRequest: 8, head: f.head, baseRef: "main", baseSha: f.base, role: "correctness" })} -->\nreview report\n`, html_url: "https://github.com/example/product/pull/8#issuecomment-10" }];
+    state.comments["8"] = [];
     await writeFile(f.state, JSON.stringify(state));
-    const reportFile = join(f.root, "protected.report.md");
-    await writeFile(reportFile, `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ v: 1, repository: "example/product", pullRequest: 8, head: f.head, baseRef: "main", baseSha: f.base, role: "correctness" })} -->\nreview report\n`);
+    await execFileAsync("git", ["update-ref", "refs/remotes/origin/main", f.base], { cwd: f.root });
+    const protectedReview = await preparedReviewerArtifact(f.root, f.env, 8, f.head, "main", f.base);
+    const reportFile = protectedReview.reportPath;
     const panelBody = await body(f.root, "protected-panel", "### Disposition\nProtected promotion must retain the exact base.");
     const input = join(f.root, "protected.json");
-    await writeFile(input, JSON.stringify({ repository: "example/product", cwd: f.root, publish: true, records: [{ id: "panel", kind: "REVIEW-PANEL", pullRequest: 8, bodyFile: panelBody, head: f.head, baseRef: "main", baseSha: f.base, mode: "staging", reviewerReports: [{ role: "correctness", reportFile }] }] }));
+    await writeFile(input, JSON.stringify({ repository: "example/product", cwd: f.root, publish: true, records: [{ id: "panel", kind: "REVIEW-PANEL", pullRequest: 8, bodyFile: panelBody, head: f.head, baseRef: "main", baseSha: f.base, mode: "staging", reviewRoot: protectedReview.reviewRoot, artifactKey: protectedReview.artifactKey, reviewerReports: [{ role: "correctness", reportFile }] }] }));
     await assert.rejects(run(["record", "batch", "--input", input, "--publish"], f.env), /protected promotion base/);
     assert.equal(JSON.parse(await readFile(f.state, "utf8")).comments["8"].length, 1);
   } finally {

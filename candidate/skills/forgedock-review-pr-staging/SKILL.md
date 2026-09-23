@@ -34,16 +34,36 @@ Select at most three reviewer roles. `forge_prepare_review.roles` accepts only
 `correctness`, `security`, and `specialist`; never pass target-domain names such as `infra`,
 `database`, or `concurrency`. Combine distinct questions into one `specialist` assignment or
 omit `roles` and let the bounded helper derive the roster. Select correctness plus only concrete
-risk-justified specialists. Use the `forge_prepare_review` tool to create the validated frozen request and its read-only repository/PR policy facts, launch
-fresh `forgedock-reviewer` reviewers through that generated native request, and wait for every
-role; their source tools are read-only and their only mutation capability is the report publisher.
+risk-justified specialists. Use `forge_prepare_review` to create the validated frozen request
+and read-only repository/PR policy facts. Read `request.json` and pass its complete contents
+unchanged to `subagent`; the staging guard rejects arbitrary child launches, inline workflows,
+modified role/timeout/concurrency settings, and writer capabilities. The exact frozen review identity may claim only one prepared roster per Pi session; re-preparing
+or reusing a workflow for that same identity after a later input is blocked. Wait for every fresh
+`forgedock-reviewer`; their source tools are read-only and their only mutation capability is the
+report publisher.
 Use `forge_run_check` for configured local checks only when the prepared configuration declares
 them; each real local check needs its receipt, and an empty local-check set is valid only when
 the collected current GitHub required-check evidence is complete and passing. Use `forge_discover_review_records` once with the prepared `reviewRoot` and `artifactKey`.
 It returns a compact bounded index plus readable `bodyPath` files for selected full records; read
 those paths before carrying a historical concern. Do not use truncated tail JSON as evidence.
 Current reviewers must inspect primary workflow/source evidence rather than independently repeating
-supplied reviewer prose. Then use `forge_publish_adjudication` after every selected report is read back. The parent must map every
+supplied reviewer prose. The workflow returns compact per-role native terminal results with each
+native run ID, status, bounded output/error, artifact references, report path, and recovery-input
+path; publication remains unverified until canonical report content and observation markers are
+read back, including exact remote comment readback when publication is requested. The adjudication
+tool blocks before creating its input if any role is missing, misbound, altered, or undelivered.
+`forge_recover_reviewer_publication` may publish only one exact completed role from its saved,
+hash-checked author input. A previously claimed/attempted operation re-enters as readback-only;
+it never clears a lock or POSTs again. Outer cancellation, interruption, timeout, and non-terminal
+children remain distinct from delivery outcome. Staging never resumes or launches another child.
+If delivery remains incomplete, `forge_publish_incomplete_review` records the observed state without
+claiming an unused attempt was exhausted or cancelling active recovery. Do not GATED-preempt an
+available completed-role recovery. An observed parent execution limit may be recorded explicitly
+without burning that recovery allowance. If a claimed operation or remote result is unresolved,
+GATED records the claim as unresolved and permits readback-only finalization. A later adjudication
+supersedes the published incomplete-delivery record. GATED is post-review delivery status, not a
+pre-review infrastructure failure, reviewer finding, verdict, or gate PASS/FAIL. Retain completed
+reports and use `forge_publish_adjudication` only after every selected report has verified delivery. The parent must map every
 structured observation ID to one explicit disposition, preserve duplicates/resolutions, and state
 whether a prerequisite applies to this promotion stage. `decisions` covers current reviewer
 observations only. Put every applicable historical concern in the required
@@ -82,7 +102,9 @@ If the PR already has a published `STAGING_GATE` record for this same exact head
 permalink as `supersedes` when publishing a changed or refreshed result; preserve the earlier
 record rather than attempting an overwrite.
 
-Read back reports and publish one consolidated `FORGE:STAGING_GATE:PASS` only when every required
-check and role is complete with no immediate repair or mechanical gate. Otherwise publish
-`FORGE:STAGING_GATE:FAIL` with the exact finding, missing proof, or wake condition. A staging
-pass is integration evidence, not production authorization.
+After every selected report is read back and parent adjudication completes, publish one
+`FORGE:STAGING_GATE:PASS` only when every required check is satisfied with no immediate repair
+or mechanical gate. Publish `FORGE:STAGING_GATE:FAIL` only for a completed review with an exact
+blocking finding, missing proof, or wake condition. Incomplete report delivery remains a `GATED`
+post-review record with no verdict or staging gate. A staging pass is integration evidence, not
+production authorization.
