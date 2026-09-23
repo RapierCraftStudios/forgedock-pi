@@ -210,6 +210,7 @@ async function writeReviewerExecutionReceipt(root: string, review: any, override
     const value = overrides[role] ?? { nativeRunId: `native-${role}-run-33800`, nativeStatus: "completed", exitCode: 0 };
     return { role, ...value, reportPath: join(root, `${role}.report.md`), recoveryPath: join(root, `${role}.publication-recovery.json`) };
   });
+  await writeFile(join(root, "panel-launch.claim"), JSON.stringify({ schema: "forgedock.candidate-review-panel-launch/v1", artifactKey: review.artifactKey, workflowSha256: review.workflowSha256, toolCallId: "fixture-reviewer-tool-call", claimedAt: new Date().toISOString() }));
   await writeFile(join(root, "reviewer-execution.json"), JSON.stringify({
     schema: "forgedock.candidate-review-execution/v1",
     repository: review.repository,
@@ -450,14 +451,16 @@ test("standard-route failed reviewer results provide post-launch GATED evidence"
       reviewRoot, artifactKey: artifacts.artifactKey, role: "correctness", nativeRunId: "native-standard-correctness-33800",
       nativeTerminal: "failed", deliveryError: "The reviewer exited before publishing a report.", publish: false,
     };
-    assert.equal(handlers.get("tool_call")!({ toolName: "forge_publish_incomplete_review", input: incompleteInput }).block, true);
+    assert.equal(handlers.get("tool_call")!({ toolName: "forge_publish_incomplete_review", input: incompleteInput }), undefined);
+    await assert.rejects(tools.get("forge_publish_incomplete_review")!.execute("preparation-only-gated", incompleteInput), /requires a completed per-role native execution receipt or exact role-bound publication recovery input/);
     await writeFile(join(reviewRoot, "reviewer-execution.json"), JSON.stringify({
       schema: "forgedock.candidate-review-execution/v1", repository: "example/product", pullRequest: 7, head: f.head,
       baseRef: "integration", baseSha: f.base, artifactKey: artifacts.artifactKey, mode: "standard", workflowPath: artifacts.review.workflowPath,
       workflowSha256: artifacts.review.workflowSha256, toolCallId: "forged", workflowRunId: "forged", completedAt: "now",
       roleResults: [{ role: "correctness", nativeRunId: incompleteInput.nativeRunId, nativeStatus: "failed", reportPath: join(reviewRoot, "correctness.report.md"), recoveryPath: join(reviewRoot, "correctness.publication-recovery.json"), exitCode: 1 }],
     }));
-    assert.equal(handlers.get("tool_call")!({ toolName: "forge_publish_incomplete_review", input: incompleteInput }).block, true);
+    assert.equal(handlers.get("tool_call")!({ toolName: "forge_publish_incomplete_review", input: incompleteInput }), undefined);
+    await assert.rejects(tools.get("forge_publish_incomplete_review")!.execute("fabricated-gated", incompleteInput), /execution receipt is present but does not match/);
     await rm(join(reviewRoot, "reviewer-execution.json"), { force: true });
     assert.equal(handlers.get("tool_call")!({ toolName: "subagent", toolCallId: "standard-launch-call", input: request }), undefined);
     const roleResult = {
@@ -477,6 +480,179 @@ test("standard-route failed reviewer results provide post-launch GATED evidence"
     assert.equal(incomplete.details.recordKind, "GATED");
     assert.equal(incomplete.details.nativeRunId, roleResult.nativeRunId);
   } finally {
+    if (reviewRoot) await rm(reviewRoot, { recursive: true, force: true });
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.state, { force: true });
+  }
+});
+
+test("fresh extension re-entry uses durable reviewer execution for readback and honest GATED", async () => {
+  const f = await fixture();
+  let reviewRoot: string | undefined;
+  let prepOnlyRoot: string | undefined;
+  const priorRunId = process.env.PI_SUBAGENT_RUN_ID;
+  const calls: Array<{ name: string; args: string[] }> = [];
+  const toolsA = toolMap(fakeExecutor(f.env, calls), true);
+  try {
+    const prepared = await toolsA.get("forge_prepare_review")!.execute("prepare-restart", {
+      repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base,
+      sourceRoot: f.root, configRoot: f.root, roles: ["correctness", "security"], publish: true,
+    });
+    const artifacts = modelArtifacts(prepared);
+    reviewRoot = artifacts.reviewRoot;
+    const review = artifacts.review;
+    const request = JSON.parse(await readFile(join(reviewRoot, "request.json"), "utf8"));
+    const workflow = await readFile(join(reviewRoot, "workflow.js"), "utf8");
+    const nativeRunIds = {
+      correctness: "native-correctness-restart-33800",
+      security: "native-security-restart-33800",
+    };
+
+    const handlersA = extensionEvents();
+    handlersA.get("tool_result")!({ toolName: "forge_prepare_review", isError: false, details: prepared.details });
+    assert.equal(handlersA.get("tool_call")!({ toolName: "subagent", toolCallId: "restart-workflow-a", input: request }), undefined);
+
+    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+    const runWorkflow = new AsyncFunction("runs", workflow) as (runs: { all: (assignments: any[]) => Promise<any[]> }) => Promise<any[]>;
+    const projectedResults = await runWorkflow({
+      all: async (assignments) => assignments.map((assignment) => {
+        const role = String(assignment.key).slice("review-".length);
+        return { key: assignment.key, ok: true, runId: nativeRunIds[role as keyof typeof nativeRunIds], exitCode: 0, results: [{ index: 0, agent: "forgedock-reviewer", exitCode: 0 }] };
+      }),
+    });
+
+    const publishRole = async (role: "correctness" | "security") => {
+      const body = [
+        "### Scope and decisions considered", `Reviewed the frozen source and policy for ${role}.`,
+        "### Evidence and findings", "The report is retained and role-bound for parent verification.",
+        "### Verification limitations", "This test uses controlled local GitHub transport only.",
+        "### Recommendation", "Verify exact report bytes before adjudication.",
+      ].join("\n\n");
+      const bodyPath = join(reviewRoot!, `${role}.body.md`);
+      process.env.PI_SUBAGENT_RUN_ID = nativeRunIds[role];
+      return toolsA.get("forge_publish_reviewer")!.execute(`publish-${role}`, {
+        repository: review.repository, pullRequest: review.pullRequest, head: review.head, baseRef: review.baseRef, baseSha: review.baseSha,
+        role, body, bodyPath, reportPath: join(reviewRoot!, `${role}.report.md`), reviewRoot,
+        authorizationPath: join(reviewRoot!, `${role}.authorization.json`), artifactKey: review.roleArtifactKeys[role], publish: true, observations: [],
+      });
+    };
+
+    assert.equal((await publishRole("correctness")).details.publication, "published");
+    const stateAfterCorrectness = JSON.parse(await readFile(f.state, "utf8"));
+    stateAfterCorrectness.failNextReviewerRole = "security";
+    await writeFile(f.state, JSON.stringify(stateAfterCorrectness));
+    await assert.rejects(publishRole("security"), /Reviewer publication failed after analysis/);
+
+    handlersA.get("tool_result")!({
+      toolName: "subagent", toolCallId: "restart-workflow-a", isError: false,
+      details: { mode: "workflow", runId: "review-workflow-restart-33800", workflow: { value: projectedResults } },
+    });
+    const executionPath = join(reviewRoot, "reviewer-execution.json");
+    const originalExecution = JSON.parse(await readFile(executionPath, "utf8"));
+    assert.equal(originalExecution.roleResults[1].nativeRunId, nativeRunIds.security);
+    assert.equal(originalExecution.roleResults[1].nativeStatus, "completed");
+
+    const stateBeforeRecovery = JSON.parse(await readFile(f.state, "utf8"));
+    stateBeforeRecovery.failNextReviewerRole = "security";
+    await writeFile(f.state, JSON.stringify(stateBeforeRecovery));
+    const baseRecovery = {
+      repository: review.repository, pullRequest: review.pullRequest, head: review.head, baseRef: review.baseRef, baseSha: review.baseSha,
+      reviewRoot, artifactKey: review.artifactKey, nativeTerminal: "completed",
+    };
+    const priorProcessFailure = await toolsA.get("forge_recover_reviewer_publication")!.execute("security-claim-a", {
+      ...baseRecovery, role: "security", nativeRunId: nativeRunIds.security,
+    });
+    assert.equal(priorProcessFailure.details.operationState, "recovery-unresolved");
+    const securityRecoveryPath = join(reviewRoot, "security.publication-recovery.json");
+    const unresolvedBeforeRestart = JSON.parse(await readFile(securityRecoveryPath, "utf8"));
+    assert.equal(unresolvedBeforeRestart.state, "recovery-unresolved");
+    assert.equal(unresolvedBeforeRestart.recoveryAttempts, 1);
+
+    // Simulate a fresh Pi/extension instance: do not replay either prepare or workflow tool_result.
+    const handlersB = extensionEvents();
+    const toolsB = toolMap(fakeExecutor(f.env, calls), true);
+    handlersB.get("input")!({ text: "/review-pr-staging", source: "interactive" });
+    const postAttemptsBeforeRestart = JSON.parse(await readFile(f.state, "utf8")).postAttempts.filter((marker: string) => marker.startsWith("<!-- FORGE:REVIEWER_REPORT ")).length;
+    const reviewerPublishCallsBeforeRestart = calls.filter((call) => call.args.includes("record") && call.args.includes("reviewer") && call.args.includes("--publish")).length;
+    const localReviewerRenderCallsBeforeRestart = calls.filter((call) => call.args.includes("record") && call.args.includes("reviewer") && !call.args.includes("--publish")).length;
+
+    const correctRecovery = { ...baseRecovery, role: "correctness", nativeRunId: nativeRunIds.correctness };
+    const securityRecovery = { ...baseRecovery, role: "security", nativeRunId: nativeRunIds.security };
+    for (const invalid of [
+      { ...securityRecovery, role: "specialist" },
+      { ...securityRecovery, nativeRunId: "native-security-wrong-run-33800" },
+      { ...securityRecovery, head: f.base },
+    ]) {
+      assert.equal(handlersB.get("tool_call")!({ toolName: "forge_recover_reviewer_publication", input: invalid }), undefined);
+      await assert.rejects(toolsB.get("forge_recover_reviewer_publication")!.execute("reject-misbound-recovery", invalid));
+    }
+
+    assert.equal(handlersB.get("tool_call")!({ toolName: "forge_recover_reviewer_publication", input: correctRecovery }), undefined);
+    const finalized = await toolsB.get("forge_recover_reviewer_publication")!.execute("readback-correctness-after-restart", correctRecovery);
+    assert.equal(finalized.details.operationState, "finalized");
+    assert.equal(finalized.details.publication, "published");
+    assert.equal(finalized.details.repeated, true);
+
+    assert.equal(handlersB.get("tool_call")!({ toolName: "forge_recover_reviewer_publication", input: securityRecovery }), undefined);
+    const unresolvedReadback = await toolsB.get("forge_recover_reviewer_publication")!.execute("readback-security-after-restart", securityRecovery);
+    assert.equal(unresolvedReadback.details.operationState, "claimed-or-active");
+    assert.equal(unresolvedReadback.details.publication, "unverified");
+
+    const incompleteInput = {
+      ...securityRecovery, nativeTerminal: "completed", publish: true,
+      deliveryError: "The exact security report remains unverified after its single claimed recovery attempt.",
+    };
+    assert.equal(handlersB.get("tool_call")!({ toolName: "forge_publish_incomplete_review", input: incompleteInput }), undefined);
+
+    // A syntactically valid receipt bound to another native run must not authorize GATED.
+    const misboundExecution = structuredClone(originalExecution);
+    misboundExecution.roleResults[1].nativeRunId = "native-security-other-run-33800";
+    await writeFile(executionPath, `${JSON.stringify(misboundExecution, null, 2)}\n`);
+    await assert.rejects(toolsB.get("forge_publish_incomplete_review")!.execute("reject-misbound-receipt", incompleteInput), /execution and reviewer publication evidence disagree/);
+    await writeFile(executionPath, `${JSON.stringify(originalExecution, null, 2)}\n`);
+
+    const afterRestart = await toolsB.get("forge_publish_incomplete_review")!.execute("gated-after-restart", incompleteInput);
+    assert.equal(afterRestart.details.recordKind, "GATED");
+    assert.equal(afterRestart.details.adjudicationPublished, false);
+    assert.equal(afterRestart.details.deliveryState, "unverified");
+    assert.match(await readFile(afterRestart.details.bodyPath, "utf8"), /No parent adjudication, approval, gate PASS\/FAIL/);
+    const unresolvedAfterRestart = JSON.parse(await readFile(securityRecoveryPath, "utf8"));
+    assert.equal(unresolvedAfterRestart.state, "recovery-unresolved");
+    assert.equal(unresolvedAfterRestart.recoveryAttempts, 1);
+    assert.ok((await readdir(reviewRoot)).includes("security.publication-recovery.lock"));
+    assert.equal(await readFile(join(reviewRoot, "panel-launch.claim"), "utf8").then(() => true), true);
+
+    // Re-entry may record GATED, but the persisted one-shot claim still blocks another reviewer workflow.
+    assert.equal(handlersB.get("tool_call")!({ toolName: "subagent", toolCallId: "must-not-relaunch", input: request })?.block, true);
+    const postAttemptsAfterRestart = JSON.parse(await readFile(f.state, "utf8")).postAttempts.filter((marker: string) => marker.startsWith("<!-- FORGE:REVIEWER_REPORT ")).length;
+    const reviewerPublishCallsAfterRestart = calls.filter((call) => call.args.includes("record") && call.args.includes("reviewer") && call.args.includes("--publish")).length;
+    const localReviewerRenderCallsAfterRestart = calls.filter((call) => call.args.includes("record") && call.args.includes("reviewer") && !call.args.includes("--publish")).length;
+    assert.equal(postAttemptsAfterRestart, postAttemptsBeforeRestart);
+    assert.equal(reviewerPublishCallsAfterRestart, reviewerPublishCallsBeforeRestart);
+    assert.ok(localReviewerRenderCallsAfterRestart > localReviewerRenderCallsBeforeRestart);
+
+    // Preparation-only evidence reaches the registered validator and is still rejected there.
+    const prepOnly = await toolsB.get("forge_prepare_review")!.execute("prepare-only", {
+      repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base,
+      sourceRoot: f.root, configRoot: f.root, roles: ["correctness"], publish: true,
+    });
+    const prepOnlyArtifacts = modelArtifacts(prepOnly);
+    prepOnlyRoot = prepOnlyArtifacts.reviewRoot;
+    const prepOnlyInput = {
+      repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base,
+      reviewRoot: prepOnlyRoot, artifactKey: prepOnlyArtifacts.artifactKey, role: "correctness",
+      nativeRunId: "native-preparation-only-33800", nativeTerminal: "completed",
+      deliveryError: "No reviewer execution result exists.", publish: true,
+    };
+    assert.equal(handlersB.get("tool_call")!({ toolName: "forge_publish_incomplete_review", input: prepOnlyInput }), undefined);
+    const gatedPostsBeforePreparationOnly = calls.filter((call) => call.args.includes("--kind") && call.args.includes("GATED")).length;
+    await assert.rejects(toolsB.get("forge_publish_incomplete_review")!.execute("reject-preparation-only", prepOnlyInput), /requires a completed per-role native execution receipt or exact role-bound publication recovery input/);
+    assert.equal(calls.filter((call) => call.args.includes("--kind") && call.args.includes("GATED")).length, gatedPostsBeforePreparationOnly);
+  } finally {
+    if (priorRunId === undefined) delete process.env.PI_SUBAGENT_RUN_ID;
+    else process.env.PI_SUBAGENT_RUN_ID = priorRunId;
+    if (prepOnlyRoot) await rm(prepOnlyRoot, { recursive: true, force: true });
     if (reviewRoot) await rm(reviewRoot, { recursive: true, force: true });
     await rm(f.root, { recursive: true, force: true });
     await rm(f.bin, { recursive: true, force: true });

@@ -343,6 +343,7 @@ async function verifyReviewerReportDelivery(pi: ExtensionAPI, review: Record<str
     } catch (error) {
       return { outcome: "invalid", reportPath, error: `retained authored artifacts do not match the recovery input: ${error instanceof Error ? error.message : String(error)}`, authoredEvidence: "mismatch" };
     }
+    // Re-entry may materialize the canonical local report for byte-exact readback, but must never publish here.
     const render = await pi.exec("node", [helperPath(), "record", "reviewer", "--repo", String(review.repository), "--pr", String(review.pullRequest), "--head", String(review.head), "--base-ref", String(review.baseRef), "--base-sha", String(review.baseSha), "--role", role, "--report-id", roleKey, "--body-file", bodyPath, "--report-file", reportPath, "--observations-file", observationsPath, "--cwd", String(review.configRoot ?? review.sourceRoot)], { timeout: 120_000 });
     if (render.code !== 0) return { outcome: "invalid", reportPath, error: bounded(render.stderr), authoredEvidence: "mismatch" };
     authoredEvidence = "verified";
@@ -362,6 +363,15 @@ async function verifyReviewerReportDelivery(pi: ExtensionAPI, review: Record<str
   }
 }
 
+function verifiedReviewerLaunchClaim(root: string, review: Record<string, unknown>, toolCallId?: unknown): boolean {
+  const path = join(root, "panel-launch.claim");
+  if (!existsSync(path) || realpathSync(path) !== path) return false;
+  try {
+    const claim = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    return claim.schema === "forgedock.candidate-review-panel-launch/v1" && claim.artifactKey === review.artifactKey && claim.workflowSha256 === review.workflowSha256 && typeof claim.claimedAt === "string" && Number.isFinite(Date.parse(claim.claimedAt)) && (claim.toolCallId === undefined || typeof claim.toolCallId === "string" && (toolCallId === undefined || claim.toolCallId === toolCallId));
+  } catch { return false; }
+}
+
 async function verifiedReviewerExecutionResult(root: string, review: Record<string, unknown>, role: string): Promise<Record<string, unknown> | undefined> {
   const path = join(root, "reviewer-execution.json");
   if (!existsSync(path) || realpathSync(path) !== path) return undefined;
@@ -369,7 +379,7 @@ async function verifiedReviewerExecutionResult(root: string, review: Record<stri
     const receipt = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
     const roles = reviewRoles(review);
     const validStatuses = new Set(["completed", "failed", "stopped", "interrupted", "timed-out", "detached", "execution-limit", "nonterminal"]);
-    if (receipt.schema !== "forgedock.candidate-review-execution/v1" || receipt.repository !== review.repository || receipt.pullRequest !== review.pullRequest || receipt.head !== review.head || receipt.baseRef !== review.baseRef || receipt.baseSha !== review.baseSha || receipt.artifactKey !== review.artifactKey || receipt.mode !== preparedReviewMode(review) || receipt.workflowPath !== review.workflowPath || receipt.workflowSha256 !== review.workflowSha256 || typeof receipt.workflowRunId !== "string" || typeof receipt.toolCallId !== "string" || typeof receipt.completedAt !== "string" || !Array.isArray(receipt.roleResults) || receipt.roleResults.length !== roles.length) return undefined;
+    if (!verifiedReviewerLaunchClaim(root, review, receipt.toolCallId) || receipt.schema !== "forgedock.candidate-review-execution/v1" || receipt.repository !== review.repository || receipt.pullRequest !== review.pullRequest || receipt.head !== review.head || receipt.baseRef !== review.baseRef || receipt.baseSha !== review.baseSha || receipt.artifactKey !== review.artifactKey || receipt.mode !== preparedReviewMode(review) || receipt.workflowPath !== review.workflowPath || receipt.workflowSha256 !== review.workflowSha256 || typeof receipt.workflowRunId !== "string" || !receipt.workflowRunId.trim() || typeof receipt.toolCallId !== "string" || !receipt.toolCallId.trim() || typeof receipt.completedAt !== "string" || !Array.isArray(receipt.roleResults) || receipt.roleResults.length !== roles.length) return undefined;
     let selected: Record<string, unknown> | undefined;
     for (let index = 0; index < roles.length; index++) {
       const row = receipt.roleResults[index];
@@ -916,7 +926,11 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
         const authorization = JSON.parse(await readFile(authorizationPath, "utf8")) as Record<string, unknown>;
         authorizedRole = realpathSync(authorizationPath) === authorizationPath && authorization.schema === "forgedock.candidate-review-role/v1" && authorization.artifactRoot === root && authorization.artifactKey === roleArtifactKey(review, input.role) && authorization.role === input.role && authorization.repository === input.repository && authorization.pullRequest === input.pullRequest && authorization.head === input.head && authorization.baseRef === input.baseRef && authorization.baseSha === input.baseSha && authorization.publish === review.publish;
       } catch { authorizedRole = false; }
+      const executionReceiptPath = join(root, "reviewer-execution.json");
+      const executionReceiptPresent = existsSync(executionReceiptPath);
       const executionResult = await verifiedReviewerExecutionResult(root, review, input.role);
+      if (executionReceiptPresent && !executionResult) throw new Error("Reviewer execution receipt is present but does not match the prepared frozen role/run or launch claim");
+      if (!executionResult && recovery !== undefined && !verifiedReviewerLaunchClaim(root, review)) throw new Error("Reviewer publication recovery input has no matching prepared panel-launch claim");
       const reportIdentity = reviewerReportIdentity(reportPath);
       if (!executionResult && recovery === undefined) throw new Error("Incomplete-review GATED record requires a completed per-role native execution receipt or exact role-bound publication recovery input; preparation, launch claims, or local reports alone are pre-review");
       if (executionResult && recovery && executionResult.nativeRunId !== null && executionResult.nativeRunId !== recovery.nativeRunId) throw new Error("Native execution and reviewer publication evidence disagree on the role run identity");

@@ -155,6 +155,7 @@ async function fixture(publish: boolean, staging = false) {
     await writeFile(reportPath, reviewerReportMarkdown(identity, body, observations[role]!));
   }
   const roleResults = roles.map((role) => ({ role, nativeRunId: `native-${role}-run-33800`, nativeStatus: "completed", reportPath: join(reviewRoot, `${role}.report.md`), recoveryPath: join(reviewRoot, `${role}.publication-recovery.json`), exitCode: 0 }));
+  await writeFile(join(reviewRoot, "panel-launch.claim"), JSON.stringify({ schema: "forgedock.candidate-review-panel-launch/v1", artifactKey: review.artifactKey, workflowSha256, toolCallId: "fixture-reviewer-tool-call", claimedAt: new Date().toISOString() }));
   await writeFile(join(reviewRoot, "reviewer-execution.json"), JSON.stringify({ schema: "forgedock.candidate-review-execution/v1", repository: review.repository, pullRequest: review.pullRequest, head, baseRef, baseSha: base, artifactKey: review.artifactKey, mode: review.mode, workflowPath, workflowSha256, toolCallId: "fixture-reviewer-tool-call", workflowRunId: "fixture-workflow-run", completedAt: new Date().toISOString(), roleResults }, null, 2));
   const state = JSON.parse(await readFile(statePath, "utf8"));
   if (publish) {

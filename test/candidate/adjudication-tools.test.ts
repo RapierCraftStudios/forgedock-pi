@@ -52,6 +52,7 @@ async function writeRecoverySidecar(root: string, review: Record<string, any>, r
     observationsSha256: createHash("sha256").update(observationsBytes).digest("hex"),
   }));
   const roleResults = (review.roles as string[]).map((selectedRole) => ({ role: selectedRole, nativeRunId: "native-correctness-run-1", nativeStatus: "completed", reportPath: join(root, `${selectedRole}.report.md`), recoveryPath: join(root, `${selectedRole}.publication-recovery.json`), exitCode: 0 }));
+  await writeFile(join(root, "panel-launch.claim"), JSON.stringify({ schema: "forgedock.candidate-review-panel-launch/v1", artifactKey: review.artifactKey, workflowSha256: review.workflowSha256, toolCallId: "test-reviewer-tool-call", claimedAt: new Date().toISOString() }));
   await writeFile(join(root, "reviewer-execution.json"), JSON.stringify({ schema: "forgedock.candidate-review-execution/v1", repository: review.repository, pullRequest: review.pullRequest, head: review.head, baseRef: review.baseRef, baseSha: review.baseSha, artifactKey: review.artifactKey, mode: review.mode, workflowPath: review.workflowPath, workflowSha256: review.workflowSha256, toolCallId: "test-reviewer-tool-call", workflowRunId: "test-workflow-run", completedAt: new Date().toISOString(), roleResults }));
 }
 

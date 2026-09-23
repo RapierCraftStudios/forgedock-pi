@@ -155,6 +155,7 @@ async function preparedReviewerArtifact(root: string, env: NodeJS.ProcessEnv, pu
     bodySha256: createHash("sha256").update(bodyBytes).digest("hex"), observationsSha256: createHash("sha256").update(observationsBytes).digest("hex"),
   }, null, 2)}\n`);
   await execFileAsync("node", [helper, "record", "reviewer", "--repo", "example/product", "--pr", String(pullRequest), "--head", head, "--base-ref", baseRef, "--base-sha", baseSha, "--role", role, "--report-id", roleKey, "--body-file", bodyPath, "--report-file", reportPath, "--observations-file", observationsPath, "--cwd", root, "--publish"], { cwd: root, env });
+  await writeFile(join(reviewRoot, "panel-launch.claim"), JSON.stringify({ schema: "forgedock.candidate-review-panel-launch/v1", artifactKey: review.artifactKey, workflowSha256: review.workflowSha256, toolCallId: `knowledge-review-${pullRequest}`, claimedAt: new Date().toISOString() }));
   await writeFile(join(reviewRoot, "reviewer-execution.json"), JSON.stringify({
     schema: "forgedock.candidate-review-execution/v1", repository: review.repository, pullRequest, head, baseRef, baseSha,
     artifactKey: review.artifactKey, mode: review.mode, workflowPath: review.workflowPath, workflowSha256: review.workflowSha256,

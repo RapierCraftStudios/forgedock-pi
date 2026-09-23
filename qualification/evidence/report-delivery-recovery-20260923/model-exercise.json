@@ -7,6 +7,7 @@
   "supplementalRecoveryInstructions": false,
   "parentModel": {"id": "openai-codex/gpt-5.6-luna", "thinking": "high"},
   "runtime": {"pi": "0.87.1", "node": "v26.7.0", "piSubagentsVersion": "0.60.0", "piSubagentsCommit": "0931cbbb98ab253177b181bd334fe02dd919dca5"},
+  "intendedInstallationRuntime": {"pi": "0.85.1", "piSubagentsVersion": "0.60.0", "piSubagentsCommit": "0931cbbb98ab253177b181bd334fe02dd919dca5", "ordinaryForgeDockPin": "d7d06783df386148e6196ab00f8b466351f5e515", "activePiCommandVersionAtQualification": "0.87.1", "status": "target specified by docs/candidate.md and install-candidate.sh; ordinary installation unchanged", "qualifiedByModelExercise": false},
   "candidate": {"base": "d7d06783df386148e6196ab00f8b466351f5e515", "patchSha256AtLaunch": "7a967c6613a6a2e529ba0811c67aad0a6c44ad41917c37b4a1296220947ca93d"},
   "target": {"repository": "example/product", "pullRequest": 33800, "head": "156e36e1898aa9bb3a0711ab70608b94572140c4", "baseRef": "main", "baseSha": "7543b8b1aa1f67ebaa54f330fb95edb0a0cc5083", "route": "staging"},
   "settings": {"roles": ["correctness", "security", "specialist"], "maxConcurrent": 2, "maxSubagentSpawnsPerRun": 3, "reviewerModel": "openai-codex/gpt-5.6-luna:medium", "reviewerTimeoutMs": 240000, "panelTimeoutMs": 600000, "publicationTimeoutMs": 120000, "configuredCheck": "node --test"},

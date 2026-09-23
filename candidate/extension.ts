@@ -105,7 +105,7 @@ function allowedPreparedReviewerSubagent(input: unknown, expectedMode: "staging"
   }
 }
 
-function claimPreparedReviewerSubagent(input: unknown, claimedIdentities: ReadonlySet<string>, expectedMode: "staging" | "standard"): string | undefined {
+function claimPreparedReviewerSubagent(input: unknown, claimedIdentities: ReadonlySet<string>, expectedMode: "staging" | "standard", toolCallId: string): string | undefined {
   if (!allowedPreparedReviewerSubagent(input, expectedMode) || !input || typeof input !== "object") return undefined;
   const workflowPath = resolve((input as { workflowScriptPath: string }).workflowScriptPath);
   const reviewRoot = resolve(dirname(workflowPath));
@@ -113,7 +113,7 @@ function claimPreparedReviewerSubagent(input: unknown, claimedIdentities: Readon
   const identity = frozenReviewIdentity(review);
   if (!identity || claimedIdentities.has(identity)) return undefined;
   const claimPath = join(reviewRoot, "panel-launch.claim");
-  const claim = { schema: "forgedock.candidate-review-panel-launch/v1", artifactKey: review.artifactKey, workflowSha256: review.workflowSha256, claimedAt: new Date().toISOString() };
+  const claim = { schema: "forgedock.candidate-review-panel-launch/v1", artifactKey: review.artifactKey, workflowSha256: review.workflowSha256, toolCallId, claimedAt: new Date().toISOString() };
   try {
     writeFileSync(claimPath, `${JSON.stringify(claim)}\n`, { flag: "wx", mode: 0o600 });
     return identity;
@@ -252,9 +252,10 @@ export default function forgedockCandidateExtension(pi: ExtensionAPI): void {
       if (typeof input.reviewRoot !== "string" || typeof input.artifactKey !== "string" || typeof input.role !== "string") {
         return { block: true, reason: "GATED delivery requires a post-launch result for the exact prepared reviewer role." };
       }
+      // A fresh extension has no process-local result map; the registered tool validates the durable prepared receipt.
       const roleResult = completedReviewerRuns.get(`${resolve(input.reviewRoot)}\u0000${input.artifactKey}`)?.get(input.role);
-      if (!roleResult || roleResult.nativeStatus !== input.nativeTerminal || (input.nativeRunId !== undefined && roleResult.nativeRunId !== input.nativeRunId)) {
-        return { block: true, reason: "GATED delivery requires the exact role's completed workflow result; preparation or a launch claim alone is insufficient." };
+      if (roleResult && (roleResult.nativeStatus !== input.nativeTerminal || (input.nativeRunId !== undefined && roleResult.nativeRunId !== input.nativeRunId))) {
+        return { block: true, reason: "GATED delivery does not match the exact role's completed workflow result." };
       }
     }
     if (event.toolName === "forge_prepare_review") {
@@ -276,7 +277,7 @@ export default function forgedockCandidateExtension(pi: ExtensionAPI): void {
     if (event.toolName === "subagent" && prepared) {
       if (prepared.mode === "staging" && !stagingGuard) return { block: true, reason: "A protected-branch reviewer roster must pass the staging launch guard." };
       if (!allowedPreparedReviewerSubagent(event.input, prepared.mode)) return { block: true, reason: "The prepared reviewer workflow or runtime request no longer matches its frozen authorization." };
-      const identity = claimPreparedReviewerSubagent(event.input, claimedReviewerIdentities, prepared.mode);
+      const identity = claimPreparedReviewerSubagent(event.input, claimedReviewerIdentities, prepared.mode, event.toolCallId);
       if (!identity) return { block: true, reason: "The prepared reviewer roster may be launched only once; use exact-run report recovery or record incomplete delivery." };
       claimedReviewerIdentities.add(identity);
       pendingReviewerRuns.set(event.toolCallId, prepared);

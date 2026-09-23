@@ -258,6 +258,7 @@ async function writeReviewerExecutionReceipt(root: string, review: Record<string
     reportPath: join(root, `${role}.report.md`),
     recoveryPath: join(root, `${role}.publication-recovery.json`),
   }));
+  await writeFile(join(root, "panel-launch.claim"), `${JSON.stringify({ schema: "forgedock.candidate-review-panel-launch/v1", artifactKey: review.artifactKey, workflowSha256: review.workflowSha256, toolCallId: "fixture-reviewer-tool-call", claimedAt: "2026-09-23T00:00:00.000Z" })}\n`);
   await writeFile(join(root, "reviewer-execution.json"), `${JSON.stringify({
     schema: "forgedock.candidate-review-execution/v1",
     repository, pullRequest, head, baseRef, baseSha, artifactKey: review.artifactKey, mode: review.mode,
