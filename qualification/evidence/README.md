@@ -12,6 +12,7 @@ the runs.
 - `intake-repeatability.*`: fresh-session, same-path idempotent intake result.
 - `replacement-rollback.*`: disposable same-repository Git-ref replacement and restoration.
 - `release-closeout-20260924.md`: fixed-scope isolated-candidate results for `/review-pr`, `/work-on`, and `/orchestrate`, with the final NOT READY decision and sanitized timing/intervention/delivery summary.
+- `release-closeout-20260924-evidence.md`: decisive sanitized issue-create, adapter-preflight, launch-lock, native workflow, owner/reviewer, gate, test, final-state, and separate duplicate-admission excerpts.
 
 No file in this directory claims **live** GitHub issue, PR, comment, merge, or
 closure activity. The release-closeout entrypoint results use local fake-GH state
