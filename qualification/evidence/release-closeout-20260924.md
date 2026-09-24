@@ -1,0 +1,17 @@
+# Frozen candidate release qualification — 2026-09-24
+
+## Decision: NOT READY FOR RELEASE / PROMOTION
+
+Candidate `c1c6e5c050123c3c0c2919bb3412805b45613c2c` was exercised only in an isolated Pi 0.85.1 runtime with pi-subagents 0.60.0 at `0931cbbb98ab253177b181bd334fe02dd919dca5`. No candidate source changes were made during closeout. The ordinary Pi installation/settings were unchanged, PRs #583/#582 remain unmerged, and no deployment or CI dispatch occurred.
+
+| Entry point | Result | Elapsed time / reported cost | Intervention and integrity | Local delivery / tracking |
+|---|---|---|---|---|
+| `/review-pr 7` | Expected blocking decision: `CHANGES_REQUESTED`, staging `FAIL`, one correctness finding. Conditional migration check skip was policy-accepted; disproven historical allegation rejected. | Parent 286.6 s / $0.03234; one reviewer 61.5 s / $0.00791. Tracking revision 228.1 s / $0.05134; no reviewer rerun. | Incorrect-CWD setup attempt excluded. The corrected review recovered one failed report POST from the same saved report. A later, explicitly authorized tracking revision reused that review. | Local review panels were published; issue tracking remains pending because the fake adapter rejected `POST /repos/example/product/issues`. No live GitHub write. |
+| `/work-on 201` | **PASS in the controlled fixture.** Owner returned `DONE/SATISFIED`; independent correctness reviewer approved; consumer behavior failed before and passed after the change. | Parent 577.8 s / $0.15852; reviewer 48.8 s / $0.00475. | One upfront fixture-only authorization; no human intervention after launch. Earlier non-qualifying attempts preserved. | Normal owner locally merged simulated PR #502, closed issue #201, and wrote expected records. This is not live GitHub lifecycle evidence. |
+| `/orchestrate #101 #102 #103` | **NOT QUALIFIED.** An initial generated workflow returned all `DONE/SATISFIED` and admitted #102 after #101, but two concurrent parent sessions ran against the same mutable fixture, causing duplicate owners and conflicting final state. | Two overlapping parent sessions lasted about 24 minutes each. Parent-only costs: about $0.04760 and $0.08118; nested owner/reviewer spend is excluded and not attributable to one clean run. | Evaluation harness launched two parent processes against the same fixture. A later attempt used a separate checkout at an advanced fake-remote head. Preserve the attempts; do not infer success from the final state. | The local fixture ended with four merged simulated PRs (#500–#503) for three issues, duplicate #103 deliveries, and #101 closed with `workflow:gated`. No single normal owner-per-issue delivery was established. |
+
+## Qualification limits
+
+All issue/PR publication, comments, labels, merges, and closures above were confined to local fake-GH state and local bare Git. There was no live GitHub operation. The `/review-pr` tracking failure is a local transport limitation; `/orchestrate` is inconclusive because the qualification fixture was shared by two concurrent parent runs. These findings do not establish a candidate source defect.
+
+Package validation completed before the entrypoint exercises: 493 passed, 0 failed, 6 optional skips; package check contained 68 files. The evidence remains limited to this isolated runtime and simulated lifecycle. Full sanitized route summaries are in this file; raw transcripts and mutable fake-GH state are not published on this branch.

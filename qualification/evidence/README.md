@@ -11,6 +11,8 @@ the runs.
 - `orchestration-repair.md` and `repaired-render.diff`: bounded same-role repair and scoped re-review.
 - `intake-repeatability.*`: fresh-session, same-path idempotent intake result.
 - `replacement-rollback.*`: disposable same-repository Git-ref replacement and restoration.
+- `release-closeout-20260924.md`: fixed-scope isolated-candidate results for `/review-pr`, `/work-on`, and `/orchestrate`, with the final NOT READY decision and sanitized timing/intervention/delivery summary.
 
-No file in this directory claims GitHub issue, PR, comment, merge, or closure
-activity. Local commits and replay markers are explicitly non-GitHub signals.
+No file in this directory claims **live** GitHub issue, PR, comment, merge, or
+closure activity. The release-closeout entrypoint results use local fake-GH state
+and local bare Git only; they are explicitly not live GitHub signals.
