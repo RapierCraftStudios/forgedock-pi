@@ -77,16 +77,30 @@ Dispatcher preparation (the selector can be `#123 #124`, `next 2`, `milestone:na
 
 ```bash
 $FORGEDOCK_CANDIDATE_BIN prepare-dispatch \
-  --selector 'next 2' --cwd /absolute/path/to/target \
-  --out /tmp/forgedock-candidate/dispatch-1
+  --selector 'next 2' --delivery-mode github \
+  --cwd /absolute/path/to/target --out /tmp/forgedock-candidate/dispatch-1
 ```
 
 The command writes `plan.json`, `workflow.js`, and `request.json` outside the target checkout.
+Select `--delivery-mode github` for the normal GitHub-style flow, including a simulated isolated
+fake-GitHub fixture, or `--delivery-mode local-replay` for a no-GitHub replay. The mode is carried
+in each trusted owner task; `--issues-file` only selects issue data and never implies local replay.
+A fixture issue may include optional `dispatchEvidence` strings; owners receive them as independently
+verifiable context only, without changing acceptance or authority. A one-line `--owner-authority-file`
+may carry explicit parent-granted operation scope into fresh owner tasks; delivery mode alone never
+grants publication or merge authority.
 Explicit output paths inside the source are rejected with a safe alternate path; defaults use the
 candidate artifact root. Before invoking the request, the dispatcher must query the supported
 native `subagent({ action: "status" })` boundary and correlate exact issue/worktree ownership;
 unavailable or ambiguous ownership gates only that issue. The dispatcher invokes the request
-through Pi's supported `subagent` tool; it does not hand-author a native script.
+through Pi's supported `subagent` tool; it does not hand-author a native script. If a workflow
+returns a detached owner, wait once for that exact run with `subagent_wait` and inspect its exact
+terminal `subagent` status. Save the unchanged initial workflow rows and one exact terminal-result row
+per detached owner in a `forgedock.candidate-dispatch-continuation/v1` input; then call
+`$FORGEDOCK_CANDIDATE_BIN continue-dispatch --plan <plan.json> --results <continuation-input.json> --out <dir>`.
+The helper checks run ID, issue, native state, and the owner marker before generating a continuation.
+Run only its returned request. It reuses the original graph and never relaunches settled owners.
+Do not continue while any detached owner remains active or unresolved.
 
 If the supplied repository is not on the configured integration branch, prepare a disposable
 base without touching it:
@@ -103,13 +117,13 @@ required to be clean; the preparation clones/fetches the exact `origin/staging` 
 one local `staging` branch in the disposable directory. `--offline` is only for fixtures with
 an already-fetched remote ref.
 
-Review preparation uses a JSON input with the frozen repository, PR, full head/base identities,
-source checkout, original acceptance, evidence, and risk selection:
-
-```bash
-$FORGEDOCK_CANDIDATE_BIN prepare-review \
-  --input /tmp/review-input.json --out /tmp/forgedock-candidate/review-123
-```
+Review preparation is a registered `forge_prepare_review` operation using the frozen repository,
+PR, full head/base identities, source/config checkout, original acceptance, evidence, risk
+selection, and an explicit `publish` mode. Launch only its returned request through the registered
+native `subagent` tool. Those hooks bind the prepared review to the exact native workflow and write
+the required `reviewer-execution.json` receipt; a direct CLI invocation cannot authorize
+adjudication. The helper's `prepare-review` command is an internal implementation detail of the
+registered tool, not a supported end-to-end review route.
 
 PR policy facts are collected without a local CI evaluator:
 

@@ -8,7 +8,7 @@ inheritSkills: false
 skills: forgedock-work-on, forgedock-review-pr, forgedock-review-pr-staging
 skillPath: ../skills
 allowNestedSubagents: true
-tools: read, grep, find, ls, bash, edit, write, subagent
+tools: read, grep, find, ls, bash, edit, write, subagent, forge_prepare_review, forge_run_check, forge_discover_review_records, forge_resolve_review_tracking, forge_recover_reviewer_publication, forge_publish_incomplete_review, forge_publish_adjudication
 acceptanceRole: writer
 defaultContext: fresh
 ---

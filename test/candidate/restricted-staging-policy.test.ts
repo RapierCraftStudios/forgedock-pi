@@ -169,7 +169,7 @@ function fakeExecutor(env: NodeJS.ProcessEnv, calls: Array<{ name: string; args:
 }
 
 async function reviewerReport(root: string, review: any) {
-  const body = "clean reviewer report";
+  const body = "Clean reviewer report with scoped evidence and a substantive recommendation.";
   const observations: unknown[] = [];
   const bodyBytes = `${body}\n`;
   const observationsBytes = `${JSON.stringify(observations, null, 2)}\n`;
@@ -419,6 +419,66 @@ test("prepared staging review separates task data from reviewer execution", asyn
   } finally {
     if (reviewRoot) await rm(reviewRoot, { recursive: true, force: true });
     if (secondReviewRoot) await rm(secondReviewRoot, { recursive: true, force: true });
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.state, { force: true });
+  }
+});
+
+test("registered nested-owner review captures native execution before parent adjudication", async () => {
+  const f = await fixture();
+  let reviewRoot: string | undefined;
+  try {
+    await execFileAsync("git", ["update-ref", "refs/remotes/origin/integration", f.base], { cwd: f.root });
+    const state = JSON.parse(await readFile(f.state, "utf8"));
+    state.pull.baseRefName = "integration";
+    state.pull.baseRefOid = f.base;
+    await writeFile(f.state, JSON.stringify(state));
+    const calls: Array<{ name: string; args: string[] }> = [];
+    const tools = toolMap(fakeExecutor(f.env, calls), true);
+    const prepared = await tools.get("forge_prepare_review")!.execute("nested-owner-prepare", {
+      repository: "example/product", pullRequest: 7, head: f.head, baseRef: "integration", baseSha: f.base,
+      sourceRoot: f.root, configRoot: f.root, roles: ["correctness"], acceptance: ["Verify the frozen owner change."], publish: false,
+    });
+    const artifacts = modelArtifacts(prepared);
+    reviewRoot = artifacts.reviewRoot;
+    const request = JSON.parse(await readFile(join(reviewRoot, "request.json"), "utf8"));
+    const handlers = extensionEvents();
+    handlers.get("tool_result")!({ toolName: "forge_prepare_review", isError: false, details: prepared.details });
+    assert.equal(await readFile(join(reviewRoot, "reviewer-execution.json"), "utf8").catch(() => ""), "");
+    assert.equal(handlers.get("tool_call")!({ toolName: "subagent", toolCallId: "nested-owner-review", input: request }), undefined);
+    const roleResult = {
+      role: "correctness", nativeRunId: "native-correctness-run-33800", nativeStatus: "completed",
+      reportPath: join(reviewRoot, "correctness.report.md"), recoveryPath: join(reviewRoot, "correctness.publication-recovery.json"), exitCode: 0,
+    };
+    handlers.get("tool_result")!({ toolName: "subagent", toolCallId: "nested-owner-review", input: request, isError: false, details: { mode: "workflow", runId: "owner-review-workflow-33800", workflow: { value: [roleResult] } } });
+    const execution = JSON.parse(await readFile(join(reviewRoot, "reviewer-execution.json"), "utf8"));
+    assert.equal(execution.workflowRunId, "owner-review-workflow-33800");
+    assert.equal(execution.roleResults[0].nativeRunId, roleResult.nativeRunId);
+    const priorRunId = process.env.PI_SUBAGENT_RUN_ID;
+    process.env.PI_SUBAGENT_RUN_ID = roleResult.nativeRunId;
+    try {
+      await tools.get("forge_publish_reviewer")!.execute("nested-owner-report", {
+        repository: "example/product", pullRequest: 7, head: f.head, baseRef: "integration", baseSha: f.base,
+        role: "correctness", body: "This report found no correctness issue in the frozen owner change.",
+        bodyPath: join(reviewRoot, "correctness.body.md"), reportPath: join(reviewRoot, "correctness.report.md"),
+        reviewRoot, authorizationPath: join(reviewRoot, "correctness.authorization.json"),
+        artifactKey: artifacts.review.roleArtifactKeys.correctness, publish: false, observations: [],
+      });
+    } finally {
+      if (priorRunId === undefined) delete process.env.PI_SUBAGENT_RUN_ID;
+      else process.env.PI_SUBAGENT_RUN_ID = priorRunId;
+    }
+    const adjudication = await tools.get("forge_publish_adjudication")!.execute("nested-owner-adjudicate", {
+      repository: "example/product", pullRequest: 7, head: f.head, baseRef: "integration", baseSha: f.base,
+      mode: "standard", reviewRoot, artifactKey: artifacts.artifactKey, verdict: "APPROVE", gate: "PASS",
+      decisions: [], historicalDecisions: [], checks: [], limitations: [], nextAction: "No follow-up.",
+      allowIssueWrites: false, publish: false,
+    });
+    assert.equal(adjudication.details.publication, "saved");
+    assert.equal(JSON.parse(await readFile(join(reviewRoot, "reviewer-execution.json"), "utf8")).roleResults[0].nativeStatus, "completed");
+  } finally {
+    if (reviewRoot) await rm(reviewRoot, { recursive: true, force: true });
     await rm(f.root, { recursive: true, force: true });
     await rm(f.bin, { recursive: true, force: true });
     await rm(f.state, { force: true });
