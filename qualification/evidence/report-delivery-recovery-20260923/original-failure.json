@@ -1,0 +1,18 @@
+{
+  "schema": "forgedock.reviewer-publication-failure/v1",
+  "target": {"repository":"RapierCraftStudios/AlterLab","pullRequest":33800,"head":"bbf883b83a58ab464b9dd518d43be4a4e75f5fbc","baseRef":"main","baseSha":"4e71d8a4db03950212873ebe7769348ce3f6c3fb"},
+  "role":"specialist",
+  "nativeRun": {"identityRedacted":true,"terminal":"completed","exitCode":0,"turns":19,"durationMs":174397,"model":"openai-codex/gpt-5.6-luna:medium"},
+  "publisherCall": {"count":1,"submittedKeyClass":"common-review-key","preparedAuthorizationKeyClass":"specialist-role-key","keysEqual":false,"roleAuthorizationMatchesPreparedMap":true,"inlineBodyCharacters":2858,"structuredObservations":0,"publicationRequested":true},
+  "observedError":"Reviewer publication authorization does not match the prepared frozen role",
+  "result": {"reportBodyFilePresent":false,"reportFilePresent":false,"publisherHelperInvoked":false,"httpPostAttempted":false,"existingCorrectnessAndSecurityReportsPreserved":true,"targetCommentsModified":false},
+  "evidenceSha256": {
+    "transcript":"d48ea87ed33a125a53db4c86ae373a23336e5a3f6ba1c4b765535bd6ed7e0c68",
+    "preparedReview":"f85ce483c0a6bb3c8f343f613b49d6b6874613ca9eecdb394646a6503900fd44",
+    "specialistAuthorization":"0d9c3cb96ea048163460022baa10184283752f5407d2352dd833663765e0947c",
+    "inlineBody":"9d7c74f6adc21e83b9a3e782b18a2b3cb1c6fd7639aeccc732d9b83fc9dc143f",
+    "emptyObservationArray":"37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+  },
+  "liveWrites":false,
+  "causeAssessment":"Established from the preserved native publisher call, prepared role authorization, role-key map, and the old pre-write key check. The child supplied the common key where the specialist role key was required."
+}

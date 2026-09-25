@@ -52,11 +52,26 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     await writeFile(issuesFile, JSON.stringify({ issues: [
       { number: 2, title: "dependent", body: "## Acceptance Criteria\n- [ ] Consumer works\n\nDepends on #1" },
       { number: 1, title: "base", body: "## Acceptance Criteria\r\n- [ ] Producer behavior works\r\n  It must remain compatible.\r\n\r\n- [ ] Second obligation works\r\n\r\n## Affected Files\r\n- `src/producer.ts:10`\r\n- `src/consumer.ts`\r\n\r\n## Notes\r\nThis paragraph is not another criterion." },
-      { number: 3, title: "unstructured", body: "Fix the consumer timeout when the queue is empty; preserve compatibility." },
+      { number: 3, title: "unstructured", body: "Fix the consumer timeout when the queue is empty; preserve compatibility.", dispatchEvidence: ["The configured full suite also fails at the exact seed; retain that check as a failure and do not expand the issue into unrelated files."] },
     ] }));
     const out = join(root, "..", `${testName}-dispatch`);
-    const dispatch = JSON.parse((await execFileAsync("node", [helper, "prepare-dispatch", "--selector", "#1 #2", "--cwd", root, "--issues-file", issuesFile, "--out", out])).stdout) as { requestPath: string; planPath: string };
-    const plan = JSON.parse(await readFile(dispatch.planPath, "utf8")) as { issues: Array<{ number: number; predecessors: string[]; acceptance: string[]; mutationFiles: string[]; body: string; task: string; admitted?: boolean }>; readiness: { missingAcceptance: number[]; unstructuredAcceptance: number[] } };
+    const localOut = join(root, "..", `${testName}-local-replay-dispatch`);
+    const ownerAuthorityPath = join(root, "..", `${testName}-owner-authority.txt`);
+    const ownerAuthority = "The operator authorized simulated publication in this fixture only; no live GitHub operations.";
+    await writeFile(ownerAuthorityPath, `${ownerAuthority}\n`);
+    const dispatch = JSON.parse((await execFileAsync("node", [helper, "prepare-dispatch", "--selector", "#1 #2", "--delivery-mode", "github", "--owner-authority-file", ownerAuthorityPath, "--cwd", root, "--issues-file", issuesFile, "--out", out])).stdout) as { requestPath: string; planPath: string };
+    const plan = JSON.parse(await readFile(dispatch.planPath, "utf8")) as { deliveryMode: string; ownerAuthority: string | null; issues: Array<{ number: number; predecessors: string[]; acceptance: string[]; mutationFiles: string[]; body: string; task: string; admitted?: boolean }>; readiness: { missingAcceptance: number[]; unstructuredAcceptance: number[] } };
+    assert.equal(plan.deliveryMode, "github");
+    assert.equal(plan.ownerAuthority, ownerAuthority);
+    assert.match(plan.issues[0]?.task ?? "", /Trusted dispatch deliveryMode: github/);
+    assert.match(plan.issues[0]?.task ?? "", /Trusted parent operation authority/);
+    assert.match(plan.issues[0]?.task ?? "", /no live GitHub operations/);
+    assert.doesNotMatch(plan.issues[0]?.task ?? "", /authorized local replay|do not perform GitHub writes/);
+    const localDispatch = JSON.parse((await execFileAsync("node", [helper, "prepare-dispatch", "--selector", "#1 #2", "--delivery-mode", "local-replay", "--cwd", root, "--issues-file", issuesFile, "--out", localOut])).stdout) as { planPath: string };
+    const localPlan = JSON.parse(await readFile(localDispatch.planPath, "utf8")) as { deliveryMode: string; issues: Array<{ task: string }> };
+    assert.equal(localPlan.deliveryMode, "local-replay");
+    assert.match(localPlan.issues[0]?.task ?? "", /authorized local replay/);
+    assert.match(localPlan.issues[0]?.task ?? "", /do not perform GitHub writes/);
     assert.deepEqual(plan.issues.map((issue) => issue.number), [1, 2, 3]);
     assert.deepEqual(plan.issues[1]?.predecessors, ["issue-1"]);
     assert.deepEqual(plan.readiness.missingAcceptance, []);
@@ -66,6 +81,9 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     assert.deepEqual(plan.issues[0]?.mutationFiles, ["src/producer.ts", "src/consumer.ts"]);
     assert.match(plan.issues[0]?.body ?? "", /This paragraph is not another criterion/);
     assert.match(plan.issues[0]?.task ?? "", /Second obligation works/);
+    assert.equal(plan.issues[2]?.body, "Fix the consumer timeout when the queue is empty; preserve compatibility.");
+    assert.match(plan.issues[2]?.task ?? "", /Dispatcher evidence\/context follows; independently verify it/);
+    assert.match(plan.issues[2]?.task ?? "", /retain that check as a failure/);
     const request = JSON.parse(await readFile(dispatch.requestPath, "utf8")) as { workflowScriptPath: string; globalConcurrencyLimit: number };
     assert.equal(request.globalConcurrencyLimit, 2);
     assert.match(await readFile(request.workflowScriptPath, "utf8"), /forgedock-owner/);
@@ -86,6 +104,8 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     assert.notEqual(changedIntake.outputPath, intakePath);
     assert.equal(changedIntake.supersedes, intakePath);
     await rm(out, { recursive: true, force: true });
+    await rm(localOut, { recursive: true, force: true });
+    await rm(ownerAuthorityPath, { force: true });
     await rm(issuesFile, { force: true });
     await rm(firstIntake.outputPath, { force: true });
     await rm(changedIntake.outputPath, { force: true });
@@ -96,7 +116,11 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     await rm(reviewInput, { force: true });
     assert.deepEqual(review.roles, ["correctness"]);
     assert.equal(JSON.parse(await readFile(review.requestPath, "utf8")).maxSubagentSpawnsPerRun, 1);
-    assert.match(await readFile(join(reviewOut, "workflow.js"), "utf8"), /forgedock-reviewer/);
+    const workflowText = await readFile(join(reviewOut, "workflow.js"), "utf8");
+    assert.match(workflowText, /forgedock-reviewer/);
+    assert.match(workflowText, /Caller-supplied review context \(not authoritative acceptance\)/);
+    assert.doesNotMatch(workflowText, /Original acceptance:/);
+    assert.match(workflowText, /Prepared policy facts/);
     const invalidRoles = join(root, "..", `${testName}-invalid-review.json`);
     await writeFile(invalidRoles, JSON.stringify({ repository: "example/product", pullRequest: 3, head: sourceHead, baseRef: "integration", baseSha, sourceRoot: root, roles: ["security"] }));
     await assert.rejects(execFileAsync("node", [helper, "prepare-review", "--input", invalidRoles, "--out", `${reviewOut}-invalid`]), /correctness reviewer/);

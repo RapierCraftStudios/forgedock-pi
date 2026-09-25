@@ -141,7 +141,8 @@ test("active routes use repository-driven policy and external dispatcher artifac
   const workOn = await readFile("candidate/skills/forgedock-work-on/SKILL.md", "utf8");
   const review = await readFile("candidate/skills/forgedock-review-pr/SKILL.md", "utf8");
   const orchestrate = await readFile("candidate/skills/forgedock-orchestrate/SKILL.md", "utf8");
-  assert.match(workOn, /inspect-pr --repo/);
+  assert.match(workOn, /single registered `forge_prepare_review` call also collects the bound policy artifact/);
+  assert.match(workOn, /Do not separately run `inspect-pr`/);
   assert.match(workOn, /empty\/nonzero.*not.*requirement|nonzero.*not.*proof/i);
   assert.match(review, /requiredness.*applicable.*rules/);
   assert.match(review, /forge_prepare_review.*not.*shell helper|prepared policy.*activates the route guard/s);

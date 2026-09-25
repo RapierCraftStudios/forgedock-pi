@@ -56,7 +56,7 @@ test("packed candidate exposes only thin resources and a bounded owner", async (
     );
     assert.match(packedAgent, /^name: forgedock-owner$/m);
     assert.match(packedAgent, /^allowNestedSubagents: true$/m);
-    assert.match(packedAgent, /^tools: read, grep, find, ls, bash, edit, write, subagent$/m);
+    assert.match(packedAgent, /^tools: read, grep, find, ls, bash, edit, write, subagent, forge_prepare_review, forge_run_check, forge_discover_review_records, forge_resolve_review_tracking, forge_recover_reviewer_publication, forge_publish_incomplete_review, forge_publish_adjudication$/m);
     assert.match(packedAgent, /^skillPath: \.\.\/skills$/m);
 
     const result = await resolveSubagentLaunchContract({
@@ -74,6 +74,15 @@ test("packed candidate exposes only thin resources and a bounded owner", async (
     assert.equal(result.contract.tools.explicitAllowlist, true);
     assert.equal(result.contract.tools.fanoutAuthorized, true);
     assert.equal(result.contract.tools.configuredExtensions.length, 0);
+    for (const tool of [
+      "forge_prepare_review",
+      "forge_run_check",
+      "forge_discover_review_records",
+      "forge_resolve_review_tracking",
+      "forge_recover_reviewer_publication",
+      "forge_publish_incomplete_review",
+      "forge_publish_adjudication",
+    ]) assert.ok(result.contract.tools.effectiveAllowlist.includes(tool), `owner tool allowlist includes ${tool}`);
 
     const reviewerResult = await resolveSubagentLaunchContract({
       agent: "forgedock-reviewer",
