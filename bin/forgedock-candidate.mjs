@@ -1295,6 +1295,258 @@ function resolveRecordReferences(values, inventory, publish, label, lookup) {
   return values.map((value, index) => resolveRecordReference(value, inventory, `${label}[${index}]`, lookup));
 }
 
+function recordReceiptRoot(cwd, repository, issue) {
+  const workspace = realpathSync(resolve(cwd));
+  const scope = sha256(canonicalJson({ repository: repository.toLowerCase(), workspace, issue: issue ?? null })).slice(0, 24);
+  const safeRoot = resolve(process.env.FORGEDOCK_SAFE_ARTIFACT_ROOT ?? join(process.env.HOME ?? tmpdir(), ".cache", "forgedock-candidate-artifacts"));
+  return join(safeRoot, "record-lineage", scope);
+}
+
+function recordReceiptBase(record, cwd) {
+  return {
+    schema: "forgedock.candidate-record-publication-receipt/v1",
+    repository: record.repository,
+    workspace: realpathSync(resolve(cwd)),
+    issue: record.issue ?? null,
+    pullRequest: record.pullRequest ?? null,
+    kind: record.kind,
+    head: record.head,
+    recordId: record.recordId,
+    url: record.publicationUrl,
+    inputs: record.metadata.inputs,
+    supersedes: record.metadata.supersedes,
+  };
+}
+
+function persistRecordReceipt(record, publication, cwd) {
+  if (!publication?.url || record.issue === undefined || record.pullRequest !== undefined) return undefined;
+  const base = recordReceiptBase({ ...record, publicationUrl: publication.url }, cwd);
+  const receiptId = `sha256:${sha256(canonicalJson(base))}`;
+  const receipt = { ...base, receiptId };
+  const receiptFile = join(recordReceiptRoot(cwd, record.repository, record.issue), `forgedock-record-${receiptId.slice(7)}.receipt.json`);
+  writeExclusive(receiptFile, json(receipt));
+  return { receipt, receiptFile };
+}
+
+function readRecordReceipts(cwd, repository, issue) {
+  const workspace = realpathSync(resolve(cwd));
+  const root = recordReceiptRoot(cwd, repository, issue);
+  if (!existsSync(root)) return [];
+  const receipts = [];
+  for (const name of readdirSync(root).filter((value) => value.startsWith("forgedock-record-") && value.endsWith(".receipt.json"))) {
+    const file = join(root, name);
+    const receipt = readJson(file);
+    if (receipt.schema !== "forgedock.candidate-record-publication-receipt/v1") fail(`Invalid durable-record receipt schema in ${file}`);
+    const { receiptId, ...base } = receipt;
+    if (receiptId !== `sha256:${sha256(canonicalJson(base))}`) fail(`Durable-record receipt identity does not verify: ${file}`);
+    if (receipt.repository?.toLowerCase() !== repository.toLowerCase() || receipt.workspace !== workspace || Number(receipt.issue) !== issue || receipt.pullRequest !== null) continue;
+    if (!DURABLE_RECORD_KINDS.has(receipt.kind) || !FULL_SHA.test(receipt.head) || typeof receipt.recordId !== "string" || !/^sha256:[a-f0-9]{64}$/.test(receipt.recordId) || !Array.isArray(receipt.inputs) || typeof receipt.url !== "string") fail(`Durable-record receipt is incomplete: ${file}`);
+    receipts.push(receipt);
+  }
+  return receipts;
+}
+
+function scopedRecordReceipts(kind, repository, issue, cwd, inventory) {
+  const values = [...readRecordReceipts(cwd, repository, issue)];
+  for (const value of inventory.values()) {
+    const receipt = value?.recordReceipt;
+    if (receipt?.kind === kind && receipt.repository?.toLowerCase() === repository.toLowerCase() && Number(receipt.issue) === issue && receipt.workspace === realpathSync(resolve(cwd))) values.push(receipt);
+  }
+  const unique = new Map();
+  for (const receipt of values.filter((value) => value.kind === kind)) {
+    const previous = unique.get(receipt.recordId);
+    if (previous && canonicalJson(previous) !== canonicalJson(receipt)) fail(`${kind} publication receipts disagree for record ${receipt.recordId}`);
+    unique.set(receipt.recordId, receipt);
+  }
+  return [...unique.values()];
+}
+
+function selectCurrentRecordReceipt(kind, receipts, repository, issue, bodyFile) {
+  const matches = receipts.filter((receipt) => receipt.kind === kind && receipt.repository.toLowerCase() === repository.toLowerCase() && Number(receipt.issue) === issue && receipt.pullRequest === null);
+  if (matches.length === 0) fail(`${kind} lineage for ${repository}#${issue} is unavailable; no published receipt was retained; authored body retained at ${resolve(bodyFile)}`);
+  const supersededUrls = new Set(matches.map((receipt) => receipt.supersedes).filter((value) => typeof value === "string"));
+  const current = matches.filter((receipt) => !supersededUrls.has(receipt.url));
+  if (current.length !== 1) fail(`${kind} lineage for ${repository}#${issue} is ambiguous: ${current.length} unsuperseded published ${kind} records; use the retained supersession chain; authored body retained at ${resolve(bodyFile)}`);
+  return current[0];
+}
+
+function recordReferenceFromUrl(value, repository, cwd, cache, expectedIssue) {
+  if (typeof value !== "string") return undefined;
+  let url;
+  try { url = new URL(value); } catch { return undefined; }
+  if (url.protocol !== "https:") return undefined;
+  const match = url.pathname.match(/^\/([^/]+\/[^/]+)\/(issues|pull)\/([1-9][0-9]*)$/i);
+  const comment = url.hash.match(/^#issuecomment-([1-9][0-9]*)$/);
+  if (!match || !comment || match[1].toLowerCase() !== repository.toLowerCase()) return undefined;
+  const destination = Number(match[3]);
+  const pullRequest = match[2].toLowerCase() === "pull";
+  if (expectedIssue !== undefined && (pullRequest || destination !== expectedIssue)) fail(`Linked pre-build record ${value} does not belong to issue #${expectedIssue}`);
+  const commentId = Number(comment[1]);
+  const canonicalUrl = verifiedCommentUrl(value, repository, destination, pullRequest, commentId, "Linked durable-record permalink");
+  const cacheKey = `durable-record-url:${canonicalUrl}`;
+  if (cache.has(cacheKey)) return cache.get(cacheKey);
+  const stored = commentReadback(repository, commentId, cwd);
+  const storedUrl = verifiedCommentUrl(stored.html_url, repository, destination, pullRequest, commentId, "Linked durable-record readback permalink");
+  if (storedUrl !== canonicalUrl) fail(`Linked durable-record permalink changed during readback: ${canonicalUrl}`);
+  const parsed = durableRecordFromBody(stored.body);
+  if (!parsed) { cache.set(cacheKey, undefined); return undefined; }
+  const metadata = parsed.metadata;
+  const execution = metadata?.execution;
+  if (!metadata || metadata.v !== 1 || !/^sha256:[a-f0-9]{64}$/.test(metadata.record_id) || !FULL_SHA.test(metadata.source_head) || !Array.isArray(metadata.inputs) || execution?.repository?.toLowerCase() !== repository.toLowerCase()) fail(`Linked ${parsed.kind} record has incomplete identity metadata: ${canonicalUrl}`);
+  if (pullRequest ? Number(execution.pull_request) !== destination : Number(execution.issue) !== destination) fail(`Linked ${parsed.kind} record destination disagrees with its permalink: ${canonicalUrl}`);
+  const result = { kind: parsed.kind, url: canonicalUrl, metadata, body: stored.body, destination, pullRequest };
+  cache.set(cacheKey, result);
+  return result;
+}
+
+function receiptRecordReadback(receipt, kind, repository, issue, cwd, cache, bodyFile) {
+  if (receipt.kind !== kind) fail(`${kind} lineage receipt has the wrong record kind; authored body retained at ${resolve(bodyFile)}`);
+  const record = recordReferenceFromUrl(receipt.url, repository, cwd, cache, issue);
+  if (!record || record.kind !== kind || record.metadata.record_id !== receipt.recordId || record.metadata.source_head !== receipt.head || canonicalJson(record.metadata.inputs) !== canonicalJson(receipt.inputs) || (record.metadata.supersedes ?? null) !== (receipt.supersedes ?? null)) fail(`${kind} publication receipt no longer matches its exact GitHub record; authored body retained at ${resolve(bodyFile)}`);
+  return record;
+}
+
+function linkedRecordsOfKind(record, expectedKind, repository, cwd, cache) {
+  const inputs = record.metadata.inputs;
+  if (!Array.isArray(inputs)) return [];
+  return inputs.map((value) => recordReferenceFromUrl(value, repository, cwd, cache)).filter((value) => value?.kind === expectedKind);
+}
+
+function verifyArchitectRecordChain(architect, repository, cwd, cache, issue, bodyFile) {
+  if (architect.kind !== "ARCHITECT" || Number(architect.metadata.execution?.issue) !== issue) fail(`ARCHITECT receipt does not belong to ${repository}#${issue}; authored body retained at ${resolve(bodyFile)}`);
+  const contracts = linkedRecordsOfKind(architect, "CONTRACT", repository, cwd, cache);
+  if (contracts.length !== 1) fail(`ARCHITECT receipt for ${repository}#${issue} must link exactly one CONTRACT; found ${contracts.length}; authored body retained at ${resolve(bodyFile)}`);
+  const contexts = linkedRecordsOfKind(contracts[0], "CONTEXT", repository, cwd, cache);
+  if (contexts.length === 0) fail(`The linked CONTRACT has no published CONTEXT reference for ${repository}#${issue}; authored body retained at ${resolve(bodyFile)}`);
+  return { architectUrl: architect.url, contractUrl: contracts[0].url, contextUrls: contexts.map((value) => value.url) };
+}
+
+function recordHeadIsAncestor(sourceHead, targetHead, cwd) {
+  if (!FULL_SHA.test(sourceHead) || !FULL_SHA.test(targetHead)) return false;
+  if (tryExec("git", ["cat-file", "-e", `${sourceHead}^{commit}`], { cwd, timeout: 20_000 }).exitCode !== 0) return false;
+  return tryExec("git", ["merge-base", "--is-ancestor", sourceHead, targetHead], { cwd, timeout: 20_000 }).exitCode === 0;
+}
+
+function issueComments(repository, issue, cwd, cache) {
+  const key = `${repository}:issue:${issue}`;
+  const comments = cache.get(key) ?? listComments(repository, issue, cwd);
+  cache.set(key, comments);
+  return comments;
+}
+
+function issueHasBuildLineage(repository, issue, cwd, cache) {
+  return issueComments(repository, issue, cwd, cache).some((comment) => {
+    const parsed = durableRecordFromBody(comment?.body);
+    const execution = parsed?.metadata?.execution;
+    return ["ARCHITECT", "BUILDER"].includes(parsed?.kind) && execution?.repository?.toLowerCase() === repository.toLowerCase() && Number(execution.issue) === issue;
+  });
+}
+
+function historicalRecordReceipts(kind, repository, issue, targetHead, cwd, cache) {
+  const receipts = [];
+  for (const comment of issueComments(repository, issue, cwd, cache)) {
+    const parsed = durableRecordFromBody(comment?.body);
+    const metadata = parsed?.metadata;
+    if (parsed?.kind !== kind || metadata?.execution?.repository?.toLowerCase() !== repository.toLowerCase() || Number(metadata.execution.issue) !== issue || !recordHeadIsAncestor(metadata.source_head, targetHead, cwd)) continue;
+    if (!Number.isSafeInteger(comment?.id) || comment.id < 1) continue;
+    const url = verifiedCommentUrl(comment.html_url, repository, issue, false, comment.id, `Historical ${kind} permalink`);
+    receipts.push({ repository, workspace: realpathSync(resolve(cwd)), issue, pullRequest: null, kind, head: metadata.source_head, recordId: metadata.record_id, url, inputs: metadata.inputs, supersedes: metadata.supersedes ?? null });
+  }
+  return receipts;
+}
+
+function resolveBuilderPlan(repository, issue, cwd, bodyFile, targetHead, inventory, cache, explicitInputs) {
+  const receipts = scopedRecordReceipts("ARCHITECT", repository, issue, cwd, inventory).filter((receipt) => recordHeadIsAncestor(receipt.head, targetHead, cwd));
+  let selected;
+  if (receipts.length > 0) selected = selectCurrentRecordReceipt("ARCHITECT", receipts, repository, issue, bodyFile);
+  else if (Array.isArray(explicitInputs) && explicitInputs.length > 0) {
+    const lookup = { repository, destination: issue, destinationIsPullRequest: false, cwd, cache };
+    const urls = resolveRecordReferences(explicitInputs, inventory, true, "BUILDER.inputs", lookup);
+    const linked = urls.map((value) => recordReferenceFromUrl(value, repository, cwd, cache, issue)).filter((value) => value?.kind === "ARCHITECT");
+    const unique = [...new Map(linked.map((value) => [value.metadata.record_id, value])).values()];
+    if (unique.length !== 1) fail(`BUILDER lineage for ${repository}#${issue} is ambiguous or missing: expected one explicitly linked ARCHITECT, found ${unique.length}; authored body retained at ${resolve(bodyFile)}`);
+    const value = unique[0];
+    if (!recordHeadIsAncestor(value.metadata.source_head, targetHead, cwd)) fail(`Explicit ARCHITECT source head is not an ancestor of the Builder head for ${repository}#${issue}; authored body retained at ${resolve(bodyFile)}`);
+    selected = { repository, workspace: realpathSync(resolve(cwd)), issue, pullRequest: null, kind: value.kind, head: value.metadata.source_head, recordId: value.metadata.record_id, url: value.url, inputs: value.metadata.inputs, supersedes: value.metadata.supersedes ?? null };
+  } else {
+    const historical = historicalRecordReceipts("ARCHITECT", repository, issue, targetHead, cwd, cache);
+    if (historical.length === 0) fail(`BUILDER lineage for ${repository}#${issue} is unavailable: no applicable pre-build receipt or unambiguous linked ARCHITECT was found; authored body retained at ${resolve(bodyFile)}`);
+    selected = selectCurrentRecordReceipt("ARCHITECT", historical, repository, issue, bodyFile);
+  }
+  const architect = receiptRecordReadback(selected, "ARCHITECT", repository, issue, cwd, cache, bodyFile);
+  const chain = verifyArchitectRecordChain(architect, repository, cwd, cache, issue, bodyFile);
+  return { receipt: selected, architect, chain };
+}
+
+function resolveTrajectoryBuilder(repository, issue, cwd, bodyFile, targetHead, inventory, cache, explicitInputs) {
+  const receipts = scopedRecordReceipts("BUILDER", repository, issue, cwd, inventory);
+  if (receipts.length > 0) {
+    const selected = selectCurrentRecordReceipt("BUILDER", receipts, repository, issue, bodyFile);
+    const builder = receiptRecordReadback(selected, "BUILDER", repository, issue, cwd, cache, bodyFile);
+    const architectUrls = (builder.metadata.inputs ?? []).map((value) => recordReferenceFromUrl(value, repository, cwd, cache, issue)).filter((value) => value?.kind === "ARCHITECT");
+    if (architectUrls.length !== 1) fail(`BUILDER receipt for ${repository}#${issue} must link exactly one ARCHITECT; found ${architectUrls.length}; authored body retained at ${resolve(bodyFile)}`);
+    verifyArchitectRecordChain(architectUrls[0], repository, cwd, cache, issue, bodyFile);
+    return { receipt: selected, builder, url: builder.url };
+  }
+  const historical = historicalRecordReceipts("BUILDER", repository, issue, targetHead, cwd, cache);
+  if (historical.length > 0) {
+    const selected = selectCurrentRecordReceipt("BUILDER", historical, repository, issue, bodyFile);
+    const builder = receiptRecordReadback(selected, "BUILDER", repository, issue, cwd, cache, bodyFile);
+    const architectUrls = (builder.metadata.inputs ?? []).map((value) => recordReferenceFromUrl(value, repository, cwd, cache, issue)).filter((value) => value?.kind === "ARCHITECT");
+    if (architectUrls.length !== 1) fail(`Linked BUILDER has no unique ARCHITECT chain for ${repository}#${issue}; authored body retained at ${resolve(bodyFile)}`);
+    verifyArchitectRecordChain(architectUrls[0], repository, cwd, cache, issue, bodyFile);
+    return { receipt: selected, builder, url: builder.url };
+  }
+  if (Array.isArray(explicitInputs) && explicitInputs.length > 0) {
+    const lookup = { repository, destination: issue, destinationIsPullRequest: false, cwd, cache };
+    const urls = resolveRecordReferences(explicitInputs, inventory, true, "TRAJECTORY.inputs", lookup);
+    const linked = urls.map((value) => recordReferenceFromUrl(value, repository, cwd, cache, issue)).filter((value) => value?.kind === "BUILDER");
+    const unique = [...new Map(linked.map((value) => [value.metadata.record_id, value])).values()];
+    if (unique.length !== 1) fail(`TRAJECTORY lineage for ${repository}#${issue} is ambiguous or missing: expected one explicitly linked BUILDER, found ${unique.length}; authored body retained at ${resolve(bodyFile)}`);
+    const builder = unique[0];
+    const architectUrls = (builder.metadata.inputs ?? []).map((value) => recordReferenceFromUrl(value, repository, cwd, cache, issue)).filter((value) => value?.kind === "ARCHITECT");
+    if (architectUrls.length !== 1) fail(`Linked BUILDER has no unique ARCHITECT chain for ${repository}#${issue}; authored body retained at ${resolve(bodyFile)}`);
+    verifyArchitectRecordChain(architectUrls[0], repository, cwd, cache, issue, bodyFile);
+    return { receipt: undefined, builder, url: builder.url };
+  }
+  fail(`TRAJECTORY lineage for ${repository}#${issue} is unavailable: no published BUILDER receipt was retained; authored body retained at ${resolve(bodyFile)}`);
+}
+
+function lineageInputValues(kind, entry, repository, issue, pullRequest, cwd, inventory, cache, publish, targetHead) {
+  const lookup = { repository, destination: issue ?? pullRequest, destinationIsPullRequest: pullRequest !== undefined, issueContext: entry.issueContext, pullRequestContext: entry.pullRequestContext, cwd, cache };
+  if (!publish || pullRequest !== undefined || !["BUILDER", "TRAJECTORY"].includes(kind)) return resolveRecordReferences(entry.inputs ?? [], inventory, publish, `${kind}.inputs`, lookup);
+  const bodyFile = entry.bodyFile;
+  const values = Array.isArray(entry.inputs) ? entry.inputs : [];
+  if (kind === "BUILDER") {
+    const plan = resolveBuilderPlan(repository, issue, cwd, bodyFile, targetHead, inventory, cache, entry.inputs);
+    const normalized = values.map((value) => replaceLineageSelector(value, "ARCHITECT", plan.receipt));
+    const resolved = resolveRecordReferences(normalized, inventory, true, `${kind}.inputs`, lookup);
+    if (resolved.length > 0 && !resolved.includes(plan.architect.url)) fail(`BUILDER inputs omit the applicable ARCHITECT receipt for ${repository}#${issue}; authored body retained at ${resolve(bodyFile)}`);
+    return resolved.length > 0 ? resolved : [plan.architect.url];
+  }
+  const hasBuilderSelector = values.some((value) => String(value?.existing?.kind ?? "").toUpperCase() === "BUILDER" || typeof value?.record === "string" && inventory.get(value.record)?.kind === "BUILDER");
+  const hasRelevantReceipt = scopedRecordReceipts("BUILDER", repository, issue, cwd, inventory).length > 0 || scopedRecordReceipts("ARCHITECT", repository, issue, cwd, inventory).length > 0;
+  const hasBuildHistory = hasRelevantReceipt || issueHasBuildLineage(repository, issue, cwd, cache);
+  if (values.length === 0 && !hasBuildHistory || values.length > 0 && !hasBuilderSelector && !hasBuildHistory) {
+    const resolved = resolveRecordReferences(values, inventory, true, `${kind}.inputs`, lookup);
+    const linkedKinds = resolved.map((value) => recordReferenceFromUrl(value, repository, cwd, cache)?.kind);
+    if (!linkedKinds.includes("BUILDER") && linkedKinds.includes("ARCHITECT")) fail(`TRAJECTORY for ${repository}#${issue} links a plan without its completed BUILDER receipt; authored body retained at ${resolve(bodyFile)}`);
+    if (!linkedKinds.includes("BUILDER")) return resolved;
+  }
+  const builder = resolveTrajectoryBuilder(repository, issue, cwd, bodyFile, targetHead, inventory, cache, entry.inputs);
+  const normalized = values.map((value) => replaceLineageSelector(value, "BUILDER", builder.receipt));
+  const resolved = resolveRecordReferences(normalized, inventory, true, `${kind}.inputs`, lookup);
+  if (resolved.length > 0 && !resolved.includes(builder.url)) fail(`TRAJECTORY inputs omit the applicable BUILDER receipt for ${repository}#${issue}; authored body retained at ${resolve(bodyFile)}`);
+  return resolved.length > 0 ? resolved : [builder.url];
+}
+
+function replaceLineageSelector(value, kind, receipt) {
+  const requested = value && typeof value === "object" && value.existing && typeof value.existing === "object" ? value.existing : undefined;
+  if (!requested || String(requested.kind ?? "").toUpperCase() !== kind || !receipt) return value;
+  if (requested.recordId !== undefined && requested.recordId !== receipt.recordId || requested.sourceHead !== undefined && requested.sourceHead !== receipt.head || requested.issue !== undefined && Number(requested.issue) !== Number(receipt.issue) || requested.pullRequest !== undefined) fail(`Existing ${kind} selector does not match the retained publication receipt`);
+  return receipt.url;
+}
+
 function resolveSupersedes(value, inventory, publish, lookup) {
   if (value == null) return null;
   return resolveRecordReference(value, inventory, "supersedes", lookup);
@@ -1443,7 +1695,15 @@ function durableRecord(entry, repository, issue, pullRequest, cwd, inventory, ca
   }
   const destinationNumber = issue ?? pullRequest;
   const lookup = { repository, destination: destinationNumber, destinationIsPullRequest: pullRequest !== undefined, issueContext: entry.issueContext, pullRequestContext: entry.pullRequestContext, cwd, cache };
-  const inputs = resolveRecordReferences(entry.inputs ?? [], inventory, publish, `${kind}.inputs`, lookup);
+  let inputs;
+  try {
+    inputs = lineageInputValues(kind, entry, repository, issue, pullRequest, cwd, inventory, cache, publish, head);
+  } catch (error) {
+    if (!publish || !["BUILDER", "TRAJECTORY"].includes(kind)) throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("authored body retained at")) throw error;
+    fail(`${kind} lineage publication failed: ${message}; authored body retained at ${resolve(bodyFile)}`);
+  }
   const supersedes = resolveSupersedes(entry.supersedes, inventory, publish, lookup);
   if (kind === "REVIEW-PANEL") verifyReviewPanelPullRequest(config, repository, pullRequest, head, baseRef, baseSha, mode, cwd);
   const reports = kind === "REVIEW-PANEL" ? reviewerReportsFor(entry, repository, pullRequest, head, baseRef, baseSha, cwd, cache, publish) : [];
@@ -2035,9 +2295,10 @@ function recordBatch(options) {
     const reportFile = artifactPath(cwd, entry.reportFile, defaultReportFile, `${id}-record`);
     writeExclusive(reportFile, record.markdown);
     const publication = publish ? publishDurableRecord({ ...record, bodyFile: reportFile }, cwd, cache) : { reconciliation: "saved", id: null, url: null, recordId: record.recordId };
-    const result = { id, kind: record.kind, issue: record.issue ?? null, pullRequest: record.pullRequest ?? null, head: record.head, reportFile, publication: publish ? "published" : "saved", ...publication };
+    const receipt = publish ? persistRecordReceipt(record, publication, cwd) : undefined;
+    const result = { id, kind: record.kind, issue: record.issue ?? null, pullRequest: record.pullRequest ?? null, head: record.head, reportFile, publication: publish ? "published" : "saved", ...publication, ...(receipt ? { receiptFile: receipt.receiptFile } : {}) };
     results.push(result);
-    inventory.set(id, result);
+    inventory.set(id, { ...result, recordReceipt: receipt?.receipt });
   }
   process.stdout.write(json({ schema: "forgedock.candidate-record-batch/v1", repository, publish, records: results }));
 }
@@ -2051,7 +2312,7 @@ function durableRecordSingle(options) {
   const pullRequest = pullValue === undefined ? undefined : integer(Number(pullValue), "record pull request");
   const cwd = resolve(requiredOption(options, "cwd"));
   const publish = options.flags.has("publish");
-  const entry = { kind: options.values.get("kind"), issue, pullRequest, bodyFile: requiredOption(options, "body-file"), head: options.values.get("head"), baseRef: options.values.get("base-ref"), baseSha: options.values.get("base-sha"), mode: options.values.get("mode"), inputs: options.values.has("inputs-file") ? readJson(requiredOption(options, "inputs-file")) : [], supersedes: options.values.get("supersedes"), round: options.values.has("round") ? Number(options.values.get("round")) : undefined, reviewerReports: options.values.has("reviewers-file") ? readJson(requiredOption(options, "reviewers-file")) : undefined };
+  const entry = { kind: options.values.get("kind"), issue, pullRequest, bodyFile: requiredOption(options, "body-file"), head: options.values.get("head"), baseRef: options.values.get("base-ref"), baseSha: options.values.get("base-sha"), mode: options.values.get("mode"), ...(options.values.has("inputs-file") ? { inputs: readJson(requiredOption(options, "inputs-file")) } : {}), supersedes: options.values.get("supersedes"), round: options.values.has("round") ? Number(options.values.get("round")) : undefined, reviewerReports: options.values.has("reviewers-file") ? readJson(requiredOption(options, "reviewers-file")) : undefined };
   entry.reviewRoot = options.values.get("review-root");
   entry.artifactKey = options.values.get("artifact-key");
   const record = durableRecord(entry, repository, issue, pullRequest, cwd, new Map(), new Map(), publish);
@@ -2059,7 +2320,8 @@ function durableRecordSingle(options) {
   const reportFile = artifactPath(cwd, options.values.get("report-file"), defaultReportFile, `${String(entry.kind).toLowerCase()}-record`);
   writeExclusive(reportFile, record.markdown);
   const publication = publish ? { publication: "published", ...publishDurableRecord({ ...record, bodyFile: reportFile }, cwd, new Map()) } : { publication: "saved", id: null, url: null, reconciliation: "saved", recordId: record.recordId };
-  process.stdout.write(json({ schema: "forgedock.candidate-record/v1", kind: record.kind, repository, issue: issue ?? null, pullRequest: pullRequest ?? null, head: record.head, reportFile, contentSha256: sha256(record.markdown), ...publication }));
+  const receipt = publish ? persistRecordReceipt(record, publication, cwd) : undefined;
+  process.stdout.write(json({ schema: "forgedock.candidate-record/v1", kind: record.kind, repository, issue: issue ?? null, pullRequest: pullRequest ?? null, head: record.head, reportFile, contentSha256: sha256(record.markdown), ...publication, ...(receipt ? { receiptFile: receipt.receiptFile } : {}) }));
 }
 
 function discoverRecords(options) {
@@ -2435,7 +2697,7 @@ async function doctor(options) {
 }
 
 function usage() {
-  process.stdout.write(`ForgeDock candidate helper\n\nCommands:\n  doctor --cwd <repo> --config-dir <isolated-pi-dir>\n  status   (alias for doctor)\n  config --cwd <repo>\n  prepare --issue <N> --cwd <repo>\n  prepare-dispatch --selector <set> --cwd <repo> --out <dir> [--issues-file <json>] [--delivery-mode github|local-replay] [--owner-authority-file <one-line-file>]\n  continue-dispatch --plan <plan.json> --results <continuation-input.json> --out <dir> (generates; does not launch)\n  prepare-review --input <json> --out <dir> (internal helper; use registered forge_prepare_review)\n  record reviewer --repo <org/repo> --pr <N> --head <sha> --base-ref <branch> --base-sha <sha> --role <role> --body-file <file> [--observations-file <json>] [--report-file <file>] [--publish]\n  verify-reviewer --repo <org/repo> --pr <N> --head <sha> --base-ref <branch> --base-sha <sha> --role <role> --report-id <id> --report-file <file> --cwd <repo>\n  record adjudication --input <json> --cwd <canonical-config-root>\n  record --kind <kind> --repo <org/repo> --issue <N>|--pr <N> --body-file <file> --cwd <repo> [--mode standard|staging] [--inputs-file <json>] [--supersedes <url>] [--publish] (REVIEW-PANEL also requires --review-root and --artifact-key)\n  record batch --input <json> [--publish]\n  discover --repo <org/repo> --issue <N>|--pr <N> [--cwd <repo>] [--out <file>]\n  inspect-pr --repo <org/repo> --pr <N> --cwd <repo>\n  label --repo <org/repo> --issue <N> --state <state> [--cwd <repo>]\n  replace --config-dir <dir> --old-source <source> --candidate-source <source>\n  rollback --rollback <directory>\n  digest-tree --root <directory>\n  verify-install --install-root <directory>\n`);
+  process.stdout.write(`ForgeDock candidate helper\n\nCommands:\n  doctor --cwd <repo> --config-dir <isolated-pi-dir>\n  status   (alias for doctor)\n  config --cwd <repo>\n  prepare --issue <N> --cwd <repo>\n  prepare-dispatch --selector <set> --cwd <repo> --out <dir> [--issues-file <json>] [--delivery-mode github|local-replay] [--owner-authority-file <one-line-file>]\n  continue-dispatch --plan <plan.json> --results <continuation-input.json> --out <dir> (generates; does not launch)\n  prepare-review --input <json> --out <dir> (internal helper; use registered forge_prepare_review)\n  record reviewer --repo <org/repo> --pr <N> --head <sha> --base-ref <branch> --base-sha <sha> --role <role> --body-file <file> [--observations-file <json>] [--report-file <file>] [--publish]\n  verify-reviewer --repo <org/repo> --pr <N> --head <sha> --base-ref <branch> --base-sha <sha> --role <role> --report-id <id> --report-file <file> --cwd <repo>\n  record adjudication --input <json> --cwd <canonical-config-root>\n  record --kind <kind> --repo <org/repo> --issue <N>|--pr <N> --body-file <file> --cwd <repo> [--mode standard|staging] [--inputs-file <json>] [--supersedes <url>] [--publish] (REVIEW-PANEL also requires --review-root and --artifact-key; published issue BUILDER/TRAJECTORY inputs resolve from retained record receipts)\n  record batch --input <json> [--publish] (persists read-back-bound publication receipts)\n  discover --repo <org/repo> --issue <N>|--pr <N> [--cwd <repo>] [--out <file>]\n  inspect-pr --repo <org/repo> --pr <N> --cwd <repo>\n  label --repo <org/repo> --issue <N> --state <state> [--cwd <repo>]\n  replace --config-dir <dir> --old-source <source> --candidate-source <source>\n  rollback --rollback <directory>\n  digest-tree --root <directory>\n  verify-install --install-root <directory>\n`);
 }
 
 async function main() {

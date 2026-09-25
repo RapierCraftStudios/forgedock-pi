@@ -34,9 +34,12 @@ and publication helpers; the candidate extension also derives this path from its
 package when normal startup did not inherit it. In normal live work, keep one current owned
 workflow label and publish the distinct issue records (`INVESTIGATOR`, `CLASSIFICATION`,
 `CONTEXT`, `CONTRACT`, `ARCHITECT`, `BUILDER`, `TRAJECTORY`, or `GATED`) through the helper's
-file-backed batch. Link the actual returned GitHub permalinks; never collapse records or use
-local paths as durable links. A publication/label transport failure is a visibility gate, not
-permission to rerun coding or review. For a declared local replay, use the supplied issue-file,
+file-backed batch/single entrypoints. Link actual returned GitHub permalinks between other records; never collapse
+records or use local paths as durable links. Leave published `BUILDER` inputs to the helper's
+retained pre-build receipt, and let `TRAJECTORY` resolve the exact Builder receipt rather than
+copying permalinks. Missing or competing lineage is a publication gate that preserves the authored
+body; never silently publish `Inputs: none`. A publication/label transport failure is a visibility
+gate, not permission to rerun coding or review. For a declared local replay, use the supplied issue-file,
 keep publication false, and prove local commit/review behavior without inventing GitHub writes.
 In a local orchestration replay,
 fetch and fast-forward the clean native branch from `origin/<integration>` before editing, and

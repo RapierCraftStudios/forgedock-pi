@@ -80,8 +80,15 @@ Mocks and generated JSON can supplement proof, never replace the behavior claime
 Before review, reconcile every original obligation against code, tests, and limitations. Do
 not knowingly send an incomplete criterion to review as a residual risk. Commit and prepare
 the PR with file-backed bodies. After the verified commit, publish one `BUILDER` issue record
-with the actual head, changed files, tests, deviations, and remaining limitations. Do not merge
-unless the exact configured authority was granted.
+with the actual head, changed files, tests, deviations, and remaining limitations. For published
+work-on records, omit `--inputs-file` for `BUILDER` and `TRAJECTORY` unless adding a specific
+additional reference: the helper carries forward exact read-back publication receipts from the
+pre-build batch, links the applicable unsuperseded `ARCHITECT` into `BUILDER`, then links that
+exact `BUILDER` into the terminal record. It verifies the linked `CONTRACT` and `CONTEXT` chain,
+uses explicit supersession rather than comment recency when attempts compete, and blocks missing
+or ambiguous lineage while preserving authored bodies. Local `publish:false` replay still saves
+local records without fabricated HTTPS links. Do not transcribe permalinks returned by an earlier
+helper call. Do not merge unless the exact configured authority was granted.
 
 ## Independent review and decision
 
@@ -136,8 +143,9 @@ verifies read-back. A missing label or failed update is an explicit visibility/a
 
 At terminal reconciliation, publish exactly one `TRAJECTORY` issue record for a completed,
 invalid, or decomposed outcome, or one concise `GATED` issue record for an unmet prerequisite or
-authorization. Link prior records with `inputs`/`existing` references; do not fabricate absent
-phases. A gated run may omit a trajectory when the gate is already the complete terminal record.
+authorization. Let the helper resolve the exact Builder receipt for a completed build; do not
+copy its permalink into a new inputs file. Link other prior records when relevant and do not
+fabricate absent phases. A gated run may omit a trajectory when the gate is already the complete terminal record.
 Publication failure preserves the local body and code result but is not a reconciled workflow
 success and must not trigger coding or review again.
 
