@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -144,14 +144,11 @@ function extensionEvents() {
 
 function modelArtifacts(prepared: any) {
   const content = prepared.content[0].text as string;
-  const handoff = content.indexOf(String.fromCharCode(10) + String.fromCharCode(10) + "PR policy evidence saved at ");
-  assert.ok(handoff > 0);
-  const preparation = JSON.parse(content.slice(0, handoff));
-  const policyPath = content.slice(handoff).split("PR policy evidence saved at ")[1]?.split(". The existing")[0];
-  assert.ok(policyPath);
-  const reviewRoot = preparation.out as string;
+  const reviewRoot = prepared.details.reviewRoot as string;
+  const policyPath = prepared.details.policyPath as string;
+  const policySummaryPath = prepared.details.policySummaryPath as string;
   const review = JSON.parse(readFileSync(join(reviewRoot, "review.json"), "utf8"));
-  return { content, reviewRoot, policyPath, artifactKey: review.artifactKey, adjudicationPath: join(reviewRoot, "adjudication.json"), review };
+  return { content, reviewRoot, policyPath, policySummaryPath, artifactKey: review.artifactKey, adjudicationPath: join(reviewRoot, "adjudication.json"), review };
 }
 
 function fakeExecutor(env: NodeJS.ProcessEnv, calls: Array<{ name: string; args: string[] }>) {
@@ -236,8 +233,92 @@ async function stagedContext(f: Awaited<ReturnType<typeof fixture>>, publish = f
   const artifacts = modelArtifacts(prepared);
   await reviewerReport(artifacts.reviewRoot, artifacts.review);
   await writeReviewerExecutionReceipt(artifacts.reviewRoot, artifacts.review);
-  await writeFile(artifacts.adjudicationPath, JSON.stringify({ schema: "forgedock.candidate-adjudication/v1", artifactKey: artifacts.artifactKey, repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base, mode: "staging", gate: "PASS", roles: ["correctness"], reports: [{ role: "correctness", reportId: artifacts.review.roleArtifactKeys.correctness }], decisions: [], verdict: "APPROVE", panelUrl: publish ? "https://github.com/example/product/pull/7#issuecomment-99" : null, trackingPublication: "complete", gateBody: "FORGE:STAGING_GATE:PASS\\n\\n## REVIEW-PANEL\\nPrepared parent decision." }));
+  const panelUrl = publish ? "https://github.com/example/product/pull/7#issuecomment-99" : null;
+  const panelLink = panelUrl ?? "pending publication";
+  const gateBody = `FORGE:STAGING_GATE:PASS
+
+## REVIEW-PANEL
+Prepared parent decision.
+
+## Gate
+
+**Parent decision permalink**: ${panelLink}
+**Gate**: PASS
+`;
+  await writeFile(artifacts.adjudicationPath, JSON.stringify({ schema: "forgedock.candidate-adjudication/v1", artifactKey: artifacts.artifactKey, repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base, mode: "staging", gate: "PASS", roles: ["correctness"], reports: [{ role: "correctness", reportId: artifacts.review.roleArtifactKeys.correctness }], decisions: [], verdict: "APPROVE", panelUrl, gateBodyPanelUrl: panelUrl, trackingPublication: "complete", gateBody }));
   return { calls, tools, artifacts };
+}
+
+async function exerciseDelayedSupervisorNotifications(root: string, sessionId: string, completedNativeRunId: string) {
+  const priorTempRoot = process.env.PI_SUBAGENTS_TEMP_ROOT;
+  const supervisorRoot = join(root, "native-supervisor-temp");
+  process.env.PI_SUBAGENTS_TEMP_ROOT = supervisorRoot;
+  let channel: any;
+  try {
+    const nativeModuleUrl = new URL("../../node_modules/pi-subagents/src/intercom/native-supervisor-channel.ts", import.meta.url).href;
+    const native = await import(nativeModuleUrl) as any;
+    const ctx = { cwd: root, hasUI: false, sessionManager: { getSessionId: () => sessionId, getSessionFile: () => null, getEntries: () => [] } };
+    const foregroundControls = new Map();
+    const state = { baseCwd: root, currentSessionId: sessionId, asyncJobs: new Map(), foregroundControls, cleanupTimers: new Map(), lastForegroundControlId: null, lastUiContext: ctx, poller: null, completionSeen: new Map(), watcher: null, watcherRestartTimer: null, resultFileCoalescer: { schedule: () => false, clear: () => {} } };
+    const messages: Array<{ message: any; options?: { triggerTurn?: boolean } }> = [];
+    const events: Array<{ name: string; payload: any }> = [];
+    const parentTools = new Map<string, any>();
+    const fakePi = {
+      getAllTools: () => [],
+      registerTool(definition: any) { parentTools.set(definition.name, definition); },
+      sendMessage(message: any, options?: { triggerTurn?: boolean }) { messages.push({ message, options }); },
+      getSessionName: () => "disposable-review-parent",
+      events: { emit(name: string, payload: any) { events.push({ name, payload }); } },
+    };
+    const channelInstance = native.createNativeSupervisorChannel(fakePi as never, state as never, { platform: "linux" });
+    channel = channelInstance;
+    const agent = "forgedock-reviewer";
+    const childIndex = 0;
+    const writeRequest = (runId: string, reason: "progress_update" | "need_decision", message: string, expectsReply: boolean) => {
+      const id = randomUUID();
+      const createdAt = Date.now();
+      const channelDir = native.resolveSupervisorChannelDir(runId, agent, childIndex);
+      native.ensureSupervisorChannelDir(channelDir);
+      writeFileSync(join(channelDir, "requests", `${id}.json`), JSON.stringify({ type: "subagent.supervisor.request", id, createdAt, reason, message, expectsReply, orchestratorTarget: "disposable-review-parent", orchestratorSessionId: sessionId, runId, agent, childIndex }));
+      return { id, createdAt, channelDir };
+    };
+    const delayedProgress = writeRequest(completedNativeRunId, "progress_update", "UPDATE: An unexpected acceptance detail changes the review plan; verify the affected consumer before parent adjudication.", false);
+    channel.start();
+    const waitForMessages = async (count: number) => {
+      const deadline = Date.now() + 1500;
+      while (messages.length < count && Date.now() < deadline) await new Promise((resolvePromise) => setTimeout(resolvePromise, 10));
+      assert.ok(messages.length >= count, `native supervisor channel did not deliver message ${count}`);
+    };
+    await waitForMessages(1);
+    assert.equal(messages[0]!.message.details.reason, "progress_update");
+    assert.equal(messages[0]!.message.details.expectsReply, false);
+    assert.equal(messages[0]!.options?.triggerTurn, true);
+    assert.equal(channel.pending.size, 0);
+
+    const actionableRunId = `active-${randomUUID()}`;
+    foregroundControls.set(actionableRunId, {});
+    const actionable = writeRequest(actionableRunId, "need_decision", "The frozen acceptance conflicts with a concrete source boundary; may I report the blocking conflict?", true);
+    channel.activateTransport();
+    await waitForMessages(2);
+    assert.equal(messages[1]!.message.details.reason, "need_decision");
+    assert.equal(messages[1]!.message.details.expectsReply, true);
+    assert.equal(messages[1]!.options?.triggerTurn, true);
+    assert.equal(channel.pending.size, 1);
+    assert.ok(events.some((event) => event.payload?.requestId === actionable.id));
+    const supervisorTool = parentTools.get("subagent_supervisor");
+    assert.ok(supervisorTool);
+    const reply = await supervisorTool.execute("reply", { action: "reply", replyTo: actionable.id, message: "Yes; preserve the exact acceptance and cite the source conflict." });
+    assert.match(reply.content[0].text, /Replied to supervisor request/);
+    assert.equal(channel.pending.size, 0);
+    const replyFile = join(actionable.channelDir, "replies", `${actionable.id}.json`);
+    assert.equal(JSON.parse(readFileSync(replyFile, "utf8")).message, "Yes; preserve the exact acceptance and cite the source conflict.");
+    return { delayedProgressAt: delayedProgress.createdAt, actionableRequestReplied: true, progressTurnTriggered: messages[0]!.options?.triggerTurn === true, actionableTurnTriggered: messages[1]!.options?.triggerTurn === true };
+  } finally {
+    channel?.dispose();
+    if (priorTempRoot === undefined) delete process.env.PI_SUBAGENTS_TEMP_ROOT;
+    else process.env.PI_SUBAGENTS_TEMP_ROOT = priorTempRoot;
+    await rm(supervisorRoot, { recursive: true, force: true });
+  }
 }
 
 test("review preparation resolves one clean exact-head worktree without replacing config root", async () => {
@@ -275,7 +356,7 @@ test("review preparation resolves one clean exact-head worktree without replacin
   }
 });
 
-test("prepared staging review separates task data from reviewer execution", async () => {
+test("prepared staging review records multi-role completion and delayed supervisor events through hooks", async () => {
   const f = await fixture();
   let reviewRoot: string | undefined;
   let secondReviewRoot: string | undefined;
@@ -306,6 +387,8 @@ test("prepared staging review separates task data from reviewer execution", asyn
     assert.match(workflow, /delegate/);
     assert.match(workflow, /nativeRunId/);
     assert.match(workflow, /publicationState: "unverified"/);
+    assert.match(workflow, /Do not send routine contact_supervisor progress_update messages/);
+    assert.match(workflow, /material unexpected discovery that changes the review plan/);
     assert.match(workflow, /recoveryPath/);
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as any;
     const runProjection = new AsyncFunction("runs", workflow);
@@ -378,6 +461,8 @@ test("prepared staging review separates task data from reviewer execution", asyn
     handlers.get("tool_result")!({ toolName: "subagent", toolCallId: "staging-panel-call", input: nativeRequest, isError: false, details: { mode: "workflow", runId: "staging-workflow-run-33800", workflow: { value: projected } } });
     const executionReceipt = JSON.parse(await readFile(join(reviewRoot, "reviewer-execution.json"), "utf8"));
     assert.equal(executionReceipt.artifactKey, artifacts.artifactKey);
+    assert.deepEqual(executionReceipt.roleResults.map((row: any) => row.role), review.roles);
+    assert.equal(executionReceipt.roleResults.length, 3);
     assert.equal(executionReceipt.roleResults[1].nativeRunId, "native-security-timeout");
     assert.equal(isStagingMutationBlocked("subagent", nativeRequest), true);
     assert.equal(handlers.get("tool_call")!({ toolName: "subagent", input: nativeRequest }).block, true);
@@ -385,6 +470,13 @@ test("prepared staging review separates task data from reviewer execution", asyn
     const reprepareInput = { repository: review.repository, pullRequest: review.pullRequest, head: review.head, baseRef: review.baseRef, baseSha: review.baseSha, sourceRoot: review.sourceRoot, configRoot: review.configRoot, roles: review.roles, publish: review.publish };
     assert.equal(handlers.get("tool_call")!({ toolName: "forge_prepare_review", input: reprepareInput }).block, true);
     handlers.get("agent_settled")!({});
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 5));
+    const delayedSupervisor = await exerciseDelayedSupervisorNotifications(f.root, `parent-${randomUUID()}`, executionReceipt.roleResults[0].nativeRunId);
+    assert.ok(delayedSupervisor.delayedProgressAt > Date.parse(executionReceipt.completedAt));
+    assert.equal(delayedSupervisor.progressTurnTriggered, true);
+    assert.equal(delayedSupervisor.actionableTurnTriggered, true);
+    assert.equal(delayedSupervisor.actionableRequestReplied, true);
+    assert.equal(handlers.get("tool_call")!({ toolName: "subagent", input: nativeRequest }).block, true);
     handlers.get("input")!({ source: "user", text: "/review-pr 33800" });
     assert.equal(handlers.get("tool_call")!({ toolName: "forge_prepare_review", input: reprepareInput }).block, true);
     assert.equal(handlers.get("tool_call")!({ toolName: "forge_prepare_review", input: { ...reprepareInput, repository: "Example/Product" } }).block, true);
@@ -1072,7 +1164,16 @@ test("published staging gates supersede the latest same-head gate", async () => 
     await writeFile(f.state, JSON.stringify(state));
     const ctx = await stagedContext(f, true);
     const adjudicationPath = join(ctx.artifacts.reviewRoot, "adjudication-gate.json");
-    const adjudicationArtifact = { schema: "forgedock.candidate-adjudication/v1", artifactKey: ctx.artifacts.artifactKey, repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base, mode: "staging", gate: "FAIL", roles: ["correctness"], reports: [{ role: "correctness", reportId: ctx.artifacts.review.roleArtifactKeys.correctness }], decisions: [], verdict: "GATED", panelUrl: "https://github.com/example/product/pull/7#issuecomment-99", trackingPublication: "complete", gateBody: "FORGE:STAGING_GATE:FAIL\n\n## REVIEW-PANEL\nA refreshed parent decision remains blocked." };
+    const adjudicationPanel = "https://github.com/example/product/pull/7#issuecomment-99";
+    const adjudicationArtifact = { schema: "forgedock.candidate-adjudication/v1", artifactKey: ctx.artifacts.artifactKey, repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base, mode: "staging", gate: "FAIL", roles: ["correctness"], reports: [{ role: "correctness", reportId: ctx.artifacts.review.roleArtifactKeys.correctness }], decisions: [], verdict: "GATED", panelUrl: adjudicationPanel, gateBodyPanelUrl: adjudicationPanel, trackingPublication: "complete", gateBody: `FORGE:STAGING_GATE:FAIL
+
+## REVIEW-PANEL
+A refreshed parent decision remains blocked.
+
+## Gate
+
+**Parent decision permalink**: ${adjudicationPanel}
+**Gate**: FAIL` };
     const gateTool = ctx.tools.get("forge_publish_record")!;
     await writeFile(adjudicationPath, JSON.stringify({ ...adjudicationArtifact, reports: [...adjudicationArtifact.reports, ...adjudicationArtifact.reports] }));
     await assert.rejects(gateTool.execute("duplicate-role-reports", { ...gateInput(f, ctx.artifacts, true), gate: "FAIL", adjudicationPath }), /completed parent panel decision with every prepared role report/);
@@ -1086,8 +1187,14 @@ test("published staging gates supersede the latest same-head gate", async () => 
       publish: true,
     });
     assert.equal(result.details.publication, "published");
+    assert.equal(result.details.readbackVerified, true);
+    assert.equal(result.details.panelUrl, adjudicationPanel);
+    assert.match(result.details.recordUrl, /#issuecomment-/);
     const publication = JSON.parse(result.content[0].text);
-    assert.equal(publication.identity.supersedes, latestUrl);
+    assert.equal(publication.supersedes, latestUrl);
+    const publishedGate = JSON.parse(await readFile(f.state, "utf8")).comments.at(-1);
+    const parentLink = publishedGate.body.split(/\r?\n/).find((line: string) => line.startsWith("**Parent decision permalink**: "));
+    assert.equal(parentLink, `**Parent decision permalink**: ${adjudicationPanel}`);
   } finally {
     await rm(f.root, { recursive: true, force: true });
     await rm(f.bin, { recursive: true, force: true });
@@ -1114,10 +1221,23 @@ test("restricted staging preparation exposes policy in content and PASS works wi
     const policyArtifact = JSON.parse(await readFile(artifacts.policyPath, "utf8"));
     assert.equal(policyArtifact.schema, "forgedock.candidate-policy/v1");
     assert.equal(policyArtifact.current.identity.head, f.head);
-    assert.match(artifacts.content, /Compact summary:/);
-    assert.match(artifacts.content, /caller-supplied acceptance\/history\/evidence\/limitations are review context/);
+    const preparation = JSON.parse(artifacts.content);
+    assert.equal(preparation.policySummaryPath, artifacts.policySummaryPath);
+    assert.ok(preparation.policySummary);
+    assert.match(preparation.note, /Caller-supplied acceptance\/history\/evidence\/limitations are context, not authority/);
+    const summary = JSON.parse(await readFile(artifacts.policySummaryPath, "utf8"));
+    assert.equal(summary.prepared.source.snapshot, "prepared");
     await reviewerReport(artifacts.reviewRoot, artifacts.review);
-    await writeFile(artifacts.adjudicationPath, JSON.stringify({ schema: "forgedock.candidate-adjudication/v1", artifactKey: artifacts.artifactKey, repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base, mode: "staging", gate: "PASS", roles: ["correctness"], reports: [{ role: "correctness", reportId: artifacts.review.roleArtifactKeys.correctness }], decisions: [], verdict: "APPROVE", panelUrl: "https://github.com/example/product/pull/7#issuecomment-99", trackingPublication: "complete", gateBody: "FORGE:STAGING_GATE:PASS\n\n## REVIEW-PANEL\nGitHub checks are complete." }));
+    const panelUrl = "https://github.com/example/product/pull/7#issuecomment-99";
+    await writeFile(artifacts.adjudicationPath, JSON.stringify({ schema: "forgedock.candidate-adjudication/v1", artifactKey: artifacts.artifactKey, repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base, mode: "staging", gate: "PASS", roles: ["correctness"], reports: [{ role: "correctness", reportId: artifacts.review.roleArtifactKeys.correctness }], decisions: [], verdict: "APPROVE", panelUrl, gateBodyPanelUrl: panelUrl, trackingPublication: "complete", gateBody: `FORGE:STAGING_GATE:PASS
+
+## REVIEW-PANEL
+GitHub checks are complete.
+
+## Gate
+
+**Parent decision permalink**: ${panelUrl}
+**Gate**: PASS` }));
     const result = await publish.execute("publish", {
       repository: "example/product", pullRequest: 7, kind: "STAGING_GATE", head: f.head, baseRef: "main", baseSha: f.base, gate: "PASS", checks: [],
       reviewRoot: artifacts.reviewRoot, artifactKey: artifacts.artifactKey, adjudicationPath: artifacts.adjudicationPath, body: "placeholder body.", publish: true,
@@ -1308,7 +1428,14 @@ test("restricted PASS rejects missing or failed GitHub requirements", async () =
     const prepared = await prepare.execute("prepare", params);
     const artifacts = modelArtifacts(prepared);
     await reviewerReport(artifacts.reviewRoot, artifacts.review);
-    await writeFile(artifacts.adjudicationPath, JSON.stringify({ schema: "forgedock.candidate-adjudication/v1", artifactKey: artifacts.artifactKey, repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base, mode: "staging", gate: "PASS", roles: ["correctness"], reports: [{ role: "correctness", reportId: artifacts.review.roleArtifactKeys.correctness }], decisions: [], verdict: "APPROVE", panelUrl: null, trackingPublication: "complete", gateBody: "FORGE:STAGING_GATE:PASS\n\n## REVIEW-PANEL\nEvidence." }));
+    await writeFile(artifacts.adjudicationPath, JSON.stringify({ schema: "forgedock.candidate-adjudication/v1", artifactKey: artifacts.artifactKey, repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base, mode: "staging", gate: "PASS", roles: ["correctness"], reports: [{ role: "correctness", reportId: artifacts.review.roleArtifactKeys.correctness }], decisions: [], verdict: "APPROVE", panelUrl: null, gateBodyPanelUrl: null, trackingPublication: "complete", gateBody: `FORGE:STAGING_GATE:PASS
+
+## REVIEW-PANEL
+Evidence.
+
+## Gate
+
+**Parent decision permalink**: pending publication` }));
     const base = { repository: "example/product", pullRequest: 7, kind: "STAGING_GATE", head: f.head, baseRef: "main", baseSha: f.base, gate: "PASS", checks: [], reviewRoot: artifacts.reviewRoot, artifactKey: artifacts.artifactKey, adjudicationPath: artifacts.adjudicationPath, body: "placeholder body.", publish: false };
     const unknownState = JSON.parse(await readFile(f.state, "utf8"));
     unknownState.rulesetsError = "HTTP 403 Resource not accessible";

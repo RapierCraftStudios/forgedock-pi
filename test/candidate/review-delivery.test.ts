@@ -117,11 +117,11 @@ async function preparedRoot(): Promise<{ root: string; review: Record<string, an
   return { root, review };
 }
 
-function registry(root: string, options: { failRecovery?: boolean; publisherGate?: { started: () => void; wait: Promise<void> } } = {}) {
+function registry(root: string, options: { failRecovery?: boolean; publisherGate?: { started: () => void; wait: Promise<void> }; publishedRoles?: string[] } = {}) {
   const tools = new Map<string, any>();
   const calls: Array<{ name: string; args: string[] }> = [];
   const records: string[] = [];
-  const publishedRoles = new Set(["correctness", "security"]);
+  const publishedRoles = new Set(options.publishedRoles ?? ["correctness", "security"]);
   const policy = {
     schema: "forgedock.candidate-pr-policy/v1",
     repository,
@@ -185,18 +185,19 @@ function registry(root: string, options: { failRecovery?: boolean; publisherGate
           reports: roles.map((role) => ({ role, reportId: prepared.roleArtifactKeys[role] })),
           decisions: input.decisions,
           panelUrl: `https://github.com/${repository}/pull/${pullRequest}#issuecomment-99`,
+          gateBodyPanelUrl: `https://github.com/${repository}/pull/${pullRequest}#issuecomment-99`,
           trackingPublication: "complete",
-          gateBody: "## REVIEW-PANEL\nParent accepted the completed panel.",
+          gateBody: `## REVIEW-PANEL\nParent accepted the completed panel.\n\n## Gate\n\n**Parent decision permalink**: https://github.com/${repository}/pull/${pullRequest}#issuecomment-99`,
         };
         await writeFile(decisionPath, `${JSON.stringify(artifact, null, 2)}\n`);
-        return { code: 0, stdout: JSON.stringify({ publication: "published", decisionPath, panelUrl: artifact.panelUrl }), stderr: "" };
+        return { code: 0, stdout: JSON.stringify({ schema: "forgedock.candidate-adjudication-result/v1", publication: "published", readbackVerified: true, decisionPath, panelUrl: artifact.panelUrl, gateBodyPanelUrl: artifact.gateBodyPanelUrl }), stderr: "" };
       }
       if (args.includes("--kind") && (args[args.indexOf("--kind") + 1] === "GATED" || args[args.indexOf("--kind") + 1] === "STAGING_GATE")) {
         const bodyPath = args[args.indexOf("--body-file") + 1]!;
         records.push(await readFile(bodyPath, "utf8"));
         const reportPath = args[args.indexOf("--report-file") + 1]!;
         await writeFile(reportPath, "controlled durable record\n");
-        return { code: 0, stdout: JSON.stringify({ publication: "published", id: 88, url: `https://github.com/${repository}/pull/${pullRequest}#issuecomment-88` }), stderr: "" };
+        return { code: 0, stdout: JSON.stringify({ publication: "published", kind: "STAGING_GATE", repository, pullRequest, head, baseRef, baseSha, gate: "PASS", id: 88, url: `https://github.com/${repository}/pull/${pullRequest}#issuecomment-88` }), stderr: "" };
       }
       return { code: 0, stdout: "{}", stderr: "" };
     },
@@ -409,9 +410,30 @@ test("recover one exact completed reviewer, preserve prior reports, then adjudic
       publish: true,
     });
     assert.equal(gate.details.publication, "published");
+    assert.equal(gate.details.readbackVerified, true);
+    assert.equal(gate.details.panelUrl, panel.details.panelUrl);
     const gateCall = calls.find((call) => call.args.includes("STAGING_GATE"));
     assert.ok(gateCall);
     assert.equal(gateCall.args[gateCall.args.indexOf("--gate") + 1], "PASS");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("already-published multi-role reports go straight to adjudication without recovery republishes", async () => {
+  const { root, review } = await preparedRoot();
+  const { tools, calls } = registry(root, { publishedRoles: roles });
+  try {
+    await writeReviewerEvidence(root, review, "specialist");
+    await writeReviewerExecutionReceipt(root, review);
+    const result = await tools.get("forge_publish_adjudication").execute("adjudicate-completed-reports", adjudicationParams(root));
+    assert.equal(result.details.publication, "published");
+    assert.equal(result.details.readbackVerified, true);
+    assert.ok(result.details.panelUrl);
+    assert.equal(calls.filter((call) => call.args.includes("verify-reviewer")).length, roles.length);
+    assert.equal(calls.filter((call) => call.args[1] === "record" && call.args[2] === "reviewer" && call.args.includes("--publish")).length, 0);
+    assert.equal(calls.filter((call) => call.args.includes("adjudication") && call.args.includes("--input")).length, 1);
+    assert.equal((await readFile(join(root, "reviewer-execution.json"), "utf8")).length > 0, true);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

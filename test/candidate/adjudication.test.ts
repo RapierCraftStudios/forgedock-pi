@@ -6,6 +6,8 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
 
+import registerCandidateTools from "../../candidate/tools.ts";
+
 const execFileAsync = promisify(execFile);
 const helper = resolve("bin/forgedock-candidate.mjs");
 
@@ -34,6 +36,12 @@ if (endpoint.includes("/issues/7/comments")) {
 }
 if (endpoint.includes("/issues/comments/")) {
   const id = Number(endpoint.split("/").at(-1));
+  if ((state.commentReadFailures ?? 0) > 0) {
+    state.commentReadFailures -= 1;
+    writeFileSync(statePath, JSON.stringify(state));
+    process.stderr.write("net/http: TLS handshake timeout");
+    process.exit(1);
+  }
   const comment = (state.comments ?? []).find((entry) => entry.id === id);
   if (!comment) process.exit(1);
   output(comment);
@@ -299,6 +307,85 @@ test("direct adjudication rejects noncanonical local report line endings", async
   }
 });
 
+test("transient provisional-panel readback retries once and gate binds the final panel permalink", async () => {
+  const f = await fixture(true, true);
+  try {
+    const state = JSON.parse(await readFile(f.statePath, "utf8"));
+    state.commentReadFailures = 1;
+    await writeFile(f.statePath, JSON.stringify(state));
+    const inputPath = join(f.reviewRoot, "adjudication-readback-retry.json");
+    const input = inputFor(f, true, false);
+    input.verdict = "GATED";
+    input.gate = "FAIL";
+    input.decisions[0]!.disposition = "EVIDENCE/AUTHORITY PREREQUISITE";
+    input.decisions[0]!.proofSource = "acceptance:fixture#exact-head-proof";
+    input.decisions[0]!.blocksCurrentStage = true;
+    input.decisions[0]!.tracking = { status: "none" };
+    await writeFile(inputPath, JSON.stringify(input));
+
+    const commandArgs = [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root];
+    const env = { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath };
+    const result = JSON.parse((await execFileAsync("node", commandArgs, { env })).stdout);
+    assert.equal(result.publication, "published");
+    assert.equal(result.readbackVerified, true);
+    assert.equal(result.gate, "FAIL");
+    assert.equal(result.verdict, "GATED");
+    assert.notEqual(result.panelUrl, result.provisionalPanelUrl);
+    assert.equal(result.supersededPanelUrl, result.provisionalPanelUrl);
+    assert.equal(result.gateBodyPanelUrl, result.panelUrl);
+
+    const artifact = JSON.parse(await readFile(result.decisionPath, "utf8"));
+    const gateLink = artifact.gateBody.split(/\r?\n/).find((line: string) => line.startsWith("**Parent decision permalink**: "));
+    assert.equal(gateLink, `**Parent decision permalink**: ${result.panelUrl}`);
+    assert.notEqual(gateLink, `**Parent decision permalink**: ${result.provisionalPanelUrl}`);
+    assert.equal(artifact.panelUrl, result.panelUrl);
+    assert.equal(artifact.gateBodyPanelUrl, result.panelUrl);
+
+    const after = JSON.parse(await readFile(f.statePath, "utf8"));
+    const provisionalGets = after.calls.filter((call: string[]) => call.includes(`repos/example/product/issues/comments/${Number(result.provisionalPanelUrl.split("issuecomment-").at(-1))}`));
+    assert.equal(provisionalGets.length, 2, "one transient GET and one bounded retry, with no duplicate POST");
+    assert.equal(after.comments.filter((comment: any) => comment.body.includes("FORGE:REVIEW-PANEL")).length, 2);
+    assert.equal(after.calls.filter((call: string[]) => call.includes("POST") && call.some((arg) => arg.includes("/issues/7/comments"))).length, 2);
+    assert.equal(after.comments.filter((comment: any) => comment.body.includes("FORGE:STAGING_GATE")).length, 0);
+
+    const retry = JSON.parse((await execFileAsync("node", commandArgs, { env })).stdout);
+    const afterRetry = JSON.parse(await readFile(f.statePath, "utf8"));
+    assert.equal(retry.panelUrl, result.panelUrl);
+    assert.equal(afterRetry.comments.filter((comment: any) => comment.body.includes("FORGE:REVIEW-PANEL")).length, 2);
+
+    const currentPolicy = { schema: "forgedock.candidate-pr-policy/v1", repository: "example/product", pullRequest: 7, identity: { head: f.head, baseRef: f.baseRef, baseSha: f.base }, configuration: { integrationBranch: "integration", protectedBranch: "main", verificationCommands: {} }, policy: { requirements: { applicability: "confirmed-none", requiredNames: [], missingRequiredNames: [], policySources: { evaluatedChecks: "available", currentCheckRuns: "available", branchRules: "available", branchProtection: "available", rulesets: "available" } }, evaluatedRequiredChecks: { status: "available", exitCode: 0, data: [] }, commitCheckRuns: { status: "available", data: [] } } };
+    await writeFile(join(f.reviewRoot, "policy.json"), JSON.stringify({ schema: "forgedock.candidate-policy/v1", artifactKey: "attempt-1", repository: "example/product", pullRequest: 7, head: f.head, baseRef: f.baseRef, baseSha: f.base, prepared: currentPolicy, current: currentPolicy, refreshedAt: null }));
+    const registeredTools = new Map<string, { execute: (id: string, params: unknown) => Promise<any> }>();
+    const fakePi = {
+      registerTool(definition: { name: string; execute: (id: string, params: unknown) => Promise<any> }) { registeredTools.set(definition.name, definition); },
+      async exec(name: string, args: string[] = [], options: { cwd?: string; timeout?: number } = {}) {
+        if (args.includes("inspect-pr")) return { code: 0, stdout: JSON.stringify(currentPolicy), stderr: "", killed: false };
+        try {
+          const output = await execFileAsync(name, args, { cwd: options.cwd ?? f.root, env, timeout: options.timeout });
+          return { code: 0, stdout: output.stdout, stderr: output.stderr, killed: false };
+        } catch (error: any) {
+          return { code: Number(error.code ?? 1), stdout: String(error.stdout ?? ""), stderr: String(error.stderr ?? error.message ?? ""), killed: false };
+        }
+      },
+    };
+    registerCandidateTools(fakePi as never);
+    const gateResult = await registeredTools.get("forge_publish_record")!.execute("gate-after-readback-retry", { repository: "example/product", pullRequest: 7, kind: "STAGING_GATE", head: f.head, baseRef: f.baseRef, baseSha: f.base, gate: "FAIL", reviewRoot: f.reviewRoot, artifactKey: "attempt-1", adjudicationPath: result.decisionPath, publish: true });
+    assert.equal(gateResult.details.publication, "published");
+    assert.equal(gateResult.details.readbackVerified, true);
+    assert.equal(gateResult.details.panelUrl, result.panelUrl);
+    assert.match(gateResult.details.recordUrl, /#issuecomment-/);
+    const finalState = JSON.parse(await readFile(f.statePath, "utf8"));
+    const gateComment = finalState.comments.at(-1);
+    const finalParentLink = gateComment.body.split(/\r?\n/).find((line: string) => line.startsWith("**Parent decision permalink**: "));
+    assert.equal(finalParentLink, `**Parent decision permalink**: ${result.panelUrl}`);
+    assert.equal(finalState.comments.filter((comment: any) => comment.body.includes("FORGE:STAGING_GATE:")).length, 1);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.reviewRoot, { recursive: true, force: true });
+  }
+});
+
 test("parent adjudication deduplicates duplicate observations and preserves skipped semantics", async () => {
   const f = await fixture(false);
   try {
@@ -307,6 +394,9 @@ test("parent adjudication deduplicates duplicate observations and preserves skip
     await writeFile(inputPath, JSON.stringify(input));
     const result = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
     assert.equal(result.publication, "saved");
+    assert.equal(result.schema, "forgedock.candidate-adjudication-result/v1");
+    assert.equal(result.readbackVerified, false);
+    assert.equal(Object.hasOwn(result, "gateBody"), false);
     assert.equal(result.trackingPublication, "pending");
     const artifact = JSON.parse(await readFile(result.decisionPath, "utf8"));
     assert.deepEqual(artifact.decisions[0].sourceObservationIds, ["correctness:F1", "security:F1"]);
@@ -442,7 +532,8 @@ test("historical follow-ups render verified links or pending drafts", async () =
     input.historicalDecisions = [{ id: "prior-follow-up", sourceReference: "https://github.com/example/product/pull/7#issuecomment-prior", disposition: "NON-BLOCKING FOLLOW-UP", resolution: "confirmed", summary: "Historical obligation remains useful", rationale: "The parent retains the actionable follow-up without blocking this stage.", evidence: ["The original report remains applicable."], stage: "later validation", blocksCurrentStage: false, tracking: { status: "existing", issueNumber: 33781, issueUrl: "https://github.com/example/product/issues/33781" } }];
     await writeFile(inputPath, JSON.stringify(input));
     const result = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", existingFixture.root], { env: { ...process.env, PATH: `${existingFixture.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: existingFixture.statePath } })).stdout);
-    assert.match(result.gateBody, /\[#33781\]\(https:\/\/github.com\/example\/product\/issues\/33781\)/);
+    const existingArtifact = JSON.parse(await readFile(result.decisionPath, "utf8"));
+    assert.match(existingArtifact.gateBody, /\[#33781\]\(https:\/\/github.com\/example\/product\/issues\/33781\)/);
   } finally {
     await rm(existingFixture.root, { recursive: true, force: true });
     await rm(existingFixture.bin, { recursive: true, force: true });
@@ -460,7 +551,8 @@ test("historical follow-ups render verified links or pending drafts", async () =
     input.historicalDecisions = [{ id: "prior-pending", sourceReference: "https://github.com/example/product/pull/7#issuecomment-prior", disposition: "NON-BLOCKING FOLLOW-UP", resolution: "confirmed", summary: "Historical work awaits permission", rationale: "The draft is actionable but issue publication is not authorized.", evidence: ["The original report remains applicable."], stage: "later validation", blocksCurrentStage: false, tracking: { status: "pending", draft: pendingDraft } }];
     await writeFile(inputPath, JSON.stringify(input));
     const result = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", pendingFixture.root], { env: { ...process.env, PATH: `${pendingFixture.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: pendingFixture.statePath } })).stdout);
-    assert.match(result.gateBody, /PENDING/);
+    const pendingArtifact = JSON.parse(await readFile(result.decisionPath, "utf8"));
+    assert.match(pendingArtifact.gateBody, /PENDING/);
   } finally {
     await rm(pendingFixture.root, { recursive: true, force: true });
     await rm(pendingFixture.bin, { recursive: true, force: true });
@@ -502,7 +594,8 @@ test("accepted staging repair records pending tracking instead of none", async (
     const result = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
     assert.equal(result.gate, "FAIL");
     assert.equal(result.trackingPublication, "pending");
-    assert.match(result.gateBody, /PENDING/);
+    const artifact = JSON.parse(await readFile(result.decisionPath, "utf8"));
+    assert.match(artifact.gateBody, /PENDING/);
   } finally {
     await rm(f.root, { recursive: true, force: true });
     await rm(f.bin, { recursive: true, force: true });
@@ -542,7 +635,8 @@ test("current evidence prerequisites use the same source requirement as historic
     await writeFile(inputPath, JSON.stringify(input));
     const result = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
     assert.equal(result.gate, "FAIL");
-    assert.match(result.gateBody, /acceptance:restore-contract#backup-proof/);
+    const artifact = JSON.parse(await readFile(result.decisionPath, "utf8"));
+    assert.match(artifact.gateBody, /acceptance:restore-contract#backup-proof/);
   } finally {
     await rm(f.root, { recursive: true, force: true });
     await rm(f.bin, { recursive: true, force: true });
@@ -633,7 +727,7 @@ test("parent reuses an existing issue for an accepted obligation", async () => {
     await writeFile(inputPath, JSON.stringify(input));
     const result = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", inputPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
     assert.equal(result.tracking.C1.status, "existing");
-    assert.equal(result.tracking.C1.issue.number, 33781);
+    assert.equal(result.tracking.C1.issueNumber, 33781);
     const decisionArtifact = JSON.parse(await readFile(result.decisionPath, "utf8"));
     assert.match(decisionArtifact.gateBody, /\[#33781\]\(https:\/\/github.com\/example\/product\/issues\/33781\)/);
     assert.match(decisionArtifact.gateBody, /existing tracking/);
@@ -743,7 +837,7 @@ test("inconclusive create preserves a known issue for direct recovery without a 
     const firstResult = JSON.parse((await execFileAsync("node", [helper, "record", "adjudication", "--input", firstPath, "--cwd", f.root], { env: { ...process.env, PATH: `${f.bin}:${process.env.PATH}`, FAKE_ADJUDICATION_STATE: f.statePath } })).stdout);
     assert.equal(firstResult.trackingPublication, "pending");
     assert.equal(firstResult.tracking.C1.status, "pending");
-    assert.equal(firstResult.tracking.C1.knownIssue.number, 401);
+    assert.equal(firstResult.tracking.C1.knownIssueNumber, 401);
     const changed = JSON.parse(await readFile(f.statePath, "utf8"));
     changed.issueReadFails = false;
     changed.omitSearchIssues = false;
@@ -779,7 +873,7 @@ test("authorized follow-up issue creation reconciles an ambiguous response once"
     assert.equal(result.trackingPublication, "complete");
     assert.equal(result.tracking.C1.status, "created");
     assert.equal(result.tracking.C1.reconciliation, "ambiguous-create-reconciled");
-    assert.equal(result.tracking.C1.issue.number, 401);
+    assert.equal(result.tracking.C1.issueNumber, 401);
     const state = JSON.parse(await readFile(f.statePath, "utf8"));
     assert.equal(state.issues.length, 81);
     assert.ok(state.comments.length >= 3);

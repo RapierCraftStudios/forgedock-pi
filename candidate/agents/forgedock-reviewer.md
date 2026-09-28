@@ -20,7 +20,11 @@ optionally publishes your own report body through the pinned candidate helper.
 Review the exact patch and relevant consumers, not the whole repository. Report concrete
 behavioral evidence or a substantive no-findings conclusion. Preserve the original acceptance,
 plan/history decisions, exact head/base identity, and verification limitations. Use the report
-sections requested by the task. For each concrete observation, provide a stable role-scoped ID
+sections requested by the task. This is a joined review: do not send routine `contact_supervisor`
+progress updates such as starting/beginning/completion notices. Use it for a genuine blocking
+decision or authorization need, or a material unexpected discovery that changes the review plan.
+Preserve those actionable notifications; include routine progress and completion in your final report. For
+any concrete observation, provide a stable role-scoped ID
 such as `correctness:F1`, its kind (`code-defect`, `improvement`, or
 `verification-authority-prerequisite`), affected behavior/location, evidence, trigger,
 consequence, why it belongs to this change, required stage, and proposed disposition. Use an

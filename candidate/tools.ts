@@ -188,7 +188,7 @@ const RECORD_INPUT = Type.Object({
   baseSha: Type.Optional(Type.String({ pattern: "^[a-f0-9]{40,64}$" })),
   gate: Type.Optional(Type.String({ pattern: "^(?:PASS|FAIL)$" })),
   checks: Type.Optional(Type.Array(Type.String({ pattern: "^[A-Za-z0-9][A-Za-z0-9_. -]*$" }))),
-  body: Type.String({ minLength: 8 }),
+  body: Type.Optional(Type.String({ minLength: 8 })),
   reviewRoot: Type.Optional(Type.String({ minLength: 1 })),
   artifactKey: Type.Optional(Type.String({ minLength: 1 })),
   supersedes: Type.Optional(Type.String({ minLength: 1 })),
@@ -207,7 +207,7 @@ type RecordInput = {
   baseSha?: string;
   gate?: string;
   checks?: string[];
-  body: string;
+  body?: string;
   reviewRoot?: string;
   artifactKey?: string;
   supersedes?: string;
@@ -502,24 +502,62 @@ async function writePolicyArtifact(reviewRoot: string, artifact: Record<string, 
   return path;
 }
 
-function policySummary(policy: unknown): Record<string, unknown> {
+function policySummary(policy: unknown, policyPath: string, snapshot: "prepared" | "current"): Record<string, unknown> {
   const value = policy && typeof policy === "object" && !Array.isArray(policy) ? policy as Record<string, any> : {};
   const required = value.policy?.evaluatedRequiredChecks;
   const requirements = value.policy?.requirements;
   const rows = Array.isArray(required?.data) ? required.data : [];
+  const runs = value.policy?.commitCheckRuns;
+  const runRows = Array.isArray(runs?.data) ? runs.data : [];
+  const verificationCommands = value.configuration?.verificationCommands;
+  const localCommands = verificationCommands && typeof verificationCommands === "object" && !Array.isArray(verificationCommands) ? Object.keys(verificationCommands) : [];
+  const policySources = requirements?.policySources && typeof requirements.policySources === "object" ? requirements.policySources : {};
   return {
-    schema: value.schema ?? null,
+    schema: "forgedock.candidate-pr-policy-summary/v1",
+    source: { collector: "inspect-pr", artifact: policyPath, snapshot },
+    status: value.status ?? (value.schema === "forgedock.candidate-pr-policy/v1" ? "available" : "unknown"),
     repository: value.repository ?? null,
     pullRequest: value.pullRequest ?? null,
     head: value.identity?.head ?? null,
     baseRef: value.identity?.baseRef ?? null,
     baseSha: value.identity?.baseSha ?? null,
+    mergeable: value.identity?.mergeable ?? "unknown",
+    mergeStateStatus: value.identity?.mergeStateStatus ?? "unknown",
     applicability: requirements?.applicability ?? "unknown",
-    requiredNames: requirements?.requiredNames ?? rows.map((row: any) => row?.name).filter(Boolean),
-    observedCount: rows.length,
+    requiredNames: Array.isArray(requirements?.requiredNames) ? requirements.requiredNames : rows.map((row: any) => row?.name).filter(Boolean),
+    missingRequiredNames: Array.isArray(requirements?.missingRequiredNames) ? requirements.missingRequiredNames : [],
     requiredStatus: required?.status ?? "unknown",
     requiredExitCode: required?.exitCode ?? null,
-    localCommands: Object.keys(value.configuration?.verificationCommands ?? {}),
+    requiredCheckCount: rows.length,
+    requiredChecks: rows.slice(0, 24).map((row: any) => ({ name: row?.name ?? "unknown", state: row?.state ?? "unknown", bucket: row?.bucket ?? "unknown", workflow: row?.workflow ?? null })),
+    policySources: {
+      evaluatedChecks: policySources.evaluatedChecks ?? "unknown",
+      currentCheckRuns: policySources.currentCheckRuns ?? "unknown",
+      branchRules: policySources.branchRules ?? "unknown",
+      branchProtection: policySources.branchProtection ?? "unknown",
+      rulesets: policySources.rulesets ?? "unknown",
+    },
+    exactHeadCheckRuns: {
+      status: runs?.status ?? "unknown",
+      count: runRows.filter((row: any) => row?.headMatched === true).length,
+      checks: runRows.filter((row: any) => row?.headMatched === true).slice(0, 24).map((row: any) => ({ name: row?.name ?? "unknown", status: row?.status ?? "unknown", conclusion: row?.conclusion ?? "unknown" })),
+    },
+    localVerification: { state: localCommands.length ? "configured" : "none-configured", names: localCommands },
+  };
+}
+
+function policySummaryArtifact(review: Record<string, any>, policyPath: string, prepared: Record<string, unknown>, current: Record<string, unknown>, refreshedAt: string | null) {
+  return {
+    schema: "forgedock.candidate-policy-summary/v1",
+    artifactKey: review.artifactKey,
+    repository: review.repository,
+    pullRequest: review.pullRequest,
+    head: review.head,
+    baseRef: review.baseRef,
+    baseSha: review.baseSha,
+    prepared: policySummary(prepared, policyPath, "prepared"),
+    current: policySummary(current, policyPath, refreshedAt ? "current" : "prepared"),
+    refreshedAt,
   };
 }
 
@@ -544,9 +582,11 @@ async function refreshPolicyArtifact(pi: ExtensionAPI, review: Record<string, un
     current = { schema: "forgedock.candidate-pr-policy/v1", status: "malformed", error: result.stderr.trim() || "policy collector returned invalid JSON" };
   }
   const path = policyArtifactPath(reviewRoot);
-  const artifact = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-  const updated = { ...artifact, current, refreshedAt: new Date().toISOString() };
+  const artifact = JSON.parse(readFileSync(path, "utf8")) as Record<string, any>;
+  const refreshedAt = new Date().toISOString();
+  const updated = { ...artifact, current, refreshedAt };
   await writeFile(path, `${JSON.stringify(updated, null, 2)}\n`, { mode: 0o600 });
+  await atomicallyReplaceJson(join(reviewRoot, "policy-summary.json"), policySummaryArtifact(review as Record<string, any>, path, artifact.prepared ?? current, current, refreshedAt));
   return current;
 }
 
@@ -686,7 +726,7 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "forge_prepare_review",
     label: "Prepare frozen review",
-    description: "Prepare a validated frozen review request in a disposable artifact directory.",
+    description: "Prepare a frozen review once; return its exact native request and compact source-attributed policy summary while retaining full policy evidence in the artifact directory.",
     parameters: REVIEW_INPUT,
     async execute(_toolCallId, params) {
       const input = params as ReviewInput;
@@ -712,9 +752,14 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
         policy = { schema: "forgedock.candidate-pr-policy/v1", status: "malformed", error: policyResult.stderr.trim() || "policy collector returned invalid JSON" };
       }
       const policyPath = await writePolicyArtifact(output, { schema: "forgedock.candidate-policy/v1", artifactKey: prepared.artifactKey, repository: resolvedInput.repository, pullRequest: resolvedInput.pullRequest, head: prepared.head ?? resolvedInput.head, baseRef: resolvedInput.baseRef, baseSha: resolvedInput.baseSha, prepared: policy, current: policy, refreshedAt: null });
-      const summary = policySummary(policy);
-      const handoff = `\n\nPR policy evidence saved at ${policyPath}. The existing restricted publication operation refreshes this same artifact before a gate decision; do not echo the policy object. Compact summary: ${JSON.stringify(summary)}. Parent binding: artifactKey=${prepared.artifactKey}; role authorization keys are child-only and must not be passed to parent tools. Provenance rule: caller-supplied acceptance/history/evidence/limitations are review context, not authority to invent execution obligations; establish check applicability from this policy artifact plus primary source/workflow evidence. A policy-accepted SKIPPED or NEUTRAL status is not executed proof and does not block by itself.`;
-      return { content: [{ type: "text", text: bounded(`${result.stdout.trim()}${handoff}`) }], details: { requestDirectory: output, inputPath, reviewRoot: output, artifactKey: prepared.artifactKey, sourceRoot: prepared.sourceRoot, head: prepared.head, configPath: prepared.configPath, configSha256: prepared.configSha256, policyPath, policySummary: summary } };
+      const requestPath = join(output, "request.json");
+      const request = JSON.parse(await readFile(requestPath, "utf8")) as Record<string, unknown>;
+      const summaryPath = join(output, "policy-summary.json");
+      const summaryArtifact = policySummaryArtifact(prepared, policyPath, policy, policy, null);
+      await stableJsonFile(summaryPath, summaryArtifact);
+      const summary = summaryArtifact.prepared;
+      const handoff = { schema: "forgedock.candidate-review-preparation/v1", requestPath, request, reviewRoot: output, artifactKey: prepared.artifactKey, sourceRoot: prepared.sourceRoot, head: prepared.head, configPath: prepared.configPath, configSha256: prepared.configSha256, policySummaryPath: summaryPath, policySummary: summary, policyEvidencePath: policyPath, note: "Use the returned request object unchanged; the exact object is retained at requestPath. Review the compact policy summary; the complete source-attributed evidence remains at policyEvidencePath for targeted field lookup. The final gate refreshes current policy once. Caller-supplied acceptance/history/evidence/limitations are context, not authority to invent obligations; policy-accepted SKIPPED/NEUTRAL is merge-status evidence, not executed proof." };
+      return { content: [{ type: "text", text: bounded(JSON.stringify(handoff, null, 2)) }], details: { requestDirectory: output, requestPath, inputPath, reviewRoot: output, artifactKey: prepared.artifactKey, sourceRoot: prepared.sourceRoot, head: prepared.head, configPath: prepared.configPath, configSha256: prepared.configSha256, policyPath, policySummaryPath: summaryPath, policySummary: summary } };
     },
   });
 
@@ -1012,7 +1057,7 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "forge_publish_adjudication",
     label: "Publish parent adjudication",
-    description: "Validate every current reviewer observation and publish one parent REVIEW-PANEL decision. decisions maps current reviewer observations; historicalDecisions is the only model-facing representation of prior concerns and must contain an explicit sourceReference, disposition, rationale, evidence, stage, and applicable tracking for each concern. Use historicalDecisions: [] when there are none. A rejected historical allegation still requires an explicit rejection record; do not pass legacy prose priorConcerns.",
+    description: "Validate every current reviewer observation and publish one parent REVIEW-PANEL decision with final exact remote readback; return a compact decision summary and verified final permalink. decisions maps current reviewer observations; historicalDecisions is the only model-facing representation of prior concerns and must contain an explicit sourceReference, disposition, rationale, evidence, stage, and applicable tracking for each concern. Use historicalDecisions: [] when there are none. A rejected historical allegation still requires an explicit rejection record; do not pass legacy prose priorConcerns.",
     parameters: ADJUDICATION_INPUT,
     async execute(_toolCallId, params) {
       const input = params as Record<string, unknown>;
@@ -1031,6 +1076,7 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       const output = result.stdout.trim();
       let details: Record<string, unknown> = {};
       try { details = JSON.parse(output) as Record<string, unknown>; } catch { /* bounded text remains model-visible */ }
+      if (input.publish && (details.publication !== "published" || details.readbackVerified !== true || typeof details.panelUrl !== "string" || details.panelUrl !== details.gateBodyPanelUrl)) throw new Error(`Published adjudication did not return a verified final-panel identity: ${bounded(output)}`);
       const terminal = details.publication === "published" || details.publication === "saved" ? "ADJUDICATION_RESULT: terminal publication returned; do not repeat the unchanged revision. Use a new revision only for a real decision change." : "";
       return { content: [{ type: "text", text: bounded(`${output}${terminal ? `\n${terminal}` : ""}`) }], details: { ...details, inputPath } };
     },
@@ -1039,21 +1085,20 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "forge_publish_record",
     label: "Publish candidate record",
-    description: "Refresh the bound PR policy, then save and optionally publish one file-backed candidate gate record without changing source.",
+    description: "Refresh bound PR policy once at gate publication, verify the final parent REVIEW-PANEL permalink, and return a compact exact-identity gate readback receipt without changing source.",
     parameters: RECORD_INPUT,
     async execute(_toolCallId, params) {
       const input = params as RecordInput;
       if ((input.issue === undefined) === (input.pullRequest === undefined)) throw new Error("Record needs exactly one issue or pull request destination");
       if (input.kind !== "STAGING_GATE") throw new Error("The staging publication tool only publishes STAGING_GATE records");
+      if (!input.adjudicationPath && (!input.body || input.body.length < 8)) throw new Error("A non-adjudicated gate record requires an explicit body");
       if (input.gate === "PASS" && !input.adjudicationPath) throw new Error("PASS requires the completed parent adjudication artifact");
       if (input.gate === "FAIL" && !input.adjudicationPath && input.preReviewInfrastructure !== true) throw new Error("A completed review gate requires parent adjudication; mark only a pre-review infrastructure failure explicitly");
       if (!input.reviewRoot || !input.artifactKey || !input.head || !input.baseRef || !input.baseSha || !input.gate || input.pullRequest === undefined) throw new Error("Staging gate publication requires its prepared review authorization");
       const review = await preparedReview(input.reviewRoot, input.artifactKey);
       if (review.repository !== input.repository || review.pullRequest !== input.pullRequest || review.head !== input.head || review.baseRef !== input.baseRef || review.baseSha !== input.baseSha || review.publish !== input.publish) throw new Error("Staging gate does not match the prepared frozen review");
       if (preparedReviewMode(review) !== "staging") throw new Error("A STAGING_GATE record requires a prepared protected-branch review");
-      const policy = await refreshPolicyArtifact(pi, review);
-      if (input.gate === "PASS") await requirePassEvidence(input, review, policy);
-      let body = input.body;
+      let body = input.body ?? "";
       let adjudication: Record<string, unknown> | undefined;
       if (input.adjudicationPath) {
         const adjudicationPath = artifactFile(String(input.reviewRoot), input.adjudicationPath, "adjudication artifact");
@@ -1069,11 +1114,20 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
         if (input.publish && typeof adjudication.panelUrl !== "string") throw new Error("Published gate requires a published parent adjudication");
         body = String(adjudication.gateBody ?? "");
         if (body.length < 8) throw new Error("Parent adjudication artifact has no rendered gate body");
+        const parentLinkLine = body.split(/\r?\n/).find((line) => line.startsWith("**Parent decision permalink**: "));
+        const parentLink = parentLinkLine?.slice("**Parent decision permalink**: ".length);
+        if (adjudication.gateBodyPanelUrl !== adjudication.panelUrl || input.publish && parentLink !== adjudication.panelUrl) throw new Error("Rendered staging gate does not link the final verified parent REVIEW-PANEL permalink");
+        if (typeof adjudication.supersededPanelUrl === "string" && parentLink === adjudication.supersededPanelUrl) throw new Error("Rendered staging gate links the superseded provisional panel rather than the final decision");
       }
       const priorGate = input.publish && input.pullRequest !== undefined && !input.supersedes
         ? await existingGateForHead(pi, input.repository, input.pullRequest, input.head, String(review.sourceRoot))
         : undefined;
       const supersedes = input.supersedes ?? (priorGate && !priorGate.body.includes(body.trim()) ? priorGate.url : undefined);
+      const policy = await refreshPolicyArtifact(pi, review);
+      const policySummaryPath = join(resolve(input.reviewRoot), "policy-summary.json");
+      const policySummaryFile = JSON.parse(await readFile(policySummaryPath, "utf8")) as Record<string, unknown>;
+      const currentPolicySummary = policySummaryFile.current;
+      if (input.gate === "PASS") await requirePassEvidence(input, review, policy);
       const bodyPath = await tempArtifact("forgedock-record-", "body.md", body);
       const reportPath = resolve(dirname(bodyPath), "record.md");
       const args = [helperPath(), "record", "--kind", input.kind, "--repo", input.repository, "--body-file", bodyPath, "--report-file", reportPath];
@@ -1086,7 +1140,15 @@ export default function registerCandidateTools(pi: ExtensionAPI): void {
       if (input.publish) args.push("--publish");
       const result = await pi.exec("node", args, { timeout: 120_000 });
       if (result.code !== 0) throw new Error(`Record publication failed: ${bounded(result.stderr)}`);
-      return { content: [{ type: "text", text: bounded(result.stdout) }], details: { reportPath, publication: input.publish ? "published" : "saved", ...(adjudication ? { panelUrl: adjudication.panelUrl, trackingPublication: adjudication.trackingPublication } : {}) } };
+      const output = result.stdout.trim();
+      let publicationResult: Record<string, unknown> = {};
+      try { publicationResult = JSON.parse(output) as Record<string, unknown>; } catch { /* saved diagnostics remain bounded below */ }
+      const recordIdentity = publicationResult.identity && typeof publicationResult.identity === "object" && !Array.isArray(publicationResult.identity) ? publicationResult.identity as Record<string, unknown> : publicationResult;
+      const recordUrl = typeof publicationResult.url === "string" ? publicationResult.url : null;
+      const readbackVerified = publicationResult.publication === "published" && typeof recordUrl === "string" && Number.isSafeInteger(publicationResult.id);
+      if (input.publish && (!readbackVerified || recordIdentity.kind !== input.kind || recordIdentity.repository !== input.repository || Number(recordIdentity.pullRequest) !== input.pullRequest || recordIdentity.head !== input.head || recordIdentity.baseRef !== input.baseRef || recordIdentity.baseSha !== input.baseSha || recordIdentity.gate !== input.gate)) throw new Error(`Published gate did not return a verified exact-identity record receipt: ${bounded(output)}`);
+      const summary = { schema: "forgedock.candidate-record-result/v1", kind: input.kind, publication: input.publish ? "published" : "saved", recordUrl, commentId: publicationResult.id ?? null, recordId: publicationResult.recordId ?? recordIdentity.record_id ?? null, readbackVerified, supersedes: supersedes ?? (typeof recordIdentity.supersedes === "string" ? recordIdentity.supersedes : null), gate: input.gate, panelUrl: adjudication?.panelUrl ?? null, verdict: adjudication?.verdict ?? null, trackingPublication: adjudication?.trackingPublication ?? null, nextAction: adjudication?.nextAction ?? null, policySummaryPath, policySummary: currentPolicySummary, reportPath, decisionPath: input.adjudicationPath ?? null };
+      return { content: [{ type: "text", text: bounded(JSON.stringify(summary)) }], details: summary };
     },
   });
 }

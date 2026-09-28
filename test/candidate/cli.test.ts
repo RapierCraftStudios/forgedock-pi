@@ -120,7 +120,7 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     assert.match(workflowText, /forgedock-reviewer/);
     assert.match(workflowText, /Caller-supplied review context \(not authoritative acceptance\)/);
     assert.doesNotMatch(workflowText, /Original acceptance:/);
-    assert.match(workflowText, /Prepared policy facts/);
+    assert.match(workflowText, /Prepared policy summary: .*policy-summary\.json/);
     const invalidRoles = join(root, "..", `${testName}-invalid-review.json`);
     await writeFile(invalidRoles, JSON.stringify({ repository: "example/product", pullRequest: 3, head: sourceHead, baseRef: "integration", baseSha, sourceRoot: root, roles: ["security"] }));
     await assert.rejects(execFileAsync("node", [helper, "prepare-review", "--input", invalidRoles, "--out", `${reviewOut}-invalid`]), /correctness reviewer/);

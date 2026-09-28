@@ -1,0 +1,90 @@
+{
+  "schema": "forgedock.review-pipeline-native-exercise/v1",
+  "plannedNativeRuns": 1,
+  "actualNativeRuns": 2,
+  "setupOnlyPreflightAttempts": 1,
+  "setupOnlyFailureRecord": "setup-failure.json (no reviewer launch or fake GitHub writes)",
+  "status": "partial-native-review",
+  "proceduralDeviation": "I launched an unintended duplicate before receiving and inspecting the first exercise's terminal result. Timestamps show the first had already settled; I should have waited for its result and not launched another. Both remained in separate fake-GitHub fixtures; no further native/model runs will be launched.",
+  "piVersion": "0.87.1",
+  "parentModel": {
+    "provider": "openai-codex",
+    "id": "gpt-6-luna",
+    "thinking": "max"
+  },
+  "piSubagents": "existing 0.60.0 package; unchanged",
+  "ordinarySettingsUnchanged": true,
+  "explicitPrompt": "/review-pr 7",
+  "attempts": [
+    {
+      "taskId": "bca425e57",
+      "role": "corrected exercise",
+      "startedAt": "2026-09-28T18:17:32.146Z",
+      "settledAt": "2026-09-28T18:20:09.726Z",
+      "durationSeconds": 155.788,
+      "target": {
+        "repository": "example/product (disposable fake-GitHub fixture)",
+        "pullRequest": 7,
+        "head": "e74769f155ba3dd423db930f79b56beed87988a0",
+        "baseRef": "main",
+        "baseSha": "0eaef6eb06afdeac1cee9e08b12c0ae93298a810"
+      },
+      "reviewer": {
+        "roles": ["correctness"],
+        "terminal": "completed",
+        "exitCode": 0,
+        "fakeReportPublished": true,
+        "fakeReportUrl": "https://github.com/example/product/pull/7#issuecomment-1000"
+      },
+      "configuredCheck": {
+        "status": "blocked-before-test-command",
+        "error": "Configured checks require a clean frozen source checkout",
+        "fixtureOnlyCause": "Untracked .pi/subagents/artifacts/* files from the reviewer runtime."
+      },
+      "adjudication": "not reached",
+      "gate": "not published",
+      "fakeGitHubCommentPosts": 1,
+      "fakeGitHubIssueWrites": 0,
+      "sourceWorktreeContainsOnlyReviewerArtifacts": true,
+      "ordinarySettingsUnchanged": true
+    },
+    {
+      "taskId": "b2f51b949",
+      "role": "unintended duplicate",
+      "startedAt": "2026-09-28T18:31:32.186Z",
+      "settledAt": "2026-09-28T18:34:48.885Z",
+      "target": {
+        "repository": "example/product (separate disposable fake-GitHub fixture)",
+        "pullRequest": 7,
+        "head": "b46fe61461fff28194cab72b8f18253d85a194c7",
+        "baseRef": "main",
+        "baseSha": "10c57d43beec003988c83ebd7638cb9fa2e62b9d"
+      },
+      "reviewer": {
+        "roles": ["correctness"],
+        "terminal": "completed",
+        "exitCode": 0,
+        "fakeReportPublished": true
+      },
+      "configuredCheck": {
+        "status": "blocked-before-test-command",
+        "error": "Configured checks require a clean frozen source checkout",
+        "fixtureOnlyCause": "Untracked .pi/subagents/artifacts/* files from the reviewer runtime."
+      },
+      "adjudication": "not reached",
+      "gate": "not published",
+      "fakeGitHubCommentPosts": 1,
+      "fakeGitHubIssueWrites": 0,
+      "sourceWorktreeContainsOnlyReviewerArtifacts": true,
+      "ordinarySettingsUnchanged": true
+    }
+  ],
+  "responseToFixtureFinding": "The staging skill now orders configured local checks before reviewer launch and reuses those receipts, without weakening clean-tree validation or deleting runtime artifacts. This post-exercise change is covered by a routing-contract assertion; no further native/model run was made.",
+  "finalPanelGateLinkDemonstration": "Separate deterministic controlled-readback regression; neither partial native attempt reached a gate.",
+  "scopeLimitations": [
+    "Neither native attempt reached parent adjudication or gate publication.",
+    "The second attempt was an unintended duplicate, recorded here rather than omitted.",
+    "The attempts do not qualify multi-reviewer LLM concurrency or demonstrate AlterLab-scale latency or full behavioral equivalence.",
+    "Multi-role event hooks, delayed supervisor delivery/actionable replies, already-published report delivery, and final-panel/gate link behavior are covered by deterministic tests."
+  ]
+}

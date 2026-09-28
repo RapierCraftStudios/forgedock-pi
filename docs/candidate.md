@@ -123,7 +123,11 @@ selection, and an explicit `publish` mode. Launch only its returned request thro
 native `subagent` tool. Those hooks bind the prepared review to the exact native workflow and write
 the required `reviewer-execution.json` receipt; a direct CLI invocation cannot authorize
 adjudication. The helper's `prepare-review` command is an internal implementation detail of the
-registered tool, not a supported end-to-end review route.
+registered tool, not a supported end-to-end review route. After staging preparation, use registered
+read/check tools rather than retrying blocked shell commands. Run configured local checks against the
+frozen source checkout before launching reviewers and reuse those receipts: native reviewer
+sessions may create `.pi/subagents/artifacts` there, which makes a later clean-tree check reject a
+rerun. Do not relax clean-tree validation or delete those runtime artifacts.
 
 PR policy facts are collected without a local CI evaluator:
 
@@ -144,7 +148,10 @@ writes a policy artifact bound to the prepared review and exposes its path plus 
 in model-visible content. The publication tool refreshes and validates that same artifact; the
 model does not echo the policy object. A staging PASS requires either confirmed absence of
 applicable GitHub checks with all configured local receipts, or complete current passing GitHub
-required-check evidence; an empty observation alone is never enough.
+required-check evidence; an empty observation alone is never enough. The restricted route
+continues to allow bounded native supervisor status/list/reply actions so genuine blocking or
+material plan-changing reviewer notifications remain actionable; routine progress/completion
+messages are discouraged in the joined reviewer task.
 
 ## File-backed records and publication
 
@@ -245,9 +252,19 @@ observation exactly once to an explicit disposition. Duplicate causes retain all
 clean reports use an empty observation list. `forge_resolve_review_tracking` searches open and
 closed issues before an authorized parent publishes one actionable follow-up. Permission or
 transport failure leaves the draft pending and does not change the review verdict or start work.
+`forge_prepare_review` collects PR policy once, returns the exact native `request` object and a
+compact source-attributed `policySummary`, and retains the complete `policy.json` plus
+`policy-summary.json`; do not run standalone `inspect-pr` or reread the request file. Staging does
+one necessary fresh policy refresh when publishing the final gate.
+
 For staging, `forge_publish_record` accepts the adjudication `decisionPath` and renders the
 `REVIEW-PANEL` section and gate from the same artifact, preserving check conclusion versus
-executed-proof semantics.
+executed-proof semantics. The returned adjudication summary identifies the final verified panel
+permalink; the saved gate must link that exact permalink, not the superseded provisional record.
+`forge_publish_record` returns a compact exact-identity readback receipt with the gate URL, final
+panel URL, policy summary, and next action, so successful publication needs no follow-up artifact
+read. A transient exact-comment GET retries once within the existing publication budget; it never
+repeats a POST.
 
 ## Opt-in replacement
 

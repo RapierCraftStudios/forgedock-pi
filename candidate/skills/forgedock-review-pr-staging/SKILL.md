@@ -16,46 +16,62 @@ review.
 
 Run only configured checks relevant to the frozen bundle and reuse exact-head evidence when
 inputs are unchanged. Keep the exact promotion checkout as `sourceRoot` and the canonical
-checkout containing `forge.yaml` as `configRoot` when they differ. Collect the actual protected-PR policy and check association with
-`inspect-pr`/the supported GitHub interfaces before deciding requiredness. A missing, pending,
-failed, or unscheduled required check is reported by name; an optional or feature-PR check is
-not promoted into this gate. A policy-accepted `SKIPPED` or `NEUTRAL` conclusion satisfies the
-merge-status requirement without claiming that the job executed. Inspect the primary workflow
-condition and detector result at the frozen head before deciding that execution is separately
-required. Do not gate on `required + skipped` alone: it becomes an
-`EVIDENCE/AUTHORITY PREREQUISITE` only when an identified acceptance/policy source or a concrete
-demonstrated defect requires executed proof; a policy.json path, check URL, or earlier reviewer
-demand alone is not that source. Record the source and contrary/confirming evidence in the
-adjudication. Missing required
-runtime/integration/configuration authority is a precise FAIL prerequisite, not permission to
-claim PASS. Structural checks do not substitute for a required runtime boundary.
+checkout containing `forge.yaml` as `configRoot` when they differ. Freeze PR identity with one
+minimal `gh pr view`, then call `forge_prepare_review` once; it collects the protected-PR policy,
+saves complete evidence in `policy.json`, writes `policy-summary.json`, and returns its compact
+source-attributed summary. Do not run standalone `inspect-pr` or read the raw policy artifact
+wholesale. A missing, pending, failed,
+or unscheduled required check is reported by name; an optional or feature-PR check is not
+promoted into this gate. A policy-accepted `SKIPPED` or `NEUTRAL` conclusion satisfies merge-status
+policy without claiming that the job executed. Inspect the primary workflow condition and detector
+at the frozen head before deciding execution is separately required. Do not gate on `required +
+skipped` alone: an `EVIDENCE/AUTHORITY PREREQUISITE` needs an identified acceptance/policy source
+or concrete demonstrated defect. Record the source and contrary/confirming evidence. Missing
+required runtime/integration/configuration authority is a precise FAIL prerequisite, not permission
+to claim PASS. Structural checks do not substitute for a required runtime boundary; the gate does
+one necessary fresh policy refresh at publication.
 
 Select at most three reviewer roles. `forge_prepare_review.roles` accepts only
 `correctness`, `security`, and `specialist`; never pass target-domain names such as `infra`,
 `database`, or `concurrency`. Combine distinct questions into one `specialist` assignment or
 omit `roles` and let the bounded helper derive the roster. Select correctness plus only concrete
 risk-justified specialists. Use `forge_prepare_review` to create the validated frozen request
-and read-only repository/PR policy facts. Read `request.json` and pass its complete contents
-unchanged to `subagent`; the staging guard rejects arbitrary child launches, inline workflows,
-modified role/timeout/concurrency settings, and writer capabilities. The exact frozen review identity may claim only one prepared roster per Pi session; re-preparing
-or reusing a workflow for that same identity after a later input is blocked. Wait for every fresh
-`forgedock-reviewer`; their source tools are read-only and their only mutation capability is the
-report publisher.
-Use `forge_run_check` for configured local checks only when the prepared configuration declares
-them; each real local check needs its receipt, and an empty local-check set is valid only when
-the collected current GitHub required-check evidence is complete and passing. Use `forge_discover_review_records` once with the prepared `reviewRoot` and `artifactKey`.
+and read-only repository/PR policy facts. Its returned `request` object is the exact `request.json`
+content; retain it unchanged without rereading the file. The staging guard rejects arbitrary child
+launches, inline workflows, modified role/timeout/concurrency settings, and writer capabilities.
+After preparation, use registered read/check tools only; do not retry blocked Bash calls. Before
+launching reviewers, run each relevant configured local check once through `forge_run_check`,
+using the frozen details. The native child runtime can create `.pi/subagents` artifacts in its
+source checkout after launch, which makes the clean-tree check reject a later local-check rerun;
+capture and reuse receipts instead of invoking checks after the roster runs. The exact frozen review
+identity may claim only one prepared roster per Pi session; re-preparing or reusing a workflow for
+that same identity after a later input is blocked. Then pass the exact returned request unchanged to
+`subagent` and wait for every fresh `forgedock-reviewer`; their source tools are read-only and their
+only mutation capability is the report publisher.
+Reuse the prepared check receipts at the gate; an empty local-check set is valid only when the
+collected current GitHub required-check evidence is complete and passing. Use
+`forge_discover_review_records` once with the prepared `reviewRoot` and `artifactKey`.
 It returns a compact bounded index plus readable `bodyPath` files for selected full records; read
 those paths before carrying a historical concern. Do not use truncated tail JSON as evidence.
 Current reviewers must inspect primary workflow/source evidence rather than independently repeating
 supplied reviewer prose. The workflow returns compact per-role native terminal results with each
 native run ID, status, bounded output/error, artifact references, report path, and recovery-input
-path; publication remains unverified until canonical report content and observation markers are
-read back, including exact remote comment readback when publication is requested. The adjudication
-tool blocks before creating its input if any role is missing, misbound, altered, or undelivered.
+path. Read each local report and observations once. `publicationState: unverified` means the
+parent has not finalized delivery; it does not override a successful `FORGE_REVIEW_RESULT ...
+publication=published` line. `forge_publish_adjudication` is the final exact-content and remote-
+comment-readback boundary; it blocks before saving its input if any role is missing, misbound,
+altered, or undelivered. Do not call the recovery tool to re-verify a role already reported as
+published; use it only when delivery is absent or uncertain. If a genuine `need_decision` or
+`interview_request` arrives, answer through `subagent_supervisor` without launching a new reviewer;
+ignore routine progress/completion notices and retain material plan-changing discoveries for
+adjudication.
 `forge_recover_reviewer_publication` may publish only one exact completed role from its saved,
 hash-checked author input. A previously claimed/attempted operation re-enters as readback-only;
 it never clears a lock or POSTs again. Outer cancellation, interruption, timeout, and non-terminal
-children remain distinct from delivery outcome. Staging never resumes or launches another child.
+children remain distinct from delivery outcome. A transient parent-panel comment GET is retried
+once against the same comment identity; if readback remains unresolved, preserve the same revision
+and use the reported readback-only reconciliation action, never a new POST. Staging never resumes
+or launches another child.
 If delivery remains incomplete, `forge_publish_incomplete_review` records the observed state without
 claiming an unused attempt was exhausted or cancelling active recovery. Do not GATED-preempt an
 available completed-role recovery. An observed parent execution limit may be recorded explicitly
@@ -63,7 +79,8 @@ without burning that recovery allowance. If a claimed operation or remote result
 GATED records the claim as unresolved and permits readback-only finalization. A later adjudication
 supersedes the published incomplete-delivery record. GATED is post-review delivery status, not a
 pre-review infrastructure failure, reviewer finding, verdict, or gate PASS/FAIL. Retain completed
-reports and use `forge_publish_adjudication` only after every selected report has verified delivery. The parent must map every
+reports and call `forge_publish_adjudication` after local report identities/observations match; it
+verifies remote delivery before writing. The parent must map every
 structured observation ID to one explicit disposition, preserve duplicates/resolutions, and state
 whether a prerequisite applies to this promotion stage. `decisions` covers current reviewer
 observations only. Put every applicable historical concern in the required
@@ -106,5 +123,8 @@ After every selected report is read back and parent adjudication completes, publ
 `FORGE:STAGING_GATE:PASS` only when every required check is satisfied with no immediate repair
 or mechanical gate. Publish `FORGE:STAGING_GATE:FAIL` only for a completed review with an exact
 blocking finding, missing proof, or wake condition. Incomplete report delivery remains a `GATED`
-post-review record with no verdict or staging gate. A staging pass is integration evidence, not
-production authorization.
+post-review record with no verdict or staging gate. Once `forge_publish_record` returns a verified
+published result, use its final panel/gate permalinks and finish the operator response immediately;
+do not reread saved adjudication/gate files or begin another inspection. If this route opened a
+local todo, mark it completed as the last tool call after verified publication, then return the
+response. A staging pass is integration evidence, not production authorization.

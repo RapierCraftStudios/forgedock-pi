@@ -70,3 +70,11 @@ context, contract, architect, builder, and gated records, plus a linked PR panel
 
 The backfill batch was retried once and all eight records reconciled as
 `existing-identity`. It did not merge, close, deploy, or restart any backlog.
+
+## Review-pipeline latency correction
+
+The retrospective latency diagnosis and sanitized evidence (including the partial disposable
+native exercise outcomes) for the existing PR #583 branch are documented in
+[`qualification/evidence/review-pr-performance-20260928/RESULT.md`](../qualification/evidence/review-pr-performance-20260928/RESULT.md).
+The completed AlterLab #33800 GATED/FAIL result remains unchanged; this tooling
+correction made no AlterLab writes.

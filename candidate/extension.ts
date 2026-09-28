@@ -15,6 +15,7 @@ export const FORGEDOCK_ALIASES = Object.freeze({
 
 const ALIAS_PATTERN =
   /^\/(?:forge:)?(orchestrate|work-on|review-pr|review-pr-staging)(?=$|\s)([\s\S]*)$/;
+const FORGEDOCK_COMMAND_LINE = /^\/(?:forge:)?(?:forge-status|orchestrate|work-on|review-pr|review-pr-staging)(?=$|\s)/;
 const INSTALLED_CANDIDATE_BIN = resolve(dirname(fileURLToPath(import.meta.url)), "../bin/forgedock-candidate.mjs");
 process.env.FORGEDOCK_CANDIDATE_BIN = INSTALLED_CANDIDATE_BIN;
 
@@ -23,6 +24,37 @@ export function rewriteForgePromptAlias(input: string): string | undefined {
   if (!match) return undefined;
   const command = match[1] as keyof typeof FORGEDOCK_ALIASES;
   return `/skill:${FORGEDOCK_ALIASES[command]}${match[2] ?? ""}`;
+}
+
+export function combinedForgeCommandLines(input: string): string[] {
+  const commands = input.split(/\r?\n/).flatMap((line) => {
+    const trimmed = line.trim();
+    if (!FORGEDOCK_COMMAND_LINE.test(trimmed)) return [];
+    const matches = [...trimmed.matchAll(/\/(?:forge:)?(?:forge-status|orchestrate|work-on|review-pr|review-pr-staging)(?=$|\s)/g)].map((match) => match[0]);
+    return matches.length > 1 ? matches : matches.length === 1 ? [trimmed] : [];
+  });
+  return commands.length > 1 ? commands : [];
+}
+
+function allowedStagingTodoCompletion(input: unknown): boolean {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
+  const value = input as Record<string, unknown>;
+  return value.action === "update" && Number.isSafeInteger(value.id) && value.status === "completed"
+    && Object.keys(value).every((key) => ["action", "id", "status"].includes(key));
+}
+
+function allowedStagingSupervisorAction(input: unknown): boolean {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
+  const value = input as Record<string, unknown>;
+  if (value.action === "status") return Object.keys(value).every((key) => key === "action");
+  if (value.action === "pending" || value.action === "list") {
+    return Object.keys(value).every((key) => key === "action" || key === "to")
+      && (value.to === undefined || typeof value.to === "string" && value.to.length > 0 && value.to.length <= 256 && !/[\0\r\n]/.test(value.to));
+  }
+  return value.action === "reply"
+    && Object.keys(value).every((key) => ["action", "replyTo", "message"].includes(key))
+    && typeof value.replyTo === "string" && value.replyTo.length > 0 && value.replyTo.length <= 256 && !/[\0\r\n]/.test(value.replyTo)
+    && typeof value.message === "string" && value.message.trim().length > 0 && !/\0/.test(value.message);
 }
 
 /** The extension only performs lexical routing; workflow decisions stay in skills. */
@@ -175,6 +207,8 @@ function reviewerRoleResults(value: unknown, prepared: PreparedReviewerWorkflow)
 
 /** Narrow route guard: staging may inspect/check/publish evidence, never mutate product code or deliver it. */
 export function isStagingMutationBlocked(toolName: string, input: unknown): boolean {
+  if (toolName === "todo") return !allowedStagingTodoCompletion(input);
+  if (toolName === "subagent_supervisor") return !allowedStagingSupervisorAction(input);
   const allowedTools = new Set(["read", "grep", "find", "ls", "forge_prepare_review", "forge_run_check", "forge_discover_review_records", "forge_resolve_review_tracking", "forge_recover_reviewer_publication", "forge_publish_incomplete_review", "forge_publish_adjudication", "forge_publish_record", "subagent"]);
   if (!allowedTools.has(toolName)) return true;
   if (toolName === "subagent" && !allowedReadOnlySubagentList(input) && !allowedPreparedReviewerSubagent(input, "staging")) return true;
@@ -189,15 +223,25 @@ export default function forgedockCandidateExtension(pi: ExtensionAPI): void {
   const completedReviewerRuns = new Map<string, Map<string, Record<string, unknown>>>();
   registerCandidateTools(pi);
   pi.registerCommand("forge-status", {
-    description: "Show that the isolated ForgeDock candidate extension is loaded",
+    description: "Show the active ForgeDock package and registered review tools",
     handler: async (_args, ctx) => {
       const tools = new Set(pi.getAllTools().map((tool) => tool.name));
       const stagingTools = ["forge_prepare_review", "forge_run_check", "forge_discover_review_records", "forge_resolve_review_tracking", "forge_recover_reviewer_publication", "forge_publish_incomplete_review", "forge_publish_adjudication", "forge_publish_record"];
-      ctx.ui.notify(`ForgeDock candidate loaded; helper=${process.env.FORGEDOCK_CANDIDATE_BIN}; native subagent=${tools.has("subagent") ? "available" : "unavailable"}; staging tools=${stagingTools.filter((name) => tools.has(name)).length}/${stagingTools.length}.`, "info");
+      const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+      ctx.ui.notify(`ForgeDock loaded; package=${packageRoot}; helper=${process.env.FORGEDOCK_CANDIDATE_BIN}; native subagent=${tools.has("subagent") ? "available" : "unavailable"}; review tools=${stagingTools.filter((name) => tools.has(name)).length}/${stagingTools.length}.`, "info");
     },
   });
-  pi.on("input", (event) => {
+  pi.on("input", (event, ctx) => {
     if (event.source === "extension") return { action: "continue" };
+    const commands = combinedForgeCommandLines(event.text);
+    if (commands.length > 1) {
+      const notice = `Pi accepts one slash command per input; none of these commands ran: ${commands.join("; ")}. Submit /forge-status and /review-pr as separate inputs, or run /review-pr directly; it does not depend on a prior status check.`;
+      if (ctx.hasUI) {
+        ctx.ui.notify(notice, "warning");
+        return { action: "handled" };
+      }
+      return { action: "transform", text: notice };
+    }
     stagingGuard = stagingGuard || stagingInput(event.text);
     const rewritten = rewriteForgePromptAlias(event.text);
     return rewritten === undefined
