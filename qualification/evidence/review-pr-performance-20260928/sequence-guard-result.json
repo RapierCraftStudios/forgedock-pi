@@ -1,0 +1,24 @@
+{
+  "schema": "forgedock.pr583.staging-check-order-guard/v1",
+  "sourceBase": "ef2b1c27b95194360f16b500793bfb6150869165",
+  "focusCommand": "npm exec -- tsx --test test/candidate/restricted-staging-policy.test.ts test/candidate/adjudication.test.ts test/candidate/review-routing-contract.test.ts",
+  "focusedResult": { "tests": 47, "passed": 47, "failed": 0, "skipped": 0, "durationMs": 41571.495876 },
+  "registeredSequence": [
+    "forge_prepare_review returns exact frozen request, identity, policy summary, config identity, and check names",
+    "forge_run_check runs the configured test once on the clean exact-head worktree and retains a bound receipt",
+    "the extension blocks premature subagent launch before the check attempt",
+    "after the check, the extension rechecks source HEAD/cleanliness and permits the prepared reviewer workflow",
+    "normal .pi/subagents/artifacts are present after controlled completed reviewer tool_result; reviewer report and receipt remain intact",
+    "forge_publish_adjudication publishes its final panel and forge_publish_record publishes the gate from the retained check receipt without rerunning the check",
+    "the gate's parent permalink is asserted to match the final panel comment"
+  ],
+  "cleanlinessProtections": {
+    "trackedProductDirtBeforeCheck": "forge_run_check refuses it before executing the configured command",
+    "trackedProductDirtAfterCheckBeforeReviewer": "the reviewer launch hook blocks it",
+    "runtimeArtifactsAfterReviewer": "remain visible as untracked .pi/subagents/artifacts; no ignore/cleanup was added",
+    "checkRerunAfterReviewerLaunch": "blocked by the extension hook",
+    "finalizationWithRuntimeArtifacts": "succeeds using the existing exact-head receipt"
+  },
+  "relatedReadbackTest": "transient provisional-panel readback retries once and gate binds the final panel permalink passed",
+  "finalFullCheck": { "command": "npm run check", "tests": 515, "passed": 509, "failed": 0, "skipped": 6, "typecheck": "passed" }
+}

@@ -91,12 +91,18 @@ async function fixture(withLocalCheck = false) {
   const bin = await mkdtemp("/tmp/forgedock-restricted-staging-bin-");
   await writeFile(join(bin, "gh"), fakeGh, { mode: 0o755 });
   await writeFile(join(root, "README.md"), "base\n");
+  if (withLocalCheck) {
+    await mkdir(join(root, "src"), { recursive: true });
+    await mkdir(join(root, "test"), { recursive: true });
+    await writeFile(join(root, "src", "display.mjs"), "export function displayName(value) { return String(value).trim(); }\n");
+    await writeFile(join(root, "test", "verify.mjs"), `import assert from "node:assert/strict";\nimport { displayName } from "../src/display.mjs";\nassert.equal(displayName(" Ada "), "Ada");\nprocess.stdout.write("display-name check passed\\n");\n`);
+  }
   await execFileAsync("git", ["init", "--quiet"], { cwd: root });
   await execFileAsync("git", ["remote", "add", "origin", "https://github.com/example/product.git"], { cwd: root });
-  await execFileAsync("git", ["add", "README.md"], { cwd: root });
+  await execFileAsync("git", ["add", "-A"], { cwd: root });
   await execFileAsync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Candidate Test", "commit", "--quiet", "-m", "base"], { cwd: root });
   const base = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: root })).stdout.trim();
-  const configText = withLocalCheck ? `${config}\nverification:\n  commands:\n    test: echo configured\n` : config;
+  const configText = withLocalCheck ? `${config}\nverification:\n  commands:\n    test: node test/verify.mjs\n` : config;
   await writeFile(join(root, "forge.yaml"), configText);
   await execFileAsync("git", ["add", "forge.yaml"], { cwd: root });
   await execFileAsync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Candidate Test", "commit", "--quiet", "-m", "config"], { cwd: root });
@@ -1247,6 +1253,221 @@ GitHub checks are complete.
     assert.equal(calls.filter((call) => call.args.includes("inspect-pr")).length, 2);
     assert.equal(JSON.parse(await readFile(f.state, "utf8")).comments.length, 1);
   } finally {
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.state, { force: true });
+  }
+});
+
+test("registered staging sequence runs checks before reviewer artifacts and publishes a gate from retained receipts", async () => {
+  const f = await fixture(true);
+  const sourceRoot = join(f.root, "..", `forgedock-review-sequence-source-${randomUUID()}`);
+  let reviewRoot: string | undefined;
+  const priorRunId = process.env.PI_SUBAGENT_RUN_ID;
+  try {
+    await execFileAsync("git", ["worktree", "add", "--quiet", "--detach", sourceRoot, f.head], { cwd: f.root });
+    const calls: Array<{ name: string; args: string[] }> = [];
+    const tools = toolMap(fakeExecutor(f.env, calls), true);
+    const prepared = await tools.get("forge_prepare_review")!.execute("sequence-prepare", {
+      repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base,
+      sourceRoot, configRoot: f.root, roles: ["correctness"], publish: true,
+    });
+    const artifacts = modelArtifacts(prepared);
+    reviewRoot = artifacts.reviewRoot;
+    const review = artifacts.review;
+    assert.equal(review.mode, "staging");
+    assert.equal(review.sourceRoot, sourceRoot);
+    assert.equal(review.configRoot, f.root);
+    const handoff = JSON.parse(prepared.content[0].text);
+    const request = handoff.request;
+    const checkInput = {
+      name: "test", configPath: prepared.details.configPath, configSha256: prepared.details.configSha256,
+      reviewRoot, artifactKey: artifacts.artifactKey, sourceRoot, head: f.head,
+    };
+    const initiallyClean = await execFileAsync("git", ["status", "--porcelain=v1", "--untracked-files=all"], { cwd: sourceRoot });
+    assert.equal(initiallyClean.stdout.trim(), "");
+    const handlers = extensionEvents();
+    handlers.get("tool_result")!({ toolName: "forge_prepare_review", isError: false, details: prepared.details });
+    const prematureReview = handlers.get("tool_call")!({ toolName: "subagent", toolCallId: "premature-review", input: request });
+    assert.equal(prematureReview?.block, true);
+    assert.match(prematureReview?.reason ?? "", /configured local check.*forge_run_check/i);
+    assert.equal(await readFile(join(reviewRoot, "panel-launch.claim"), "utf8").catch(() => ""), "");
+    const checkTool = tools.get("forge_run_check")!;
+    assert.equal(isStagingMutationBlocked("forge_run_check", checkInput), false);
+    assert.equal(handlers.get("tool_call")!({ toolName: "forge_run_check", input: checkInput }), undefined);
+    const check = await checkTool.execute("sequence-configured-test", checkInput);
+    assert.equal(check.details.name, "test");
+    assert.equal(check.details.command, "node test/verify.mjs");
+    assert.equal(check.details.exitCode, 0);
+    assert.match(check.content[0].text, /display-name check passed/);
+    const receiptPath = check.details.receiptPath;
+    const receiptBeforeReviewer = await readFile(receiptPath, "utf8");
+    assert.equal(JSON.parse(receiptBeforeReviewer).status, "passed");
+    assert.equal(JSON.parse(receiptBeforeReviewer).head, f.head);
+    const cleanAfterCheck = await execFileAsync("git", ["status", "--porcelain=v1", "--untracked-files=all"], { cwd: sourceRoot });
+    assert.equal(cleanAfterCheck.stdout.trim(), "");
+    const reviewCall = handlers.get("tool_call")!({ toolName: "subagent", toolCallId: "sequence-native-review", input: request });
+    assert.equal(reviewCall, undefined);
+    const runId = "native-sequence-correctness-1";
+    const runtimeArtifacts = join(sourceRoot, ".pi", "subagents", "artifacts");
+    await mkdir(runtimeArtifacts, { recursive: true });
+    const runtimeFiles = [
+      [`${runId}_forgedock-reviewer_0_input.md`, "synthetic native reviewer input\n"],
+      [`${runId}_forgedock-reviewer_0_meta.json`, JSON.stringify({ runId, agent: "forgedock-reviewer", terminal: "completed" })],
+      [`${runId}_forgedock-reviewer_0_output.md`, "synthetic reviewer output\n"],
+      [`${runId}_forgedock-reviewer_0_transcript.jsonl`, `${JSON.stringify({ type: "message", text: "synthetic completed reviewer" })}\n`],
+    ] as const;
+    for (const [name, content] of runtimeFiles) await writeFile(join(runtimeArtifacts, name), content);
+    const roleResult = {
+      role: "correctness", nativeRunId: runId, nativeStatus: "completed", exitCode: 0,
+      reportPath: join(reviewRoot, "correctness.report.md"), recoveryPath: join(reviewRoot, "correctness.publication-recovery.json"),
+    };
+    handlers.get("tool_result")!({ toolName: "subagent", toolCallId: "sequence-native-review", isError: false, details: { mode: "workflow", runId: "sequence-review-workflow", workflow: { value: [roleResult] } } });
+    const execution = JSON.parse(await readFile(join(reviewRoot, "reviewer-execution.json"), "utf8"));
+    assert.equal(execution.roleResults[0].nativeRunId, runId);
+    assert.equal(execution.roleResults[0].nativeStatus, "completed");
+    const lateCheck = handlers.get("tool_call")!({ toolName: "forge_run_check", input: checkInput });
+    assert.equal(lateCheck?.block, true);
+    assert.match(lateCheck?.reason ?? "", /do not rerun checks after native reviewer artifacts/i);
+
+    process.env.PI_SUBAGENT_RUN_ID = runId;
+    const reviewerBody = [
+      "## Scope and decisions considered",
+      "Reviewed the exact frozen display-name fixture change and its consumer.",
+      "## Evidence and findings",
+      "The configured behavior is covered by the completed exact-head test; no findings.",
+      "## Verification limitations",
+      "This disposable fixture proves only the configured check and report path.",
+      "## Recommendation",
+      "Approve the frozen fixture change.",
+    ].join("\n\n");
+    const report = await tools.get("forge_publish_reviewer")!.execute("sequence-review-report", {
+      repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base,
+      role: "correctness", body: reviewerBody,
+      bodyPath: join(reviewRoot, "correctness.body.md"), reportPath: join(reviewRoot, "correctness.report.md"),
+      reviewRoot, authorizationPath: join(reviewRoot, "correctness.authorization.json"),
+      artifactKey: review.roleArtifactKeys.correctness, publish: true, observations: [],
+    });
+    assert.equal(report.details.publication, "published");
+    const reportReceiptPath = join(reviewRoot, "correctness.publication-recovery.json");
+    assert.equal(JSON.parse(await readFile(reportReceiptPath, "utf8")).state, "published");
+
+    const adjudication = await tools.get("forge_publish_adjudication")!.execute("sequence-adjudication", {
+      repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base,
+      mode: "staging", reviewRoot, artifactKey: artifacts.artifactKey, verdict: "APPROVE", gate: "PASS",
+      decisions: [], historicalDecisions: [],
+      checks: [{ name: "test", required: true, conclusion: "passed", executedProof: true, executedProofRequired: false, policyAccepted: true, stage: "current stage", evidence: [`Configured receipt passed: ${receiptPath}`] }],
+      limitations: ["Disposable fixture only; no scale claim."], nextAction: "No follow-up is required.", allowIssueWrites: false, publish: true,
+    });
+    assert.equal(adjudication.details.publication, "published");
+    assert.equal(adjudication.details.readbackVerified, true);
+    assert.equal(adjudication.details.verdict, "APPROVE");
+    assert.ok(adjudication.details.panelUrl);
+    assert.equal(adjudication.details.gateBodyPanelUrl, adjudication.details.panelUrl);
+
+    const gate = await tools.get("forge_publish_record")!.execute("sequence-gate", {
+      repository: "example/product", pullRequest: 7, kind: "STAGING_GATE", head: f.head, baseRef: "main", baseSha: f.base,
+      gate: "PASS", checks: ["test"], reviewRoot, artifactKey: artifacts.artifactKey,
+      adjudicationPath: adjudication.details.decisionPath, publish: true,
+    });
+    assert.equal(gate.details.publication, "published");
+    assert.equal(gate.details.readbackVerified, true);
+    assert.equal(gate.details.panelUrl, adjudication.details.panelUrl);
+
+    const finalState = JSON.parse(await readFile(f.state, "utf8"));
+    const reportComments = finalState.comments.filter((comment: any) => comment.body.includes("FORGE:REVIEWER_REPORT"));
+    const panels = finalState.comments.filter((comment: any) => comment.body.includes("FORGE:REVIEW-PANEL"));
+    const gates = finalState.comments.filter((comment: any) => comment.body.includes("FORGE:STAGING_GATE"));
+    assert.equal(reportComments.length, 1);
+    assert.equal(panels.length, 2);
+    assert.equal(gates.length, 1);
+    const finalParentLink = gates[0].body.split(/\r?\n/).find((line: string) => line.startsWith("**Parent decision permalink**: "));
+    assert.equal(finalParentLink, `**Parent decision permalink**: ${adjudication.details.panelUrl}`);
+    assert.equal(calls.filter((call) => call.name === "sh" && call.args.includes("-lc")).length, 1, "the successful configured check must not be rerun after reviewer completion");
+    assert.equal(calls.filter((call) => call.args.includes("inspect-pr")).length, 2, "one preparation read and one final gate refresh");
+    assert.equal(JSON.parse(await readFile(receiptPath, "utf8")).status, "passed");
+    assert.ok(await readFile(join(reviewRoot, "correctness.report.md"), "utf8"));
+    assert.ok(await readFile(reportReceiptPath, "utf8"));
+    for (const [name] of runtimeFiles) assert.ok(await readFile(join(runtimeArtifacts, name), "utf8"));
+    const sourceStatus = await execFileAsync("git", ["status", "--porcelain=v1", "--untracked-files=all"], { cwd: sourceRoot });
+    const statusLines = sourceStatus.stdout.trim().split("\n").filter(Boolean);
+    assert.equal(statusLines.length, runtimeFiles.length);
+    assert.ok(statusLines.every((line: string) => line.includes(".pi/subagents/artifacts/")));
+    assert.equal(await readFile(join(sourceRoot, "src", "display.mjs"), "utf8"), "export function displayName(value) { return String(value).trim(); }\n");
+    assert.equal((await execFileAsync("git", ["status", "--porcelain=v1", "--untracked-files=all"], { cwd: f.root })).stdout.trim(), "", "the canonical config checkout remains clean");
+    assert.equal(finalState.issues?.length ?? 0, 0);
+  } finally {
+    if (priorRunId === undefined) delete process.env.PI_SUBAGENT_RUN_ID;
+    else process.env.PI_SUBAGENT_RUN_ID = priorRunId;
+    if (reviewRoot) await rm(reviewRoot, { recursive: true, force: true });
+    await execFileAsync("git", ["worktree", "remove", "--force", sourceRoot], { cwd: f.root }).catch(() => {});
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.state, { force: true });
+  }
+});
+
+test("reviewer launch guard rejects product-source dirt introduced after a passed check", async () => {
+  const f = await fixture(true);
+  const sourceRoot = join(f.root, "..", `forgedock-dirty-after-check-${randomUUID()}`);
+  let reviewRoot: string | undefined;
+  try {
+    await execFileAsync("git", ["worktree", "add", "--quiet", "--detach", sourceRoot, f.head], { cwd: f.root });
+    const calls: Array<{ name: string; args: string[] }> = [];
+    const tools = toolMap(fakeExecutor(f.env, calls));
+    const prepared = await tools.get("forge_prepare_review")!.execute("prepare-before-source-dirt", {
+      repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base,
+      sourceRoot, configRoot: f.root, roles: ["correctness"], publish: true,
+    });
+    const artifacts = modelArtifacts(prepared);
+    reviewRoot = artifacts.reviewRoot;
+    const request = JSON.parse(prepared.content[0].text).request;
+    const handlers = extensionEvents();
+    handlers.get("tool_result")!({ toolName: "forge_prepare_review", isError: false, details: prepared.details });
+    const checkInput = { name: "test", configPath: prepared.details.configPath, configSha256: prepared.details.configSha256, reviewRoot, artifactKey: artifacts.artifactKey, sourceRoot, head: f.head };
+    assert.equal(handlers.get("tool_call")!({ toolName: "forge_run_check", input: checkInput }), undefined);
+    const check = await tools.get("forge_run_check")!.execute("check-before-external-dirt", checkInput);
+    assert.equal(check.details.exitCode, 0);
+    await writeFile(join(sourceRoot, "src", "display.mjs"), "export function displayName(value) { return value.toUpperCase(); }\n");
+    const launch = handlers.get("tool_call")!({ toolName: "subagent", toolCallId: "dirty-source-review", input: request });
+    assert.equal(launch?.block, true);
+    assert.match(launch?.reason ?? "", /frozen source is dirty before reviewer launch/);
+    assert.equal(await readFile(join(reviewRoot, "panel-launch.claim"), "utf8").catch(() => ""), "");
+    assert.equal(JSON.parse(await readFile(check.details.receiptPath, "utf8")).status, "passed");
+    assert.equal(calls.filter((call) => call.name === "sh" && call.args.includes("-lc")).length, 1);
+    const status = await execFileAsync("git", ["status", "--porcelain=v1", "--untracked-files=all"], { cwd: sourceRoot });
+    assert.match(status.stdout, /src\/display\.mjs/);
+  } finally {
+    if (reviewRoot) await rm(reviewRoot, { recursive: true, force: true });
+    await execFileAsync("git", ["worktree", "remove", "--force", sourceRoot], { cwd: f.root }).catch(() => {});
+    await rm(f.root, { recursive: true, force: true });
+    await rm(f.bin, { recursive: true, force: true });
+    await rm(f.state, { force: true });
+  }
+});
+
+test("configured checks still reject actual product-source changes", async () => {
+  const f = await fixture(true);
+  let reviewRoot: string | undefined;
+  try {
+    const calls: Array<{ name: string; args: string[] }> = [];
+    const tools = toolMap(fakeExecutor(f.env, calls));
+    const prepared = await tools.get("forge_prepare_review")!.execute("dirty-source-prepare", {
+      repository: "example/product", pullRequest: 7, head: f.head, baseRef: "main", baseSha: f.base,
+      sourceRoot: f.root, configRoot: f.root, roles: ["correctness"], publish: true,
+    });
+    const artifacts = modelArtifacts(prepared);
+    reviewRoot = artifacts.reviewRoot;
+    await writeFile(join(f.root, "src", "display.mjs"), "export function displayName(value) { return value.toUpperCase(); }\n");
+    await assert.rejects(tools.get("forge_run_check")!.execute("reject-dirty-product", {
+      name: "test", configPath: prepared.details.configPath, configSha256: prepared.details.configSha256,
+      reviewRoot, artifactKey: artifacts.artifactKey, sourceRoot: f.root, head: f.head,
+    }), /Configured checks require a clean frozen source checkout/);
+    assert.equal(calls.filter((call) => call.name === "sh" && call.args.includes("-lc")).length, 0);
+    const status = await execFileAsync("git", ["status", "--porcelain=v1", "--untracked-files=all"], { cwd: f.root });
+    assert.match(status.stdout, /src\/display\.mjs/);
+  } finally {
+    if (reviewRoot) await rm(reviewRoot, { recursive: true, force: true });
     await rm(f.root, { recursive: true, force: true });
     await rm(f.bin, { recursive: true, force: true });
     await rm(f.state, { force: true });

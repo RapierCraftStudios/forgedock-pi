@@ -127,7 +127,9 @@ registered tool, not a supported end-to-end review route. After staging preparat
 read/check tools rather than retrying blocked shell commands. Run configured local checks against the
 frozen source checkout before launching reviewers and reuse those receipts: native reviewer
 sessions may create `.pi/subagents/artifacts` there, which makes a later clean-tree check reject a
-rerun. Do not relax clean-tree validation or delete those runtime artifacts.
+rerun. The staging launch hook requires one attempt for each configured check and rechecks exact
+HEAD/cleanliness before claiming the roster; it blocks check reruns after launch. A failed attempt
+is not a PASS receipt. Do not relax clean-tree validation or delete runtime artifacts.
 
 PR policy facts are collected without a local CI evaluator:
 

@@ -5,7 +5,7 @@
   "setupOnlyPreflightAttempts": 1,
   "setupOnlyFailureRecord": "setup-failure.json (no reviewer launch or fake GitHub writes)",
   "status": "partial-native-review",
-  "proceduralDeviation": "I launched an unintended duplicate before receiving and inspecting the first exercise's terminal result. Timestamps show the first had already settled; I should have waited for its result and not launched another. Both remained in separate fake-GitHub fixtures; no further native/model runs will be launched.",
+  "proceduralDeviation": "I launched an unintended duplicate before receiving and inspecting the first exercise's terminal result. Timestamps show the first had already settled; I should have waited for its result and not launched another. Both remained in separate fake-GitHub fixtures. At the close of these two attempts, no further native/model run had been performed; the later authorized corrective attempt is recorded in corrective-native-result.json.",
   "piVersion": "0.87.1",
   "parentModel": {
     "provider": "openai-codex",
@@ -79,7 +79,7 @@
       "ordinarySettingsUnchanged": true
     }
   ],
-  "responseToFixtureFinding": "The staging skill now orders configured local checks before reviewer launch and reuses those receipts, without weakening clean-tree validation or deleting runtime artifacts. This post-exercise change is covered by a routing-contract assertion; no further native/model run was made.",
+  "responseToFixtureFinding": "After these two attempts, the staging skill was updated to order configured local checks before reviewer launch and reuse their receipts, without weakening clean-tree validation or deleting runtime artifacts. The later authorized corrective attempt and its remaining ordering failure are recorded in corrective-native-result.json.",
   "finalPanelGateLinkDemonstration": "Separate deterministic controlled-readback regression; neither partial native attempt reached a gate.",
   "scopeLimitations": [
     "Neither native attempt reached parent adjudication or gate publication.",

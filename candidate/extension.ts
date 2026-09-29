@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { existsSync, linkSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -166,6 +167,9 @@ type PreparedReviewerWorkflow = {
   baseRef: string;
   baseSha: string;
   sourceRoot: string;
+  configPath: string;
+  configSha256: string;
+  configuredChecks: string[];
   mode: "standard" | "staging";
   roles: string[];
   protectedPromotion: boolean;
@@ -184,10 +188,40 @@ function preparedReviewerWorkflow(details: unknown): PreparedReviewerWorkflow | 
     const identity = frozenReviewIdentity(review);
     if (review.schema !== "forgedock.candidate-review/v1" || review.artifactRoot !== reviewRoot || review.artifactKey !== value.artifactKey || !identity || (review.mode !== "standard" && review.mode !== "staging") || !roles?.length || !workflowPath || resolve(dirname(workflowPath)) !== reviewRoot || !existsSync(workflowPath) || realpathSync(workflowPath) !== workflowPath || typeof review.workflowSha256 !== "string" || sha256(readFileSync(workflowPath, "utf8")) !== review.workflowSha256 || typeof review.repository !== "string" || !Number.isSafeInteger(review.pullRequest) || typeof review.head !== "string" || typeof review.baseRef !== "string" || typeof review.baseSha !== "string" || typeof review.sourceRoot !== "string") return undefined;
     const config = review.config && typeof review.config === "object" && !Array.isArray(review.config) ? review.config as Record<string, unknown> : {};
+    const verificationCommands = config.verificationCommands && typeof config.verificationCommands === "object" && !Array.isArray(config.verificationCommands) ? config.verificationCommands as Record<string, unknown> : {};
+    const configuredChecks = Object.keys(verificationCommands);
     const protectedBranch = config.protectedBranch;
-    return { reviewRoot, artifactKey: String(review.artifactKey), workflowPath, workflowSha256: review.workflowSha256, identity, repository: review.repository, pullRequest: Number(review.pullRequest), head: review.head, baseRef: review.baseRef, baseSha: review.baseSha, sourceRoot: review.sourceRoot, mode: review.mode, roles, protectedPromotion: review.mode === "staging" && typeof protectedBranch === "string" && summary.baseRef === protectedBranch };
+    if (typeof review.configPath !== "string" || typeof review.configSha256 !== "string") return undefined;
+    return { reviewRoot, artifactKey: String(review.artifactKey), workflowPath, workflowSha256: review.workflowSha256, identity, repository: review.repository, pullRequest: Number(review.pullRequest), head: review.head, baseRef: review.baseRef, baseSha: review.baseSha, sourceRoot: review.sourceRoot, configPath: review.configPath, configSha256: review.configSha256, configuredChecks, mode: review.mode, roles, protectedPromotion: review.mode === "staging" && typeof protectedBranch === "string" && summary.baseRef === protectedBranch };
   } catch {
     return undefined;
+  }
+}
+
+function preparedCheckKey(prepared: PreparedReviewerWorkflow, name: string): string {
+  return `${prepared.reviewRoot}\u0000${prepared.artifactKey}\u0000${name}`;
+}
+
+function hasPreparedCheckReceipt(prepared: PreparedReviewerWorkflow, name: string): boolean {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_. -]*$/.test(name)) return false;
+  const path = join(prepared.reviewRoot, "checks", `${name}.json`);
+  try {
+    if (!existsSync(path) || realpathSync(path) !== path) return false;
+    const receipt = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    return receipt.schema === "forgedock.candidate-check/v1" && receipt.status === "passed" && receipt.name === name && receipt.sourceRoot === prepared.sourceRoot && receipt.head === prepared.head && receipt.configPath === prepared.configPath && receipt.configSha256 === prepared.configSha256;
+  } catch {
+    return false;
+  }
+}
+
+function cleanPreparedSourceProblem(prepared: PreparedReviewerWorkflow): string | undefined {
+  try {
+    const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: prepared.sourceRoot, encoding: "utf8", timeout: 5_000 }).trim();
+    if (head !== prepared.head) return `frozen source moved from ${prepared.head} to ${head}`;
+    const status = execFileSync("git", ["status", "--porcelain=v1", "--untracked-files=all"], { cwd: prepared.sourceRoot, encoding: "utf8", timeout: 5_000 }).trim();
+    return status ? `frozen source is dirty before reviewer launch: ${status.slice(0, 320)}` : undefined;
+  } catch (error) {
+    return `frozen source cleanliness could not be verified: ${error instanceof Error ? error.message : String(error)}`;
   }
 }
 
@@ -221,6 +255,7 @@ export default function forgedockCandidateExtension(pi: ExtensionAPI): void {
   const preparedReviewerWorkflows = new Map<string, PreparedReviewerWorkflow>();
   const pendingReviewerRuns = new Map<string, PreparedReviewerWorkflow>();
   const completedReviewerRuns = new Map<string, Map<string, Record<string, unknown>>>();
+  const attemptedStagingChecks = new Set<string>();
   registerCandidateTools(pi);
   pi.registerCommand("forge-status", {
     description: "Show the active ForgeDock package and registered review tools",
@@ -317,10 +352,28 @@ export default function forgedockCandidateExtension(pi: ExtensionAPI): void {
     if (stagingGuard && isStagingMutationBlocked(event.toolName, event.input)) {
       return { block: true, reason: "The staging review route is non-mutating; use read-only inspection and configured checks. The prepared reviewer roster cannot be relaunched; recover only an exact completed role or record incomplete delivery." };
     }
+    if (event.toolName === "forge_run_check" && event.input && typeof event.input === "object" && !Array.isArray(event.input)) {
+      const input = event.input as Record<string, unknown>;
+      const preparedCheck = [...preparedReviewerWorkflows.values()].find((candidate) => candidate.protectedPromotion && typeof input.reviewRoot === "string" && resolve(input.reviewRoot) === candidate.reviewRoot && input.artifactKey === candidate.artifactKey);
+      if (preparedCheck) {
+        if (claimedReviewerIdentities.has(preparedCheck.identity)) return { block: true, reason: "Configured checks must run before reviewer launch; do not rerun checks after native reviewer artifacts may exist. Reuse the exact-head receipt." };
+        if (typeof input.name !== "string" || !preparedCheck.configuredChecks.includes(input.name)) return { block: true, reason: "Run only a check named by the prepared canonical forge.yaml." };
+        if (input.sourceRoot !== preparedCheck.sourceRoot || input.head !== preparedCheck.head || typeof input.configPath !== "string" || resolve(input.configPath) !== preparedCheck.configPath || input.configSha256 !== preparedCheck.configSha256) return { block: true, reason: "Configured check does not match the prepared frozen review identity." };
+        const checkKey = preparedCheckKey(preparedCheck, input.name);
+        if (attemptedStagingChecks.has(checkKey) || hasPreparedCheckReceipt(preparedCheck, input.name)) return { block: true, reason: `Configured check '${input.name}' was already attempted for this frozen review; do not rerun it.` };
+        attemptedStagingChecks.add(checkKey);
+      }
+    }
     if (event.toolName === "subagent" && allowedReadOnlySubagentList(event.input)) return undefined;
     if (event.toolName === "subagent" && prepared) {
       if (prepared.mode === "staging" && !stagingGuard) return { block: true, reason: "A protected-branch reviewer roster must pass the staging launch guard." };
       if (!allowedPreparedReviewerSubagent(event.input, prepared.mode)) return { block: true, reason: "The prepared reviewer workflow or runtime request no longer matches its frozen authorization." };
+      if (prepared.protectedPromotion) {
+        const missingChecks = prepared.configuredChecks.filter((name) => !attemptedStagingChecks.has(preparedCheckKey(prepared, name)) && !hasPreparedCheckReceipt(prepared, name));
+        if (missingChecks.length > 0) return { block: true, reason: `Run each configured local check through forge_run_check before reviewer launch: ${missingChecks.join(", ")}.` };
+        const cleanlinessProblem = cleanPreparedSourceProblem(prepared);
+        if (cleanlinessProblem) return { block: true, reason: `Reviewer launch requires the exact frozen source checkout to remain clean: ${cleanlinessProblem}` };
+      }
       const identity = claimPreparedReviewerSubagent(event.input, claimedReviewerIdentities, prepared.mode, event.toolCallId);
       if (!identity) return { block: true, reason: "The prepared reviewer roster may be launched only once; use exact-run report recovery or record incomplete delivery." };
       claimedReviewerIdentities.add(identity);

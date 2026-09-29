@@ -13,7 +13,7 @@ test("automatic promotion handoff activates and settles the staging guard", asyn
     const workflowPath = join(reviewRoot, "workflow.js");
     const workflow = "const assignments = [];\n";
     await writeFile(workflowPath, workflow);
-    const review = { schema: "forgedock.candidate-review/v1", artifactRoot: reviewRoot, artifactKey: "test-review", repository: "example/product", pullRequest: 7, head: "a".repeat(40), baseRef: "main", baseSha: "b".repeat(40), sourceRoot: reviewRoot, mode: "staging", roles: ["correctness"], workflowPath, workflowSha256: createHash("sha256").update(workflow).digest("hex"), config: { protectedBranch: "main" } };
+    const review = { schema: "forgedock.candidate-review/v1", artifactRoot: reviewRoot, artifactKey: "test-review", repository: "example/product", pullRequest: 7, head: "a".repeat(40), baseRef: "main", baseSha: "b".repeat(40), sourceRoot: reviewRoot, configPath: join(reviewRoot, "forge.yaml"), configSha256: "c".repeat(64), mode: "staging", roles: ["correctness"], workflowPath, workflowSha256: createHash("sha256").update(workflow).digest("hex"), config: { protectedBranch: "main", verificationCommands: {} } };
     await writeFile(join(reviewRoot, "review.json"), JSON.stringify(review));
     const handlers = new Map<string, Array<(event: any) => any>>();
     const fakePi = {

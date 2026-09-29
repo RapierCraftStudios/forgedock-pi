@@ -34,6 +34,8 @@ test("review-pr preserves canonical bare-number identity resolution", async () =
   assert.ok(localCheckPosition >= 0 && localCheckPosition < rosterLaunchPosition);
   assert.match(staging, /Before\s+launching reviewers, run each relevant configured local check once through\s+`forge_run_check`/);
   assert.match(staging, /clean-tree check reject a later local-check rerun/);
+  assert.match(staging, /staging launch\s+hook enforces one attempt per configured check/);
+  assert.match(staging, /after launch it blocks check reruns/);
   assert.match(staging, /After preparation, use registered read\/check tools only; do not retry blocked Bash calls/);
   assert.match(staging, /answer through `subagent_supervisor` without launching a new reviewer/);
   assert.match(staging, /mark it completed as the last tool call after verified publication/);

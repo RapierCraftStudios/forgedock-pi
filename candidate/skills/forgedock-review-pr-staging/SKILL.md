@@ -43,8 +43,10 @@ After preparation, use registered read/check tools only; do not retry blocked Ba
 launching reviewers, run each relevant configured local check once through `forge_run_check`,
 using the frozen details. The native child runtime can create `.pi/subagents` artifacts in its
 source checkout after launch, which makes the clean-tree check reject a later local-check rerun;
-capture and reuse receipts instead of invoking checks after the roster runs. The exact frozen review
-identity may claim only one prepared roster per Pi session; re-preparing or reusing a workflow for
+capture and reuse receipts instead of invoking checks after the roster runs. The staging launch
+hook enforces one attempt per configured check and rechecks the exact source head/cleanliness before
+claiming the roster; after launch it blocks check reruns. A failed check attempt is not a PASS receipt.
+The exact frozen review identity may claim only one prepared roster per Pi session; re-preparing or reusing a workflow for
 that same identity after a later input is blocked. Then pass the exact returned request unchanged to
 `subagent` and wait for every fresh `forgedock-reviewer`; their source tools are read-only and their
 only mutation capability is the report publisher.
