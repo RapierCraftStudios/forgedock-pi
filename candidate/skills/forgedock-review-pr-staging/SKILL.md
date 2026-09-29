@@ -126,7 +126,8 @@ After every selected report is read back and parent adjudication completes, publ
 or mechanical gate. Publish `FORGE:STAGING_GATE:FAIL` only for a completed review with an exact
 blocking finding, missing proof, or wake condition. Incomplete report delivery remains a `GATED`
 post-review record with no verdict or staging gate. Once `forge_publish_record` returns a verified
-published result, use its final panel/gate permalinks and finish the operator response immediately;
-do not reread saved adjudication/gate files or begin another inspection. If this route opened a
+published result, include both exact returned permalinks on separate labeled lines (`REVIEW-PANEL`
+and `STAGING_GATE`), then finish the operator response immediately; never cite only the gate or a
+provisional panel. Do not reread saved adjudication/gate files or begin another inspection. If this route opened a
 local todo, mark it completed as the last tool call after verified publication, then return the
 response. A staging pass is integration evidence, not production authorization.

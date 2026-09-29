@@ -28,7 +28,7 @@ test("review-pr preserves canonical bare-number identity resolution", async () =
   assert.match(skill, /Do not call the recovery tool to re-verify a role[\s\S]*workflow result already says publication succeeded/);
   assert.match(skill, /After successful final publication[\s\S]*Do not reread the completed decision\/gate artifacts/);
   assert.match(staging, /preserve the same revision[\s\S]*readback-only reconciliation action/);
-  assert.match(staging, /use its final panel\/gate permalinks and finish the operator response immediately/);
+  assert.match(staging, /include both exact returned permalinks on separate labeled lines[\s\S]*never cite only the gate or a\s+provisional panel/);
   const localCheckPosition = staging.indexOf("configured local check once through");
   const rosterLaunchPosition = staging.indexOf("pass the exact returned request unchanged to");
   assert.ok(localCheckPosition >= 0 && localCheckPosition < rosterLaunchPosition);
