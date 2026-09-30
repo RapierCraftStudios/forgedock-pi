@@ -52,6 +52,26 @@
     "finalAdjudication": { "startedAt": "2026-09-29T15:10:03.268Z", "settledAt": "2026-09-29T15:10:03.981Z", "elapsedMs": 713 },
     "gatePublication": { "startedAt": "2026-09-29T15:10:20.898Z", "settledAt": "2026-09-29T15:10:21.571Z", "elapsedMs": 673 }
   },
+  "resourceIsolation": {
+    "preflightVerifiedBeforeInvocation": false,
+    "piCodingAgentDir": "/home/dev/.pi/agent",
+    "candidateExtensionPathPassed": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/extension.ts",
+    "candidateSkillPathsPassed": [
+      "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/skills/forgedock-review-pr/SKILL.md",
+      "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/skills/forgedock-review-pr-staging/SKILL.md"
+    ],
+    "candidatePromptTemplatesPassed": false,
+    "candidateReviewerAgentResourcesIsolated": false,
+    "piSubagentsExtensionPath": "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents/index.ts",
+    "piSubagentsVersion": "0.60.0",
+    "piSubagentsCommit": "0931cbbb98ab253177b181bd334fe02dd919dca5",
+    "noExtensionsFlag": true,
+    "noSkillsFlag": false,
+    "ordinaryInstalledForgeDockCommit": "a58675de0d3ed2add3e14ea9d3db8960e71bc744",
+    "observedInstalledSkillRead": "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/forgedock-pi/candidate/skills/forgedock-review-pr-staging/SKILL.md",
+    "coherentCandidateResourceSetVerified": false,
+    "reason": "The invocation left global skill discovery enabled and did not load candidate prompt/agent resources as one package; the parent later read the ordinary installed staging skill."
+  },
   "skillDiscovery": {
     "sourceSkillPathPassedToParent": "candidate/skills/forgedock-review-pr-staging/SKILL.md at source commit ef2b1c27",
     "parentReadPathAfterCheckFailure": "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/forgedock-pi/candidate/skills/forgedock-review-pr-staging/SKILL.md (installed commit a58675de)",
@@ -118,9 +138,39 @@
   },
   "postRunLauncherFailure": "The Pi run settled successfully, but the launcher summary failed afterward with ReferenceError: sourceCommitAtLaunch is not defined. This result was reconstructed from preserved RPC/session/fake-GitHub artifacts; no Pi run was repeated.",
   "postRunCorrection": "A narrow staging extension guard was added after this native attempt: require configured check attempts and a clean exact-head source before reviewer launch, then block post-launch check reruns. The sequence and guard are verified without a model in sequence-guard-result.json; the native run was not repeated.",
+  "postRunNoModelPreflight": {
+    "correctedFixture": {
+      "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f",
+      "command": "npm test",
+      "exitCode": 0,
+      "testsPassed": 1,
+      "sourceTreeCleanBeforeAndAfter": true,
+      "forgeRunCheckInvoked": false,
+      "reviewReceiptCreated": false,
+      "evidence": "postrun-preflight/fixture-result.json and postrun-preflight/npm-test.stdout"
+    },
+    "resourceAudit": {
+      "sourceHead": "ea1081a38df2fad912765cc0fe6aa787bb75d034",
+      "piSubagents": "0.60.0 at 0931cbbb98ab253177b181bd334fe02dd919dca5",
+      "selectedReviewerProfile": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/agents/forgedock-reviewer.md",
+      "selectedReviewerTools": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/reviewer-tools.ts",
+      "noPiProcessOrModelLaunched": true,
+      "evidence": "postrun-preflight/resource-resolution-audit.json",
+      "limitation": "This audit occurred after the native run and cannot retroactively validate its resource set."
+    },
+    "launcherSource": {
+      "fixtureSeedParenthesisCorrected": true,
+      "summaryReferenceChangedToSourceHeadAtLaunch": true,
+      "nodeCheckPassed": true,
+      "actualRunPostSettlementErrorRemains": true,
+      "launcherOrPiWasNotRerun": true
+    }
+  },
   "remainingLimitations": [
     "The native route still did not complete the configured npm test in the supported pre-review order; the final GATED/FAIL is the actual decision and the completion acceptance is not met.",
-    "The disposable fixture test has a syntax error and was not corrected or rerun after the review.",
+    "The actual native fixture head retained the malformed test and npm test was not executed; the separate corrected fixture preflight passed but created no check receipt and does not qualify the native run.",
+    "The native invocation did not isolate the candidate skills/prompts/agent resources; the post-run resource audit is not a substitute for a pre-invocation audit or a native run.",
+    "The launcher summary still failed after the Pi process settled; the corrected source was only syntax-checked, and the actual result was reconstructed from retained artifacts.",
     "The parent attempted adjudication with two rejected argument sets before publishing revision 1; no external evaluator modified arguments, but this adds tool-error latency.",
     "The parent final response links the gate record but omits a separate final panel permalink; the gate body itself is verified against the final panel.",
     "One readback-only recovery call followed a published reviewer report; it made no duplicate report POST.",

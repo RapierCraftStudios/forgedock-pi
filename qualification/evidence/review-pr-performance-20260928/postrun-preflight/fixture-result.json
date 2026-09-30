@@ -1,0 +1,18 @@
+{
+  "phase": "post-run no-model fixture preflight; does not retroactively qualify the native run",
+  "project": "/home/dev/.cache/forgedock-pr583-corrected-fixture-preflight-20260929/project",
+  "sourceRoot": "/home/dev/.cache/forgedock-pr583-corrected-fixture-preflight-20260929/project/.forge/worktrees/review-pr-7",
+  "base": "16e4e51e3f24a44c882e929c577b717461d09599",
+  "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f",
+  "configuredCheck": "npm test",
+  "testCommand": "npm test",
+  "exitCode": 0,
+  "sourceCleanBefore": true,
+  "sourceCleanAfter": true,
+  "headUnchanged": true,
+  "reviewerRuntimeArtifactsCreated": false,
+  "forgeRunCheckInvoked": false,
+  "reviewReceiptCreated": false,
+  "stdoutPath": "/home/dev/.cache/forgedock-pr583-corrected-fixture-preflight-20260929/evidence/npm-test.stdout",
+  "stderrPath": "/home/dev/.cache/forgedock-pr583-corrected-fixture-preflight-20260929/evidence/npm-test.stderr"
+}
