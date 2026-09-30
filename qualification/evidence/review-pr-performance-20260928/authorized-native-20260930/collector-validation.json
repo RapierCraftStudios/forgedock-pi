@@ -1,0 +1,45 @@
+{
+  "passed": true,
+  "outputPath": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/native-runs/2026-09-30T03-52-43-764Z/native-summary-collected.json",
+  "sourceCommitAtLaunch": "392daed1a178e9081d86ec6c85430ba893cb0f9c",
+  "eventCount": 2215,
+  "configuredCheckBeforeReviewer": true,
+  "receiptPassed": true,
+  "gateLinksFinalPanel": true,
+  "finalResponseIncludesBothLinks": true,
+  "elapsed": {
+    "parentStartedAt": "2026-09-30T03:52:44.453Z",
+    "parentSettledAt": "2026-09-30T03:57:33.402Z",
+    "processFinishedAt": "2026-09-30T03:57:33.424Z",
+    "totalElapsedMs": 288971,
+    "processExitCode": 0,
+    "processSignal": null,
+    "stages": {
+      "prepare": {
+        "startedAt": "2026-09-30T03:53:33.074Z",
+        "settledAt": "2026-09-30T03:53:34.474Z",
+        "elapsedMs": 1400
+      },
+      "check": {
+        "startedAt": "2026-09-30T03:54:13.956Z",
+        "settledAt": "2026-09-30T03:54:14.581Z",
+        "elapsedMs": 625
+      },
+      "reviewer": {
+        "startedAt": "2026-09-30T03:54:22.200Z",
+        "settledAt": "2026-09-30T03:54:22.235Z",
+        "elapsedMs": 35
+      },
+      "adjudication": {
+        "startedAt": "2026-09-30T03:56:21.960Z",
+        "settledAt": "2026-09-30T03:56:22.880Z",
+        "elapsedMs": 920
+      },
+      "gate": {
+        "startedAt": "2026-09-30T03:56:40.451Z",
+        "settledAt": "2026-09-30T03:56:40.968Z",
+        "elapsedMs": 517
+      }
+    }
+  }
+}

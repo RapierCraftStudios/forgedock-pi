@@ -1,0 +1,1 @@
+{"status":"PASS","parentModel":"openai-codex/gpt-6-luna","reviewerModel":"openai-codex/gpt-5.6-luna","provider":"openai-codex","parentThinking":"max","reviewerThinking":"medium","modelListingOnly":true,"noLLMRequest":true}

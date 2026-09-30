@@ -1,0 +1,25 @@
+{
+  "schema": "forgedock.candidate-review-execution/v1",
+  "repository": "example/product",
+  "pullRequest": 7,
+  "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f",
+  "baseRef": "main",
+  "baseSha": "16e4e51e3f24a44c882e929c577b717461d09599",
+  "artifactKey": "8371e940-03ca-4529-93ff-f59a92458edd",
+  "mode": "staging",
+  "workflowPath": "/tmp/forgedock-review-request-ZkIgtn/workflow.js",
+  "workflowSha256": "89cc5b96c1c951981d3037f60b7aa9d842ec4e7de747a869cea14827d4a5c3ca",
+  "toolCallId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+  "workflowRunId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+  "completedAt": "2026-09-30T03:55:18.400Z",
+  "roleResults": [
+    {
+      "role": "correctness",
+      "nativeRunId": "753c61ab-59fc-4b53-ae4e-bac154c4d71c",
+      "nativeStatus": "completed",
+      "reportPath": "/tmp/forgedock-review-request-ZkIgtn/correctness.report.md",
+      "recoveryPath": "/tmp/forgedock-review-request-ZkIgtn/correctness.publication-recovery.json",
+      "exitCode": 0
+    }
+  ]
+}
