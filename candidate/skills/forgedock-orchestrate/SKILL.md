@@ -43,8 +43,9 @@ investigation and mutation plans stay inside each owner.
 
 Run the generated request from `<run-dir>/request.json` through the installed `subagent` tool.
 The request is a supported `workflowScriptPath`, uses fresh `forgedock-owner` children in
-isolated native worktrees, and admits at most two owners during qualification. It uses rolling
-admission: only ready issues consume owner slots; a successor waits for the predecessor's
+isolated native worktrees, and uses the validated `orchestration.max_concurrent` as its owner
+ceiling. Qualification fixtures must set their own intentionally small configured ceiling. It uses
+rolling admission: only ready issues consume owner slots; a successor waits for the predecessor's
 exact `FORGE_WORK_ON_RESULT ... dependency=SATISFIED` line. A failed/gated predecessor does not
 release its successor, while unrelated ready issues continue.
 

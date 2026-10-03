@@ -20,12 +20,14 @@ branches:
   feature_pattern: feature/{slug}
 agents:
   subagent_model: provider/model
+  thinking: max
 orchestration:
   max_concurrent: 2
 verification:
   commands:
     test: npm test
 review:
+  thinking: max
   reviewer_timeout_ms: 1000
   panel_timeout_ms: 4000
   publication_timeout_ms: 1000
@@ -47,6 +49,12 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     const baseSha = (await execFileAsync("git", ["rev-parse", "HEAD^"], { cwd: root })).stdout.trim();
     await execFileAsync("git", ["branch", "-M", "integration"], { cwd: root });
     await execFileAsync("git", ["update-ref", "refs/remotes/origin/integration", sourceHead], { cwd: root });
+    const parsedConfig = JSON.parse((await execFileAsync("node", [helper, "config", "--cwd", root])).stdout) as { ownerModel: string; ownerThinking: string; configuredOwnerConcurrency: number; effectiveOwnerConcurrency: number; review: { reviewerThinking: string } };
+    assert.equal(parsedConfig.ownerModel, "provider/model");
+    assert.equal(parsedConfig.ownerThinking, "max");
+    assert.equal(parsedConfig.configuredOwnerConcurrency, 2);
+    assert.equal(parsedConfig.effectiveOwnerConcurrency, 2);
+    assert.equal(parsedConfig.review.reviewerThinking, "max");
     const testName = root.slice(root.lastIndexOf("/") + 1);
     const issuesFile = join(root, "..", `${testName}-issues.json`);
     await writeFile(issuesFile, JSON.stringify({ issues: [
@@ -60,9 +68,10 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     const ownerAuthority = "The operator authorized simulated publication in this fixture only; no live GitHub operations.";
     await writeFile(ownerAuthorityPath, `${ownerAuthority}\n`);
     const dispatch = JSON.parse((await execFileAsync("node", [helper, "prepare-dispatch", "--selector", "#1 #2", "--delivery-mode", "github", "--owner-authority-file", ownerAuthorityPath, "--cwd", root, "--issues-file", issuesFile, "--out", out])).stdout) as { requestPath: string; planPath: string };
-    const plan = JSON.parse(await readFile(dispatch.planPath, "utf8")) as { deliveryMode: string; ownerAuthority: string | null; issues: Array<{ number: number; predecessors: string[]; acceptance: string[]; mutationFiles: string[]; body: string; task: string; admitted?: boolean }>; readiness: { missingAcceptance: number[]; unstructuredAcceptance: number[] } };
+    const plan = JSON.parse(await readFile(dispatch.planPath, "utf8")) as { deliveryMode: string; ownerAuthority: string | null; ownerConcurrency: { configured: number; effective: number }; issues: Array<{ number: number; predecessors: string[]; acceptance: string[]; mutationFiles: string[]; body: string; task: string; admitted?: boolean }>; readiness: { missingAcceptance: number[]; unstructuredAcceptance: number[] } };
     assert.equal(plan.deliveryMode, "github");
     assert.equal(plan.ownerAuthority, ownerAuthority);
+    assert.deepEqual(plan.ownerConcurrency, { configured: 2, effective: 2 });
     assert.match(plan.issues[0]?.task ?? "", /Trusted dispatch deliveryMode: github/);
     assert.match(plan.issues[0]?.task ?? "", /Trusted parent operation authority/);
     assert.match(plan.issues[0]?.task ?? "", /no live GitHub operations/);
@@ -86,7 +95,9 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     assert.match(plan.issues[2]?.task ?? "", /retain that check as a failure/);
     const request = JSON.parse(await readFile(dispatch.requestPath, "utf8")) as { workflowScriptPath: string; globalConcurrencyLimit: number };
     assert.equal(request.globalConcurrencyLimit, 2);
-    assert.match(await readFile(request.workflowScriptPath, "utf8"), /forgedock-owner/);
+    const ownerWorkflow = await readFile(request.workflowScriptPath, "utf8");
+    assert.match(ownerWorkflow, /forgedock-owner/);
+    assert.ok(ownerWorkflow.includes('const configuredModel = "provider/model:max";'));
     const intakePath = join(root, "..", `${testName}-intake.json`);
     const firstIntake = JSON.parse((await execFileAsync("node", [helper, "prepare", "--issue", "1", "--cwd", root, "--issue-file", issuesFile, "--out", intakePath])).stdout) as { outputPath: string; preparedAt: string; reused: boolean; issue: { acceptance: string[]; mutationFiles: string[] } };
     const secondIntake = JSON.parse((await execFileAsync("node", [helper, "prepare", "--issue", "1", "--cwd", root, "--issue-file", issuesFile, "--out", intakePath])).stdout) as { outputPath: string; preparedAt: string; reused: boolean };
@@ -118,6 +129,7 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     assert.equal(JSON.parse(await readFile(review.requestPath, "utf8")).maxSubagentSpawnsPerRun, 1);
     const workflowText = await readFile(join(reviewOut, "workflow.js"), "utf8");
     assert.match(workflowText, /forgedock-reviewer/);
+    assert.ok(workflowText.includes('"model":"provider/model:max"'));
     assert.match(workflowText, /Caller-supplied review context \(not authoritative acceptance\)/);
     assert.doesNotMatch(workflowText, /Original acceptance:/);
     assert.match(workflowText, /Prepared policy summary: .*policy-summary\.json/);

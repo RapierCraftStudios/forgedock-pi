@@ -297,7 +297,7 @@ function configFromRaw(rawText, configPath, cwd, options = {}) {
   const remediationMaxRounds = validateReview
     ? integer(review.remediation_max_rounds ?? 1, "review.remediation_max_rounds", 0)
     : review.remediation_max_rounds ?? 1;
-  const reviewerThinking = validateReview && typeof review.thinking === "string" && THINKING_LEVELS.has(review.thinking) ? review.thinking : "medium";
+  const reviewerThinking = typeof review.thinking === "string" && THINKING_LEVELS.has(review.thinking) ? review.thinking : "medium";
   const verificationCommands = {};
   const commands = verification.commands && typeof verification.commands === "object" && !Array.isArray(verification.commands) ? verification.commands : {};
   for (const [key, value] of Object.entries(commands)) {
@@ -323,7 +323,7 @@ function configFromRaw(rawText, configPath, cwd, options = {}) {
     ownerModel,
     ownerThinking: configuredThinking,
     configuredOwnerConcurrency,
-    qualificationOwnerConcurrency: validateDispatch ? Math.min(configuredOwnerConcurrency, 2) : null,
+    effectiveOwnerConcurrency: configuredOwnerConcurrency,
     review: { reviewerTimeoutMs, panelTimeoutMs, publicationTimeoutMs, maxConcurrent, remediationMaxRounds, reviewerThinking },
     verificationCommands,
     globalFiles,
@@ -743,7 +743,7 @@ function nativeWorkflowForBatch(issues, config, runDir, priorRows = []) {
   const graph = JSON.stringify(issues).replaceAll("\u2028", "\\u2028").replaceAll("\u2029", "\\u2029");
   const prior = JSON.stringify(priorRows).replaceAll("\u2028", "\\u2028").replaceAll("\u2029", "\\u2029");
   const model = JSON.stringify(modelWithThinking(config.ownerModel, config.ownerThinking));
-  const concurrency = Math.min(config.configuredOwnerConcurrency, 2);
+  const concurrency = config.effectiveOwnerConcurrency;
   const taskDir = JSON.stringify(runDir);
   return `const issueGraph = ${graph};\nconst priorRows = ${prior};\nconst configuredModel = ${model};\nconst ownerConcurrency = ${concurrency};\nconst runDirectory = ${taskDir};\nfunction failure(error) { return { ok: false, error: String(error) }; }\nfunction launch(key, params) { return Promise.resolve().then(() => runs.all([{ ...params, key }])).then((items) => items[0]).catch(failure); }\n\nfunction ownerOutcome(result, issueNumber) { if (result?.syntheticGate === true) return { valid: false, status: "GATED", dependency: "UNSATISFIED", output: null, error: String(result?.error ?? "predecessor or admission gate") }; if (result?.detached === true || result?.pending === true || result?.status === "WAITING") return { valid: false, status: "WAITING", dependency: "UNSATISFIED", output: null, error: String(result?.error ?? "native owner is not terminal") }; if (result?.ok !== true || result?.stopped === true || result?.cancelled === true || result?.interrupted === true) return { valid: false, status: "FAILED", dependency: "UNSATISFIED", output: null, error: String(result?.error ?? result?.output ?? "native owner execution did not complete") }; const lines = String(result.output ?? "").split("\\n").filter((line) => line.startsWith("FORGE_WORK_ON_RESULT status=")); const matches = lines.map((line) => line.match(/^FORGE_WORK_ON_RESULT status=(DONE|GATED|FAILED) issue=([0-9]+) pr=([0-9]+|none) dependency=(SATISFIED|UNSATISFIED)$/)).filter(Boolean); if (lines.length !== 1 || matches.length !== 1) return { valid: false, status: "FAILED", dependency: "UNSATISFIED", output: null, error: "owner result must contain exactly one valid terminal marker" }; const match = matches[0]; if (Number(match[2]) !== issueNumber) return { valid: false, status: "FAILED", dependency: "UNSATISFIED", output: lines[0], error: "owner terminal marker is for the wrong issue" }; if (match[1] === "DONE" && match[4] !== "SATISFIED") return { valid: false, status: "FAILED", dependency: match[4], output: lines[0], error: "DONE owner result must declare SATISFIED dependency" }; return { valid: true, status: match[1], dependency: match[4], output: lines[0], error: null }; } function nativeState(result) { if (result?.syntheticGate === true) return "not-started"; if (result?.detached === true) return "detached"; if (result?.pending === true && !result?.runId) return "not-started"; if (result?.stopped === true) return "stopped"; if (result?.interrupted === true) return "interrupted"; if (result?.timedOut === true || result?.terminalOutcome?.reason === "timeout") return "timed-out"; if (result?.turnBudgetExceeded === true || result?.toolBudgetBlocked === true || result?.terminalOutcome?.reason === "budget_exhausted") return "execution-limit"; if (result?.pending === true) return "nonterminal"; return result?.ok === true ? "completed" : "failed"; } function satisfied(result, issueNumber) { const normalized = ownerOutcome(result, issueNumber); return normalized.valid && normalized.status === "DONE" && normalized.dependency === "SATISFIED"; }\nfunction runIssue(node) { return launch(node.key, { agent: \"forgedock-owner\", task: node.task, model: configuredModel, context: \"fresh\", cwd: ${JSON.stringify(config.projectRoot)}, worktree: true, output: false, artifacts: true, maxRuntimeMs: 2147483647 }).then((result) => { if (result.ok || result.detached || result.stopped || !result.runId || result.resumability?.state !== \"resumable\") return result; return launch(node.key + \"-recovery\", { resume: result.runId, task: \"The prior owner is terminal and resumable. Continue the same issue in the same retained worktree; reconcile preserved work and never create a competing writer.\" }).then((recovered) => ({ ...recovered, recoverySource: { runId: result.runId, output: result.output ?? null, outputReference: result.outputReference ?? null, artifactPaths: result.artifactPaths ?? [] } })); }); }\nconst issueByKey = new Map(issueGraph.map((node) => [node.key, node]));\nconst outcomes = new Map();\nconst detachedOwners = new Map();\nfor (const row of priorRows) { const node = issueByKey.get(row.key); if (!node || Number(row.issue) !== node.number) throw new Error("Continuation result does not match the prepared issue graph"); if (row.nativeStatus === "detached") { const result = { ok: false, detached: true, pending: true, runId: row.runId ?? undefined, error: "Detached owner remains unresolved; wait for its exact native run before continuing." }; outcomes.set(node.key, result); detachedOwners.set(node.key, result); } else if (!(row.status === "WAITING" && row.nativeStatus === "not-started")) outcomes.set(node.key, { ok: row.ok === true, status: row.status, dependency: row.dependency, runId: row.runId ?? undefined, output: row.output ?? undefined, error: row.error ?? undefined, syntheticGate: row.nativeStatus === "not-started" && row.status === "GATED", stopped: row.nativeStatus === "stopped", interrupted: row.nativeStatus === "interrupted", timedOut: row.nativeStatus === "timed-out", turnBudgetExceeded: row.nativeStatus === "execution-limit" }); }\nconst pending = issueGraph.filter((node) => !outcomes.has(node.key));\nconst active = new Map();\nfunction start(node) { const work = runIssue(node).then((result) => { outcomes.set(node.key, result); if (result?.detached === true) detachedOwners.set(node.key, result); active.delete(node.key); }); active.set(node.key, work); }\nwhile (pending.length || active.size) { for (let index = 0; index < pending.length && active.size + detachedOwners.size < ownerConcurrency;) { const node = pending[index]; const waitingFor = node.predecessors.filter((key) => !outcomes.has(key) || ownerOutcome(outcomes.get(key), issueByKey.get(key)?.number).status === "WAITING"); if (waitingFor.length) { index += 1; continue; } pending.splice(index, 1); const blockedBy = node.predecessors.filter((key) => !satisfied(outcomes.get(key), issueByKey.get(key)?.number)); if (blockedBy.length) outcomes.set(node.key, { ok: false, status: \"GATED\", blockedBy, syntheticGate: true }); else if (!node.admitted) outcomes.set(node.key, { ok: false, status: "GATED", blockedBy: [], syntheticGate: true, error: node.gateReason ?? "issue is not admitted" }); else start(node); } if (active.size) await Promise.race([...active.values()]); else if (pending.length && detachedOwners.size === 0) throw new Error(\"Unresolved issue graph\"); else if (pending.length) break; }\nreturn issueGraph.map((node) => { const waitingFor = node.predecessors.filter((key) => !outcomes.has(key) || ownerOutcome(outcomes.get(key), issueByKey.get(key)?.number).status === \"WAITING\"); const result = outcomes.get(node.key) ?? { ok: false, pending: true, waitingFor, error: \"Not admitted while a detached owner retains its native slot.\" }; const normalized = ownerOutcome(result, node.number); return { key: node.key, issue: node.number, repository: node.repository, target: ${JSON.stringify(config.integrationBranch)}, ok: normalized.valid, status: normalized.status, nativeStatus: nativeState(result), dependency: normalized.dependency, runId: result.runId ?? null, output: normalized.output, blockedBy: result.blockedBy ?? [], waitingFor: result.waitingFor ?? waitingFor, detached: result.detached === true, recoverySource: result.recoverySource ?? null, error: normalized.error ?? result.error ?? null }; });\n`;
 }
@@ -798,6 +798,7 @@ function prepareDispatch(options) {
     projectRoot: config.projectRoot,
     config,
     targetBase,
+    ownerConcurrency: { configured: config.configuredOwnerConcurrency, effective: config.effectiveOwnerConcurrency },
     ownership: { exactWorktreeMatches, nativeRunCheck: { required: true, action: "subagent({ action: \"status\" })", policy: "correlate exact issue/worktree evidence before admission; unavailable status gates the affected issue" } },
     readiness: { missingAcceptance, unstructuredAcceptance, activeOwnership: [...activeOwnership], externalDependencies: graph.filter((issue) => issue.externalDependencies.length > 0).map((issue) => ({ issue: issue.number, dependencies: issue.externalDependencies })), admittedIssues: graph.filter((issue) => issue.admitted).map((issue) => issue.number) },
     issues: graph.map((issue) => ({ ...issue, task: ownerTask(issue, config, out, targetBase, options.values.get("issues-file") ? resolve(requiredOption(options, "issues-file")) : undefined, deliveryMode === "local-replay" && graph.length > 1, deliveryMode, ownerAuthority) })),
@@ -808,12 +809,12 @@ function prepareDispatch(options) {
     async: false,
     cwd: config.projectRoot,
     workflowScriptPath: workflowPath,
-    globalConcurrencyLimit: Math.min(config.configuredOwnerConcurrency, 2),
+    globalConcurrencyLimit: config.effectiveOwnerConcurrency,
     maxSubagentSpawnsPerRun: Math.max(6, graph.length * 5 + 2),
     control: { needsAttentionAfterMs: config.review.panelTimeoutMs, activeNoticeAfterMs: config.review.reviewerTimeoutMs },
   };
   const requestPath = writeExclusive(join(out, "request.json"), json(request));
-  const result = { planPath, workflowPath, requestPath, request, issueCount: graph.length, missingAcceptance };
+  const result = { planPath, workflowPath, requestPath, request, issueCount: graph.length, missingAcceptance, ownerConcurrency: plan.ownerConcurrency };
   process.stdout.write(json(result));
   return result;
 }
@@ -824,6 +825,8 @@ function continueDispatch(options) {
   if (plan.schema !== "forgedock.candidate-dispatch/v1" || !Array.isArray(plan.issues) || !plan.config || typeof plan.projectRoot !== "string") fail("--plan must name a prepared ForgeDock dispatch plan");
   const config = loadConfig(plan.projectRoot);
   if (canonicalJson(config) !== canonicalJson(plan.config)) fail("Canonical dispatch configuration changed; do not continue the frozen plan");
+  const ownerConcurrency = { configured: config.configuredOwnerConcurrency, effective: config.effectiveOwnerConcurrency };
+  if (canonicalJson(plan.ownerConcurrency) !== canonicalJson(ownerConcurrency)) fail("Prepared owner concurrency binding changed; do not continue the frozen plan");
   const resultPath = realpathSync(resolve(requiredOption(options, "results")));
   const input = readJson(resultPath);
   if (input.schema !== "forgedock.candidate-dispatch-continuation/v1" || !Array.isArray(input.initialResults) || !Array.isArray(input.terminalResults)) fail("--results must contain initialResults and terminalResults for a detached dispatch continuation");
@@ -895,6 +898,7 @@ function continueDispatch(options) {
     selector: plan.selector,
     deliveryMode: plan.deliveryMode,
     targetBase: plan.targetBase,
+    ownerConcurrency,
     resolvedDetachedIssues: [...terminalByIssue.keys()],
     issues: mergedResults.map((row) => ({ issue: row.issue, status: row.status, nativeStatus: row.nativeStatus, runId: row.runId })),
   };
@@ -904,12 +908,12 @@ function continueDispatch(options) {
     async: false,
     cwd: config.projectRoot,
     workflowScriptPath: workflowPath,
-    globalConcurrencyLimit: Math.min(config.configuredOwnerConcurrency, 2),
+    globalConcurrencyLimit: config.effectiveOwnerConcurrency,
     maxSubagentSpawnsPerRun: Math.max(6, plan.issues.length * 5 + 2),
     control: { needsAttentionAfterMs: config.review.panelTimeoutMs, activeNoticeAfterMs: config.review.reviewerTimeoutMs },
   };
   const requestPath = writeExclusive(join(out, "request.json"), json(request));
-  const result = { continuationPath, workflowPath, requestPath, request, resolvedDetachedIssues: [...terminalByIssue.keys()] };
+  const result = { continuationPath, workflowPath, requestPath, request, ownerConcurrency, resolvedDetachedIssues: [...terminalByIssue.keys()] };
   process.stdout.write(json(result));
   return result;
 }

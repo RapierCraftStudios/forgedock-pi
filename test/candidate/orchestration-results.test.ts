@@ -12,7 +12,7 @@ const helper = resolve("bin/forgedock-candidate.mjs");
 async function prepared(issueRows = [
   { number: 1, title: "first", body: "## Acceptance Criteria\n- [ ] first result" },
   { number: 2, title: "second", body: "## Acceptance Criteria\n- [ ] second result\n\nDepends on #1" },
-]) {
+], ownerConcurrency = 2) {
   const root = await mkdtemp("/tmp/forgedock-candidate-outcomes-");
   await execFileAsync("git", ["init", "--quiet"], { cwd: root });
   await execFileAsync("git", ["remote", "add", "origin", "https://github.com/example/product.git"], { cwd: root });
@@ -32,7 +32,7 @@ branches:
 agents:
   subagent_model: provider/model
 orchestration:
-  max_concurrent: 2
+  max_concurrent: ${ownerConcurrency}
 `);
   await execFileAsync("git", ["add", "forge.yaml"], { cwd: root });
   await execFileAsync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Candidate Test", "commit", "--quiet", "-m", "fixture"], { cwd: root });
@@ -42,13 +42,13 @@ orchestration:
   const issues = join(root, "..", `forgedock-candidate-outcomes-issues-${root.split("/").at(-1)}.json`);
   await writeFile(issues, JSON.stringify({ issues: issueRows }));
   const out = join(root, "..", `forgedock-candidate-outcomes-artifacts-${root.split("/").at(-1)}`);
-  const preparedResult = JSON.parse((await execFileAsync("node", [helper, "prepare-dispatch", "--selector", issueRows.map((issue) => `#${issue.number}`).join(" "), "--cwd", root, "--issues-file", issues, "--out", out])).stdout) as { planPath: string; workflowPath: string };
+  const preparedResult = JSON.parse((await execFileAsync("node", [helper, "prepare-dispatch", "--selector", issueRows.map((issue) => `#${issue.number}`).join(" "), "--cwd", root, "--issues-file", issues, "--out", out])).stdout) as { planPath: string; workflowPath: string; requestPath: string; ownerConcurrency: { configured: number; effective: number } };
   const defaultResult = JSON.parse((await execFileAsync("node", [helper, "prepare-dispatch", "--selector", "#1 #2", "--cwd", root, "--issues-file", issues], { env: { ...process.env, FORGEDOCK_CANDIDATE_ARTIFACT_ROOT: root } })).stdout) as { planPath: string };
   assert.match(defaultResult.planPath, /forgedock-candidate-artifacts/);
   await assert.rejects(execFileAsync("node", [helper, "prepare-dispatch", "--selector", "#1 #2", "--cwd", root, "--issues-file", issues, "--out", join(root, "contaminating-artifacts")]), /must be outside the source checkout; use/);
   const workflow = await readFile(preparedResult.workflowPath, "utf8");
   const execute = vm.runInNewContext(`(async (runs) => { ${workflow} })`, { Promise }) as (runs: { all: (items: Array<Record<string, unknown>>) => Promise<Array<Record<string, unknown>>> }) => Promise<any[]>;
-  return { root, out, issues, planPath: preparedResult.planPath, workflowPath: preparedResult.workflowPath, defaultOut: defaultResult.planPath.split("/plan.json")[0]!, execute };
+  return { root, out, issues, planPath: preparedResult.planPath, workflowPath: preparedResult.workflowPath, requestPath: preparedResult.requestPath, ownerConcurrencySummary: preparedResult.ownerConcurrency, defaultOut: defaultResult.planPath.split("/plan.json")[0]!, ownerConcurrency, execute };
 }
 
 async function cleanup(result: Awaited<ReturnType<typeof prepared>>) {
@@ -68,6 +68,68 @@ async function runSingle(result: Awaited<ReturnType<typeof prepared>>, outcome: 
   });
   return { rows, calls };
 }
+
+test("generated dispatch honors configured owner ceilings 1, 2, and 10", { timeout: 30000 }, async () => {
+  const issueRows = Array.from({ length: 10 }, (_, index) => ({ number: index + 1, title: `ready ${index + 1}`, body: `## Acceptance Criteria\n- [ ] complete ${index + 1}` }));
+  for (const configured of [1, 2, 10]) {
+    const result = await prepared(issueRows, configured);
+    try {
+      const plan = JSON.parse(await readFile(result.planPath, "utf8")) as { ownerConcurrency: { configured: number; effective: number }; issues: Array<{ number: number; admitted: boolean }> };
+      const request = JSON.parse(await readFile(result.requestPath, "utf8")) as { globalConcurrencyLimit: number };
+      assert.deepEqual(plan.ownerConcurrency, { configured, effective: configured });
+      assert.deepEqual(result.ownerConcurrencySummary, { configured, effective: configured });
+      assert.ok(plan.issues.every((issue) => issue.admitted));
+      assert.equal(request.globalConcurrencyLimit, configured);
+      const active = new Set<string>();
+      const started: string[] = [];
+      let peak = 0;
+      const rows = await result.execute({
+        all: async (items) => {
+          assert.equal(items.length, 1);
+          const key = String(items[0]?.key);
+          active.add(key);
+          started.push(key);
+          peak = Math.max(peak, active.size);
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          active.delete(key);
+          const issue = Number(key.slice("issue-".length));
+          return [{ ok: true, runId: `native-${issue}`, output: `FORGE_WORK_ON_RESULT status=DONE issue=${issue} pr=none dependency=SATISFIED` }];
+        },
+      });
+      assert.equal(peak, configured, `configured ceiling ${configured}`);
+      assert.equal(started.length, issueRows.length);
+      assert.ok(rows.every((row: { status: string; dependency: string }) => row.status === "DONE" && row.dependency === "SATISFIED"));
+    } finally {
+      await cleanup(result);
+    }
+  }
+});
+
+test("continuation request preserves a configured ten-owner ceiling", async () => {
+  const issueRows = Array.from({ length: 10 }, (_, index) => ({ number: index + 1, title: `ready ${index + 1}`, body: `## Acceptance Criteria\n- [ ] complete ${index + 1}` }));
+  const result = await prepared(issueRows, 10);
+  const plan = JSON.parse(await readFile(result.planPath, "utf8")) as { issues: Array<{ number: number }>; ownerConcurrency: { configured: number; effective: number } };
+  const continuationInput = join(result.out, "continuation-input.json");
+  const continuationOut = join(result.root, "..", `forgedock-candidate-continuation-limit-${result.root.split("/").at(-1)}`);
+  try {
+    const initialResults = plan.issues.map((issue) => issue.number === 1
+      ? { key: "issue-1", issue: 1, repository: "example/product", target: "integration", ok: false, status: "WAITING", nativeStatus: "detached", dependency: "UNSATISFIED", runId: "native-detached-owner-one", output: null, blockedBy: [], waitingFor: [], detached: true, error: "retained detached owner" }
+      : { key: `issue-${issue.number}`, issue: issue.number, repository: "example/product", target: "integration", ok: true, status: "DONE", nativeStatus: "completed", dependency: "SATISFIED", runId: `native-owner-${issue.number}`, output: `FORGE_WORK_ON_RESULT status=DONE issue=${issue.number} pr=none dependency=SATISFIED`, blockedBy: [], waitingFor: [], detached: false, error: null });
+    const terminalResults = [{ issue: 1, runId: "native-detached-owner-one", nativeStatus: "completed", ok: true, status: "DONE", dependency: "SATISFIED", output: "FORGE_WORK_ON_RESULT status=DONE issue=1 pr=none dependency=SATISFIED", error: null }];
+    await writeFile(continuationInput, JSON.stringify({ schema: "forgedock.candidate-dispatch-continuation/v1", initialResults, terminalResults }));
+    const resultJson = JSON.parse((await execFileAsync("node", [helper, "continue-dispatch", "--plan", result.planPath, "--results", continuationInput, "--out", continuationOut])).stdout) as { requestPath: string; workflowPath: string; ownerConcurrency: { configured: number; effective: number } };
+    const request = JSON.parse(await readFile(resultJson.requestPath, "utf8")) as { globalConcurrencyLimit: number };
+    const workflow = await readFile(resultJson.workflowPath, "utf8");
+    assert.deepEqual(plan.ownerConcurrency, { configured: 10, effective: 10 });
+    assert.deepEqual(resultJson.ownerConcurrency, { configured: 10, effective: 10 });
+    assert.equal(request.globalConcurrencyLimit, 10);
+    assert.match(workflow, /const ownerConcurrency = 10;/);
+  } finally {
+    await rm(continuationInput, { force: true });
+    await rm(continuationOut, { recursive: true, force: true });
+    await cleanup(result);
+  }
+});
 
 test("normalizes completed gated owners without relaunching them", async () => {
   const result = await prepared();
@@ -205,7 +267,9 @@ test("detached owners retain capacity and generated continuation releases only t
     await writeFile(continuationInputPath, JSON.stringify({ ...continuationRequest, terminalResults: [{ ...terminalDone, runId: "different-detached-run" }] }));
     await assert.rejects(execFileAsync("node", [helper, "continue-dispatch", "--plan", result.planPath, "--results", continuationInputPath, "--out", continuationOutDone]), /not bound to the exact owner run/);
     await writeFile(continuationInputPath, JSON.stringify(continuationRequest));
-    const continuation = JSON.parse((await execFileAsync("node", [helper, "continue-dispatch", "--plan", result.planPath, "--results", continuationInputPath, "--out", continuationOutDone])).stdout) as { workflowPath: string };
+    const continuation = JSON.parse((await execFileAsync("node", [helper, "continue-dispatch", "--plan", result.planPath, "--results", continuationInputPath, "--out", continuationOutDone])).stdout) as { continuationPath: string; workflowPath: string };
+    const continuationRecord = JSON.parse(await readFile(continuation.continuationPath, "utf8")) as { ownerConcurrency: { configured: number; effective: number } };
+    assert.deepEqual(continuationRecord.ownerConcurrency, { configured: 2, effective: 2 });
     const workflow = await readFile(continuation.workflowPath, "utf8");
     const executeContinuation = vm.runInNewContext(`(async (runs) => { ${workflow} })`, { Promise }) as (runs: { all: (items: Array<Record<string, unknown>>) => Promise<Array<Record<string, unknown>>> }) => Promise<any[]>;
     const doneCalls: string[] = [];
