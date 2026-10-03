@@ -1,0 +1,1266 @@
+{
+  "schema": "forgedock.native-result-collection/v1",
+  "collectionStatus": "complete",
+  "collectedFromRetainedOutput": true,
+  "processIdentity": {
+    "parentSessionId": "01a0edb0-23bd-72f5-b28c-3ba71de84dc8",
+    "workflowRunId": null,
+    "taskRoot": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z",
+    "sourceCommitAtLaunch": "ef2b1c27b95194360f16b500793bfb6150869165",
+    "piVersion": "0.87.1",
+    "parentDefaultModel": "gpt-6-luna",
+    "parentDefaultThinking": "max",
+    "piSubagentsVersion": "0.60.0",
+    "piSubagentsHead": "0931cbbb98ab253177b181bd334fe02dd919dca5"
+  },
+  "target": {
+    "repository": "example/product",
+    "pullRequest": 7,
+    "head": "23ed53566fe20bc967a4b6db0c3f4892618ed444",
+    "baseRef": "main",
+    "baseSha": "663d6d522a104d67527d0bf0ed2a588380cba93e",
+    "project": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/project",
+    "sourceRoot": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/project/.forge/worktrees/review-pr-7"
+  },
+  "elapsed": {
+    "parentStartedAt": "2026-09-29T15:02:18.388Z",
+    "parentSettledAt": "2026-09-29T15:10:39.357Z",
+    "processFinishedAt": "2026-09-29T15:10:39.391Z",
+    "totalElapsedMs": null,
+    "processExitCode": 0,
+    "processSignal": null,
+    "stages": {
+      "prepare": null,
+      "check": null,
+      "reviewer": null,
+      "adjudication": null,
+      "gate": null
+    }
+  },
+  "eventStream": {
+    "path": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/parent.rpc.jsonl",
+    "rawRpcPath": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/parent.rpc.jsonl",
+    "eventCount": 2967,
+    "agentEndObserved": true,
+    "assistantModelEvents": [
+      {
+        "index": 8,
+        "provider": "openai-codex",
+        "model": "gpt-6-luna",
+        "thinkingLevel": null
+      },
+      {
+        "index": 42,
+        "provider": "openai-codex",
+        "model": "gpt-6-luna",
+        "thinkingLevel": null
+      },
+      {
+        "index": 93,
+        "provider": "openai-codex",
+        "model": "gpt-6-luna",
+        "thinkingLevel": null
+      },
+      {
+        "index": 153,
+        "provider": "openai-codex",
+        "model": "gpt-6-luna",
+        "thinkingLevel": null
+      },
+      {
+        "index": 379,
+        "provider": "openai-codex",
+        "model": "gpt-6-luna",
+        "thinkingLevel": null
+      },
+      {
+        "index": 401,
+        "provider": "openai-codex",
+        "model": "gpt-6-luna",
+        "thinkingLevel": null
+      },
+      {
+        "index": 539,
+        "provider": "openai-codex",
+        "model": "gpt-6-luna",
+        "thinkingLevel": null
+      },
+      {
+        "index": 563,
+        "provider": "openai-codex",
+        "model": "gpt-6-luna",
+        "thinkingLevel": null
+      },
+      {
+        "index": 603,
+        "provider": "openai-codex",
+        "model": "gpt-6-luna",
+        "thinkingLevel": null
+      },
+      {
+        "index": 641,
+        "provider": "openai-codex",
+        "model": "gpt-6-luna",
+        "thinkingLevel": null
+      },
+      {
+        "index": 708,
+        "provider": "openai-codex",
+        "model": "gpt-6-luna",
+        "thinkingLevel": null
+      },
+      {
+        "index": 763,
+        "provider": "openai-codex",
+        "model": "gpt-6-luna",
+        "thinkingLevel": null
+      },
+      {
+        "index": 1433,
+        "provider": "openai-codex",
+        "model": "gpt-6-luna",
+        "thinkingLevel": null
+      },
+      {
+        "index": 2053,
+        "provider": "openai-codex",
+        "model": "gpt-6-luna",
+        "thinkingLevel": null
+      },
+      {
+        "index": 2671,
+        "provider": "openai-codex",
+        "model": "gpt-6-luna",
+        "thinkingLevel": null
+      },
+      {
+        "index": 2845,
+        "provider": "openai-codex",
+        "model": "gpt-6-luna",
+        "thinkingLevel": null
+      }
+    ]
+  },
+  "toolCalls": [
+    {
+      "index": 23,
+      "name": "bash",
+      "args": {}
+    },
+    {
+      "index": 24,
+      "name": "read",
+      "args": {}
+    },
+    {
+      "index": 25,
+      "name": "bash",
+      "args": {}
+    },
+    {
+      "index": 85,
+      "name": "bash",
+      "args": {}
+    },
+    {
+      "index": 145,
+      "name": "bash",
+      "args": {}
+    },
+    {
+      "index": 373,
+      "name": "forge_prepare_review",
+      "args": {
+        "repository": "example/product",
+        "pullRequest": 7,
+        "head": "23ed53566fe20bc967a4b6db0c3f4892618ed444"
+      }
+    },
+    {
+      "index": 391,
+      "name": "read",
+      "args": {}
+    },
+    {
+      "index": 392,
+      "name": "forge_discover_review_records",
+      "args": {}
+    },
+    {
+      "index": 530,
+      "name": "subagent",
+      "args": {}
+    },
+    {
+      "index": 553,
+      "name": "read",
+      "args": {}
+    },
+    {
+      "index": 554,
+      "name": "read",
+      "args": {}
+    },
+    {
+      "index": 585,
+      "name": "read",
+      "args": {}
+    },
+    {
+      "index": 586,
+      "name": "read",
+      "args": {}
+    },
+    {
+      "index": 587,
+      "name": "forge_recover_reviewer_publication",
+      "args": {}
+    },
+    {
+      "index": 588,
+      "name": "forge_run_check",
+      "args": {
+        "name": "test",
+        "head": "23ed53566fe20bc967a4b6db0c3f4892618ed444"
+      }
+    },
+    {
+      "index": 623,
+      "name": "bash",
+      "args": {}
+    },
+    {
+      "index": 625,
+      "name": "bash",
+      "args": {}
+    },
+    {
+      "index": 627,
+      "name": "read",
+      "args": {}
+    },
+    {
+      "index": 628,
+      "name": "read",
+      "args": {}
+    },
+    {
+      "index": 702,
+      "name": "read",
+      "args": {}
+    },
+    {
+      "index": 749,
+      "name": "read",
+      "args": {}
+    },
+    {
+      "index": 750,
+      "name": "read",
+      "args": {}
+    },
+    {
+      "index": 751,
+      "name": "read",
+      "args": {}
+    },
+    {
+      "index": 1427,
+      "name": "forge_publish_adjudication",
+      "args": {}
+    },
+    {
+      "index": 2047,
+      "name": "forge_publish_adjudication",
+      "args": {}
+    },
+    {
+      "index": 2665,
+      "name": "forge_publish_adjudication",
+      "args": {}
+    },
+    {
+      "index": 2839,
+      "name": "forge_publish_record",
+      "args": {}
+    }
+  ],
+  "toolResults": [
+    {
+      "index": 30,
+      "name": "bash",
+      "isError": false,
+      "text": "FORGEDOCK_CANDIDATE_BIN=/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/bin/forgedock-candidate.mjs\nPI_CODING_AGENT_DIR=/home/dev/.pi/agent\nPI_CODING_AGENT_SESSION_DIR=/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/sessions\nPI_CODING_AGENT=true\nPI_MODEL=gpt-6-luna\nPI_OFFLINE=1\nPI_PROVIDER=openai-codex\nPI_REASONING_LEVEL=max\nPI_SESSION_FILE=/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/sessions/2026-09-29T15-02-18-813",
+      "details": {}
+    },
+    {
+      "index": 32,
+      "name": "bash",
+      "isError": false,
+      "text": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/project\n## main\norigin\thttps://github.com/example/product.git (fetch)\norigin\thttps://github.com/example/product.git (push)\ntotal 44\ndrwx------ 7 dev dev 4096 Sep 29 20:32 .\ndrwx------ 6 dev dev 4096 Sep 29 20:32 ..\ndrwx------ 3 dev dev 4096 Sep 29 20:32 docs\ndrwxr-xr-x 3 dev dev 4096 Sep 29 20:32 .forge\n-rw------- 1 dev dev  456 Sep 29 20:32 forge.yaml\ndrwxr-xr-x 8 dev dev 4096 Sep 29 20:32 .git\n-rw------- 1 dev dev   23",
+      "details": {}
+    },
+    {
+      "index": 33,
+      "name": "read",
+      "isError": false,
+      "text": "project:\n  owner: example\n  repo: product\npaths:\n  root: .\nbranches:\n  default: main\n  staging: integration\n  feature_pattern: feature/{slug}\nagents:\n  subagent_model: openai-codex/gpt-5.6-luna\n  thinking: low\norchestration:\n  max_concurrent: 2\nverification:\n  commands:\n    test: npm test\nreview:\n  thinking: medium\n  reviewer_timeout_ms: 900000\n  panel_timeout_ms: 1920000\n  publication_timeout_ms: 120000\n  max_concurrent: 2\n  remediation_max_rounds: 1\n",
+      "details": {}
+    },
+    {
+      "index": 88,
+      "name": "bash",
+      "isError": false,
+      "text": "{\n  \"schema\": \"forgedock.candidate-pr-policy/v1\",\n  \"repository\": \"example/product\",\n  \"pullRequest\": 7,\n  \"identity\": {\n    \"head\": \"23ed53566fe20bc967a4b6db0c3f4892618ed444\",\n    \"baseRef\": \"main\",\n    \"baseSha\": \"663d6d522a104d67527d0bf0ed2a588380cba93e\",\n    \"mergeable\": \"MERGEABLE\",\n    \"mergeStateStatus\": \"CLEAN\",\n    \"state\": \"OPEN\",\n    \"isDraft\": false,\n    \"url\": \"https://github.com/example/product/pull/7\"\n  },\n  \"configuration\": {\n    \"integrationBranch\": \"integration\",\n    \"protected",
+      "details": {}
+    },
+    {
+      "index": 148,
+      "name": "bash",
+      "isError": false,
+      "text": "{\"number\":7,\"title\":\"Trim display names when rendering\",\"body\":\"Normalize display labels at the presentation boundary. Preserve stored identifiers and source profile values. Acceptance: rendered display labels have surrounding whitespace removed while stored identifiers and source strings remain unchanged. Verification is the repository-configured test command.\",\"headRefOid\":\"23ed53566fe20bc967a4b6db0c3f4892618ed444\",\"baseRefName\":\"main\",\"baseRefOid\":\"663d6d522a104d67527d0bf0ed2a588380cba93e\",\"m",
+      "details": {}
+    },
+    {
+      "index": 374,
+      "name": "forge_prepare_review",
+      "isError": false,
+      "text": "{\n  \"schema\": \"forgedock.candidate-review-preparation/v1\",\n  \"requestPath\": \"/tmp/forgedock-review-request-DPWBaf/request.json\",\n  \"request\": {\n    \"async\": false,\n    \"cwd\": \"/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/project/.forge/worktrees/review-pr-7\",\n    \"workflowScriptPath\": \"/tmp/forgedock-review-request-DPWBaf/workflow.js\",\n    \"globalConcurrencyLimit\": 1,\n    \"maxSubagentSpawnsPerRun\": 1,\n    \"timeoutMs\": 1920000,\n    \"control\": {\n      \"needsAttention",
+      "details": {
+        "requestDirectory": "/tmp/forgedock-review-request-DPWBaf",
+        "requestPath": "/tmp/forgedock-review-request-DPWBaf/request.json",
+        "inputPath": "/tmp/forgedock-review-input-6Oe2la/input.json",
+        "reviewRoot": "/tmp/forgedock-review-request-DPWBaf",
+        "artifactKey": "b8ad8fce-4f44-4092-8bfb-f630993d4e5a",
+        "sourceRoot": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/project/.forge/worktrees/review-pr-7",
+        "head": "23ed53566fe20bc967a4b6db0c3f4892618ed444",
+        "configPath": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/project/forge.yaml",
+        "configSha256": "532318d1b31c9f853cbddcf242f2c655ab609920d1da3e6e4a98c07ab8f84a2b",
+        "policyPath": "/tmp/forgedock-review-request-DPWBaf/policy.json",
+        "policySummaryPath": "/tmp/forgedock-review-request-DPWBaf/policy-summary.json",
+        "policySummary": {
+          "schema": "forgedock.candidate-pr-policy-summary/v1",
+          "source": {
+            "collector": "inspect-pr",
+            "artifact": "/tmp/forgedock-review-request-DPWBaf/policy.json",
+            "snapshot": "prepared"
+          },
+          "status": "available",
+          "repository": "example/product",
+          "pullRequest": 7,
+          "head": "23ed53566fe20bc967a4b6db0c3f4892618ed444",
+          "baseRef": "main",
+          "baseSha": "663d6d522a104d67527d0bf0ed2a588380cba93e",
+          "mergeable": "MERGEABLE",
+          "mergeStateStatus": "CLEAN",
+          "applicability": "known-required",
+          "requiredNames": [
+            "CI"
+          ],
+          "missingRequiredNames": [],
+          "requiredStatus": "available",
+          "requiredExitCode": 0,
+          "requiredCheckCount": 1,
+          "requiredChecks": [
+            {
+              "name": "CI",
+              "state": "SUCCESS",
+              "bucket": "pass",
+              "workflow": "CI"
+            }
+          ],
+          "policySources": {
+            "evaluatedChecks": "available",
+            "currentCheckRuns": "available",
+            "branchRules": "available",
+            "branchProtection": "available",
+            "rulesets": "available"
+          },
+          "exactHeadCheckRuns": {
+            "status": "available",
+            "count": 1,
+            "checks": [
+              {
+                "name": "CI",
+                "status": "completed",
+                "conclusion": "success"
+              }
+            ]
+          },
+          "localVerification": {
+            "state": "configured",
+            "names": [
+              "test"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "index": 393,
+      "name": "read",
+      "isError": false,
+      "text": "{\n  \"async\": false,\n  \"cwd\": \"/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/project/.forge/worktrees/review-pr-7\",\n  \"workflowScriptPath\": \"/tmp/forgedock-review-request-DPWBaf/workflow.js\",\n  \"globalConcurrencyLimit\": 1,\n  \"maxSubagentSpawnsPerRun\": 1,\n  \"timeoutMs\": 1920000,\n  \"control\": {\n    \"needsAttentionAfterMs\": 1920000,\n    \"activeNoticeAfterMs\": 900000\n  }\n}\n",
+      "details": {}
+    },
+    {
+      "index": 394,
+      "name": "forge_discover_review_records",
+      "isError": false,
+      "text": "{\n  \"schema\": \"forgedock.candidate-review-history-index/v1\",\n  \"repository\": \"example/product\",\n  \"pullRequest\": 7,\n  \"historyIndexPath\": \"/tmp/forgedock-review-request-DPWBaf/review-history-92b8f2ff1bda.json\",\n  \"sourceArtifactPath\": \"/tmp/forgedock-review-request-DPWBaf/review-history-source-92b8f2ff1bda.json\",\n  \"completeness\": {\n    \"totalComments\": 0,\n    \"totalRecords\": 0,\n    \"unclassifiedRecords\": 0,\n    \"displayedRecords\": 0\n  },\n  \"records\": []\n}",
+      "details": {
+        "repository": "example/product",
+        "pullRequest": 7,
+        "historyIndexPath": "/tmp/forgedock-review-request-DPWBaf/review-history-92b8f2ff1bda.json",
+        "sourceArtifactPath": "/tmp/forgedock-review-request-DPWBaf/review-history-source-92b8f2ff1bda.json",
+        "recordCount": 0,
+        "displayedRecords": 0
+      }
+    },
+    {
+      "index": 534,
+      "name": "subagent",
+      "isError": false,
+      "text": "Run fan-out: 1/1 used, 0 remaining\nWorkflow completed.\n\nReturn:\n[\n  {\n    \"role\": \"correctness\",\n    \"nativeRunId\": \"fa77f871-3bc3-43b3-98d5-e91475327d33\",\n    \"nativeStatus\": \"completed\",\n    \"nativeFlags\": {\n      \"timedOut\": false,\n      \"stopped\": false,\n      \"interrupted\": false,\n      \"detached\": false,\n      \"executionLimit\": false\n    },\n    \"exitCode\": 0,\n    \"terminalOutcome\": null,\n    \"publicationState\": \"unverified\",\n    \"reportPath\": \"/tmp/forgedock-review-request-DPWBaf/correctne",
+      "details": {
+        "mode": "workflow",
+        "runId": "call_1KRDV9GuRqvixVNhCvbHWwiL|fc_0ed942f804fe081d016abbd34fd4c087d0959fb57c94d48fc5",
+        "results": [
+          {
+            "index": 0,
+            "agent": "forgedock-reviewer",
+            "task": "[prompt redacted]",
+            "sessionName": "forgedock-reviewer: You are the independent correctness reviewer. Review only...",
+            "launchContractDigest": "6859a6e9ccffbdc0c19e76042f4cd840c403d359f8af9e7f84a81e68724acecf",
+            "launchResolvedExtensions": {
+              "version": 1,
+              "source": "launch-resolved",
+              "disableAmbientExtensions": true,
+              "runtime": [
+                "sha256:537165a4c198eacf"
+              ],
+              "configured": [
+                "sha256:bc4f16914a5f688c"
+              ],
+              "effective": [
+                "sha256:537165a4c198eacf",
+                "sha256:bc4f16914a5f688c"
+              ],
+              "omitted": {
+                "runtime": 0,
+                "configured": 0,
+                "effective": 0
+              }
+            },
+            "exitCode": 0,
+            "outputState": "present",
+            "usage": {
+              "input": 31019,
+              "output": 1761,
+              "cacheRead": 29184,
+              "cacheWrite": 0,
+              "cost": 0.008900680000000001,
+              "turns": 7
+            },
+            "model": "openai-codex/gpt-5.6-luna:medium",
+            "thinking": "medium",
+            "artifactPaths": {
+              "inputPath": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/project/.forge/worktrees/review-pr-7/.pi/subagents/artifacts/fa77f871-3bc3-43b3-98d5-e91475327d33_forgedock-reviewer_0_input.md",
+              "outputPath": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/project/.forge/worktrees/review-pr-7/.pi/subagents/artifacts/fa77f871-3bc3-43b3-98d5-e91475327d33_forgedock-reviewer_0_output.md",
+              "jsonlPath": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/project/.forge/worktrees/review-pr-7/.pi/subagents/artifacts/fa77f871-3bc3-43b3-98d5-e91475327d33_forgedock-reviewer_0.jsonl",
+              "transcriptPath": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/project/.forge/worktrees/review-pr-7/.pi/subagents/artifacts/fa77f871-3bc3-43b3-98d5-e91475327d33_forgedock-reviewer_0_transcript.jsonl",
+              "metadataPath": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/project/.forge/worktrees/review-pr-7/.pi/subagents/artifacts/fa77f871-3bc3-43b3-98d5-e91475327d33_forgedock-reviewer_0_meta.json"
+            },
+            "transcriptPath": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/project/.forge/worktrees/review-pr-7/.pi/subagents/artifacts/fa77f871-3bc3-43b3-98d5-e91475327d33_forgedock-reviewer_0_transcript.jsonl",
+            "context": "fresh",
+            "progressSummary": {
+              "sessionName": "forgedock-reviewer: You are the independent correctness reviewer. Review only...",
+              "toolCount": 20,
+              "tokens": 32780,
+              "durationMs": 54866
+            },
+            "effects": {
+              "fileMutation": {
+                "status": "not-applicable",
+                "expected": false,
+                "attempted": false,
+                "evidence": {
+                  "source": "tracked-files",
+                  "trackedOnly": true,
+                  "changedFiles": [],
+                  "attemptedMutation": false
+                }
+              }
+            },
+            "outputMode": "inline",
+            "finalOutput": "FORGE_REVIEW_RESULT role=correctness report=/tmp/forgedock-review-request-DPWBaf/correctness.report.md publication=published verdict=APPROVE",
+            "attemptedModels": [
+              "openai-codex/gpt-5.6-luna:medium"
+            ],
+            "modelAttempts": [
+              {
+                "model": "openai-codex/gpt-5.6-luna:medium",
+                "success": true,
+                "exitCode": 0,
+                "usage": {
+                  "input": 31019,
+                  "output": 1761,
+                  "cacheRead": 29184,
+                  "cacheWrite": 0,
+                  "cost": 0.008900680000000001,
+                  "turns": 7
+                }
+              }
+            ],
+            "sessionFile": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/sessions/2026-09-29T15-02-18-813Z_01a0edb0-23bd-72f5-b28c-3ba71de84dc8/fa77f871-3bc3-43b3-98d5-e91475327d33/run-0/session.jsonl",
+            "acceptance": {
+              "status": "not-required",
+              "evidenceStatus": "not-required",
+              "explicit": true,
+              "effectiveAcceptance": {
+                "level": "none",
+                "explicit": true,
+                "inferredReason": [
+                  "read-only/reviewer-style agent"
+                ],
+                "criteria": [
+                  {
+                    "id": "criterion-1",
+                    "must": "Return concrete findings with file paths and severity when applicable",
+                    "evidence": [],
+                    "severity": "required"
+                  }
+                ],
+                "evidence": [],
+                "verify": [],
+                "stopRules": [],
+                "reason": "disabled by deprecated false shorthand"
+              },
+              "inferredReason": [
+                "read-only/reviewer-style agent"
+              ],
+              "criteria": [
+                {
+                  "id": "criterion-1",
+                  "must": "Return concrete findings with file paths and severity when applicable",
+                  "evidence": [],
+                  "severity": "required"
+                }
+              ],
+              "runtimeChecks": [],
+              "verifyRuns": []
+            },
+            "toolCalls": [
+              {
+                "text": "read /tmp/forgedock-review-request-DPWBaf/policy-summary.json",
+                "expandedText": "read /tmp/forgedock-review-request-DPWBaf/policy-summary.json"
+              },
+              {
+                "text": "read /tmp/forgedock-review-request-DPWBaf/frozen.diff",
+                "expandedText": "read /tmp/forgedock-review-request-DPWBaf/frozen.diff"
+              },
+              {
+                "text": "read /tmp/forgedock-review-request-DPWBaf/correctness.authorization.json",
+                "expandedText": "read /tmp/forgedock-review-request-DPWBaf/correctness.authorization.json"
+              },
+              {
+                "text": "grep {\"pattern\":\"displayName\",\"path\":\".\",\"...",
+                "expandedText": "grep {\"pattern\":\"displayName\",\"path\":\".\",\"ignoreCase\":false,\"context\":3,\"limit\":100}"
+              },
+              {
+                "text": "find {\"pattern\":\".github/workflows/*\",\"pat...",
+                "expandedText": "find {\"pattern\":\".github/workflows/*\",\"path\":\".\"}"
+              },
+              {
+                "text": "ls {\"path\":\".\"}",
+                "expandedText": "ls {\"path\":\".\"}"
+              },
+              {
+                "text": "read src/render.mjs",
+                "expandedText": "read src/render.mjs"
+              },
+              {
+                "text": "read src/display.mjs",
+                "expandedText": "read src/display.mjs"
+              },
+              {
+                "text": "read test/display.test.mjs",
+                "expandedText": "read test/display.test.mjs"
+              },
+              {
+                "text": "read package.json",
+                "expandedText": "read package.json"
+              },
+              {
+                "text": "read forge.yaml",
+                "expandedText": "read forge.yaml"
+              },
+              {
+                "text": "read README.md",
+                "expandedText": "read README.md"
+              },
+              {
+                "text": "read docs/decisions/display-boundary.md",
+                "expandedText": "read docs/decisions/display-boundary.md"
+              },
+              {
+                "text": "read .gitignore",
+                "expandedText": "read .gitignore"
+              },
+              {
+                "text": "find {\"pattern\":\"**/*\",\"path\":\"src\",\"limit...",
+                "expandedText": "find {\"pattern\":\"**/*\",\"path\":\"src\",\"limit\":100}"
+              },
+              {
+                "text": "find {\"pattern\":\"**/*\",\"path\":\"test\",\"limi...",
+                "expandedText": "find {\"pattern\":\"**/*\",\"path\":\"test\",\"limit\":100}"
+              },
+              {
+                "text": "grep {\"pattern\":\"CI|workflow|detector|npm ...",
+                "expandedText": "grep {\"pattern\":\"CI|workflow|detector|npm test|verification\",\"path\":\".\",\"glob\":\"!**/.pi/**\",\"ignoreCase\":true,\"context\":2,\"limit\":100}"
+              },
+              {
+                "text": "find {\"pattern\":\"**/*.yml\",\"path\":\".\",\"lim...",
+                "expandedText": "find {\"pattern\":\"**/*.yml\",\"path\":\".\",\"limit\":100}"
+              },
+              {
+                "text": "find {\"pattern\":\"**/*.yaml\",\"path\":\".\",\"li...",
+                "expandedText": "find {\"pattern\":\"**/*.yaml\",\"path\":\".\",\"limit\":100}"
+              },
+              {
+                "text": "forge_publish_reviewer {\"repository\":\"example/product\",\"pull...",
+                "expandedText": "forge_publish_reviewer {\"repository\":\"example/product\",\"pullRequest\":7,\"head\":\"23ed53566fe20bc967a4b6db0c3f4892618ed444\",\"baseRef\":\"main\",\"baseSha\":\"663d6d522a104d67527d0bf0ed2a588..."
+              }
+            ]
+          }
+        ],
+        "workflowChildren": {
+          "version": 1,
+          "parentToolCallId": "call_1KRDV9GuRqvixVNhCvbHWwiL|fc_0ed942f804fe081d016abbd34fd4c087d0959fb57c94d48fc5",
+          "workflowRunId": "call_1KRDV9GuRqvixVNhCvbHWwiL|fc_0ed942f804fe081d016abbd34fd4c087d0959fb57c94d48fc5",
+          "inventoryComplete": true,
+          "workflowState": "completed",
+          "children": [
+            {
+              "childId": "review-correctness",
+              "state": "completed",
+              "runId": "fa77f871-3bc3-43b3-98d5-e91475327d33",
+              "agent": "forgedock-reviewer",
+              "sessionName": "forgedock-reviewer: You are the independent correctness reviewer. Review only...",
+              "model": "openai-codex/gpt-5.6-luna:medium",
+              "thinking": "medium"
+            }
+          ]
+        },
+        "totalChildUsage": {
+          "input": 31019,
+          "output": 1761,
+          "cacheRead": 29184,
+          "cacheWrite": 0,
+          "cost": 0.008900680000000001,
+          "turns": 7
+        },
+        "totalCost": {
+          "inputTokens": 31019,
+          "outputTokens": 1761,
+          "costUsd": 0.008900680000000001
+        },
+        "workflow": {
+          "value": [
+            {
+              "role": "correctness",
+              "nativeRunId": "fa77f871-3bc3-43b3-98d5-e91475327d33",
+              "nativeStatus": "completed",
+              "nativeFlags": {
+                "timedOut": false,
+                "stopped": false,
+                "interrupted": false,
+                "detached": false,
+                "executionLimit": false
+              },
+              "exitCode": 0,
+              "terminalOutcome": null,
+              "publicationState": "unverified",
+              "reportPath": "/tmp/forgedock-review-request-DPWBaf/correctness.report.md",
+              "recoveryPath": "/tmp/forgedock-review-request-DPWBaf/correctness.publication-recovery.json",
+              "output": "FORGE_REVIEW_RESULT role=correctness report=/tmp/forgedock-review-request-DPWBaf/correctness.report.md publication=published verdict=APPROVE",
+              "error": null,
+              "artifactPaths": [
+                "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/sessions/2026-09-29T15-02-18-813Z_01a0edb0-23bd-72f5-b28c-3ba71de84dc8/fa77f871-3bc3-43b3-98d5-e91475327d33/run-0/session.jsonl"
+              ]
+            }
+          ],
+          "trace": [
+            {
+              "operation": "run",
+              "key": "review-correctness",
+              "state": "started",
+              "agent": "forgedock-reviewer"
+            },
+            {
+              "operation": "run",
+              "key": "review-correctness",
+              "state": "completed",
+              "durationMs": 54945,
+              "agent": "forgedock-reviewer",
+              "runId": "fa77f871-3bc3-43b3-98d5-e91475327d33"
+            }
+          ],
+          "emits": [],
+          "console": [],
+          "receipt": {
+            "version": 1,
+            "workflowRunId": "call_1KRDV9GuRqvixVNhCvbHWwiL|fc_0ed942f804fe081d016abbd34fd4c087d0959fb57c94d48fc5",
+            "state": "complete",
+            "createdAt": 1790694279783,
+            "entries": {
+              "review-correctness": {
+                "key": "review-correctness",
+                "agent": "forgedock-reviewer",
+                "requestedContext": "fresh",
+                "resolvedContext": "fresh",
+                "continuation": {
+                  "runIds": [
+                    "fa77f871-3bc3-43b3-98d5-e91475327d33"
+                  ]
+                },
+                "latestRunId": "fa77f871-3bc3-43b3-98d5-e91475327d33",
+                "resumability": {
+                  "state": "resumable"
+                }
+              }
+            },
+            "workflowChildren": {
+              "version": 1,
+              "parentToolCallId": "call_1KRDV9GuRqvixVNhCvbHWwiL|fc_0ed942f804fe081d016abbd34fd4c087d0959fb57c94d48fc5",
+              "workflowRunId": "call_1KRDV9GuRqvixVNhCvbHWwiL|fc_0ed942f804fe081d016abbd34fd4c087d0959fb57c94d48fc5",
+              "inventoryComplete": true,
+              "workflowState": "completed",
+              "children": [
+                {
+                  "childId": "review-correctness",
+                  "state": "completed",
+                  "runId": "fa77f871-3bc3-43b3-98d5-e91475327d33",
+                  "agent": "forgedock-reviewer",
+                  "sessionName": "forgedock-reviewer: You are the independent correctness reviewer. Review only...",
+                  "model": "openai-codex/gpt-5.6-luna:medium",
+                  "thinking": "medium"
+                }
+              ]
+            }
+          }
+        },
+        "chatProgress": {
+          "mode": "live-card",
+          "repoRelation": "same",
+          "repoLabel": "review-pr-7"
+        },
+        "runFanoutBudget": {
+          "used": 1,
+          "limit": 1,
+          "remaining": 0
+        },
+        "missionId": "0bd42f31-a83b-4d10-9fbc-ab33eb70f6ed",
+        "missionPath": "/home/dev/.pi/agent/missions/projects/3b3c2312b72d26b80d81721bbb87ae712ad68240ddec8eb9987aa5ad63c27092/0bd42f31-a83b-4d10-9fbc-ab33eb70f6ed.json",
+        "mission": {
+          "schemaVersion": 1,
+          "id": "0bd42f31-a83b-4d10-9fbc-ab33eb70f6ed",
+          "title": "[prompt redacted]",
+          "objective": "[prompt redacted]",
+          "status": "completed",
+          "createdAt": "2026-09-29T15:03:44.755Z",
+          "updatedAt": "2026-09-29T15:04:39.786Z",
+          "runs": [
+            {
+              "runId": "call_1KRDV9GuRqvixVNhCvbHWwiL|fc_0ed942f804fe081d016abbd34fd4c087d0959fb57c94d48fc5",
+              "mode": "workflow",
+              "agent": "forgedock-reviewer",
+              "status": "completed",
+              "startedAt": "2026-09-29T15:04:39.786Z",
+              "completedAt": "2026-09-29T15:04:39.786Z",
+              "usage": {
+                "tokens": 32780
+              }
+            }
+          ],
+          "workflowChildren": [
+            {
+              "workflowRunId": "call_1KRDV9GuRqvixVNhCvbHWwiL|fc_0ed942f804fe081d016abbd34fd4c087d0959fb57c94d48fc5",
+              "key": "review-correctness",
+              "status": "completed",
+              "startedAt": "2026-09-29T15:03:44.830Z",
+              "updatedAt": "2026-09-29T15:04:39.768Z",
+              "artifactPaths": [
+                "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/sessions/2026-09-29T15-02-18-813Z_01a0edb0-23bd-72f5-b28c-3ba71de84dc8/fa77f871-3bc3-43b3-98d5-e91475327d33/run-0/session.jsonl"
+              ],
+              "runId": "fa77f871-3bc3-43b3-98d5-e91475327d33",
+              "agent": "forgedock-reviewer",
+              "completedAt": "2026-09-29T15:04:39.768Z",
+              "sessionPath": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/sessions/2026-09-29T15-02-18-813Z_01a0edb0-23bd-72f5-b28c-3ba71de84dc8/fa77f871-3bc3-43b3-98d5-e91475327d33/run-0/session.jsonl",
+              "heartbeat": {
+                "updatedAt": "2026-09-29T15:04:39.768Z",
+                "status": "completed"
+              }
+            }
+          ],
+          "decisions": [],
+          "artifacts": [
+            {
+              "kind": "output",
+              "path": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/project/.forge/worktrees/review-pr-7/.pi/subagents/artifacts/fa77f871-3bc3-43b3-98d5-e91475327d33_forgedock-reviewer_0_output.md"
+            },
+            {
+              "kind": "other",
+              "path": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/project/.forge/worktrees/review-pr-7/.pi/subagents/artifacts/fa77f871-3bc3-43b3-98d5-e91475327d33_forgedock-reviewer_0_transcript.jsonl",
+              "description": "Child transcript"
+            }
+          ],
+          "receipts": [],
+          "cwd": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/project/.forge/worktrees/review-pr-7",
+          "ownerSessionId": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/sessions/2026-09-29T15-02-18-813Z_01a0edb0-23bd-72f5-b28c-3ba71de84dc8.jsonl",
+          "summary": "Run fan-out: 1/1 used, 0 remaining\nWorkflow completed.\n\nReturn:\n[\n  {\n    \"role\": \"correctness\",\n    \"nativeRunId\": \"fa77f871-3bc3-43b3-98d5-e91475327d33\",\n    \"nativeStatus\": \"completed\",\n    \"nativeFlags\": {\n      \"timedOut\": false,\n      \"stopped\": false,\n      \"interrupted\": false,\n      \"detached\": false,\n      \"executionLimit\": false\n    },\n    \"exitCode\": 0,\n    \"terminalOutcome\": null,\n    \"publicationState\": \"unverified\",\n    \"reportPath\": \"/tmp/forgedock-review-request-DPWBaf/correctness.report.md\",\n    \"recoveryPath\": \"/tmp/forgedock-review-request-DPWBaf/correctness.publication-recovery.json\",\n    \"output\": \"FORGE_REVIEW_RESULT role=correctness report=/tmp/forgedock-review-request-DPWBaf/correctness.report.md publication=published verdict=APPROVE\",\n    \"error\": null,\n    \"artifactPaths\": [\n      \"/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/sessions/2026-09-29T15-02-18-813Z_01a0edb0-23bd-72f5-b28c-3ba71de84dc8/fa77f871-3bc3-43b3-98d5-e91475327d33/run-0/session.jsonl\"\n    ]\n  }\n]\n\nCall trace:\n- run review-correctness: started\n- run review-correctness: completed (fa77f871-3bc3-43b3-98d5-e91475327d33) in 54945ms",
+          "acceptance": {
+            "status": "not-required",
+            "evidenceStatus": "not-required",
+            "explicit": true,
+            "effectiveAcceptance": {
+              "level": "none",
+              "explicit": true,
+              "inferredReason": [
+                "read-only/reviewer-style agent"
+              ],
+              "criteria": [
+                {
+                  "id": "criterion-1",
+                  "must": "Return concrete findings with file paths and severity when applicable",
+                  "evidence": [],
+                  "severity": "required"
+                }
+              ],
+              "evidence": [],
+              "verify": [],
+              "stopRules": [],
+              "reason": "disabled by deprecated false shorthand"
+            },
+            "inferredReason": [
+              "read-only/reviewer-style agent"
+            ],
+            "criteria": [
+              {
+                "id": "criterion-1",
+                "must": "Return concrete findings with file paths and severity when applicable",
+                "evidence": [],
+                "severity": "required"
+              }
+            ],
+            "runtimeChecks": [],
+            "verifyRuns": []
+          }
+        }
+      }
+    },
+    {
+      "index": 555,
+      "name": "read",
+      "isError": false,
+      "text": "<!-- FORGE:REVIEWER_REPORT {\"v\":1,\"kind\":\"REVIEW\",\"repository\":\"example/product\",\"pullRequest\":7,\"head\":\"23ed53566fe20bc967a4b6db0c3f4892618ed444\",\"baseSha\":\"663d6d522a104d67527d0bf0ed2a588380cba93e\",\"role\":\"correctness\",\"reportId\":\"7f456723-2d17-40a8-aa7f-94b859da6846\",\"baseRef\":\"main\"} -->\n<!-- FORGE:REVIEW_OBSERVATIONS [] -->\n## ForgeDock review\n\n**Reviewer role**: `correctness`\n**Pull request**: #7\n**Reviewed source**: `23ed53566fe20bc967a4b6db0c3f4892618ed444`\n**Review base**: `main` at `66",
+      "details": {}
+    },
+    {
+      "index": 556,
+      "name": "read",
+      "isError": false,
+      "text": "{\n  \"schema\": \"forgedock.candidate-review-publication-recovery/v1\",\n  \"state\": \"published\",\n  \"recoveryAttempts\": 0,\n  \"nativeRunId\": \"fa77f871-3bc3-43b3-98d5-e91475327d33\",\n  \"reviewArtifactKey\": \"b8ad8fce-4f44-4092-8bfb-f630993d4e5a\",\n  \"roleArtifactKey\": \"7f456723-2d17-40a8-aa7f-94b859da6846\",\n  \"suppliedArtifactKey\": \"7f456723-2d17-40a8-aa7f-94b859da6846\",\n  \"repository\": \"example/product\",\n  \"pullRequest\": 7,\n  \"head\": \"23ed53566fe20bc967a4b6db0c3f4892618ed444\",\n  \"baseRef\": \"main\",\n  \"base",
+      "details": {}
+    },
+    {
+      "index": 589,
+      "name": "read",
+      "isError": false,
+      "text": "## Scope and decisions considered\nReviewed the frozen one-line change in `src/display.mjs` and its relevant `src/render.mjs` consumer, test, and display-boundary contract. The change is evaluated against the requested presentation-only trimming behavior and preservation of stored profile values.\n\n## Evidence and findings\nNo correctness findings. `displayName` still converts the input with `String(value)` and now trims only the returned display string. `renderProfile` passes `profile.displayName`",
+      "details": {}
+    },
+    {
+      "index": 590,
+      "name": "read",
+      "isError": false,
+      "text": "[]\n",
+      "details": {}
+    },
+    {
+      "index": 591,
+      "name": "forge_run_check",
+      "isError": true,
+      "text": "Configured checks require a clean frozen source checkout",
+      "details": {}
+    },
+    {
+      "index": 592,
+      "name": "forge_recover_reviewer_publication",
+      "isError": false,
+      "text": "Readback verified correctness report delivery for native run fa77f871-3bc3-43b3-98d5-e91475327d33; no publisher was invoked during finalization. https://github.com/example/product/pull/7#issuecomment-1000",
+      "details": {
+        "role": "correctness",
+        "nativeRunId": "fa77f871-3bc3-43b3-98d5-e91475327d33",
+        "recoveryPath": "/tmp/forgedock-review-request-DPWBaf/correctness.publication-recovery.json",
+        "reportPath": "/tmp/forgedock-review-request-DPWBaf/correctness.report.md",
+        "publication": "published",
+        "deliveryVerified": true,
+        "authoredEvidence": "verified",
+        "operationState": "finalized",
+        "repeated": true,
+        "recovered": true,
+        "error": null
+      }
+    },
+    {
+      "index": 624,
+      "name": "bash",
+      "isError": true,
+      "text": "The staging review route is non-mutating; use read-only inspection and configured checks. The prepared reviewer roster cannot be relaunched; recover only an exact completed role or record incomplete delivery.",
+      "details": {}
+    },
+    {
+      "index": 626,
+      "name": "bash",
+      "isError": true,
+      "text": "The staging review route is non-mutating; use read-only inspection and configured checks. The prepared reviewer roster cannot be relaunched; recover only an exact completed role or record incomplete delivery.",
+      "details": {}
+    },
+    {
+      "index": 629,
+      "name": "read",
+      "isError": false,
+      "text": "export function displayName(value) { return String(value).trim(); }\n",
+      "details": {}
+    },
+    {
+      "index": 630,
+      "name": "read",
+      "isError": false,
+      "text": "import { displayName } from \"./display.mjs\";\nexport function renderProfile(profile) { return displayName(profile.displayName); }\n",
+      "details": {}
+    },
+    {
+      "index": 703,
+      "name": "read",
+      "isError": false,
+      "text": "---\nname: forgedock-review-pr-staging\ndescription: Run a non-merging integration-to-protected promotion gate with evidence and no repair\n---\n\n# ForgeDock staging review\n\nUse this route only for an explicit integration-to-protected promotion or bundle. Resolve the\nactual promotion PR/configuration and freeze exact integration/protected head/base identities.\nThe standard review route hands off here only after the prepared policy identifies the actual\nprotected base; issue text, comments, branch na",
+      "details": {}
+    },
+    {
+      "index": 752,
+      "name": "read",
+      "isError": true,
+      "text": "ENOENT: no such file or directory, access '/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/project/.forge/worktrees/review-pr-7/docs/display-boundary.md'",
+      "details": {}
+    },
+    {
+      "index": 753,
+      "name": "read",
+      "isError": false,
+      "text": "import assert from \"node:assert/strict\";\nimport test from \"node:test\";\nimport { renderProfile } from \"../src/render.mjs\";\ntest(\"rendered profile label is trimmed without changing its stored identifier\", () => { const profile = { id: \"user-1\", displayName: \" Ada \" }; assert.equal(renderProfile(profile), \"Ada\"); assert.equal(profile.id, \"user-1\"); assert.equal(profile.displayName, \" Ada \")); });\n",
+      "details": {}
+    },
+    {
+      "index": 754,
+      "name": "read",
+      "isError": false,
+      "text": "{\n  \"name\": \"example-product-fixture\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"node --test test/display.test.mjs\"\n  }\n}\n",
+      "details": {}
+    },
+    {
+      "index": 1428,
+      "name": "forge_publish_adjudication",
+      "isError": true,
+      "text": "Parent adjudication failed: CHANGES_REQUESTED needs an immediate-repair disposition\n",
+      "details": {}
+    },
+    {
+      "index": 2048,
+      "name": "forge_publish_adjudication",
+      "isError": true,
+      "text": "adjudication-input revision 0 must advance the existing review artifact revision",
+      "details": {}
+    },
+    {
+      "index": 2666,
+      "name": "forge_publish_adjudication",
+      "isError": false,
+      "text": "{\n  \"schema\": \"forgedock.candidate-adjudication-result/v1\",\n  \"artifactSchema\": \"forgedock.candidate-adjudication/v1\",\n  \"decisionPath\": \"/tmp/forgedock-review-request-DPWBaf/adjudication-r1.json\",\n  \"revision\": 1,\n  \"repository\": \"example/product\",\n  \"pullRequest\": 7,\n  \"head\": \"23ed53566fe20bc967a4b6db0c3f4892618ed444\",\n  \"baseRef\": \"main\",\n  \"baseSha\": \"663d6d522a104d67527d0bf0ed2a588380cba93e\",\n  \"panelUrl\": \"https://github.com/example/product/pull/7#issuecomment-1002\",\n  \"provisionalPanelUr",
+      "details": {
+        "schema": "forgedock.candidate-adjudication-result/v1",
+        "artifactSchema": "forgedock.candidate-adjudication/v1",
+        "decisionPath": "/tmp/forgedock-review-request-DPWBaf/adjudication-r1.json",
+        "revision": 1,
+        "repository": "example/product",
+        "pullRequest": 7,
+        "head": "23ed53566fe20bc967a4b6db0c3f4892618ed444",
+        "baseRef": "main",
+        "baseSha": "663d6d522a104d67527d0bf0ed2a588380cba93e",
+        "panelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+        "provisionalPanelUrl": "https://github.com/example/product/pull/7#issuecomment-1001",
+        "supersededPanelUrl": "https://github.com/example/product/pull/7#issuecomment-1001",
+        "gateBodyPanelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+        "gate": "FAIL",
+        "verdict": "GATED",
+        "roles": [
+          {
+            "role": "correctness",
+            "reportId": "7f456723-2d17-40a8-aa7f-94b859da6846",
+            "url": "https://github.com/example/product/pull/7#issuecomment-1000"
+          }
+        ],
+        "decisions": [],
+        "historicalDecisions": [],
+        "checks": [
+          {
+            "name": "CI",
+            "required": true,
+            "conclusion": "success; evaluated required check and exact-head run completed successfully",
+            "policyAccepted": true,
+            "executedProof": true,
+            "executedProofRequired": false,
+            "proofSource": "inspect-pr policy snapshot and exact-head check run https://github.com/example/product/actions/runs/1",
+            "stage": "protected-branch required checks"
+          },
+          {
+            "name": "test",
+            "required": true,
+            "conclusion": "not executed: forge_run_check returned `configured checks require a clean frozen source checkout`. the frozen test/display.test.mjs has an unmatched extra closing parenthesis after the second assertion, so the configured node test command cannot parse this test.",
+            "policyAccepted": false,
+            "executedProof": false,
+            "executedProofRequired": true,
+            "proofSource": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/project/.forge/worktrees/review-pr-7/test/display.test.mjs",
+            "stage": "protected-promotion acceptance verification"
+          }
+        ],
+        "tracking": {},
+        "nextAction": "Remove the extra closing parenthesis in test/display.test.mjs, rerun the configured npm test command and verify the exact-head required CI check; then submit the repaired promotion for a fresh staging review.",
+        "trackingPublication": "complete",
+        "publication": "published",
+        "reconciliation": "created",
+        "readbackVerified": true,
+        "inputPath": "/tmp/forgedock-review-request-DPWBaf/adjudication-input-r1-372035e4d1db.json"
+      }
+    },
+    {
+      "index": 2840,
+      "name": "forge_publish_record",
+      "isError": false,
+      "text": "{\"schema\":\"forgedock.candidate-record-result/v1\",\"kind\":\"STAGING_GATE\",\"publication\":\"published\",\"recordUrl\":\"https://github.com/example/product/pull/7#issuecomment-1003\",\"commentId\":1003,\"recordId\":null,\"readbackVerified\":true,\"supersedes\":null,\"gate\":\"FAIL\",\"panelUrl\":\"https://github.com/example/product/pull/7#issuecomment-1002\",\"verdict\":\"GATED\",\"trackingPublication\":\"complete\",\"nextAction\":null,\"policySummaryPath\":\"/tmp/forgedock-review-request-DPWBaf/policy-summary.json\",\"policySummary\":{\"s",
+      "details": {
+        "schema": "forgedock.candidate-record-result/v1",
+        "kind": "STAGING_GATE",
+        "publication": "published",
+        "recordUrl": "https://github.com/example/product/pull/7#issuecomment-1003",
+        "commentId": 1003,
+        "recordId": null,
+        "readbackVerified": true,
+        "supersedes": null,
+        "gate": "FAIL",
+        "panelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+        "verdict": "GATED",
+        "trackingPublication": "complete",
+        "nextAction": null,
+        "policySummaryPath": "/tmp/forgedock-review-request-DPWBaf/policy-summary.json",
+        "policySummary": {
+          "schema": "forgedock.candidate-pr-policy-summary/v1",
+          "source": {
+            "collector": "inspect-pr",
+            "artifact": "/tmp/forgedock-review-request-DPWBaf/policy.json",
+            "snapshot": "current"
+          },
+          "status": "available",
+          "repository": "example/product",
+          "pullRequest": 7,
+          "head": "23ed53566fe20bc967a4b6db0c3f4892618ed444",
+          "baseRef": "main",
+          "baseSha": "663d6d522a104d67527d0bf0ed2a588380cba93e",
+          "mergeable": "MERGEABLE",
+          "mergeStateStatus": "CLEAN",
+          "applicability": "known-required",
+          "requiredNames": [
+            "CI"
+          ],
+          "missingRequiredNames": [],
+          "requiredStatus": "available",
+          "requiredExitCode": 0,
+          "requiredCheckCount": 1,
+          "requiredChecks": [
+            {
+              "name": "CI",
+              "state": "SUCCESS",
+              "bucket": "pass",
+              "workflow": "CI"
+            }
+          ],
+          "policySources": {
+            "evaluatedChecks": "available",
+            "currentCheckRuns": "available",
+            "branchRules": "available",
+            "branchProtection": "available",
+            "rulesets": "available"
+          },
+          "exactHeadCheckRuns": {
+            "status": "available",
+            "count": 1,
+            "checks": [
+              {
+                "name": "CI",
+                "status": "completed",
+                "conclusion": "success"
+              }
+            ]
+          },
+          "localVerification": {
+            "state": "configured",
+            "names": [
+              "test"
+            ]
+          }
+        },
+        "reportPath": "/tmp/forgedock-record-FIYM0N/record.md",
+        "decisionPath": "/tmp/forgedock-review-request-DPWBaf/adjudication-r1.json"
+      }
+    }
+  ],
+  "toolCounts": {
+    "bash": 6,
+    "read": 12,
+    "forge_prepare_review": 1,
+    "forge_discover_review_records": 1,
+    "subagent": 1,
+    "forge_recover_reviewer_publication": 1,
+    "forge_run_check": 1,
+    "forge_publish_adjudication": 3,
+    "forge_publish_record": 1
+  },
+  "check": {
+    "command": "npm test",
+    "attempted": true,
+    "error": true,
+    "receiptPath": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/prepared-review/checks/test.json",
+    "receipt": null,
+    "receiptPassed": false,
+    "receiptBoundToHead": false
+  },
+  "reviewer": {
+    "launched": true,
+    "roles": [
+      "correctness"
+    ],
+    "execution": {
+      "schema": "forgedock.candidate-review-execution/v1",
+      "repository": "example/product",
+      "pullRequest": 7,
+      "head": "23ed53566fe20bc967a4b6db0c3f4892618ed444",
+      "baseRef": "main",
+      "baseSha": "663d6d522a104d67527d0bf0ed2a588380cba93e",
+      "artifactKey": "b8ad8fce-4f44-4092-8bfb-f630993d4e5a",
+      "mode": "staging",
+      "workflowPath": "/tmp/forgedock-review-request-DPWBaf/workflow.js",
+      "workflowSha256": "8caf0c56f987ebde466d92cb9edc0f72a79a1ce329bede5d8914463b06e4acb4",
+      "toolCallId": "call_1KRDV9GuRqvixVNhCvbHWwiL|fc_0ed942f804fe081d016abbd34fd4c087d0959fb57c94d48fc5",
+      "workflowRunId": "call_1KRDV9GuRqvixVNhCvbHWwiL|fc_0ed942f804fe081d016abbd34fd4c087d0959fb57c94d48fc5",
+      "completedAt": "2026-09-29T15:04:39.792Z",
+      "roleResults": [
+        {
+          "role": "correctness",
+          "nativeRunId": "fa77f871-3bc3-43b3-98d5-e91475327d33",
+          "nativeStatus": "completed",
+          "reportPath": "/tmp/forgedock-review-request-DPWBaf/correctness.report.md",
+          "recoveryPath": "/tmp/forgedock-review-request-DPWBaf/correctness.publication-recovery.json",
+          "exitCode": 0
+        }
+      ]
+    },
+    "reviewerReportComments": [
+      {
+        "id": 1000,
+        "url": "https://github.com/example/product/pull/7#issuecomment-1000"
+      }
+    ],
+    "reportCount": 1
+  },
+  "decision": {
+    "panelComments": [
+      {
+        "id": 1001,
+        "url": "https://github.com/example/product/pull/7#issuecomment-1001",
+        "provisional": true
+      },
+      {
+        "id": 1002,
+        "url": "https://github.com/example/product/pull/7#issuecomment-1002",
+        "provisional": false
+      }
+    ],
+    "finalPanelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+    "gateUrl": "https://github.com/example/product/pull/7#issuecomment-1003",
+    "gateLinksFinalPanel": true,
+    "linkedPanelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+    "sameCommentTlsRetry": {
+      "failureInjected": true,
+      "commentId": 1001,
+      "attempts": [
+        {
+          "id": 1001,
+          "outcome": "injected-transient-failure"
+        },
+        {
+          "id": 1001,
+          "outcome": "success"
+        }
+      ],
+      "retrySucceededOnSameComment": true
+    },
+    "gateVerdict": "GATED"
+  },
+  "finalResponse": {
+    "text": "**PR #7: GATED — staging gate FAIL.** The correctness reviewer reported no findings, and its report was verified as published. Required GitHub CI passed, but configured `npm test` did not run: the frozen test file has an unmatched `)` after its second assertion.\n\nRemove the extra parenthesis, rerun the test and verify CI, then request a fresh staging review. No source changes were made.\n\n[Staging gate record](https://github.com/example/product/pull/7#issuecomment-1003)",
+    "includesPanelUrl": false,
+    "includesGateUrl": true
+  },
+  "boundary": {
+    "fakeGithubIssueWrites": 0,
+    "unsupportedCalls": [],
+    "noIssueWrites": true,
+    "priorLauncherSummaryError": "ReferenceError: sourceCommitAtLaunch is not defined\n    at file:///tmp/forgedock-pr583-corrective-native.mjs:450:5\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)"
+  },
+  "order": {
+    "firstAttemptIndices": {
+      "prepare": 373,
+      "check": 588,
+      "reviewer": 530,
+      "adjudication": 1427,
+      "gate": 2839
+    },
+    "successfulOperations": {
+      "prepare": {
+        "startIndex": 373,
+        "endIndex": 374,
+        "receivedAt": null
+      },
+      "check": null,
+      "reviewer": {
+        "startIndex": 530,
+        "endIndex": 534,
+        "receivedAt": null
+      },
+      "adjudication": {
+        "startIndex": 2665,
+        "endIndex": 2666,
+        "receivedAt": null
+      },
+      "gate": {
+        "startIndex": 2839,
+        "endIndex": 2840,
+        "receivedAt": null
+      }
+    },
+    "prematureReviewerAttemptsRejected": 0,
+    "configuredCheckBeforeReviewer": false,
+    "actualNativeOrder": false
+  }
+}

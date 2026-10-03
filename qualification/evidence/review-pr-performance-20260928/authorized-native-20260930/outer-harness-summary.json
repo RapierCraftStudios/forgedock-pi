@@ -1,0 +1,1955 @@
+{
+  "schema": "forgedock.pr583.authorized-native/v1",
+  "status": {
+    "processExitCode": 0,
+    "processSignal": null,
+    "agentEndObserved": true,
+    "reviewerCount": 1,
+    "reporterCount": 1,
+    "adjudicationPublished": true,
+    "gatePublished": true,
+    "gateReadback": true,
+    "finalPanelGateLinkMatches": true,
+    "readbackRetryProven": true,
+    "localReceiptRetained": true,
+    "reviewerEvidenceRetained": false,
+    "runtimeArtifactsVisible": false,
+    "productSourceClean": true,
+    "canonicalConfigClean": true,
+    "settingsUnchanged": true,
+    "ordinarySettingsUnchanged": true,
+    "ordinaryAuthUnchanged": true,
+    "installedForgeDockUnchanged": true,
+    "noIssueWrites": true,
+    "noUnsupportedCalls": true,
+    "noFinalizerErrors": false
+  },
+  "prompt": "/review-pr 7",
+  "sourceCommitAtLaunch": "392daed1a178e9081d86ec6c85430ba893cb0f9c",
+  "runtimeSourceHashes": {
+    "candidate/extension.ts": "eacac634116d2118cac531048949251814a5e82b2fc99479bcdd898ccbbeb9a3",
+    "candidate/tools.ts": "24e186ee2a6a3aabf5f4c02bd4533cb02294de7ec504fadcffd8a5939107b453",
+    "bin/forgedock-candidate.mjs": "e52a65b2ffb5721bca45f80ed057048513758f7f92c6226f0e17e057db17684e",
+    "candidate/skills/forgedock-review-pr-staging/SKILL.md": "cbc803c509301fe679f9eb7270d4ba978ab509f42fc34f97dde61b82ddaadea3"
+  },
+  "runtime": {
+    "piVersion": "0.87.1",
+    "piSubagentsVersion": "0.60.0",
+    "piSubagentsHeadBefore": "0931cbbb98ab253177b181bd334fe02dd919dca5",
+    "piSubagentsHeadAfter": "0931cbbb98ab253177b181bd334fe02dd919dca5",
+    "installedForgeDockHeadBefore": "a58675de0d3ed2add3e14ea9d3db8960e71bc744",
+    "installedForgeDockHeadAfter": "a58675de0d3ed2add3e14ea9d3db8960e71bc744",
+    "installedForgeDockUnchanged": true,
+    "parentSettingsPath": "/dev/shm/forgedock-pr583-agent-521872/settings.json",
+    "settingsShaBefore": "28f3dee51fb8e8ccabab8edeaad5e4124ed2ba4a930a0b155073fde80b25a719",
+    "settingsShaAfter": "28f3dee51fb8e8ccabab8edeaad5e4124ed2ba4a930a0b155073fde80b25a719",
+    "settingsUnchanged": true,
+    "isolatedPackageSources": [],
+    "ordinarySettingsUnchanged": true,
+    "ordinaryAuthUnchanged": true
+  },
+  "target": {
+    "repository": "example/product",
+    "pullRequest": 7,
+    "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f",
+    "baseRef": "main",
+    "baseSha": "16e4e51e3f24a44c882e929c577b717461d09599",
+    "sourceRoot": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/.forge/worktrees/review-pr-7",
+    "configRoot": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project",
+    "sourceStatusAfter": [],
+    "configStatusAfter": []
+  },
+  "models": {
+    "parent": {
+      "configuredDefaultModel": "gpt-6-luna",
+      "configuredDefaultThinking": "max",
+      "cliOverrides": null,
+      "observed": [
+        {
+          "provider": "openai-codex",
+          "model": "gpt-6-luna",
+          "thinkingLevel": null,
+          "receivedAt": "2026-09-30T03:57:33.402Z"
+        }
+      ]
+    },
+    "reviewer": {
+      "workflowModelWithThinking": [
+        "openai-codex/gpt-5.6-luna:medium"
+      ],
+      "runtimeMetadata": []
+    }
+  },
+  "toolCalls": [
+    {
+      "name": "bash",
+      "callId": "call_yUDMh781xd1rJAJgdwC6PQVb|fc_07b8fc6f8fa8aa3a016abc8792bbec87d0b1ad2b12c0309082",
+      "args": {}
+    },
+    {
+      "name": "bash",
+      "callId": "call_yUDMh781xd1rJAJgdwC6PQVb|fc_07b8fc6f8fa8aa3a016abc8792bbec87d0b1ad2b12c0309082",
+      "args": {}
+    },
+    {
+      "name": "bash",
+      "callId": "call_yUDMh781xd1rJAJgdwC6PQVb|fc_07b8fc6f8fa8aa3a016abc8792bbec87d0b1ad2b12c0309082",
+      "args": {}
+    },
+    {
+      "name": "read",
+      "callId": "call_2t504JgKuAnklfJlBeA9HPR6|fc_07b8fc6f8fa8aa3a016abc8796b2ec87d08899311347fa9bca",
+      "args": {
+        "path": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/forge.yaml"
+      }
+    },
+    {
+      "name": "read",
+      "callId": "call_2t504JgKuAnklfJlBeA9HPR6|fc_07b8fc6f8fa8aa3a016abc8796b2ec87d08899311347fa9bca",
+      "args": {
+        "path": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/forge.yaml"
+      }
+    },
+    {
+      "name": "read",
+      "callId": "call_2t504JgKuAnklfJlBeA9HPR6|fc_07b8fc6f8fa8aa3a016abc8796b2ec87d08899311347fa9bca",
+      "args": {
+        "path": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/forge.yaml"
+      }
+    },
+    {
+      "name": "bash",
+      "callId": "call_cCXwXY73bi4qEPuF2Lk8gc7c|fc_07b8fc6f8fa8aa3a016abc879cbb0487d085c9a7fb36285d84",
+      "args": {}
+    },
+    {
+      "name": "bash",
+      "callId": "call_cCXwXY73bi4qEPuF2Lk8gc7c|fc_07b8fc6f8fa8aa3a016abc879cbb0487d085c9a7fb36285d84",
+      "args": {}
+    },
+    {
+      "name": "bash",
+      "callId": "call_cCXwXY73bi4qEPuF2Lk8gc7c|fc_07b8fc6f8fa8aa3a016abc879cbb0487d085c9a7fb36285d84",
+      "args": {}
+    },
+    {
+      "name": "bash",
+      "callId": "call_lTZfJIiSb4hAuFnD3e0gX9tU|fc_07b8fc6f8fa8aa3a016abc87aad67087d09107a61d8d877121",
+      "args": {}
+    },
+    {
+      "name": "bash",
+      "callId": "call_lTZfJIiSb4hAuFnD3e0gX9tU|fc_07b8fc6f8fa8aa3a016abc87aad67087d09107a61d8d877121",
+      "args": {}
+    },
+    {
+      "name": "bash",
+      "callId": "call_lTZfJIiSb4hAuFnD3e0gX9tU|fc_07b8fc6f8fa8aa3a016abc87aad67087d09107a61d8d877121",
+      "args": {}
+    },
+    {
+      "name": "forge_prepare_review",
+      "callId": "call_Lyv30XBIJwrQgmHWvZA4ifdd|fc_07b8fc6f8fa8aa3a016abc87b9fc2487d0a1432c7057b616f1",
+      "args": {
+        "repository": "example/product",
+        "pullRequest": 7,
+        "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f",
+        "baseRef": "main",
+        "publish": true
+      }
+    },
+    {
+      "name": "forge_prepare_review",
+      "callId": "call_Lyv30XBIJwrQgmHWvZA4ifdd|fc_07b8fc6f8fa8aa3a016abc87b9fc2487d0a1432c7057b616f1",
+      "args": {
+        "repository": "example/product",
+        "pullRequest": 7,
+        "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f",
+        "baseRef": "main",
+        "publish": true
+      }
+    },
+    {
+      "name": "forge_prepare_review",
+      "callId": "call_Lyv30XBIJwrQgmHWvZA4ifdd|fc_07b8fc6f8fa8aa3a016abc87b9fc2487d0a1432c7057b616f1",
+      "args": {
+        "repository": "example/product",
+        "pullRequest": 7,
+        "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f",
+        "baseRef": "main",
+        "publish": true
+      }
+    },
+    {
+      "name": "bash",
+      "callId": "call_zYUuzxrCHDxETExv5UlCVXuM|fc_07b8fc6f8fa8aa3a016abc87ca97a087d094dada0e381a9487",
+      "args": {}
+    },
+    {
+      "name": "bash",
+      "callId": "call_zYUuzxrCHDxETExv5UlCVXuM|fc_07b8fc6f8fa8aa3a016abc87ca97a087d094dada0e381a9487",
+      "args": {}
+    },
+    {
+      "name": "bash",
+      "callId": "call_zYUuzxrCHDxETExv5UlCVXuM|fc_07b8fc6f8fa8aa3a016abc87ca97a087d094dada0e381a9487",
+      "args": {}
+    },
+    {
+      "name": "read",
+      "callId": "call_qW4MKlB4AzBzHK9K33vbhczN|fc_07b8fc6f8fa8aa3a016abc87dbaebc87d08170d3ead3bf2b48",
+      "args": {
+        "path": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/skills/forgedock-review-pr-staging/SKILL.md"
+      }
+    },
+    {
+      "name": "read",
+      "callId": "call_qW4MKlB4AzBzHK9K33vbhczN|fc_07b8fc6f8fa8aa3a016abc87dbaebc87d08170d3ead3bf2b48",
+      "args": {
+        "path": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/skills/forgedock-review-pr-staging/SKILL.md"
+      }
+    },
+    {
+      "name": "read",
+      "callId": "call_qW4MKlB4AzBzHK9K33vbhczN|fc_07b8fc6f8fa8aa3a016abc87dbaebc87d08170d3ead3bf2b48",
+      "args": {
+        "path": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/skills/forgedock-review-pr-staging/SKILL.md"
+      }
+    },
+    {
+      "name": "forge_run_check",
+      "callId": "call_A2e4akRIxBo5AKqMMtzFYLyP|fc_07b8fc6f8fa8aa3a016abc87e3202487d0bda5fae9d37b3ea3",
+      "args": {
+        "name": "test",
+        "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f"
+      }
+    },
+    {
+      "name": "forge_run_check",
+      "callId": "call_A2e4akRIxBo5AKqMMtzFYLyP|fc_07b8fc6f8fa8aa3a016abc87e3202487d0bda5fae9d37b3ea3",
+      "args": {
+        "name": "test",
+        "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f"
+      }
+    },
+    {
+      "name": "forge_run_check",
+      "callId": "call_A2e4akRIxBo5AKqMMtzFYLyP|fc_07b8fc6f8fa8aa3a016abc87e3202487d0bda5fae9d37b3ea3",
+      "args": {
+        "name": "test",
+        "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f"
+      }
+    },
+    {
+      "name": "subagent",
+      "callId": "call_ng2kgyZn4lv2zbc9QejJQRVJ|fc_07b8fc6f8fa8aa3a016abc87edb81487d080d4a92514a61b81",
+      "args": {}
+    },
+    {
+      "name": "subagent",
+      "callId": "call_ng2kgyZn4lv2zbc9QejJQRVJ|fc_07b8fc6f8fa8aa3a016abc87edb81487d080d4a92514a61b81",
+      "args": {}
+    },
+    {
+      "name": "subagent",
+      "callId": "call_ng2kgyZn4lv2zbc9QejJQRVJ|fc_07b8fc6f8fa8aa3a016abc87edb81487d080d4a92514a61b81",
+      "args": {}
+    },
+    {
+      "name": "subagent",
+      "callId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+      "args": {
+        "cwd": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/.forge/worktrees/review-pr-7",
+        "async": false,
+        "workflowScriptPath": "/tmp/forgedock-review-request-ZkIgtn/workflow.js"
+      }
+    },
+    {
+      "name": "subagent",
+      "callId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+      "args": {
+        "cwd": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/.forge/worktrees/review-pr-7",
+        "async": false,
+        "workflowScriptPath": "/tmp/forgedock-review-request-ZkIgtn/workflow.js"
+      }
+    },
+    {
+      "name": "subagent",
+      "callId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+      "args": {
+        "cwd": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/.forge/worktrees/review-pr-7",
+        "async": false,
+        "workflowScriptPath": "/tmp/forgedock-review-request-ZkIgtn/workflow.js"
+      }
+    },
+    {
+      "name": "read",
+      "callId": "call_sRtNEDvKt8Lpbzy1qKaWutUy|fc_07b8fc6f8fa8aa3a016abc882e3e6c87d09fcfc400cd349542",
+      "args": {
+        "path": "/tmp/forgedock-review-request-ZkIgtn/correctness.report.md"
+      }
+    },
+    {
+      "name": "forge_discover_review_records",
+      "callId": "call_7EmrhhGFhroAFZbEnsEOHudZ|fc_07b8fc6f8fa8aa3a016abc882e3e8887d08f5f406193afd946",
+      "args": {}
+    },
+    {
+      "name": "read",
+      "callId": "call_sRtNEDvKt8Lpbzy1qKaWutUy|fc_07b8fc6f8fa8aa3a016abc882e3e6c87d09fcfc400cd349542",
+      "args": {
+        "path": "/tmp/forgedock-review-request-ZkIgtn/correctness.report.md"
+      }
+    },
+    {
+      "name": "forge_discover_review_records",
+      "callId": "call_7EmrhhGFhroAFZbEnsEOHudZ|fc_07b8fc6f8fa8aa3a016abc882e3e8887d08f5f406193afd946",
+      "args": {}
+    },
+    {
+      "name": "read",
+      "callId": "call_sRtNEDvKt8Lpbzy1qKaWutUy|fc_07b8fc6f8fa8aa3a016abc882e3e6c87d09fcfc400cd349542",
+      "args": {
+        "path": "/tmp/forgedock-review-request-ZkIgtn/correctness.report.md"
+      }
+    },
+    {
+      "name": "forge_discover_review_records",
+      "callId": "call_7EmrhhGFhroAFZbEnsEOHudZ|fc_07b8fc6f8fa8aa3a016abc882e3e8887d08f5f406193afd946",
+      "args": {}
+    },
+    {
+      "name": "read",
+      "callId": "call_LiHnrWQMwFtxSrW2LhNYLioO|fc_07b8fc6f8fa8aa3a016abc883a94e087d08b4f21c309cf91b7",
+      "args": {
+        "path": "/tmp/forgedock-review-request-ZkIgtn/review-history-92b8f2ff1bda.json"
+      }
+    },
+    {
+      "name": "read",
+      "callId": "call_LiHnrWQMwFtxSrW2LhNYLioO|fc_07b8fc6f8fa8aa3a016abc883a94e087d08b4f21c309cf91b7",
+      "args": {
+        "path": "/tmp/forgedock-review-request-ZkIgtn/review-history-92b8f2ff1bda.json"
+      }
+    },
+    {
+      "name": "read",
+      "callId": "call_LiHnrWQMwFtxSrW2LhNYLioO|fc_07b8fc6f8fa8aa3a016abc883a94e087d08b4f21c309cf91b7",
+      "args": {
+        "path": "/tmp/forgedock-review-request-ZkIgtn/review-history-92b8f2ff1bda.json"
+      }
+    },
+    {
+      "name": "read",
+      "callId": "call_VrfHESFFJP4ZKoz1PuUMyz94|fc_07b8fc6f8fa8aa3a016abc8840181887d0a21ace3356594d26",
+      "args": {
+        "path": "/tmp/forgedock-review-request-ZkIgtn/review-history-92b8f2ff1bda/comment-1000.md"
+      }
+    },
+    {
+      "name": "read",
+      "callId": "call_VrfHESFFJP4ZKoz1PuUMyz94|fc_07b8fc6f8fa8aa3a016abc8840181887d0a21ace3356594d26",
+      "args": {
+        "path": "/tmp/forgedock-review-request-ZkIgtn/review-history-92b8f2ff1bda/comment-1000.md"
+      }
+    },
+    {
+      "name": "read",
+      "callId": "call_VrfHESFFJP4ZKoz1PuUMyz94|fc_07b8fc6f8fa8aa3a016abc8840181887d0a21ace3356594d26",
+      "args": {
+        "path": "/tmp/forgedock-review-request-ZkIgtn/review-history-92b8f2ff1bda/comment-1000.md"
+      }
+    },
+    {
+      "name": "forge_publish_adjudication",
+      "callId": "call_yCEIo06HEXoLe9INSpcoh6HP|fc_07b8fc6f8fa8aa3a016abc8861b5cc87d083fc9cf0750b459e",
+      "args": {
+        "mode": "staging",
+        "verdict": "APPROVE",
+        "gate": "PASS",
+        "publish": true
+      }
+    },
+    {
+      "name": "forge_publish_adjudication",
+      "callId": "call_yCEIo06HEXoLe9INSpcoh6HP|fc_07b8fc6f8fa8aa3a016abc8861b5cc87d083fc9cf0750b459e",
+      "args": {
+        "mode": "staging",
+        "verdict": "APPROVE",
+        "gate": "PASS",
+        "publish": true
+      }
+    },
+    {
+      "name": "forge_publish_adjudication",
+      "callId": "call_yCEIo06HEXoLe9INSpcoh6HP|fc_07b8fc6f8fa8aa3a016abc8861b5cc87d083fc9cf0750b459e",
+      "args": {
+        "mode": "staging",
+        "verdict": "APPROVE",
+        "gate": "PASS",
+        "publish": true
+      }
+    },
+    {
+      "name": "forge_publish_record",
+      "callId": "call_6zBJrYCoQIHSDJ3ho4GHyAUw|fc_07b8fc6f8fa8aa3a016abc8870a10087d08b8f47ba36d622ba",
+      "args": {
+        "kind": "STAGING_GATE",
+        "gate": "PASS",
+        "checks": [
+          "CI",
+          "test"
+        ],
+        "publish": true,
+        "adjudicationPath": "/tmp/forgedock-review-request-ZkIgtn/adjudication-r0.json"
+      }
+    },
+    {
+      "name": "forge_publish_record",
+      "callId": "call_6zBJrYCoQIHSDJ3ho4GHyAUw|fc_07b8fc6f8fa8aa3a016abc8870a10087d08b8f47ba36d622ba",
+      "args": {
+        "kind": "STAGING_GATE",
+        "gate": "PASS",
+        "checks": [
+          "CI",
+          "test"
+        ],
+        "publish": true,
+        "adjudicationPath": "/tmp/forgedock-review-request-ZkIgtn/adjudication-r0.json"
+      }
+    },
+    {
+      "name": "forge_publish_record",
+      "callId": "call_6zBJrYCoQIHSDJ3ho4GHyAUw|fc_07b8fc6f8fa8aa3a016abc8870a10087d08b8f47ba36d622ba",
+      "args": {
+        "kind": "STAGING_GATE",
+        "gate": "PASS",
+        "checks": [
+          "CI",
+          "test"
+        ],
+        "publish": true,
+        "adjudicationPath": "/tmp/forgedock-review-request-ZkIgtn/adjudication-r0.json"
+      }
+    },
+    {
+      "name": "forge_publish_record",
+      "callId": "call_Us3ukhhaM8H4Unt2DhH3hft5|fc_07b8fc6f8fa8aa3a016abc889baa6887d0bc554e4e68529479",
+      "args": {
+        "kind": "STAGING_GATE",
+        "gate": "PASS",
+        "checks": [
+          "test"
+        ],
+        "publish": true,
+        "adjudicationPath": "/tmp/forgedock-review-request-ZkIgtn/adjudication-r0.json"
+      }
+    },
+    {
+      "name": "forge_publish_record",
+      "callId": "call_Us3ukhhaM8H4Unt2DhH3hft5|fc_07b8fc6f8fa8aa3a016abc889baa6887d0bc554e4e68529479",
+      "args": {
+        "kind": "STAGING_GATE",
+        "gate": "PASS",
+        "checks": [
+          "test"
+        ],
+        "publish": true,
+        "adjudicationPath": "/tmp/forgedock-review-request-ZkIgtn/adjudication-r0.json"
+      }
+    },
+    {
+      "name": "forge_publish_record",
+      "callId": "call_Us3ukhhaM8H4Unt2DhH3hft5|fc_07b8fc6f8fa8aa3a016abc889baa6887d0bc554e4e68529479",
+      "args": {
+        "kind": "STAGING_GATE",
+        "gate": "PASS",
+        "checks": [
+          "test"
+        ],
+        "publish": true,
+        "adjudicationPath": "/tmp/forgedock-review-request-ZkIgtn/adjudication-r0.json"
+      }
+    },
+    {
+      "name": "bash",
+      "callId": "call_yUDMh781xd1rJAJgdwC6PQVb|fc_07b8fc6f8fa8aa3a016abc8792bbec87d0b1ad2b12c0309082",
+      "args": {}
+    },
+    {
+      "name": "read",
+      "callId": "call_2t504JgKuAnklfJlBeA9HPR6|fc_07b8fc6f8fa8aa3a016abc8796b2ec87d08899311347fa9bca",
+      "args": {
+        "path": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/forge.yaml"
+      }
+    },
+    {
+      "name": "bash",
+      "callId": "call_cCXwXY73bi4qEPuF2Lk8gc7c|fc_07b8fc6f8fa8aa3a016abc879cbb0487d085c9a7fb36285d84",
+      "args": {}
+    },
+    {
+      "name": "bash",
+      "callId": "call_lTZfJIiSb4hAuFnD3e0gX9tU|fc_07b8fc6f8fa8aa3a016abc87aad67087d09107a61d8d877121",
+      "args": {}
+    },
+    {
+      "name": "forge_prepare_review",
+      "callId": "call_Lyv30XBIJwrQgmHWvZA4ifdd|fc_07b8fc6f8fa8aa3a016abc87b9fc2487d0a1432c7057b616f1",
+      "args": {
+        "repository": "example/product",
+        "pullRequest": 7,
+        "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f",
+        "baseRef": "main",
+        "publish": true
+      }
+    },
+    {
+      "name": "bash",
+      "callId": "call_zYUuzxrCHDxETExv5UlCVXuM|fc_07b8fc6f8fa8aa3a016abc87ca97a087d094dada0e381a9487",
+      "args": {}
+    },
+    {
+      "name": "read",
+      "callId": "call_qW4MKlB4AzBzHK9K33vbhczN|fc_07b8fc6f8fa8aa3a016abc87dbaebc87d08170d3ead3bf2b48",
+      "args": {
+        "path": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/skills/forgedock-review-pr-staging/SKILL.md"
+      }
+    },
+    {
+      "name": "forge_run_check",
+      "callId": "call_A2e4akRIxBo5AKqMMtzFYLyP|fc_07b8fc6f8fa8aa3a016abc87e3202487d0bda5fae9d37b3ea3",
+      "args": {
+        "name": "test",
+        "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f"
+      }
+    },
+    {
+      "name": "subagent",
+      "callId": "call_ng2kgyZn4lv2zbc9QejJQRVJ|fc_07b8fc6f8fa8aa3a016abc87edb81487d080d4a92514a61b81",
+      "args": {}
+    },
+    {
+      "name": "subagent",
+      "callId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+      "args": {
+        "cwd": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/.forge/worktrees/review-pr-7",
+        "async": false,
+        "workflowScriptPath": "/tmp/forgedock-review-request-ZkIgtn/workflow.js"
+      }
+    },
+    {
+      "name": "read",
+      "callId": "call_sRtNEDvKt8Lpbzy1qKaWutUy|fc_07b8fc6f8fa8aa3a016abc882e3e6c87d09fcfc400cd349542",
+      "args": {
+        "path": "/tmp/forgedock-review-request-ZkIgtn/correctness.report.md"
+      }
+    },
+    {
+      "name": "forge_discover_review_records",
+      "callId": "call_7EmrhhGFhroAFZbEnsEOHudZ|fc_07b8fc6f8fa8aa3a016abc882e3e8887d08f5f406193afd946",
+      "args": {}
+    },
+    {
+      "name": "read",
+      "callId": "call_LiHnrWQMwFtxSrW2LhNYLioO|fc_07b8fc6f8fa8aa3a016abc883a94e087d08b4f21c309cf91b7",
+      "args": {
+        "path": "/tmp/forgedock-review-request-ZkIgtn/review-history-92b8f2ff1bda.json"
+      }
+    },
+    {
+      "name": "read",
+      "callId": "call_VrfHESFFJP4ZKoz1PuUMyz94|fc_07b8fc6f8fa8aa3a016abc8840181887d0a21ace3356594d26",
+      "args": {
+        "path": "/tmp/forgedock-review-request-ZkIgtn/review-history-92b8f2ff1bda/comment-1000.md"
+      }
+    },
+    {
+      "name": "forge_publish_adjudication",
+      "callId": "call_yCEIo06HEXoLe9INSpcoh6HP|fc_07b8fc6f8fa8aa3a016abc8861b5cc87d083fc9cf0750b459e",
+      "args": {
+        "mode": "staging",
+        "verdict": "APPROVE",
+        "gate": "PASS",
+        "publish": true
+      }
+    },
+    {
+      "name": "forge_publish_record",
+      "callId": "call_6zBJrYCoQIHSDJ3ho4GHyAUw|fc_07b8fc6f8fa8aa3a016abc8870a10087d08b8f47ba36d622ba",
+      "args": {
+        "kind": "STAGING_GATE",
+        "gate": "PASS",
+        "checks": [
+          "CI",
+          "test"
+        ],
+        "publish": true,
+        "adjudicationPath": "/tmp/forgedock-review-request-ZkIgtn/adjudication-r0.json"
+      }
+    },
+    {
+      "name": "forge_publish_record",
+      "callId": "call_Us3ukhhaM8H4Unt2DhH3hft5|fc_07b8fc6f8fa8aa3a016abc889baa6887d0bc554e4e68529479",
+      "args": {
+        "kind": "STAGING_GATE",
+        "gate": "PASS",
+        "checks": [
+          "test"
+        ],
+        "publish": true,
+        "adjudicationPath": "/tmp/forgedock-review-request-ZkIgtn/adjudication-r0.json"
+      }
+    }
+  ],
+  "toolResults": [
+    {
+      "name": "bash",
+      "callId": "call_yUDMh781xd1rJAJgdwC6PQVb|fc_07b8fc6f8fa8aa3a016abc8792bbec87d0b1ad2b12c0309082",
+      "isError": false,
+      "details": {},
+      "text": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project\ntotal 44\ndrwxr-xr-x 7 dev dev 4096 Sep 30 08:20 .\ndrwx------ 7 dev dev 4096 Sep 30 09:02 ..\ndrwxr-xr-x 3 dev dev 4096 Sep 30 08:20 docs\ndrwxr-xr-x 3 dev dev 4096 Sep 30 08:20 .forge\n-rw-r--r-- 1 dev dev  456 Sep 30 08:20 forge.yaml\ndrwxr-xr-x 8 dev dev 4096 Sep 30 09:22 .git\n-rw-r--r-- 1 dev dev   23 Sep 30 08:20 .gitignore\n-rw-r--r-- 1 dev dev  147 Sep 30 08:20 package.json\n-rw-r--r-- 1 dev dev  233 Sep 30 08:20 README.md\ndrwxr-xr-x 2 dev dev 4096 Sep 30 08:20 src\ndrwxr-xr-x 2 dev dev 4096 Sep 30 08:20 test\n./forge."
+    },
+    {
+      "name": "bash",
+      "callId": "call_yUDMh781xd1rJAJgdwC6PQVb|fc_07b8fc6f8fa8aa3a016abc8792bbec87d0b1ad2b12c0309082",
+      "isError": false,
+      "details": {},
+      "text": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project\ntotal 44\ndrwxr-xr-x 7 dev dev 4096 Sep 30 08:20 .\ndrwx------ 7 dev dev 4096 Sep 30 09:02 ..\ndrwxr-xr-x 3 dev dev 4096 Sep 30 08:20 docs\ndrwxr-xr-x 3 dev dev 4096 Sep 30 08:20 .forge\n-rw-r--r-- 1 dev dev  456 Sep 30 08:20 forge.yaml\ndrwxr-xr-x 8 dev dev 4096 Sep 30 09:22 .git\n-rw-r--r-- 1 dev dev   23 Sep 30 08:20 .gitignore\n-rw-r--r-- 1 dev dev  147 Sep 30 08:20 package.json\n-rw-r--r-- 1 dev dev  233 Sep 30 08:20 README.md\ndrwxr-xr-x 2 dev dev 4096 Sep 30 08:20 src\ndrwxr-xr-x 2 dev dev 4096 Sep 30 08:20 test\n./forge."
+    },
+    {
+      "name": "bash",
+      "callId": "call_yUDMh781xd1rJAJgdwC6PQVb|fc_07b8fc6f8fa8aa3a016abc8792bbec87d0b1ad2b12c0309082",
+      "isError": false,
+      "details": {},
+      "text": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project\ntotal 44\ndrwxr-xr-x 7 dev dev 4096 Sep 30 08:20 .\ndrwx------ 7 dev dev 4096 Sep 30 09:02 ..\ndrwxr-xr-x 3 dev dev 4096 Sep 30 08:20 docs\ndrwxr-xr-x 3 dev dev 4096 Sep 30 08:20 .forge\n-rw-r--r-- 1 dev dev  456 Sep 30 08:20 forge.yaml\ndrwxr-xr-x 8 dev dev 4096 Sep 30 09:22 .git\n-rw-r--r-- 1 dev dev   23 Sep 30 08:20 .gitignore\n-rw-r--r-- 1 dev dev  147 Sep 30 08:20 package.json\n-rw-r--r-- 1 dev dev  233 Sep 30 08:20 README.md\ndrwxr-xr-x 2 dev dev 4096 Sep 30 08:20 src\ndrwxr-xr-x 2 dev dev 4096 Sep 30 08:20 test\n./forge."
+    },
+    {
+      "name": "read",
+      "callId": "call_2t504JgKuAnklfJlBeA9HPR6|fc_07b8fc6f8fa8aa3a016abc8796b2ec87d08899311347fa9bca",
+      "isError": false,
+      "details": {},
+      "text": "project:\n  owner: example\n  repo: product\npaths:\n  root: .\nbranches:\n  default: main\n  staging: integration\n  feature_pattern: feature/{slug}\nagents:\n  subagent_model: openai-codex/gpt-5.6-luna\n  thinking: low\norchestration:\n  max_concurrent: 2\nverification:\n  commands:\n    test: npm test\nreview:\n  thinking: medium\n  reviewer_timeout_ms: 900000\n  panel_timeout_ms: 1920000\n  publication_timeout_ms: 120000\n  max_concurrent: 2\n  remediation_max_rounds: 1\n"
+    },
+    {
+      "name": "read",
+      "callId": "call_2t504JgKuAnklfJlBeA9HPR6|fc_07b8fc6f8fa8aa3a016abc8796b2ec87d08899311347fa9bca",
+      "isError": false,
+      "details": {},
+      "text": "project:\n  owner: example\n  repo: product\npaths:\n  root: .\nbranches:\n  default: main\n  staging: integration\n  feature_pattern: feature/{slug}\nagents:\n  subagent_model: openai-codex/gpt-5.6-luna\n  thinking: low\norchestration:\n  max_concurrent: 2\nverification:\n  commands:\n    test: npm test\nreview:\n  thinking: medium\n  reviewer_timeout_ms: 900000\n  panel_timeout_ms: 1920000\n  publication_timeout_ms: 120000\n  max_concurrent: 2\n  remediation_max_rounds: 1\n"
+    },
+    {
+      "name": "read",
+      "callId": "call_2t504JgKuAnklfJlBeA9HPR6|fc_07b8fc6f8fa8aa3a016abc8796b2ec87d08899311347fa9bca",
+      "isError": false,
+      "details": {},
+      "text": "project:\n  owner: example\n  repo: product\npaths:\n  root: .\nbranches:\n  default: main\n  staging: integration\n  feature_pattern: feature/{slug}\nagents:\n  subagent_model: openai-codex/gpt-5.6-luna\n  thinking: low\norchestration:\n  max_concurrent: 2\nverification:\n  commands:\n    test: npm test\nreview:\n  thinking: medium\n  reviewer_timeout_ms: 900000\n  panel_timeout_ms: 1920000\n  publication_timeout_ms: 120000\n  max_concurrent: 2\n  remediation_max_rounds: 1\n"
+    },
+    {
+      "name": "bash",
+      "callId": "call_cCXwXY73bi4qEPuF2Lk8gc7c|fc_07b8fc6f8fa8aa3a016abc879cbb0487d085c9a7fb36285d84",
+      "isError": false,
+      "details": {},
+      "text": "{\"number\":7,\"title\":\"Trim display names when rendering\",\"body\":\"Normalize display labels at the presentation boundary. Preserve stored identifiers and source profile values. Acceptance: rendered display labels have surrounding whitespace removed while stored identifiers and source strings remain unchanged. Verification is the repository-configured test command.\",\"headRefOid\":\"93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f\",\"baseRefName\":\"main\",\"baseRefOid\":\"16e4e51e3f24a44c882e929c577b717461d09599\",\"mergeable\":\"MERGEABLE\",\"mergeStateStatus\":\"CLEAN\",\"state\":\"OPEN\",\"isDraft\":false,\"url\":\"https://githu"
+    },
+    {
+      "name": "bash",
+      "callId": "call_cCXwXY73bi4qEPuF2Lk8gc7c|fc_07b8fc6f8fa8aa3a016abc879cbb0487d085c9a7fb36285d84",
+      "isError": false,
+      "details": {},
+      "text": "{\"number\":7,\"title\":\"Trim display names when rendering\",\"body\":\"Normalize display labels at the presentation boundary. Preserve stored identifiers and source profile values. Acceptance: rendered display labels have surrounding whitespace removed while stored identifiers and source strings remain unchanged. Verification is the repository-configured test command.\",\"headRefOid\":\"93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f\",\"baseRefName\":\"main\",\"baseRefOid\":\"16e4e51e3f24a44c882e929c577b717461d09599\",\"mergeable\":\"MERGEABLE\",\"mergeStateStatus\":\"CLEAN\",\"state\":\"OPEN\",\"isDraft\":false,\"url\":\"https://githu"
+    },
+    {
+      "name": "bash",
+      "callId": "call_cCXwXY73bi4qEPuF2Lk8gc7c|fc_07b8fc6f8fa8aa3a016abc879cbb0487d085c9a7fb36285d84",
+      "isError": false,
+      "details": {},
+      "text": "{\"number\":7,\"title\":\"Trim display names when rendering\",\"body\":\"Normalize display labels at the presentation boundary. Preserve stored identifiers and source profile values. Acceptance: rendered display labels have surrounding whitespace removed while stored identifiers and source strings remain unchanged. Verification is the repository-configured test command.\",\"headRefOid\":\"93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f\",\"baseRefName\":\"main\",\"baseRefOid\":\"16e4e51e3f24a44c882e929c577b717461d09599\",\"mergeable\":\"MERGEABLE\",\"mergeStateStatus\":\"CLEAN\",\"state\":\"OPEN\",\"isDraft\":false,\"url\":\"https://githu"
+    },
+    {
+      "name": "bash",
+      "callId": "call_lTZfJIiSb4hAuFnD3e0gX9tU|fc_07b8fc6f8fa8aa3a016abc87aad67087d09107a61d8d877121",
+      "isError": false,
+      "details": {},
+      "text": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project\n16e4e51e3f24a44c882e929c577b717461d09599\n"
+    },
+    {
+      "name": "bash",
+      "callId": "call_lTZfJIiSb4hAuFnD3e0gX9tU|fc_07b8fc6f8fa8aa3a016abc87aad67087d09107a61d8d877121",
+      "isError": false,
+      "details": {},
+      "text": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project\n16e4e51e3f24a44c882e929c577b717461d09599\n"
+    },
+    {
+      "name": "bash",
+      "callId": "call_lTZfJIiSb4hAuFnD3e0gX9tU|fc_07b8fc6f8fa8aa3a016abc87aad67087d09107a61d8d877121",
+      "isError": false,
+      "details": {},
+      "text": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project\n16e4e51e3f24a44c882e929c577b717461d09599\n"
+    },
+    {
+      "name": "forge_prepare_review",
+      "callId": "call_Lyv30XBIJwrQgmHWvZA4ifdd|fc_07b8fc6f8fa8aa3a016abc87b9fc2487d0a1432c7057b616f1",
+      "isError": false,
+      "details": {
+        "reviewRoot": "/tmp/forgedock-review-request-ZkIgtn",
+        "artifactKey": "8371e940-03ca-4529-93ff-f59a92458edd",
+        "sourceRoot": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/.forge/worktrees/review-pr-7",
+        "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f",
+        "configPath": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/forge.yaml",
+        "configSha256": "532318d1b31c9f853cbddcf242f2c655ab609920d1da3e6e4a98c07ab8f84a2b",
+        "policySummaryPath": "/tmp/forgedock-review-request-ZkIgtn/policy-summary.json",
+        "policySummary": {
+          "schema": "forgedock.candidate-pr-policy-summary/v1",
+          "source": {
+            "collector": "inspect-pr",
+            "artifact": "/tmp/forgedock-review-request-ZkIgtn/policy.json",
+            "snapshot": "prepared"
+          },
+          "status": "available",
+          "repository": "example/product",
+          "pullRequest": 7,
+          "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f",
+          "baseRef": "main",
+          "baseSha": "16e4e51e3f24a44c882e929c577b717461d09599",
+          "mergeable": "MERGEABLE",
+          "mergeStateStatus": "CLEAN",
+          "applicability": "known-required",
+          "requiredNames": [
+            "CI"
+          ],
+          "missingRequiredNames": [],
+          "requiredStatus": "available",
+          "requiredExitCode": 0,
+          "requiredCheckCount": 1,
+          "requiredChecks": [
+            {
+              "name": "CI",
+              "state": "SUCCESS",
+              "bucket": "pass",
+              "workflow": "CI"
+            }
+          ],
+          "policySources": {
+            "evaluatedChecks": "available",
+            "currentCheckRuns": "available",
+            "branchRules": "available",
+            "branchProtection": "available",
+            "rulesets": "available"
+          },
+          "exactHeadCheckRuns": {
+            "status": "available",
+            "count": 1,
+            "checks": [
+              {
+                "name": "CI",
+                "status": "completed",
+                "conclusion": "success"
+              }
+            ]
+          },
+          "localVerification": {
+            "state": "configured",
+            "names": [
+              "test"
+            ]
+          }
+        }
+      },
+      "text": "{\n  \"schema\": \"forgedock.candidate-review-preparation/v1\",\n  \"requestPath\": \"/tmp/forgedock-review-request-ZkIgtn/request.json\",\n  \"request\": {\n    \"async\": false,\n    \"cwd\": \"/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/.forge/worktrees/review-pr-7\",\n    \"workflowScriptPath\": \"/tmp/forgedock-review-request-ZkIgtn/workflow.js\",\n    \"globalConcurrencyLimit\": 1,\n    \"maxSubagentSpawnsPerRun\": 1,\n    \"timeoutMs\": 1920000,\n    \"control\": {\n      \"needsAttentionAfterMs\": 1920000,\n      \"activeNoticeAfterMs\": 900000\n    }\n  },\n  \"reviewRoot\": \"/tmp/forgedock-review-r"
+    },
+    {
+      "name": "forge_prepare_review",
+      "callId": "call_Lyv30XBIJwrQgmHWvZA4ifdd|fc_07b8fc6f8fa8aa3a016abc87b9fc2487d0a1432c7057b616f1",
+      "isError": false,
+      "details": {
+        "reviewRoot": "/tmp/forgedock-review-request-ZkIgtn",
+        "artifactKey": "8371e940-03ca-4529-93ff-f59a92458edd",
+        "sourceRoot": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/.forge/worktrees/review-pr-7",
+        "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f",
+        "configPath": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/forge.yaml",
+        "configSha256": "532318d1b31c9f853cbddcf242f2c655ab609920d1da3e6e4a98c07ab8f84a2b",
+        "policySummaryPath": "/tmp/forgedock-review-request-ZkIgtn/policy-summary.json",
+        "policySummary": {
+          "schema": "forgedock.candidate-pr-policy-summary/v1",
+          "source": {
+            "collector": "inspect-pr",
+            "artifact": "/tmp/forgedock-review-request-ZkIgtn/policy.json",
+            "snapshot": "prepared"
+          },
+          "status": "available",
+          "repository": "example/product",
+          "pullRequest": 7,
+          "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f",
+          "baseRef": "main",
+          "baseSha": "16e4e51e3f24a44c882e929c577b717461d09599",
+          "mergeable": "MERGEABLE",
+          "mergeStateStatus": "CLEAN",
+          "applicability": "known-required",
+          "requiredNames": [
+            "CI"
+          ],
+          "missingRequiredNames": [],
+          "requiredStatus": "available",
+          "requiredExitCode": 0,
+          "requiredCheckCount": 1,
+          "requiredChecks": [
+            {
+              "name": "CI",
+              "state": "SUCCESS",
+              "bucket": "pass",
+              "workflow": "CI"
+            }
+          ],
+          "policySources": {
+            "evaluatedChecks": "available",
+            "currentCheckRuns": "available",
+            "branchRules": "available",
+            "branchProtection": "available",
+            "rulesets": "available"
+          },
+          "exactHeadCheckRuns": {
+            "status": "available",
+            "count": 1,
+            "checks": [
+              {
+                "name": "CI",
+                "status": "completed",
+                "conclusion": "success"
+              }
+            ]
+          },
+          "localVerification": {
+            "state": "configured",
+            "names": [
+              "test"
+            ]
+          }
+        }
+      },
+      "text": "{\n  \"schema\": \"forgedock.candidate-review-preparation/v1\",\n  \"requestPath\": \"/tmp/forgedock-review-request-ZkIgtn/request.json\",\n  \"request\": {\n    \"async\": false,\n    \"cwd\": \"/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/.forge/worktrees/review-pr-7\",\n    \"workflowScriptPath\": \"/tmp/forgedock-review-request-ZkIgtn/workflow.js\",\n    \"globalConcurrencyLimit\": 1,\n    \"maxSubagentSpawnsPerRun\": 1,\n    \"timeoutMs\": 1920000,\n    \"control\": {\n      \"needsAttentionAfterMs\": 1920000,\n      \"activeNoticeAfterMs\": 900000\n    }\n  },\n  \"reviewRoot\": \"/tmp/forgedock-review-r"
+    },
+    {
+      "name": "forge_prepare_review",
+      "callId": "call_Lyv30XBIJwrQgmHWvZA4ifdd|fc_07b8fc6f8fa8aa3a016abc87b9fc2487d0a1432c7057b616f1",
+      "isError": false,
+      "details": {
+        "reviewRoot": "/tmp/forgedock-review-request-ZkIgtn",
+        "artifactKey": "8371e940-03ca-4529-93ff-f59a92458edd",
+        "sourceRoot": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/.forge/worktrees/review-pr-7",
+        "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f",
+        "configPath": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/forge.yaml",
+        "configSha256": "532318d1b31c9f853cbddcf242f2c655ab609920d1da3e6e4a98c07ab8f84a2b",
+        "policySummaryPath": "/tmp/forgedock-review-request-ZkIgtn/policy-summary.json",
+        "policySummary": {
+          "schema": "forgedock.candidate-pr-policy-summary/v1",
+          "source": {
+            "collector": "inspect-pr",
+            "artifact": "/tmp/forgedock-review-request-ZkIgtn/policy.json",
+            "snapshot": "prepared"
+          },
+          "status": "available",
+          "repository": "example/product",
+          "pullRequest": 7,
+          "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f",
+          "baseRef": "main",
+          "baseSha": "16e4e51e3f24a44c882e929c577b717461d09599",
+          "mergeable": "MERGEABLE",
+          "mergeStateStatus": "CLEAN",
+          "applicability": "known-required",
+          "requiredNames": [
+            "CI"
+          ],
+          "missingRequiredNames": [],
+          "requiredStatus": "available",
+          "requiredExitCode": 0,
+          "requiredCheckCount": 1,
+          "requiredChecks": [
+            {
+              "name": "CI",
+              "state": "SUCCESS",
+              "bucket": "pass",
+              "workflow": "CI"
+            }
+          ],
+          "policySources": {
+            "evaluatedChecks": "available",
+            "currentCheckRuns": "available",
+            "branchRules": "available",
+            "branchProtection": "available",
+            "rulesets": "available"
+          },
+          "exactHeadCheckRuns": {
+            "status": "available",
+            "count": 1,
+            "checks": [
+              {
+                "name": "CI",
+                "status": "completed",
+                "conclusion": "success"
+              }
+            ]
+          },
+          "localVerification": {
+            "state": "configured",
+            "names": [
+              "test"
+            ]
+          }
+        }
+      },
+      "text": "{\n  \"schema\": \"forgedock.candidate-review-preparation/v1\",\n  \"requestPath\": \"/tmp/forgedock-review-request-ZkIgtn/request.json\",\n  \"request\": {\n    \"async\": false,\n    \"cwd\": \"/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/.forge/worktrees/review-pr-7\",\n    \"workflowScriptPath\": \"/tmp/forgedock-review-request-ZkIgtn/workflow.js\",\n    \"globalConcurrencyLimit\": 1,\n    \"maxSubagentSpawnsPerRun\": 1,\n    \"timeoutMs\": 1920000,\n    \"control\": {\n      \"needsAttentionAfterMs\": 1920000,\n      \"activeNoticeAfterMs\": 900000\n    }\n  },\n  \"reviewRoot\": \"/tmp/forgedock-review-r"
+    },
+    {
+      "name": "bash",
+      "callId": "call_zYUuzxrCHDxETExv5UlCVXuM|fc_07b8fc6f8fa8aa3a016abc87ca97a087d094dada0e381a9487",
+      "isError": true,
+      "details": {},
+      "text": "The staging review route is non-mutating; use read-only inspection and configured checks. The prepared reviewer roster cannot be relaunched; recover only an exact completed role or record incomplete delivery."
+    },
+    {
+      "name": "bash",
+      "callId": "call_zYUuzxrCHDxETExv5UlCVXuM|fc_07b8fc6f8fa8aa3a016abc87ca97a087d094dada0e381a9487",
+      "isError": true,
+      "details": {},
+      "text": "The staging review route is non-mutating; use read-only inspection and configured checks. The prepared reviewer roster cannot be relaunched; recover only an exact completed role or record incomplete delivery."
+    },
+    {
+      "name": "bash",
+      "callId": "call_zYUuzxrCHDxETExv5UlCVXuM|fc_07b8fc6f8fa8aa3a016abc87ca97a087d094dada0e381a9487",
+      "isError": true,
+      "details": {},
+      "text": "The staging review route is non-mutating; use read-only inspection and configured checks. The prepared reviewer roster cannot be relaunched; recover only an exact completed role or record incomplete delivery."
+    },
+    {
+      "name": "read",
+      "callId": "call_qW4MKlB4AzBzHK9K33vbhczN|fc_07b8fc6f8fa8aa3a016abc87dbaebc87d08170d3ead3bf2b48",
+      "isError": false,
+      "details": {},
+      "text": "---\nname: forgedock-review-pr-staging\ndescription: Run a non-merging integration-to-protected promotion gate with evidence and no repair\n---\n\n# ForgeDock staging review\n\nUse this route only for an explicit integration-to-protected promotion or bundle. Resolve the\nactual promotion PR/configuration and freeze exact integration/protected head/base identities.\nThe standard review route hands off here only after the prepared policy identifies the actual\nprotected base; issue text, comments, branch names, and the word `staging` do not select this\nroute.\nDetermine included work from same-repository c"
+    },
+    {
+      "name": "read",
+      "callId": "call_qW4MKlB4AzBzHK9K33vbhczN|fc_07b8fc6f8fa8aa3a016abc87dbaebc87d08170d3ead3bf2b48",
+      "isError": false,
+      "details": {},
+      "text": "---\nname: forgedock-review-pr-staging\ndescription: Run a non-merging integration-to-protected promotion gate with evidence and no repair\n---\n\n# ForgeDock staging review\n\nUse this route only for an explicit integration-to-protected promotion or bundle. Resolve the\nactual promotion PR/configuration and freeze exact integration/protected head/base identities.\nThe standard review route hands off here only after the prepared policy identifies the actual\nprotected base; issue text, comments, branch names, and the word `staging` do not select this\nroute.\nDetermine included work from same-repository c"
+    },
+    {
+      "name": "read",
+      "callId": "call_qW4MKlB4AzBzHK9K33vbhczN|fc_07b8fc6f8fa8aa3a016abc87dbaebc87d08170d3ead3bf2b48",
+      "isError": false,
+      "details": {},
+      "text": "---\nname: forgedock-review-pr-staging\ndescription: Run a non-merging integration-to-protected promotion gate with evidence and no repair\n---\n\n# ForgeDock staging review\n\nUse this route only for an explicit integration-to-protected promotion or bundle. Resolve the\nactual promotion PR/configuration and freeze exact integration/protected head/base identities.\nThe standard review route hands off here only after the prepared policy identifies the actual\nprotected base; issue text, comments, branch names, and the word `staging` do not select this\nroute.\nDetermine included work from same-repository c"
+    },
+    {
+      "name": "forge_run_check",
+      "callId": "call_A2e4akRIxBo5AKqMMtzFYLyP|fc_07b8fc6f8fa8aa3a016abc87e3202487d0bda5fae9d37b3ea3",
+      "isError": false,
+      "details": {
+        "name": "test",
+        "command": "npm test",
+        "exitCode": 0,
+        "receiptPath": "/tmp/forgedock-review-request-ZkIgtn/checks/test.json"
+      },
+      "text": "✔ rendered profile label is trimmed without changing its stored identifier (0.865971ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 82.910524\n\nnpm notice run test\nnpm notice run node --test test/display.test.mjs\n"
+    },
+    {
+      "name": "forge_run_check",
+      "callId": "call_A2e4akRIxBo5AKqMMtzFYLyP|fc_07b8fc6f8fa8aa3a016abc87e3202487d0bda5fae9d37b3ea3",
+      "isError": false,
+      "details": {
+        "name": "test",
+        "command": "npm test",
+        "exitCode": 0,
+        "receiptPath": "/tmp/forgedock-review-request-ZkIgtn/checks/test.json"
+      },
+      "text": "✔ rendered profile label is trimmed without changing its stored identifier (0.865971ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 82.910524\n\nnpm notice run test\nnpm notice run node --test test/display.test.mjs\n"
+    },
+    {
+      "name": "forge_run_check",
+      "callId": "call_A2e4akRIxBo5AKqMMtzFYLyP|fc_07b8fc6f8fa8aa3a016abc87e3202487d0bda5fae9d37b3ea3",
+      "isError": false,
+      "details": {
+        "name": "test",
+        "command": "npm test",
+        "exitCode": 0,
+        "receiptPath": "/tmp/forgedock-review-request-ZkIgtn/checks/test.json"
+      },
+      "text": "✔ rendered profile label is trimmed without changing its stored identifier (0.865971ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 82.910524\n\nnpm notice run test\nnpm notice run node --test test/display.test.mjs\n"
+    },
+    {
+      "name": "subagent",
+      "callId": "call_ng2kgyZn4lv2zbc9QejJQRVJ|fc_07b8fc6f8fa8aa3a016abc87edb81487d080d4a92514a61b81",
+      "isError": false,
+      "details": {
+        "mode": "management"
+      },
+      "text": "Executable agents (capabilities):\nUser agents\n- forgedock-owner (user, context: fresh): Description: Sole owner for one ForgeDock issue from evidence through delivery; Tools: read, grep, find, ls, bash, edit, write, subagent, forge_prepare_review, forge_run_check, forge_discover_review_records, forge_resolve_review_tracking, forge_recover_reviewer_publication, forge_publish_incomplete_review, forge_publish_adjudication; Model: openai-codex/gpt-5.6-luna; Thinking: max\n- forgedock-reviewer (user, context: fresh): Description: Fresh read-only reviewer with a bounded report-publication capability;"
+    },
+    {
+      "name": "subagent",
+      "callId": "call_ng2kgyZn4lv2zbc9QejJQRVJ|fc_07b8fc6f8fa8aa3a016abc87edb81487d080d4a92514a61b81",
+      "isError": false,
+      "details": {
+        "mode": "management"
+      },
+      "text": "Executable agents (capabilities):\nUser agents\n- forgedock-owner (user, context: fresh): Description: Sole owner for one ForgeDock issue from evidence through delivery; Tools: read, grep, find, ls, bash, edit, write, subagent, forge_prepare_review, forge_run_check, forge_discover_review_records, forge_resolve_review_tracking, forge_recover_reviewer_publication, forge_publish_incomplete_review, forge_publish_adjudication; Model: openai-codex/gpt-5.6-luna; Thinking: max\n- forgedock-reviewer (user, context: fresh): Description: Fresh read-only reviewer with a bounded report-publication capability;"
+    },
+    {
+      "name": "subagent",
+      "callId": "call_ng2kgyZn4lv2zbc9QejJQRVJ|fc_07b8fc6f8fa8aa3a016abc87edb81487d080d4a92514a61b81",
+      "isError": false,
+      "details": {
+        "mode": "management"
+      },
+      "text": "Executable agents (capabilities):\nUser agents\n- forgedock-owner (user, context: fresh): Description: Sole owner for one ForgeDock issue from evidence through delivery; Tools: read, grep, find, ls, bash, edit, write, subagent, forge_prepare_review, forge_run_check, forge_discover_review_records, forge_resolve_review_tracking, forge_recover_reviewer_publication, forge_publish_incomplete_review, forge_publish_adjudication; Model: openai-codex/gpt-5.6-luna; Thinking: max\n- forgedock-reviewer (user, context: fresh): Description: Fresh read-only reviewer with a bounded report-publication capability;"
+    },
+    {
+      "name": "subagent",
+      "callId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+      "isError": false,
+      "details": {
+        "mode": "workflow",
+        "runId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+        "workflow": {
+          "value": [
+            {
+              "role": "correctness",
+              "nativeRunId": "753c61ab-59fc-4b53-ae4e-bac154c4d71c",
+              "nativeStatus": "completed",
+              "nativeFlags": {
+                "timedOut": false,
+                "stopped": false,
+                "interrupted": false,
+                "detached": false,
+                "executionLimit": false
+              },
+              "exitCode": 0,
+              "terminalOutcome": null,
+              "publicationState": "unverified",
+              "reportPath": "/tmp/forgedock-review-request-ZkIgtn/correctness.report.md",
+              "recoveryPath": "/tmp/forgedock-review-request-ZkIgtn/correctness.publication-recovery.json",
+              "output": "FORGE_REVIEW_RESULT role=correctness report=/tmp/forgedock-review-request-ZkIgtn/correctness.report.md publication=published verdict=APPROVE",
+              "error": null,
+              "artifactPaths": [
+                "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/native-runs/2026-09-30T03-52-43-764Z/sessions/2026-09-30T03-52-44-839Z_01a0f071-7e27-711e-af1f-e1121bd353ba/753c61ab-59fc-4b53-ae4e-bac154c4d71c/run-0/session.jsonl"
+              ]
+            }
+          ],
+          "trace": [
+            {
+              "operation": "run",
+              "key": "review-correctness",
+              "state": "started",
+              "agent": "forgedock-reviewer"
+            },
+            {
+              "operation": "run",
+              "key": "review-correctness",
+              "state": "completed",
+              "durationMs": 42651,
+              "agent": "forgedock-reviewer",
+              "runId": "753c61ab-59fc-4b53-ae4e-bac154c4d71c"
+            }
+          ],
+          "emits": [],
+          "console": [],
+          "receipt": {
+            "version": 1,
+            "workflowRunId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+            "state": "complete",
+            "createdAt": 1790740518398,
+            "entries": {
+              "review-correctness": {
+                "key": "review-correctness",
+                "agent": "forgedock-reviewer",
+                "requestedContext": "fresh",
+                "resolvedContext": "fresh",
+                "continuation": {
+                  "runIds": [
+                    "753c61ab-59fc-4b53-ae4e-bac154c4d71c"
+                  ]
+                },
+                "latestRunId": "753c61ab-59fc-4b53-ae4e-bac154c4d71c",
+                "resumability": {
+                  "state": "resumable"
+                }
+              }
+            },
+            "workflowChildren": {
+              "version": 1,
+              "parentToolCallId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+              "workflowRunId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+              "inventoryComplete": true,
+              "workflowState": "completed",
+              "children": [
+                {
+                  "childId": "review-correctness",
+                  "state": "completed",
+                  "runId": "753c61ab-59fc-4b53-ae4e-bac154c4d71c",
+                  "agent": "forgedock-reviewer",
+                  "sessionName": "forgedock-reviewer: You are the independent correctness reviewer. Review only...",
+                  "model": "openai-codex/gpt-5.6-luna:medium",
+                  "thinking": "medium"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "text": "Run fan-out: 1/1 used, 0 remaining\nWorkflow completed.\n\nReturn:\n[\n  {\n    \"role\": \"correctness\",\n    \"nativeRunId\": \"753c61ab-59fc-4b53-ae4e-bac154c4d71c\",\n    \"nativeStatus\": \"completed\",\n    \"nativeFlags\": {\n      \"timedOut\": false,\n      \"stopped\": false,\n      \"interrupted\": false,\n      \"detached\": false,\n      \"executionLimit\": false\n    },\n    \"exitCode\": 0,\n    \"terminalOutcome\": null,\n    \"publicationState\": \"unverified\",\n    \"reportPath\": \"/tmp/forgedock-review-request-ZkIgtn/correctness.report.md\",\n    \"recoveryPath\": \"/tmp/forgedock-review-request-ZkIgtn/correctness.publication-rec"
+    },
+    {
+      "name": "subagent",
+      "callId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+      "isError": false,
+      "details": {
+        "mode": "workflow",
+        "runId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+        "workflow": {
+          "value": [
+            {
+              "role": "correctness",
+              "nativeRunId": "753c61ab-59fc-4b53-ae4e-bac154c4d71c",
+              "nativeStatus": "completed",
+              "nativeFlags": {
+                "timedOut": false,
+                "stopped": false,
+                "interrupted": false,
+                "detached": false,
+                "executionLimit": false
+              },
+              "exitCode": 0,
+              "terminalOutcome": null,
+              "publicationState": "unverified",
+              "reportPath": "/tmp/forgedock-review-request-ZkIgtn/correctness.report.md",
+              "recoveryPath": "/tmp/forgedock-review-request-ZkIgtn/correctness.publication-recovery.json",
+              "output": "FORGE_REVIEW_RESULT role=correctness report=/tmp/forgedock-review-request-ZkIgtn/correctness.report.md publication=published verdict=APPROVE",
+              "error": null,
+              "artifactPaths": [
+                "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/native-runs/2026-09-30T03-52-43-764Z/sessions/2026-09-30T03-52-44-839Z_01a0f071-7e27-711e-af1f-e1121bd353ba/753c61ab-59fc-4b53-ae4e-bac154c4d71c/run-0/session.jsonl"
+              ]
+            }
+          ],
+          "trace": [
+            {
+              "operation": "run",
+              "key": "review-correctness",
+              "state": "started",
+              "agent": "forgedock-reviewer"
+            },
+            {
+              "operation": "run",
+              "key": "review-correctness",
+              "state": "completed",
+              "durationMs": 42651,
+              "agent": "forgedock-reviewer",
+              "runId": "753c61ab-59fc-4b53-ae4e-bac154c4d71c"
+            }
+          ],
+          "emits": [],
+          "console": [],
+          "receipt": {
+            "version": 1,
+            "workflowRunId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+            "state": "complete",
+            "createdAt": 1790740518398,
+            "entries": {
+              "review-correctness": {
+                "key": "review-correctness",
+                "agent": "forgedock-reviewer",
+                "requestedContext": "fresh",
+                "resolvedContext": "fresh",
+                "continuation": {
+                  "runIds": [
+                    "753c61ab-59fc-4b53-ae4e-bac154c4d71c"
+                  ]
+                },
+                "latestRunId": "753c61ab-59fc-4b53-ae4e-bac154c4d71c",
+                "resumability": {
+                  "state": "resumable"
+                }
+              }
+            },
+            "workflowChildren": {
+              "version": 1,
+              "parentToolCallId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+              "workflowRunId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+              "inventoryComplete": true,
+              "workflowState": "completed",
+              "children": [
+                {
+                  "childId": "review-correctness",
+                  "state": "completed",
+                  "runId": "753c61ab-59fc-4b53-ae4e-bac154c4d71c",
+                  "agent": "forgedock-reviewer",
+                  "sessionName": "forgedock-reviewer: You are the independent correctness reviewer. Review only...",
+                  "model": "openai-codex/gpt-5.6-luna:medium",
+                  "thinking": "medium"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "text": "Run fan-out: 1/1 used, 0 remaining\nWorkflow completed.\n\nReturn:\n[\n  {\n    \"role\": \"correctness\",\n    \"nativeRunId\": \"753c61ab-59fc-4b53-ae4e-bac154c4d71c\",\n    \"nativeStatus\": \"completed\",\n    \"nativeFlags\": {\n      \"timedOut\": false,\n      \"stopped\": false,\n      \"interrupted\": false,\n      \"detached\": false,\n      \"executionLimit\": false\n    },\n    \"exitCode\": 0,\n    \"terminalOutcome\": null,\n    \"publicationState\": \"unverified\",\n    \"reportPath\": \"/tmp/forgedock-review-request-ZkIgtn/correctness.report.md\",\n    \"recoveryPath\": \"/tmp/forgedock-review-request-ZkIgtn/correctness.publication-rec"
+    },
+    {
+      "name": "subagent",
+      "callId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+      "isError": false,
+      "details": {
+        "mode": "workflow",
+        "runId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+        "workflow": {
+          "value": [
+            {
+              "role": "correctness",
+              "nativeRunId": "753c61ab-59fc-4b53-ae4e-bac154c4d71c",
+              "nativeStatus": "completed",
+              "nativeFlags": {
+                "timedOut": false,
+                "stopped": false,
+                "interrupted": false,
+                "detached": false,
+                "executionLimit": false
+              },
+              "exitCode": 0,
+              "terminalOutcome": null,
+              "publicationState": "unverified",
+              "reportPath": "/tmp/forgedock-review-request-ZkIgtn/correctness.report.md",
+              "recoveryPath": "/tmp/forgedock-review-request-ZkIgtn/correctness.publication-recovery.json",
+              "output": "FORGE_REVIEW_RESULT role=correctness report=/tmp/forgedock-review-request-ZkIgtn/correctness.report.md publication=published verdict=APPROVE",
+              "error": null,
+              "artifactPaths": [
+                "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/native-runs/2026-09-30T03-52-43-764Z/sessions/2026-09-30T03-52-44-839Z_01a0f071-7e27-711e-af1f-e1121bd353ba/753c61ab-59fc-4b53-ae4e-bac154c4d71c/run-0/session.jsonl"
+              ]
+            }
+          ],
+          "trace": [
+            {
+              "operation": "run",
+              "key": "review-correctness",
+              "state": "started",
+              "agent": "forgedock-reviewer"
+            },
+            {
+              "operation": "run",
+              "key": "review-correctness",
+              "state": "completed",
+              "durationMs": 42651,
+              "agent": "forgedock-reviewer",
+              "runId": "753c61ab-59fc-4b53-ae4e-bac154c4d71c"
+            }
+          ],
+          "emits": [],
+          "console": [],
+          "receipt": {
+            "version": 1,
+            "workflowRunId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+            "state": "complete",
+            "createdAt": 1790740518398,
+            "entries": {
+              "review-correctness": {
+                "key": "review-correctness",
+                "agent": "forgedock-reviewer",
+                "requestedContext": "fresh",
+                "resolvedContext": "fresh",
+                "continuation": {
+                  "runIds": [
+                    "753c61ab-59fc-4b53-ae4e-bac154c4d71c"
+                  ]
+                },
+                "latestRunId": "753c61ab-59fc-4b53-ae4e-bac154c4d71c",
+                "resumability": {
+                  "state": "resumable"
+                }
+              }
+            },
+            "workflowChildren": {
+              "version": 1,
+              "parentToolCallId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+              "workflowRunId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+              "inventoryComplete": true,
+              "workflowState": "completed",
+              "children": [
+                {
+                  "childId": "review-correctness",
+                  "state": "completed",
+                  "runId": "753c61ab-59fc-4b53-ae4e-bac154c4d71c",
+                  "agent": "forgedock-reviewer",
+                  "sessionName": "forgedock-reviewer: You are the independent correctness reviewer. Review only...",
+                  "model": "openai-codex/gpt-5.6-luna:medium",
+                  "thinking": "medium"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "text": "Run fan-out: 1/1 used, 0 remaining\nWorkflow completed.\n\nReturn:\n[\n  {\n    \"role\": \"correctness\",\n    \"nativeRunId\": \"753c61ab-59fc-4b53-ae4e-bac154c4d71c\",\n    \"nativeStatus\": \"completed\",\n    \"nativeFlags\": {\n      \"timedOut\": false,\n      \"stopped\": false,\n      \"interrupted\": false,\n      \"detached\": false,\n      \"executionLimit\": false\n    },\n    \"exitCode\": 0,\n    \"terminalOutcome\": null,\n    \"publicationState\": \"unverified\",\n    \"reportPath\": \"/tmp/forgedock-review-request-ZkIgtn/correctness.report.md\",\n    \"recoveryPath\": \"/tmp/forgedock-review-request-ZkIgtn/correctness.publication-rec"
+    },
+    {
+      "name": "read",
+      "callId": "call_sRtNEDvKt8Lpbzy1qKaWutUy|fc_07b8fc6f8fa8aa3a016abc882e3e6c87d09fcfc400cd349542",
+      "isError": false,
+      "details": {},
+      "text": "<!-- FORGE:REVIEWER_REPORT {\"v\":1,\"kind\":\"REVIEW\",\"repository\":\"example/product\",\"pullRequest\":7,\"head\":\"93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f\",\"baseSha\":\"16e4e51e3f24a44c882e929c577b717461d09599\",\"role\":\"correctness\",\"reportId\":\"9cbf570e-89be-40ee-900b-dc9eb859bfe7\",\"baseRef\":\"main\"} -->\n<!-- FORGE:REVIEW_OBSERVATIONS [] -->\n## ForgeDock review\n\n**Reviewer role**: `correctness`\n**Pull request**: #7\n**Reviewed source**: `93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f`\n**Review base**: `main` at `16e4e51e3f24a44c882e929c577b717461d09599`\n\n### Structured findings\n\nNo structured observations reporte"
+    },
+    {
+      "name": "read",
+      "callId": "call_sRtNEDvKt8Lpbzy1qKaWutUy|fc_07b8fc6f8fa8aa3a016abc882e3e6c87d09fcfc400cd349542",
+      "isError": false,
+      "details": {},
+      "text": "<!-- FORGE:REVIEWER_REPORT {\"v\":1,\"kind\":\"REVIEW\",\"repository\":\"example/product\",\"pullRequest\":7,\"head\":\"93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f\",\"baseSha\":\"16e4e51e3f24a44c882e929c577b717461d09599\",\"role\":\"correctness\",\"reportId\":\"9cbf570e-89be-40ee-900b-dc9eb859bfe7\",\"baseRef\":\"main\"} -->\n<!-- FORGE:REVIEW_OBSERVATIONS [] -->\n## ForgeDock review\n\n**Reviewer role**: `correctness`\n**Pull request**: #7\n**Reviewed source**: `93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f`\n**Review base**: `main` at `16e4e51e3f24a44c882e929c577b717461d09599`\n\n### Structured findings\n\nNo structured observations reporte"
+    },
+    {
+      "name": "forge_discover_review_records",
+      "callId": "call_7EmrhhGFhroAFZbEnsEOHudZ|fc_07b8fc6f8fa8aa3a016abc882e3e8887d08f5f406193afd946",
+      "isError": false,
+      "details": {},
+      "text": "{\n  \"schema\": \"forgedock.candidate-review-history-index/v1\",\n  \"repository\": \"example/product\",\n  \"pullRequest\": 7,\n  \"historyIndexPath\": \"/tmp/forgedock-review-request-ZkIgtn/review-history-92b8f2ff1bda.json\",\n  \"sourceArtifactPath\": \"/tmp/forgedock-review-request-ZkIgtn/review-history-source-92b8f2ff1bda.json\",\n  \"completeness\": {\n    \"totalComments\": 1,\n    \"totalRecords\": 1,\n    \"unclassifiedRecords\": 0,\n    \"displayedRecords\": 1\n  },\n  \"records\": [\n    {\n      \"id\": 1000,\n      \"url\": \"https://github.com/example/product/pull/7#issuecomment-1000\",\n      \"createdAt\": null,\n      \"kind\": \"RE"
+    },
+    {
+      "name": "forge_discover_review_records",
+      "callId": "call_7EmrhhGFhroAFZbEnsEOHudZ|fc_07b8fc6f8fa8aa3a016abc882e3e8887d08f5f406193afd946",
+      "isError": false,
+      "details": {},
+      "text": "{\n  \"schema\": \"forgedock.candidate-review-history-index/v1\",\n  \"repository\": \"example/product\",\n  \"pullRequest\": 7,\n  \"historyIndexPath\": \"/tmp/forgedock-review-request-ZkIgtn/review-history-92b8f2ff1bda.json\",\n  \"sourceArtifactPath\": \"/tmp/forgedock-review-request-ZkIgtn/review-history-source-92b8f2ff1bda.json\",\n  \"completeness\": {\n    \"totalComments\": 1,\n    \"totalRecords\": 1,\n    \"unclassifiedRecords\": 0,\n    \"displayedRecords\": 1\n  },\n  \"records\": [\n    {\n      \"id\": 1000,\n      \"url\": \"https://github.com/example/product/pull/7#issuecomment-1000\",\n      \"createdAt\": null,\n      \"kind\": \"RE"
+    },
+    {
+      "name": "read",
+      "callId": "call_sRtNEDvKt8Lpbzy1qKaWutUy|fc_07b8fc6f8fa8aa3a016abc882e3e6c87d09fcfc400cd349542",
+      "isError": false,
+      "details": {},
+      "text": "<!-- FORGE:REVIEWER_REPORT {\"v\":1,\"kind\":\"REVIEW\",\"repository\":\"example/product\",\"pullRequest\":7,\"head\":\"93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f\",\"baseSha\":\"16e4e51e3f24a44c882e929c577b717461d09599\",\"role\":\"correctness\",\"reportId\":\"9cbf570e-89be-40ee-900b-dc9eb859bfe7\",\"baseRef\":\"main\"} -->\n<!-- FORGE:REVIEW_OBSERVATIONS [] -->\n## ForgeDock review\n\n**Reviewer role**: `correctness`\n**Pull request**: #7\n**Reviewed source**: `93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f`\n**Review base**: `main` at `16e4e51e3f24a44c882e929c577b717461d09599`\n\n### Structured findings\n\nNo structured observations reporte"
+    },
+    {
+      "name": "forge_discover_review_records",
+      "callId": "call_7EmrhhGFhroAFZbEnsEOHudZ|fc_07b8fc6f8fa8aa3a016abc882e3e8887d08f5f406193afd946",
+      "isError": false,
+      "details": {},
+      "text": "{\n  \"schema\": \"forgedock.candidate-review-history-index/v1\",\n  \"repository\": \"example/product\",\n  \"pullRequest\": 7,\n  \"historyIndexPath\": \"/tmp/forgedock-review-request-ZkIgtn/review-history-92b8f2ff1bda.json\",\n  \"sourceArtifactPath\": \"/tmp/forgedock-review-request-ZkIgtn/review-history-source-92b8f2ff1bda.json\",\n  \"completeness\": {\n    \"totalComments\": 1,\n    \"totalRecords\": 1,\n    \"unclassifiedRecords\": 0,\n    \"displayedRecords\": 1\n  },\n  \"records\": [\n    {\n      \"id\": 1000,\n      \"url\": \"https://github.com/example/product/pull/7#issuecomment-1000\",\n      \"createdAt\": null,\n      \"kind\": \"RE"
+    },
+    {
+      "name": "read",
+      "callId": "call_LiHnrWQMwFtxSrW2LhNYLioO|fc_07b8fc6f8fa8aa3a016abc883a94e087d08b4f21c309cf91b7",
+      "isError": false,
+      "details": {},
+      "text": "{\n  \"schema\": \"forgedock.candidate-review-history-index/v1\",\n  \"repository\": \"example/product\",\n  \"pullRequest\": 7,\n  \"artifactKey\": \"8371e940-03ca-4529-93ff-f59a92458edd\",\n  \"completeness\": {\n    \"totalComments\": 1,\n    \"totalRecords\": 1,\n    \"unclassifiedRecords\": 0\n  },\n  \"records\": [\n    {\n      \"id\": 1000,\n      \"url\": \"https://github.com/example/product/pull/7#issuecomment-1000\",\n      \"createdAt\": null,\n      \"kind\": \"REVIEWER_REPORT\",\n      \"record\": {\n        \"id\": 1000,\n        \"url\": \"https://github.com/example/product/pull/7#issuecomment-1000\",\n        \"createdAt\": null,\n        \"k"
+    },
+    {
+      "name": "read",
+      "callId": "call_LiHnrWQMwFtxSrW2LhNYLioO|fc_07b8fc6f8fa8aa3a016abc883a94e087d08b4f21c309cf91b7",
+      "isError": false,
+      "details": {},
+      "text": "{\n  \"schema\": \"forgedock.candidate-review-history-index/v1\",\n  \"repository\": \"example/product\",\n  \"pullRequest\": 7,\n  \"artifactKey\": \"8371e940-03ca-4529-93ff-f59a92458edd\",\n  \"completeness\": {\n    \"totalComments\": 1,\n    \"totalRecords\": 1,\n    \"unclassifiedRecords\": 0\n  },\n  \"records\": [\n    {\n      \"id\": 1000,\n      \"url\": \"https://github.com/example/product/pull/7#issuecomment-1000\",\n      \"createdAt\": null,\n      \"kind\": \"REVIEWER_REPORT\",\n      \"record\": {\n        \"id\": 1000,\n        \"url\": \"https://github.com/example/product/pull/7#issuecomment-1000\",\n        \"createdAt\": null,\n        \"k"
+    },
+    {
+      "name": "read",
+      "callId": "call_LiHnrWQMwFtxSrW2LhNYLioO|fc_07b8fc6f8fa8aa3a016abc883a94e087d08b4f21c309cf91b7",
+      "isError": false,
+      "details": {},
+      "text": "{\n  \"schema\": \"forgedock.candidate-review-history-index/v1\",\n  \"repository\": \"example/product\",\n  \"pullRequest\": 7,\n  \"artifactKey\": \"8371e940-03ca-4529-93ff-f59a92458edd\",\n  \"completeness\": {\n    \"totalComments\": 1,\n    \"totalRecords\": 1,\n    \"unclassifiedRecords\": 0\n  },\n  \"records\": [\n    {\n      \"id\": 1000,\n      \"url\": \"https://github.com/example/product/pull/7#issuecomment-1000\",\n      \"createdAt\": null,\n      \"kind\": \"REVIEWER_REPORT\",\n      \"record\": {\n        \"id\": 1000,\n        \"url\": \"https://github.com/example/product/pull/7#issuecomment-1000\",\n        \"createdAt\": null,\n        \"k"
+    },
+    {
+      "name": "read",
+      "callId": "call_VrfHESFFJP4ZKoz1PuUMyz94|fc_07b8fc6f8fa8aa3a016abc8840181887d0a21ace3356594d26",
+      "isError": false,
+      "details": {},
+      "text": "<!-- FORGE:REVIEWER_REPORT {\"v\":1,\"kind\":\"REVIEW\",\"repository\":\"example/product\",\"pullRequest\":7,\"head\":\"93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f\",\"baseSha\":\"16e4e51e3f24a44c882e929c577b717461d09599\",\"role\":\"correctness\",\"reportId\":\"9cbf570e-89be-40ee-900b-dc9eb859bfe7\",\"baseRef\":\"main\"} -->\n<!-- FORGE:REVIEW_OBSERVATIONS [] -->\n## ForgeDock review\n\n**Reviewer role**: `correctness`\n**Pull request**: #7\n**Reviewed source**: `93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f`\n**Review base**: `main` at `16e4e51e3f24a44c882e929c577b717461d09599`\n\n### Structured findings\n\nNo structured observations reporte"
+    },
+    {
+      "name": "read",
+      "callId": "call_VrfHESFFJP4ZKoz1PuUMyz94|fc_07b8fc6f8fa8aa3a016abc8840181887d0a21ace3356594d26",
+      "isError": false,
+      "details": {},
+      "text": "<!-- FORGE:REVIEWER_REPORT {\"v\":1,\"kind\":\"REVIEW\",\"repository\":\"example/product\",\"pullRequest\":7,\"head\":\"93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f\",\"baseSha\":\"16e4e51e3f24a44c882e929c577b717461d09599\",\"role\":\"correctness\",\"reportId\":\"9cbf570e-89be-40ee-900b-dc9eb859bfe7\",\"baseRef\":\"main\"} -->\n<!-- FORGE:REVIEW_OBSERVATIONS [] -->\n## ForgeDock review\n\n**Reviewer role**: `correctness`\n**Pull request**: #7\n**Reviewed source**: `93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f`\n**Review base**: `main` at `16e4e51e3f24a44c882e929c577b717461d09599`\n\n### Structured findings\n\nNo structured observations reporte"
+    },
+    {
+      "name": "read",
+      "callId": "call_VrfHESFFJP4ZKoz1PuUMyz94|fc_07b8fc6f8fa8aa3a016abc8840181887d0a21ace3356594d26",
+      "isError": false,
+      "details": {},
+      "text": "<!-- FORGE:REVIEWER_REPORT {\"v\":1,\"kind\":\"REVIEW\",\"repository\":\"example/product\",\"pullRequest\":7,\"head\":\"93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f\",\"baseSha\":\"16e4e51e3f24a44c882e929c577b717461d09599\",\"role\":\"correctness\",\"reportId\":\"9cbf570e-89be-40ee-900b-dc9eb859bfe7\",\"baseRef\":\"main\"} -->\n<!-- FORGE:REVIEW_OBSERVATIONS [] -->\n## ForgeDock review\n\n**Reviewer role**: `correctness`\n**Pull request**: #7\n**Reviewed source**: `93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f`\n**Review base**: `main` at `16e4e51e3f24a44c882e929c577b717461d09599`\n\n### Structured findings\n\nNo structured observations reporte"
+    },
+    {
+      "name": "forge_publish_adjudication",
+      "callId": "call_yCEIo06HEXoLe9INSpcoh6HP|fc_07b8fc6f8fa8aa3a016abc8861b5cc87d083fc9cf0750b459e",
+      "isError": false,
+      "details": {
+        "publication": "published",
+        "readbackVerified": true,
+        "verdict": "APPROVE",
+        "gate": "PASS",
+        "panelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+        "provisionalPanelUrl": "https://github.com/example/product/pull/7#issuecomment-1001",
+        "gateBodyPanelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+        "decisionPath": "/tmp/forgedock-review-request-ZkIgtn/adjudication-r0.json"
+      },
+      "text": "{\n  \"schema\": \"forgedock.candidate-adjudication-result/v1\",\n  \"artifactSchema\": \"forgedock.candidate-adjudication/v1\",\n  \"decisionPath\": \"/tmp/forgedock-review-request-ZkIgtn/adjudication-r0.json\",\n  \"revision\": 0,\n  \"repository\": \"example/product\",\n  \"pullRequest\": 7,\n  \"head\": \"93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f\",\n  \"baseRef\": \"main\",\n  \"baseSha\": \"16e4e51e3f24a44c882e929c577b717461d09599\",\n  \"panelUrl\": \"https://github.com/example/product/pull/7#issuecomment-1002\",\n  \"provisionalPanelUrl\": \"https://github.com/example/product/pull/7#issuecomment-1001\",\n  \"supersededPanelUrl\": \"https://"
+    },
+    {
+      "name": "forge_publish_adjudication",
+      "callId": "call_yCEIo06HEXoLe9INSpcoh6HP|fc_07b8fc6f8fa8aa3a016abc8861b5cc87d083fc9cf0750b459e",
+      "isError": false,
+      "details": {
+        "publication": "published",
+        "readbackVerified": true,
+        "verdict": "APPROVE",
+        "gate": "PASS",
+        "panelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+        "provisionalPanelUrl": "https://github.com/example/product/pull/7#issuecomment-1001",
+        "gateBodyPanelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+        "decisionPath": "/tmp/forgedock-review-request-ZkIgtn/adjudication-r0.json"
+      },
+      "text": "{\n  \"schema\": \"forgedock.candidate-adjudication-result/v1\",\n  \"artifactSchema\": \"forgedock.candidate-adjudication/v1\",\n  \"decisionPath\": \"/tmp/forgedock-review-request-ZkIgtn/adjudication-r0.json\",\n  \"revision\": 0,\n  \"repository\": \"example/product\",\n  \"pullRequest\": 7,\n  \"head\": \"93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f\",\n  \"baseRef\": \"main\",\n  \"baseSha\": \"16e4e51e3f24a44c882e929c577b717461d09599\",\n  \"panelUrl\": \"https://github.com/example/product/pull/7#issuecomment-1002\",\n  \"provisionalPanelUrl\": \"https://github.com/example/product/pull/7#issuecomment-1001\",\n  \"supersededPanelUrl\": \"https://"
+    },
+    {
+      "name": "forge_publish_adjudication",
+      "callId": "call_yCEIo06HEXoLe9INSpcoh6HP|fc_07b8fc6f8fa8aa3a016abc8861b5cc87d083fc9cf0750b459e",
+      "isError": false,
+      "details": {
+        "publication": "published",
+        "readbackVerified": true,
+        "verdict": "APPROVE",
+        "gate": "PASS",
+        "panelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+        "provisionalPanelUrl": "https://github.com/example/product/pull/7#issuecomment-1001",
+        "gateBodyPanelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+        "decisionPath": "/tmp/forgedock-review-request-ZkIgtn/adjudication-r0.json"
+      },
+      "text": "{\n  \"schema\": \"forgedock.candidate-adjudication-result/v1\",\n  \"artifactSchema\": \"forgedock.candidate-adjudication/v1\",\n  \"decisionPath\": \"/tmp/forgedock-review-request-ZkIgtn/adjudication-r0.json\",\n  \"revision\": 0,\n  \"repository\": \"example/product\",\n  \"pullRequest\": 7,\n  \"head\": \"93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f\",\n  \"baseRef\": \"main\",\n  \"baseSha\": \"16e4e51e3f24a44c882e929c577b717461d09599\",\n  \"panelUrl\": \"https://github.com/example/product/pull/7#issuecomment-1002\",\n  \"provisionalPanelUrl\": \"https://github.com/example/product/pull/7#issuecomment-1001\",\n  \"supersededPanelUrl\": \"https://"
+    },
+    {
+      "name": "forge_publish_record",
+      "callId": "call_6zBJrYCoQIHSDJ3ho4GHyAUw|fc_07b8fc6f8fa8aa3a016abc8870a10087d08b8f47ba36d622ba",
+      "isError": true,
+      "details": {},
+      "text": "Missing completed check receipt: CI"
+    },
+    {
+      "name": "forge_publish_record",
+      "callId": "call_6zBJrYCoQIHSDJ3ho4GHyAUw|fc_07b8fc6f8fa8aa3a016abc8870a10087d08b8f47ba36d622ba",
+      "isError": true,
+      "details": {},
+      "text": "Missing completed check receipt: CI"
+    },
+    {
+      "name": "forge_publish_record",
+      "callId": "call_6zBJrYCoQIHSDJ3ho4GHyAUw|fc_07b8fc6f8fa8aa3a016abc8870a10087d08b8f47ba36d622ba",
+      "isError": true,
+      "details": {},
+      "text": "Missing completed check receipt: CI"
+    },
+    {
+      "name": "forge_publish_record",
+      "callId": "call_Us3ukhhaM8H4Unt2DhH3hft5|fc_07b8fc6f8fa8aa3a016abc889baa6887d0bc554e4e68529479",
+      "isError": false,
+      "details": {
+        "publication": "published",
+        "readbackVerified": true,
+        "gate": "PASS",
+        "panelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+        "recordUrl": "https://github.com/example/product/pull/7#issuecomment-1003",
+        "commentId": 1003,
+        "policySummaryPath": "/tmp/forgedock-review-request-ZkIgtn/policy-summary.json"
+      },
+      "text": "{\"schema\":\"forgedock.candidate-record-result/v1\",\"kind\":\"STAGING_GATE\",\"publication\":\"published\",\"recordUrl\":\"https://github.com/example/product/pull/7#issuecomment-1003\",\"commentId\":1003,\"recordId\":null,\"readbackVerified\":true,\"supersedes\":null,\"gate\":\"PASS\",\"panelUrl\":\"https://github.com/example/product/pull/7#issuecomment-1002\",\"verdict\":\"APPROVE\",\"trackingPublication\":\"complete\",\"nextAction\":null,\"policySummaryPath\":\"/tmp/forgedock-review-request-ZkIgtn/policy-summary.json\",\"policySummary\":{\"schema\":\"forgedock.candidate-pr-policy-summary/v1\",\"source\":{\"collector\":\"inspect-pr\",\"artifact\":\"/"
+    },
+    {
+      "name": "forge_publish_record",
+      "callId": "call_Us3ukhhaM8H4Unt2DhH3hft5|fc_07b8fc6f8fa8aa3a016abc889baa6887d0bc554e4e68529479",
+      "isError": false,
+      "details": {
+        "publication": "published",
+        "readbackVerified": true,
+        "gate": "PASS",
+        "panelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+        "recordUrl": "https://github.com/example/product/pull/7#issuecomment-1003",
+        "commentId": 1003,
+        "policySummaryPath": "/tmp/forgedock-review-request-ZkIgtn/policy-summary.json"
+      },
+      "text": "{\"schema\":\"forgedock.candidate-record-result/v1\",\"kind\":\"STAGING_GATE\",\"publication\":\"published\",\"recordUrl\":\"https://github.com/example/product/pull/7#issuecomment-1003\",\"commentId\":1003,\"recordId\":null,\"readbackVerified\":true,\"supersedes\":null,\"gate\":\"PASS\",\"panelUrl\":\"https://github.com/example/product/pull/7#issuecomment-1002\",\"verdict\":\"APPROVE\",\"trackingPublication\":\"complete\",\"nextAction\":null,\"policySummaryPath\":\"/tmp/forgedock-review-request-ZkIgtn/policy-summary.json\",\"policySummary\":{\"schema\":\"forgedock.candidate-pr-policy-summary/v1\",\"source\":{\"collector\":\"inspect-pr\",\"artifact\":\"/"
+    },
+    {
+      "name": "forge_publish_record",
+      "callId": "call_Us3ukhhaM8H4Unt2DhH3hft5|fc_07b8fc6f8fa8aa3a016abc889baa6887d0bc554e4e68529479",
+      "isError": false,
+      "details": {
+        "publication": "published",
+        "readbackVerified": true,
+        "gate": "PASS",
+        "panelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+        "recordUrl": "https://github.com/example/product/pull/7#issuecomment-1003",
+        "commentId": 1003,
+        "policySummaryPath": "/tmp/forgedock-review-request-ZkIgtn/policy-summary.json"
+      },
+      "text": "{\"schema\":\"forgedock.candidate-record-result/v1\",\"kind\":\"STAGING_GATE\",\"publication\":\"published\",\"recordUrl\":\"https://github.com/example/product/pull/7#issuecomment-1003\",\"commentId\":1003,\"recordId\":null,\"readbackVerified\":true,\"supersedes\":null,\"gate\":\"PASS\",\"panelUrl\":\"https://github.com/example/product/pull/7#issuecomment-1002\",\"verdict\":\"APPROVE\",\"trackingPublication\":\"complete\",\"nextAction\":null,\"policySummaryPath\":\"/tmp/forgedock-review-request-ZkIgtn/policy-summary.json\",\"policySummary\":{\"schema\":\"forgedock.candidate-pr-policy-summary/v1\",\"source\":{\"collector\":\"inspect-pr\",\"artifact\":\"/"
+    },
+    {
+      "name": "bash",
+      "callId": "call_yUDMh781xd1rJAJgdwC6PQVb|fc_07b8fc6f8fa8aa3a016abc8792bbec87d0b1ad2b12c0309082",
+      "isError": false,
+      "details": {},
+      "text": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project\ntotal 44\ndrwxr-xr-x 7 dev dev 4096 Sep 30 08:20 .\ndrwx------ 7 dev dev 4096 Sep 30 09:02 ..\ndrwxr-xr-x 3 dev dev 4096 Sep 30 08:20 docs\ndrwxr-xr-x 3 dev dev 4096 Sep 30 08:20 .forge\n-rw-r--r-- 1 dev dev  456 Sep 30 08:20 forge.yaml\ndrwxr-xr-x 8 dev dev 4096 Sep 30 09:22 .git\n-rw-r--r-- 1 dev dev   23 Sep 30 08:20 .gitignore\n-rw-r--r-- 1 dev dev  147 Sep 30 08:20 package.json\n-rw-r--r-- 1 dev dev  233 Sep 30 08:20 README.md\ndrwxr-xr-x 2 dev dev 4096 Sep 30 08:20 src\ndrwxr-xr-x 2 dev dev 4096 Sep 30 08:20 test\n./forge."
+    },
+    {
+      "name": "read",
+      "callId": "call_2t504JgKuAnklfJlBeA9HPR6|fc_07b8fc6f8fa8aa3a016abc8796b2ec87d08899311347fa9bca",
+      "isError": false,
+      "details": {},
+      "text": "project:\n  owner: example\n  repo: product\npaths:\n  root: .\nbranches:\n  default: main\n  staging: integration\n  feature_pattern: feature/{slug}\nagents:\n  subagent_model: openai-codex/gpt-5.6-luna\n  thinking: low\norchestration:\n  max_concurrent: 2\nverification:\n  commands:\n    test: npm test\nreview:\n  thinking: medium\n  reviewer_timeout_ms: 900000\n  panel_timeout_ms: 1920000\n  publication_timeout_ms: 120000\n  max_concurrent: 2\n  remediation_max_rounds: 1\n"
+    },
+    {
+      "name": "bash",
+      "callId": "call_cCXwXY73bi4qEPuF2Lk8gc7c|fc_07b8fc6f8fa8aa3a016abc879cbb0487d085c9a7fb36285d84",
+      "isError": false,
+      "details": {},
+      "text": "{\"number\":7,\"title\":\"Trim display names when rendering\",\"body\":\"Normalize display labels at the presentation boundary. Preserve stored identifiers and source profile values. Acceptance: rendered display labels have surrounding whitespace removed while stored identifiers and source strings remain unchanged. Verification is the repository-configured test command.\",\"headRefOid\":\"93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f\",\"baseRefName\":\"main\",\"baseRefOid\":\"16e4e51e3f24a44c882e929c577b717461d09599\",\"mergeable\":\"MERGEABLE\",\"mergeStateStatus\":\"CLEAN\",\"state\":\"OPEN\",\"isDraft\":false,\"url\":\"https://githu"
+    },
+    {
+      "name": "bash",
+      "callId": "call_lTZfJIiSb4hAuFnD3e0gX9tU|fc_07b8fc6f8fa8aa3a016abc87aad67087d09107a61d8d877121",
+      "isError": false,
+      "details": {},
+      "text": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project\n16e4e51e3f24a44c882e929c577b717461d09599\n"
+    },
+    {
+      "name": "forge_prepare_review",
+      "callId": "call_Lyv30XBIJwrQgmHWvZA4ifdd|fc_07b8fc6f8fa8aa3a016abc87b9fc2487d0a1432c7057b616f1",
+      "isError": false,
+      "details": {
+        "reviewRoot": "/tmp/forgedock-review-request-ZkIgtn",
+        "artifactKey": "8371e940-03ca-4529-93ff-f59a92458edd",
+        "sourceRoot": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/.forge/worktrees/review-pr-7",
+        "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f",
+        "configPath": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/forge.yaml",
+        "configSha256": "532318d1b31c9f853cbddcf242f2c655ab609920d1da3e6e4a98c07ab8f84a2b",
+        "policySummaryPath": "/tmp/forgedock-review-request-ZkIgtn/policy-summary.json",
+        "policySummary": {
+          "schema": "forgedock.candidate-pr-policy-summary/v1",
+          "source": {
+            "collector": "inspect-pr",
+            "artifact": "/tmp/forgedock-review-request-ZkIgtn/policy.json",
+            "snapshot": "prepared"
+          },
+          "status": "available",
+          "repository": "example/product",
+          "pullRequest": 7,
+          "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f",
+          "baseRef": "main",
+          "baseSha": "16e4e51e3f24a44c882e929c577b717461d09599",
+          "mergeable": "MERGEABLE",
+          "mergeStateStatus": "CLEAN",
+          "applicability": "known-required",
+          "requiredNames": [
+            "CI"
+          ],
+          "missingRequiredNames": [],
+          "requiredStatus": "available",
+          "requiredExitCode": 0,
+          "requiredCheckCount": 1,
+          "requiredChecks": [
+            {
+              "name": "CI",
+              "state": "SUCCESS",
+              "bucket": "pass",
+              "workflow": "CI"
+            }
+          ],
+          "policySources": {
+            "evaluatedChecks": "available",
+            "currentCheckRuns": "available",
+            "branchRules": "available",
+            "branchProtection": "available",
+            "rulesets": "available"
+          },
+          "exactHeadCheckRuns": {
+            "status": "available",
+            "count": 1,
+            "checks": [
+              {
+                "name": "CI",
+                "status": "completed",
+                "conclusion": "success"
+              }
+            ]
+          },
+          "localVerification": {
+            "state": "configured",
+            "names": [
+              "test"
+            ]
+          }
+        }
+      },
+      "text": "{\n  \"schema\": \"forgedock.candidate-review-preparation/v1\",\n  \"requestPath\": \"/tmp/forgedock-review-request-ZkIgtn/request.json\",\n  \"request\": {\n    \"async\": false,\n    \"cwd\": \"/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/.forge/worktrees/review-pr-7\",\n    \"workflowScriptPath\": \"/tmp/forgedock-review-request-ZkIgtn/workflow.js\",\n    \"globalConcurrencyLimit\": 1,\n    \"maxSubagentSpawnsPerRun\": 1,\n    \"timeoutMs\": 1920000,\n    \"control\": {\n      \"needsAttentionAfterMs\": 1920000,\n      \"activeNoticeAfterMs\": 900000\n    }\n  },\n  \"reviewRoot\": \"/tmp/forgedock-review-r"
+    },
+    {
+      "name": "bash",
+      "callId": "call_zYUuzxrCHDxETExv5UlCVXuM|fc_07b8fc6f8fa8aa3a016abc87ca97a087d094dada0e381a9487",
+      "isError": true,
+      "details": {},
+      "text": "The staging review route is non-mutating; use read-only inspection and configured checks. The prepared reviewer roster cannot be relaunched; recover only an exact completed role or record incomplete delivery."
+    },
+    {
+      "name": "read",
+      "callId": "call_qW4MKlB4AzBzHK9K33vbhczN|fc_07b8fc6f8fa8aa3a016abc87dbaebc87d08170d3ead3bf2b48",
+      "isError": false,
+      "details": {},
+      "text": "---\nname: forgedock-review-pr-staging\ndescription: Run a non-merging integration-to-protected promotion gate with evidence and no repair\n---\n\n# ForgeDock staging review\n\nUse this route only for an explicit integration-to-protected promotion or bundle. Resolve the\nactual promotion PR/configuration and freeze exact integration/protected head/base identities.\nThe standard review route hands off here only after the prepared policy identifies the actual\nprotected base; issue text, comments, branch names, and the word `staging` do not select this\nroute.\nDetermine included work from same-repository c"
+    },
+    {
+      "name": "forge_run_check",
+      "callId": "call_A2e4akRIxBo5AKqMMtzFYLyP|fc_07b8fc6f8fa8aa3a016abc87e3202487d0bda5fae9d37b3ea3",
+      "isError": false,
+      "details": {
+        "name": "test",
+        "command": "npm test",
+        "exitCode": 0,
+        "receiptPath": "/tmp/forgedock-review-request-ZkIgtn/checks/test.json"
+      },
+      "text": "✔ rendered profile label is trimmed without changing its stored identifier (0.865971ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 82.910524\n\nnpm notice run test\nnpm notice run node --test test/display.test.mjs\n"
+    },
+    {
+      "name": "subagent",
+      "callId": "call_ng2kgyZn4lv2zbc9QejJQRVJ|fc_07b8fc6f8fa8aa3a016abc87edb81487d080d4a92514a61b81",
+      "isError": false,
+      "details": {
+        "mode": "management"
+      },
+      "text": "Executable agents (capabilities):\nUser agents\n- forgedock-owner (user, context: fresh): Description: Sole owner for one ForgeDock issue from evidence through delivery; Tools: read, grep, find, ls, bash, edit, write, subagent, forge_prepare_review, forge_run_check, forge_discover_review_records, forge_resolve_review_tracking, forge_recover_reviewer_publication, forge_publish_incomplete_review, forge_publish_adjudication; Model: openai-codex/gpt-5.6-luna; Thinking: max\n- forgedock-reviewer (user, context: fresh): Description: Fresh read-only reviewer with a bounded report-publication capability;"
+    },
+    {
+      "name": "subagent",
+      "callId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+      "isError": false,
+      "details": {
+        "mode": "workflow",
+        "runId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+        "workflow": {
+          "value": [
+            {
+              "role": "correctness",
+              "nativeRunId": "753c61ab-59fc-4b53-ae4e-bac154c4d71c",
+              "nativeStatus": "completed",
+              "nativeFlags": {
+                "timedOut": false,
+                "stopped": false,
+                "interrupted": false,
+                "detached": false,
+                "executionLimit": false
+              },
+              "exitCode": 0,
+              "terminalOutcome": null,
+              "publicationState": "unverified",
+              "reportPath": "/tmp/forgedock-review-request-ZkIgtn/correctness.report.md",
+              "recoveryPath": "/tmp/forgedock-review-request-ZkIgtn/correctness.publication-recovery.json",
+              "output": "FORGE_REVIEW_RESULT role=correctness report=/tmp/forgedock-review-request-ZkIgtn/correctness.report.md publication=published verdict=APPROVE",
+              "error": null,
+              "artifactPaths": [
+                "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/native-runs/2026-09-30T03-52-43-764Z/sessions/2026-09-30T03-52-44-839Z_01a0f071-7e27-711e-af1f-e1121bd353ba/753c61ab-59fc-4b53-ae4e-bac154c4d71c/run-0/session.jsonl"
+              ]
+            }
+          ],
+          "trace": [
+            {
+              "operation": "run",
+              "key": "review-correctness",
+              "state": "started",
+              "agent": "forgedock-reviewer"
+            },
+            {
+              "operation": "run",
+              "key": "review-correctness",
+              "state": "completed",
+              "durationMs": 42651,
+              "agent": "forgedock-reviewer",
+              "runId": "753c61ab-59fc-4b53-ae4e-bac154c4d71c"
+            }
+          ],
+          "emits": [],
+          "console": [],
+          "receipt": {
+            "version": 1,
+            "workflowRunId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+            "state": "complete",
+            "createdAt": 1790740518398,
+            "entries": {
+              "review-correctness": {
+                "key": "review-correctness",
+                "agent": "forgedock-reviewer",
+                "requestedContext": "fresh",
+                "resolvedContext": "fresh",
+                "continuation": {
+                  "runIds": [
+                    "753c61ab-59fc-4b53-ae4e-bac154c4d71c"
+                  ]
+                },
+                "latestRunId": "753c61ab-59fc-4b53-ae4e-bac154c4d71c",
+                "resumability": {
+                  "state": "resumable"
+                }
+              }
+            },
+            "workflowChildren": {
+              "version": 1,
+              "parentToolCallId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+              "workflowRunId": "call_WlorcWYu99QRlhpIBPQXHglo|fc_07b8fc6f8fa8aa3a016abc87f688cc87d0955bbdc0e3604c02",
+              "inventoryComplete": true,
+              "workflowState": "completed",
+              "children": [
+                {
+                  "childId": "review-correctness",
+                  "state": "completed",
+                  "runId": "753c61ab-59fc-4b53-ae4e-bac154c4d71c",
+                  "agent": "forgedock-reviewer",
+                  "sessionName": "forgedock-reviewer: You are the independent correctness reviewer. Review only...",
+                  "model": "openai-codex/gpt-5.6-luna:medium",
+                  "thinking": "medium"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "text": "Run fan-out: 1/1 used, 0 remaining\nWorkflow completed.\n\nReturn:\n[\n  {\n    \"role\": \"correctness\",\n    \"nativeRunId\": \"753c61ab-59fc-4b53-ae4e-bac154c4d71c\",\n    \"nativeStatus\": \"completed\",\n    \"nativeFlags\": {\n      \"timedOut\": false,\n      \"stopped\": false,\n      \"interrupted\": false,\n      \"detached\": false,\n      \"executionLimit\": false\n    },\n    \"exitCode\": 0,\n    \"terminalOutcome\": null,\n    \"publicationState\": \"unverified\",\n    \"reportPath\": \"/tmp/forgedock-review-request-ZkIgtn/correctness.report.md\",\n    \"recoveryPath\": \"/tmp/forgedock-review-request-ZkIgtn/correctness.publication-rec"
+    },
+    {
+      "name": "read",
+      "callId": "call_sRtNEDvKt8Lpbzy1qKaWutUy|fc_07b8fc6f8fa8aa3a016abc882e3e6c87d09fcfc400cd349542",
+      "isError": false,
+      "details": {},
+      "text": "<!-- FORGE:REVIEWER_REPORT {\"v\":1,\"kind\":\"REVIEW\",\"repository\":\"example/product\",\"pullRequest\":7,\"head\":\"93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f\",\"baseSha\":\"16e4e51e3f24a44c882e929c577b717461d09599\",\"role\":\"correctness\",\"reportId\":\"9cbf570e-89be-40ee-900b-dc9eb859bfe7\",\"baseRef\":\"main\"} -->\n<!-- FORGE:REVIEW_OBSERVATIONS [] -->\n## ForgeDock review\n\n**Reviewer role**: `correctness`\n**Pull request**: #7\n**Reviewed source**: `93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f`\n**Review base**: `main` at `16e4e51e3f24a44c882e929c577b717461d09599`\n\n### Structured findings\n\nNo structured observations reporte"
+    },
+    {
+      "name": "forge_discover_review_records",
+      "callId": "call_7EmrhhGFhroAFZbEnsEOHudZ|fc_07b8fc6f8fa8aa3a016abc882e3e8887d08f5f406193afd946",
+      "isError": false,
+      "details": {},
+      "text": "{\n  \"schema\": \"forgedock.candidate-review-history-index/v1\",\n  \"repository\": \"example/product\",\n  \"pullRequest\": 7,\n  \"historyIndexPath\": \"/tmp/forgedock-review-request-ZkIgtn/review-history-92b8f2ff1bda.json\",\n  \"sourceArtifactPath\": \"/tmp/forgedock-review-request-ZkIgtn/review-history-source-92b8f2ff1bda.json\",\n  \"completeness\": {\n    \"totalComments\": 1,\n    \"totalRecords\": 1,\n    \"unclassifiedRecords\": 0,\n    \"displayedRecords\": 1\n  },\n  \"records\": [\n    {\n      \"id\": 1000,\n      \"url\": \"https://github.com/example/product/pull/7#issuecomment-1000\",\n      \"createdAt\": null,\n      \"kind\": \"RE"
+    },
+    {
+      "name": "read",
+      "callId": "call_LiHnrWQMwFtxSrW2LhNYLioO|fc_07b8fc6f8fa8aa3a016abc883a94e087d08b4f21c309cf91b7",
+      "isError": false,
+      "details": {},
+      "text": "{\n  \"schema\": \"forgedock.candidate-review-history-index/v1\",\n  \"repository\": \"example/product\",\n  \"pullRequest\": 7,\n  \"artifactKey\": \"8371e940-03ca-4529-93ff-f59a92458edd\",\n  \"completeness\": {\n    \"totalComments\": 1,\n    \"totalRecords\": 1,\n    \"unclassifiedRecords\": 0\n  },\n  \"records\": [\n    {\n      \"id\": 1000,\n      \"url\": \"https://github.com/example/product/pull/7#issuecomment-1000\",\n      \"createdAt\": null,\n      \"kind\": \"REVIEWER_REPORT\",\n      \"record\": {\n        \"id\": 1000,\n        \"url\": \"https://github.com/example/product/pull/7#issuecomment-1000\",\n        \"createdAt\": null,\n        \"k"
+    },
+    {
+      "name": "read",
+      "callId": "call_VrfHESFFJP4ZKoz1PuUMyz94|fc_07b8fc6f8fa8aa3a016abc8840181887d0a21ace3356594d26",
+      "isError": false,
+      "details": {},
+      "text": "<!-- FORGE:REVIEWER_REPORT {\"v\":1,\"kind\":\"REVIEW\",\"repository\":\"example/product\",\"pullRequest\":7,\"head\":\"93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f\",\"baseSha\":\"16e4e51e3f24a44c882e929c577b717461d09599\",\"role\":\"correctness\",\"reportId\":\"9cbf570e-89be-40ee-900b-dc9eb859bfe7\",\"baseRef\":\"main\"} -->\n<!-- FORGE:REVIEW_OBSERVATIONS [] -->\n## ForgeDock review\n\n**Reviewer role**: `correctness`\n**Pull request**: #7\n**Reviewed source**: `93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f`\n**Review base**: `main` at `16e4e51e3f24a44c882e929c577b717461d09599`\n\n### Structured findings\n\nNo structured observations reporte"
+    },
+    {
+      "name": "forge_publish_adjudication",
+      "callId": "call_yCEIo06HEXoLe9INSpcoh6HP|fc_07b8fc6f8fa8aa3a016abc8861b5cc87d083fc9cf0750b459e",
+      "isError": false,
+      "details": {
+        "publication": "published",
+        "readbackVerified": true,
+        "verdict": "APPROVE",
+        "gate": "PASS",
+        "panelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+        "provisionalPanelUrl": "https://github.com/example/product/pull/7#issuecomment-1001",
+        "gateBodyPanelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+        "decisionPath": "/tmp/forgedock-review-request-ZkIgtn/adjudication-r0.json"
+      },
+      "text": "{\n  \"schema\": \"forgedock.candidate-adjudication-result/v1\",\n  \"artifactSchema\": \"forgedock.candidate-adjudication/v1\",\n  \"decisionPath\": \"/tmp/forgedock-review-request-ZkIgtn/adjudication-r0.json\",\n  \"revision\": 0,\n  \"repository\": \"example/product\",\n  \"pullRequest\": 7,\n  \"head\": \"93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f\",\n  \"baseRef\": \"main\",\n  \"baseSha\": \"16e4e51e3f24a44c882e929c577b717461d09599\",\n  \"panelUrl\": \"https://github.com/example/product/pull/7#issuecomment-1002\",\n  \"provisionalPanelUrl\": \"https://github.com/example/product/pull/7#issuecomment-1001\",\n  \"supersededPanelUrl\": \"https://"
+    },
+    {
+      "name": "forge_publish_record",
+      "callId": "call_6zBJrYCoQIHSDJ3ho4GHyAUw|fc_07b8fc6f8fa8aa3a016abc8870a10087d08b8f47ba36d622ba",
+      "isError": true,
+      "details": {},
+      "text": "Missing completed check receipt: CI"
+    },
+    {
+      "name": "forge_publish_record",
+      "callId": "call_Us3ukhhaM8H4Unt2DhH3hft5|fc_07b8fc6f8fa8aa3a016abc889baa6887d0bc554e4e68529479",
+      "isError": false,
+      "details": {
+        "publication": "published",
+        "readbackVerified": true,
+        "gate": "PASS",
+        "panelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+        "recordUrl": "https://github.com/example/product/pull/7#issuecomment-1003",
+        "commentId": 1003,
+        "policySummaryPath": "/tmp/forgedock-review-request-ZkIgtn/policy-summary.json"
+      },
+      "text": "{\"schema\":\"forgedock.candidate-record-result/v1\",\"kind\":\"STAGING_GATE\",\"publication\":\"published\",\"recordUrl\":\"https://github.com/example/product/pull/7#issuecomment-1003\",\"commentId\":1003,\"recordId\":null,\"readbackVerified\":true,\"supersedes\":null,\"gate\":\"PASS\",\"panelUrl\":\"https://github.com/example/product/pull/7#issuecomment-1002\",\"verdict\":\"APPROVE\",\"trackingPublication\":\"complete\",\"nextAction\":null,\"policySummaryPath\":\"/tmp/forgedock-review-request-ZkIgtn/policy-summary.json\",\"policySummary\":{\"schema\":\"forgedock.candidate-pr-policy-summary/v1\",\"source\":{\"collector\":\"inspect-pr\",\"artifact\":\"/"
+    }
+  ],
+  "toolCounts": {
+    "bash": 16,
+    "read": 20,
+    "forge_prepare_review": 4,
+    "forge_run_check": 4,
+    "subagent": 8,
+    "forge_discover_review_records": 4,
+    "forge_publish_adjudication": 4,
+    "forge_publish_record": 8
+  },
+  "reviewerRoles": [
+    "correctness"
+  ],
+  "reviewerReportComments": [
+    {
+      "id": 1000,
+      "url": "https://github.com/example/product/pull/7#issuecomment-1000",
+      "kind": "REVIEWER_REPORT"
+    }
+  ],
+  "configuredCheck": {
+    "receiptPath": "/tmp/forgedock-review-request-ZkIgtn/checks/test.json",
+    "receipt": {
+      "schema": "forgedock.candidate-check/v1",
+      "name": "test",
+      "status": "passed",
+      "sourceRoot": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/.forge/worktrees/review-pr-7",
+      "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f",
+      "configPath": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/forge.yaml",
+      "configSha256": "532318d1b31c9f853cbddcf242f2c655ab609920d1da3e6e4a98c07ab8f84a2b"
+    },
+    "command": "npm test",
+    "completedBeforeReviewer": false,
+    "callCount": 4
+  },
+  "adjudication": {
+    "path": "/tmp/forgedock-review-request-ZkIgtn/adjudication-r0.json",
+    "verdict": "APPROVE",
+    "gate": "PASS",
+    "panelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+    "gateBodyPanelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+    "supersededPanelUrl": "https://github.com/example/product/pull/7#issuecomment-1001"
+  },
+  "gate": {
+    "id": 1003,
+    "url": "https://github.com/example/product/pull/7#issuecomment-1003",
+    "linkedPanelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+    "finalPanelUrl": "https://github.com/example/product/pull/7#issuecomment-1002",
+    "linkMatchesFinalPanel": true
+  },
+  "controlledReadback": {
+    "failureInjected": true,
+    "commentId": 1001,
+    "sameCommentAttempts": [
+      {
+        "id": 1001,
+        "outcome": "injected-transient-failure"
+      },
+      {
+        "id": 1001,
+        "outcome": "success"
+      }
+    ],
+    "sameCommentRetried": true,
+    "panelPostCount": 2
+  },
+  "reviewerRuntimeArtifacts": {
+    "root": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/.forge/worktrees/review-pr-7/.pi/subagents/artifacts",
+    "files": [],
+    "supervisorCalls": 0,
+    "progressUpdates": 0,
+    "actionableRequests": 0
+  },
+  "githubBoundary": {
+    "fakeOnly": true,
+    "posts": [
+      {
+        "id": 1000,
+        "kind": "REVIEWER_REPORT",
+        "marker": "<!-- FORGE:REVIEWER_REPORT {\"v\":1,\"kind\":\"REVIEW\",\"repository\":\"example/product\",\"pullRequest\":7,\"head\":\"93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f\",\"baseSha\":\"16e4e51e3f24a44c882e929c577b717461d09599\",\"role\":\"correctness\",\"reportId\":\"9cbf570e-89be-40ee-900b-dc9eb859bfe7\",\"baseRef\":\"main\"} -->",
+        "at": "2026-09-30T03:55:14.851Z"
+      },
+      {
+        "id": 1001,
+        "kind": "REVIEW-PANEL",
+        "marker": "<!-- FORGE:REVIEW-PANEL -->",
+        "at": "2026-09-30T03:56:22.591Z"
+      },
+      {
+        "id": 1002,
+        "kind": "REVIEW-PANEL",
+        "marker": "<!-- FORGE:REVIEW-PANEL -->",
+        "at": "2026-09-30T03:56:22.826Z"
+      },
+      {
+        "id": 1003,
+        "kind": "STAGING_GATE",
+        "marker": "<!-- FORGE:CANDIDATE:STAGING_GATE {\"v\":1,\"kind\":\"STAGING_GATE\",\"repository\":\"example/product\",\"pullRequest\":7,\"head\":\"93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f\",\"baseSha\":\"16e4e51e3f24a44c882e929c577b717461d09599\",\"baseRef\":\"main\",\"gate\":\"PASS\"} -->",
+        "at": "2026-09-30T03:57:17.160Z"
+      }
+    ],
+    "issueWrites": 0,
+    "unsupportedCalls": [],
+    "directCredentialsUnset": true
+  },
+  "finalResponse": "PR #7 (`93fa2ca`, base `main` at `16e4e51`): **APPROVE — STAGING_GATE PASS**.\n\nNo findings or unresolved prerequisites. Required CI succeeded, and the configured test passed (1/1).\n\n- [Reviewer report](https://github.com/example/product/pull/7#issuecomment-1000)\n- [REVIEW-PANEL](https://github.com/example/product/pull/7#issuecomment-1002)\n- [STAGING_GATE](https://github.com/example/product/pull/7#issuecomment-1003)\n\nThe reviewer did not run commands; the configured test was run by the parent. This gate is promotion evidence, not authorization to merge or deploy.",
+  "finalResponseHasFinalPanelUrl": true,
+  "finalResponseHasGateUrl": true,
+  "finalizerToolErrors": [
+    {
+      "name": "forge_publish_record",
+      "callId": "call_6zBJrYCoQIHSDJ3ho4GHyAUw|fc_07b8fc6f8fa8aa3a016abc8870a10087d08b8f47ba36d622ba",
+      "isError": true,
+      "details": {},
+      "text": "Missing completed check receipt: CI"
+    },
+    {
+      "name": "forge_publish_record",
+      "callId": "call_6zBJrYCoQIHSDJ3ho4GHyAUw|fc_07b8fc6f8fa8aa3a016abc8870a10087d08b8f47ba36d622ba",
+      "isError": true,
+      "details": {},
+      "text": "Missing completed check receipt: CI"
+    },
+    {
+      "name": "forge_publish_record",
+      "callId": "call_6zBJrYCoQIHSDJ3ho4GHyAUw|fc_07b8fc6f8fa8aa3a016abc8870a10087d08b8f47ba36d622ba",
+      "isError": true,
+      "details": {},
+      "text": "Missing completed check receipt: CI"
+    },
+    {
+      "name": "forge_publish_record",
+      "callId": "call_6zBJrYCoQIHSDJ3ho4GHyAUw|fc_07b8fc6f8fa8aa3a016abc8870a10087d08b8f47ba36d622ba",
+      "isError": true,
+      "details": {},
+      "text": "Missing completed check receipt: CI"
+    }
+  ],
+  "toolSequence": {
+    "counts": {
+      "bash": 16,
+      "read": 20,
+      "forge_prepare_review": 4,
+      "forge_run_check": 4,
+      "subagent": 8,
+      "forge_discover_review_records": 4,
+      "forge_publish_adjudication": 4,
+      "forge_publish_record": 8
+    },
+    "firstCallIndices": {
+      "prepare": 12,
+      "check": 21,
+      "reviewerWorkflow": 24,
+      "adjudication": 42,
+      "gate": 45,
+      "ordered": true
+    },
+    "successfulCheckReceiptWrittenAtMs": 1790740454580.3545,
+    "firstReviewerRuntimeArtifactAtMs": null,
+    "receiptPrecedesReviewerArtifacts": false
+  },
+  "preservedEvidence": {
+    "root": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/native-runs/2026-09-30T03-52-43-764Z",
+    "rawRpc": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/native-runs/2026-09-30T03-52-43-764Z/parent.rpc.jsonl",
+    "rawStderr": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/native-runs/2026-09-30T03-52-43-764Z/parent.stderr.log",
+    "reviewRoot": "/tmp/forgedock-review-request-ZkIgtn",
+    "copiedReviewRoot": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/native-runs/2026-09-30T03-52-43-764Z/prepared-review"
+  }
+}

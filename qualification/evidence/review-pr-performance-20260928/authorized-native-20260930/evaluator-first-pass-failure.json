@@ -1,0 +1,8 @@
+{
+  "phase": "offline evaluation of saved run b64ae7db7; no model or reviewer invoked",
+  "status": "evaluator-input-schema-mismatch",
+  "error": "The first evaluator pass expected CI evidence at the policy-summary root; the retained artifact nests it under prepared/current.",
+  "sourceArtifact": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/native-runs/2026-09-30T03-52-43-764Z/prepared-review/policy-summary.json",
+  "nativeRunChanged": false,
+  "nextAction": "Correct the evaluator to inspect the saved prepared/current policy summary, then rerun it offline against the same saved run only."
+}

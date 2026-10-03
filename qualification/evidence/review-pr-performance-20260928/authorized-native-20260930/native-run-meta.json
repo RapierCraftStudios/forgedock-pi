@@ -1,0 +1,10 @@
+{
+  "parentStartedAt": "2026-09-30T03:52:44.453Z",
+  "parentSettledAt": "2026-09-30T03:57:33.402Z",
+  "processFinishedAt": "2026-09-30T03:57:33.424Z",
+  "totalElapsedMs": 288971,
+  "processExitCode": 0,
+  "processSignal": null,
+  "parentSessionId": "01a0f071-7e27-711e-af1f-e1121bd353ba",
+  "agentEndObserved": true
+}

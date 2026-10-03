@@ -1,0 +1,93 @@
+{
+  "phase": "post-run, no-model resource-resolution audit; not a preflight for the completed native run",
+  "piVersion": "0.87.1",
+  "sourceRepo": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z",
+  "sourceHead": "ea1081a38df2fad912765cc0fe6aa787bb75d034",
+  "piSubagents": {
+    "root": "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents",
+    "version": "0.60.0",
+    "head": "0931cbbb98ab253177b181bd334fe02dd919dca5"
+  },
+  "ordinarySettings": {
+    "path": "/home/dev/.pi/agent/settings.json",
+    "defaultModel": "gpt-6-luna",
+    "defaultThinkingLevel": "max",
+    "packages": [
+      "npm:@juicesharp/rpiv-ask-user-question",
+      "npm:pi-background-tasks",
+      "npm:@juicesharp/rpiv-todo",
+      "npm:pi-hermes-memory",
+      "npm:@tunnckocore/pi-gpt-fast-mode",
+      "npm:@zhcsyncer/pi-glance",
+      "git:github.com/RapierCraftStudios/pi-subagents@0931cbbb98ab253177b181bd334fe02dd919dca5",
+      "git:github.com/RapierCraftStudios/forgedock-pi@a58675de0d3ed2add3e14ea9d3db8960e71bc744"
+    ]
+  },
+  "supportedResourceIsolationFlags": [
+    "--no-extensions",
+    "--no-skills",
+    "--no-prompt-templates"
+  ],
+  "explicitResourceArgs": [
+    [
+      "--extension",
+      "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/extension.ts"
+    ],
+    [
+      "--extension",
+      "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents/index.ts"
+    ],
+    [
+      "--skill",
+      "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/skills/forgedock-review-pr/SKILL.md"
+    ],
+    [
+      "--skill",
+      "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/skills/forgedock-review-pr-staging/SKILL.md"
+    ],
+    [
+      "--skill",
+      "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents/skills/pi-subagents/SKILL.md"
+    ],
+    [
+      "--prompt-template",
+      "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/prompts"
+    ]
+  ],
+  "agentDiscovery": {
+    "env": {
+      "PI_SUBAGENT_EXTRA_AGENT_DIRS": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/agents"
+    },
+    "selectedName": "forgedock-reviewer",
+    "selectedSource": "user",
+    "selectedProfile": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/agents/forgedock-reviewer.md",
+    "selectedSubagentOnlyExtensions": [
+      "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/reviewer-tools.ts"
+    ],
+    "matches": [
+      {
+        "source": "user",
+        "filePath": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/agents/forgedock-reviewer.md"
+      }
+    ]
+  },
+  "resourceSha256": {
+    "extension": "bcde509971935a853cd6c76e1170fb16f2d9f711b87b32dc69bdb42f92cd8ba5",
+    "prompts": "56a8cf58f703e19810fb15d3731bcc70865da94011f30107cc6b4c908e6f57d5",
+    "skills": "645cc4c0b3f289df8c3c098b3e8752d0cb416c9914c4c4202a3c68407d8c2217",
+    "agents": "e605d3d3ec74e0483df5eb18c3bb968f0aabf92d302a42cf4bdad5a9120269f8",
+    "helper": "a3111ad297a7949749ae98385e71f61a8763083056d839e1e7044bf992627582",
+    "reviewerTools": "55ca92d1907bbc92627bf3d453228582753e21e32b097f88dd282dcba50054f7",
+    "reviewerProfile": "4ad6608cc4d27830a66b2702df802c705b33826405c3bfb8a90670a01c8f1a93",
+    "parentSkill": "6bb582ee5d8629fafec1a84312bd9e664ded51f18e8e21c216f8035581003db5",
+    "stagingSkill": "25ba41354abac0952e1bca5936afcb31bf757f2793bd10c9abde8df738248401",
+    "piSubagentsExtension": "90a97825382bf9ded080c533a33d881d2d948bb9ccaf2f3563cf8ce470013171",
+    "piSubagentsSkill": "022a36b78a498c49b9a0abcdd4d1f390b440386087ef26d6f3a8cd8a3304eb97"
+  },
+  "noPiProcessLaunched": true,
+  "noModelInvoked": true,
+  "limitations": [
+    "This audit occurred after the native attempt and does not retroactively isolate or validate that run.",
+    "The parent's actual native invocation did not use --no-skills or --no-prompt-templates and did not set PI_SUBAGENT_EXTRA_AGENT_DIRS; it later read the installed a58675de staging skill."
+  ]
+}

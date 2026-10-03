@@ -1,0 +1,16 @@
+{
+  "taskId": "b64ae7db7",
+  "taskName": "Corrected PR 583 Review",
+  "terminalStatus": "failed",
+  "status": "failed",
+  "outerExitCode": 1,
+  "exitCode": 1,
+  "outputPath": "/home/dev/Projects/forgedock-pi/.pi/tasks/01a0ab32-2f09-749d-8d86-7262dfbae0f6-3697145/b64ae7db7.output",
+  "nativeRunRoot": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/native-runs/2026-09-30T03-52-43-764Z",
+  "nativePiProcessExitCode": 0,
+  "nativePiAgentEndObserved": true,
+  "postRunHarnessFailure": "The launcher returned nonzero because its outer expected predicate treated retained session artifacts as absent from sourceRoot/.pi/subagents/artifacts and required zero finalizer tool errors, despite the parent correcting one gate argument error and successfully publishing the final gate.",
+  "preSpawnFailureEvidence": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/qualification/evidence/review-pr-performance-20260928/authorized-native-20260930/pre-spawn-parser-failure.json",
+  "preSpawnTaskId": "b0490a858",
+  "preSpawnNativePiStarted": false
+}

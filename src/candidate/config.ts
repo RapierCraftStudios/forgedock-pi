@@ -30,6 +30,7 @@ export interface CandidateConfig {
   ownerModel: string;
   ownerThinking: ThinkingLevel;
   configuredOwnerConcurrency: number;
+  effectiveOwnerConcurrency: number;
   review: CandidateReviewConfig;
   verificationCommands: Readonly<Record<string, string>>;
 }
@@ -191,6 +192,7 @@ export function parseCandidateConfig(rawText: string, configPath: string, cwd = 
     ownerModel,
     ownerThinking,
     configuredOwnerConcurrency,
+    effectiveOwnerConcurrency: configuredOwnerConcurrency,
     review: {
       reviewerTimeoutMs,
       panelTimeoutMs,
@@ -220,7 +222,7 @@ export function sanitizeCandidateConfig(config: CandidateConfig): Record<string,
     ownerModel: config.ownerModel,
     ownerThinking: config.ownerThinking,
     configuredOwnerConcurrency: config.configuredOwnerConcurrency,
-    qualificationOwnerConcurrency: Math.min(config.configuredOwnerConcurrency, 2),
+    effectiveOwnerConcurrency: config.effectiveOwnerConcurrency,
     review: config.review,
     verificationCommands: config.verificationCommands,
   };

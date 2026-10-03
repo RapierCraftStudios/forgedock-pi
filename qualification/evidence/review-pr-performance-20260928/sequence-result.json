@@ -1,0 +1,40 @@
+{
+  "schema": "forgedock.pr583.registered-staging-sequence/v1",
+  "commitUnderTest": "ef2b1c27b95194360f16b500793bfb6150869165",
+  "command": "npm exec -- tsx --test test/candidate/restricted-staging-policy.test.ts",
+  "result": {
+    "tests": 21,
+    "passed": 21,
+    "failed": 0,
+    "durationMs": 34501.395077,
+    "sequenceTest": "registered staging sequence runs checks before reviewer artifacts and publishes a gate from retained receipts",
+    "sequenceTestDurationMs": 2826.474406
+  },
+  "execution": {
+    "prepareCalls": 1,
+    "configuredCheck": {
+      "name": "test",
+      "command": "node test/verify.mjs",
+      "exitCode": 0,
+      "receiptRetained": true
+    },
+    "checkCompletedBeforeReviewer": true,
+    "controlledReviewerCompletion": "actual ForgeDock tool_result hook wrote the exact per-role reviewer-execution.json receipt",
+    "runtimeArtifacts": "four normal .pi/subagents/artifacts files were created in the exact-head review worktree and remained present through finalization",
+    "reviewerPublisher": "registered forge_publish_reviewer published one fake-GitHub report",
+    "adjudication": { "tool": "forge_publish_adjudication", "verdict": "APPROVE", "gate": "PASS", "publication": "published", "readbackVerified": true },
+    "gate": { "tool": "forge_publish_record", "publication": "published", "readbackVerified": true, "parentLinkMatchesFinalPanel": true },
+    "successfulConfiguredCheckReruns": 0,
+    "actualProductSourceChanges": 0,
+    "reviewerEvidenceDeletedBeforeAssertions": false,
+    "fakeGitHubIssueWrites": 0
+  },
+  "cleanlinessGuard": {
+    "exactHeadWorktreeWasCleanBeforeCheck": true,
+    "configuredCheckStillRejectsTrackedProductSourceDirt": true,
+    "postReviewerWorktreeDirtWasOnlyRuntimeArtifacts": true,
+    "canonicalConfigCheckoutRemainedClean": true,
+    "runtimeArtifactsWereNotIgnoredOrRemovedDuringFinalization": true
+  },
+  "fixtureNote": "An earlier version of this deterministic fixture used node --test recursively inside the Node test runner and did not execute the configured check. It was corrected to invoke a direct Node verifier; this was a harness issue, not a native or product-code result."
+}

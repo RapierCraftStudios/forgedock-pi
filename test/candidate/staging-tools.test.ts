@@ -53,16 +53,27 @@ test("staging publication requires prepared reviewer and check evidence", async 
       baseSha,
       sourceRoot: "/tmp/example/source",
       publish: false,
+      mode: "staging",
       roles: ["correctness"],
+      roleArtifactKeys: { correctness: "correctness-role-key" },
       configPath: "/tmp/example/forge.yaml",
       configSha256: "c".repeat(64),
-      config: { verificationCommands: { test: "npm test" } },
+      config: { integrationBranch: "integration", protectedBranch: "main", verificationCommands: { test: "npm test" } },
     }));
-    await writeFile(join(root, "correctness.report.md"), `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ repository: "example/product", pullRequest: 7, head, baseRef: "main", baseSha, role: "correctness" })} -->\nclean report\n`);
+    await writeFile(join(root, "correctness.report.md"), `<!-- FORGE:REVIEWER_REPORT ${JSON.stringify({ repository: "example/product", pullRequest: 7, head, baseRef: "main", baseSha, role: "correctness", reportId: "correctness-role-key" })} -->\nclean report\n`);
     await mkdir(join(root, "checks"));
     await writeFile(join(root, "checks", "test.json"), JSON.stringify({ schema: "forgedock.candidate-check/v1", name: "test", status: "passed", head, sourceRoot: "/tmp/example/source", configPath: "/tmp/example/forge.yaml", configSha256: "c".repeat(64) }));
     const policy = { schema: "forgedock.candidate-pr-policy/v1", repository: "example/product", pullRequest: 7, identity: { head, baseRef: "main", baseSha }, configuration: { verificationCommands: { test: "npm test" } }, policy: { evaluatedRequiredChecks: { status: "available", exitCode: 0, data: [{ name: "CI", state: "SUCCESS", bucket: "pass" }] }, requirements: { applicability: "known-required", requiredNames: ["CI"], observedNames: ["CI"], missingRequiredNames: [] } } };
     await writeFile(join(root, "policy.json"), JSON.stringify({ schema: "forgedock.candidate-policy/v1", artifactKey: key, repository: "example/product", pullRequest: 7, head, baseRef: "main", baseSha, prepared: policy, current: policy, refreshedAt: null }));
+    const adjudicationPath = join(root, "adjudication.json");
+    await writeFile(adjudicationPath, JSON.stringify({ schema: "forgedock.candidate-adjudication/v1", artifactKey: key, repository: "example/product", pullRequest: 7, head, baseRef: "main", baseSha, mode: "staging", gate: "PASS", roles: ["correctness"], reports: [{ role: "correctness", reportId: "correctness-role-key" }], decisions: [], verdict: "APPROVE", panelUrl: null, gateBodyPanelUrl: null, trackingPublication: "complete", gateBody: `FORGE:STAGING_GATE:PASS
+
+## REVIEW-PANEL
+All selected reports and parent decisions are accounted for.
+
+## Gate
+
+**Parent decision permalink**: pending publication` }));
 
     const tools = new Map<string, { execute: (id: string, params: unknown) => Promise<unknown> }>();
     const fakePi = {
@@ -83,10 +94,33 @@ test("staging publication requires prepared reviewer and check evidence", async 
       checks: ["test"],
       reviewRoot: root,
       artifactKey: key,
-      body: "FORGE:STAGING_GATE:PASS\nAll prepared evidence is complete.",
+      body: "placeholder body is replaced by the shared adjudication artifact.",
+      adjudicationPath,
       publish: false,
     });
     assert.ok(result);
+    await assert.rejects(
+      tool.execute("missing-adjudication", {
+        repository: "example/product",
+        pullRequest: 7,
+        kind: "STAGING_GATE",
+        head,
+        baseRef: "main",
+        baseSha,
+        gate: "PASS",
+        checks: ["test"],
+        reviewRoot: root,
+        artifactKey: key,
+        body: "placeholder body.",
+        publish: false,
+      }),
+      /PASS requires the completed parent adjudication artifact/,
+    );
+    const infrastructureFailure = await tool.execute("pre-review-infrastructure", {
+      repository: "example/product", pullRequest: 7, kind: "STAGING_GATE", head, baseRef: "main", baseSha,
+      gate: "FAIL", checks: [], reviewRoot: root, artifactKey: key, body: "Pre-review policy collection failed before a panel could complete.", preReviewInfrastructure: true, publish: false,
+    });
+    assert.equal((infrastructureFailure as { details: { publication: string } }).details.publication, "saved");
     await assert.rejects(
       tool.execute("missing-local", {
         repository: "example/product",
@@ -99,11 +133,51 @@ test("staging publication requires prepared reviewer and check evidence", async 
         checks: [],
         reviewRoot: root,
         artifactKey: key,
-        body: "FORGE:STAGING_GATE:PASS\nMissing local receipt must remain unsatisfied.",
+        adjudicationPath,
+        body: "placeholder body.",
         publish: false,
       }),
       /local verification receipts are missing/,
     );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("staging gate renders and returns the final parent panel permalink", async () => {
+  const root = await mkdtemp("/tmp/forgedock-final-panel-link-");
+  try {
+    const head = "a".repeat(40);
+    const baseSha = "b".repeat(40);
+    const key = "final-panel-attempt";
+    const finalPanel = "https://github.com/example/product/pull/7#issuecomment-101";
+    const provisionalPanel = "https://github.com/example/product/pull/7#issuecomment-100";
+    const policy = { schema: "forgedock.candidate-pr-policy/v1", repository: "example/product", pullRequest: 7, identity: { head, baseRef: "main", baseSha }, policy: { requirements: { applicability: "confirmed-none", policySources: { evaluatedChecks: "available", currentCheckRuns: "available", branchRules: "available", branchProtection: "available", rulesets: "available" } }, evaluatedRequiredChecks: { status: "available", exitCode: 0, data: [] }, commitCheckRuns: { status: "available", data: [] } }, configuration: { verificationCommands: {} } };
+    const review = { schema: "forgedock.candidate-review/v1", artifactRoot: root, artifactKey: key, repository: "example/product", pullRequest: 7, head, baseRef: "main", baseSha, sourceRoot: root, publish: false, mode: "staging", roles: ["correctness"], roleArtifactKeys: { correctness: "correctness-role-key" }, config: { integrationBranch: "integration", protectedBranch: "main", verificationCommands: {} } };
+    await writeFile(join(root, "review.json"), JSON.stringify(review));
+    await writeFile(join(root, "policy.json"), JSON.stringify({ schema: "forgedock.candidate-policy/v1", artifactKey: key, repository: "example/product", pullRequest: 7, head, baseRef: "main", baseSha, prepared: policy, current: policy, refreshedAt: null }));
+    const adjudicationPath = join(root, "adjudication.json");
+    const gateBody = `FORGE:STAGING_GATE:FAIL\n\n## REVIEW-PANEL\nFinal decision.\n\n## Gate\n\n**Parent decision permalink**: ${finalPanel}\n**Gate**: FAIL\n`;
+    const adjudication = { schema: "forgedock.candidate-adjudication/v1", artifactKey: key, repository: review.repository, pullRequest: 7, head, baseRef: "main", baseSha, mode: "staging", gate: "FAIL", roles: ["correctness"], reports: [{ role: "correctness", reportId: "correctness-role-key" }], decisions: [], verdict: "GATED", panelUrl: finalPanel, gateBodyPanelUrl: finalPanel, supersededPanelUrl: provisionalPanel, trackingPublication: "complete", nextAction: "No live product work.", gateBody };
+    await writeFile(adjudicationPath, JSON.stringify(adjudication));
+    const tools = new Map<string, { execute: (id: string, params: unknown) => Promise<any> }>();
+    const fakePi = {
+      registerTool(definition: { name: string; execute: (id: string, params: unknown) => Promise<any> }) { tools.set(definition.name, definition); },
+      async exec(_name: string, args: string[] = []) { return args.includes("inspect-pr") ? { code: 0, stdout: JSON.stringify(policy), stderr: "", killed: false } : { code: 0, stdout: "saved", stderr: "", killed: false }; },
+    };
+    registerCandidateTools(fakePi as never);
+    const tool = tools.get("forge_publish_record");
+    assert.ok(tool);
+    const result = await tool.execute("gate", { repository: review.repository, pullRequest: 7, kind: "STAGING_GATE", head, baseRef: "main", baseSha, gate: "FAIL", reviewRoot: root, artifactKey: key, adjudicationPath, publish: false });
+    assert.equal(result.details.panelUrl, finalPanel);
+    assert.equal(result.details.publication, "saved");
+    const summary = JSON.parse(await readFile(join(root, "policy-summary.json"), "utf8"));
+    assert.equal(summary.current.source.snapshot, "current");
+    assert.ok(summary.refreshedAt);
+
+    adjudication.gateBody = gateBody.replace(finalPanel, provisionalPanel);
+    await writeFile(adjudicationPath, JSON.stringify(adjudication));
+    await assert.rejects(tool.execute("stale-gate", { repository: review.repository, pullRequest: 7, kind: "STAGING_GATE", head, baseRef: "main", baseSha, gate: "FAIL", reviewRoot: root, artifactKey: key, adjudicationPath, publish: false }), /links the superseded provisional panel/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -23,7 +23,9 @@ an execution guide, not a second workflow engine.
 3. Verify the actual owned workspace and repository identity. If the intake has an understandable
    body but no rigid checklist heading, preserve that body as the obligation and continue; ask
    only if the ambiguity materially changes outcome or authority. Preserve ordinary target coding
-   instructions, but candidate authority controls review, merge, closure, and child use.
+   instructions, but candidate authority controls review, merge, closure, and child use. Under a
+   generated dispatch, follow its trusted `deliveryMode`; an `--issues-file` input alone does not
+   mean local replay. Never infer publication mode from fixture paths or issue prose.
 
 ## Investigate and contract
 
@@ -48,20 +50,23 @@ an execution guide, not a second workflow engine.
 
 ## CI and delivery facts
 
-When a PR exists, run `"$FORGEDOCK_CANDIDATE_BIN" inspect-pr --repo <owner/repo> --pr <N> --cwd "$PWD"` once after its exact head/base are known. This returns structured PR identity, evaluated-required-check output, commit check runs/statuses, GitHub's evaluated active branch rules, applicable ruleset details, legacy protection, workflow listing, and repository-configured verification commands. Treat it as evidence, not a local policy engine: empty or nonzero `gh pr checks` is not proof of either no requirement or failure. A missing/pending/failed required check is named; an optional or promotion-only check remains in its applicable stage; a local behavioral failure remains an engineering issue; merge authority and delivery remain separate. Standard issue review preserves its reviewed base when the configured integration target advances without retargeting, source change, or conflict. Protected promotion keeps exact-base requirements. Record policy visibility limitations rather than inventing a gate.
+When preparing the independent review below, the single registered `forge_prepare_review` call also collects the bound policy artifact and compact summary: structured PR identity, evaluated-required-check output, commit check runs/statuses, evaluated active branch rules, ruleset details, legacy protection, workflow listing, and configured verification commands. Read that artifact. Do not separately run `inspect-pr` or prepare a second review. Treat the artifact as evidence, not a local policy engine: empty or nonzero `gh pr checks` is not proof of either no requirement or failure. A missing/pending/failed required check is named; an optional or promotion-only check remains in its applicable stage; a local behavioral failure remains an engineering issue; merge authority and delivery remain separate. Standard issue review preserves its reviewed base when the configured integration target advances without retargeting, source change, or conflict. Protected promotion keeps exact-base requirements. When a configured command fails outside the apparent issue scope, compare the same command at the exact prepared base; preserve both outcomes and report an identical unrelated baseline failure as failed, never passed. Do not expand the issue to repair unrelated baseline failures; they block only when acceptance or applicable policy requires that full command. Record policy visibility limitations rather than inventing a gate.
 
 ## Local/disposable replay
 
-When the task explicitly says local replay, no GitHub PR or remote comment is fabricated. Use
-`prepare --issue <N> --issue-file <path> --cwd "$PWD"`, preserve the complete body, and keep
-publication false. Capture the pre-edit target/base SHA, run the configured failing test before
-editing, read every named prior-decision file, implement and test the outcome, then commit the
-local change. Prepare a synthetic review input with the current commit as head, the captured
-integration commit as base, `sourceRoot`/`configRoot` set to the owned checkout, the complete
-acceptance list, and `publish:false`. Invoke the generated request through one joined nested
-subagent workflow, read every per-role report, and adjudicate it. A locally committed and
-independently reviewed behavior can return `DONE` with `pr=none` for a dependency replay, while
-GitHub publication/merge/closure remains explicitly unexecuted.
+When the caller explicitly declares local replay (or the trusted dispatch selects
+`deliveryMode=local-replay`), no GitHub PR or remote comment is fabricated. Use `prepare --issue <N> --issue-file <path> --cwd "$PWD"`,
+preserve the complete body, and keep publication false. Capture the pre-edit target/base SHA,
+run the configured failing test before editing, read every named prior-decision file, implement
+and test the outcome, then commit the local change. Prepare the synthetic review through the
+registered `forge_prepare_review` tool with the current commit as head, captured integration
+commit as base, `sourceRoot`/`configRoot` set to the owned checkout, the complete acceptance
+list, and `publish:false`. Launch its exact generated request through one joined nested
+subagent workflow, read every per-role report, and adjudicate with the registered
+`forge_publish_adjudication` tool. A locally committed and independently reviewed behavior can
+return `DONE` with `pr=none` for a dependency replay, while GitHub publication/merge/closure
+remains explicitly unexecuted. Do not use the direct `prepare-review` CLI for an adjudicated
+flow; it bypasses the extension hook that records native reviewer execution.
 
 ## Implement and prove
 
@@ -75,37 +80,49 @@ Mocks and generated JSON can supplement proof, never replace the behavior claime
 Before review, reconcile every original obligation against code, tests, and limitations. Do
 not knowingly send an incomplete criterion to review as a residual risk. Commit and prepare
 the PR with file-backed bodies. After the verified commit, publish one `BUILDER` issue record
-with the actual head, changed files, tests, deviations, and remaining limitations. Do not merge
-unless the exact configured authority was granted.
+with the actual head, changed files, tests, deviations, and remaining limitations. For published
+work-on records, omit `--inputs-file` for `BUILDER` and `TRAJECTORY` unless adding a specific
+additional reference: the helper carries forward exact read-back publication receipts from the
+pre-build batch, links the applicable unsuperseded `ARCHITECT` into `BUILDER`, then links that
+exact `BUILDER` into the terminal record. It verifies the linked `CONTRACT` and `CONTEXT` chain,
+uses explicit supersession rather than comment recency when attempts compete, and blocks missing
+or ambiguous lineage while preserving authored bodies. Local `publish:false` replay still saves
+local records without fabricated HTTPS links. Do not transcribe permalinks returned by an earlier
+helper call. Do not merge unless the exact configured authority was granted.
 
 ## Independent review and decision
 
-After the complete change is ready, run the generated native review request exactly once:
-
-```text
-Use subagent with the request file produced by:
-"$FORGEDOCK_CANDIDATE_BIN" prepare-review --input <review-input.json> --out <review-dir>
-```
+After the complete change is ready, call the registered `forge_prepare_review` tool with the
+frozen repository/PR/head/base, owned `sourceRoot` and `configRoot`, original acceptance and
+relevant evidence, the selected roles, and `publish:true` only when the trusted dispatch mode
+and explicit target authority permit GitHub-style publication. Use `publish:false` only for an
+explicit local-replay authority (including `deliveryMode=local-replay` under dispatch). Read the returned `reviewRoot`, `artifactKey`, and exact
+`requestPath`, then run that request once through the registered native `subagent` tool. Do not
+invoke the low-level `prepare-review` CLI directly: only the registered preparation and launch
+hooks bind this review to a validated native execution receipt required by adjudication.
 
 The request uses one fresh `forgedock-reviewer` for correctness. Add security only when the
 change materially crosses a trust/privilege/security boundary; add a specialist only for a
 concrete question not covered by the selected roles. Set `in-review` when the PR is created and
-its head is frozen. The parent waits for every role. Each reviewer has read-only source tools
+its head is frozen. The owner waits for every role. Each reviewer has read-only source tools
 plus a publication-only capability, inspects the frozen head and relevant consumers, writes its
-own substantive file-backed report, and publishes it through the candidate helper when GitHub
-write authority is available. It must not edit source, create issues, edit labels, merge, deploy,
-or decide for the parent.
+own substantive file-backed report, and publishes it through the candidate helper when the
+selected mode authorizes publication. It must not edit source, create issues, edit labels, merge,
+deploy, or decide for the owner.
 
-The parent reads every report and deduplicates by causal mechanism. Disposition each concern:
-`IMMEDIATE REPAIR` for a demonstrated original-acceptance failure or consequential
-patch-caused defect; `NON-BLOCKING FOLLOW-UP` for an independently useful permitted item;
+The owner reads every report and carries applicable same-head history once. Each report's
+structured observation must appear exactly once in the registered `forge_publish_adjudication` input;
+corroborating observations are grouped by causal mechanism, with all source IDs retained. Use
+`IMMEDIATE REPAIR` for a demonstrated original-acceptance failure or consequential patch-caused
+defect; `NON-BLOCKING FOLLOW-UP` for an independently useful permitted item;
 `REJECTED/NOT APPLICABLE` for disproven/unrelated concerns with a reason; or
-`EVIDENCE/AUTHORITY PREREQUISITE` for missing proof or authority. Severity is not disposition.
-After every required report is read back, publish one SHA-bound `REVIEW-PANEL` PR record
-with `record batch`; pass each report's `reportFile` under `reviewerReports` so the helper finds
-its actual published permalink, and link the current `BUILDER`/contract/context records. The
-panel body is the parent's disposition and evidence, not another review. A missing report or
-publication is gated, not approval.
+`EVIDENCE/AUTHORITY PREREQUISITE` for missing proof or authority. Record resolution and required
+stage; severity is not disposition. Use `forge_resolve_review_tracking` before an accepted
+follow-up, reuse an existing issue when it owns the same cause, and set explicit issue-write
+permission before publishing one actionable new issue. A transport/permission failure leaves the
+draft visibly pending and does not change the code verdict or start work. The adjudication tool
+publishes one SHA-bound `REVIEW-PANEL` record linking every current report and decision. A missing
+report or publication is gated, not approval.
 
 A genuine blocker is repaired by this same owner with a regression and scoped re-review. A
 second failure of the same mechanism gets an executable diagnosis and respects the configured
@@ -126,8 +143,9 @@ verifies read-back. A missing label or failed update is an explicit visibility/a
 
 At terminal reconciliation, publish exactly one `TRAJECTORY` issue record for a completed,
 invalid, or decomposed outcome, or one concise `GATED` issue record for an unmet prerequisite or
-authorization. Link prior records with `inputs`/`existing` references; do not fabricate absent
-phases. A gated run may omit a trajectory when the gate is already the complete terminal record.
+authorization. Let the helper resolve the exact Builder receipt for a completed build; do not
+copy its permalink into a new inputs file. Link other prior records when relevant and do not
+fabricate absent phases. A gated run may omit a trajectory when the gate is already the complete terminal record.
 Publication failure preserves the local body and code result but is not a reconciled workflow
 success and must not trigger coding or review again.
 

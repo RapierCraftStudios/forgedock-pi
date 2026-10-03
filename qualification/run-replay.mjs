@@ -86,14 +86,17 @@ async function prepareIntegration(source, sandbox) {
   return { out, preparation: JSON.parse(result.stdout) };
 }
 
-async function fakeGithub(sandbox) {
+async function fakeGithub(sandbox, { originUrl, pullRequests }) {
   const directory = join(sandbox, "fake-bin");
   await mkdir(directory, { recursive: true });
-  const log = join(sandbox, "github-write-attempts.log");
+  const log = join(sandbox, "github-local-transport.jsonl");
+  const stateFile = join(sandbox, "github-local-state.json");
+  await writeFile(stateFile, json({ schema: "forgedock.local-github-readback/v1", repository: "example/product", originUrl, integrationBranch: "integration", pullRequests, publication: "disabled", comments: [] }), { mode: 0o600 });
   const script = join(directory, "gh");
-  await writeFile(script, `#!/usr/bin/env node\nimport { appendFileSync } from "node:fs";\nappendFileSync(${JSON.stringify(log)}, process.argv.slice(2).join(" ") + "\\n");\nprocess.stderr.write("GitHub is intentionally unavailable in this local replay\\n");\nprocess.exit(77);\n`);
-  await chmod(script, 0o755);
-  return { directory, log };
+  const helper = join(PROJECT_ROOT, "qualification", "local-github-readback.mjs");
+  await writeFile(script, `#!/usr/bin/env bash\nexec node ${JSON.stringify(helper)} "$@"\n`, { mode: 0o700 });
+  await chmod(script, 0o700);
+  return { directory, log, stateFile, helper };
 }
 
 function ownerTask({ issueFile, integration, output, baseHead, issueNumber }) {
@@ -157,8 +160,11 @@ async function main() {
   const sandbox = await mkdtemp(join(tmpdir(), `forgedock-${mode}-replay-`));
   const repository = await createRepository(mode, sandbox);
   const prepared = await prepareIntegration(repository.source, sandbox);
-  const github = await fakeGithub(sandbox);
   const issueNumber = mode === "owner" ? 201 : undefined;
+  const issueInput = readJson(repository.issueFile);
+  const issueRows = Array.isArray(issueInput) ? issueInput : Array.isArray(issueInput.issues) ? issueInput.issues : [issueInput];
+  const pullRequests = [...new Set(issueRows.map((issue) => Number(issue.number)).filter((number) => Number.isSafeInteger(number) && number > 0))];
+  const github = await fakeGithub(sandbox, { originUrl: `file://${repository.remote}`, pullRequests });
   const prompt = mode === "owner"
     ? [
       "Run one fresh native ForgeDock owner child for this local qualification replay. Do not edit the product workspace in the parent.",
@@ -169,7 +175,7 @@ async function main() {
       "Run the installed ForgeDock orchestration route for this local qualification replay. Do not edit the product workspace in the parent.",
       dispatcherTask({ issueFile: repository.issueFile, integration: prepared.out, output }),
     ].join("\n");
-  const launchInput = { schema: "forgedock.qualification-launch/v1", mode, installRoot, sandbox, source: repository.source, integration: prepared.out, issueFile: repository.issueFile, baseHead: repository.baseHead, prompt: "redacted from sanitized summary", model: "openai-codex/gpt-5.6-luna:low", githubWrites: "fake gh exits 77; no remote GitHub target" };
+  const launchInput = { schema: "forgedock.qualification-launch/v1", mode, installRoot, sandbox, source: repository.source, integration: prepared.out, issueFile: repository.issueFile, baseHead: repository.baseHead, prompt: "redacted from sanitized summary", model: "openai-codex/gpt-5.6-luna:low", githubWrites: "disabled; fake gh permits only source-bound local readback", localGithubState: github.stateFile };
   await writeFile(join(output, "launch-input.json"), json(launchInput), { mode: 0o600 });
   const env = {
     HOME: process.env.HOME ?? ".",
@@ -181,6 +187,8 @@ async function main() {
     FORGEDOCK_CANDIDATE_INSTALL_ROOT: installRoot,
     FORGEDOCK_CANDIDATE_BIN: join(installRoot, "package", "bin", "forgedock-candidate.mjs"),
     FORGEDOCK_REPLAY_EVIDENCE: output,
+    FORGEDOCK_LOCAL_GH_STATE: github.stateFile,
+    FORGEDOCK_LOCAL_GH_LOG: github.log,
     ...(mode === "orchestrate" ? { FORGEDOCK_LOCAL_ORCHESTRATION: "1" } : {}),
     PI_OFFLINE: "1",
     PI_SKIP_VERSION_CHECK: "1",
@@ -223,7 +231,7 @@ async function main() {
     markers,
     reviewResults,
     firstPass: (mode === "owner" ? [201] : [101, 102]).every((issue) => markers.some((marker) => new RegExp(`^FORGE_WORK_ON_RESULT status=DONE issue=${issue} pr=(?:\\d+|none) dependency=SATISFIED$`).test(marker))) && !reviewResults.some((result) => /verdict=BLOCK/.test(result)) ? "accepted-local" : "not-accepted-local",
-    github: { writes: "unexecuted", fakeGhLog: github.log, reason: "No disposable remote GitHub write authority was provided" },
+    github: { writes: "unexecuted", fakeGhLog: github.log, localState: github.stateFile, reason: "Local fake gh returns only exact Git-verified PR identity and empty comments; all writes and unsupported endpoints are rejected" },
     sourceWorktrees,
     retainedEvidence: { directory: output, rawParentEvents: join(output, "parent.jsonl"), stderr: join(output, "parent.stderr.log") },
   };
