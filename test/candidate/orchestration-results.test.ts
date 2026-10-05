@@ -167,6 +167,28 @@ test("continuation request preserves a configured ten-owner ceiling", async () =
   }
 });
 
+test("generated native owner acceptance preserves an explicit integration proof type", async () => {
+  const result = await prepared([{ number: 41, title: "integration proof", body: "## Acceptance Criteria\n- [ ] Exercise the real consumer contract [type:integration]" }]);
+  try {
+    let launch: Record<string, any> | undefined;
+    const rows = await result.execute({
+      all: async (items) => {
+        launch = items[0];
+        return [{ ok: true, runId: "native-integration-gated", results: [{ acceptance: { status: "rejected" } }], output: "FORGE_WORK_ON_RESULT status=GATED issue=41 pr=none dependency=UNSATISFIED" }];
+      },
+    });
+    const criterion = launch?.acceptance?.criteria?.[0];
+    assert.match(String(criterion?.must), /proofType=integration/);
+    assert.match(String(criterion?.must), /acceptance-id=I41-AC-/);
+    assert.equal(launch?.agentContract?.version, 1);
+    assert.equal(launch?.gateOn, "acceptance");
+    assert.equal(rows[0]?.nativeAcceptanceStatus, "rejected");
+    assert.equal(rows[0]?.status, "GATED");
+  } finally {
+    await cleanup(result);
+  }
+});
+
 test("normalizes completed gated owners without relaunching them", async () => {
   const result = await prepared();
   try {

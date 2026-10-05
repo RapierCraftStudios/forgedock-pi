@@ -91,9 +91,11 @@ export function mapIssueAcceptance(issueNumber, body, affectedBoundaries = []) {
   const boundaries = [...new Set(affectedBoundaries.map((value) => value.trim()).filter(Boolean))];
   const duplicateOrdinals = new Map();
   const criteria = sourceItems(body).map((sourceText, index) => {
-    const annotation = sourceText.match(/\s+\[type:(api|unit|e2e|manual)\]\s*$/i);
-    const text = annotation ? sourceText.slice(0, annotation.index).replace(/[ \t\n]+$/, "") : sourceText;
-    const proofType = annotation ? annotation[1].toLowerCase() : "behavioral";
+    const annotation = sourceText.match(/\s+\[type:([^\]\r\n]+)\]\s*$/i);
+    const declaredProofType = annotation?.[1]?.trim();
+    if (annotation && !declaredProofType) throw new Error(`Issue #${issueNumber} acceptance criterion ${index + 1} has an empty proof type`);
+    const text = declaredProofType && annotation ? sourceText.slice(0, annotation.index).replace(/[ \t\n]+$/, "") : sourceText;
+    const proofType = declaredProofType ? declaredProofType.toLowerCase() : "behavioral";
     const textHash = `sha256:${sha256(Buffer.from(text, "utf8"))}`;
     const baseId = `I${issueNumber}-AC-${textHash.slice(7, 19)}`;
     const duplicateOrdinal = duplicateOrdinals.get(baseId) ?? 0;

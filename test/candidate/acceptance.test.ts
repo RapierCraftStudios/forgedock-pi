@@ -43,6 +43,28 @@ test("acceptance map preserves multiline HTML/comments and proof annotations whi
   assert.equal(mapping.criteria.some((criterion) => criterion.text.includes("issue-create-token")), false);
 });
 
+test("integration and other explicit proof annotations survive trailing metadata without rewriting criterion text", () => {
+  const body = [
+    "## Acceptance Criteria",
+    "- [ ] Verify the real consumer through the local integration path [type:integration]",
+    "<!-- FORGE:BATCHABLE -->",
+    "<!-- FORGE:BODY-INTEGRITY:integration-fixture -->",
+    "<!-- issue-create-token:integration-fixture-token -->",
+    "- [ ] Keep the existing unit annotation [type:unit]",
+    "- [ ] Preserve other explicit proof labels [type:property-based]",
+    "- [ ] An unannotated criterion keeps the default behavior proof.",
+  ].join("\n");
+  const mapping = mapIssueAcceptance(89, body, ["src/consumer.ts", "test/consumer.test.ts"]);
+  assert.deepEqual(mapping.criteria.map((criterion) => [criterion.text, criterion.proofType]), [
+    ["Verify the real consumer through the local integration path", "integration"],
+    ["Keep the existing unit annotation", "unit"],
+    ["Preserve other explicit proof labels", "property-based"],
+    ["An unannotated criterion keeps the default behavior proof.", "behavioral"],
+  ]);
+  assert.ok(mapping.criteria.every((criterion) => criterion.affectedBoundaries.includes("test/consumer.test.ts")));
+  assert.equal(mapping.sourceBodySha256, sha256(body));
+});
+
 test("acceptance mapping verifies exact criterion-to-captured-body identity without rewriting input", () => {
   const body = "## Acceptance Criteria\n- [ ] A real criterion.\n<!-- FORGE:BODY-INTEGRITY:fixture -->\n";
   const mapping = mapIssueAcceptance(77, body, ["src/file.ts"]);
