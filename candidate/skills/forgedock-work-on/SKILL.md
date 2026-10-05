@@ -38,6 +38,17 @@ an execution guide, not a second workflow engine.
   absence then presence. For inspection-only work, state why execution is unavailable.
 - Record a concise contract: original observable outcome; required behavior and scope;
   non-goals; concrete behavioral proof. Do not shrink acceptance to match a proposed patch.
+- If the deterministic `prepare` helper rejects an invocation shape, retain the exact error, check
+  its documented CLI contract, and correct only the argument shape before continuing; do not repeat
+  the unchanged call or switch to the retired dispatch context helper. No source edit begins until
+  the exact issue/body/config context is prepared. If that fails for an infrastructure reason, keep
+  the owner bound and request an explicit dispatcher rebind rather than silently changing heads.
+- Preserve the dispatcher's exact prepared base. Record the actual checked-out SHA in `CONTEXT`.
+  Only a declared dependency edge permits a clean fetch/fast-forward before the first source edit;
+  verify the exact predecessor merge SHA is reachable, and record prepared/effective/observed target
+  SHAs plus predecessor references. Stop before edits if the prerequisite or clean transition is
+  unavailable. Never fast-forward after mutation; ordinary target movement is handled by the
+  standard PR base/patch-equivalence rule below, without retargeting a reviewed head.
 - After investigation and before source edits, write substantive body files and publish one
   ordered `record batch --input <records.json> --publish` containing `INVESTIGATOR`,
   `CLASSIFICATION`, `CONTEXT`, `CONTRACT`, and `ARCHITECT`. Use `{ "record": "id" }` for

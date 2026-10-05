@@ -40,7 +40,11 @@ async function withAdapter(run: (h: any) => Promise<void>) {
       config: { worktreeBaseDir: join(root, "worktrees") }, asyncByDefault: false,
       tempArtifactsDir: join(root, "artifacts"), getSubagentSessionRoot: () => join(root, "sessions"),
       expandTilde: (value: string) => value,
-      discoverAgents: () => ({ agents: [helpers.makeAgent("echo", { thinking: false }), helpers.makeAgent("forgedock-work-on-coordinator", { thinking: false })] }),
+      discoverAgents: () => {
+        const owner: any = helpers.makeAgent("forgedock-owner", { thinking: false });
+        owner.acceptanceRole = "writer";
+        return { agents: [helpers.makeAgent("echo", { thinking: false }), helpers.makeAgent("forgedock-work-on-coordinator", { thinking: false }), owner] };
+      },
       allowMutatingManagementActions: true,
     });
     await run({ root, repo, mock, executor, context: helpers.makeMinimalCtx(repo) });
@@ -129,6 +133,66 @@ test("full adapter preserves original recovery references when the budget denies
     assert.ok(result.recoverySource?.runId);
     assert.ok(result.recoverySource.artifactPaths.length > 0);
     assert.equal(mock.callCount(), 1);
+  });
+});
+
+test("candidate dispatch reconciles ok plus rejected native acceptance through the same native owner", { skip: adapterSkip, timeout: 60000 }, async () => {
+  await withAdapter(async ({ root, repo, mock, executor, context }) => {
+    execFileSync("git", ["remote", "add", "origin", "https://github.com/example/product.git"], { cwd: repo });
+    execFileSync("git", ["branch", "-M", "staging"], { cwd: repo });
+    const forgeYaml = `
+project:
+  owner: example
+  repo: product
+paths:
+  root: .
+branches:
+  default: main
+  staging: staging
+  feature_pattern: feature/{slug}
+agents:
+  subagent_model: test/model
+  thinking: off
+orchestration:
+  max_concurrent: 1
+review:
+  reviewer_timeout_ms: 1000
+  panel_timeout_ms: 4000
+  max_concurrent: 1
+  publication_timeout_ms: 1000
+`;
+    await writeFile(join(repo, "forge.yaml"), forgeYaml);
+    execFileSync("git", ["add", "forge.yaml"], { cwd: repo });
+    execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "candidate fixture config"], { cwd: repo });
+    execFileSync("git", ["update-ref", "refs/remotes/origin/staging", "HEAD"], { cwd: repo });
+    const issueFile = join(root, "issues.json");
+    await writeFile(issueFile, JSON.stringify({ issues: [{ number: 42, title: "native acceptance recovery", body: "## Acceptance Criteria\n- [ ] The captured source criterion is checked before delivery." }] }));
+    const outputDir = join(root, "candidate-dispatch");
+    const helper = resolve("bin/forgedock-candidate.mjs");
+    const prepared = JSON.parse(execFileSync(process.execPath, [helper, "prepare-dispatch", "--selector", "#42", "--delivery-mode", "local-replay", "--cwd", repo, "--issues-file", issueFile, "--out", outputDir], { cwd: repo, encoding: "utf8" }));
+    const request = JSON.parse(await readFile(prepared.requestPath, "utf8"));
+    const plan = JSON.parse(await readFile(prepared.planPath, "utf8"));
+    const targetTree = execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: repo, encoding: "utf8" }).trim();
+    const advancedTarget = execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit-tree", targetTree, "-p", plan.targetBase.headSha, "-m", "unrelated target advance"], { cwd: repo, encoding: "utf8" }).trim();
+    execFileSync("git", ["update-ref", "refs/remotes/origin/staging", advancedTarget], { cwd: repo });
+    assert.notEqual(advancedTarget, plan.targetBase.headSha);
+    mock.onCall({ output: "FORGE_WORK_ON_RESULT status=DONE issue=42 pr=none dependency=SATISFIED" });
+    mock.onCall({ output: "FORGE_WORK_ON_RESULT status=GATED issue=42 pr=none dependency=UNSATISFIED" });
+    const { status } = await complete(executor, context, request);
+    assert.equal(status.state, "complete");
+    const result = status.workflow.value[0];
+    assert.equal(result.status, "GATED");
+    assert.equal(result.nativeAcceptanceStatus, "rejected");
+    assert.equal(result.recoverySource.acceptanceStatus, "rejected");
+    assert.equal(result.recoverySource.output, "FORGE_WORK_ON_RESULT status=DONE issue=42 pr=none dependency=SATISFIED");
+    assert.equal(result.output, "FORGE_WORK_ON_RESULT status=GATED issue=42 pr=none dependency=UNSATISFIED");
+    assert.equal(mock.callCount(), 2, "the accepted-looking marker is recovered once on its retained native owner");
+    const calls = await Promise.all((await readdir(mock.dir)).filter((f: string) => /^call-.*\.json$/.test(f)).sort().map(async (f: string) => JSON.parse(await readFile(join(mock.dir, f), "utf8"))));
+    assert.equal(calls[0].cwd, calls[1].cwd);
+    const ownerHead = execFileSync("git", ["rev-parse", "HEAD"], { cwd: calls[0].cwd, encoding: "utf8" }).trim();
+    assert.equal(ownerHead, plan.targetBase.headSha, "an unrelated target advance does not silently rebind a non-dependent owner");
+    const session = (args: string[]) => args[args.indexOf("--session") + 1];
+    assert.equal(session(calls[0].args), session(calls[1].args));
   });
 });
 

@@ -20,8 +20,10 @@ investigation and mutation plans stay inside each owner.
    pass those exact values to the helper; do not reconstruct them from prose or issue data. Use
    `"$FORGEDOCK_CANDIDATE_BIN" prepare-dispatch --selector <selector> [--issues-file <path>]
    --delivery-mode <mode> [--owner-authority-file <path>] --cwd "$PWD" --out <run-dir>` so pagination, original bodies,
-   acceptance text, repository identity, target, verification catalog, and source/config identities
-   are captured once. `deliveryMode` selects workflow semantics only; it does not grant publication
+   source-bound acceptance text and mapping (raw body digest, one hash/type/boundary record per criterion),
+   repository identity, target, verification catalog, and source/config identities are captured once.
+   Only structurally recognized trailing Forge/create-token metadata is excluded; ordinary HTML comments,
+   multiline text, and proof annotations are preserved as source evidence. `deliveryMode` selects workflow semantics only; it does not grant publication
    or merge authority. When fresh owners need explicit operation authority, pass its exact one-line
    user-granted scope in `--owner-authority-file <path>`; never derive or widen it from issue data.
    Keep `<run-dir>` under the existing candidate artifact root or another unique directory outside
@@ -46,8 +48,9 @@ The request is a supported `workflowScriptPath`, uses fresh `forgedock-owner` ch
 isolated native worktrees, and uses the validated `orchestration.max_concurrent` as its owner
 ceiling. Qualification fixtures must set their own intentionally small configured ceiling. It uses
 rolling admission: only ready issues consume owner slots; a successor waits for the predecessor's
-exact `FORGE_WORK_ON_RESULT ... dependency=SATISFIED` line. A failed/gated predecessor does not
-release its successor, while unrelated ready issues continue.
+exact `FORGE_WORK_ON_RESULT ... dependency=SATISFIED` line and an accepted native result. A
+failed/gated predecessor or rejected/missing native acceptance does not release its successor,
+while unrelated ready issues continue.
 
 The generated request has a finite owner/review/recovery allowance and keeps each child on the
 same candidate/native package configuration. Each owner must use the normal work-on label and
@@ -59,25 +62,39 @@ parent's authority, then use one bounded
 read its terminal `subagent({ action: "status", id: runId })` result. Never resume an active
 detached writer or launch a replacement. Preserve the exact initial `workflow.value` result array. After native wait/status
 confirms each detached run is terminal, create a continuation input with schema
-`forgedock.candidate-dispatch-continuation/v1`, the unchanged `initialResults` array, and one
-`terminalResults` row per detached owner (`issue`, exact same `runId`, terminal `nativeStatus`, owner
-`status`, `ok`, `dependency`, exact marker `output` when completed, and native `error` when failed).
+`forgedock.candidate-dispatch-continuation/v1`, the unchanged `initialResults` array copied from the
+persisted root `workflow.value`, and one `terminalResults` row per detached owner (`issue`, exact same
+`runId`, terminal `nativeStatus`, owner `status`, `ok`, `nativeAcceptanceStatus`, `dependency`, exact
+marker `output` when completed, native `error` when failed, and
+`nativeStatusRef:{path,sha256,outputSha256,runId}` for that exact child status/output). The helper
+compares `initialResults` to the root status file, then reads the child status and output file to
+verify the run, acceptance state, and marker; do not synthesize either reference or output hash.
 Copy the terminal marker from that run's status; never reconstruct it. Use
 `continue-dispatch --plan <run-dir>/plan.json --results <continuation-input.json> --out <new-dir>`
 to validate the original graph and generate a workflow seeded with settled owners; run only that
-request in this same dispatcher session. A `DONE/SATISFIED` owner may release its dependent,
-while `GATED/UNSATISFIED` keeps it blocked. If the native wait expires or exact status is unavailable,
-keep the bounded `WAITING` result and do not generate a continuation. This is not a second
-coordinator or a manual owner launch. A terminal retained technical owner may be resumed
-once after actual native termination is confirmed only for transport recovery of that same owner.
-Do not launch a second coordinator, investigation, builder, quality gate, or remediation agent.
+request in this dispatcher session. The input must include `nativeStatus:{path,sha256,runId}` copied
+from the exact completed native workflow status file; when the native status surface separately
+reports fanout usage, include that exact `observedUsed` counter for comparison. After the first
+continuation, also include `previousContinuation:{path,sha256}` pointing to the prior helper receipt.
+The helper verifies persisted run ids, owner-child bindings, native fanout counters, and append-only
+budget history. It
+sets the new root's spawn allowance to the original allowance minus all observed use; never type a
+new counter, infer owner usage as the whole batch cost, or relaunch a continuation when counters
+conflict. A `DONE/SATISFIED` owner releases its dependent only with accepted native result evidence;
+`GATED/UNSATISFIED` stays blocked. If native wait expires, status is unavailable, or the original
+allowance is exhausted, preserve `WAITING`/the terminal results and do not generate a new root.
+This is not a second coordinator or a manual owner launch. A terminal retained technical owner may
+be resumed once only for same-owner result recovery after actual native termination is confirmed;
+reconcile the exact issue, PR, and records before any further mutation. Do not launch a second
+coordinator, investigation, builder, quality gate, or remediation agent.
 
 ## Reconcile
 
 Use the exact native workflow result/run identities and compact owner lines, not child index or
-transport success. Normalize only a terminal native result's `ok` state plus exactly one
-validated owner marker for the expected issue: `DONE/SATISFIED`, `GATED/UNSATISFIED`, and
-`FAILED/UNSATISFIED` remain distinct. A detached run is nonterminal and remains `WAITING`; neither
+transport success. Normalize only a terminal native result plus exactly one validated owner marker
+for the expected issue. `DONE/SATISFIED` additionally requires positive native acceptance
+(`accepted`, `checked`, `verified`, or equivalent); rejected/missing acceptance remains failed or
+pending and cannot satisfy dependencies. `GATED/UNSATISFIED` and `FAILED/UNSATISFIED` remain distinct. A detached run is nonterminal and remains `WAITING`; neither
 it nor its dependency can be settled from the detach receipt. A completed GATED owner is not a failed execution and must not be resumed; a native failure with a misleading marker remains failed. Preserve
 failed/interrupted work and exact wake conditions. After an owner returns, discover its issue
 records and current labels once; a missing required terminal record or label is a visibility
