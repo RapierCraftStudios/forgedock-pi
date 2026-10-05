@@ -171,6 +171,7 @@ review:
     const helper = resolve("bin/forgedock-candidate.mjs");
     const prepared = JSON.parse(execFileSync(process.execPath, [helper, "prepare-dispatch", "--selector", "#42", "--delivery-mode", "local-replay", "--cwd", repo, "--issues-file", issueFile, "--out", outputDir], { cwd: repo, encoding: "utf8" }));
     const request = JSON.parse(await readFile(prepared.requestPath, "utf8"));
+    assert.equal(request.async, true);
     const plan = JSON.parse(await readFile(prepared.planPath, "utf8"));
     const targetTree = execFileSync("git", ["rev-parse", "HEAD^{tree}"], { cwd: repo, encoding: "utf8" }).trim();
     const advancedTarget = execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit-tree", targetTree, "-p", plan.targetBase.headSha, "-m", "unrelated target advance"], { cwd: repo, encoding: "utf8" }).trim();
@@ -180,6 +181,8 @@ review:
     mock.onCall({ output: "FORGE_WORK_ON_RESULT status=GATED issue=42 pr=none dependency=UNSATISFIED" });
     const { status } = await complete(executor, context, request);
     assert.equal(status.state, "complete");
+    assert.equal(status.runFanoutBudget.limit, request.maxSubagentSpawnsPerRun);
+    assert.equal(Array.isArray(status.workflow.value), true);
     const result = status.workflow.value[0];
     assert.equal(result.status, "GATED");
     assert.equal(result.nativeAcceptanceStatus, "rejected");

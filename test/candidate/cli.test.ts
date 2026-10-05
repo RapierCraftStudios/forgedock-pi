@@ -101,8 +101,9 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     assert.equal(plan.issues[2]?.body, "Fix the consumer timeout when the queue is empty; preserve compatibility.");
     assert.match(plan.issues[2]?.task ?? "", /Dispatcher evidence\/context follows; independently verify it/);
     assert.match(plan.issues[2]?.task ?? "", /retain that check as a failure/);
-    const request = JSON.parse(await readFile(dispatch.requestPath, "utf8")) as { workflowScriptPath: string; globalConcurrencyLimit: number; maxSubagentSpawnsPerRun: number };
+    const request = JSON.parse(await readFile(dispatch.requestPath, "utf8")) as { workflowScriptPath: string; globalConcurrencyLimit: number; maxSubagentSpawnsPerRun: number; async: boolean };
     assert.equal(request.globalConcurrencyLimit, 2);
+    assert.equal(request.async, true);
     assert.equal(request.maxSubagentSpawnsPerRun, plan.launchAllowance);
     const ownerWorkflow = await readFile(request.workflowScriptPath, "utf8");
     assert.match(ownerWorkflow, /forgedock-owner/);

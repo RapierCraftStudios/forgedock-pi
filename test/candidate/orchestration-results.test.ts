@@ -44,13 +44,13 @@ orchestration:
   await writeFile(issues, JSON.stringify({ issues: issueRows }));
   const out = join(root, "..", `forgedock-candidate-outcomes-artifacts-${root.split("/").at(-1)}`);
   const preparedResult = JSON.parse((await execFileAsync("node", [helper, "prepare-dispatch", "--selector", issueRows.map((issue) => `#${issue.number}`).join(" "), "--cwd", root, "--issues-file", issues, "--out", out])).stdout) as { planPath: string; workflowPath: string; requestPath: string; ownerConcurrency: { configured: number; effective: number } };
-  const preparedRequest = JSON.parse(await readFile(preparedResult.requestPath, "utf8")) as { maxSubagentSpawnsPerRun: number };
+  const preparedRequest = JSON.parse(await readFile(preparedResult.requestPath, "utf8")) as { maxSubagentSpawnsPerRun: number; async: boolean };
   const defaultResult = JSON.parse((await execFileAsync("node", [helper, "prepare-dispatch", "--selector", "#1 #2", "--cwd", root, "--issues-file", issues], { env: { ...process.env, FORGEDOCK_CANDIDATE_ARTIFACT_ROOT: root } })).stdout) as { planPath: string };
   assert.match(defaultResult.planPath, /forgedock-candidate-artifacts/);
   await assert.rejects(execFileAsync("node", [helper, "prepare-dispatch", "--selector", "#1 #2", "--cwd", root, "--issues-file", issues, "--out", join(root, "contaminating-artifacts")]), /must be outside the source checkout; use/);
   const workflow = await readFile(preparedResult.workflowPath, "utf8");
   const execute = vm.runInNewContext(`(async (runs) => { ${workflow} })`, { Promise }) as (runs: { all: (items: Array<Record<string, unknown>>) => Promise<Array<Record<string, unknown>>> }) => Promise<any[]>;
-  return { root, out, issues, planPath: preparedResult.planPath, workflowPath: preparedResult.workflowPath, requestPath: preparedResult.requestPath, launchAllowance: preparedRequest.maxSubagentSpawnsPerRun, ownerConcurrencySummary: preparedResult.ownerConcurrency, defaultOut: defaultResult.planPath.split("/plan.json")[0]!, ownerConcurrency, execute };
+  return { root, out, issues, planPath: preparedResult.planPath, workflowPath: preparedResult.workflowPath, requestPath: preparedResult.requestPath, requestAsync: preparedRequest.async, launchAllowance: preparedRequest.maxSubagentSpawnsPerRun, ownerConcurrencySummary: preparedResult.ownerConcurrency, defaultOut: defaultResult.planPath.split("/plan.json")[0]!, ownerConcurrency, execute };
 }
 
 async function nativeStatusRef(out: string, runId: string, limit: number, used: number, rows: Array<Record<string, any>>, workflowValue: Array<Record<string, any>> = rows) {
@@ -107,6 +107,7 @@ test("generated dispatch honors configured owner ceilings 1, 2, and 10", { timeo
       assert.deepEqual(result.ownerConcurrencySummary, { configured, effective: configured });
       assert.ok(plan.issues.every((issue) => issue.admitted));
       assert.equal(request.globalConcurrencyLimit, configured);
+      assert.equal(result.requestAsync, true);
       const active = new Set<string>();
       const started: string[] = [];
       let peak = 0;
@@ -150,7 +151,7 @@ test("continuation request preserves a configured ten-owner ceiling", async () =
     await assert.rejects(execFileAsync("node", [helper, "continue-dispatch", "--plan", result.planPath, "--results", continuationInput, "--out", continuationOut]), /persisted and observed fanout usage disagree/);
     await writeFile(continuationInput, JSON.stringify(input));
     const resultJson = JSON.parse((await execFileAsync("node", [helper, "continue-dispatch", "--plan", result.planPath, "--results", continuationInput, "--out", continuationOut])).stdout) as { continuationPath: string; requestPath: string; workflowPath: string; ownerConcurrency: { configured: number; effective: number }; fanoutBudget: { originalLimit: number; spent: number; remaining: number } };
-    const request = JSON.parse(await readFile(resultJson.requestPath, "utf8")) as { globalConcurrencyLimit: number; maxSubagentSpawnsPerRun: number };
+    const request = JSON.parse(await readFile(resultJson.requestPath, "utf8")) as { globalConcurrencyLimit: number; maxSubagentSpawnsPerRun: number; async: boolean };
     const workflow = await readFile(resultJson.workflowPath, "utf8");
     assert.deepEqual(plan.ownerConcurrency, { configured: 10, effective: 10 });
     assert.deepEqual(resultJson.ownerConcurrency, { configured: 10, effective: 10 });
@@ -364,7 +365,8 @@ test("detached owners retain capacity and generated continuation releases only t
     assert.deepEqual(continuationRecord.ownerConcurrency, { configured: 2, effective: 2 });
     assert.equal(continuationRecord.fanoutHistory.length, 1);
     assert.deepEqual(continuation.fanoutBudget, { originalLimit: result.launchAllowance, spent: 8, remaining: result.launchAllowance - 8 });
-    const firstRequest = JSON.parse(await readFile(continuation.requestPath, "utf8")) as { maxSubagentSpawnsPerRun: number };
+    const firstRequest = JSON.parse(await readFile(continuation.requestPath, "utf8")) as { maxSubagentSpawnsPerRun: number; async: boolean };
+    assert.equal(firstRequest.async, true);
     assert.equal(firstRequest.maxSubagentSpawnsPerRun, result.launchAllowance - 8);
     const workflow = await readFile(continuation.workflowPath, "utf8");
     const executeContinuation = vm.runInNewContext(`(async (runs) => { ${workflow} })`, { Promise }) as (runs: { all: (items: Array<Record<string, unknown>>) => Promise<Array<Record<string, unknown>>> }) => Promise<any[]>;
@@ -393,7 +395,8 @@ test("detached owners retain capacity and generated continuation releases only t
     await writeFile(continuationInputPath, JSON.stringify({ schema: "forgedock.candidate-dispatch-continuation/v1", initialResults: firstContinuationRows, terminalResults: [terminalSecond], nativeStatus: secondNativeStatus, previousContinuation }));
     const secondContinuation = JSON.parse((await execFileAsync("node", [helper, "continue-dispatch", "--plan", result.planPath, "--results", continuationInputPath, "--out", continuationOutSecond])).stdout) as { workflowPath: string; requestPath: string; fanoutBudget: { originalLimit: number; spent: number; remaining: number } };
     assert.deepEqual(secondContinuation.fanoutBudget, { originalLimit: result.launchAllowance, spent: 11, remaining: result.launchAllowance - 11 });
-    const secondRequest = JSON.parse(await readFile(secondContinuation.requestPath, "utf8")) as { maxSubagentSpawnsPerRun: number };
+    const secondRequest = JSON.parse(await readFile(secondContinuation.requestPath, "utf8")) as { maxSubagentSpawnsPerRun: number; async: boolean };
+    assert.equal(secondRequest.async, true);
     assert.equal(secondRequest.maxSubagentSpawnsPerRun, result.launchAllowance - 11);
     const secondWorkflow = await readFile(secondContinuation.workflowPath, "utf8");
     const executeSecondContinuation = vm.runInNewContext(`(async (runs) => { ${secondWorkflow} })`, { Promise }) as (runs: { all: (items: Array<Record<string, unknown>>) => Promise<Array<Record<string, unknown>>> }) => Promise<any[]>;
@@ -428,8 +431,8 @@ test("a rejected native GATED result is terminal and cannot release dependents",
     });
     const initial = initialRows.find((row) => row.key === "issue-1")!;
     const nativeStatus = await nativeStatusRef(result.out, "native-root-gated", result.launchAllowance, 4, initialRows);
-    const terminalGatedOutput = "FORGE_WORK_ON_RESULT status=GATED issue=1 pr=none dependency=UNSATISFIED";
-    const terminalGated = { issue: 1, runId: initial.runId, nativeStatus: "completed", ok: true, status: "GATED", nativeAcceptanceStatus: "rejected", nativeStatusRef: await nativeOwnerStatusRef(result.out, String(initial.runId), terminalGatedOutput, "rejected"), dependency: "UNSATISFIED", output: terminalGatedOutput, error: null };
+    const terminalGatedOutput = "FORGE_WORK_ON_RESULT status=GATED issue=1 pr=none dependency=SATISFIED";
+    const terminalGated = { issue: 1, runId: initial.runId, nativeStatus: "completed", ok: true, status: "GATED", nativeAcceptanceStatus: "rejected", nativeStatusRef: await nativeOwnerStatusRef(result.out, String(initial.runId), terminalGatedOutput, "rejected"), dependency: "SATISFIED", output: terminalGatedOutput, error: null };
     await writeFile(continuationInputPath, JSON.stringify({ schema: "forgedock.candidate-dispatch-continuation/v1", initialResults: initialRows, terminalResults: [terminalGated], nativeStatus }));
     const continuation = JSON.parse((await execFileAsync("node", [helper, "continue-dispatch", "--plan", result.planPath, "--results", continuationInputPath, "--out", continuationOut])).stdout) as { workflowPath: string };
     const workflow = await readFile(continuation.workflowPath, "utf8");

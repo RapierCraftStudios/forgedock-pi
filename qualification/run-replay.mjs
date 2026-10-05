@@ -329,7 +329,19 @@ async function main() {
     return [];
   });
   const allText = textual.join("\n");
-  const markers = allText.match(/^FORGE_WORK_ON_RESULT status=(?:DONE|GATED|FAILED) issue=\d+ pr=(?:\d+|none) dependency=(?:SATISFIED|UNSATISFIED)$/gm) ?? [];
+  const observedMarkers = allText.match(/^FORGE_WORK_ON_RESULT status=(?:DONE|GATED|FAILED) issue=\d+ pr=(?:\d+|none) dependency=(?:SATISFIED|UNSATISFIED)$/gm) ?? [];
+  const nativeWorkflowValue = events
+    .filter((event) => event.type === "tool_execution_end" && event.toolName === "subagent")
+    .map((event) => event.result?.details?.workflow?.value ?? event.result?.structuredContent?.details?.workflow?.value)
+    .filter((value) => Array.isArray(value) && value.every((row) => Number.isSafeInteger(row?.issue) && typeof row?.key === "string"))
+    .at(-1) ?? null;
+  const workflowRows = Array.isArray(nativeWorkflowValue) ? nativeWorkflowValue.map((row) => ({ key: row.key, issue: row.issue, status: row.status, nativeStatus: row.nativeStatus, nativeAcceptanceStatus: row.nativeAcceptanceStatus ?? "unknown", dependency: row.dependency, runId: row.runId ?? null, output: row.output ?? null, waitingFor: row.waitingFor ?? [], blockedBy: row.blockedBy ?? [], detached: row.detached === true, error: row.error ?? null })) : [];
+  const markers = workflowRows.flatMap((row) => typeof row.output === "string" && row.output.startsWith("FORGE_WORK_ON_RESULT status=") ? [row.output] : []);
+  const expectedIssues = mode === "owner" ? [201] : [101, 102];
+  const terminalNativeStatuses = new Set(["completed", "failed", "stopped", "interrupted", "timed-out", "execution-limit"]);
+  const workflowReconciled = workflowRows.length === expectedIssues.length && workflowRows.every((row) => (terminalNativeStatuses.has(row.nativeStatus) || (row.nativeStatus === "not-started" && row.status === "GATED")) && row.status !== "WAITING");
+  const acceptedStatuses = new Set(["accepted", "checked", "verified", "attested", "reviewed", "not-required"]);
+  const acceptedOutcomes = workflowReconciled && expectedIssues.every((issue) => { const row = workflowRows.find((value) => value.issue === issue); return row?.status === "DONE" && row.dependency === "SATISFIED" && acceptedStatuses.has(row.nativeAcceptanceStatus); });
   const reviewResults = allText.match(/^FORGE_REVIEW_RESULT role=[a-z][a-z0-9-]* report=\S+ publication=(?:published|saved|failed) verdict=(?:APPROVE|BLOCK|FOLLOW_UP)$/gm) ?? [];
   const nativeCalls = events.filter((event) => event.type === "tool_execution_start" && event.toolName === "subagent").map((event) => ({ agent: event.args?.agent ?? null, action: event.args?.action ?? null, workflowScriptPath: event.args?.workflowScriptPath ?? null, cwd: event.args?.cwd ?? null, model: event.args?.model ?? null, async: event.args?.async ?? null }));
   const runRecords = [...new Map(collectRuns(events.filter((event) => event.type === "tool_execution_end" && event.toolName === "subagent").map((event) => event.result)).map((record) => [`${record.runId}:${record.agent ?? ""}`, record])).values()];
@@ -356,9 +368,12 @@ async function main() {
     nativeCalls,
     runs: runRecords,
     operatorInterventions: { count: interventionTools.length, tools: interventionTools },
+    workflowStatus: nativeWorkflowValue ? workflowReconciled ? "terminal" : "waiting" : "unavailable",
+    workflowRows,
     markers,
+    observedMarkers,
     reviewResults,
-    firstPass: (mode === "owner" ? [201] : [101, 102]).every((issue) => markers.some((marker) => new RegExp(`^FORGE_WORK_ON_RESULT status=DONE issue=${issue} pr=(?:\\d+|none) dependency=SATISFIED$`).test(marker))) && !reviewResults.some((result) => /verdict=BLOCK/.test(result)) ? "accepted-local" : "not-accepted-local",
+    firstPass: acceptedOutcomes && !reviewResults.some((result) => /verdict=BLOCK/.test(result)) ? "accepted-local" : "not-accepted-local",
     github: { writes: "unexecuted", fakeGhLog: github.log, localState: github.stateFile, reason: "Local fake gh returns only exact Git-verified PR identity and empty comments; all writes and unsupported endpoints are rejected" },
     sourceWorktrees,
     retainedEvidence: { directory: output, rawParentEvents: join(output, "parent.jsonl"), stderr: join(output, "parent.stderr.log") },

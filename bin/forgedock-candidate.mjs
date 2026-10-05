@@ -770,7 +770,7 @@ function prepareDispatch(options) {
   const planPath = writeExclusive(join(out, "plan.json"), json(plan));
   const workflowPath = writeExclusive(join(out, "workflow.js"), nativeWorkflowForBatch(plan.issues, config, out));
   const request = {
-    async: false,
+    async: true,
     cwd: config.projectRoot,
     workflowScriptPath: workflowPath,
     globalConcurrencyLimit: config.effectiveOwnerConcurrency,
@@ -902,7 +902,7 @@ function continueDispatch(options) {
     const match = lines.length === 1 ? lines[0].match(markerPattern) : null;
     if (!match || lines[0] !== row.output || Number(match[2]) !== issue.number || match[1] !== expectedStatus || match[4] !== row.dependency) fail(`Continuation terminal result does not match issue #${issue.number}`);
     if (match[1] === "DONE" && !["accepted", "verified", "checked", "attested", "reviewed", "not-required"].includes(row.nativeAcceptanceStatus)) fail(`DONE result for issue #${issue.number} lacks accepted native result evidence`);
-    if (match[1] === "DONE" && match[4] !== "SATISFIED" || match[1] !== "DONE" && match[4] !== "UNSATISFIED") fail(`Continuation dependency marker is invalid for issue #${issue.number}`);
+    if (match[1] === "DONE" && match[4] !== "SATISFIED") fail(`DONE result for issue #${issue.number} must declare a satisfied dependency`);
   }
   for (const row of input.initialResults) {
     const issue = issuesByKey.get(row?.key);
@@ -1002,7 +1002,7 @@ function continueDispatch(options) {
   const continuationPath = writeExclusive(join(out, "continuation.json"), json(continuation));
   const workflowPath = writeExclusive(join(out, "workflow.js"), nativeWorkflowForBatch(continuationIssues, config, out, mergedResults));
   const request = {
-    async: false,
+    async: true,
     cwd: config.projectRoot,
     workflowScriptPath: workflowPath,
     globalConcurrencyLimit: config.effectiveOwnerConcurrency,
