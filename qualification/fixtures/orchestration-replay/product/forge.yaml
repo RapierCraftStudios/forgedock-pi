@@ -16,7 +16,10 @@ orchestration:
   max_concurrent: 2
 verification:
   commands:
-    test: "npm test"
+    test:
+      producer: "npm test"
+      consumer: "npm run test:display"
+      all: "npm run test:all"
 review:
   thinking: "max"
   reviewer_timeout_ms: 900000

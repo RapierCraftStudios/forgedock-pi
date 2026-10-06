@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { collectNativeBatch } from "./native-batch-collector.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(HERE, "..");
@@ -183,6 +184,54 @@ async function verifyLocalDeliveryAndFastForward(integration, remote, sandbox, b
   }
 }
 
+async function verifyOrchestrationFixtureContract(issueFile, productRoot) {
+  const issueInput = readJson(issueFile);
+  const issues = Array.isArray(issueInput) ? issueInput : issueInput.issues;
+  const byNumber = new Map(issues.map((issue) => [Number(issue.number), issue]));
+  const producer = byNumber.get(101);
+  const successor = byNumber.get(102);
+  const decision = await readFile(join(productRoot, "docs/decisions/display-boundary.md"), "utf8");
+  const displayTests = await readFile(join(productRoot, "test/display.test.mjs"), "utf8");
+  const producerSource = await readFile(join(productRoot, "src/profile.mjs"), "utf8");
+  const rendererSource = await readFile(join(productRoot, "src/render.mjs"), "utf8");
+  const forgeConfig = await readFile(join(productRoot, "forge.yaml"), "utf8");
+  const productPackage = readJson(join(productRoot, "package.json"));
+  const exampleWithTeam = '{ id: "User-7", name: "  ALICE  ", teamLabel: "Platform" }';
+  const exampleWithoutTeam = '{ id: "User-7", name: "  ALICE  " }';
+  const requiredText = [
+    [producer?.body, "display text trims surrounding whitespace and is lowercase"],
+    [producer?.body, "test.producer"],
+    [successor?.body, "test.consumer"],
+    [successor?.body, "test.all"],
+    [successor?.body, "profile.teamLabel"],
+    [successor?.body, "nonempty"],
+    [successor?.body, "Preserve the identifier and source object."],
+    [successor?.body, "User-7:alice:Platform"],
+    [successor?.body, "User-7:alice"],
+    [successor?.body, "Depends on #101"],
+    [decision, "disposable qualification fixture"],
+    [decision, "included verbatim as the third colon-separated segment"],
+    [decision, "User-7:alice:Platform"],
+    [decision, "User-7:alice"],
+    [displayTests, exampleWithTeam],
+    [displayTests, exampleWithoutTeam],
+    [displayTests, "User-7:alice:Platform"],
+    [displayTests, "User-7:alice"],
+    [displayTests, "User-7:alice:  Platform  "],
+    [displayTests, "assert.deepEqual(input"],
+    [displayTests, "assert.deepEqual(profile"],
+    [successor?.body, "npm run test:display"],
+    [successor?.body, "npm run test:all"],
+    [forgeConfig, 'producer: "npm test"'],
+    [forgeConfig, 'consumer: "npm run test:display"'],
+    [forgeConfig, 'all: "npm run test:all"'],
+  ];
+  if (issues.length !== 2 || !producer || !successor || requiredText.some(([text, expected]) => typeof text !== "string" || !text.includes(expected))) throw new Error("Disposable orchestration fixture does not match the authorized v2 team-label contract/examples/dependency");
+  if (productPackage.scripts?.test !== "node --test test/profile.test.mjs" || productPackage.scripts?.["test:display"] !== "node --test test/display.test.mjs" || productPackage.scripts?.["test:all"] !== "node --test test/*.test.mjs" || Object.keys(productPackage.dependencies ?? {}).length !== 0) throw new Error("Disposable fixture verification command or no-dependency contract changed");
+  if (!producerSource.includes('throw new Error("display normalization is not implemented")') || rendererSource.includes("teamLabel")) throw new Error("Disposable fixture seed must leave both producer normalization and consumer team-label integration unimplemented");
+  return { revision: "v2-disposable-only", issues: [101, 102], dependency: { successor: 102, predecessor: 101 }, examples: [{ input: exampleWithTeam, output: "User-7:alice:Platform" }, { input: exampleWithoutTeam, output: "User-7:alice" }], verificationCommands: { producer: "npm test", consumer: "npm run test:display", full: "npm run test:all" }, seed: "both issue behaviors remain unimplemented" };
+}
+
 async function verifyReplayOperations({ installRoot, manifest, model, thinking, mode, prepared, repository, issueFile, github, output, env }) {
   const candidateBin = join(installRoot, "package", "bin", "forgedock-candidate.mjs");
   const verifyInstall = await run(PROJECT_ROOT, process.execPath, [candidateBin, "verify-install", "--install-root", installRoot], env);
@@ -194,10 +243,22 @@ async function verifyReplayOperations({ installRoot, manifest, model, thinking, 
   if (configResult.code !== 0) throw new Error(`Fixture configuration resolution failed before model execution: ${configResult.stderr.slice(-800)}`);
   const config = JSON.parse(configResult.stdout);
   if (config.ownerModel !== model || config.ownerThinking !== thinking || config.configuredOwnerConcurrency !== 2 || config.effectiveOwnerConcurrency !== 2) throw new Error("Fixture model/thinking or configured owner ceiling does not match the requested qualification");
-  const baseline = await run(prepared.out, process.platform === "win32" ? "npm.cmd" : "npm", ["test"], env);
+  const fixtureContract = mode === "orchestrate" ? await verifyOrchestrationFixtureContract(issueFile, repository.source) : null;
+  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+  const baseline = await run(prepared.out, npm, ["test"], env);
   const baselineText = `${baseline.stdout}\n${baseline.stderr}`;
-  await writeFile(join(output, "preflight-baseline-test.log"), baselineText, { mode: 0o600 });
+  await writeFile(join(output, "preflight-baseline-producer.log"), baselineText, { mode: 0o600 });
   const expectedBaselineFailure = mode === "orchestrate" && baseline.code !== 0 && baselineText.includes("display normalization is not implemented");
+  let consumerBaseline = null;
+  let fullBaseline = null;
+  if (mode === "orchestrate") {
+    consumerBaseline = await run(prepared.out, npm, ["run", "test:display"], env);
+    fullBaseline = await run(prepared.out, npm, ["run", "test:all"], env);
+    await writeFile(join(output, "preflight-baseline-consumer.log"), `${consumerBaseline.stdout}\n${consumerBaseline.stderr}`, { mode: 0o600 });
+    await writeFile(join(output, "preflight-baseline-all.log"), `${fullBaseline.stdout}\n${fullBaseline.stderr}`, { mode: 0o600 });
+    if (Object.entries({ "test.producer": "npm test", "test.consumer": "npm run test:display", "test.all": "npm run test:all" }).some(([key, value]) => config.verificationCommands?.[key] !== value)) throw new Error("Resolved configured verification commands do not match the fixture's issue-scoped commands");
+    if (consumerBaseline.code === 0 || fullBaseline.code === 0 || !`${consumerBaseline.stdout}\n${consumerBaseline.stderr}`.includes("display normalization is not implemented") || !`${fullBaseline.stdout}\n${fullBaseline.stderr}`.includes("display normalization is not implemented")) throw new Error("Consumer/full fixture baselines did not fail through the expected unimplemented producer before model execution");
+  }
   if (mode === "orchestrate" && !expectedBaselineFailure) throw new Error("Fixture did not demonstrate its exact expected pre-fix producer failure before model execution");
 
   const issueInput = readJson(issueFile);
@@ -221,7 +282,8 @@ async function verifyReplayOperations({ installRoot, manifest, model, thinking, 
     const request = readJson(preparedDispatch.requestPath);
     const producer = plan.issues.find((issue) => issue.number === 101);
     const successor = plan.issues.find((issue) => issue.number === 102);
-    if (plan.deliveryMode !== "local-replay" || !producer || !successor || !successor.predecessors.includes(producer.key) || plan.targetBase.headSha !== repository.baseHead || request.globalConcurrencyLimit !== 2) throw new Error("Candidate local dispatch lost the exact fixture identity, configured ceiling, or true dependency edge");
+    const ownerSkill = await readFile(join(installRoot, "package", "candidate/skills/forgedock-work-on/SKILL.md"), "utf8");
+    if (plan.deliveryMode !== "local-replay" || plan.issues.length !== 2 || plan.issues[0]?.number !== 101 || plan.issues[1]?.number !== 102 || !producer || !successor || producer.predecessors.length !== 0 || successor.predecessors.length !== 1 || successor.predecessors[0] !== producer.key || plan.targetBase.headSha !== repository.baseHead || request.async !== true || request.globalConcurrencyLimit !== 2 || !successor.task.includes("There is no GitHub PR/merge receipt in local replay") || !ownerSkill.replace(/\s+/g, " ").includes("Do not require a GitHub PR/merge receipt in local replay.")) throw new Error("Candidate local dispatch lost the exact fixture identity, local-delivery instructions, async root, configured ceiling, or true dependency edge");
     dispatch = { result: "passed", deliveryMode: plan.deliveryMode, issueOrder: plan.issues.map((issue) => issue.number), dependency: { successor: 102, predecessor: 101 }, targetBase: plan.targetBase, ownerConcurrency: request.globalConcurrencyLimit };
     preparedWorkflow = preparedDispatch.requestPath;
   } else {
@@ -244,10 +306,12 @@ async function verifyReplayOperations({ installRoot, manifest, model, thinking, 
   const operatorAuth = process.env.PI_AUTH_SOURCE ?? join(process.env.HOME ?? ".", ".pi", "agent", "auth.json");
   if (!existsSync(authPath) || realpathSync(authPath) !== realpathSync(operatorAuth)) throw new Error("Isolated candidate auth is not the existing operator auth symlink");
 
-  return { schema: "forgedock.qualification-preflight/v1", result: "passed", noModelRequests: true, candidateCommit: manifest.candidateCommit, piVersion: manifest.piVersion, piSubagentsCommit: manifest.piSubagentsCommit, model, thinking, configuredOwnerConcurrency: config.configuredOwnerConcurrency, baselineTest: { exitCode: baseline.code, expectedFailure: expectedBaselineFailure, marker: expectedBaselineFailure ? "display normalization is not implemented" : null }, localGitHub: { identityRead: "passed", writeAttempt: "rejected-by-local-only-transport" }, dispatch, preparedWorkflow, localDelivery: delivery, doctor: { readiness: doctor.readiness, providerAuth: doctor.providerAuth, loadedCommands: doctor.loadedResources?.commands?.length ?? 0 }, auth: "isolated symlink to existing operator auth; file contents not read", restoredFixtureHead: restoredHead };
+  return { schema: "forgedock.qualification-preflight/v1", result: "passed", noModelRequests: true, candidateCommit: manifest.candidateCommit, piVersion: manifest.piVersion, piSubagentsCommit: manifest.piSubagentsCommit, model, thinking, configuredOwnerConcurrency: config.configuredOwnerConcurrency, fixtureContract, baselineTests: { producer: { command: "npm test", exitCode: baseline.code, expectedFailure: expectedBaselineFailure }, consumer: consumerBaseline ? { command: "npm run test:display", exitCode: consumerBaseline.code, expectedFailure: consumerBaseline.code !== 0 } : null, full: fullBaseline ? { command: "npm run test:all", exitCode: fullBaseline.code, expectedFailure: fullBaseline.code !== 0 } : null, marker: expectedBaselineFailure ? "display normalization is not implemented" : null }, localGitHub: { identityRead: "passed", writeAttempt: "rejected-by-local-only-transport" }, dispatch, preparedWorkflow, localDelivery: delivery, doctor: { readiness: doctor.readiness, providerAuth: doctor.providerAuth, loadedCommands: doctor.loadedResources?.commands?.length ?? 0 }, auth: "isolated symlink to existing operator auth; file contents not read", restoredFixtureHead: restoredHead };
 }
 
 async function main() {
+  const setupStartedAt = new Date().toISOString();
+  const setupStartedMs = Date.now();
   const values = parseArgs(process.argv.slice(2));
   if (values.has("help")) {
     process.stdout.write("Usage: run-replay.mjs --install-root DIR --mode owner|orchestrate --out DIR --model provider/id --thinking off|minimal|low|medium|high|xhigh|max --pi-version VERSION --subagents-commit SHA [--preflight-only]\n");
@@ -297,7 +361,12 @@ async function main() {
     PI_SKIP_VERSION_CHECK: "1",
     PI_TELEMETRY: "0",
   };
+  const preflightStartedAt = new Date().toISOString();
+  const preflightStartedMs = Date.now();
   const preflight = await verifyReplayOperations({ installRoot, manifest, model, thinking, mode, prepared, repository, issueFile: repository.issueFile, github, output, env });
+  const preflightFinishedAt = new Date().toISOString();
+  const preflightFinishedMs = Date.now();
+  preflight.timing = { setupStartedAt, setupFinishedAt: preflightStartedAt, setupElapsedMs: preflightStartedMs - setupStartedMs, startedAt: preflightStartedAt, finishedAt: preflightFinishedAt, elapsedMs: preflightFinishedMs - preflightStartedMs };
   await writeFile(join(output, "preflight.json"), json(preflight), { mode: 0o600 });
   if (values.has("preflight-only")) {
     process.stdout.write(json({ ...preflight, sandbox, integration: prepared.out, evidence: join(output, "preflight.json") }));
@@ -330,25 +399,29 @@ async function main() {
   });
   const allText = textual.join("\n");
   const observedMarkers = allText.match(/^FORGE_WORK_ON_RESULT status=(?:DONE|GATED|FAILED) issue=\d+ pr=(?:\d+|none) dependency=(?:SATISFIED|UNSATISFIED)$/gm) ?? [];
-  const nativeWorkflowValue = events
-    .filter((event) => event.type === "tool_execution_end" && event.toolName === "subagent")
-    .map((event) => event.result?.details?.workflow?.value ?? event.result?.structuredContent?.details?.workflow?.value)
-    .filter((value) => Array.isArray(value) && value.every((row) => Number.isSafeInteger(row?.issue) && typeof row?.key === "string"))
-    .at(-1) ?? null;
-  const workflowRows = Array.isArray(nativeWorkflowValue) ? nativeWorkflowValue.map((row) => ({ key: row.key, issue: row.issue, status: row.status, nativeStatus: row.nativeStatus, nativeAcceptanceStatus: row.nativeAcceptanceStatus ?? "unknown", dependency: row.dependency, runId: row.runId ?? null, output: row.output ?? null, waitingFor: row.waitingFor ?? [], blockedBy: row.blockedBy ?? [], detached: row.detached === true, error: row.error ?? null })) : [];
+  const nativeBatch = mode === "orchestrate" ? collectNativeBatch(events, { issues: [101, 102], repository: "example/product", target: "integration", cwd: prepared.out }, join(installRoot, "package", "bin", "forgedock-candidate.mjs")) : null;
+  const workflowRows = nativeBatch?.rows ?? [];
   const markers = workflowRows.flatMap((row) => typeof row.output === "string" && row.output.startsWith("FORGE_WORK_ON_RESULT status=") ? [row.output] : []);
-  const expectedIssues = mode === "owner" ? [201] : [101, 102];
-  const terminalNativeStatuses = new Set(["completed", "failed", "stopped", "interrupted", "timed-out", "execution-limit"]);
-  const workflowReconciled = workflowRows.length === expectedIssues.length && workflowRows.every((row) => (terminalNativeStatuses.has(row.nativeStatus) || (row.nativeStatus === "not-started" && row.status === "GATED")) && row.status !== "WAITING");
-  const acceptedStatuses = new Set(["accepted", "checked", "verified", "attested", "reviewed", "not-required"]);
-  const acceptedOutcomes = workflowReconciled && expectedIssues.every((issue) => { const row = workflowRows.find((value) => value.issue === issue); return row?.status === "DONE" && row.dependency === "SATISFIED" && acceptedStatuses.has(row.nativeAcceptanceStatus); });
+  const acceptedOutcomes = nativeBatch?.outcome === "terminal-done";
   const reviewResults = allText.match(/^FORGE_REVIEW_RESULT role=[a-z][a-z0-9-]* report=\S+ publication=(?:published|saved|failed) verdict=(?:APPROVE|BLOCK|FOLLOW_UP)$/gm) ?? [];
   const nativeCalls = events.filter((event) => event.type === "tool_execution_start" && event.toolName === "subagent").map((event) => ({ agent: event.args?.agent ?? null, action: event.args?.action ?? null, workflowScriptPath: event.args?.workflowScriptPath ?? null, cwd: event.args?.cwd ?? null, model: event.args?.model ?? null, async: event.args?.async ?? null }));
   const runRecords = [...new Map(collectRuns(events.filter((event) => event.type === "tool_execution_end" && event.toolName === "subagent").map((event) => event.result)).map((record) => [`${record.runId}:${record.agent ?? ""}`, record])).values()];
-  const interventionTools = events.filter((event) => event.type === "tool_execution_start" && ["ask_user_question", "contact_supervisor", "subagent_supervisor"].includes(event.toolName)).map((event) => ({ tool: event.toolName, callId: event.toolCallId ?? null }));
+  const operatorInterventions = events.filter((event) => event.type === "tool_execution_start" && event.toolName === "ask_user_question").map((event) => ({ tool: event.toolName, callId: event.toolCallId ?? null }));
+  const coordinationCalls = events.filter((event) => event.type === "tool_execution_start" && ["contact_supervisor", "subagent_supervisor"].includes(event.toolName)).map((event) => ({ tool: event.toolName, action: event.args?.action ?? null, id: event.args?.id ?? event.args?.replyTo ?? null, callId: event.toolCallId ?? null }));
   let deliveredHead = null;
   try { deliveredHead = await git(repository.remote, ["rev-parse", "refs/heads/integration"]); } catch { /* remote may remain at baseline */ }
   const sourceWorktrees = (await git(prepared.out, ["worktree", "list", "--porcelain"])).split(/\n\n+/).filter(Boolean).map((entry) => Object.fromEntries(entry.split("\n").map((line) => line.split(" ", 2)).filter(([key, value]) => key && value)));
+  const parentUsageEvents = events.filter((event) => event.type === "message_end" && event.message?.role === "assistant").map((event) => event.message.usage).filter((usage) => usage && typeof usage === "object");
+  const parentUsage = parentUsageEvents.reduce((total, usage) => ({ messages: total.messages + 1, input: total.input + (usage.input ?? 0), output: total.output + (usage.output ?? 0), cacheRead: total.cacheRead + (usage.cacheRead ?? 0), cacheWrite: total.cacheWrite + (usage.cacheWrite ?? 0), totalTokens: total.totalTokens + (usage.totalTokens ?? 0), costUsd: total.costUsd + (usage.cost?.total ?? 0) }), { messages: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, costUsd: 0 });
+  const millis = (value) => typeof value === "number" ? value : typeof value === "string" ? Date.parse(value) : NaN;
+  const roots = nativeBatch?.rootHistory ?? [];
+  const rootWindows = roots.map((root) => ({ runId: root.runId, kind: root.kind, startedAt: root.startedAt, endedAt: root.endedAt, elapsedMs: Number.isFinite(millis(root.startedAt)) && Number.isFinite(millis(root.endedAt)) ? millis(root.endedAt) - millis(root.startedAt) : root.durationMs }));
+  const firstRootStart = roots.length ? millis(roots[0].startedAt) : NaN;
+  const lastRootEnd = roots.length ? millis(roots.at(-1).endedAt) : NaN;
+  const parentStartedMs = millis(startedAt);
+  const parentFinishedMs = millis(finishedAt);
+  const interRootCoordination = roots.slice(1).map((root, index) => ({ fromRunId: roots[index].runId, toRunId: root.runId, fromEndedAt: roots[index].endedAt, toStartedAt: root.startedAt, elapsedMs: Number.isFinite(millis(roots[index].endedAt)) && Number.isFinite(millis(root.startedAt)) ? millis(root.startedAt) - millis(roots[index].endedAt) : null }));
+  const timing = { setupAndFixturePreparation: { startedAt: setupStartedAt, endedAt: preflightStartedAt, elapsedMs: preflightStartedMs - setupStartedMs }, noModelPreflight: preflight.timing, parentPreparationUntilFirstNativeRootMs: Number.isFinite(firstRootStart) ? firstRootStart - parentStartedMs : null, nativeRootWindows: rootWindows, interRootCoordination, waits: nativeBatch?.observations.waits ?? [], finalRootToParentCollectionMs: Number.isFinite(lastRootEnd) ? parentFinishedMs - lastRootEnd : null, parentElapsedMs: elapsedMs, parentUsage, nativeWorkflowCost: nativeBatch?.finalRoot.totalCost ?? null, timingLimits: "Native root windows include in-root owners/reviewers. Wait durations are retained separately and are not added to wall time; missing lifecycle boundaries are null." };
   const summary = {
     schema: "forgedock.qualification-result/v1",
     mode,
@@ -356,6 +429,7 @@ async function main() {
     startedAt,
     finishedAt,
     elapsedMs,
+    timing,
     parentSessionId: events.find((event) => event.type === "session")?.id ?? null,
     installRoot,
     runtime: { piVersion: manifest.piVersion, nodeVersion: process.version, candidateCommit: manifest.candidateCommit, piSubagentsCommit: manifest.piSubagentsCommit, model, thinking },
@@ -367,13 +441,15 @@ async function main() {
     deliveredHead,
     nativeCalls,
     runs: runRecords,
-    operatorInterventions: { count: interventionTools.length, tools: interventionTools },
-    workflowStatus: nativeWorkflowValue ? workflowReconciled ? "terminal" : "waiting" : "unavailable",
+    operatorInterventions: { count: operatorInterventions.length, tools: operatorInterventions },
+    coordination: { count: coordinationCalls.length, tools: coordinationCalls },
+    workflowStatus: nativeBatch?.status ?? "unavailable",
+    nativeBatch,
     workflowRows,
     markers,
     observedMarkers,
     reviewResults,
-    firstPass: acceptedOutcomes && !reviewResults.some((result) => /verdict=BLOCK/.test(result)) ? "accepted-local" : "not-accepted-local",
+    firstPass: acceptedOutcomes ? "native-owner-outcomes-done" : "not-accepted-local",
     github: { writes: "unexecuted", fakeGhLog: github.log, localState: github.stateFile, reason: "Local fake gh returns only exact Git-verified PR identity and empty comments; all writes and unsupported endpoints are rejected" },
     sourceWorktrees,
     retainedEvidence: { directory: output, rawParentEvents: join(output, "parent.jsonl"), stderr: join(output, "parent.stderr.log") },

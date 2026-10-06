@@ -45,10 +45,12 @@ an execution guide, not a second workflow engine.
   the owner bound and request an explicit dispatcher rebind rather than silently changing heads.
 - Preserve the dispatcher's exact prepared base. Record the actual checked-out SHA in `CONTEXT`.
   Only a declared dependency edge permits a clean fetch/fast-forward before the first source edit;
-  verify the exact predecessor merge SHA is reachable, and record prepared/effective/observed target
-  SHAs plus predecessor references. Stop before edits if the prerequisite or clean transition is
-  unavailable. Never fast-forward after mutation; ordinary target movement is handled by the
-  standard PR base/patch-equivalence rule below, without retargeting a reviewed head.
+  verify the exact predecessor delivery is reachable (its merge SHA for GitHub delivery, or its
+  committed local `origin/<integration>` SHA for local replay), and record prepared/effective/observed
+  target SHAs plus the applicable predecessor reference. Do not require a GitHub PR/merge receipt in
+  local replay. Stop before edits if the prerequisite or clean transition is unavailable. Never
+  fast-forward after mutation; ordinary target movement is handled by the standard PR
+  base/patch-equivalence rule below, without retargeting a reviewed head.
 - After investigation and before source edits, write substantive body files and publish one
   ordered `record batch --input <records.json> --publish` containing `INVESTIGATOR`,
   `CLASSIFICATION`, `CONTEXT`, `CONTRACT`, and `ARCHITECT`. Use `{ "record": "id" }` for

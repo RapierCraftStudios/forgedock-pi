@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { mkdtemp, mkdir, readFile, writeFile, readdir, rm, stat } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, writeFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -14,7 +14,7 @@ const source = process.env.PI_SUBAGENTS_ADAPTER_SOURCE;
 const adapterSkip = source ? false : "Installed npm artifact has no pi-subagents test-support seam; set PI_SUBAGENTS_ADAPTER_SOURCE to a pinned source checkout.";
 const load = (file: string) => import(pathToFileURL(resolve(source!, file)).href);
 
-async function withAdapter(run: (h: any) => Promise<void>) {
+async function withAdapter(run: (h: any) => Promise<void>, options: { ownerSystemPrompt?: string } = {}) {
   const root = await mkdtemp(join(tmpdir(), "forge-adapter-boundary-"));
   const repo = join(root, "repo");
   const previous = process.env.PI_CODING_AGENT_DIR;
@@ -28,6 +28,11 @@ async function withAdapter(run: (h: any) => Promise<void>) {
     await load("test/support/register-loader.mjs");
     const helpers = await load("test/support/helpers.ts");
     const { createSubagentExecutor } = await load("src/runs/foreground/subagent-executor.ts");
+    const { registerWaitTool } = await load("src/runs/background/wait-tool.ts");
+    const nativeEvents = helpers.createEventBus();
+    const state: any = { baseCwd: repo, currentSessionId: "session-123", asyncJobs: new Map(), foregroundControls: new Map(), foregroundRuns: new Map(), cleanupTimers: new Map(), resultFileCoalescer: new Map(), lastForegroundControlId: null };
+    const waitTools = new Map<string, any>();
+    registerWaitTool({ events: nativeEvents, registerTool: (tool: any) => waitTools.set(tool.name, tool) } as never, state, true);
     execFileSync("git", ["init", "-q"], { cwd: repo });
     await writeFile(join(repo, "base.txt"), "base\n");
     execFileSync("git", ["add", "base.txt"], { cwd: repo });
@@ -35,19 +40,19 @@ async function withAdapter(run: (h: any) => Promise<void>) {
     execFileSync("git", ["branch", "-M", "pi-parallel-native"], { cwd: repo });
     mock = helpers.createMockPi(); mock.install(); mock.reset();
     const executor = createSubagentExecutor({
-      pi: { events: helpers.createEventBus(), getSessionName: () => undefined },
-      state: { baseCwd: repo, currentSessionId: "session-123", asyncJobs: new Map(), foregroundControls: new Map(), lastForegroundControlId: null },
+      pi: { events: nativeEvents, getSessionName: () => undefined },
+      state,
       config: { worktreeBaseDir: join(root, "worktrees") }, asyncByDefault: false,
       tempArtifactsDir: join(root, "artifacts"), getSubagentSessionRoot: () => join(root, "sessions"),
       expandTilde: (value: string) => value,
       discoverAgents: () => {
-        const owner: any = helpers.makeAgent("forgedock-owner", { thinking: false });
+        const owner: any = helpers.makeAgent("forgedock-owner", { thinking: false, systemPrompt: options.ownerSystemPrompt ?? "" });
         owner.acceptanceRole = "writer";
         return { agents: [helpers.makeAgent("echo", { thinking: false }), helpers.makeAgent("forgedock-work-on-coordinator", { thinking: false }), owner] };
       },
       allowMutatingManagementActions: true,
     });
-    await run({ root, repo, mock, executor, context: helpers.makeMinimalCtx(repo) });
+    await run({ root, repo, mock, executor, context: helpers.makeMinimalCtx(repo), state, nativeEvents, waitTools });
   } finally {
     mock?.uninstall();
     if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
@@ -69,6 +74,107 @@ async function complete(executor: any, context: any, params: Record<string, unkn
     await new Promise(resolve => setTimeout(resolve, 20));
   }
   throw new Error("native async fixture did not settle");
+}
+
+async function waitForNativeFile(file: string, predicate: (value: any) => boolean, message: string) {
+  for (let attempt = 0; attempt < 1500; attempt++) {
+    try {
+      const value = JSON.parse(await readFile(file, "utf8"));
+      if (predicate(value)) return value;
+    } catch { /* Native status is written atomically after launch. */ }
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  throw new Error(message);
+}
+
+async function waitForNativeTextFile(file: string, predicate: (value: string) => boolean, message: string) {
+  for (let attempt = 0; attempt < 1500; attempt++) {
+    try {
+      const value = await readFile(file, "utf8");
+      if (predicate(value)) return value;
+    } catch { /* Worktree file may not exist until the controlled child starts. */ }
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  throw new Error(message);
+}
+
+async function invokeNativeWait(waitTools: Map<string, any>, context: any, events: any[], id: string, toolCallId: string) {
+  const tool = waitTools.get("subagent_wait");
+  assert.ok(tool?.execute, "pinned extension did not register its supported subagent_wait tool");
+  const args = { id, timeoutMs: 30000, stopOnAttention: false };
+  events.push({ type: "tool_execution_start", toolName: "subagent_wait", toolCallId, args });
+  const result = await tool.execute(toolCallId, args, new AbortController().signal, undefined, context);
+  events.push({ type: "tool_execution_end", toolName: "subagent_wait", toolCallId, result });
+  assert.equal(result.isError, undefined, result.content?.[0]?.text);
+  return result;
+}
+
+async function prepareReplayDispatch(root: string, repo: string, issues: Array<Record<string, unknown>>) {
+  const productSeed = resolve("qualification/fixtures/orchestration-replay/product");
+  await cp(productSeed, repo, { recursive: true, force: true });
+  const remote = join(root, "example", "product.git");
+  await mkdir(join(root, "example"), { recursive: true });
+  execFileSync("git", ["init", "--bare", "-q", remote], { cwd: root });
+  execFileSync("git", ["branch", "-M", "integration"], { cwd: repo });
+  execFileSync("git", ["remote", "add", "origin", `file://${remote}`], { cwd: repo });
+  execFileSync("git", ["add", "-A"], { cwd: repo });
+  execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "disposable orchestration seed"], { cwd: repo });
+  execFileSync("git", ["push", "-q", "-u", "origin", "integration"], { cwd: repo });
+  const issueFile = join(root, "orchestrate-issues.json");
+  await writeFile(issueFile, JSON.stringify({ issues }));
+  const outputDir = join(root, "candidate-dispatch");
+  const helper = resolve("bin/forgedock-candidate.mjs");
+  const result = JSON.parse(execFileSync(process.execPath, [helper, "prepare-dispatch", "--selector", issues.map((issue) => `#${issue.number}`).join(" "), "--delivery-mode", "local-replay", "--cwd", repo, "--issues-file", issueFile, "--out", outputDir], { cwd: repo, encoding: "utf8" }));
+  const plan = JSON.parse(await readFile(result.planPath, "utf8"));
+  const localDependent = plan.issues.find((issue: any) => issue.predecessors?.length > 0);
+  if (localDependent) assert.match(localDependent.task, /There is no GitHub PR\/merge receipt in local replay/);
+  return { ...result, plan, helper, issueFile, remote, outputDir, baseHead: execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" }).trim() };
+}
+
+function assistantMessage(text: string) {
+  return { type: "message_end", message: { role: "assistant", content: [{ type: "text", text }], model: "test/model", stopReason: "stop", usage: { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, cost: { total: 0 } } } };
+}
+
+function runFixtureNpm(cwd: string, args: string[]) {
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  return execFileSync("npm", args, { cwd, encoding: "utf8", env });
+}
+
+function runFixtureNpmResult(cwd: string, args: string[]) {
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  try { return { code: 0, output: execFileSync("npm", args, { cwd, encoding: "utf8", env }) }; }
+  catch (error: any) { return { code: error.status ?? 1, output: `${error.stdout ?? ""}\n${error.stderr ?? ""}` }; }
+}
+
+function acceptanceText(issue: any, files: string[], tests: string[], command: string) {
+  return [
+    "```acceptance-report",
+    JSON.stringify({
+      criteriaSatisfied: issue.acceptanceMapping.criteria.map((criterion: any) => ({ id: criterion.id, status: "satisfied", evidence: "controlled native-adapter fixture executed the contract test" })),
+      changedFiles: files,
+      testsAddedOrUpdated: tests,
+      commandsRun: [{ command, result: "passed", summary: "executed by the no-model adapter test before the controlled child was released" }],
+      validationOutput: [`${command} passed`],
+      residualRisks: [],
+      noStagedFiles: true,
+      manualNotes: "No-model native adapter fixture; not a live owner implementation.",
+    }, null, 2),
+    "```",
+  ].join("\n");
+}
+
+function recordNativeLaunch(events: any[], request: Record<string, unknown>, callId: string, receipt: any) {
+  events.push({ type: "tool_execution_start", toolName: "subagent", toolCallId: callId, args: request });
+  events.push({ type: "tool_execution_end", toolName: "subagent", toolCallId: callId, result: receipt });
+}
+
+async function recordNativeStatusRead(events: any[], statusPath: string, callId: string) {
+  const text = await readFile(statusPath, "utf8");
+  events.push({ type: "tool_execution_start", toolName: "read", toolCallId: callId, args: { path: statusPath } });
+  events.push({ type: "tool_execution_end", toolName: "read", toolCallId: callId, result: { content: [{ type: "text", text }] } });
+  return JSON.parse(text);
 }
 
 function findEnvironment(value: any): any {
@@ -196,6 +302,368 @@ review:
     assert.equal(ownerHead, plan.targetBase.headSha, "an unrelated target advance does not silently rebind a non-dependent owner");
     const session = (args: string[]) => args[args.indexOf("--session") + 1];
     assert.equal(session(calls[0].args), session(calls[1].args));
+  });
+});
+
+test("async native dispatch waits through delayed GATED result and collects the persisted terminal batch", { skip: adapterSkip, timeout: 60000 }, async () => {
+  await withAdapter(async ({ root, repo, mock, executor, context, waitTools }) => {
+    const issuesInput = JSON.parse(await readFile(resolve("qualification/fixtures/orchestration-replay/orchestrate-issues.json"), "utf8"));
+    issuesInput.issues.push({ number: 103, title: "Downstream sentinel", body: "# Downstream sentinel\n\n## Acceptance Criteria\n- [ ] Run only after issue #102 is delivered.\n\n## Affected Files\n- `test/display.test.mjs`\n\nDepends on #102" });
+    const prepared = await prepareReplayDispatch(root, repo, issuesInput.issues);
+    const plan = JSON.parse(await readFile(prepared.planPath, "utf8"));
+    const request = JSON.parse(await readFile(prepared.requestPath, "utf8"));
+    const issue101 = plan.issues.find((issue: any) => issue.number === 101)!;
+    const issue102 = plan.issues.find((issue: any) => issue.number === 102)!;
+    const release101 = join(root, "release-owner-101");
+    const release102 = join(root, "release-owner-102");
+    const output101 = `FORGE_WORK_ON_RESULT status=DONE issue=101 pr=none dependency=SATISFIED\n${acceptanceText(issue101, ["src/profile.mjs", "test/profile.test.mjs"], ["test/profile.test.mjs"], "npm test")}`;
+    const producerSource = 'export function normalizeDisplayName(value) { return value.trim().toLowerCase(); }\nexport function profileId(profile) { return profile.id; }\n';
+    const producerTest = [
+      'import assert from "node:assert/strict";',
+      'import test from "node:test";',
+      'import { normalizeDisplayName, profileId } from "../src/profile.mjs";',
+      'test("producer normalizes display text and preserves the profile", () => {',
+      '  const profile = { id: "User-7", name: "  ALICE  " };',
+      '  assert.equal(normalizeDisplayName(profile.name), "alice");',
+      '  assert.equal(profileId(profile), "User-7");',
+      '  assert.deepEqual(profile, { id: "User-7", name: "  ALICE  " });',
+      '});',
+      "",
+    ].join("\n");
+    mock.onCall({ writeFiles: [{ path: "src/profile.mjs", content: producerSource }, { path: "test/profile.test.mjs", content: producerTest }], steps: [{ waitForPath: release101, jsonl: [assistantMessage(output101)] }] });
+    const gatedOutput = "FORGE_WORK_ON_RESULT status=GATED issue=102 pr=none dependency=SATISFIED";
+    mock.onCall({ steps: [{ waitForPath: release102, jsonl: [assistantMessage(gatedOutput)] }] });
+
+    try {
+    const rootCallId = "qualification-gated-root-call";
+    const receipt = await executor.executePublic(rootCallId, { ...request, mission: false }, new AbortController().signal, undefined, context);
+    assert.equal(receipt.isError, undefined, receipt.content?.[0]?.text);
+    assert.equal(receipt.details.asyncId, receipt.details.runId);
+    assert.ok(receipt.details.asyncDir);
+    assert.equal(Array.isArray(receipt.details.workflow?.value), false, "async launch receipt must not be mistaken for its final workflow result");
+    const statusFile = join(receipt.details.asyncDir, "status.json");
+    const parentEvents: any[] = [];
+    recordNativeLaunch(parentEvents, request, rootCallId, receipt);
+
+    for (let attempt = 0; attempt < 1000 && mock.callCount() < 1; attempt++) await new Promise(resolve => setTimeout(resolve, 20));
+    assert.equal(mock.callCount(), 1, "only the prerequisite owner may be active before its delivery marker");
+    const call101 = JSON.parse(await readFile(join(mock.dir, (await readdir(mock.dir)).find((file: string) => /^call-.*\.json$/.test(file))!), "utf8"));
+    const owner101 = call101.cwd;
+    assert.equal(execFileSync("git", ["rev-parse", "HEAD"], { cwd: owner101, encoding: "utf8" }).trim(), prepared.baseHead);
+    const producerTestOutput = runFixtureNpm(owner101, ["test"]);
+    assert.match(producerTestOutput, /tests 1/);
+    assert.match(producerTestOutput, /pass 1/);
+    execFileSync("git", ["add", "src/profile.mjs", "test/profile.test.mjs"], { cwd: owner101 });
+    execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "controlled producer delivery"], { cwd: owner101 });
+    const delivered101 = execFileSync("git", ["rev-parse", "HEAD"], { cwd: owner101, encoding: "utf8" }).trim();
+    execFileSync("git", ["push", "origin", "HEAD:refs/heads/integration"], { cwd: owner101 });
+    assert.equal(execFileSync("git", ["rev-parse", "refs/heads/integration"], { cwd: prepared.remote, encoding: "utf8" }).trim(), delivered101);
+    await writeFile(release101, "release");
+
+    for (let attempt = 0; attempt < 1000 && mock.callCount() < 2; attempt++) await new Promise(resolve => setTimeout(resolve, 20));
+    assert.equal(mock.callCount(), 2, "#102 becomes eligible only after #101's checked DONE result");
+    const callFiles = (await readdir(mock.dir)).filter((file: string) => /^call-.*\.json$/.test(file)).sort();
+    const call102 = JSON.parse(await readFile(join(mock.dir, callFiles[1]!), "utf8"));
+    const owner102 = call102.cwd;
+    const prepared102 = execFileSync("git", ["rev-parse", "HEAD"], { cwd: owner102, encoding: "utf8" }).trim();
+    assert.equal(prepared102, prepared.baseHead, "the dependent worktree starts from the exact prepared base before CONTEXT");
+    execFileSync("git", ["fetch", "origin", "integration", "--quiet"], { cwd: owner102 });
+    execFileSync("git", ["merge", "--ff-only", "origin/integration"], { cwd: owner102 });
+    assert.equal(execFileSync("git", ["rev-parse", "HEAD"], { cwd: owner102, encoding: "utf8" }).trim(), delivered101, "the dependent consumes the exact predecessor commit before edits");
+    const activeStatus = JSON.parse(await readFile(statusFile, "utf8"));
+    assert.equal(activeStatus.state, "running", "the persisted root must remain nonterminal while the child is held");
+    const rootWait = invokeNativeWait(waitTools, context, parentEvents, receipt.details.runId, "qualification-root-wait");
+    await writeFile(release102, "release");
+    const waited = await rootWait;
+    assert.match(waited.content?.[0]?.text ?? "", new RegExp(receipt.details.runId));
+    const beforeCollector = await readFile(statusFile);
+    const finalStatus = await recordNativeStatusRead(parentEvents, statusFile, "qualification-root-status-read");
+    const { collectNativeBatch } = await import(new URL("../../qualification/native-batch-collector.mjs", import.meta.url).href);
+    const batch = collectNativeBatch(parentEvents, { issues: [101, 102, 103], predecessors: { 101: [], 102: [101], 103: [102] }, repository: "example/product", target: "integration", cwd: repo }, resolve("bin/forgedock-candidate.mjs"));
+    assert.equal(batch.status, "terminal");
+    assert.equal(batch.outcome, "terminal-gated");
+    assert.equal(batch.continuationCount, 0);
+    assert.equal(batch.finalRoot.runId, receipt.details.runId);
+    assert.equal(batch.observations.waits.some((wait: any) => wait.id === receipt.details.runId), true);
+    assert.ok(batch.observations.readPaths.includes(statusFile));
+    const rows = new Map<number, any>(batch.rows.map((row: any): [number, any] => [row.issue, row]));
+    assert.equal(rows.get(101)?.status, "DONE");
+    assert.equal(rows.get(101)?.runId, finalStatus.workflow.value.find((row: any) => row.issue === 101)?.runId);
+    assert.equal(rows.get(102)?.status, "GATED");
+    assert.equal(rows.get(102)?.dependency, "SATISFIED", "a gated owner may have a delivered incoming prerequisite");
+    assert.equal(rows.get(102)?.nativeStatus, "completed");
+    assert.equal(rows.get(103)?.status, "GATED");
+    assert.equal(rows.get(103)?.nativeStatus, "not-started");
+    assert.deepEqual(rows.get(103)?.blockedBy, ["issue-102"]);
+    assert.equal(mock.callCount(), 2, "the gated #102 owner never releases or launches #103");
+    assert.deepEqual(await readFile(statusFile), beforeCollector, "collector must not rewrite native status records");
+    assert.equal(execFileSync("git", ["rev-parse", "refs/heads/integration"], { cwd: prepared.remote, encoding: "utf8" }).trim(), delivered101, "GATED work is not delivered to integration");
+    } finally {
+      await writeFile(release101, "release").catch(() => {});
+      await writeFile(release102, "release").catch(() => {});
+    }
+  });
+});
+
+test("detached child GATED result reconciles on the exact async root without stale WAITING or successor admission", { skip: adapterSkip, timeout: 90000 }, async () => {
+  await withAdapter(async ({ root, repo, mock, executor, context, state, nativeEvents, waitTools }) => {
+    const issuesInput = JSON.parse(await readFile(resolve("qualification/fixtures/orchestration-replay/orchestrate-issues.json"), "utf8"));
+    issuesInput.issues.push({ number: 103, title: "Downstream sentinel", body: "# Downstream sentinel\n\n## Acceptance Criteria\n- [ ] Run only after issue #102 is delivered.\n\n## Affected Files\n- `test/display.test.mjs`\n\nDepends on #102" });
+    const prepared = await prepareReplayDispatch(root, repo, issuesInput.issues);
+    const plan = JSON.parse(await readFile(prepared.planPath, "utf8"));
+    const request = JSON.parse(await readFile(prepared.requestPath, "utf8"));
+    const issue101 = plan.issues.find((issue: any) => issue.number === 101)!;
+    const release101 = join(root, "detach-release-101");
+    const supervisorReply = join(root, "detach-reply-102");
+    const release102 = join(root, "detach-release-102");
+    const output101 = `FORGE_WORK_ON_RESULT status=DONE issue=101 pr=none dependency=SATISFIED\n${acceptanceText(issue101, ["src/profile.mjs", "test/profile.test.mjs"], ["test/profile.test.mjs"], "npm test")}`;
+    const producerSource = 'export function normalizeDisplayName(value) { return value.trim().toLowerCase(); }\nexport function profileId(profile) { return profile.id; }\n';
+    const producerTest = [
+      'import assert from "node:assert/strict";',
+      'import test from "node:test";',
+      'import { normalizeDisplayName, profileId } from "../src/profile.mjs";',
+      'test("producer normalizes display text and preserves the profile", () => {',
+      '  const profile = { id: "User-7", name: "  ALICE  " };',
+      '  assert.equal(normalizeDisplayName(profile.name), "alice");',
+      '  assert.equal(profileId(profile), "User-7");',
+      '  assert.deepEqual(profile, { id: "User-7", name: "  ALICE  " });',
+      '});',
+      "",
+    ].join("\n");
+    const gatedOutput = "FORGE_WORK_ON_RESULT status=GATED issue=102 pr=none dependency=SATISFIED";
+    mock.onCall({ writeFiles: [{ path: "src/profile.mjs", content: producerSource }, { path: "test/profile.test.mjs", content: producerTest }], steps: [{ waitForPath: release101, jsonl: [assistantMessage(output101)] }] });
+    mock.onCall({ steps: [
+      { jsonl: [{ type: "tool_execution_start", toolCallId: "controlled-contact", toolName: "contact_supervisor", args: { reason: "need_decision", message: "Controlled native detach test" } }] },
+      { waitForPath: supervisorReply, jsonl: [{ type: "tool_execution_end", toolCallId: "controlled-contact", toolName: "contact_supervisor" }, { type: "tool_result_end", message: { role: "toolResult", toolCallId: "controlled-contact", toolName: "contact_supervisor", content: [{ type: "text", text: "Controlled reply" }] } }] },
+      { waitForPath: release102, jsonl: [assistantMessage(gatedOutput)] },
+    ] });
+
+    const { INTERCOM_DETACH_REQUEST_EVENT, INTERCOM_DETACH_RESPONSE_EVENT } = await load("src/shared/types.ts");
+    const detachRequestId = "qualification-detached-owner-102";
+    let detachAccepted = false;
+    nativeEvents.on(INTERCOM_DETACH_RESPONSE_EVENT, (payload: any) => {
+      if (payload?.requestId === detachRequestId) detachAccepted ||= payload.accepted === true;
+    });
+    const detachTimer = setInterval(() => {
+      if (!detachAccepted) nativeEvents.emit(INTERCOM_DETACH_REQUEST_EVENT, { requestId: detachRequestId });
+    }, 10);
+    detachTimer.unref();
+    const rootCallId = "qualification-detached-root";
+    const parentEvents: any[] = [];
+    let childRunId: string | undefined;
+    try {
+      const receipt = await executor.executePublic(rootCallId, { ...request, mission: false }, new AbortController().signal, undefined, context);
+      assert.equal(receipt.isError, undefined, receipt.content?.[0]?.text);
+      assert.equal(receipt.details.async, undefined);
+      assert.equal(receipt.details.mode, "workflow");
+      assert.ok(receipt.details.asyncDir);
+      recordNativeLaunch(parentEvents, request, rootCallId, receipt);
+      const statusFile = join(receipt.details.asyncDir, "status.json");
+      for (let attempt = 0; attempt < 200 && mock.callCount() < 1; attempt++) await new Promise(resolve => setTimeout(resolve, 20));
+      if (mock.callCount() < 1) {
+        const failedRoot = JSON.parse(await readFile(statusFile, "utf8"));
+        throw new Error(`detached fixture root never launched its producer owner: ${JSON.stringify({ state: failedRoot.state, error: failedRoot.error, trace: failedRoot.workflow?.trace, value: failedRoot.workflow?.value, steps: failedRoot.steps })}`);
+      }
+      const call101File = (await readdir(mock.dir)).find((file: string) => /^call-.*\.json$/.test(file))!;
+      const owner101 = JSON.parse(await readFile(join(mock.dir, call101File), "utf8")).cwd;
+      await waitForNativeTextFile(join(owner101, "src/profile.mjs"), (text) => text.includes("trim().toLowerCase()"), "controlled producer implementation was not written in its native worktree");
+      const producerTestOutput = runFixtureNpm(owner101, ["test"]);
+      assert.match(producerTestOutput, /tests 1/);
+      assert.match(producerTestOutput, /pass 1/);
+      execFileSync("git", ["add", "src/profile.mjs", "test/profile.test.mjs"], { cwd: owner101 });
+      execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "controlled producer delivery"], { cwd: owner101 });
+      const delivered101 = execFileSync("git", ["rev-parse", "HEAD"], { cwd: owner101, encoding: "utf8" }).trim();
+      execFileSync("git", ["push", "origin", "HEAD:refs/heads/integration"], { cwd: owner101 });
+      await writeFile(release101, "release");
+
+      for (let attempt = 0; attempt < 1000 && mock.callCount() < 2; attempt++) await new Promise(resolve => setTimeout(resolve, 20));
+      assert.equal(mock.callCount(), 2, "the successor is admitted only after the prerequisite's local delivery");
+      const callFiles = (await readdir(mock.dir)).filter((file: string) => /^call-.*\.json$/.test(file)).sort();
+      const owner102 = JSON.parse(await readFile(join(mock.dir, callFiles[1]!), "utf8")).cwd;
+      assert.equal(execFileSync("git", ["rev-parse", "HEAD"], { cwd: owner102, encoding: "utf8" }).trim(), prepared.baseHead);
+      execFileSync("git", ["fetch", "origin", "integration", "--quiet"], { cwd: owner102 });
+      execFileSync("git", ["merge", "--ff-only", "origin/integration"], { cwd: owner102 });
+      assert.equal(execFileSync("git", ["rev-parse", "HEAD"], { cwd: owner102, encoding: "utf8" }).trim(), delivered101);
+      for (let attempt = 0; attempt < 500 && !detachAccepted; attempt++) await new Promise(resolve => setTimeout(resolve, 20));
+      assert.equal(detachAccepted, true, "the actual native adapter accepted the child detach request");
+      const intermediateStatus = await waitForNativeFile(statusFile, (value) => value.state === "running" && value.steps?.some((step: any) => step.workflowKey === "issue-102" && step.currentTool === "contact_supervisor"), `native root did not retain the detached owner as active (status=${await readFile(statusFile, "utf8")})`);
+      const issue102Step = intermediateStatus.steps.find((step: any) => step.workflowKey === "issue-102");
+      childRunId = issue102Step.runId;
+      assert.ok(childRunId);
+      assert.equal(issue102Step.status, "running");
+      assert.equal(intermediateStatus.workflow?.value, undefined, "nonterminal launch snapshot must not be mistaken for a batch result");
+      assert.equal(mock.callCount(), 2, "one owner per eligible issue; no replacement writer");
+
+      await writeFile(supervisorReply, "controlled reply");
+      const afterReplyStatus = await waitForNativeFile(statusFile, (value) => value.state === "running" && !value.steps?.find((step: any) => step.workflowKey === "issue-102")?.currentTool, "native root did not clear the child supervisor tool after its controlled reply");
+      assert.equal(afterReplyStatus.runId, receipt.details.runId);
+      const rootWait = invokeNativeWait(waitTools, context, parentEvents, receipt.details.runId, "qualification-detached-root-wait");
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await writeFile(release102, "release");
+      const waited = await rootWait;
+      assert.match(waited.content?.[0]?.text ?? "", new RegExp(receipt.details.runId));
+      const finalStatus = await waitForNativeFile(statusFile, (value) => value.state === "complete" && Array.isArray(value.workflow?.value), "the same async root did not publish its terminal workflow.value");
+      await recordNativeStatusRead(parentEvents, statusFile, "qualification-final-root-readback");
+      const statusCallId = "qualification-detached-child-status";
+      parentEvents.push({ type: "tool_execution_start", toolName: "subagent", toolCallId: statusCallId, args: { action: "status", id: childRunId } });
+      const childStatusResult = await executor.executePublic(statusCallId, { action: "status", id: childRunId }, new AbortController().signal, undefined, context);
+      parentEvents.push({ type: "tool_execution_end", toolName: "subagent", toolCallId: statusCallId, result: childStatusResult });
+      const statusText = childStatusResult.content?.[0]?.text ?? "";
+      assert.match(statusText, /detached: intercom coordination/);
+      const outputPath = statusText.match(/^\s*Output:\s*(.+)$/m)?.[1];
+      assert.ok(outputPath, statusText);
+      const metadataPath = outputPath.replace(/_output\.md$/, "_meta.json");
+      assert.notEqual(metadataPath, outputPath);
+      const metadataBytes = await readFile(metadataPath);
+      const outputBytes = await readFile(outputPath);
+      const metadataSha = createHash("sha256").update(metadataBytes).digest("hex");
+      const outputSha = createHash("sha256").update(outputBytes).digest("hex");
+      parentEvents.push({ type: "tool_execution_start", toolName: "read", toolCallId: "qualification-terminal-meta-readback", args: { path: metadataPath } });
+      parentEvents.push({ type: "tool_execution_end", toolName: "read", toolCallId: "qualification-terminal-meta-readback", result: { content: [{ type: "text", text: metadataBytes.toString("utf8") }] } });
+      parentEvents.push({ type: "tool_execution_start", toolName: "read", toolCallId: "qualification-terminal-output-readback", args: { path: outputPath } });
+      parentEvents.push({ type: "tool_execution_end", toolName: "read", toolCallId: "qualification-terminal-output-readback", result: { content: [{ type: "text", text: outputBytes.toString("utf8") }] } });
+      const metadata = JSON.parse(metadataBytes.toString("utf8"));
+      assert.equal(metadata.runId, childRunId);
+      assert.equal(metadata.execution.status, "completed");
+      const marker = outputBytes.toString("utf8").replace(/\r\n?/g, "\n").split("\n").find((line) => line === gatedOutput);
+      assert.equal(marker, gatedOutput);
+      assert.equal(metadata.execution.success, true);
+      const finalRootBytes = await readFile(statusFile);
+      const finalRootHash = createHash("sha256").update(finalRootBytes).digest("hex");
+      const finalRows = new Map<number, any>(finalStatus.workflow.value.map((row: any): [number, any] => [row.issue, row]));
+      assert.equal(finalStatus.state, "complete");
+      assert.equal(finalStatus.runId, receipt.details.runId);
+      assert.equal(finalRows.get(101)?.status, "DONE");
+      assert.equal(finalRows.get(102)?.runId, childRunId, "the GATED result must remain bound to the exact detached child");
+      assert.equal(finalRows.get(102)?.status, "GATED");
+      assert.equal(finalRows.get(102)?.dependency, "SATISFIED", "a GATED owner's incoming prerequisite may already be delivered");
+      assert.equal(finalRows.get(102)?.nativeStatus, "completed");
+      assert.equal(finalRows.get(103)?.status, "GATED");
+      assert.equal(finalRows.get(103)?.nativeStatus, "not-started");
+      assert.deepEqual(finalRows.get(103)?.blockedBy, ["issue-102"]);
+      const { collectNativeBatch } = await import(new URL("../../qualification/native-batch-collector.mjs", import.meta.url).href);
+      const batch = collectNativeBatch(parentEvents, { issues: [101, 102, 103], predecessors: { 101: [], 102: [101], 103: [102] }, repository: "example/product", target: "integration", cwd: repo }, resolve("bin/forgedock-candidate.mjs"));
+      assert.equal(batch.status, "terminal");
+      assert.equal(batch.outcome, "terminal-gated");
+      assert.equal(batch.continuationCount, 0, "the active async root itself reconciled after the detached child returned");
+      assert.equal(batch.finalRoot.runId, receipt.details.runId);
+      assert.equal(batch.observations.waits.some((wait: any) => wait.id === receipt.details.runId), true);
+      assert.equal(batch.rows.find((row: any) => row.issue === 102)?.runId, childRunId);
+      assert.equal(batch.rows.find((row: any) => row.issue === 102)?.status, "GATED");
+      assert.equal(batch.rows.find((row: any) => row.issue === 102)?.dependency, "SATISFIED");
+      assert.equal(mock.callCount(), 2, "the terminal GATED result does not launch a replacement owner or successor");
+      assert.deepEqual(await readFile(statusFile), finalRootBytes, "collector must not edit authoritative native root status");
+      assert.equal(createHash("sha256").update(await readFile(statusFile)).digest("hex"), finalRootHash);
+      assert.equal(createHash("sha256").update(await readFile(metadataPath)).digest("hex"), metadataSha);
+      assert.equal(createHash("sha256").update(await readFile(outputPath)).digest("hex"), outputSha);
+      assert.equal(execFileSync("git", ["rev-parse", "refs/heads/integration"], { cwd: prepared.remote, encoding: "utf8" }).trim(), delivered101, "the GATED consumer's own work was not delivered");
+    } finally {
+      clearInterval(detachTimer);
+      await writeFile(release101, "release").catch(() => {});
+      await writeFile(supervisorReply, "release").catch(() => {});
+      await writeFile(release102, "release").catch(() => {});
+      if (childRunId) await waitTools.get("subagent_wait")?.execute?.("cleanup-wait", { id: childRunId, timeoutMs: 1 }, new AbortController().signal, undefined, context).catch(() => {});
+    }
+  }, { ownerSystemPrompt: "Intercom orchestration channel:" });
+});
+
+test("verified DONE prerequisite delivery admits a consumer that consumes it through the normal workflow", { skip: adapterSkip, timeout: 90000 }, async () => {
+  await withAdapter(async ({ root, repo, mock, executor, context, waitTools }) => {
+    const issuesInput = JSON.parse(await readFile(resolve("qualification/fixtures/orchestration-replay/orchestrate-issues.json"), "utf8"));
+    const prepared = await prepareReplayDispatch(root, repo, issuesInput.issues);
+    const plan = JSON.parse(await readFile(prepared.planPath, "utf8"));
+    const request = JSON.parse(await readFile(prepared.requestPath, "utf8"));
+    const issue101 = plan.issues.find((issue: any) => issue.number === 101)!;
+    const issue102 = plan.issues.find((issue: any) => issue.number === 102)!;
+    const release101 = join(root, "done-release-101");
+    const release102 = join(root, "done-release-102");
+    const output101 = `FORGE_WORK_ON_RESULT status=DONE issue=101 pr=none dependency=SATISFIED\n${acceptanceText(issue101, ["src/profile.mjs", "test/profile.test.mjs"], ["test/profile.test.mjs"], "npm test")}`;
+    const producerSource = 'export function normalizeDisplayName(value) { return value.trim().toLowerCase(); }\nexport function profileId(profile) { return profile.id; }\n';
+    const producerTest = [
+      'import assert from "node:assert/strict";',
+      'import test from "node:test";',
+      'import { normalizeDisplayName, profileId } from "../src/profile.mjs";',
+      'test("producer normalizes display text and preserves the profile", () => {',
+      '  const profile = { id: "User-7", name: "  ALICE  " };',
+      '  assert.equal(normalizeDisplayName(profile.name), "alice");',
+      '  assert.equal(profileId(profile), "User-7");',
+      '  assert.deepEqual(profile, { id: "User-7", name: "  ALICE  " });',
+      '});',
+      "",
+    ].join("\n");
+    const output102 = `FORGE_WORK_ON_RESULT status=DONE issue=102 pr=none dependency=SATISFIED\n${acceptanceText(issue102, ["src/render.mjs"], [], "npm run test:all")}`;
+    const rendererSource = [
+      'import { normalizeDisplayName, profileId } from "./profile.mjs";',
+      'export function renderProfile(profile) {',
+      '  const base = `${profileId(profile)}:${normalizeDisplayName(profile.name)}`;',
+      '  return typeof profile.teamLabel === "string" && profile.teamLabel.length > 0 ? `${base}:${profile.teamLabel}` : base;',
+      '}',
+      "",
+    ].join("\n");
+    mock.onCall({ writeFiles: [{ path: "src/profile.mjs", content: producerSource }, { path: "test/profile.test.mjs", content: producerTest }], steps: [{ waitForPath: release101, jsonl: [assistantMessage(output101)] }] });
+    mock.onCall({ steps: [{ waitForPath: release102, jsonl: [assistantMessage(output102)] }] });
+
+    const rootCallId = "qualification-done-root-call";
+    const receipt = await executor.executePublic(rootCallId, { ...request, mission: false }, new AbortController().signal, undefined, context);
+    assert.equal(receipt.isError, undefined, receipt.content?.[0]?.text);
+    assert.equal(Array.isArray(receipt.details.workflow?.value), false);
+    const statusFile = join(receipt.details.asyncDir, "status.json");
+    const parentEvents: any[] = [];
+    recordNativeLaunch(parentEvents, request, rootCallId, receipt);
+    const rootWait = invokeNativeWait(waitTools, context, parentEvents, receipt.details.runId, "qualification-done-root-wait");
+
+    for (let attempt = 0; attempt < 1000 && mock.callCount() < 1; attempt++) await new Promise(resolve => setTimeout(resolve, 20));
+    assert.equal(mock.callCount(), 1, "successor must remain unlaunched while #101 is active");
+    const callFiles101 = (await readdir(mock.dir)).filter((file: string) => /^call-.*\.json$/.test(file)).sort();
+    const owner101 = JSON.parse(await readFile(join(mock.dir, callFiles101[0]!), "utf8")).cwd;
+    await waitForNativeTextFile(join(owner101, "src/profile.mjs"), (text) => text.includes("trim().toLowerCase()"), "controlled producer implementation did not reach the native owner worktree");
+    const producerTests = runFixtureNpm(owner101, ["test"]);
+    assert.match(producerTests, /tests 1/); assert.match(producerTests, /pass 1/);
+    execFileSync("git", ["add", "src/profile.mjs", "test/profile.test.mjs"], { cwd: owner101 });
+    execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "controlled producer delivery"], { cwd: owner101 });
+    const delivered101 = execFileSync("git", ["rev-parse", "HEAD"], { cwd: owner101, encoding: "utf8" }).trim();
+    execFileSync("git", ["push", "origin", "HEAD:refs/heads/integration"], { cwd: owner101 });
+    assert.equal(execFileSync("git", ["rev-parse", "refs/heads/integration"], { cwd: prepared.remote, encoding: "utf8" }).trim(), delivered101);
+    await writeFile(release101, "release");
+
+    for (let attempt = 0; attempt < 1000 && mock.callCount() < 2; attempt++) await new Promise(resolve => setTimeout(resolve, 20));
+    assert.equal(mock.callCount(), 2, "#102 is admitted after native #101 DONE and exact local delivery");
+    const callFiles = (await readdir(mock.dir)).filter((file: string) => /^call-.*\.json$/.test(file)).sort();
+    const owner102 = JSON.parse(await readFile(join(mock.dir, callFiles[1]!), "utf8")).cwd;
+    assert.equal(execFileSync("git", ["rev-parse", "HEAD"], { cwd: owner102, encoding: "utf8" }).trim(), prepared.baseHead);
+    execFileSync("git", ["fetch", "origin", "integration", "--quiet"], { cwd: owner102 });
+    execFileSync("git", ["merge", "--ff-only", "origin/integration"], { cwd: owner102 });
+    assert.equal(execFileSync("git", ["rev-parse", "HEAD"], { cwd: owner102, encoding: "utf8" }).trim(), delivered101, "the successor consumes the exact predecessor before source edits");
+    const consumerBaseline = runFixtureNpmResult(owner102, ["run", "test:display"]);
+    assert.notEqual(consumerBaseline.code, 0);
+    assert.match(consumerBaseline.output, /User-7:alice:Platform/);
+    await writeFile(join(owner102, "src/render.mjs"), rendererSource);
+    const consumerTests = runFixtureNpm(owner102, ["run", "test:display"]);
+    assert.match(consumerTests, /tests 3/); assert.match(consumerTests, /pass 3/);
+    const fullTests = runFixtureNpm(owner102, ["run", "test:all"]);
+    assert.match(fullTests, /tests 4/); assert.match(fullTests, /pass 4/);
+    execFileSync("git", ["add", "src/render.mjs"], { cwd: owner102 });
+    execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit", "-qm", "controlled consumer delivery"], { cwd: owner102 });
+    const delivered102 = execFileSync("git", ["rev-parse", "HEAD"], { cwd: owner102, encoding: "utf8" }).trim();
+    execFileSync("git", ["push", "origin", "HEAD:refs/heads/integration"], { cwd: owner102 });
+    assert.equal(execFileSync("git", ["rev-parse", "refs/heads/integration"], { cwd: prepared.remote, encoding: "utf8" }).trim(), delivered102);
+    await writeFile(release102, "release");
+    const waited = await rootWait;
+    assert.match(waited.content?.[0]?.text ?? "", new RegExp(receipt.details.runId));
+    const finalStatus = await waitForNativeFile(statusFile, (value) => value.state === "complete" && Array.isArray(value.workflow?.value), "positive native root did not publish its terminal workflow.value");
+    await recordNativeStatusRead(parentEvents, statusFile, "qualification-done-root-readback");
+    const { collectNativeBatch } = await import(new URL("../../qualification/native-batch-collector.mjs", import.meta.url).href);
+    const batch = collectNativeBatch(parentEvents, { issues: [101, 102], predecessors: { 101: [], 102: [101] }, repository: "example/product", target: "integration", cwd: repo }, resolve("bin/forgedock-candidate.mjs"));
+    assert.equal(batch.status, "terminal");
+    assert.equal(batch.outcome, "terminal-done");
+    const rows = new Map<number, any>(batch.rows.map((row: any): [number, any] => [row.issue, row]));
+    assert.equal(rows.get(101)?.status, "DONE"); assert.equal(rows.get(101)?.dependency, "SATISFIED");
+    assert.equal(rows.get(102)?.status, "DONE"); assert.equal(rows.get(102)?.dependency, "SATISFIED");
+    assert.equal(rows.get(102)?.nativeAcceptanceStatus, "checked");
+    assert.equal(execFileSync("git", ["merge-base", "--is-ancestor", delivered101, delivered102], { cwd: repo }).toString(), "");
+    assert.equal(execFileSync("git", ["rev-parse", "refs/heads/integration"], { cwd: prepared.remote, encoding: "utf8" }).trim(), delivered102);
+    assert.equal(mock.callCount(), 2, "one native owner per issue, with no replacement launch");
+    assert.equal(finalStatus.workflow.value.find((row: any) => row.issue === 102)?.status, "DONE");
   });
 });
 
