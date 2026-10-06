@@ -1,0 +1,75 @@
+{
+  "schema": "forgedock.candidate-adjudication/v1",
+  "artifactKey": "59c98168-f5fb-4337-9667-5af2ae151edc",
+  "revision": 0,
+  "repository": "example/product",
+  "pullRequest": 102,
+  "head": "0d5a548ac58951b6c23cb87668891d4bd00282ce",
+  "baseRef": "integration",
+  "baseSha": "713aced2e0e5efef105dbc379bc1687d8c65414c",
+  "mode": "standard",
+  "verdict": "APPROVE",
+  "gate": "PASS",
+  "roles": [
+    "correctness"
+  ],
+  "reports": [
+    {
+      "role": "correctness",
+      "id": null,
+      "url": null,
+      "head": "0d5a548ac58951b6c23cb87668891d4bd00282ce",
+      "round": 0,
+      "reportId": "6a05c5c1-08f5-479c-bf40-76f8727647fd",
+      "observations": []
+    }
+  ],
+  "decisions": [],
+  "checks": [
+    {
+      "name": "test.consumer",
+      "required": true,
+      "conclusion": "passed",
+      "executedProof": true,
+      "executedProofRequired": true,
+      "policyAccepted": true,
+      "proofSource": "local command npm run test:display",
+      "stage": "local acceptance verification",
+      "evidence": [
+        "npm run test:display: 4/4 passing; real renderProfile consumer tests cover absent, empty, ordinary nonempty, and whitespace-padded labels"
+      ]
+    },
+    {
+      "name": "test.all",
+      "required": true,
+      "conclusion": "passed",
+      "executedProof": true,
+      "executedProofRequired": true,
+      "policyAccepted": true,
+      "proofSource": "local command npm run test:all",
+      "stage": "local acceptance verification",
+      "evidence": [
+        "npm run test:all: 5/5 passing across producer and consumer fixtures"
+      ]
+    },
+    {
+      "name": "test.producer",
+      "required": false,
+      "conclusion": "passed",
+      "executedProof": true,
+      "executedProofRequired": false,
+      "policyAccepted": true,
+      "proofSource": "local command npm test",
+      "stage": "supplemental local verification",
+      "evidence": [
+        "npm test: 1/1 passing"
+      ]
+    }
+  ],
+  "tracking": {},
+  "panelUrl": null,
+  "gateBodyPanelUrl": null,
+  "supersededPanelUrl": null,
+  "gateBody": "FORGE:STAGING_GATE:PASS\n\n## REVIEW-PANEL\n\n**Review attempt**: `59c98168-f5fb-4337-9667-5af2ae151edc`\n**Current roster**: correctness\n**Exact identity**: PR #102, 0d5a548ac58951b6c23cb87668891d4bd00282ce, integration@713aced2e0e5efef105dbc379bc1687d8c65414c\n**Parent decision**: final REVIEW-PANEL publication; use its verified permalink from the adjudication result and linked staging gate.\n\n### Individual reports\n\n- **correctness**: saved report (not published)\n\n### Parent adjudication\n\n| Item | Sources | Decision | Reason/evidence | Required stage | Tracking |\n| --- | --- | --- | --- | --- | --- |\nNo actionable observations were submitted. Code findings: none; unresolved prerequisites: none.\n\n### Check conclusions and execution proof\n\n- **test.consumer**: passed; executed proof: yes; required: yes; stage: local acceptance verification; policy accepts conclusion; proof source: local command npm run test:display; evidence: npm run test:display: 4/4 passing; real renderProfile consumer tests cover absent, empty, ordinary nonempty, and whitespace-padded labels\n- **test.all**: passed; executed proof: yes; required: yes; stage: local acceptance verification; policy accepts conclusion; proof source: local command npm run test:all; evidence: npm run test:all: 5/5 passing across producer and consumer fixtures\n- **test.producer**: passed; executed proof: yes; required: no; stage: supplemental local verification; policy accepts conclusion; evidence: npm test: 1/1 passing\n\n### Prior concern disposition\n\n- No applicable prior concern was carried into this attempt.\n\n### Remaining limitations and next action\n\n- This is an explicitly local replay with no GitHub PR. The prepared policy summary records GitHub workflow, required-check, branch-rule, protection, and ruleset sources as unavailable; no remote policy/check status or merge readiness is claimed.\n- GitHub comments, labels, PR creation, merge, and closure were not performed. The authorized disposable origin/integration push remains pending.\nNext action: After the verified local adjudication, push the reviewed committed head to the disposable origin/integration as the authorized dependency-delivery boundary; do not describe this as GitHub delivery.\n\nOfficial parent verdict: **APPROVE**\n\n\n## Gate\n\n**Parent decision permalink**: pending publication\n**Gate**: PASS\n**Next action**: After the verified local adjudication, push the reviewed committed head to the disposable origin/integration as the authorized dependency-delivery boundary; do not describe this as GitHub delivery.\n",
+  "trackingPublication": "complete"
+}

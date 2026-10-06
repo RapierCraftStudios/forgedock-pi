@@ -1,0 +1,50 @@
+{
+  "schema": "forgedock.candidate-adjudication/v1",
+  "artifactKey": "5236c125-3166-499a-9538-9156187a1eaf",
+  "revision": 0,
+  "repository": "example/product",
+  "pullRequest": 101,
+  "head": "713aced2e0e5efef105dbc379bc1687d8c65414c",
+  "baseRef": "integration",
+  "baseSha": "bdeda88466290319f33ab19dc8b3642a78dd8b24",
+  "mode": "standard",
+  "verdict": "APPROVE",
+  "gate": "PASS",
+  "roles": [
+    "correctness"
+  ],
+  "reports": [
+    {
+      "role": "correctness",
+      "id": null,
+      "url": null,
+      "head": "713aced2e0e5efef105dbc379bc1687d8c65414c",
+      "round": 0,
+      "reportId": "b4401305-e735-48c3-b6b7-d68f3df4250f",
+      "observations": []
+    }
+  ],
+  "decisions": [],
+  "checks": [
+    {
+      "name": "test.producer",
+      "required": true,
+      "conclusion": "passed: npm test passed 1/1 on exact reviewed head",
+      "executedProof": true,
+      "executedProofRequired": true,
+      "policyAccepted": true,
+      "proofSource": "Owner exact-head local command: npm test",
+      "stage": "issue #101 producer acceptance",
+      "evidence": [
+        "Pre-edit npm test failed because normalizeDisplayName threw its not-implemented error.",
+        "Updated regression failed before the implementation edit, then npm test passed on reviewed head 713aced2e0e5efef105dbc379bc1687d8c65414c (1 test, 1 pass, 0 failures)."
+      ]
+    }
+  ],
+  "tracking": {},
+  "panelUrl": null,
+  "gateBodyPanelUrl": null,
+  "supersededPanelUrl": null,
+  "gateBody": "FORGE:STAGING_GATE:PASS\n\n## REVIEW-PANEL\n\n**Review attempt**: `5236c125-3166-499a-9538-9156187a1eaf`\n**Current roster**: correctness\n**Exact identity**: PR #101, 713aced2e0e5efef105dbc379bc1687d8c65414c, integration@bdeda88466290319f33ab19dc8b3642a78dd8b24\n**Parent decision**: final REVIEW-PANEL publication; use its verified permalink from the adjudication result and linked staging gate.\n\n### Individual reports\n\n- **correctness**: saved report (not published)\n\n### Parent adjudication\n\n| Item | Sources | Decision | Reason/evidence | Required stage | Tracking |\n| --- | --- | --- | --- | --- | --- |\nNo actionable observations were submitted. Code findings: none; unresolved prerequisites: none.\n\n### Check conclusions and execution proof\n\n- **test.producer**: passed: npm test passed 1/1 on exact reviewed head; executed proof: yes; required: yes; stage: issue #101 producer acceptance; policy accepts conclusion; proof source: Owner exact-head local command: npm test; evidence: Pre-edit npm test failed because normalizeDisplayName threw its not-implemented error. Updated regression failed before the implementation edit, then npm test passed on reviewed head 713aced2e0e5efef105dbc379bc1687d8c65414c (1 test, 1 pass, 0 failures).\n\n### Prior concern disposition\n\n- No applicable prior concern was carried into this attempt.\n\n### Remaining limitations and next action\n\n- The configured optional consumer command npm run test:display was executed and failed 2 of 3 tests on the reviewed head because optional teamLabel output is explicitly reserved for dependent #102. The same command at exact prepared base bdeda88466290319f33ab19dc8b3642a78dd8b24 failed all 3 tests due the unimplemented producer; no consumer code was changed here.\n- The configured full fixture suite npm run test:all was not run because the issue assigns it to dependent #102.\n- Local replay policy collection could not access evaluated GitHub checks, branch rules, protection, rulesets, or workflow files; no external required-check or remote PR conclusion is claimed.\n- GitHub comments, labels, PRs, merges, and issue closure were not published in this local replay.\nNext action: Push the exact reviewed local commit 713aced2e0e5efef105dbc379bc1687d8c65414c to the explicitly authorized disposable origin/integration dependency-delivery ref; do not claim GitHub PR or merge delivery.\n\nOfficial parent verdict: **APPROVE**\n\n\n## Gate\n\n**Parent decision permalink**: pending publication\n**Gate**: PASS\n**Next action**: Push the exact reviewed local commit 713aced2e0e5efef105dbc379bc1687d8c65414c to the explicitly authorized disposable origin/integration dependency-delivery ref; do not claim GitHub PR or merge delivery.\n",
+  "trackingPublication": "complete"
+}

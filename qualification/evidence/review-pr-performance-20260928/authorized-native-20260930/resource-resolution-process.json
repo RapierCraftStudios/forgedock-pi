@@ -1,0 +1,163 @@
+{
+  "status": "passed",
+  "processExit": {
+    "code": 0,
+    "signal": null
+  },
+  "noAgentOrModelTurn": true,
+  "inspectedActualPiProcess": true,
+  "loadedResourceReport": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/preflight/resource-process-verified.json",
+  "argv": [
+    "/home/dev/.local/node_modules/.bin/pi",
+    "--mode",
+    "rpc",
+    "--offline",
+    "--no-approve",
+    "--no-context-files",
+    "--session-dir",
+    "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/preflight/resource-sessions-verified",
+    "--no-extensions",
+    "--extension",
+    "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/extension.ts",
+    "--extension",
+    "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents/index.ts",
+    "--extension",
+    "/tmp/pr583-resource-inspector.ts",
+    "--no-skills",
+    "--skill",
+    "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/skills/forgedock-review-pr/SKILL.md",
+    "--skill",
+    "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/skills/forgedock-review-pr-staging/SKILL.md",
+    "--skill",
+    "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents/skills/pi-subagents/SKILL.md",
+    "--no-prompt-templates",
+    "--prompt-template",
+    "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/prompts"
+  ],
+  "stdoutPath": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/preflight/resource-pi-verified.rpc.jsonl",
+  "stderrPath": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/preflight/resource-pi-verified.stderr.log",
+  "eventTypes": {
+    "extension_ui_request": 2,
+    "response": 1
+  },
+  "resolved": {
+    "defaultModel": "gpt-6-luna",
+    "defaultThinkingLevel": "max",
+    "skills": [
+      {
+        "name": "skill:forgedock-review-pr",
+        "source": "skill",
+        "path": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/skills/forgedock-review-pr/SKILL.md",
+        "scope": "temporary"
+      },
+      {
+        "name": "skill:forgedock-review-pr-staging",
+        "source": "skill",
+        "path": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/skills/forgedock-review-pr-staging/SKILL.md",
+        "scope": "temporary"
+      },
+      {
+        "name": "skill:pi-subagents",
+        "source": "skill",
+        "path": "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents/skills/pi-subagents/SKILL.md",
+        "scope": "temporary"
+      }
+    ],
+    "prompts": [
+      {
+        "name": "orchestrate",
+        "source": "prompt",
+        "path": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/prompts/orchestrate.md",
+        "scope": "temporary"
+      },
+      {
+        "name": "review-pr-staging",
+        "source": "prompt",
+        "path": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/prompts/review-pr-staging.md",
+        "scope": "temporary"
+      },
+      {
+        "name": "review-pr",
+        "source": "prompt",
+        "path": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/prompts/review-pr.md",
+        "scope": "temporary"
+      },
+      {
+        "name": "work-on",
+        "source": "prompt",
+        "path": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/prompts/work-on.md",
+        "scope": "temporary"
+      }
+    ],
+    "candidateTools": [
+      {
+        "name": "forge_prepare_review",
+        "path": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/extension.ts",
+        "source": "cli",
+        "scope": "temporary"
+      },
+      {
+        "name": "forge_run_check",
+        "path": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/extension.ts",
+        "source": "cli",
+        "scope": "temporary"
+      },
+      {
+        "name": "forge_discover_review_records",
+        "path": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/extension.ts",
+        "source": "cli",
+        "scope": "temporary"
+      },
+      {
+        "name": "forge_resolve_review_tracking",
+        "path": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/extension.ts",
+        "source": "cli",
+        "scope": "temporary"
+      },
+      {
+        "name": "forge_recover_reviewer_publication",
+        "path": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/extension.ts",
+        "source": "cli",
+        "scope": "temporary"
+      },
+      {
+        "name": "forge_publish_incomplete_review",
+        "path": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/extension.ts",
+        "source": "cli",
+        "scope": "temporary"
+      },
+      {
+        "name": "forge_publish_adjudication",
+        "path": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/extension.ts",
+        "source": "cli",
+        "scope": "temporary"
+      },
+      {
+        "name": "forge_publish_record",
+        "path": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/extension.ts",
+        "source": "cli",
+        "scope": "temporary"
+      },
+      {
+        "name": "subagent",
+        "path": "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents/index.ts",
+        "source": "cli",
+        "scope": "temporary"
+      }
+    ],
+    "reviewer": {
+      "name": "forgedock-reviewer",
+      "source": "user",
+      "profilePath": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/agents/forgedock-reviewer.md",
+      "subagentOnlyExtensions": [
+        "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/reviewer-tools.ts"
+      ],
+      "profileSha256": "a88f3b617ddff380e7b3b24771687005c0a59a45403062f58a0e5137e5e2e26b"
+    },
+    "helper": {
+      "path": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/bin/forgedock-candidate.mjs",
+      "sha256": "e52a65b2ffb5721bca45f80ed057048513758f7f92c6226f0e17e057db17684e"
+    },
+    "forbiddenInstalledForgeDockResources": []
+  }
+}

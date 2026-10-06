@@ -1,0 +1,13 @@
+{
+  "taskId": "b0490a858",
+  "launcherEvidenceRoot": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/native-runs/2026-09-30T03-32-20-268Z",
+  "status": "failed-before-Pi-spawn",
+  "error": "Local fake Git origin does not match the corrected fixture base",
+  "cause": "The launcher harness used split(/\\\\s+/) instead of split(/\\s+/), so the local git ls-remote output retained the tab-separated ref name and failed the SHA comparison. The transport itself was local and returned the expected base SHA.",
+  "processStartedAt": null,
+  "parentSessionCreated": false,
+  "reviewPromptSent": false,
+  "modelInvoked": false,
+  "sourceOrFixtureModified": false,
+  "resolution": "Corrected the temporary launch harness's whitespace-regex escape and verified that the same local mirror output parses to base SHA 16e4e51e3f24a44c882e929c577b717461d09599. No ForgeDock source was changed and no native review was retried yet."
+}

@@ -31,7 +31,7 @@ review:
   remediation_max_rounds: 1
 `;
 
-test("parses one canonical configuration and caps qualification owners", async () => {
+test("parses one canonical configuration and preserves the configured owner ceiling", async () => {
   const root = await mkdtemp("/tmp/forgedock-candidate-config-");
   try {
     const configPath = join(root, "forge.yaml");
@@ -43,7 +43,10 @@ test("parses one canonical configuration and caps qualification owners", async (
     assert.equal(config.ownerModel, "provider/model");
     assert.equal(config.ownerThinking, "medium");
     assert.equal(config.configuredOwnerConcurrency, 8);
-    assert.deepEqual(sanitizeCandidateConfig(config).qualificationOwnerConcurrency, 2);
+    assert.equal(config.effectiveOwnerConcurrency, 8);
+    const safeConfig = sanitizeCandidateConfig(config);
+    assert.equal(safeConfig.effectiveOwnerConcurrency, 8);
+    assert.equal(Object.hasOwn(safeConfig, "qualificationOwnerConcurrency"), false);
     assert.deepEqual(config.verificationCommands, { test: "npm test" });
   } finally {
     await rm(root, { recursive: true, force: true });

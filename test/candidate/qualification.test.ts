@@ -74,6 +74,26 @@ test("same-head staging gate publication uses an explicit supersession marker", 
   }
 });
 
+test("reviewer reports retain structured observations for parent adjudication", async () => {
+  const root = await mkdtemp("/tmp/forgedock-candidate-observation-");
+  try {
+    const body = join(root, "body.md");
+    const report = join(root, "report.md");
+    const observations = join(root, "observations.json");
+    await writeFile(body, "### Scope and decisions considered\nThe exact frozen patch was reviewed.\n\n### Evidence and findings\nOne concrete observation is recorded below.\n\n### Verification limitations\nThe disposable publication boundary was used.\n\n### Recommendation\nFollow up after parent adjudication.\n");
+    await writeFile(observations, JSON.stringify([{ id: "correctness:F1", kind: "verification-authority-prerequisite", summary: "Runtime proof is absent", affectedBehavior: "Promotion evidence", location: "policy:required-check", evidence: ["The required check is skipped."], trigger: "The check conclusion is SKIPPED.", consequence: "Promotion cannot claim executed proof.", whyThisChange: "The review evaluates promotion readiness.", stage: "before promotion", proposedDisposition: "EVIDENCE/AUTHORITY PREREQUISITE" }]));
+    const result = JSON.parse((await execFileAsync("node", [helper, "record", "reviewer", "--repo", "example/product", "--pr", "7", "--head", "a".repeat(40), "--base-ref", "main", "--base-sha", "b".repeat(40), "--role", "correctness", "--observations-file", observations, "--body-file", body, "--report-file", report], { env: process.env })).stdout) as { publication: string };
+    assert.equal(result.publication, "saved");
+    const reportText = await readFile(report, "utf8");
+    assert.match(reportText, /FORGE:REVIEW_OBSERVATIONS/);
+    assert.match(reportText, /correctness:F1/);
+    assert.match(reportText, /Runtime proof is absent/);
+    assert.match(reportText, /The required check is skipped/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("replacement and rollback preserve the exact prior registration", async () => {
   const root = await mkdtemp("/tmp/forgedock-candidate-replace-");
   try {

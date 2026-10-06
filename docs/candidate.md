@@ -1,6 +1,6 @@
 # ForgeDock thin candidate
 
-This branch packages one active path for Pi 0.85.1 and `pi-subagents` 0.60.0:
+This branch packages one active path for Pi 1.0.2 and `pi-subagents` 0.60.0:
 
 ```text
 /work-on       -> one owner -> one focused fresh review -> parent decision -> delivery
@@ -15,7 +15,7 @@ configuration/intake/plan/request/record operations; it is not a workflow engine
 
 ## Prerequisites
 
-- Node.js 22+, Pi, Git, and `gh` for live GitHub work.
+- Node.js 22+, Pi 1.0.2, Git, and `gh` for live GitHub work. The selected Pi executable is pinned in the isolated install manifest and reused for the parent and native children.
 - A clean candidate checkout and a clean pinned `pi-subagents` checkout.
 - A target repository with a canonical `forge.yaml` and a full `provider/model` value.
 - Existing provider authentication. The candidate never copies auth files.
@@ -27,15 +27,15 @@ From this checkout:
 ```bash
 PI_SUBAGENTS_SOURCE=/home/dev/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents \
 PI_SUBAGENTS_COMMIT=0931cbbb98ab253177b181bd334fe02dd919dca5 \
-PI_REQUIRED_VERSION=0.85.1 \
+PI_SUBAGENT_PI_BINARY=/absolute/path/to/pi-1.0.2 \
+PI_REQUIRED_VERSION=1.0.2 \
 FORGEDOCK_CANDIDATE_INSTALL_ROOT=/home/dev/.cache/forgedock-pi-candidate/<candidate-sha> \
 ./scripts/install-candidate.sh --reuse-auth
 ```
 
 `--reuse-auth` is optional; it symlinks an already-authenticated operator `auth.json` into
 this disposable config without copying credentials. Omit it to qualify resource loading only.
-The installer requires Pi 0.85.1 and pi-subagents commit 0931cbbb98ab253177b181bd334fe02dd919dca5
-by default (alternate explicitly pinned values can be supplied). It snapshots both exact Git heads, installs them through Pi into
+The installer defaults to Pi 1.0.2 and pi-subagents commit 0931cbbb98ab253177b181bd334fe02dd919dca5. It validates the executable selected by `PI_SUBAGENT_PI_BINARY` (or `PATH` when unset), records that exact path and version, and installs through that executable into
 `<install-root>/pi-agent`, sets `defaultProjectTrust: never`, and does not edit the ordinary
 `~/.pi/agent/settings.json`. It writes only package paths, versions, and policy metadata to
 `manifest.json`; credentials are not copied or printed.
@@ -49,8 +49,11 @@ Launch an interactive candidate session in a target repository:
 
 Use `--model provider/id[:thinking]` or `--thinking high` only as an explicit operator
 override. Without `--model`, the launcher reads the target's configured model through the
-candidate helper. It passes `--no-approve`, so target-local `.pi` workflow settings cannot
-change candidate authority; normal `AGENTS.md` coding guidance is still available.
+candidate helper. Before opening the parent session it verifies the pinned Pi executable,
+checks the configured owner/reviewer model against that runtime's offline registry, then
+sets `PI_SUBAGENT_PI_BINARY` to the same executable so native children cannot fall back to
+`PATH`. It passes `--no-approve`, so target-local `.pi` workflow settings cannot change
+candidate authority; normal `AGENTS.md` coding guidance is still available.
 
 ## Doctor/status
 
@@ -77,16 +80,30 @@ Dispatcher preparation (the selector can be `#123 #124`, `next 2`, `milestone:na
 
 ```bash
 $FORGEDOCK_CANDIDATE_BIN prepare-dispatch \
-  --selector 'next 2' --cwd /absolute/path/to/target \
-  --out /tmp/forgedock-candidate/dispatch-1
+  --selector 'next 2' --delivery-mode github \
+  --cwd /absolute/path/to/target --out /tmp/forgedock-candidate/dispatch-1
 ```
 
 The command writes `plan.json`, `workflow.js`, and `request.json` outside the target checkout.
+Select `--delivery-mode github` for the normal GitHub-style flow, including a simulated isolated
+fake-GitHub fixture, or `--delivery-mode local-replay` for a no-GitHub replay. The mode is carried
+in each trusted owner task; `--issues-file` only selects issue data and never implies local replay.
+A fixture issue may include optional `dispatchEvidence` strings; owners receive them as independently
+verifiable context only, without changing acceptance or authority. A one-line `--owner-authority-file`
+may carry explicit parent-granted operation scope into fresh owner tasks; delivery mode alone never
+grants publication or merge authority.
 Explicit output paths inside the source are rejected with a safe alternate path; defaults use the
 candidate artifact root. Before invoking the request, the dispatcher must query the supported
 native `subagent({ action: "status" })` boundary and correlate exact issue/worktree ownership;
 unavailable or ambiguous ownership gates only that issue. The dispatcher invokes the request
-through Pi's supported `subagent` tool; it does not hand-author a native script.
+through Pi's supported `subagent` tool; it does not hand-author a native script. If a workflow
+returns a detached owner, wait once for that exact run with `subagent_wait` and inspect its exact
+terminal `subagent` status. Save the unchanged initial workflow rows and one exact terminal-result row
+per detached owner in a `forgedock.candidate-dispatch-continuation/v1` input; then call
+`$FORGEDOCK_CANDIDATE_BIN continue-dispatch --plan <plan.json> --results <continuation-input.json> --out <dir>`.
+The helper checks run ID, issue, native state, and the owner marker before generating a continuation.
+Run only its returned request. It reuses the original graph and never relaunches settled owners.
+Do not continue while any detached owner remains active or unresolved.
 
 If the supplied repository is not on the configured integration branch, prepare a disposable
 base without touching it:
@@ -103,13 +120,19 @@ required to be clean; the preparation clones/fetches the exact `origin/staging` 
 one local `staging` branch in the disposable directory. `--offline` is only for fixtures with
 an already-fetched remote ref.
 
-Review preparation uses a JSON input with the frozen repository, PR, full head/base identities,
-source checkout, original acceptance, evidence, and risk selection:
-
-```bash
-$FORGEDOCK_CANDIDATE_BIN prepare-review \
-  --input /tmp/review-input.json --out /tmp/forgedock-candidate/review-123
-```
+Review preparation is a registered `forge_prepare_review` operation using the frozen repository,
+PR, full head/base identities, source/config checkout, original acceptance, evidence, risk
+selection, and an explicit `publish` mode. Launch only its returned request through the registered
+native `subagent` tool. Those hooks bind the prepared review to the exact native workflow and write
+the required `reviewer-execution.json` receipt; a direct CLI invocation cannot authorize
+adjudication. The helper's `prepare-review` command is an internal implementation detail of the
+registered tool, not a supported end-to-end review route. After staging preparation, use registered
+read/check tools rather than retrying blocked shell commands. Run configured local checks against the
+frozen source checkout before launching reviewers and reuse those receipts: native reviewer
+sessions may create `.pi/subagents/artifacts` there, which makes a later clean-tree check reject a
+rerun. The staging launch hook requires one attempt for each configured check and rechecks exact
+HEAD/cleanliness before claiming the roster; it blocks check reruns after launch. A failed attempt
+is not a PASS receipt. Do not relax clean-tree validation or delete runtime artifacts.
 
 PR policy facts are collected without a local CI evaluator:
 
@@ -130,7 +153,10 @@ writes a policy artifact bound to the prepared review and exposes its path plus 
 in model-visible content. The publication tool refreshes and validates that same artifact; the
 model does not echo the policy object. A staging PASS requires either confirmed absence of
 applicable GitHub checks with all configured local receipts, or complete current passing GitHub
-required-check evidence; an empty observation alone is never enough.
+required-check evidence; an empty observation alone is never enough. The restricted route
+continues to allow bounded native supervisor status/list/reply actions so genuine blocking or
+material plan-changing reviewer notifications remain actionable; routine progress/completion
+messages are discouraged in the joined reviewer task.
 
 ## File-backed records and publication
 
@@ -174,14 +200,19 @@ The batch publishes distinct `FORGE:INVESTIGATOR`, `FORGE:CLASSIFICATION`, `FORG
 `FORGE:CONTRACT`, `FORGE:ARCHITECT`, `FORGE:BUILDER`, `FORGE:TRAJECTORY`, or `FORGE:GATED`
 comments in order. `{ "record": "id" }` links a previous batch record and
 `{ "existing": { "kind": "BUILDER" } }` resolves one existing issue record without manual URL
-copying. `REVIEW-PANEL` targets a PR and accepts `reviewerReports` with each report's
-`reportFile`; the helper resolves the actual published reviewer permalink and renders it in the
-panel. `REVIEW-PANEL` defaults to `mode: standard`: an unchanged, clean PR may publish after an
-unrelated advance of its configured integration target, while the original reviewed base SHA
-remains in the record. Use `mode: staging` only for the protected promotion route, which requires
-an exact live base SHA. A changed same-head record needs an explicit `supersedes` reference. Retries reuse the
-same content identity, reconcile lost create responses, and return comment IDs, URLs, and
-publication status.
+copying. Published issue records persist exact read-back receipts in the safe artifact root. For issue
+work-on, an omitted or empty `BUILDER` input list resolves the unique applicable `ARCHITECT`
+receipt and verifies its `CONTRACT`/`CONTEXT` links; the terminal `TRAJECTORY` resolves that exact
+`BUILDER` receipt. Competing records require an explicit supersession chain; ambiguous or missing
+lineage blocks publication and retains the authored body. Local `publish:false` replay creates no
+HTTPS receipts and fabricates no permalinks. `REVIEW-PANEL` targets a PR and accepts
+`reviewerReports` with each report's `reportFile`; the helper resolves the actual published
+reviewer permalink and renders it in the panel. `REVIEW-PANEL` defaults to `mode: standard`: an
+unchanged, clean PR may publish after an unrelated advance of its configured integration target,
+while the original reviewed base SHA remains in the record. Use `mode: staging` only for the
+protected promotion route, which requires an exact live base SHA. A changed same-head record needs
+an explicit `supersedes` reference. Retries reuse the same content identity, reconcile lost create
+responses, and return comment IDs, URLs, and publication status.
 
 Discover current and legacy records without hiding ordinary comments:
 
@@ -200,8 +231,45 @@ $FORGEDOCK_CANDIDATE_BIN record reviewer \
 
 Add `--publish` only when the target and GitHub write authority are explicitly authorized.
 Publication lists comments once, reuses one matching stable marker, reconciles an ambiguous
-create response by readback, and requires exact saved-byte/permalink readback. A saved report
-survives a publication failure; review analysis is not rerun.
+create response by readback, and requires exact saved-byte/permalink readback. Each reviewer
+workflow returns a bounded result per role with native run ID/terminal state, report path,
+recovery-input path, and artifact references; delivery remains unverified until the parent reads
+the exact report. The protected-route roster has a durable one-launch claim: the prepared
+workflow cannot be replayed, and the panel cannot be re-prepared after launch in the same turn.
+The child publisher saves a hash-checked role/run-bound recovery sidecar before publication. A
+single `forge_recover_reviewer_publication` operation can make at most one role-only publish call,
+and only for an exact completed native role run with its prepared authorization. Once an
+operation is claimed, repeated calls are readback/finalization only: they verify canonical local
+authored content and exact remote comment bytes/permalink through the existing helper without
+clearing the claim or issuing another POST. Timeout, cancellation, detachment, execution limit, and
+unknown delivery remain distinct outcomes. `forge_publish_incomplete_review` can record truthful
+post-review `GATED` status without consuming an unused recovery attempt when recovery is
+unavailable or the parent reports an execution limit. It cannot preempt an available completed-role
+recovery, cancel an active claim, or describe an unresolved claim as exhausted. If a later readback
+verifies delivery, the parent adjudication automatically supersedes the published incomplete
+record using the existing durable-record mechanism. GATED is not a verdict or pre-review
+infrastructure failure. The parent tool rejects missing, altered, misbound, or undelivered reports
+before writing adjudication input.
+Reports may also carry a `FORGE:REVIEW_OBSERVATIONS` marker containing stable role-scoped
+observation IDs. The parent reads every current report and uses the restricted
+`forge_publish_adjudication` tool to map each
+observation exactly once to an explicit disposition. Duplicate causes retain all source IDs;
+clean reports use an empty observation list. `forge_resolve_review_tracking` searches open and
+closed issues before an authorized parent publishes one actionable follow-up. Permission or
+transport failure leaves the draft pending and does not change the review verdict or start work.
+`forge_prepare_review` collects PR policy once, returns the exact native `request` object and a
+compact source-attributed `policySummary`, and retains the complete `policy.json` plus
+`policy-summary.json`; do not run standalone `inspect-pr` or reread the request file. Staging does
+one necessary fresh policy refresh when publishing the final gate.
+
+For staging, `forge_publish_record` accepts the adjudication `decisionPath` and renders the
+`REVIEW-PANEL` section and gate from the same artifact, preserving check conclusion versus
+executed-proof semantics. The returned adjudication summary identifies the final verified panel
+permalink; the saved gate must link that exact permalink, not the superseded provisional record.
+`forge_publish_record` returns a compact exact-identity readback receipt with the gate URL, final
+panel URL, policy summary, and next action, so successful publication needs no follow-up artifact
+read. A transient exact-comment GET retries once within the existing publication budget; it never
+repeats a POST.
 
 ## Opt-in replacement
 

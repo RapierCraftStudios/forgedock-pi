@@ -1,0 +1,293 @@
+{
+  "runId": "adfb3e2c-7b8e-4444-b9a8-a317c2a2ccda",
+  "agent": "forgedock-owner",
+  "task": "[prompt redacted]",
+  "exitCode": 0,
+  "processSignal": "SIGTERM",
+  "usage": {
+    "input": 93479,
+    "output": 26036,
+    "cacheRead": 1882624,
+    "cacheWrite": 0,
+    "cost": 0.041192139999999995,
+    "turns": 46
+  },
+  "model": "openai-codex/gpt-6-luna:max",
+  "attemptedModels": [
+    "openai-codex/gpt-6-luna:max"
+  ],
+  "modelAttempts": [
+    {
+      "model": "openai-codex/gpt-6-luna:max",
+      "success": true,
+      "exitCode": 0,
+      "usage": {
+        "input": 93479,
+        "output": 26036,
+        "cacheRead": 1882624,
+        "cacheWrite": 0,
+        "cost": 0.041192139999999995,
+        "turns": 46
+      }
+    }
+  ],
+  "durationMs": 733286,
+  "toolCount": 61,
+  "agentContract": {
+    "version": 1
+  },
+  "launchContractDigest": "a84f7409a4222b3cdaa0bf6255cb9c0792a8a5ae6f91e9f4828e9604138dabff",
+  "launchResolvedExtensions": {
+    "version": 1,
+    "source": "launch-resolved",
+    "disableAmbientExtensions": false,
+    "runtime": [
+      "sha256:d7bc0fd99926c1a6",
+      "sha256:d1cdb42f3d136213"
+    ],
+    "configured": [],
+    "effective": [
+      "sha256:d7bc0fd99926c1a6",
+      "sha256:d1cdb42f3d136213"
+    ],
+    "omitted": {
+      "runtime": 0,
+      "configured": 0,
+      "effective": 0
+    }
+  },
+  "execution": {
+    "status": "completed",
+    "success": true,
+    "exitCode": 0
+  },
+  "acceptance": {
+    "status": "checked",
+    "evidenceStatus": "checked",
+    "explicit": true,
+    "effectiveAcceptance": {
+      "level": "checked",
+      "explicit": true,
+      "inferredReason": [],
+      "criteria": [
+        {
+          "id": "I102-AC-af54c48e9d54",
+          "must": "Exact bound criterion I102-AC-af54c48e9d54; acceptance-id=I102-AC-af54c48e9d54; textHash=sha256:af54c48e9d5435e87bdad09e5948ed97bc605550f8a74b5b754357b959c41459; proofType=behavioral; affectedBoundaries=src/render.mjs,test/display.test.mjs",
+          "evidence": [
+            "changed-files",
+            "tests-added",
+            "commands-run",
+            "residual-risks"
+          ],
+          "severity": "required"
+        },
+        {
+          "id": "I102-AC-1e433d8de812",
+          "must": "Exact bound criterion I102-AC-1e433d8de812; acceptance-id=I102-AC-1e433d8de812; textHash=sha256:1e433d8de812610c6188833b46e77986fd2be104a8ae9de703912d6569c8ea80; proofType=behavioral; affectedBoundaries=src/render.mjs,test/display.test.mjs",
+          "evidence": [
+            "changed-files",
+            "tests-added",
+            "commands-run",
+            "residual-risks"
+          ],
+          "severity": "required"
+        },
+        {
+          "id": "I102-AC-f2c58e248d7a",
+          "must": "Exact bound criterion I102-AC-f2c58e248d7a; acceptance-id=I102-AC-f2c58e248d7a; textHash=sha256:f2c58e248d7a054ebe209ef0cc6e4a096fc6db18c869cd7a11ae1df16ece583e; proofType=behavioral; affectedBoundaries=src/render.mjs,test/display.test.mjs",
+          "evidence": [
+            "changed-files",
+            "tests-added",
+            "commands-run",
+            "residual-risks"
+          ],
+          "severity": "required"
+        }
+      ],
+      "evidence": [
+        "changed-files",
+        "tests-added",
+        "commands-run",
+        "residual-risks",
+        "no-staged-files"
+      ],
+      "verify": [],
+      "stopRules": [
+        "Do not replace bound criterion IDs with generic criterion-1/criterion-2 values."
+      ]
+    },
+    "inferredReason": [],
+    "criteria": [
+      {
+        "id": "I102-AC-af54c48e9d54",
+        "must": "Exact bound criterion I102-AC-af54c48e9d54; acceptance-id=I102-AC-af54c48e9d54; textHash=sha256:af54c48e9d5435e87bdad09e5948ed97bc605550f8a74b5b754357b959c41459; proofType=behavioral; affectedBoundaries=src/render.mjs,test/display.test.mjs",
+        "evidence": [
+          "changed-files",
+          "tests-added",
+          "commands-run",
+          "residual-risks"
+        ],
+        "severity": "required"
+      },
+      {
+        "id": "I102-AC-1e433d8de812",
+        "must": "Exact bound criterion I102-AC-1e433d8de812; acceptance-id=I102-AC-1e433d8de812; textHash=sha256:1e433d8de812610c6188833b46e77986fd2be104a8ae9de703912d6569c8ea80; proofType=behavioral; affectedBoundaries=src/render.mjs,test/display.test.mjs",
+        "evidence": [
+          "changed-files",
+          "tests-added",
+          "commands-run",
+          "residual-risks"
+        ],
+        "severity": "required"
+      },
+      {
+        "id": "I102-AC-f2c58e248d7a",
+        "must": "Exact bound criterion I102-AC-f2c58e248d7a; acceptance-id=I102-AC-f2c58e248d7a; textHash=sha256:f2c58e248d7a054ebe209ef0cc6e4a096fc6db18c869cd7a11ae1df16ece583e; proofType=behavioral; affectedBoundaries=src/render.mjs,test/display.test.mjs",
+        "evidence": [
+          "changed-files",
+          "tests-added",
+          "commands-run",
+          "residual-risks"
+        ],
+        "severity": "required"
+      }
+    ],
+    "runtimeChecks": [
+      {
+        "id": "criterion:I102-AC-af54c48e9d54",
+        "status": "passed",
+        "message": "Required criterion 'I102-AC-af54c48e9d54' satisfied."
+      },
+      {
+        "id": "criterion:I102-AC-1e433d8de812",
+        "status": "passed",
+        "message": "Required criterion 'I102-AC-1e433d8de812' satisfied."
+      },
+      {
+        "id": "criterion:I102-AC-f2c58e248d7a",
+        "status": "passed",
+        "message": "Required criterion 'I102-AC-f2c58e248d7a' satisfied."
+      },
+      {
+        "id": "evidence:changed-files",
+        "status": "passed",
+        "message": "changed-files evidence present."
+      },
+      {
+        "id": "evidence:tests-added",
+        "status": "passed",
+        "message": "tests-added evidence present."
+      },
+      {
+        "id": "evidence:commands-run",
+        "status": "passed",
+        "message": "commands-run evidence present."
+      },
+      {
+        "id": "evidence:residual-risks",
+        "status": "passed",
+        "message": "residual-risks evidence present."
+      },
+      {
+        "id": "evidence:no-staged-files",
+        "status": "passed",
+        "message": "no-staged-files evidence present."
+      },
+      {
+        "id": "no-staged-files",
+        "status": "passed",
+        "message": "No staged files detected."
+      }
+    ],
+    "verifyRuns": [],
+    "childReport": {
+      "criteriaSatisfied": [
+        {
+          "id": "i102-ac-af54c48e9d54",
+          "status": "satisfied",
+          "evidence": "renderProfile appends a nonempty string teamLabel verbatim and keeps the two-segment output when absent or empty; real-consumer tests pass."
+        },
+        {
+          "id": "i102-ac-1e433d8de812",
+          "status": "satisfied",
+          "evidence": "The real renderer returns User-7:alice:Platform for the supplied profile and User-7:alice without teamLabel; tests verify the source objects remain unchanged."
+        },
+        {
+          "id": "i102-ac-f2c58e248d7a",
+          "status": "satisfied",
+          "evidence": "test/display.test.mjs exercises the real renderProfile import; npm run test:display passes 4/4 without adding a dependency."
+        }
+      ],
+      "changedFiles": [
+        "src/render.mjs",
+        "test/display.test.mjs"
+      ],
+      "testsAddedOrUpdated": [
+        "test/display.test.mjs"
+      ],
+      "commandsRun": [
+        {
+          "command": "npm run test:display (pre-edit)",
+          "result": "failed",
+          "summary": "Expected regression reproduced: 1 passed, 2 team-label assertions failed."
+        },
+        {
+          "command": "npm test (pre-edit)",
+          "result": "passed",
+          "summary": "Producer regression passed, 1/1."
+        },
+        {
+          "command": "npm run test:display (post-edit)",
+          "result": "passed",
+          "summary": "Consumer tests passed, 4/4."
+        },
+        {
+          "command": "npm run test:all",
+          "result": "passed",
+          "summary": "Complete producer and consumer fixture passed, 5/5."
+        },
+        {
+          "command": "npm test",
+          "result": "passed",
+          "summary": "Producer regression passed, 1/1."
+        },
+        {
+          "command": "git diff --check",
+          "result": "passed",
+          "summary": "No whitespace errors."
+        },
+        {
+          "command": "git push origin HEAD:refs/heads/integration",
+          "result": "passed",
+          "summary": "Reviewed commit pushed; remote integration readback matched 0d5a548ac58951b6c23cb87668891d4bd00282ce."
+        }
+      ],
+      "validationOutput": [
+        "Commit 0d5a548ac58951b6c23cb87668891d4bd00282ce is based on predecessor 713aced2e0e5efef105dbc379bc1687d8c65414c.",
+        "Worktree clean; no staged files.",
+        "Fresh correctness review found no structured observations; local adjudication APPROVE/PASS."
+      ],
+      "residualRisks": [
+        "No known code residuals.",
+        "GitHub PR, policy/check status, labels, comments, merge, and closure were not performed or claimed in this local replay."
+      ],
+      "noStagedFiles": true,
+      "diffSummary": "Append nonempty team labels verbatim in renderProfile and test empty-label omission through the real consumer.",
+      "reviewFindings": [
+        "No blockers or structured correctness findings; local adjudication APPROVE/PASS."
+      ],
+      "manualNotes": "The exact issue-101 predecessor was verified and fast-forwarded before edits. The reviewed commit was pushed to disposable origin/integration as the authorized local dependency-delivery boundary, not as GitHub delivery."
+    }
+  },
+  "review": {
+    "status": "not-requested"
+  },
+  "effects": {},
+  "transcriptPath": "/tmp/pi-subagents-uid-1000/artifacts/adfb3e2c-7b8e-4444-b9a8-a317c2a2ccda_forgedock-owner_0_transcript.jsonl",
+  "skills": [
+    "forgedock-work-on",
+    "forgedock-review-pr",
+    "forgedock-review-pr-staging"
+  ],
+  "timestamp": 1791269515242
+}

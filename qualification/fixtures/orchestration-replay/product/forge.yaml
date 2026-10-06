@@ -10,15 +10,18 @@ branches:
   staging: "integration"
   feature_pattern: "feature/{slug}"
 agents:
-  subagent_model: "openai-codex/gpt-5.6-luna"
-  thinking: "low"
+  subagent_model: "openai-codex/gpt-6-luna"
+  thinking: "max"
 orchestration:
   max_concurrent: 2
 verification:
   commands:
-    test: "npm test"
+    test:
+      producer: "npm test"
+      consumer: "npm run test:display"
+      all: "npm run test:all"
 review:
-  thinking: "low"
+  thinking: "max"
   reviewer_timeout_ms: 900000
   panel_timeout_ms: 2400000
   publication_timeout_ms: 120000

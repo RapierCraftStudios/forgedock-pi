@@ -1,0 +1,179 @@
+{
+  "schema": "forgedock.pr583.corrective-native-result/v1",
+  "status": "native-run-settled-gated-fail; acceptance-incomplete",
+  "launcherPreflightFailures": [
+    { "taskId": "b1d34eab1", "root": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T14-53-15-235Z", "error": "ReferenceError: fileURLToPath is not defined", "piProcessStarted": false },
+    { "taskId": "b36d49b5f", "root": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T14-55-18-440Z", "error": "ReferenceError: copyFileSync is not defined", "piProcessStarted": false }
+  ],
+  "launcher": {
+    "taskId": "bba756525",
+    "prompt": "/review-pr 7",
+    "piProcessAgentEndObserved": true,
+    "piProcessExitCode": 0,
+    "postRunSummaryError": "ReferenceError: sourceCommitAtLaunch is not defined; occurred after the Pi process settled and did not alter its outcome",
+    "parentSessionId": "01a0edb0-23bd-72f5-b28c-3ba71de84dc8",
+    "workflowRunId": "call_1KRDV9GuRqvixVNhCvbHWwiL|fc_0ed942f804fe081d016abbd34fd4c087d0959fb57c94d48fc5"
+  },
+  "runtime": {
+    "piVersion": "0.87.1",
+    "parentModel": "openai-codex/gpt-6-luna",
+    "parentThinking": "max",
+    "parentModelSource": "unchanged ordinary settings default; no CLI model/thinking override",
+    "reviewerModel": "openai-codex/gpt-5.6-luna:medium",
+    "reviewerModelSource": "prepared workflow and child runtime metadata",
+    "reviewerRunId": "fa77f871-3bc3-43b3-98d5-e91475327d33",
+    "reviewerThinking": "medium",
+    "reviewerDurationMs": 54866,
+    "reviewerToolCount": 20,
+    "reviewerUsage": { "inputTokens": 31019, "outputTokens": 1761, "cacheReadTokens": 29184, "turns": 7, "costUsd": 0.00890068 },
+    "piSubagentsVersion": "0.60.0",
+    "piSubagentsCommit": "0931cbbb98ab253177b181bd334fe02dd919dca5",
+    "ordinaryForgeDockCommit": "a58675de0d3ed2add3e14ea9d3db8960e71bc744",
+    "ordinarySettingsSha256BeforeAndAfter": "83f48baf1360c754bc2e4359ad7e7d6bb1db00723167acda69dd175d0bcd29a4"
+  },
+  "target": {
+    "repository": "example/product (local fake-GitHub fixture only)",
+    "pullRequest": 7,
+    "head": "23ed53566fe20bc967a4b6db0c3f4892618ed444",
+    "baseRef": "main",
+    "baseSha": "663d6d522a104d67527d0bf0ed2a588380cba93e",
+    "sourceRoot": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/project/.forge/worktrees/review-pr-7",
+    "configRoot": "/home/dev/.cache/forgedock-pr583-corrective-native/2026-09-29T15-02-17-769Z/project"
+  },
+  "elapsed": {
+    "parentStartedAt": "2026-09-29T15:02:18.388Z",
+    "parentSettledAt": "2026-09-29T15:10:39.357Z",
+    "parentSessionId": "01a0edb0-23bd-72f5-b28c-3ba71de84dc8",
+    "workflowRunId": "call_1KRDV9GuRqvixVNhCvbHWwiL|fc_0ed942f804fe081d016abbd34fd4c087d0959fb57c94d48fc5",
+    "parentElapsedMs": 500969,
+    "reviewerWorkflow": { "startedAt": "2026-09-29T15:03:44.677Z", "settledAt": "2026-09-29T15:04:39.798Z", "elapsedMs": 55121 },
+    "reviewerReportPublication": "2026-09-29T15:04:36.932Z",
+    "configuredCheckAttempt": { "startedAt": "2026-09-29T15:05:17.361Z", "settledAt": "2026-09-29T15:05:17.658Z", "elapsedMs": 297 },
+    "finalAdjudication": { "startedAt": "2026-09-29T15:10:03.268Z", "settledAt": "2026-09-29T15:10:03.981Z", "elapsedMs": 713 },
+    "gatePublication": { "startedAt": "2026-09-29T15:10:20.898Z", "settledAt": "2026-09-29T15:10:21.571Z", "elapsedMs": 673 }
+  },
+  "resourceIsolation": {
+    "preflightVerifiedBeforeInvocation": false,
+    "piCodingAgentDir": "/home/dev/.pi/agent",
+    "candidateExtensionPathPassed": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/extension.ts",
+    "candidateSkillPathsPassed": [
+      "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/skills/forgedock-review-pr/SKILL.md",
+      "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/skills/forgedock-review-pr-staging/SKILL.md"
+    ],
+    "candidatePromptTemplatesPassed": false,
+    "candidateReviewerAgentResourcesIsolated": false,
+    "piSubagentsExtensionPath": "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents/index.ts",
+    "piSubagentsVersion": "0.60.0",
+    "piSubagentsCommit": "0931cbbb98ab253177b181bd334fe02dd919dca5",
+    "noExtensionsFlag": true,
+    "noSkillsFlag": false,
+    "ordinaryInstalledForgeDockCommit": "a58675de0d3ed2add3e14ea9d3db8960e71bc744",
+    "observedInstalledSkillRead": "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/forgedock-pi/candidate/skills/forgedock-review-pr-staging/SKILL.md",
+    "coherentCandidateResourceSetVerified": false,
+    "reason": "The invocation left global skill discovery enabled and did not load candidate prompt/agent resources as one package; the parent later read the ordinary installed staging skill."
+  },
+  "skillDiscovery": {
+    "sourceSkillPathPassedToParent": "candidate/skills/forgedock-review-pr-staging/SKILL.md at source commit ef2b1c27",
+    "parentReadPathAfterCheckFailure": "/home/dev/.pi/agent/git/github.com/RapierCraftStudios/forgedock-pi/candidate/skills/forgedock-review-pr-staging/SKILL.md (installed commit a58675de)",
+    "parentMeaningfulReads": ["forge.yaml", "request.json", "src/display.mjs", "src/render.mjs", "test/display.test.mjs", "package.json", "README.md", "docs/decisions/display-boundary.md"],
+    "reviewerMeaningfulReads": ["policy-summary.json", "frozen.diff", "src/render.mjs", "src/display.mjs", "test/display.test.mjs", "package.json", "README.md", "docs/decisions/display-boundary.md", "forge.yaml", ".gitignore"],
+    "note": "The parent later inspected the installed older staging skill after the check failure; this is evidence of a possible skill-resource collision, not proof of the only cause. The post-run extension launch guard does not rely on skill selection."
+  },
+  "nativeOutcome": {
+    "reviewerRoles": ["correctness"],
+    "reviewerTerminal": "completed",
+    "reviewerReport": { "publication": "published to fake GitHub only", "url": "https://github.com/example/product/pull/7#issuecomment-1000", "structuredFindings": 0, "recommendation": "APPROVE" },
+    "checkOrder": "NOT MET: the reviewer workflow completed before forge_run_check was called",
+    "configuredCheck": {
+      "name": "test",
+      "command": "npm test",
+      "toolError": "Configured checks require a clean frozen source checkout",
+      "testCommandExecuted": false,
+      "receiptCreated": false,
+      "cause": "four native .pi/subagents/artifacts files made the frozen source worktree untracked/dirty",
+      "additionalFixtureDefect": "test/display.test.mjs contains an unmatched closing parenthesis in its second assertion; the parent spotted this, but npm test was not run"
+    },
+    "adjudication": { "publication": "published to fake GitHub only", "verdict": "GATED", "gate": "FAIL", "revision": 1, "panelUrl": "https://github.com/example/product/pull/7#issuecomment-1002", "readbackVerified": true },
+    "gate": { "publication": "published to fake GitHub only", "url": "https://github.com/example/product/pull/7#issuecomment-1003", "readbackVerified": true, "parentPanelUrl": "https://github.com/example/product/pull/7#issuecomment-1002", "linkMatchesFinalPanel": true },
+    "adjudicationToolAttempts": [
+      { "at": "2026-09-29T15:08:48.813Z", "verdict": "CHANGES_REQUESTED", "result": "rejected: CHANGES_REQUESTED needs an immediate-repair disposition" },
+      { "at": "2026-09-29T15:09:37.721Z", "verdict": "GATED", "revision": 0, "result": "rejected: adjudication-input revision 0 must advance the existing review artifact revision" },
+      { "at": "2026-09-29T15:10:03.268Z", "verdict": "GATED", "revision": 1, "result": "published; readbackVerified=true" }
+    ],
+    "externalEvaluatorRepair": false,
+    "finalResponseExcerpt": "PR #7: GATED — staging gate FAIL. The correctness reviewer reported no findings, and its report was verified as published. Required GitHub CI passed, but configured npm test did not run: the frozen test file has an unmatched ) after its second assertion. Remove the extra parenthesis, rerun the test and verify CI, then request a fresh staging review. No source changes were made. [Staging gate record](https://github.com/example/product/pull/7#issuecomment-1003)",
+    "finalResponseContainsGateUrl": true,
+    "finalResponseContainsSeparatePanelUrl": false
+  },
+  "controlledReadback": {
+    "injectedFailure": "TLS handshake timeout on provisional panel comment GET",
+    "commentId": 1001,
+    "attempts": ["failed transiently", "same comment GET succeeded"],
+    "duplicateProvisionalPost": false,
+    "panelComments": [
+      "https://github.com/example/product/pull/7#issuecomment-1001 (provisional)",
+      "https://github.com/example/product/pull/7#issuecomment-1002 (final)"
+    ],
+    "gateComment": "https://github.com/example/product/pull/7#issuecomment-1003",
+    "gateLinksFinalPanel": true
+  },
+  "completedResultAndProgress": {
+    "readbackOnlyRecoveryCalls": 1,
+    "recoveryResult": "publication already verified; no publisher POST was invoked",
+    "reviewerContactSupervisorCalls": 0,
+    "progressUpdateMessagesObserved": 0,
+    "actionableMessagesObserved": 0,
+    "guarantee": "Reviewer instructions discourage routine supervisor messages; native Pi triggerTurn behavior for progress_update remains enabled and actionable requests remain available. No runtime suppression is claimed."
+  },
+  "sourceAndWriteBoundary": {
+    "sourceHeadUnchanged": true,
+    "sourceStatusAfter": ["?? .pi/subagents/artifacts/<four reviewer runtime files>"],
+    "canonicalConfigCheckoutClean": true,
+    "issueWrites": 0,
+    "liveGitHubWrites": 0,
+    "alterLabWrites": 0,
+    "ordinarySettingsUnchanged": true,
+    "piSubagentsUnchanged": true,
+    "ordinaryForgeDockInstallUnchanged": true
+  },
+  "postRunLauncherFailure": "The Pi run settled successfully, but the launcher summary failed afterward with ReferenceError: sourceCommitAtLaunch is not defined. This result was reconstructed from preserved RPC/session/fake-GitHub artifacts; no Pi run was repeated.",
+  "postRunCorrection": "A narrow staging extension guard was added after this native attempt: require configured check attempts and a clean exact-head source before reviewer launch, then block post-launch check reruns. The sequence and guard are verified without a model in sequence-guard-result.json; the native run was not repeated.",
+  "postRunNoModelPreflight": {
+    "correctedFixture": {
+      "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f",
+      "command": "npm test",
+      "exitCode": 0,
+      "testsPassed": 1,
+      "sourceTreeCleanBeforeAndAfter": true,
+      "forgeRunCheckInvoked": false,
+      "reviewReceiptCreated": false,
+      "evidence": "postrun-preflight/fixture-result.json and postrun-preflight/npm-test.stdout"
+    },
+    "resourceAudit": {
+      "sourceHead": "ea1081a38df2fad912765cc0fe6aa787bb75d034",
+      "piSubagents": "0.60.0 at 0931cbbb98ab253177b181bd334fe02dd919dca5",
+      "selectedReviewerProfile": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/agents/forgedock-reviewer.md",
+      "selectedReviewerTools": "/home/dev/Projects/forgedock-pi-review-adjudication-20260918T060000Z/candidate/reviewer-tools.ts",
+      "noPiProcessOrModelLaunched": true,
+      "evidence": "postrun-preflight/resource-resolution-audit.json",
+      "limitation": "This audit occurred after the native run and cannot retroactively validate its resource set."
+    },
+    "launcherSource": {
+      "fixtureSeedParenthesisCorrected": true,
+      "summaryReferenceChangedToSourceHeadAtLaunch": true,
+      "nodeCheckPassed": true,
+      "actualRunPostSettlementErrorRemains": true,
+      "launcherOrPiWasNotRerun": true
+    }
+  },
+  "remainingLimitations": [
+    "The native route still did not complete the configured npm test in the supported pre-review order; the final GATED/FAIL is the actual decision and the completion acceptance is not met.",
+    "The actual native fixture head retained the malformed test and npm test was not executed; the separate corrected fixture preflight passed but created no check receipt and does not qualify the native run.",
+    "The native invocation did not isolate the candidate skills/prompts/agent resources; the post-run resource audit is not a substitute for a pre-invocation audit or a native run.",
+    "The launcher summary still failed after the Pi process settled; the corrected source was only syntax-checked, and the actual result was reconstructed from retained artifacts.",
+    "The parent attempted adjudication with two rejected argument sets before publishing revision 1; no external evaluator modified arguments, but this adds tool-error latency.",
+    "The parent final response links the gate record but omits a separate final panel permalink; the gate body itself is verified against the final panel.",
+    "One readback-only recovery call followed a published reviewer report; it made no duplicate report POST.",
+    "This small fake-GitHub fixture establishes no AlterLab-scale performance or behavioral-equivalence claim."
+  ]
+}

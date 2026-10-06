@@ -70,3 +70,63 @@ context, contract, architect, builder, and gated records, plus a linked PR panel
 
 The backfill batch was retried once and all eight records reconciled as
 `existing-identity`. It did not merge, close, deploy, or restart any backlog.
+
+## Review-pipeline latency correction
+
+The retrospective latency diagnosis and sanitized evidence (including two earlier partial
+native attempts and one corrective native GATED/FAIL attempt that did not reach the configured
+check in order) for the existing PR #583 branch are documented in
+[`qualification/evidence/review-pr-performance-20260928/RESULT.md`](../qualification/evidence/review-pr-performance-20260928/RESULT.md).
+The completed AlterLab #33800 GATED/FAIL result remains unchanged; this tooling
+correction made no AlterLab writes.
+
+## Corrected native reconciliation pair (2026-10-06)
+
+The corrected disposable-only v2 contract was qualified once with the exact candidate
+commit `4a36725a5f4ccd53e573549a167c1ac91b53f025` installed in isolation. Runtime
+identity was Pi `1.0.2`, pi-subagents `0931cbbb98ab253177b181bd334fe02dd919dca5`,
+and `openai-codex/gpt-6-luna:max`. The existing PR #583 was open at that candidate
+head; no merge or install of the later evidence-only closeout was performed.
+
+In the single native pair run, synthetic #101 and #102 both completed `DONE`, with
+native status `completed`, acceptance `checked`, and dependency `SATISFIED` on the
+same persisted parent root. #101 delivered commit
+`713aced2e0e5efef105dbc379bc1687d8c65414c`; #102 fast-forwarded from that exact
+predecessor before editing and delivered `0d5a548ac58951b6c23cb87668891d4bd00282ce`
+with #101 as parent. The disposable local `origin/integration` readback matched the
+final commit. The parent integration worktree itself remained at the prepared base,
+behind the local ref by two commits; this is local ref delivery, not GitHub merge.
+
+Both local correctness panels reported no structured findings and adjudicated
+`APPROVE / PASS`. Owner-run verification passed: #101 `npm test` 1/1 (its two
+`teamLabel` consumer cases remained correctly deferred); #102 `npm run test:display`
+4/4, `npm run test:all` 5/5, and `npm test` 1/1, with `git diff --check` clean.
+The pre-install no-model repository check passed 520 tests, 0 failed, 10 skipped;
+the focused native-adapter pair passed 2/2. Reviewers inspected frozen source but
+did not independently run tests.
+
+The #102 owner automatically corrected one rejected reviewer-tool call that carried
+an unrequested `includeProgress` option; the rejected call launched no reviewer, and
+one valid review then completed. There was no human/operator repair, parent reply,
+code remediation, repeated review, or evaluator-edited native result. The final
+persisted parent root had no detached owner and no continuation. The earlier v1
+ambiguous-contract result remains an immutable failure archive with #102 GATED and
+the stale WAITING/detached root; it is not relabeled as success.
+
+Timing and reported cost are separated in the [sanitized evidence bundle](../qualification/evidence/native-pair-v2-gpt6-20261006/README.md): setup 0.686s, no-model preflight 18.282s, parent preparation 2m32.245s, native owner/review/delivery window 19m56.039s, and 6m44.760s of parent collection after the root. The exact-root wait was reported as 19m31s and overlaps the root window. Parent execution elapsed 29m13.044s; setup through closeout totaled 29m32.012s. Reported model cost was $0.03490868 for the parent plus $0.08316298 for the native child workflow, or $0.11807166 combined; no-model setup is excluded.
+
+### Requirements-to-evidence map
+
+| Requirement | Evidence |
+| --- | --- |
+| Exact runtime/install and disposable contract | `qualification/evidence/native-pair-v2-gpt6-20261006/run/{launch-input,preflight,install-manifest}.json` |
+| Authoritative same-root final batch status | `run/result.json`, byte-identical `run/native-root-status.json`, and `run/workflow-value.json`; root SHA-256 and issue rows are recorded in the bundle README |
+| Issue-level context, records, predecessor consumption, and local delivery | `owners/`, `records/issue-101/`, `records/issue-102/`, and `run/dispatch-result.md` |
+| Frozen code review, actual reviewer runs, and adjudication | `reviews/issue-101/` and `reviews/issue-102/` |
+| Historical v1 ambiguous-contract failure | `qualification/fixtures/orchestration-replay/legacy-ambiguous-v1/` (unchanged) |
+
+This one disposable pair demonstrates corrected local parent reconciliation only. It
+creates no general reliability, GitHub policy/check, merge-readiness, or production
+claim. Auto20 remains paused; no AlterLab issue/comment (including #33616), ordinary
+Pi, product source, live fixture, deployment, or backlog execution was changed. The
+closeout changes only this ForgeDock qualification report and its evidence bundle.

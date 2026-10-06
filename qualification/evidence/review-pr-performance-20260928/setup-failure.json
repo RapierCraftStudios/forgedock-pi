@@ -1,0 +1,24 @@
+{
+  "schema": "forgedock.review-exercise-setup-failure/v1",
+  "startedAt": "2026-09-28T14:38:32.606Z",
+  "completedAt": "2026-09-28T14:39:22.231Z",
+  "project": "example/product (disposable local fixture)",
+  "prompt": "/review-pr 7",
+  "operation": "forge_prepare_review",
+  "error": "review.panel_timeout_ms must be an integer from 2820000 through 2147483647",
+  "fixtureReviewConfig": {
+    "reviewerTimeoutMs": 900000,
+    "publicationTimeoutMs": 120000,
+    "panelTimeoutMs": 1920000,
+    "maxConcurrent": 1,
+    "minimumPanelTimeoutMs": 2820000
+  },
+  "completedReview": false,
+  "reviewerRoles": [],
+  "nativeWorkflowLaunches": 0,
+  "requiredCheckQueries": 0,
+  "fakeGithubCommentPosts": 0,
+  "fakeGithubIssueWrites": 0,
+  "ordinaryPiSettingsUnchanged": true,
+  "disposition": "preserved setup failure; corrected only the disposable fixture concurrency to 2, keeping all three timeouts unchanged"
+}

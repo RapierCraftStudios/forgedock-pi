@@ -1,5 +1,8 @@
+import path from "node:path";
+
 export interface IssuePlanInput {
   number: number;
+  target?: string;
   title?: string;
   body?: string;
   dependsOn?: readonly number[];
@@ -8,9 +11,18 @@ export interface IssuePlanInput {
   globalFiles?: readonly string[];
 }
 
+export interface PlannedConflict {
+  issue: number;
+  reason: "shared-mutation-file" | "shared-global-file" | "migration-sequence";
+  files: readonly string[];
+}
+
 export interface PlannedIssue extends IssuePlanInput {
   key: string;
+  /** Functional prerequisites only; conflicts must never use this list. */
   predecessors: readonly string[];
+  /** Exclusive-write ordering; settling this issue does not imply its behavior was delivered. */
+  conflicts: readonly PlannedConflict[];
   externalDependencies: readonly number[];
 }
 
@@ -26,20 +38,32 @@ export interface ReviewRoster {
   rationale: readonly string[];
 }
 
-function normalizedFiles(files: readonly string[] | undefined): readonly string[] {
-  return [...new Set((files ?? []).map((file) => file.trim()).filter(Boolean))];
+function normalizedRepoPath(file: string): string {
+  const portable = file.trim().replace(/\\/g, "/");
+  if (!portable || portable.startsWith("/") || /^[A-Za-z]:/.test(portable) || /[*?]/.test(portable)) {
+    throw new Error(`Mutation path must be an exact repository-relative file: ${file}`);
+  }
+  const normalized = path.posix.normalize(portable);
+  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.endsWith("/")) {
+    throw new Error(`Mutation path escapes or is not a file: ${file}`);
+  }
+  return normalized;
 }
 
-function overlap(left: readonly string[] | undefined, right: readonly string[] | undefined): boolean {
-  const rightSet = new Set(normalizedFiles(right));
-  return normalizedFiles(left).some((file) => rightSet.has(file));
+function normalizedFiles(files: readonly string[] | undefined): readonly string[] {
+  return [...new Set((files ?? []).map(normalizedRepoPath))].sort();
+}
+
+function intersection(left: readonly string[], right: readonly string[]): string[] {
+  const rightSet = new Set(right);
+  return left.filter((file) => rightSet.has(file));
 }
 
 function explicitPredecessors(issue: IssuePlanInput, numbers: Set<number>): readonly number[] {
   return [...new Set((issue.dependsOn ?? []).filter((number) => numbers.has(number) && number !== issue.number))];
 }
 
-/** Build only explicit or exact-file dependency edges. Broad domains/directories never add edges. */
+/** Keep functional prerequisites separate from exact-file and migration write conflicts. */
 export function buildDependencyGraph(
   issues: readonly IssuePlanInput[],
   configuredGlobalFiles: readonly string[] = [],
@@ -49,10 +73,19 @@ export function buildDependencyGraph(
   const predecessors = new Map<number, Set<number>>(
     issues.map((issue) => [issue.number, new Set(explicitPredecessors(issue, numbers))]),
   );
+  const conflicts = new Map<number, Map<number, PlannedConflict>>(
+    issues.map((issue) => [issue.number, new Map()]),
+  );
   const externalDependencies = new Map(
     issues.map((issue) => [issue.number, (issue.dependsOn ?? []).filter((number) => !numbers.has(number))]),
   );
   const globalFiles = normalizedFiles(configuredGlobalFiles);
+  const filesByIssue = new Map(issues.map((issue) => [issue.number, normalizedFiles(issue.mutationFiles)]));
+
+  function addConflict(left: number, right: number, conflict: PlannedConflict): void {
+    conflicts.get(left)?.set(right, conflict);
+    conflicts.get(right)?.set(left, { ...conflict, issue: left });
+  }
 
   for (let leftIndex = 0; leftIndex < issues.length; leftIndex += 1) {
     const left = issues[leftIndex];
@@ -60,13 +93,20 @@ export function buildDependencyGraph(
     for (let rightIndex = leftIndex + 1; rightIndex < issues.length; rightIndex += 1) {
       const right = issues[rightIndex];
       if (!right) continue;
-      const exactMutationConflict = overlap(left.mutationFiles, right.mutationFiles);
-      const exactGlobalConflict =
-        overlap(left.mutationFiles, globalFiles) && overlap(right.mutationFiles, globalFiles);
-      const migrationOrder = Boolean(left.migration && right.migration);
-      const explicitOrder = (left.dependsOn ?? []).includes(right.number) || (right.dependsOn ?? []).includes(left.number);
-      if (!explicitOrder && (exactMutationConflict || exactGlobalConflict || migrationOrder)) {
-        predecessors.get(right.number)?.add(left.number);
+      const sharedFiles = intersection(filesByIssue.get(left.number) ?? [], filesByIssue.get(right.number) ?? []);
+      if (sharedFiles.length > 0) {
+        const sharedGlobalFiles = intersection(sharedFiles, globalFiles);
+        addConflict(left.number, right.number, {
+          issue: right.number,
+          reason: sharedGlobalFiles.length > 0 ? "shared-global-file" : "shared-mutation-file",
+          files: sharedFiles,
+        });
+      } else if (left.migration && right.migration && (left.target ?? "") === (right.target ?? "")) {
+        addConflict(left.number, right.number, {
+          issue: right.number,
+          reason: "migration-sequence",
+          files: [],
+        });
       }
     }
   }
@@ -90,6 +130,9 @@ export function buildDependencyGraph(
     ...issue,
     key: keys.get(issue.number) as string,
     predecessors: [...(predecessors.get(issue.number) ?? [])].map((number) => keys.get(number) as string),
+    conflicts: [...(conflicts.get(issue.number)?.values() ?? [])]
+      .sort((left, right) => left.issue - right.issue)
+      .map((conflict) => ({ ...conflict, issue: conflict.issue })),
     externalDependencies: externalDependencies.get(issue.number) ?? [],
   }));
 }

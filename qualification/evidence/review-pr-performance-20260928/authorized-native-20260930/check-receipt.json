@@ -1,0 +1,9 @@
+{
+  "schema": "forgedock.candidate-check/v1",
+  "name": "test",
+  "status": "passed",
+  "sourceRoot": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/.forge/worktrees/review-pr-7",
+  "head": "93fa2ca98f47cacaa44d5dbf0f7d1ac936b85d1f",
+  "configPath": "/home/dev/.cache/forgedock-pr583-authorized-native-20260930/attempt-1/project/forge.yaml",
+  "configSha256": "532318d1b31c9f853cbddcf242f2c655ab609920d1da3e6e4a98c07ab8f84a2b"
+}

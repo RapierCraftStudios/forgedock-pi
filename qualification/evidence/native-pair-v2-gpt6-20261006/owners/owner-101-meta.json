@@ -1,0 +1,268 @@
+{
+  "runId": "6f75ede6-25d6-4ad3-8118-cba6606f7039",
+  "agent": "forgedock-owner",
+  "task": "[prompt redacted]",
+  "exitCode": 0,
+  "processSignal": "SIGTERM",
+  "usage": {
+    "input": 80498,
+    "output": 21740,
+    "cacheRead": 1511936,
+    "cacheWrite": 0,
+    "cost": 0.03403916,
+    "turns": 42
+  },
+  "model": "openai-codex/gpt-6-luna:max",
+  "attemptedModels": [
+    "openai-codex/gpt-6-luna:max"
+  ],
+  "modelAttempts": [
+    {
+      "model": "openai-codex/gpt-6-luna:max",
+      "success": true,
+      "exitCode": 0,
+      "usage": {
+        "input": 80498,
+        "output": 21740,
+        "cacheRead": 1511936,
+        "cacheWrite": 0,
+        "cost": 0.03403916,
+        "turns": 42
+      }
+    }
+  ],
+  "durationMs": 462375,
+  "toolCount": 52,
+  "agentContract": {
+    "version": 1
+  },
+  "launchContractDigest": "b30df821af657da64bf8307c4784c724b62407caea623328158c4df7bb96ac5d",
+  "launchResolvedExtensions": {
+    "version": 1,
+    "source": "launch-resolved",
+    "disableAmbientExtensions": false,
+    "runtime": [
+      "sha256:d7bc0fd99926c1a6",
+      "sha256:d1cdb42f3d136213"
+    ],
+    "configured": [],
+    "effective": [
+      "sha256:d7bc0fd99926c1a6",
+      "sha256:d1cdb42f3d136213"
+    ],
+    "omitted": {
+      "runtime": 0,
+      "configured": 0,
+      "effective": 0
+    }
+  },
+  "execution": {
+    "status": "completed",
+    "success": true,
+    "exitCode": 0
+  },
+  "acceptance": {
+    "status": "checked",
+    "evidenceStatus": "checked",
+    "explicit": true,
+    "effectiveAcceptance": {
+      "level": "checked",
+      "explicit": true,
+      "inferredReason": [],
+      "criteria": [
+        {
+          "id": "I101-AC-d820f0bf3acb",
+          "must": "Exact bound criterion I101-AC-d820f0bf3acb; acceptance-id=I101-AC-d820f0bf3acb; textHash=sha256:d820f0bf3acb0b8d7b69d1692c1a80825f98cf42517e10d7efba8843ce720196; proofType=behavioral; affectedBoundaries=src/profile.mjs,test/profile.test.mjs",
+          "evidence": [
+            "changed-files",
+            "tests-added",
+            "commands-run",
+            "residual-risks"
+          ],
+          "severity": "required"
+        },
+        {
+          "id": "I101-AC-59636083d919",
+          "must": "Exact bound criterion I101-AC-59636083d919; acceptance-id=I101-AC-59636083d919; textHash=sha256:59636083d9198f5da40d77dc2e4ef39564875f05a2c38efb7417ac1fb465eca1; proofType=behavioral; affectedBoundaries=src/profile.mjs,test/profile.test.mjs",
+          "evidence": [
+            "changed-files",
+            "tests-added",
+            "commands-run",
+            "residual-risks"
+          ],
+          "severity": "required"
+        }
+      ],
+      "evidence": [
+        "changed-files",
+        "tests-added",
+        "commands-run",
+        "residual-risks",
+        "no-staged-files"
+      ],
+      "verify": [],
+      "stopRules": [
+        "Do not replace bound criterion IDs with generic criterion-1/criterion-2 values."
+      ]
+    },
+    "inferredReason": [],
+    "criteria": [
+      {
+        "id": "I101-AC-d820f0bf3acb",
+        "must": "Exact bound criterion I101-AC-d820f0bf3acb; acceptance-id=I101-AC-d820f0bf3acb; textHash=sha256:d820f0bf3acb0b8d7b69d1692c1a80825f98cf42517e10d7efba8843ce720196; proofType=behavioral; affectedBoundaries=src/profile.mjs,test/profile.test.mjs",
+        "evidence": [
+          "changed-files",
+          "tests-added",
+          "commands-run",
+          "residual-risks"
+        ],
+        "severity": "required"
+      },
+      {
+        "id": "I101-AC-59636083d919",
+        "must": "Exact bound criterion I101-AC-59636083d919; acceptance-id=I101-AC-59636083d919; textHash=sha256:59636083d9198f5da40d77dc2e4ef39564875f05a2c38efb7417ac1fb465eca1; proofType=behavioral; affectedBoundaries=src/profile.mjs,test/profile.test.mjs",
+        "evidence": [
+          "changed-files",
+          "tests-added",
+          "commands-run",
+          "residual-risks"
+        ],
+        "severity": "required"
+      }
+    ],
+    "runtimeChecks": [
+      {
+        "id": "criterion:I101-AC-d820f0bf3acb",
+        "status": "passed",
+        "message": "Required criterion 'I101-AC-d820f0bf3acb' satisfied."
+      },
+      {
+        "id": "criterion:I101-AC-59636083d919",
+        "status": "passed",
+        "message": "Required criterion 'I101-AC-59636083d919' satisfied."
+      },
+      {
+        "id": "evidence:changed-files",
+        "status": "passed",
+        "message": "changed-files evidence present."
+      },
+      {
+        "id": "evidence:tests-added",
+        "status": "passed",
+        "message": "tests-added evidence present."
+      },
+      {
+        "id": "evidence:commands-run",
+        "status": "passed",
+        "message": "commands-run evidence present."
+      },
+      {
+        "id": "evidence:residual-risks",
+        "status": "passed",
+        "message": "residual-risks evidence present."
+      },
+      {
+        "id": "evidence:no-staged-files",
+        "status": "passed",
+        "message": "no-staged-files evidence present."
+      },
+      {
+        "id": "no-staged-files",
+        "status": "passed",
+        "message": "No staged files detected."
+      }
+    ],
+    "verifyRuns": [],
+    "childReport": {
+      "criteriaSatisfied": [
+        {
+          "id": "i101-ac-d820f0bf3acb",
+          "status": "satisfied",
+          "evidence": "At reviewed head 713aced2e0e5efef105dbc379bc1687d8c65414c, normalizeDisplayName trims and lowercases the display value; the regression also verifies profileId remains User-7 and the source profile object is unchanged."
+        },
+        {
+          "id": "i101-ac-59636083d919",
+          "status": "satisfied",
+          "evidence": "The updated test/profile.test.mjs regression passes through npm test (1/1 tests passed) on the reviewed head."
+        }
+      ],
+      "changedFiles": [
+        "src/profile.mjs",
+        "test/profile.test.mjs"
+      ],
+      "testsAddedOrUpdated": [
+        "test/profile.test.mjs"
+      ],
+      "commandsRun": [
+        {
+          "command": "npm test (before edits)",
+          "result": "failed",
+          "summary": "The existing regression failed because normalizeDisplayName was an unimplemented throwing stub."
+        },
+        {
+          "command": "npm test (after regression update, before implementation)",
+          "result": "failed",
+          "summary": "The strengthened behavioral regression failed against the stub, demonstrating the behavior gap."
+        },
+        {
+          "command": "npm test (after implementation)",
+          "result": "passed",
+          "summary": "1 test passed, 0 failed."
+        },
+        {
+          "command": "npm run test:display (reviewed head)",
+          "result": "failed",
+          "summary": "1 of 3 tests passed; the two optional teamLabel cases reserved for #102 failed."
+        },
+        {
+          "command": "npm run test:display (prepared base bdeda88466290319f33ab19dc8b3642a78dd8b24)",
+          "result": "failed",
+          "summary": "0 of 3 tests passed because the producer was unimplemented at the exact prepared base."
+        },
+        {
+          "command": "npm run test:all",
+          "result": "not-run",
+          "summary": "Deferred to dependent issue #102 as specified."
+        },
+        {
+          "command": "git diff --check HEAD^ HEAD",
+          "result": "passed",
+          "summary": "No whitespace errors."
+        },
+        {
+          "command": "git push origin HEAD:refs/heads/integration",
+          "result": "passed",
+          "summary": "Fast-forwarded disposable origin/integration from the prepared base to reviewed head 713aced2e0e5efef105dbc379bc1687d8c65414c; remote readback matched."
+        }
+      ],
+      "validationOutput": [
+        "Fresh read-only correctness review: no structured observations; APPROVE / PASS adjudication saved locally.",
+        "Final worktree was clean with no staged files; origin/integration read back as 713aced2e0e5efef105dbc379bc1687d8c65414c.",
+        "Local INVESTIGATOR, CLASSIFICATION, CONTEXT, CONTRACT, ARCHITECT, BUILDER, adjudication, and TRAJECTORY records were saved without GitHub publication."
+      ],
+      "residualRisks": [
+        "The two failing test:display cases exercise optional teamLabel rendering reserved for #102; no consumer implementation was added here.",
+        "The full fixture suite npm run test:all remains deferred to #102.",
+        "GitHub policy and required-check evidence was unavailable in local replay; no remote PR/check conclusion is claimed.",
+        "No GitHub labels, comments, PR, merge, or issue closure were performed."
+      ],
+      "noStagedFiles": true,
+      "diffSummary": "Implemented trim-and-lowercase normalization and strengthened the focused producer regression to check identifier and source-data preservation.",
+      "reviewFindings": [
+        "No blockers or structured observations; independent correctness reviewer recommended APPROVE."
+      ],
+      "manualNotes": "The authorized disposable integration push is the dependency-delivery boundary; no GitHub delivery is claimed."
+    }
+  },
+  "review": {
+    "status": "not-requested"
+  },
+  "effects": {},
+  "transcriptPath": "/tmp/pi-subagents-uid-1000/artifacts/6f75ede6-25d6-4ad3-8118-cba6606f7039_forgedock-owner_0_transcript.jsonl",
+  "skills": [
+    "forgedock-work-on",
+    "forgedock-review-pr",
+    "forgedock-review-pr-staging"
+  ],
+  "timestamp": 1791268781816
+}

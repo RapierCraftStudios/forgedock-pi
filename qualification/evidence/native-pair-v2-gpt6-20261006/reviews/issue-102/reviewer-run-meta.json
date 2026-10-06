@@ -1,0 +1,109 @@
+{
+  "runId": "08c3bc83-baad-4d23-8cc6-647d4bb7d9e0",
+  "agent": "forgedock-reviewer",
+  "task": "[prompt redacted]",
+  "exitCode": 0,
+  "processSignal": "SIGTERM",
+  "usage": {
+    "input": 14259,
+    "output": 3173,
+    "cacheRead": 41984,
+    "cacheWrite": 0,
+    "cost": 0.00343224,
+    "turns": 9
+  },
+  "model": "openai-codex/gpt-6-luna:max",
+  "attemptedModels": [
+    "openai-codex/gpt-6-luna:max"
+  ],
+  "modelAttempts": [
+    {
+      "model": "openai-codex/gpt-6-luna:max",
+      "success": true,
+      "exitCode": 0,
+      "usage": {
+        "input": 14259,
+        "output": 3173,
+        "cacheRead": 41984,
+        "cacheWrite": 0,
+        "cost": 0.00343224,
+        "turns": 9
+      }
+    }
+  ],
+  "durationMs": 84848,
+  "toolCount": 17,
+  "launchContractDigest": "1118cc3ff8894ceefd446b98c7dd7a78ea5ce3cad08c7e720e17d12299f0d53e",
+  "launchResolvedExtensions": {
+    "version": 1,
+    "source": "launch-resolved",
+    "disableAmbientExtensions": true,
+    "runtime": [
+      "sha256:d7bc0fd99926c1a6"
+    ],
+    "configured": [
+      "sha256:6da8bfae480f5be4"
+    ],
+    "effective": [
+      "sha256:d7bc0fd99926c1a6",
+      "sha256:6da8bfae480f5be4"
+    ],
+    "omitted": {
+      "runtime": 0,
+      "configured": 0,
+      "effective": 0
+    }
+  },
+  "acceptance": {
+    "status": "not-required",
+    "evidenceStatus": "not-required",
+    "explicit": true,
+    "effectiveAcceptance": {
+      "level": "none",
+      "explicit": true,
+      "inferredReason": [
+        "read-only/reviewer-style agent"
+      ],
+      "criteria": [
+        {
+          "id": "criterion-1",
+          "must": "Return concrete findings with file paths and severity when applicable",
+          "evidence": [],
+          "severity": "required"
+        }
+      ],
+      "evidence": [],
+      "verify": [],
+      "stopRules": [],
+      "reason": "disabled by deprecated false shorthand"
+    },
+    "inferredReason": [
+      "read-only/reviewer-style agent"
+    ],
+    "criteria": [
+      {
+        "id": "criterion-1",
+        "must": "Return concrete findings with file paths and severity when applicable",
+        "evidence": [],
+        "severity": "required"
+      }
+    ],
+    "runtimeChecks": [],
+    "verifyRuns": []
+  },
+  "effects": {
+    "fileMutation": {
+      "status": "not-applicable",
+      "expected": false,
+      "attempted": false,
+      "evidence": {
+        "source": "tracked-files",
+        "trackedOnly": true,
+        "changedFiles": [],
+        "attemptedMutation": false
+      }
+    }
+  },
+  "transcriptPath": "/tmp/pi-subagent-session-iScYWg/adfb3e2c-7b8e-4444-b9a8-a317c2a2ccda/run-0/subagent-artifacts/08c3bc83-baad-4d23-8cc6-647d4bb7d9e0_forgedock-reviewer_0_transcript.jsonl",
+  "timestamp": 1791269292416
+}

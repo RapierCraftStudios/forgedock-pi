@@ -84,16 +84,19 @@ the parent serializes that object into the JSON plan before invoking `prepareBat
   "launchAllowance": 24,
   "requestStartedAt": "<actual original request timestamp>",
   "issues": [
-    {"number": 42, "target": "staging", "baseCwd": "/actual/prepared/issue-42", "predecessors": [], "contract": {"path": "/actual/parent-artifacts/issue-42-contract.json", "sha256": "<file SHA-256>"}},
-    {"number": 43, "target": "staging", "baseCwd": "/actual/prepared/issue-43", "predecessors": [42], "contract": {"path": "/actual/parent-artifacts/issue-43-contract.json", "sha256": "<file SHA-256>"}}
+    {"number": 42, "target": "staging", "baseCwd": "/actual/prepared/issue-42", "predecessors": [], "conflicts": [], "contract": {"path": "/actual/parent-artifacts/issue-42-contract.json", "sha256": "<file SHA-256>"}},
+    {"number": 43, "target": "staging", "baseCwd": "/actual/prepared/issue-43", "predecessors": [42], "conflicts": [], "contract": {"path": "/actual/parent-artifacts/issue-43-contract.json", "sha256": "<file SHA-256>"}}
   ]
 }
 ```
 
-The issue list is already confirmed/topologically ordered; `baseCwd` is each exact clean
-managed issue worktree prepared from `origin/<target>` by the parent. Each lane has a unique
-registered `pi-parallel-*` worktree path and branch; the dispatcher never asks Pi to create
-another worktree. Before writing the plan, the dispatcher compiles each retained issue's exact
+The issue list is already confirmed/topologically ordered by functional `predecessors`; exact
+write conflicts are recorded separately in `conflicts` as `{issue, reason, files}` entries. A
+conflict serializes only writers to the same normalized repository-relative path or identified
+exclusive resource; it does not require the preceding issue to deliver code. `baseCwd` is each
+exact clean managed issue worktree prepared from `origin/<target>` by the parent. Each lane has
+a unique registered `pi-parallel-*` worktree path and branch; the dispatcher never asks Pi to
+create another worktree. Before writing the plan, the dispatcher compiles each retained issue's exact
 checked acceptance criteria into a fresh issue-contract file with the installed
 `createIssueContract` helper. Each criterion preserves a stable source ID, exact text hash,
 proof type, and affected boundaries; the returned contract object has top-level `criteria`
@@ -110,9 +113,12 @@ search. Optional
 current configured commands; an empty catalog is not PASS and does not excuse missing
 required verification.
 
-Run `node <package>/specs/helpers/dispatch.mjs batch <plan.json> <new-empty-output-dir>`.
-Read its `request.json` and invoke `subagent` with those exact fields, including the generated
-`workflowScriptPath`, active limit and cumulative allowance. Do not copy or rewrite the
+For the candidate route, retain the configured owner ceiling; a lower `activeOwners` value
+requires one explicit, recorded capacity decision and is not inferred from generic caution. The
+candidate plan also carries a structured operation scope through its existing
+`--owner-authority-file`: absent scope grants no merge; a scope is bound per issue and must name
+the exact target. Read the generated `request.json` and invoke `subagent` with those exact fields,
+including the generated `workflowScriptPath`, active limit and cumulative allowance. Do not copy or rewrite the
 workflow body. Preparation rejects malformed data before publishing a runnable request;
 fix the named plan/config field, not the native runner. Keep inputs while lanes may resume.
 

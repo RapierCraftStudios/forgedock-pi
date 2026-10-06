@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/profile.test.mjs",
+    "test:display": "node --test test/display.test.mjs",
+    "test:all": "node --test test/*.test.mjs"
   }
 }

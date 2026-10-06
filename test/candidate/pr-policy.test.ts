@@ -5,6 +5,8 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
 
+import registerCandidateTools from "../../candidate/tools.ts";
+
 const execFileAsync = promisify(execFile);
 const helper = resolve("bin/forgedock-candidate.mjs");
 
@@ -137,14 +139,76 @@ test("inspect-pr retains pending and failed check facts without collapsing them"
   }
 });
 
+test("registered review preparation writes compact attributed policy context and retains complete evidence", async () => {
+  const f = await fixture();
+  try {
+    await writeFile(join(f.root, ".gitignore"), "/bin/\n/state.json\n");
+    await execFileAsync("git", ["add", ".gitignore"], { cwd: f.root });
+    await execFileAsync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Candidate Test", "commit", "--quiet", "-m", "ignore fake policy transport"], { cwd: f.root });
+    const base = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: f.root })).stdout.trim();
+    await writeFile(join(f.root, "src.js"), "export const value = 'review fixture';\n");
+    await execFileAsync("git", ["add", "src.js"], { cwd: f.root });
+    await execFileAsync("git", ["-c", "user.email=test@example.com", "-c", "user.name=Candidate Test", "commit", "--quiet", "-m", "fixture change"], { cwd: f.root });
+    const head = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: f.root })).stdout.trim();
+    await execFileAsync("git", ["update-ref", "refs/remotes/origin/integration", base], { cwd: f.root });
+    const state = JSON.parse(await readFile(f.state, "utf8"));
+    state.pull = { ...state.pull, headRefOid: head, baseRefOid: base };
+    state.requiredChecks = [{ name: "CI", state: "SUCCESS", bucket: "pass" }];
+    state.requiredExit = 0;
+    state.checkRuns = [{ name: "CI", status: "completed", conclusion: "success", head_sha: head, app: { slug: "github-actions" } }];
+    await writeFile(f.state, JSON.stringify(state));
+
+    const tools = new Map<string, { execute: (id: string, params: unknown) => Promise<any> }>();
+    const calls: Array<{ name: string; args: string[] }> = [];
+    const fakePi = {
+      registerTool(definition: { name: string; execute: (id: string, params: unknown) => Promise<any> }) { tools.set(definition.name, definition); },
+      async exec(name: string, args: string[] = [], options: { cwd?: string; timeout?: number } = {}) {
+        calls.push({ name, args });
+        try {
+          const result = await execFileAsync(name, args, { cwd: options.cwd ?? f.root, env: { ...f.env, FORGEDOCK_CANDIDATE_BIN: helper }, timeout: options.timeout });
+          return { code: 0, stdout: result.stdout, stderr: result.stderr, killed: false };
+        } catch (error: any) {
+          return { code: Number(error.code ?? 1), stdout: String(error.stdout ?? ""), stderr: String(error.stderr ?? error.message ?? ""), killed: false };
+        }
+      },
+    };
+    registerCandidateTools(fakePi as never);
+    const prepare = tools.get("forge_prepare_review");
+    assert.ok(prepare);
+    const result = await prepare.execute("prepare", { repository: "example/product", pullRequest: 7, head, baseRef: "integration", baseSha: base, sourceRoot: f.root, configRoot: f.root, roles: ["correctness"], publish: false });
+    const details = result.details as { reviewRoot: string; policyPath: string; policySummaryPath: string; policySummary: any };
+    assert.ok(details.policyPath.endsWith("/policy.json"));
+    assert.ok(details.policySummaryPath.endsWith("/policy-summary.json"));
+    const fullPolicy = JSON.parse(await readFile(details.policyPath, "utf8"));
+    const summaryArtifact = JSON.parse(await readFile(details.policySummaryPath, "utf8"));
+    assert.equal(fullPolicy.current.policy.evaluatedRequiredChecks.data[0].name, "CI");
+    assert.equal(summaryArtifact.current.source.snapshot, "prepared");
+    assert.equal(summaryArtifact.current.source.artifact, details.policyPath);
+    assert.equal(summaryArtifact.current.applicability, fullPolicy.current.policy.requirements.applicability);
+    assert.equal(summaryArtifact.current.requiredNames[0], "CI");
+    assert.equal(summaryArtifact.current.exactHeadCheckRuns.count, 1);
+    assert.deepEqual(details.policySummary, summaryArtifact.prepared);
+    const returnedPreparation = JSON.parse(result.content[0].text);
+    assert.deepEqual(returnedPreparation.request, JSON.parse(await readFile(join(details.reviewRoot, "request.json"), "utf8")));
+    assert.equal(returnedPreparation.policySummaryPath, details.policySummaryPath);
+    assert.ok(result.content[0].text.length < 8_000);
+    assert.doesNotMatch(result.content[0].text, /download_url|raw\.example\/token=secret/);
+    assert.equal(calls.filter((call) => call.args.includes("inspect-pr")).length, 1);
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+  }
+});
+
 test("active routes use repository-driven policy and external dispatcher artifacts", async () => {
   const workOn = await readFile("candidate/skills/forgedock-work-on/SKILL.md", "utf8");
   const review = await readFile("candidate/skills/forgedock-review-pr/SKILL.md", "utf8");
   const orchestrate = await readFile("candidate/skills/forgedock-orchestrate/SKILL.md", "utf8");
-  assert.match(workOn, /inspect-pr --repo/);
+  assert.match(workOn, /single registered `forge_prepare_review` call also collects the bound policy artifact/);
+  assert.match(workOn, /Do not separately run `inspect-pr`/);
   assert.match(workOn, /empty\/nonzero.*not.*requirement|nonzero.*not.*proof/i);
-  assert.match(review, /requiredness.*applicable.*rules/);
-  assert.match(review, /forge_prepare_review.*not.*shell helper|prepared policy.*activates the route guard/s);
+  assert.match(review, /evaluated active branch rules[\s\S]*establish requiredness/);
+  assert.match(review, /`forge_prepare_review` once/);
+  assert.match(review, /`policy-summary\.json`/);
   assert.match(review, /deterministic validation error.*Do not retry/s);
   assert.match(orchestrate, /outside[\s\S]*\$PWD/);
   assert.match(orchestrate, /completed GATED owner is not a failed execution/);

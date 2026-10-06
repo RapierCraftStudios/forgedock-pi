@@ -1,0 +1,563 @@
+{
+  "schema": "forgedock.qualification-result/v1",
+  "mode": "orchestrate",
+  "exitCode": 0,
+  "startedAt": "2026-10-06T06:29:27.007Z",
+  "finishedAt": "2026-10-06T06:58:40.051Z",
+  "elapsedMs": 1753044,
+  "timing": {
+    "setupAndFixturePreparation": {
+      "startedAt": "2026-10-06T06:29:08.037Z",
+      "endedAt": "2026-10-06T06:29:08.724Z",
+      "elapsedMs": 686
+    },
+    "noModelPreflight": {
+      "setupStartedAt": "2026-10-06T06:29:08.037Z",
+      "setupFinishedAt": "2026-10-06T06:29:08.724Z",
+      "setupElapsedMs": 686,
+      "startedAt": "2026-10-06T06:29:08.724Z",
+      "finishedAt": "2026-10-06T06:29:27.006Z",
+      "elapsedMs": 18282
+    },
+    "parentPreparationUntilFirstNativeRootMs": 152245,
+    "nativeRootWindows": [
+      {
+        "runId": "231d2f30-3fd1-4b43-9135-d04c9d526908",
+        "kind": "dispatch",
+        "startedAt": 1791268319252,
+        "endedAt": 1791269515291,
+        "elapsedMs": 1196039
+      }
+    ],
+    "interRootCoordination": [],
+    "waits": [
+      {
+        "tool": "bg_wait",
+        "id": "231d2f30-3fd1-4b43-9135-d04c9d526908",
+        "toolCallId": "call_15lx93zl9DO5DZsXTnbdzPif|fc_044711c3e1c2c8a1016ac495f7d4c887d0a08ca191462c94f2",
+        "result": "Waited 19m31s for run \"231d2f30-3fd1-4b43-9135-d04c9d526908\"; done. Outcome: 1 complete. Completion/control events have been observed; inspect status if a notification is not visible yet."
+      }
+    ],
+    "finalRootToParentCollectionMs": 404760,
+    "parentElapsedMs": 1753044,
+    "parentUsage": {
+      "messages": 34,
+      "input": 129220,
+      "output": 20790,
+      "cacheRead": 1159168,
+      "cacheWrite": 0,
+      "totalTokens": 1309178,
+      "costUsd": 0.034908680000000004
+    },
+    "nativeWorkflowCost": {
+      "inputTokens": 205171,
+      "outputTokens": 55926,
+      "costUsd": 0.08316298
+    },
+    "timingLimits": "Native root windows include in-root owners/reviewers. Wait durations are retained separately and are not added to wall time; missing lifecycle boundaries are null."
+  },
+  "parentSessionId": "01a10fe7-1eb4-7438-acd9-5561d3a4a0bc",
+  "installRoot": "/home/dev/.cache/forgedock-pi-candidate/4a36725a5f4ccd53e573549a167c1ac91b53f025",
+  "runtime": {
+    "piVersion": "1.0.2",
+    "nodeVersion": "v26.7.0",
+    "candidateCommit": "4a36725a5f4ccd53e573549a167c1ac91b53f025",
+    "piSubagentsCommit": "0931cbbb98ab253177b181bd334fe02dd919dca5",
+    "model": "openai-codex/gpt-6-luna",
+    "thinking": "max"
+  },
+  "preflight": {
+    "schema": "forgedock.qualification-preflight/v1",
+    "result": "passed",
+    "noModelRequests": true,
+    "candidateCommit": "4a36725a5f4ccd53e573549a167c1ac91b53f025",
+    "piVersion": "1.0.2",
+    "piSubagentsCommit": "0931cbbb98ab253177b181bd334fe02dd919dca5",
+    "model": "openai-codex/gpt-6-luna",
+    "thinking": "max",
+    "configuredOwnerConcurrency": 2,
+    "fixtureContract": {
+      "revision": "v2-disposable-only",
+      "issues": [
+        101,
+        102
+      ],
+      "dependency": {
+        "successor": 102,
+        "predecessor": 101
+      },
+      "examples": [
+        {
+          "input": "{ id: \"User-7\", name: \"  ALICE  \", teamLabel: \"Platform\" }",
+          "output": "User-7:alice:Platform"
+        },
+        {
+          "input": "{ id: \"User-7\", name: \"  ALICE  \" }",
+          "output": "User-7:alice"
+        }
+      ],
+      "verificationCommands": {
+        "producer": "npm test",
+        "consumer": "npm run test:display",
+        "full": "npm run test:all"
+      },
+      "seed": "both issue behaviors remain unimplemented"
+    },
+    "baselineTests": {
+      "producer": {
+        "command": "npm test",
+        "exitCode": 1,
+        "expectedFailure": true
+      },
+      "consumer": {
+        "command": "npm run test:display",
+        "exitCode": 1,
+        "expectedFailure": true
+      },
+      "full": {
+        "command": "npm run test:all",
+        "exitCode": 1,
+        "expectedFailure": true
+      },
+      "marker": "display normalization is not implemented"
+    },
+    "localGitHub": {
+      "identityRead": "passed",
+      "writeAttempt": "rejected-by-local-only-transport"
+    },
+    "dispatch": {
+      "result": "passed",
+      "deliveryMode": "local-replay",
+      "issueOrder": [
+        101,
+        102
+      ],
+      "dependency": {
+        "successor": 102,
+        "predecessor": 101
+      },
+      "targetBase": {
+        "branch": "integration",
+        "targetSha": "bdeda88466290319f33ab19dc8b3642a78dd8b24",
+        "headSha": "bdeda88466290319f33ab19dc8b3642a78dd8b24"
+      },
+      "ownerConcurrency": 2
+    },
+    "preparedWorkflow": "/tmp/forgedock-gpt6-orchestration-4a36725a5f4ccd53e573549a167c1ac91b53f025-20261006T062907Z/preflight-dispatch/request.json",
+    "localDelivery": {
+      "pushReadback": "e45709c398be97c0bd3d49bb7e7f9fbc6d5df577",
+      "successorFastForward": "e45709c398be97c0bd3d49bb7e7f9fbc6d5df577",
+      "worktreeClean": true
+    },
+    "doctor": {
+      "readiness": "ready-with-live-write-limitation",
+      "providerAuth": {
+        "provider": "openai-codex",
+        "status": "ready"
+      },
+      "loadedCommands": 31
+    },
+    "auth": "isolated symlink to existing operator auth; file contents not read",
+    "restoredFixtureHead": "bdeda88466290319f33ab19dc8b3642a78dd8b24",
+    "timing": {
+      "setupStartedAt": "2026-10-06T06:29:08.037Z",
+      "setupFinishedAt": "2026-10-06T06:29:08.724Z",
+      "setupElapsedMs": 686,
+      "startedAt": "2026-10-06T06:29:08.724Z",
+      "finishedAt": "2026-10-06T06:29:27.006Z",
+      "elapsedMs": 18282
+    }
+  },
+  "sandbox": "/tmp/forgedock-orchestrate-replay-odOm0I",
+  "integration": "/tmp/forgedock-orchestrate-replay-odOm0I/integration",
+  "issueFile": "/tmp/forgedock-orchestrate-replay-odOm0I/orchestrate-issues.json",
+  "baseHead": "bdeda88466290319f33ab19dc8b3642a78dd8b24",
+  "deliveredHead": "0d5a548ac58951b6c23cb87668891d4bd00282ce",
+  "nativeCalls": [
+    {
+      "agent": null,
+      "action": "list",
+      "workflowScriptPath": null,
+      "cwd": null,
+      "model": null,
+      "async": null
+    },
+    {
+      "agent": null,
+      "action": "status",
+      "workflowScriptPath": null,
+      "cwd": null,
+      "model": null,
+      "async": null
+    },
+    {
+      "agent": null,
+      "action": null,
+      "workflowScriptPath": "/tmp/forgedock-gpt6-orchestration-4a36725a5f4ccd53e573549a167c1ac91b53f025-20261006T062907Z/dispatch.1JMfys/workflow.js",
+      "cwd": "/tmp/forgedock-orchestrate-replay-odOm0I/integration",
+      "model": null,
+      "async": true
+    },
+    {
+      "agent": null,
+      "action": "status",
+      "workflowScriptPath": null,
+      "cwd": null,
+      "model": null,
+      "async": null
+    },
+    {
+      "agent": null,
+      "action": "status",
+      "workflowScriptPath": null,
+      "cwd": null,
+      "model": null,
+      "async": null
+    },
+    {
+      "agent": null,
+      "action": "status",
+      "workflowScriptPath": null,
+      "cwd": null,
+      "model": null,
+      "async": null
+    },
+    {
+      "agent": null,
+      "action": "status",
+      "workflowScriptPath": null,
+      "cwd": null,
+      "model": null,
+      "async": null
+    }
+  ],
+  "runs": [
+    {
+      "runId": "231d2f30-3fd1-4b43-9135-d04c9d526908",
+      "agent": null,
+      "model": null,
+      "exitCode": null,
+      "usage": null,
+      "progressSummary": null
+    },
+    {
+      "runId": "6f75ede6-25d6-4ad3-8118-cba6606f7039",
+      "agent": "forgedock-owner",
+      "model": "gpt-6-luna",
+      "exitCode": null,
+      "usage": null,
+      "progressSummary": null
+    },
+    {
+      "runId": "adfb3e2c-7b8e-4444-b9a8-a317c2a2ccda",
+      "agent": "forgedock-owner",
+      "model": "gpt-6-luna",
+      "exitCode": null,
+      "usage": null,
+      "progressSummary": null
+    }
+  ],
+  "operatorInterventions": {
+    "count": 0,
+    "tools": []
+  },
+  "coordination": {
+    "count": 0,
+    "tools": []
+  },
+  "workflowStatus": "terminal",
+  "nativeBatch": {
+    "status": "terminal",
+    "outcome": "terminal-done",
+    "reason": null,
+    "rootHistory": [
+      {
+        "runId": "231d2f30-3fd1-4b43-9135-d04c9d526908",
+        "toolCallId": "call_epdfTDcLCet5Nlvr41zLrfEH|fc_044711c3e1c2c8a1016ac495de7d1887d0a3affe05b406fbd7",
+        "asyncDir": "/tmp/pi-subagents-uid-1000/async-subagent-runs/231d2f30-3fd1-4b43-9135-d04c9d526908",
+        "statusPath": "/tmp/pi-subagents-uid-1000/async-subagent-runs/231d2f30-3fd1-4b43-9135-d04c9d526908/status.json",
+        "statusSha256": "7758055e4ca7546eae5cc053d7a03de9bf409e112e8419e175cb51c00028fbd2",
+        "state": "complete",
+        "kind": "dispatch",
+        "startedAt": 1791268319252,
+        "endedAt": 1791269515291,
+        "durationMs": null,
+        "totalTokens": {
+          "input": 173977,
+          "output": 47776,
+          "total": 221753
+        },
+        "totalCost": {
+          "inputTokens": 205171,
+          "outputTokens": 55926,
+          "costUsd": 0.08316298
+        },
+        "runFanoutBudget": {
+          "used": 3,
+          "limit": 12,
+          "remaining": 9
+        },
+        "workflowSteps": [
+          {
+            "key": "issue-101",
+            "runId": "6f75ede6-25d6-4ad3-8118-cba6606f7039",
+            "agent": "forgedock-owner",
+            "status": "completed",
+            "startedAt": 1791268319344,
+            "endedAt": null,
+            "durationMs": 462527,
+            "currentTool": null,
+            "totalTokens": null,
+            "totalCost": null
+          },
+          {
+            "key": "issue-102",
+            "runId": "adfb3e2c-7b8e-4444-b9a8-a317c2a2ccda",
+            "agent": "forgedock-owner",
+            "status": "completed",
+            "startedAt": 1791268781883,
+            "endedAt": null,
+            "durationMs": 733395,
+            "currentTool": null,
+            "totalTokens": null,
+            "totalCost": null
+          }
+        ],
+        "workflowChildren": [
+          {
+            "key": "issue-101",
+            "runId": "6f75ede6-25d6-4ad3-8118-cba6606f7039",
+            "agent": "forgedock-owner",
+            "status": null,
+            "startedAt": null,
+            "endedAt": null,
+            "durationMs": null,
+            "usage": null,
+            "totalCost": null
+          },
+          {
+            "key": "issue-102",
+            "runId": "adfb3e2c-7b8e-4444-b9a8-a317c2a2ccda",
+            "agent": "forgedock-owner",
+            "status": null,
+            "startedAt": null,
+            "endedAt": null,
+            "durationMs": null,
+            "usage": null,
+            "totalCost": null
+          }
+        ]
+      }
+    ],
+    "finalRoot": {
+      "runId": "231d2f30-3fd1-4b43-9135-d04c9d526908",
+      "toolCallId": "call_epdfTDcLCet5Nlvr41zLrfEH|fc_044711c3e1c2c8a1016ac495de7d1887d0a3affe05b406fbd7",
+      "asyncDir": "/tmp/pi-subagents-uid-1000/async-subagent-runs/231d2f30-3fd1-4b43-9135-d04c9d526908",
+      "statusPath": "/tmp/pi-subagents-uid-1000/async-subagent-runs/231d2f30-3fd1-4b43-9135-d04c9d526908/status.json",
+      "statusSha256": "7758055e4ca7546eae5cc053d7a03de9bf409e112e8419e175cb51c00028fbd2",
+      "state": "complete",
+      "kind": "dispatch",
+      "startedAt": 1791268319252,
+      "endedAt": 1791269515291,
+      "durationMs": null,
+      "totalTokens": {
+        "input": 173977,
+        "output": 47776,
+        "total": 221753
+      },
+      "totalCost": {
+        "inputTokens": 205171,
+        "outputTokens": 55926,
+        "costUsd": 0.08316298
+      },
+      "runFanoutBudget": {
+        "used": 3,
+        "limit": 12,
+        "remaining": 9
+      },
+      "workflowSteps": [
+        {
+          "key": "issue-101",
+          "runId": "6f75ede6-25d6-4ad3-8118-cba6606f7039",
+          "agent": "forgedock-owner",
+          "status": "completed",
+          "startedAt": 1791268319344,
+          "endedAt": null,
+          "durationMs": 462527,
+          "currentTool": null,
+          "totalTokens": null,
+          "totalCost": null
+        },
+        {
+          "key": "issue-102",
+          "runId": "adfb3e2c-7b8e-4444-b9a8-a317c2a2ccda",
+          "agent": "forgedock-owner",
+          "status": "completed",
+          "startedAt": 1791268781883,
+          "endedAt": null,
+          "durationMs": 733395,
+          "currentTool": null,
+          "totalTokens": null,
+          "totalCost": null
+        }
+      ],
+      "workflowChildren": [
+        {
+          "key": "issue-101",
+          "runId": "6f75ede6-25d6-4ad3-8118-cba6606f7039",
+          "agent": "forgedock-owner",
+          "status": null,
+          "startedAt": null,
+          "endedAt": null,
+          "durationMs": null,
+          "usage": null,
+          "totalCost": null
+        },
+        {
+          "key": "issue-102",
+          "runId": "adfb3e2c-7b8e-4444-b9a8-a317c2a2ccda",
+          "agent": "forgedock-owner",
+          "status": null,
+          "startedAt": null,
+          "endedAt": null,
+          "durationMs": null,
+          "usage": null,
+          "totalCost": null
+        }
+      ]
+    },
+    "rows": [
+      {
+        "key": "issue-101",
+        "issue": 101,
+        "repository": "example/product",
+        "target": "integration",
+        "ok": true,
+        "status": "DONE",
+        "nativeStatus": "completed",
+        "nativeAcceptanceStatus": "checked",
+        "dependency": "SATISFIED",
+        "runId": "6f75ede6-25d6-4ad3-8118-cba6606f7039",
+        "output": "FORGE_WORK_ON_RESULT status=DONE issue=101 pr=none dependency=SATISFIED",
+        "blockedBy": [],
+        "waitingFor": [],
+        "detached": false,
+        "nativeStatusRef": null,
+        "recoverySource": null,
+        "error": null
+      },
+      {
+        "key": "issue-102",
+        "issue": 102,
+        "repository": "example/product",
+        "target": "integration",
+        "ok": true,
+        "status": "DONE",
+        "nativeStatus": "completed",
+        "nativeAcceptanceStatus": "checked",
+        "dependency": "SATISFIED",
+        "runId": "adfb3e2c-7b8e-4444-b9a8-a317c2a2ccda",
+        "output": "FORGE_WORK_ON_RESULT status=DONE issue=102 pr=none dependency=SATISFIED",
+        "blockedBy": [],
+        "waitingFor": [],
+        "detached": false,
+        "nativeStatusRef": null,
+        "recoverySource": null,
+        "error": null
+      }
+    ],
+    "observations": {
+      "waits": [
+        {
+          "tool": "bg_wait",
+          "id": "231d2f30-3fd1-4b43-9135-d04c9d526908",
+          "toolCallId": "call_15lx93zl9DO5DZsXTnbdzPif|fc_044711c3e1c2c8a1016ac495f7d4c887d0a08ca191462c94f2",
+          "result": "Waited 19m31s for run \"231d2f30-3fd1-4b43-9135-d04c9d526908\"; done. Outcome: 1 complete. Completion/control events have been observed; inspect status if a notification is not visible yet."
+        }
+      ],
+      "readPaths": [
+        "/tmp/pi-subagents-uid-1000/async-subagent-runs/231d2f30-3fd1-4b43-9135-d04c9d526908/status.json",
+        "/tmp/pi-subagents-uid-1000/async-subagent-runs/231d2f30-3fd1-4b43-9135-d04c9d526908/status.json"
+      ]
+    },
+    "continuationCount": 0
+  },
+  "workflowRows": [
+    {
+      "key": "issue-101",
+      "issue": 101,
+      "repository": "example/product",
+      "target": "integration",
+      "ok": true,
+      "status": "DONE",
+      "nativeStatus": "completed",
+      "nativeAcceptanceStatus": "checked",
+      "dependency": "SATISFIED",
+      "runId": "6f75ede6-25d6-4ad3-8118-cba6606f7039",
+      "output": "FORGE_WORK_ON_RESULT status=DONE issue=101 pr=none dependency=SATISFIED",
+      "blockedBy": [],
+      "waitingFor": [],
+      "detached": false,
+      "nativeStatusRef": null,
+      "recoverySource": null,
+      "error": null
+    },
+    {
+      "key": "issue-102",
+      "issue": 102,
+      "repository": "example/product",
+      "target": "integration",
+      "ok": true,
+      "status": "DONE",
+      "nativeStatus": "completed",
+      "nativeAcceptanceStatus": "checked",
+      "dependency": "SATISFIED",
+      "runId": "adfb3e2c-7b8e-4444-b9a8-a317c2a2ccda",
+      "output": "FORGE_WORK_ON_RESULT status=DONE issue=102 pr=none dependency=SATISFIED",
+      "blockedBy": [],
+      "waitingFor": [],
+      "detached": false,
+      "nativeStatusRef": null,
+      "recoverySource": null,
+      "error": null
+    }
+  ],
+  "markers": [
+    "FORGE_WORK_ON_RESULT status=DONE issue=101 pr=none dependency=SATISFIED",
+    "FORGE_WORK_ON_RESULT status=DONE issue=102 pr=none dependency=SATISFIED"
+  ],
+  "observedMarkers": [
+    "FORGE_WORK_ON_RESULT status=DONE issue=101 pr=none dependency=SATISFIED",
+    "FORGE_WORK_ON_RESULT status=DONE issue=102 pr=none dependency=SATISFIED"
+  ],
+  "reviewResults": [],
+  "firstPass": "native-owner-outcomes-done",
+  "github": {
+    "writes": "unexecuted",
+    "fakeGhLog": "/tmp/forgedock-orchestrate-replay-odOm0I/github-local-transport.jsonl",
+    "localState": "/tmp/forgedock-orchestrate-replay-odOm0I/github-local-state.json",
+    "reason": "Local fake gh returns only exact Git-verified PR identity and empty comments; all writes and unsupported endpoints are rejected"
+  },
+  "sourceWorktrees": [
+    {
+      "worktree": "/tmp/forgedock-orchestrate-replay-odOm0I/integration",
+      "HEAD": "bdeda88466290319f33ab19dc8b3642a78dd8b24",
+      "branch": "refs/heads/integration"
+    },
+    {
+      "worktree": "/tmp/pi-worktree-6f75ede6-25d6-4ad3-8118-cba6606f7039-0",
+      "HEAD": "713aced2e0e5efef105dbc379bc1687d8c65414c",
+      "branch": "refs/heads/pi-parallel-6f75ede6-25d6-4ad3-8118-cba6606f7039-0"
+    },
+    {
+      "worktree": "/tmp/pi-worktree-adfb3e2c-7b8e-4444-b9a8-a317c2a2ccda-0",
+      "HEAD": "0d5a548ac58951b6c23cb87668891d4bd00282ce",
+      "branch": "refs/heads/pi-parallel-adfb3e2c-7b8e-4444-b9a8-a317c2a2ccda-0"
+    }
+  ],
+  "retainedEvidence": {
+    "directory": "/tmp/forgedock-gpt6-orchestration-4a36725a5f4ccd53e573549a167c1ac91b53f025-20261006T062907Z",
+    "rawParentEvents": "/tmp/forgedock-gpt6-orchestration-4a36725a5f4ccd53e573549a167c1ac91b53f025-20261006T062907Z/parent.jsonl",
+    "stderr": "/tmp/forgedock-gpt6-orchestration-4a36725a5f4ccd53e573549a167c1ac91b53f025-20261006T062907Z/parent.stderr.log"
+  }
+}

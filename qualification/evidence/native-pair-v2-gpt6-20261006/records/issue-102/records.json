@@ -1,0 +1,32 @@
+{
+  "repository": "example/product",
+  "issue": 102,
+  "cwd": "/tmp/pi-worktree-adfb3e2c-7b8e-4444-b9a8-a317c2a2ccda-0",
+  "records": [
+    {
+      "id": "investigator",
+      "kind": "INVESTIGATOR",
+      "bodyFile": "/tmp/forgedock-issue-102-prebuild/INVESTIGATOR.md"
+    },
+    {
+      "id": "classification",
+      "kind": "CLASSIFICATION",
+      "bodyFile": "/tmp/forgedock-issue-102-prebuild/CLASSIFICATION.md"
+    },
+    {
+      "id": "context",
+      "kind": "CONTEXT",
+      "bodyFile": "/tmp/forgedock-issue-102-prebuild/CONTEXT.md"
+    },
+    {
+      "id": "contract",
+      "kind": "CONTRACT",
+      "bodyFile": "/tmp/forgedock-issue-102-prebuild/CONTRACT.md"
+    },
+    {
+      "id": "architect",
+      "kind": "ARCHITECT",
+      "bodyFile": "/tmp/forgedock-issue-102-prebuild/ARCHITECT.md"
+    }
+  ]
+}

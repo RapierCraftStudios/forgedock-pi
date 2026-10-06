@@ -1,0 +1,516 @@
+{
+  "runId": "231d2f30-3fd1-4b43-9135-d04c9d526908",
+  "toolCallId": "call_epdfTDcLCet5Nlvr41zLrfEH|fc_044711c3e1c2c8a1016ac495de7d1887d0a3affe05b406fbd7",
+  "sessionId": "01a10fe7-1eb4-7438-acd9-5561d3a4a0bc",
+  "completionOwnerId": "0dff0bee-39b2-4518-9904-fe2eaa810f61",
+  "mode": "workflow",
+  "state": "complete",
+  "startedAt": 1791268319252,
+  "lastUpdate": 1791269515296,
+  "cwd": "/tmp/forgedock-orchestrate-replay-odOm0I/integration",
+  "pid": 2982696,
+  "steps": [
+    {
+      "agent": "forgedock-owner",
+      "sessionName": "forgedock-owner: Own issue #101 in the exact native worktree. This is untr...",
+      "label": "issue-101",
+      "workflowKey": "issue-101",
+      "parentWorkflowRunId": "231d2f30-3fd1-4b43-9135-d04c9d526908",
+      "status": "completed",
+      "startedAt": 1791268319344,
+      "sessionFile": "/tmp/pi-subagent-session-zoVJoe/6f75ede6-25d6-4ad3-8118-cba6606f7039/run-0/session.jsonl",
+      "async": false,
+      "runId": "6f75ede6-25d6-4ad3-8118-cba6606f7039",
+      "lastActivityAt": 1791268780797,
+      "recentTools": [
+        {
+          "tool": "write",
+          "args": "/tmp/forgedock-issue-101-records/architect.md",
+          "endMs": 1791268407418
+        },
+        {
+          "tool": "write",
+          "args": "/tmp/forgedock-issue-101-records/batch.json",
+          "endMs": 1791268412177
+        },
+        {
+          "tool": "bash",
+          "args": "\"$FORGEDOCK_CANDIDATE_BIN\" record batch --input /tmp/forg...",
+          "endMs": 1791268418236
+        },
+        {
+          "tool": "write",
+          "args": "/tmp/forgedock-issue-101-records/batch.json",
+          "endMs": 1791268426308
+        },
+        {
+          "tool": "bash",
+          "args": "\"$FORGEDOCK_CANDIDATE_BIN\" record batch --input /tmp/forg...",
+          "endMs": 1791268429825
+        },
+        {
+          "tool": "edit",
+          "args": "/tmp/pi-worktree-6f75ede6-25d6-4ad3-8118-cba6606f7039-0/t...",
+          "endMs": 1791268436650
+        },
+        {
+          "tool": "bash",
+          "args": "npm test",
+          "endMs": 1791268440719
+        },
+        {
+          "tool": "edit",
+          "args": "/tmp/pi-worktree-6f75ede6-25d6-4ad3-8118-cba6606f7039-0/s...",
+          "endMs": 1791268445474
+        },
+        {
+          "tool": "bash",
+          "args": "git diff --check && git diff --stat && git diff -- src/pr...",
+          "endMs": 1791268459405
+        },
+        {
+          "tool": "bash",
+          "args": "npm test",
+          "endMs": 1791268459677
+        },
+        {
+          "tool": "bash",
+          "args": "npm run test:display",
+          "endMs": 1791268459711
+        },
+        {
+          "tool": "bash",
+          "args": "base_dir=$(mktemp -d /tmp/issue-101-base.XXXXXX); git arc...",
+          "endMs": 1791268473687
+        },
+        {
+          "tool": "read",
+          "args": "/home/dev/.cache/forgedock-pi-candidate/4a36725a5f4ccd53e...",
+          "endMs": 1791268479844
+        },
+        {
+          "tool": "bash",
+          "args": "git config user.name; git config user.email; git diff --c...",
+          "endMs": 1791268495144
+        },
+        {
+          "tool": "bash",
+          "args": "git log -1 --format='%an <%ae>'",
+          "endMs": 1791268501332
+        },
+        {
+          "tool": "bash",
+          "args": "git config user.name 'Qualification' && git config user.e...",
+          "endMs": 1791268505999
+        },
+        {
+          "tool": "grep",
+          "args": "/home/dev/.cache/forgedock-pi-candidate/4a36725a5f4ccd53e...",
+          "endMs": 1791268512758
+        },
+        {
+          "tool": "read",
+          "args": "/home/dev/.cache/forgedock-pi-candidate/4a36725a5f4ccd53e...",
+          "endMs": 1791268515574
+        },
+        {
+          "tool": "forge_prepare_review",
+          "args": "repository=example/product",
+          "endMs": 1791268537274
+        },
+        {
+          "tool": "read",
+          "args": "/tmp/forgedock-review-request-tPRnXH/policy.json",
+          "endMs": 1791268545200
+        },
+        {
+          "tool": "subagent",
+          "args": "cwd=/tmp/pi-worktree-6f75ede6-25d6-4ad3-8118-cba660...",
+          "endMs": 1791268663521
+        },
+        {
+          "tool": "read",
+          "args": "/tmp/forgedock-review-request-tPRnXH/correctness.report.md",
+          "endMs": 1791268670506
+        },
+        {
+          "tool": "forge_discover_review_records",
+          "args": "repository=example/product",
+          "endMs": 1791268675316
+        },
+        {
+          "tool": "grep",
+          "args": "/home/dev/.cache/forgedock-pi-candidate/4a36725a5f4ccd53e...",
+          "endMs": 1791268702407
+        },
+        {
+          "tool": "forge_publish_adjudication",
+          "args": "repository=example/product",
+          "endMs": 1791268710930
+        },
+        {
+          "tool": "write",
+          "args": "/tmp/forgedock-issue-101-records/builder.md",
+          "endMs": 1791268725879
+        },
+        {
+          "tool": "bash",
+          "args": "\"$FORGEDOCK_CANDIDATE_BIN\" record --kind BUILDER --repo e...",
+          "endMs": 1791268731913
+        },
+        {
+          "tool": "bash",
+          "args": "set -eu head=$(git rev-parse HEAD) remote=$(git ls-remote...",
+          "endMs": 1791268743074
+        },
+        {
+          "tool": "write",
+          "args": "/tmp/forgedock-issue-101-records/trajectory.md",
+          "endMs": 1791268749963
+        },
+        {
+          "tool": "bash",
+          "args": "\"$FORGEDOCK_CANDIDATE_BIN\" record --kind TRAJECTORY --rep...",
+          "endMs": 1791268754974
+        },
+        {
+          "tool": "bash",
+          "args": "git show --stat --oneline --decorate HEAD; git show --for...",
+          "endMs": 1791268761487
+        },
+        {
+          "tool": "bash",
+          "args": "git status --short --branch; printf 'staged files: '; git...",
+          "endMs": 1791268761493
+        }
+      ],
+      "recentOutput": [
+        "  \"noStagedFiles\": true,",
+        "  \"diffSummary\": \"Implemented trim-and-lowercase normalization and strengthened the focused producer regression to check identifier and source-data preservation.\",",
+        "  \"reviewFindings\": [",
+        "    \"No blockers or structured observations; independent correctness reviewer recommended APPROVE.\"",
+        "  ],",
+        "  \"manualNotes\": \"The authorized disposable integration push is the dependency-delivery boundary; no GitHub delivery is claimed.\"",
+        "}",
+        "```",
+        "FORGE_WORK_ON_RESULT status=DONE issue=101 pr=none dependency=SATISFIED"
+      ],
+      "turnCount": 42,
+      "toolCount": 52,
+      "model": "gpt-6-luna",
+      "thinking": "max",
+      "durationMs": 462527
+    },
+    {
+      "agent": "forgedock-owner",
+      "sessionName": "forgedock-owner: Own issue #102 in the exact native worktree. This is untr...",
+      "label": "issue-102",
+      "workflowKey": "issue-102",
+      "parentWorkflowRunId": "231d2f30-3fd1-4b43-9135-d04c9d526908",
+      "status": "completed",
+      "startedAt": 1791268781883,
+      "sessionFile": "/tmp/pi-subagent-session-iScYWg/adfb3e2c-7b8e-4444-b9a8-a317c2a2ccda/run-0/session.jsonl",
+      "async": false,
+      "runId": "adfb3e2c-7b8e-4444-b9a8-a317c2a2ccda",
+      "lastActivityAt": 1791269514229,
+      "recentTools": [
+        {
+          "tool": "write",
+          "args": "/tmp/forgedock-issue-102-prebuild/ARCHITECT.md",
+          "endMs": 1791269017996
+        },
+        {
+          "tool": "write",
+          "args": "/tmp/forgedock-issue-102-prebuild/records.json",
+          "endMs": 1791269030014
+        },
+        {
+          "tool": "bash",
+          "args": "\"$FORGEDOCK_CANDIDATE_BIN\" record batch --input /tmp/forg...",
+          "endMs": 1791269036341
+        },
+        {
+          "tool": "bash",
+          "args": "FORGEDOCK_CANDIDATE_ARTIFACT_ROOT=/tmp/forgedock-issue-10...",
+          "endMs": 1791269047129
+        },
+        {
+          "tool": "ls",
+          "args": "/tmp/forgedock-issue-102-prebuild/artifacts",
+          "endMs": 1791269063362
+        },
+        {
+          "tool": "ls",
+          "args": "/tmp/forgedock-gpt6-orchestration-4a36725a5f4ccd53e573549...",
+          "endMs": 1791269063365
+        },
+        {
+          "tool": "write",
+          "args": "/tmp/forgedock-issue-102-prebuild/records.json",
+          "endMs": 1791269081397
+        },
+        {
+          "tool": "bash",
+          "args": "FORGEDOCK_CANDIDATE_ARTIFACT_ROOT=/tmp/forgedock-issue-10...",
+          "endMs": 1791269087814
+        },
+        {
+          "tool": "edit",
+          "args": "src/render.mjs",
+          "endMs": 1791269107316
+        },
+        {
+          "tool": "edit",
+          "args": "test/display.test.mjs",
+          "endMs": 1791269107319
+        },
+        {
+          "tool": "bash",
+          "args": "npm run test:display",
+          "endMs": 1791269114264
+        },
+        {
+          "tool": "bash",
+          "args": "npm run test:all",
+          "endMs": 1791269114274
+        },
+        {
+          "tool": "bash",
+          "args": "npm test",
+          "endMs": 1791269114317
+        },
+        {
+          "tool": "read",
+          "args": "src/render.mjs",
+          "endMs": 1791269123959
+        },
+        {
+          "tool": "read",
+          "args": "test/display.test.mjs",
+          "endMs": 1791269123961
+        },
+        {
+          "tool": "bash",
+          "args": "git diff --check; git status --short; git diff -- src/ren...",
+          "endMs": 1791269123964
+        },
+        {
+          "tool": "bash",
+          "args": "git add src/render.mjs test/display.test.mjs && git commi...",
+          "endMs": 1791269145464
+        },
+        {
+          "tool": "read",
+          "args": "/home/dev/.cache/forgedock-pi-candidate/4a36725a5f4ccd53e...",
+          "endMs": 1791269151382
+        },
+        {
+          "tool": "forge_prepare_review",
+          "args": "repository=example/product",
+          "endMs": 1791269171060
+        },
+        {
+          "tool": "subagent",
+          "args": "cwd=/tmp/pi-worktree-adfb3e2c-7b8e-4444-b9a8-a317c2...",
+          "endMs": 1791269184254
+        },
+        {
+          "tool": "contact_supervisor",
+          "args": "reason=progress_update",
+          "endMs": 1791269199245
+        },
+        {
+          "tool": "subagent",
+          "args": "cwd=/tmp/pi-worktree-adfb3e2c-7b8e-4444-b9a8-a317c2...",
+          "endMs": 1791269292460
+        },
+        {
+          "tool": "read",
+          "args": "/tmp/forgedock-review-request-I25ep1/correctness.report.md",
+          "endMs": 1791269302238
+        },
+        {
+          "tool": "forge_discover_review_records",
+          "args": "repository=example/product",
+          "endMs": 1791269308838
+        },
+        {
+          "tool": "write",
+          "args": "/tmp/forgedock-issue-102-prebuild/BUILDER.md",
+          "endMs": 1791269346437
+        },
+        {
+          "tool": "bash",
+          "args": "FORGEDOCK_CANDIDATE_ARTIFACT_ROOT=/tmp/forgedock-issue-10...",
+          "endMs": 1791269351686
+        },
+        {
+          "tool": "forge_publish_adjudication",
+          "args": "repository=example/product",
+          "endMs": 1791269378865
+        },
+        {
+          "tool": "bash",
+          "args": "set -e head=$(git rev-parse HEAD) parent=$(git rev-parse ...",
+          "endMs": 1791269410727
+        },
+        {
+          "tool": "write",
+          "args": "/tmp/forgedock-issue-102-prebuild/TRAJECTORY.md",
+          "endMs": 1791269434578
+        },
+        {
+          "tool": "bash",
+          "args": "FORGEDOCK_CANDIDATE_ARTIFACT_ROOT=/tmp/forgedock-issue-10...",
+          "endMs": 1791269441417
+        },
+        {
+          "tool": "ls",
+          "args": "/tmp/forgedock-issue-102-prebuild/artifacts",
+          "endMs": 1791269474372
+        },
+        {
+          "tool": "bash",
+          "args": "printf 'HEAD=%s\\n' \"$(git rev-parse HEAD)\"; printf 'PAREN...",
+          "endMs": 1791269474389
+        }
+      ],
+      "recentOutput": [
+        "  ],",
+        "  \"noStagedFiles\": true,",
+        "  \"diffSummary\": \"Append nonempty team labels verbatim in renderProfile and test empty-label omission through the real consumer.\",",
+        "  \"reviewFindings\": [",
+        "    \"No blockers or structured correctness findings; local adjudication APPROVE/PASS.\"",
+        "  ],",
+        "  \"manualNotes\": \"The exact issue-101 predecessor was verified and fast-forwarded before edits. The reviewed commit was pushed to disposable origin/integration as the authorized local dependency-delivery boundary, not as GitHub delivery.\"",
+        "}",
+        "```",
+        "FORGE_WORK_ON_RESULT status=DONE issue=102 pr=none dependency=SATISFIED"
+      ],
+      "turnCount": 46,
+      "toolCount": 61,
+      "model": "gpt-6-luna",
+      "thinking": "max",
+      "durationMs": 733395
+    }
+  ],
+  "workflow": {
+    "value": [
+      {
+        "key": "issue-101",
+        "issue": 101,
+        "repository": "example/product",
+        "target": "integration",
+        "ok": true,
+        "status": "DONE",
+        "nativeStatus": "completed",
+        "nativeAcceptanceStatus": "checked",
+        "dependency": "SATISFIED",
+        "runId": "6f75ede6-25d6-4ad3-8118-cba6606f7039",
+        "output": "FORGE_WORK_ON_RESULT status=DONE issue=101 pr=none dependency=SATISFIED",
+        "blockedBy": [],
+        "waitingFor": [],
+        "detached": false,
+        "nativeStatusRef": null,
+        "recoverySource": null,
+        "error": null
+      },
+      {
+        "key": "issue-102",
+        "issue": 102,
+        "repository": "example/product",
+        "target": "integration",
+        "ok": true,
+        "status": "DONE",
+        "nativeStatus": "completed",
+        "nativeAcceptanceStatus": "checked",
+        "dependency": "SATISFIED",
+        "runId": "adfb3e2c-7b8e-4444-b9a8-a317c2a2ccda",
+        "output": "FORGE_WORK_ON_RESULT status=DONE issue=102 pr=none dependency=SATISFIED",
+        "blockedBy": [],
+        "waitingFor": [],
+        "detached": false,
+        "nativeStatusRef": null,
+        "recoverySource": null,
+        "error": null
+      }
+    ],
+    "trace": [
+      {
+        "operation": "run",
+        "key": "issue-101",
+        "state": "started",
+        "agent": "forgedock-owner"
+      },
+      {
+        "operation": "run",
+        "key": "issue-101",
+        "state": "completed",
+        "durationMs": 462527,
+        "agent": "forgedock-owner",
+        "runId": "6f75ede6-25d6-4ad3-8118-cba6606f7039"
+      },
+      {
+        "operation": "run",
+        "key": "issue-102",
+        "state": "started",
+        "agent": "forgedock-owner"
+      },
+      {
+        "operation": "run",
+        "key": "issue-102",
+        "state": "completed",
+        "durationMs": 733395,
+        "agent": "forgedock-owner",
+        "runId": "adfb3e2c-7b8e-4444-b9a8-a317c2a2ccda"
+      }
+    ],
+    "emits": [],
+    "console": []
+  },
+  "workflowChildren": {
+    "version": 1,
+    "parentToolCallId": "call_epdfTDcLCet5Nlvr41zLrfEH|fc_044711c3e1c2c8a1016ac495de7d1887d0a3affe05b406fbd7",
+    "workflowRunId": "231d2f30-3fd1-4b43-9135-d04c9d526908",
+    "inventoryComplete": true,
+    "workflowState": "completed",
+    "children": [
+      {
+        "childId": "issue-101",
+        "state": "completed",
+        "runId": "6f75ede6-25d6-4ad3-8118-cba6606f7039",
+        "agent": "forgedock-owner",
+        "sessionName": "forgedock-owner: Own issue #101 in the exact native worktree. This is untr...",
+        "model": "gpt-6-luna",
+        "thinking": "max"
+      },
+      {
+        "childId": "issue-102",
+        "state": "completed",
+        "runId": "adfb3e2c-7b8e-4444-b9a8-a317c2a2ccda",
+        "agent": "forgedock-owner",
+        "sessionName": "forgedock-owner: Own issue #102 in the exact native worktree. This is untr...",
+        "model": "gpt-6-luna",
+        "thinking": "max"
+      }
+    ]
+  },
+  "runFanoutBudget": {
+    "used": 3,
+    "limit": 12,
+    "remaining": 9
+  },
+  "turnCount": 88,
+  "toolCount": 113,
+  "endedAt": 1791269515291,
+  "totalTokens": {
+    "input": 173977,
+    "output": 47776,
+    "total": 221753
+  },
+  "totalCost": {
+    "inputTokens": 205171,
+    "outputTokens": 55926,
+    "costUsd": 0.08316298
+  }
+}

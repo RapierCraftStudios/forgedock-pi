@@ -1,0 +1,19 @@
+{
+  "schema": "forgedock.qualification-launch/v1",
+  "mode": "orchestrate",
+  "installRoot": "/home/dev/.cache/forgedock-pi-candidate/4a36725a5f4ccd53e573549a167c1ac91b53f025",
+  "candidateCommit": "4a36725a5f4ccd53e573549a167c1ac91b53f025",
+  "piVersion": "1.0.2",
+  "piSubagentsCommit": "0931cbbb98ab253177b181bd334fe02dd919dca5",
+  "model": "openai-codex/gpt-6-luna",
+  "thinking": "max",
+  "sandbox": "/tmp/forgedock-orchestrate-replay-odOm0I",
+  "source": "/tmp/forgedock-orchestrate-replay-odOm0I/seed",
+  "integration": "/tmp/forgedock-orchestrate-replay-odOm0I/integration",
+  "issueFile": "/tmp/forgedock-orchestrate-replay-odOm0I/orchestrate-issues.json",
+  "baseHead": "bdeda88466290319f33ab19dc8b3642a78dd8b24",
+  "prompt": "redacted from sanitized summary",
+  "githubWrites": "disabled; fake gh permits only source-bound local readback",
+  "localGithubState": "/tmp/forgedock-orchestrate-replay-odOm0I/github-local-state.json",
+  "preflight": "/tmp/forgedock-gpt6-orchestration-4a36725a5f4ccd53e573549a167c1ac91b53f025-20261006T062907Z/preflight.json"
+}
