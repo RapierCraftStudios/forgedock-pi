@@ -133,6 +133,57 @@ test("generated dispatch honors configured owner ceilings 1, 2, and 10", { timeo
   }
 });
 
+test("conflicting writers serialize while freed capacity admits the next independent lane", async () => {
+  const affected = (file: string) => `## Acceptance Criteria\n- [ ] update ${file}\n\n## Affected Files\n- \`${file}\``;
+  const result = await prepared([
+    { number: 1, title: "slow shared writer", body: affected("src/shared.ts") },
+    { number: 2, title: "conflicting writer", body: affected("src/shared.ts") },
+    { number: 3, title: "fast independent writer", body: affected("src/independent-three.ts") },
+    { number: 4, title: "refilled independent writer", body: affected("src/independent-four.ts") },
+  ], 2);
+  try {
+    const plan = JSON.parse(await readFile(result.planPath, "utf8")) as { issues: Array<{ number: number; predecessors: string[]; conflicts: Array<{ issue: number }> }> };
+    assert.deepEqual(plan.issues.find((issue) => issue.number === 2)?.predecessors, []);
+    assert.deepEqual(plan.issues.find((issue) => issue.number === 2)?.conflicts.map((conflict) => conflict.issue), [1]);
+    const calls: string[] = [];
+    let releaseFirst!: (value: Array<Record<string, unknown>>) => void;
+    let releaseThird!: (value: Array<Record<string, unknown>>) => void;
+    let firstStarted!: () => void;
+    let thirdStarted!: () => void;
+    let fourthStarted!: () => void;
+    let secondStarted!: () => void;
+    const firstStartedPromise = new Promise<void>((resolve) => { firstStarted = resolve; });
+    const thirdStartedPromise = new Promise<void>((resolve) => { thirdStarted = resolve; });
+    const fourthStartedPromise = new Promise<void>((resolve) => { fourthStarted = resolve; });
+    const secondStartedPromise = new Promise<void>((resolve) => { secondStarted = resolve; });
+    const firstResult = new Promise<Array<Record<string, unknown>>>((resolve) => { releaseFirst = resolve; });
+    const thirdResult = new Promise<Array<Record<string, unknown>>>((resolve) => { releaseThird = resolve; });
+    const ownerResult = (issue: number) => [{ ok: true, runId: `native-owner-${issue}`, results: [{ acceptance: { status: "accepted" } }], output: `FORGE_WORK_ON_RESULT status=DONE issue=${issue} pr=${issue + 10} dependency=SATISFIED` }];
+    const running = result.execute({
+      all: async (items) => {
+        const key = String(items[0]?.key);
+        calls.push(key);
+        if (key === "issue-1") { firstStarted(); return firstResult; }
+        if (key === "issue-2") { secondStarted(); return ownerResult(2); }
+        if (key === "issue-3") { thirdStarted(); return thirdResult; }
+        if (key === "issue-4") { fourthStarted(); return ownerResult(4); }
+        throw new Error(`Unexpected owner launch ${key}`);
+      },
+    });
+    await Promise.all([firstStartedPromise, thirdStartedPromise]);
+    releaseThird(ownerResult(3));
+    await fourthStartedPromise;
+    assert.deepEqual(calls, ["issue-1", "issue-3", "issue-4"], "the shared-file writer waits, but independent work refills the free slot");
+    releaseFirst(ownerResult(1));
+    await secondStartedPromise;
+    const rows = await running;
+    assert.deepEqual(calls, ["issue-1", "issue-3", "issue-4", "issue-2"]);
+    assert.ok(rows.every((row: { status: string; dependency: string }) => row.status === "DONE" && row.dependency === "SATISFIED"));
+  } finally {
+    await cleanup(result);
+  }
+});
+
 test("continuation request preserves a configured ten-owner ceiling", async () => {
   const issueRows = Array.from({ length: 10 }, (_, index) => ({ number: index + 1, title: `ready ${index + 1}`, body: `## Acceptance Criteria\n- [ ] complete ${index + 1}` }));
   const result = await prepared(issueRows, 10);
@@ -263,6 +314,70 @@ test("rejects malformed, duplicate, wrong-issue, and unsatisfied DONE markers", 
       assert.equal(rows.rows[0]?.dependency, "UNSATISFIED", output);
       assert.equal(rows.rows[0]?.ok, false, output);
     }
+  } finally {
+    await cleanup(result);
+  }
+});
+
+test("validated INVALID no-change remains distinct and releases only a write-conflict lane", async () => {
+  const validationBody = "## Acceptance Criteria\n- [ ] Determine whether the configured behavior already satisfies the contract [type:validation]\n- [ ] Change implementation only if validation proves it is needed [type:conditional]\n\n## Affected Files\n- `src/shared.ts`";
+  const result = await prepared([
+    { number: 1, title: "validation-only no-change", body: validationBody },
+    { number: 2, title: "shared implementation writer", body: "## Acceptance Criteria\n- [ ] Preserve the verified shared contract\n\n## Affected Files\n- `src/shared.ts`" },
+  ], 2);
+  try {
+    const plan = JSON.parse(await readFile(result.planPath, "utf8")) as { issues: Array<{ number: number; targetBaseSha: string; predecessors: string[]; conflicts: Array<{ issue: number }>; acceptanceMapping: { criteria: Array<{ id: string; proofType: string }> } }> };
+    const validationIssue = plan.issues.find((issue) => issue.number === 1)!;
+    assert.deepEqual(plan.issues.find((issue) => issue.number === 2)?.predecessors, []);
+    assert.deepEqual(plan.issues.find((issue) => issue.number === 2)?.conflicts.map((conflict) => conflict.issue), [1]);
+    const childReport = {
+      criteriaSatisfied: validationIssue.acceptanceMapping.criteria.map((criterion) => ({
+        id: criterion.id,
+        status: criterion.proofType === "validation" ? "satisfied" : "not-applicable",
+        evidence: `Validated source-bound criterion ${criterion.id} against the prepared target.`,
+      })),
+      changedFiles: [],
+      testsAddedOrUpdated: [],
+      noStagedFiles: true,
+      validationOutput: [`Read-only verification at target ${validationIssue.targetBaseSha}.`, "https://github.com/example/product/issues/1#issuecomment-9001"],
+      residualRisks: [],
+      diffSummary: "Validation proves the current behavior already satisfies the bound contract; no code or tests changed.",
+    };
+    const invalidMarker = "FORGE_WORK_ON_RESULT status=INVALID issue=1 pr=none dependency=UNSATISFIED";
+    const doneTwo = "FORGE_WORK_ON_RESULT status=DONE issue=2 pr=12 dependency=SATISFIED";
+    const rows = await result.execute({
+      all: async (items) => {
+        const key = String(items[0]?.key);
+        if (key === "issue-1") return [{ ok: true, runId: "native-invalid-owner", results: [{ acceptance: { status: "rejected", childReport } }], output: invalidMarker }];
+        if (key === "issue-2") return [{ ok: true, runId: "native-shared-writer", results: [{ acceptance: { status: "accepted" } }], output: doneTwo }];
+        throw new Error(`Unexpected owner launch ${key}`);
+      },
+    });
+    assert.equal(rows[0]?.status, "INVALID");
+    assert.equal(rows[0]?.ok, false);
+    assert.equal(rows[0]?.nativeStatus, "completed");
+    assert.equal(rows[0]?.nativeAcceptanceStatus, "rejected", "reconciliation preserves rather than rewrites native acceptance");
+    assert.equal(rows[0]?.outcomeValidated, true);
+    assert.equal(rows[0]?.writeDisposition, "no-change");
+    assert.equal(rows[0]?.terminalDisposition, "INVALID");
+    assert.equal(rows[0]?.output, invalidMarker);
+    assert.equal(rows[1]?.status, "DONE", "no-change settles the exclusive-write conflict without inventing a functional dependency");
+    assert.equal(rows[1]?.dependency, "SATISFIED");
+
+    const inadequate = await result.execute({
+      all: async (items) => {
+        const key = String(items[0]?.key);
+        if (key === "issue-1") return [{ ok: true, runId: "native-invalid-inadequate", results: [{ acceptance: { status: "rejected", childReport: { ...childReport, validationOutput: ["Read-only inspection was attempted."] } } }], output: invalidMarker }];
+        if (key === "issue-2") throw new Error("a failed INVALID claim must retain the conflicting write gate");
+        throw new Error(`Unexpected owner launch ${key}`);
+      },
+    });
+    assert.equal(inadequate[0]?.status, "FAILED");
+    assert.equal(inadequate[0]?.nativeAcceptanceStatus, "rejected");
+    assert.match(inadequate[0]?.error ?? "", /INVALID disposition lacks bound validation\/no-change evidence/);
+    assert.equal(inadequate[1]?.status, "GATED");
+    assert.equal(inadequate[1]?.dependency, "SATISFIED");
+    assert.deepEqual(Array.from(inadequate[1]?.blockedByConflicts ?? [], (conflict: { issue: number }) => conflict.issue), [1]);
   } finally {
     await cleanup(result);
   }

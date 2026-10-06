@@ -18,7 +18,197 @@ const ALIAS_PATTERN =
   /^\/(?:forge:)?(orchestrate|work-on|review-pr|review-pr-staging)(?=$|\s)([\s\S]*)$/;
 const FORGEDOCK_COMMAND_LINE = /^\/(?:forge:)?(?:forge-status|orchestrate|work-on|review-pr|review-pr-staging)(?=$|\s)/;
 const INSTALLED_CANDIDATE_BIN = resolve(dirname(fileURLToPath(import.meta.url)), "../bin/forgedock-candidate.mjs");
+const OWNER_OPERATION_AUTHORITY_BINDING = "forgedock.candidate-owner-authority/1";
 process.env.FORGEDOCK_CANDIDATE_BIN = INSTALLED_CANDIDATE_BIN;
+
+type OwnerOperationAuthority = {
+  schema: "forgedock.candidate-owner-authority/v1";
+  scope: string;
+  repository: string;
+  issue: number;
+  deliveryMode: "github" | "local-replay";
+  target: string;
+  protectedTarget: string;
+  mergeTargets: string[];
+  closeIssueAfterMerge: boolean;
+  closeInvalidIssue: boolean;
+  createIssues: boolean;
+};
+
+function ownerOperationAuthority(): { present: boolean; value?: OwnerOperationAuthority } {
+  const raw = process.env.PI_SUBAGENT_EXTENSION_BINDINGS;
+  if (!raw) return { present: false };
+  try {
+    const bindings = JSON.parse(raw) as Record<string, unknown>;
+    if (!Object.hasOwn(bindings, OWNER_OPERATION_AUTHORITY_BINDING)) return { present: false };
+    const value = bindings[OWNER_OPERATION_AUTHORITY_BINDING];
+    if (!value || typeof value !== "object" || Array.isArray(value)) return { present: true };
+    const authority = value as Record<string, unknown>;
+    if (authority.schema !== "forgedock.candidate-owner-authority/v1" || typeof authority.scope !== "string" || typeof authority.repository !== "string" || !Number.isSafeInteger(authority.issue) || !["github", "local-replay"].includes(String(authority.deliveryMode)) || typeof authority.target !== "string" || typeof authority.protectedTarget !== "string" || !Array.isArray(authority.mergeTargets) || !authority.mergeTargets.every((target) => typeof target === "string") || typeof authority.closeIssueAfterMerge !== "boolean" || typeof authority.closeInvalidIssue !== "boolean" || typeof authority.createIssues !== "boolean") return { present: true };
+    return { present: true, value: authority as OwnerOperationAuthority };
+  } catch {
+    return { present: true };
+  }
+}
+
+function normalizeShellCommand(command: string): string {
+  return command.replace(/\\\r?\n/g, " ");
+}
+
+export function ownerMergeBlockReason(command: string, authority: OwnerOperationAuthority | undefined, pullReadback?: Record<string, unknown>): string | undefined {
+  const shellCommand = normalizeShellCommand(command);
+  const mergeOperations = shellCommand.match(/\bgh\s+pr\s+(?:merge|auto-merge)\b|\bgh\s+api\b[^\n;&|]*\/pulls\/\d+\/merge\b|\bmergePullRequest\b/gi) ?? [];
+  if (mergeOperations.length > 1) return "Compound commands with multiple PR merge operations are blocked; authorize one merge at a time.";
+  const directMerge = /\bgh\s+pr\s+(?:merge|auto-merge)\b/i.test(shellCommand);
+  const apiMerge = /\bgh\s+api\b[^\n]*\/pulls\/\d+\/merge/i.test(shellCommand) || /mergePullRequest/i.test(shellCommand);
+  if (!directMerge && !apiMerge) return undefined;
+  if (!authority) return "No validated ForgeDock owner authority is bound; PR merge is blocked.";
+  if (authority.deliveryMode === "local-replay") return "Local replay cannot merge a GitHub PR.";
+  if (apiMerge) return "Direct merge API calls are blocked; use the exact scoped gh pr merge operation.";
+  if (/--auto(?:\s|$)/i.test(shellCommand) || /auto-merge/i.test(shellCommand)) return "Automatic merge is not authorized for candidate work-on owners.";
+  if (!authority.mergeTargets.includes(authority.target) || authority.target === authority.protectedTarget) return `Merge to ${authority.target} is not explicitly authorized.`;
+  const pull = shellCommand.match(/\bgh\s+pr\s+merge\s+(\d+)\b/i);
+  if (!pull) return "Merge must name one exact PR number; branch/URL selectors are blocked.";
+  const matchHead = shellCommand.match(/--match-head-commit\s+([a-f0-9]{40,64})/i)?.[1];
+  if (!matchHead) return "Merge must bind --match-head-commit to the reviewed PR head.";
+  const explicitRepo = shellCommand.match(/(?:--repo|-R)\s+([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)/i)?.[1];
+  if (explicitRepo && explicitRepo.toLowerCase() !== authority.repository.toLowerCase()) return "Merge repository does not match the bound issue owner.";
+  if (!pullReadback) return "Exact PR merge identity could not be read back; merge is blocked.";
+  if (Number(pullReadback.number) !== Number(pull[1])) return "PR readback does not match the requested pull request.";
+  if (pullReadback.state !== "OPEN" || pullReadback.baseRefName !== authority.target || pullReadback.headRefOid !== matchHead) return "PR state/base/head does not match the bound merge authority.";
+  if (!(pullReadback.mergeable === "MERGEABLE" || pullReadback.mergeable === true)) return "PR mergeability is not positively verified.";
+  const expectedIssueUrl = `https://github.com/${authority.repository}/issues/${authority.issue}`.toLowerCase();
+  const closingIssueReferences = Array.isArray(pullReadback.closingIssuesReferences) ? pullReadback.closingIssuesReferences : [];
+  const linkedIssue = closingIssueReferences.length === 1 && closingIssueReferences.some((reference) => reference && Number(reference.number) === authority.issue && typeof reference.url === "string" && reference.url.toLowerCase() === expectedIssueUrl);
+  if (!linkedIssue) return `PR is not linked to the exact bound issue #${authority.issue}.`;
+  return undefined;
+}
+
+type VerifiedOwnerIssueDelivery = { repository: string; issue: number; target: string; pullRequest: number; headSha: string };
+
+function ownerMergedDeliveryReadback(authority: OwnerOperationAuthority): VerifiedOwnerIssueDelivery | undefined {
+  try {
+    const timelineText = execFileSync("gh", ["api", "--paginate", "--slurp", `repos/${authority.repository}/issues/${authority.issue}/timeline`], {
+      cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 15_000, maxBuffer: 8 * 1024 * 1024,
+    });
+    const pages = JSON.parse(timelineText) as unknown;
+    const events = Array.isArray(pages) ? pages.flatMap((page) => Array.isArray(page) ? page : [page]) : [];
+    const pullRequests = new Set<number>();
+    for (const event of events) {
+      const sourceIssue = event && typeof event === "object" ? (event as Record<string, any>).source?.issue : undefined;
+      if ((event as Record<string, unknown>)?.event === "cross-referenced" && sourceIssue?.pull_request && Number.isSafeInteger(sourceIssue.number)) pullRequests.add(sourceIssue.number);
+    }
+    const expectedIssueUrl = `https://github.com/${authority.repository}/issues/${authority.issue}`.toLowerCase();
+    for (const pullRequest of pullRequests) {
+      const pullText = execFileSync("gh", ["pr", "view", String(pullRequest), "--repo", authority.repository, "--json", "number,state,baseRefName,headRefOid,mergedAt,closingIssuesReferences"], {
+        cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 15_000,
+      });
+      const pull = JSON.parse(pullText) as Record<string, any>;
+      const references = Array.isArray(pull.closingIssuesReferences) ? pull.closingIssuesReferences : [];
+      const linkedIssue = references.length === 1 && references.some((reference: Record<string, unknown>) => Number(reference.number) === authority.issue && typeof reference.url === "string" && reference.url.toLowerCase() === expectedIssueUrl);
+      if (Number(pull.number) === pullRequest && pull.state === "MERGED" && pull.baseRefName === authority.target && typeof pull.headRefOid === "string" && /^[a-f0-9]{40,64}$/.test(pull.headRefOid) && typeof pull.mergedAt === "string" && linkedIssue) {
+        return { repository: authority.repository, issue: authority.issue, target: authority.target, pullRequest, headSha: pull.headRefOid };
+      }
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+export function ownerIssueCloseBlockReason(command: string, authority: OwnerOperationAuthority | undefined, verifiedDelivery?: VerifiedOwnerIssueDelivery): string | undefined {
+  const shellCommand = normalizeShellCommand(command);
+  const graphQLCalls = shellCommand.match(/\bgh\s+api\b[^;&|]*\bgraphql\b[^;&|]*/gi) ?? [];
+  if (graphQLCalls.some((call) => /\b(?:mutation|closeIssue|updateIssue)\b/i.test(call) || /(?:--input(?:=|\s+)|(?:-f|-F|--field|--raw-field)(?:=|\s+)query=@)/i.test(call))) return "GraphQL issue-state changes are not authorized through the owner shell; use the verified bound close route.";
+  const closures: Array<{ issue: number; repository?: string }> = [];
+  for (const segment of shellCommand.split(/(?:&&|\|\||[;&|])/g)) {
+    const close = segment.match(/\bgh\s+issue\s+close\s+(\d+)\b/i);
+    if (close) {
+      const repository = segment.match(/(?:--repo|-R)\s+([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)/i)?.[1];
+      closures.push({ issue: Number(close[1]), repository });
+      continue;
+    }
+    const apiCalls = segment.match(/\bgh\s+api\b[^;&|]*/gi) ?? [];
+    for (const apiCall of apiCalls) {
+      const route = apiCall.match(/(?:^|\s)\/?repos\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/issues\/(\d+)\/?(?=\s|\?|$)/i);
+      if (!route) continue;
+      const method = apiCall.match(/(?:^|\s)(?:-X|--method)\s+(PATCH|PUT|DELETE|POST)\b/i)?.[1]?.toUpperCase();
+      if (!method || !["PATCH", "PUT", "DELETE"].includes(method)) continue;
+      const stateClosed = /(?:-f|-F|--field|--raw-field)\s+["']?state=closed\b/i.test(apiCall);
+      if (!stateClosed) return "Direct issue API mutations are blocked; use the bound ForgeDock helper.";
+      closures.push({ issue: Number(route[3]), repository: `${route[1]}/${route[2]}` });
+    }
+  }
+  if (closures.length === 0) return undefined;
+  if (closures.length > 1) return "Compound commands with multiple issue closures are blocked.";
+  const close = closures[0]!;
+  if (!authority || close.issue !== authority.issue || close.repository && close.repository.toLowerCase() !== authority.repository.toLowerCase()) return "Issue close does not match a bound ForgeDock owner authority.";
+  if (authority.closeIssueAfterMerge && verifiedDelivery && verifiedDelivery.issue === authority.issue && verifiedDelivery.repository.toLowerCase() === authority.repository.toLowerCase() && verifiedDelivery.target === authority.target) return undefined;
+  if (authority.closeInvalidIssue) return "INVALID issue closure requires a separately validated no-change outcome; static scope authority alone is insufficient.";
+  if (authority.closeIssueAfterMerge) return "Issue closure after delivery requires a read-back-confirmed merged PR to the bound target.";
+  return "Issue closure is not authorized by the bound operation scope.";
+}
+
+export function ownerIssueCreateBlockReason(command: string, authority: OwnerOperationAuthority | undefined): string | undefined {
+  const shellCommand = normalizeShellCommand(command);
+  const graphQLCalls = shellCommand.match(/\bgh\s+api\b[^;&|]*\bgraphql\b[^;&|]*/gi) ?? [];
+  if (graphQLCalls.some((call) => /\b(?:mutation|createIssue)\b/i.test(call) || /(?:--input(?:=|\s+)|(?:-f|-F|--field|--raw-field)(?:=|\s+)query=@)/i.test(call))) return "GraphQL issue creation is not authorized through the owner shell.";
+  const directCreates = shellCommand.match(/\bgh\s+issue\s+create\b/gi) ?? [];
+  const apiCreates: Array<{ repository: string }> = [];
+  for (const segment of shellCommand.split(/(?:&&|\|\||[;&|])/g)) {
+    const apiCalls = segment.match(/\bgh\s+api\b[^;&|]*/gi) ?? [];
+    for (const apiCall of apiCalls) {
+      const route = apiCall.match(/(?:^|\s)\/?repos\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/issues\/?(?:\?[^\s]*)?(?=\s|$)/i);
+      if (!route) continue;
+      const method = apiCall.match(/(?:^|\s)(?:-X|--method)\s+(GET|POST|PUT|PATCH|DELETE)\b/i)?.[1]?.toUpperCase();
+      const fields = /(?:^|\s)(?:-f|-F|--field|--raw-field)\s+\S+/i.test(apiCall);
+      const inputFile = /(?:^|\s)--input(?:=|\s+)\S+/i.test(apiCall);
+      const writesCollection = method ? ["POST", "PUT", "PATCH", "DELETE"].includes(method) : fields || inputFile;
+      if (writesCollection) apiCreates.push({ repository: `${route[1]}/${route[2]}` });
+    }
+  }
+  if (directCreates.length === 0 && apiCreates.length === 0) return undefined;
+  if (!authority || !authority.createIssues) return "Creating additional issues is not authorized for this owner lane.";
+  if (apiCreates.some((create) => create.repository.toLowerCase() !== authority.repository.toLowerCase())) return "Issue creation outside the bound repository is not authorized.";
+  return undefined;
+}
+
+export function ownerDirectTargetPushBlockReason(command: string, authority: OwnerOperationAuthority | undefined): string | undefined {
+  const match = command.match(/\bgit\s+push\b([^\n;&|]*)/i);
+  if (!match) return undefined;
+  if (!authority) return "No validated ForgeDock owner authority is bound to this push.";
+  const args = match[1]!.trim().split(/\s+/).filter(Boolean);
+  if (args.some((arg) => ["--all", "--mirror", "--tags"].includes(arg))) return "Bulk Git pushes are blocked in bound issue worktrees.";
+  const protectedBranches = authority.deliveryMode === "local-replay" ? [authority.protectedTarget] : [authority.target, authority.protectedTarget];
+  const protectedRefs = new Set(protectedBranches.flatMap((branch) => [branch, `refs/heads/${branch}`]));
+  for (const arg of args) {
+    if (arg.startsWith("-")) continue;
+    const destination = arg.includes(":") ? arg.slice(arg.lastIndexOf(":") + 1) : arg;
+    if (protectedRefs.has(destination)) return `Direct push to protected integration/default ref '${destination}' is blocked; deliver through the authorized PR route.`;
+  }
+  try {
+    const branch = execFileSync("git", ["branch", "--show-current"], { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 5_000 }).trim();
+    if (protectedBranches.includes(branch)) return `Direct push from protected branch '${branch}' is blocked.`;
+  } catch {
+    return "Current worktree branch could not be verified before push.";
+  }
+  return undefined;
+}
+
+function ownerPullReadback(command: string, authority: OwnerOperationAuthority | undefined): Record<string, unknown> | undefined {
+  if (!authority) return undefined;
+  const pull = command.match(/\bgh\s+pr\s+merge\s+(\d+)\b/i);
+  if (!pull) return undefined;
+  try {
+    const output = execFileSync("gh", ["pr", "view", pull[1]!, "--repo", authority.repository, "--json", "number,state,baseRefName,headRefOid,mergeable,closingIssuesReferences"], {
+      cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 15_000,
+    });
+    const value = JSON.parse(output) as unknown;
+    return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export function rewriteForgePromptAlias(input: string): string | undefined {
   const match = input.match(ALIAS_PATTERN);
@@ -323,6 +513,7 @@ export default function forgedockCandidateExtension(pi: ExtensionAPI): void {
     completedReviewerRuns.set(`${prepared.reviewRoot}\u0000${prepared.artifactKey}`, new Map(roleResults.map((result) => [String(result.role), result])));
   });
   pi.on("tool_call", (event) => {
+    const ownerAuthority = ownerOperationAuthority();
     if (event.toolName === "forge_publish_incomplete_review") {
       if (!event.input || typeof event.input !== "object" || Array.isArray(event.input)) {
         return { block: true, reason: "GATED delivery requires a post-launch result for the exact prepared reviewer role." };
@@ -337,6 +528,9 @@ export default function forgedockCandidateExtension(pi: ExtensionAPI): void {
         return { block: true, reason: "GATED delivery does not match the exact role's completed workflow result." };
       }
     }
+    if (ownerAuthority.present && event.toolName === "forge_publish_adjudication" && event.input && typeof event.input === "object" && (event.input as Record<string, unknown>).allowIssueWrites === true && !ownerAuthority.value?.createIssues) {
+      return { block: true, reason: "Publishing a follow-up issue is outside the bound owner authority." };
+    }
     if (event.toolName === "forge_prepare_review") {
       const identity = frozenReviewIdentity(event.input);
       if (identity && claimedReviewerIdentities.has(identity)) {
@@ -348,6 +542,24 @@ export default function forgedockCandidateExtension(pi: ExtensionAPI): void {
     const prepared = workflowPath ? preparedReviewerWorkflows.get(workflowPath) : undefined;
     if (prepared && claimedReviewerIdentities.has(prepared.identity)) {
       return { block: true, reason: "This exact frozen review already claimed its reviewer roster in this Pi session; recover or finalize its reports instead of launching the workflow again." };
+    }
+    if (ownerAuthority.present && event.toolName === "bash" && event.input && typeof event.input === "object" && !Array.isArray(event.input)) {
+      const command = (event.input as Record<string, unknown>).command;
+      if (typeof command === "string") {
+        const pushBlock = ownerDirectTargetPushBlockReason(command, ownerAuthority.value);
+        if (pushBlock) return { block: true, reason: pushBlock };
+        const canReadMergeTarget = ownerAuthority.value && ownerAuthority.value.mergeTargets.includes(ownerAuthority.value.target) && !/--auto(?:\s|$)|auto-merge/i.test(command);
+        const mergeReadback = canReadMergeTarget ? ownerPullReadback(command, ownerAuthority.value) : undefined;
+        const mergeBlock = ownerMergeBlockReason(command, ownerAuthority.value, mergeReadback);
+        if (mergeBlock) return { block: true, reason: mergeBlock };
+        const normalizedCommand = normalizeShellCommand(command);
+        const closeRequest = /\bgh\s+issue\s+close\b|(?:-f|-F|--field|--raw-field)\s+["']?state=closed\b/i.test(normalizedCommand);
+        const verifiedDelivery = closeRequest && ownerAuthority.value?.closeIssueAfterMerge ? ownerMergedDeliveryReadback(ownerAuthority.value) : undefined;
+        const closeBlock = ownerIssueCloseBlockReason(command, ownerAuthority.value, verifiedDelivery);
+        if (closeBlock) return { block: true, reason: closeBlock };
+        const createBlock = ownerIssueCreateBlockReason(command, ownerAuthority.value);
+        if (createBlock) return { block: true, reason: createBlock };
+      }
     }
     if (stagingGuard && isStagingMutationBlocked(event.toolName, event.input)) {
       return { block: true, reason: "The staging review route is non-mutating; use read-only inspection and configured checks. The prepared reviewer roster cannot be relaunched; recover only an exact completed role or record incomplete delivery." };

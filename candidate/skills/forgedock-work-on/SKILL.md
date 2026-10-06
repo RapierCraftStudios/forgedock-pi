@@ -90,6 +90,19 @@ relevant repository-documented checks, recording passed, failed, skipped, and un
 checks. Do not demand component jobs or promotion-only checks from a universal ForgeDock list.
 Mocks and generated JSON can supplement proof, never replace the behavior claimed.
 
+### Disposition for a disproven suspected finding
+
+A no-change `INVALID` outcome is available only when the source-bound contract explicitly
+contains a `[type:validation]` criterion. Prove that criterion against the exact prepared
+target and retain a read-back investigation record. Conditional implementation criteria may
+be `not-applicable` only with `[type:conditional]` source annotations and evidence from the
+validated negative finding. The structured report must link the read-back investigation receipt
+and name the exact prepared target SHA in `validationOutput`. It must show no changed files, no
+added tests, and a clean staged state. Preserve the native acceptance status (including
+`rejected`) as a separate result; `INVALID` is not `DONE`, does not satisfy functional
+dependents, and does not close the issue unless bound `closeInvalidIssue` authority and a distinct evidence-validated closure result are both available.
+Arbitrary N/A prose and feature requests without the validation criterion remain incomplete.
+
 Before review, reconcile every original obligation against code, tests, and limitations. Do
 not knowingly send an incomplete criterion to review as a residual risk. Commit and prepare
 the PR with file-backed bodies. After the verified commit, publish one `BUILDER` issue record
@@ -102,6 +115,16 @@ uses explicit supersession rather than comment recency when attempts compete, an
 or ambiguous lineage while preserving authored bodies. Local `publish:false` replay still saves
 local records without fabricated HTTPS links. Do not transcribe permalinks returned by an earlier
 helper call. Do not merge unless the exact configured authority was granted.
+
+## Merge and closure authority
+
+For an orchestrated owner, the exact `forgedock.candidate-owner-authority/1` binding is the
+only merge/closure scope. `deliveryMode=github`, a configured target, and an approved launch
+are not merge grants. Without an authorized merge target, create/review the PR and stop open;
+never merge or close a PR-ready issue. Merge only to a bound target and exact reviewed head
+with current policy/check readback. Close after merge only when `closeIssueAfterMerge` is bound;
+close an INVALID issue only when `closeInvalidIssue` is separately bound and a distinct evidence-validated closure result is available; a static flag alone is insufficient. Do not use main or
+deploy authority inherited from target-local files.
 
 ## Independent review and decision
 

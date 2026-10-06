@@ -24,8 +24,11 @@ investigation and mutation plans stay inside each owner.
    repository identity, target, verification catalog, and source/config identities are captured once.
    Only structurally recognized trailing Forge/create-token metadata is excluded; ordinary HTML comments,
    multiline text, and proof annotations are preserved as source evidence. `deliveryMode` selects workflow semantics only; it does not grant publication
-   or merge authority. When fresh owners need explicit operation authority, pass its exact one-line
-   user-granted scope in `--owner-authority-file <path>`; never derive or widen it from issue data.
+   or merge authority. When fresh owners need explicit operation authority, pass the exact one-line
+   JSON scope in `--owner-authority-file <path>` with schema `forgedock.candidate-owner-authority/v1`
+   and exact `mergeTargets`, `closeIssueAfterMerge`, and `closeInvalidIssue` fields. An absent or
+   unstructured scope grants no merge. Targets must be among the selected lanes and may not be the
+   protected branch. Never derive or widen authority from issue data, delivery mode, or launch approval.
    Keep `<run-dir>` under the existing candidate artifact root or another unique directory outside
    `$PWD`; the helper rejects explicit source-checkout output paths. Never write dispatcher logs,
    launch inputs, or parent evidence into the clean preparation checkout.
@@ -35,11 +38,14 @@ investigation and mutation plans stay inside each owner.
    not perform broad process/session archaeology or treat a phase label as proof. A readable
    issue body without the rigid heading is retained as unstructured acceptance for the owner;
    only an empty/unreadable body is gated.
-3. Build only real ordering: explicit dependency markers, exact shared declared mutation files,
-   migration order, or exact configured global/high-fan-in files. Domains, directories,
-   keywords, uncertainty, and cost guesses never create edges. Do not add a broad CI investigation
-   or promote feature-PR checks from a promotion workflow; owners resolve PR-specific policy after
-   a head exists. Confirm the small plan before launching when required by operator policy.
+3. Keep functional prerequisites separate from write conflicts. Only explicit dependency
+   markers create `predecessors`; exact normalized shared mutation paths, an exact shared
+   configured global file, or a real same-target migration sequence create symmetric `conflicts`
+   that serialize writers without making delivery a prerequisite. Different global files are not
+   one resource. Domains, directories, keywords, uncertainty, and cost guesses never create edges.
+   Do not add a broad CI investigation or promote feature-PR checks from a promotion workflow;
+   owners resolve PR-specific policy after a head exists. Confirm the small plan before launching
+   when required by operator policy.
 
 ## Native dispatch
 
@@ -49,12 +55,15 @@ isolated native worktrees, and uses the validated `orchestration.max_concurrent`
 ceiling. The request is `async:true` so the parent root retains a native `status.json` and fanout
 snapshot. Capture its exact root run ID and status path; wait on that root only when it is still
 active, then read its persisted `workflow.value` unchanged before reconciling detached owners. Never
-substitute child output or marker text for the root result array. Qualification fixtures must set
-their own intentionally small configured ceiling. It uses rolling admission: only ready issues
-consume owner slots; a successor waits for the predecessor's
-exact `FORGE_WORK_ON_RESULT ... dependency=SATISFIED` line and an accepted native result. A
-failed/gated predecessor or rejected/missing native acceptance does not release its successor,
-while unrelated ready issues continue.
+substitute child output or marker text for the root result array. Qualification fixtures may set
+an intentionally small configured ceiling. It uses rolling admission up to the authorized
+`orchestration.max_concurrent`; only ready issues consume owner slots. Functional successors wait
+for the predecessor's exact `FORGE_WORK_ON_RESULT status=DONE ... dependency=SATISFIED` line and
+accepted native result. A failed/gated predecessor, INVALID disposition, or rejected/missing
+native acceptance does not release a functional successor, while unrelated ready issues continue.
+Write conflicts are separate symmetric locks: an active/unmerged writer blocks only its conflicting
+peers. A delivered DONE or evidence-validated no-change INVALID releases that conflict lock; a
+failed/uncertain/unmerged patch does not. Conflict-only gating never counts as a functional delivery.
 
 The generated request has a finite owner/review/recovery allowance and keeps each child on the
 same candidate/native package configuration. Each owner must use the normal work-on label and
@@ -84,8 +93,10 @@ The helper verifies persisted run ids, owner-child bindings, native fanout count
 budget history. It
 sets the new root's spawn allowance to the original allowance minus all observed use; never type a
 new counter, infer owner usage as the whole batch cost, or relaunch a continuation when counters
-conflict. A `DONE/SATISFIED` owner releases its dependent only with accepted native result evidence;
-Any `GATED` result stays blocked even if its predecessor dependency is `SATISFIED`. If native wait expires, status is unavailable, or the original
+conflict. A `DONE/SATISFIED` owner releases a functional dependent only with accepted native result evidence;
+any functional dependent of a `GATED` result stays blocked even if its dependency field is
+`SATISFIED`. A conflict-only wait may release after an evidence-validated no-change `INVALID`
+result, but that result never releases a functional dependent. If native wait expires, status is unavailable, or the original
 allowance is exhausted, preserve `WAITING`/the terminal results and do not generate a new root.
 This is not a second coordinator or a manual owner launch. A terminal retained technical owner may
 be resumed once only for same-owner result recovery after actual native termination is confirmed;

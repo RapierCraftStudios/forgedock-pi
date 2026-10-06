@@ -55,6 +55,9 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     assert.equal(parsedConfig.configuredOwnerConcurrency, 2);
     assert.equal(parsedConfig.effectiveOwnerConcurrency, 2);
     assert.equal(parsedConfig.review.reviewerThinking, "max");
+    const isolatedMaxConfig = JSON.parse((await execFileAsync("node", [helper, "config", "--cwd", root], { env: { ...process.env, FORGEDOCK_CANDIDATE_OWNER_MODEL: "provider/model", FORGEDOCK_CANDIDATE_OWNER_THINKING: "max", FORGEDOCK_CANDIDATE_REVIEWER_THINKING: "max" } })).stdout) as { ownerModel: string; ownerModelSource: string; ownerThinking: string; ownerThinkingSource: string; review: { reviewerThinking: string; reviewerThinkingSource: string } };
+    assert.deepEqual({ ownerModel: isolatedMaxConfig.ownerModel, ownerModelSource: isolatedMaxConfig.ownerModelSource, ownerThinking: isolatedMaxConfig.ownerThinking, ownerThinkingSource: isolatedMaxConfig.ownerThinkingSource, reviewerThinking: isolatedMaxConfig.review.reviewerThinking, reviewerThinkingSource: isolatedMaxConfig.review.reviewerThinkingSource }, { ownerModel: "provider/model", ownerModelSource: "isolated-launch-override", ownerThinking: "max", ownerThinkingSource: "isolated-launch-override", reviewerThinking: "max", reviewerThinkingSource: "isolated-launch-override" });
+    await assert.rejects(execFileAsync("node", [helper, "config", "--cwd", root], { env: { ...process.env, FORGEDOCK_CANDIDATE_OWNER_MODEL: "other/provider", FORGEDOCK_CANDIDATE_OWNER_THINKING: "max" } }), /must preserve forge.yaml provider\/model identity/);
     const testName = root.slice(root.lastIndexOf("/") + 1);
     const issuesFile = join(root, "..", `${testName}-issues.json`);
     await writeFile(issuesFile, JSON.stringify({ issues: [
@@ -71,6 +74,9 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     const plan = JSON.parse(await readFile(dispatch.planPath, "utf8")) as { deliveryMode: string; ownerAuthority: string | null; ownerConcurrency: { configured: number; effective: number }; launchAllowance: number; targetBase: { branch: string; headSha: string }; issues: Array<{ number: number; predecessors: string[]; acceptance: string[]; acceptanceMapping: { sourceBodySha256: string; criteria: Array<{ id: string; textHash: string; proofType: string; affectedBoundaries: string[] }> }; mutationFiles: string[]; body: string; task: string; admitted?: boolean }>; readiness: { missingAcceptance: number[]; unstructuredAcceptance: number[] } };
     assert.equal(plan.deliveryMode, "github");
     assert.equal(plan.ownerAuthority, ownerAuthority);
+    assert.deepEqual((plan as any).operationAuthority, { schema: "forgedock.candidate-owner-authority/v1", scope: "", mergeTargets: [], closeIssueAfterMerge: false, closeInvalidIssue: false, createIssues: false });
+    assert.deepEqual((plan.issues[0] as any)?.operationAuthority.mergeTargets, []);
+    assert.match(plan.issues[0]?.task ?? "", /No listed merge target means PR-only/);
     assert.deepEqual(plan.ownerConcurrency, { configured: 2, effective: 2 });
     assert.equal(plan.launchAllowance, 17);
     assert.equal(plan.targetBase.headSha, sourceHead);
@@ -81,9 +87,22 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     assert.equal(plan.issues[0]?.acceptanceMapping.criteria[0]?.affectedBoundaries.includes("src/producer.ts"), true);
     assert.match(plan.issues[0]?.acceptanceMapping.sourceBodySha256 ?? "", /^sha256:[a-f0-9]{64}$/);
     assert.match(plan.issues[0]?.task ?? "", /Trusted dispatch deliveryMode: github/);
-    assert.match(plan.issues[0]?.task ?? "", /Trusted parent operation authority/);
+    assert.match(plan.issues[0]?.task ?? "", /Original parent operation-scope text/);
+    assert.match(plan.issues[0]?.task ?? "", /additional task limits; the structured fields above exclusively control merge, closure, and follow-up issue creation/);
     assert.match(plan.issues[0]?.task ?? "", /no live GitHub operations/);
     assert.doesNotMatch(plan.issues[0]?.task ?? "", /authorized local replay|do not perform GitHub writes/);
+    const stagingAuthorityPath = join(root, "..", `${testName}-staging-authority.json`);
+    const authorizedOut = join(root, "..", `${testName}-dispatch-staging-authority`);
+    await writeFile(stagingAuthorityPath, `${JSON.stringify({ schema: "forgedock.candidate-owner-authority/v1", mergeTargets: ["integration"], closeIssueAfterMerge: true, closeInvalidIssue: false })}\n`);
+    const authorizedDispatch = JSON.parse((await execFileAsync("node", [helper, "prepare-dispatch", "--selector", "#1 #2", "--delivery-mode", "github", "--owner-authority-file", stagingAuthorityPath, "--cwd", root, "--issues-file", issuesFile, "--out", authorizedOut])).stdout) as { planPath: string; workflowPath: string };
+    const authorizedPlan = JSON.parse(await readFile(authorizedDispatch.planPath, "utf8")) as any;
+    assert.deepEqual(authorizedPlan.operationAuthority.mergeTargets, ["integration"]);
+    assert.deepEqual(authorizedPlan.issues[0].operationAuthority, { schema: "forgedock.candidate-owner-authority/v1", scope: "", repository: "example/product", issue: 1, deliveryMode: "github", target: "integration", protectedTarget: "main", mergeTargets: ["integration"], closeIssueAfterMerge: true, closeInvalidIssue: false, createIssues: false });
+    assert.match(authorizedPlan.issues[0].task, /Merge only to a listed target/);
+    assert.match(await readFile(authorizedDispatch.workflowPath, "utf8"), /forgedock\.candidate-owner-authority\/1/);
+    const protectedAuthorityPath = join(root, "..", `${testName}-main-authority.json`);
+    await writeFile(protectedAuthorityPath, `${JSON.stringify({ schema: "forgedock.candidate-owner-authority/v1", mergeTargets: ["main"], closeIssueAfterMerge: true, closeInvalidIssue: false })}\n`);
+    await assert.rejects(execFileAsync("node", [helper, "prepare-dispatch", "--selector", "#1", "--delivery-mode", "github", "--owner-authority-file", protectedAuthorityPath, "--cwd", root, "--issues-file", issuesFile, "--out", join(root, "..", `${testName}-dispatch-main-authority`)]), /outside the selected issue targets/);
     const localDispatch = JSON.parse((await execFileAsync("node", [helper, "prepare-dispatch", "--selector", "#1 #2", "--delivery-mode", "local-replay", "--cwd", root, "--issues-file", issuesFile, "--out", localOut])).stdout) as { planPath: string };
     const localPlan = JSON.parse(await readFile(localDispatch.planPath, "utf8")) as { deliveryMode: string; issues: Array<{ task: string }> };
     assert.equal(localPlan.deliveryMode, "local-replay");
@@ -95,7 +114,7 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     assert.deepEqual(plan.readiness.unstructuredAcceptance, [3]);
     assert.equal(plan.issues[2]?.admitted, true);
     assert.deepEqual(plan.issues[0]?.acceptance, ["Producer behavior works\n  It must remain compatible.", "Second obligation works"]);
-    assert.deepEqual(plan.issues[0]?.mutationFiles, ["src/producer.ts", "src/consumer.ts"]);
+    assert.deepEqual(plan.issues[0]?.mutationFiles, ["src/consumer.ts", "src/producer.ts"]);
     assert.match(plan.issues[0]?.body ?? "", /This paragraph is not another criterion/);
     assert.match(plan.issues[0]?.task ?? "", /Second obligation works/);
     assert.equal(plan.issues[2]?.body, "Fix the consumer timeout when the queue is empty; preserve compatibility.");
@@ -129,6 +148,9 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     assert.equal(changedIntake.supersedes, intakePath);
     await rm(out, { recursive: true, force: true });
     await rm(localOut, { recursive: true, force: true });
+    await rm(authorizedOut, { recursive: true, force: true });
+    await rm(stagingAuthorityPath, { force: true });
+    await rm(protectedAuthorityPath, { force: true });
     await rm(ownerAuthorityPath, { force: true });
     await rm(issuesFile, { force: true });
     await rm(firstIntake.outputPath, { force: true });

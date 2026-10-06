@@ -48,7 +48,7 @@ async function withAdapter(run: (h: any) => Promise<void>, options: { ownerSyste
       discoverAgents: () => {
         const owner: any = helpers.makeAgent("forgedock-owner", { thinking: false, systemPrompt: options.ownerSystemPrompt ?? "" });
         owner.acceptanceRole = "writer";
-        return { agents: [helpers.makeAgent("echo", { thinking: false }), helpers.makeAgent("forgedock-work-on-coordinator", { thinking: false }), owner] };
+        return { agents: [helpers.makeAgent("echo", { thinking: false }), helpers.makeAgent("forgedock-parent-control.forgedock-work-on-coordinator", { thinking: false }), owner] };
       },
       allowMutatingManagementActions: true,
     });
