@@ -37,6 +37,7 @@ test("packed candidate exposes only thin resources and a bounded owner", async (
       "candidate/agents/forgedock-reviewer.md",
       "bin/forgedock-candidate.mjs",
       "scripts/install-candidate.sh",
+      "scripts/launch-candidate.sh",
     ]) assert.ok(manifest.files.some((file) => file.path === required), required);
     assert.equal(manifest.files.some((file) => file.path.startsWith("skills/")), false);
     assert.equal(manifest.files.some((file) => file.path.startsWith("specs/")), false);
@@ -54,6 +55,14 @@ test("packed candidate exposes only thin resources and a bounded owner", async (
       `${project}/node_modules/forgedock-pi/candidate/agents/forgedock-owner.md`,
       "utf8",
     );
+    const packedWorkOnSkill = await readFile(
+      `${project}/node_modules/forgedock-pi/candidate/skills/forgedock-work-on/SKILL.md`,
+      "utf8",
+    );
+    assert.match(packedWorkOnSkill, /derive at least one testable criterion from that body/);
+    assert.match(packedWorkOnSkill, /Derived contract:/);
+    assert.match(packedWorkOnSkill, /manualNotes/);
+    assert.match(packedWorkOnSkill, /generic IDs\/evidence, or an unbound line is not satisfied acceptance/);
     assert.match(packedAgent, /^name: forgedock-owner$/m);
     assert.match(packedAgent, /^allowNestedSubagents: true$/m);
     assert.match(packedAgent, /^tools: read, grep, find, ls, bash, edit, write, subagent, forge_prepare_review, forge_run_check, forge_discover_review_records, forge_resolve_review_tracking, forge_recover_reviewer_publication, forge_publish_incomplete_review, forge_publish_adjudication$/m);

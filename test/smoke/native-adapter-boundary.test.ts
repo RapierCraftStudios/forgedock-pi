@@ -206,6 +206,29 @@ async function ownerScript(output: string | false) {
   return `const configuredModel="test-model";\n${helpers}\nreturn await runIssue("owner", ${JSON.stringify({ agent: "echo", task: "Return fixture result", context: "fresh", worktree: true, output, outputMode: "inline", artifacts: true, acceptance: false })});`;
 }
 
+test("explicit GPT-6/max model resolution failure is terminal before owner session creation", { skip: adapterSkip, timeout: 30000 }, async () => {
+  await withAdapter(async ({ repo, mock, executor, context, state }) => {
+    context.model = { provider: "openai-codex", id: "gpt-6-luna" };
+    context.modelRegistry.getAvailable = () => [{ provider: "openai-codex", id: "gpt-5.6-luna", fullId: "openai-codex/gpt-5.6-luna", reasoning: true }];
+    const result = await executor.executePublic("runtime-preflight-owner", {
+      agent: "forgedock-owner",
+      task: "Read-only runtime preflight fixture; no product work.",
+      model: "openai-codex/gpt-6-luna:max",
+      context: "fresh",
+      async: false,
+      worktree: true,
+      acceptance: false,
+    }, new AbortController().signal, undefined, context);
+    assert.equal(result.isError, true);
+    assert.match(result.content?.[0]?.text ?? "", /Unknown subagent model 'openai-codex\/gpt-6-luna:max' in the active Pi model registry/);
+    assert.equal(mock.callCount(), 0, "the Pi child CLI must not start when native model preflight fails");
+    assert.equal(state.foregroundRuns.size, 0, "no foreground owner session exists");
+    assert.equal(state.asyncJobs.size, 0, "no resumable async owner exists");
+    const worktrees = execFileSync("git", ["worktree", "list", "--porcelain"], { cwd: repo, encoding: "utf8" }).trim().split(/\n\n+/);
+    assert.equal(worktrees.length, 1, "pre-session model failure must not create an owner worktree");
+  });
+});
+
 for (const explicitOutput of [true, false]) {
   test(`full adapter retained recovery with declared output=${explicitOutput}`, { skip: adapterSkip, timeout: 30000 }, async () => {
     await withAdapter(async ({ root, mock, executor, context }) => {

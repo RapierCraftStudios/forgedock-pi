@@ -60,10 +60,11 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     await assert.rejects(execFileAsync("node", [helper, "config", "--cwd", root], { env: { ...process.env, FORGEDOCK_CANDIDATE_OWNER_MODEL: "other/provider", FORGEDOCK_CANDIDATE_OWNER_THINKING: "max" } }), /must preserve forge.yaml provider\/model identity/);
     const testName = root.slice(root.lastIndexOf("/") + 1);
     const issuesFile = join(root, "..", `${testName}-issues.json`);
+    const unstructuredBody = "Fix the consumer timeout when the queue is empty; preserve compatibility.";
     await writeFile(issuesFile, JSON.stringify({ issues: [
       { number: 2, title: "dependent", body: "## Acceptance Criteria\n- [ ] Consumer works\n\nDepends on #1" },
       { number: 1, title: "base", body: "## Acceptance Criteria\r\n- [ ] Producer behavior works\r\n  It must remain compatible.\r\n\r\n- [ ] Second obligation works\r\n\r\n## Affected Files\r\n- `src/producer.ts:10`\r\n- `src/consumer.ts`\r\n\r\n## Notes\r\nThis paragraph is not another criterion." },
-      { number: 3, title: "unstructured", body: "Fix the consumer timeout when the queue is empty; preserve compatibility.", dispatchEvidence: ["The configured full suite also fails at the exact seed; retain that check as a failure and do not expand the issue into unrelated files."] },
+      { number: 3, title: "unstructured", body: unstructuredBody, dispatchEvidence: ["The configured full suite also fails at the exact seed; retain that check as a failure and do not expand the issue into unrelated files."] },
     ] }));
     const out = join(root, "..", `${testName}-dispatch`);
     const localOut = join(root, "..", `${testName}-local-replay-dispatch`);
@@ -117,7 +118,13 @@ test("generates bounded dispatch and review requests from ordinary JSON data", a
     assert.deepEqual(plan.issues[0]?.mutationFiles, ["src/consumer.ts", "src/producer.ts"]);
     assert.match(plan.issues[0]?.body ?? "", /This paragraph is not another criterion/);
     assert.match(plan.issues[0]?.task ?? "", /Second obligation works/);
-    assert.equal(plan.issues[2]?.body, "Fix the consumer timeout when the queue is empty; preserve compatibility.");
+    assert.equal(plan.issues[2]?.body, unstructuredBody);
+    assert.equal(plan.issues[2]?.acceptanceMapping.criteria.length, 0);
+    assert.equal(plan.issues[2]?.acceptanceMapping.sourceBodySha256, `sha256:${(await import("node:crypto")).createHash("sha256").update(unstructuredBody).digest("hex")}`);
+    assert.match(plan.issues[2]?.task ?? "", /readable but its acceptance mapping is unstructured/);
+    assert.match(plan.issues[2]?.task ?? "", /derive at least one concise testable criterion from the unchanged body/);
+    assert.match(plan.issues[2]?.task ?? "", /Original issue body begins below/);
+    assert.ok((plan.issues[2]?.task ?? "").includes(unstructuredBody), "the owner receives the exact readable source body");
     assert.match(plan.issues[2]?.task ?? "", /Dispatcher evidence\/context follows; independently verify it/);
     assert.match(plan.issues[2]?.task ?? "", /retain that check as a failure/);
     const request = JSON.parse(await readFile(dispatch.requestPath, "utf8")) as { workflowScriptPath: string; globalConcurrencyLimit: number; maxSubagentSpawnsPerRun: number; async: boolean };

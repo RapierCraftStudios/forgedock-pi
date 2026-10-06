@@ -1,6 +1,6 @@
 # ForgeDock thin candidate
 
-This branch packages one active path for Pi 0.85.1 and `pi-subagents` 0.60.0:
+This branch packages one active path for Pi 1.0.2 and `pi-subagents` 0.60.0:
 
 ```text
 /work-on       -> one owner -> one focused fresh review -> parent decision -> delivery
@@ -15,7 +15,7 @@ configuration/intake/plan/request/record operations; it is not a workflow engine
 
 ## Prerequisites
 
-- Node.js 22+, Pi, Git, and `gh` for live GitHub work.
+- Node.js 22+, Pi 1.0.2, Git, and `gh` for live GitHub work. The selected Pi executable is pinned in the isolated install manifest and reused for the parent and native children.
 - A clean candidate checkout and a clean pinned `pi-subagents` checkout.
 - A target repository with a canonical `forge.yaml` and a full `provider/model` value.
 - Existing provider authentication. The candidate never copies auth files.
@@ -27,15 +27,15 @@ From this checkout:
 ```bash
 PI_SUBAGENTS_SOURCE=/home/dev/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents \
 PI_SUBAGENTS_COMMIT=0931cbbb98ab253177b181bd334fe02dd919dca5 \
-PI_REQUIRED_VERSION=0.85.1 \
+PI_SUBAGENT_PI_BINARY=/absolute/path/to/pi-1.0.2 \
+PI_REQUIRED_VERSION=1.0.2 \
 FORGEDOCK_CANDIDATE_INSTALL_ROOT=/home/dev/.cache/forgedock-pi-candidate/<candidate-sha> \
 ./scripts/install-candidate.sh --reuse-auth
 ```
 
 `--reuse-auth` is optional; it symlinks an already-authenticated operator `auth.json` into
 this disposable config without copying credentials. Omit it to qualify resource loading only.
-The installer requires Pi 0.85.1 and pi-subagents commit 0931cbbb98ab253177b181bd334fe02dd919dca5
-by default (alternate explicitly pinned values can be supplied). It snapshots both exact Git heads, installs them through Pi into
+The installer defaults to Pi 1.0.2 and pi-subagents commit 0931cbbb98ab253177b181bd334fe02dd919dca5. It validates the executable selected by `PI_SUBAGENT_PI_BINARY` (or `PATH` when unset), records that exact path and version, and installs through that executable into
 `<install-root>/pi-agent`, sets `defaultProjectTrust: never`, and does not edit the ordinary
 `~/.pi/agent/settings.json`. It writes only package paths, versions, and policy metadata to
 `manifest.json`; credentials are not copied or printed.
@@ -49,8 +49,11 @@ Launch an interactive candidate session in a target repository:
 
 Use `--model provider/id[:thinking]` or `--thinking high` only as an explicit operator
 override. Without `--model`, the launcher reads the target's configured model through the
-candidate helper. It passes `--no-approve`, so target-local `.pi` workflow settings cannot
-change candidate authority; normal `AGENTS.md` coding guidance is still available.
+candidate helper. Before opening the parent session it verifies the pinned Pi executable,
+checks the configured owner/reviewer model against that runtime's offline registry, then
+sets `PI_SUBAGENT_PI_BINARY` to the same executable so native children cannot fall back to
+`PATH`. It passes `--no-approve`, so target-local `.pi` workflow settings cannot change
+candidate authority; normal `AGENTS.md` coding guidance is still available.
 
 ## Doctor/status
 

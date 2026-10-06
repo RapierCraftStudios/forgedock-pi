@@ -4,7 +4,7 @@ set -euo pipefail
 SOURCE_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 SUBAGENTS_SOURCE=${PI_SUBAGENTS_SOURCE:-$HOME/.pi/agent/git/github.com/RapierCraftStudios/pi-subagents}
 SUBAGENTS_COMMIT=${PI_SUBAGENTS_COMMIT:-0931cbbb98ab253177b181bd334fe02dd919dca5}
-REQUIRED_PI_VERSION=${PI_REQUIRED_VERSION:-0.85.1}
+REQUIRED_PI_VERSION=${PI_REQUIRED_VERSION:-1.0.2}
 INSTALL_ROOT=${FORGEDOCK_CANDIDATE_INSTALL_ROOT:-}
 REUSE_AUTH=0
 AUTH_SOURCE=${PI_AUTH_SOURCE:-$HOME/.pi/agent/auth.json}
@@ -45,8 +45,11 @@ fi
 CANDIDATE_SHA=$(git -C "$SOURCE_ROOT" rev-parse HEAD)
 SUBAGENTS_SHA=$(git -C "$SUBAGENTS_SOURCE" rev-parse HEAD)
 [[ "$SUBAGENTS_COMMIT" == "$SUBAGENTS_SHA" ]] || { echo "pi-subagents checkout is $SUBAGENTS_SHA, expected pinned commit $SUBAGENTS_COMMIT" >&2; exit 1; }
-PI_VERSION=$(pi --version)
-[[ "$PI_VERSION" == "$REQUIRED_PI_VERSION" ]] || { echo "Pi is $PI_VERSION, expected pinned version $REQUIRED_PI_VERSION" >&2; exit 1; }
+PI_BINARY=${PI_SUBAGENT_PI_BINARY:-$(command -v pi || true)}
+if [[ "$PI_BINARY" != /* ]]; then PI_BINARY=$(command -v "$PI_BINARY" || true); fi
+[[ -n "$PI_BINARY" && "$PI_BINARY" == /* && -x "$PI_BINARY" ]] || { echo "No absolute executable Pi runtime selected; set PI_SUBAGENT_PI_BINARY or put the intended Pi on PATH" >&2; exit 1; }
+PI_VERSION=$("$PI_BINARY" --version)
+[[ "$PI_VERSION" == "$REQUIRED_PI_VERSION" ]] || { echo "Selected Pi runtime $PI_BINARY is $PI_VERSION, expected pinned version $REQUIRED_PI_VERSION" >&2; exit 1; }
 INSTALL_ROOT=${INSTALL_ROOT:-$HOME/.cache/forgedock-pi-candidate/$CANDIDATE_SHA}
 INSTALL_ROOT=$(mkdir -p "$INSTALL_ROOT" && cd "$INSTALL_ROOT" && pwd)
 PACKAGE_ROOT="$INSTALL_ROOT/package"
@@ -54,17 +57,15 @@ SUBAGENTS_ROOT="$INSTALL_ROOT/pi-subagents"
 PI_ROOT="$INSTALL_ROOT/pi-agent"
 
 if [[ -f "$INSTALL_ROOT/manifest.json" ]]; then
-  INSTALL_IDENTITY=$(node --input-type=module - "$INSTALL_ROOT/manifest.json" <<'NODE'
+  node --input-type=module - "$INSTALL_ROOT/manifest.json" "$CANDIDATE_SHA" "$SUBAGENTS_SHA" "$PI_VERSION" "$PI_BINARY" <<'NODE'
 import { readFileSync } from "node:fs";
-const manifest = JSON.parse(readFileSync(process.argv[2], "utf8"));
-process.stdout.write(`${manifest.candidateCommit ?? ""} ${manifest.piSubagentsCommit ?? ""}`);
+const [manifestPath, candidateSha, subagentsSha, piVersion, piBinary] = process.argv.slice(2);
+const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+if (manifest.candidateCommit !== candidateSha || manifest.piSubagentsCommit !== subagentsSha || manifest.piVersion !== piVersion || manifest.requiredPiVersion !== piVersion || manifest.piBinary !== piBinary) {
+  console.error("Install root already contains a different candidate/runtime identity; choose a new --install-root.");
+  process.exit(1);
+}
 NODE
-  )
-  read -r INSTALLED_CANDIDATE_SHA INSTALLED_SUBAGENTS_SHA <<< "$INSTALL_IDENTITY"
-  if [[ "$INSTALLED_CANDIDATE_SHA" != "$CANDIDATE_SHA" || "$INSTALLED_SUBAGENTS_SHA" != "$SUBAGENTS_SHA" ]]; then
-    echo "Install root already contains a different candidate snapshot; choose a new --install-root." >&2
-    exit 1
-  fi
 elif [[ -e "$PACKAGE_ROOT/package.json" || -e "$SUBAGENTS_ROOT/package.json" ]]; then
   echo "Install root is incomplete and has no identity manifest; choose a new --install-root." >&2
   exit 1
@@ -108,8 +109,8 @@ export PI_TELEMETRY=0
 
 # Install the exact two snapshots into the isolated settings scope. Pi owns the
 # package registration and dependency setup; no global settings are consulted.
-pi install "$SUBAGENTS_ROOT" --approve >/dev/null
-pi install "$PACKAGE_ROOT" --approve >/dev/null
+"$PI_BINARY" install "$SUBAGENTS_ROOT" --approve >/dev/null
+"$PI_BINARY" install "$PACKAGE_ROOT" --approve >/dev/null
 
 # Keep project settings disabled for this trial while retaining normal AGENTS.md
 # coding guidance. Do not copy or rewrite auth/settings files from the operator scope.
@@ -148,6 +149,7 @@ cat > "$INSTALL_ROOT/manifest.json" <<EOF
   "piSubagentsDigest": "$SUBAGENTS_DIGEST",
   "piVersion": "$PI_VERSION",
   "requiredPiVersion": "$REQUIRED_PI_VERSION",
+  "piBinary": "$PI_BINARY",
   "installRoot": "$INSTALL_ROOT",
   "packageRoot": "$PACKAGE_ROOT",
   "piSubagentsRoot": "$SUBAGENTS_ROOT",
@@ -165,11 +167,11 @@ if [[ "$REUSE_AUTH" -eq 1 ]]; then
 fi
 cat > "$INSTALL_ROOT/launch.sh" <<EOF
 #!/usr/bin/env bash
-exec "$PACKAGE_ROOT/scripts/launch-candidate.sh" --install-root "$INSTALL_ROOT" "\$@"
+exec env PI_SUBAGENT_PI_BINARY="$PI_BINARY" "$PACKAGE_ROOT/scripts/launch-candidate.sh" --install-root "$INSTALL_ROOT" "\$@"
 EOF
 cat > "$INSTALL_ROOT/doctor.sh" <<EOF
 #!/usr/bin/env bash
-exec node "$PACKAGE_ROOT/bin/forgedock-candidate.mjs" doctor --config-dir "$PI_ROOT" "\$@"
+exec env PI_SUBAGENT_PI_BINARY="$PI_BINARY" node "$PACKAGE_ROOT/bin/forgedock-candidate.mjs" doctor --config-dir "$PI_ROOT" "\$@"
 EOF
 chmod 700 "$INSTALL_ROOT/launch.sh" "$INSTALL_ROOT/doctor.sh"
 

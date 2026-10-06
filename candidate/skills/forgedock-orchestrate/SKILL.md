@@ -37,7 +37,11 @@ investigation and mutation plans stay inside each owner.
    live-worktree check. An ambiguous or unavailable match is surfaced/gated for that issue; do
    not perform broad process/session archaeology or treat a phase label as proof. A readable
    issue body without the rigid heading is retained as unstructured acceptance for the owner;
-   only an empty/unreadable body is gated.
+   only an empty/unreadable body is gated. Zero extracted criteria is not acceptance-satisfied:
+   the owner must derive and prove a testable contract from the unchanged readable body before
+   edits, put its exact text after `Derived contract:` in final `manualNotes`, and use the identical
+   text as the `id` of a satisfied `criteriaSatisfied` row with matching evidence. The parent rejects
+   generic or unbound evidence without rewriting or rehashing the source body.
 3. Keep functional prerequisites separate from write conflicts. Only explicit dependency
    markers create `predecessors`; exact normalized shared mutation paths, an exact shared
    configured global file, or a real same-target migration sequence create symmetric `conflicts`

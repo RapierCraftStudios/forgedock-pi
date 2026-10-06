@@ -36,8 +36,8 @@ an execution guide, not a second workflow engine.
   cause or bounded uncertainty, and the smallest experiment that distinguishes the fix.
 - Demonstrate a safe failing regression before editing when feasible. For a new feature, prove
   absence then presence. For inspection-only work, state why execution is unavailable.
-- Record a concise contract: original observable outcome; required behavior and scope;
-  non-goals; concrete behavioral proof. Do not shrink acceptance to match a proposed patch.
+- Record a concise contract before edits: original observable outcome; required behavior and scope;
+  non-goals; concrete behavioral proof. If the readable source body has no extracted checklist, derive at least one testable criterion from that body, preserve the body/source identity unchanged, and put the exact criterion text after `Derived contract:` in final acceptance `manualNotes`, and use that identical text as the `id` of a satisfied `criteriaSatisfied` row with matching evidence. An empty extraction, generic IDs/evidence, or an unbound line is not satisfied acceptance; do not ask the dispatcher to rewrite the issue or fabricate source hashes. Do not shrink acceptance to match a proposed patch.
 - If the deterministic `prepare` helper rejects an invocation shape, retain the exact error, check
   its documented CLI contract, and correct only the argument shape before continuing; do not repeat
   the unchanged call or switch to the retired dispatch context helper. No source edit begins until

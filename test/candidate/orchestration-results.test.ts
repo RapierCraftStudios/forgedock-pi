@@ -274,6 +274,134 @@ test("accepts only a valid delivered DONE marker and retains native failures", a
   }
 });
 
+test("preserves a pre-session native launch failure without an owner marker and keeps dependents gated", async () => {
+  const result = await prepared();
+  try {
+    const calls: string[] = [];
+    const launchError = "Unknown subagent model 'openai-codex/gpt-6-luna:max' in the active Pi model registry.";
+    const rows = await result.execute({
+      all: async (items) => {
+        const key = String(items[0]?.key);
+        calls.push(key);
+        if (key === "issue-1") return [{ key, ok: false, output: launchError, error: launchError, artifactPaths: [] }];
+        throw new Error(`Functional dependent must not launch after ${key}`);
+      },
+    });
+    assert.deepEqual(calls, ["issue-1"]);
+    assert.equal(rows[0]?.issue, 1);
+    assert.equal(rows[0]?.status, "FAILED");
+    assert.equal(rows[0]?.nativeStatus, "failed");
+    assert.equal(rows[0]?.nativeAcceptanceStatus, "unknown");
+    assert.equal(rows[0]?.ownerExecution, "not-launched");
+    assert.equal(rows[0]?.launchAttemptKey, "issue-1");
+    assert.equal(rows[0]?.launchAttemptId, null);
+    assert.equal(rows[0]?.childSessionRunId, null);
+    assert.equal(rows[0]?.resumability?.state, "not-resumable");
+    assert.equal(rows[0]?.resumability?.reason, "native launch failed before a child run id was returned");
+    assert.equal(rows[0]?.output, null);
+    assert.equal(rows[0]?.error, launchError);
+    assert.doesNotMatch(rows[0]?.error ?? "", /terminal marker/);
+    assert.equal(rows[1]?.issue, 2);
+    assert.equal(rows[1]?.status, "GATED");
+    assert.equal(rows[1]?.nativeStatus, "not-started");
+    assert.equal(rows[1]?.dependency, "UNSATISFIED");
+    assert.deepEqual(Array.from(rows[1]?.blockedBy ?? []), ["issue-1"]);
+  } finally {
+    await cleanup(result);
+  }
+});
+
+test("retained #33390 body stays exact, readable, and source-bound without supervisor-authored criteria", async () => {
+  // The body value is byte-for-byte from the preserved prelaunch snapshot; no expected fix is encoded here.
+  const snapshot = JSON.parse(await readFile(resolve("test/fixtures/issue-33390-body.json"), "utf8")) as { number: number; body: string };
+  assert.equal(snapshot.number, 33390);
+  const body = snapshot.body;
+  const result = await prepared([{ number: 33390, title: "rollback test review finding", body }], 1);
+  try {
+    const plan = JSON.parse(await readFile(result.planPath, "utf8")) as { readiness: { unstructuredAcceptance: number[] }; issues: Array<{ number: number; body: string; task: string; acceptanceMapping: { sourceBodySha256: string; criteria: unknown[] } }> };
+    const issue = plan.issues[0]!;
+    assert.deepEqual(plan.readiness.unstructuredAcceptance, [33390]);
+    assert.equal(issue.body, body);
+    assert.deepEqual(issue.acceptanceMapping.criteria, []);
+    assert.equal(issue.acceptanceMapping.sourceBodySha256, `sha256:${createHash("sha256").update(body).digest("hex")}`);
+    assert.match(issue.task, /Original issue body begins below/);
+    assert.match(issue.task, /exact criterion text after Derived contract: in manualNotes/);
+    assert.ok(issue.task.includes(body), "the owner receives the exact retained source body");
+
+    const rows = await result.execute({
+      all: async (items) => {
+        assert.equal(items.length, 1);
+        assert.equal(String(items[0]?.key), "issue-33390");
+        return [{ ok: true, runId: "native-retained-33390-empty", results: [{ acceptance: { status: "checked", childReport: { criteriaSatisfied: [] } } }], output: "FORGE_WORK_ON_RESULT status=DONE issue=33390 pr=none dependency=SATISFIED" }];
+      },
+    });
+    assert.equal(rows[0]?.status, "FAILED");
+    assert.match(rows[0]?.error ?? "", /empty extraction cannot satisfy DONE/);
+  } finally {
+    await cleanup(result);
+  }
+});
+
+test("unstructured source acceptance is not vacuously satisfied by an empty mapping", async () => {
+  const body = "The text editor should retain the cursor selection when a long line wraps.";
+  const result = await prepared([
+    { number: 1, title: "unstructured selection behavior", body },
+    { number: 2, title: "dependent follow-up", body: "## Acceptance Criteria\n- [ ] Follow-up runs only after issue #1 is delivered.\n\nDepends on #1" },
+  ]);
+  try {
+    const plan = JSON.parse(await readFile(result.planPath, "utf8")) as { readiness: { unstructuredAcceptance: number[] }; issues: Array<{ number: number; body: string; acceptanceMapping: { sourceBodySha256: string; criteria: unknown[] }; task: string }> };
+    const issue = plan.issues[0]!;
+    assert.deepEqual(plan.readiness.unstructuredAcceptance, [1]);
+    assert.equal(issue.body, body);
+    assert.deepEqual(issue.acceptanceMapping.criteria, []);
+    assert.equal(issue.acceptanceMapping.sourceBodySha256, `sha256:${createHash("sha256").update(body).digest("hex")}`);
+    assert.match(issue.task, /derive at least one concise testable criterion from the unchanged body/);
+    assert.match(issue.task, /Original issue body begins below/);
+    const marker = "FORGE_WORK_ON_RESULT status=DONE issue=1 pr=none dependency=SATISFIED";
+    const emptyReport = { criteriaSatisfied: [], changedFiles: ["src/widget.ts"], testsAddedOrUpdated: ["src/widget.test.ts"], commandsRun: [{ command: "focused test", result: "passed", summary: "owner verification" }], residualRisks: [], noStagedFiles: true, diffSummary: "owner report" };
+    const emptyCalls: string[] = [];
+    const emptyRows = await result.execute({
+      all: async (items) => {
+        const key = String(items[0]?.key);
+        emptyCalls.push(key);
+        if (key === "issue-1") return [{ ok: true, runId: "native-unstructured-empty", results: [{ acceptance: { status: "checked", childReport: emptyReport } }], output: marker }];
+        throw new Error("Empty extracted acceptance must not release its functional dependent");
+      },
+    });
+    assert.deepEqual(emptyCalls, ["issue-1"]);
+    assert.equal(emptyRows[0]?.status, "FAILED");
+    assert.equal(emptyRows[0]?.nativeAcceptanceStatus, "checked");
+    assert.match(emptyRows[0]?.error ?? "", /empty extraction cannot satisfy DONE/);
+    assert.equal(emptyRows[1]?.status, "GATED");
+    assert.deepEqual(Array.from(emptyRows[1]?.blockedBy ?? []), ["issue-1"]);
+
+    const superficialReport = { ...emptyReport, criteriaSatisfied: [{ id: "owner-derived-contract", status: "satisfied", evidence: "The owner reports a successful test." }], manualNotes: "Derived contract: one concrete observable outcome." };
+    const superficial = await runSingle(result, { ok: true, runId: "native-unstructured-generic", results: [{ acceptance: { status: "checked", childReport: superficialReport } }], output: marker });
+    assert.equal(superficial.rows[0]?.status, "FAILED");
+    assert.match(superficial.rows[0]?.error ?? "", /empty extraction cannot satisfy DONE/);
+
+    const criterion = "When a long line wraps, the cursor remains at the same logical character position.";
+    const criterionId = criterion.trim().toLowerCase().replace(/[\s_]+/g, "-").replace(/-+/g, "-");
+    const derivedReport = { ...superficialReport, criteriaSatisfied: [{ id: criterionId, status: "satisfied", evidence: "Focused wrap-selection regression asserts the cursor index before and after wrapping." }], manualNotes: `Derived contract: ${criterion}` };
+    const derivedCalls: string[] = [];
+    const derivedRows = await result.execute({
+      all: async (items) => {
+        const key = String(items[0]?.key);
+        derivedCalls.push(key);
+        if (key === "issue-1") return [{ ok: true, runId: "native-unstructured-derived", results: [{ acceptance: { status: "checked", childReport: derivedReport } }], output: marker }];
+        if (key === "issue-2") return [{ ok: true, runId: "native-dependent", results: [{ acceptance: { status: "accepted" } }], output: "FORGE_WORK_ON_RESULT status=DONE issue=2 pr=none dependency=SATISFIED" }];
+        throw new Error(`Unexpected owner launch ${key}`);
+      },
+    });
+    assert.deepEqual(derivedCalls, ["issue-1", "issue-2"]);
+    assert.equal(derivedRows[0]?.status, "DONE");
+    assert.equal(derivedRows[1]?.status, "DONE");
+    assert.equal(derivedRows[0]?.nativeAcceptanceStatus, "checked");
+  } finally {
+    await cleanup(result);
+  }
+});
+
 test("recovers a rejected DONE result once on the same owner and retains native acceptance history", async () => {
   const result = await prepared();
   try {
@@ -313,6 +441,10 @@ test("rejects malformed, duplicate, wrong-issue, and unsatisfied DONE markers", 
       assert.equal(rows.rows[0]?.status, "FAILED", output);
       assert.equal(rows.rows[0]?.dependency, "UNSATISFIED", output);
       assert.equal(rows.rows[0]?.ok, false, output);
+      assert.equal(rows.rows[0]?.ownerExecution, "started", output);
+      if (output === "not a marker" || output.startsWith("FORGE_WORK_ON_RESULT status=DONE issue=1 pr=11 dependency=SATISFIED\n")) {
+        assert.match(rows.rows[0]?.error ?? "", /owner result must contain exactly one valid terminal marker/, output);
+      }
     }
   } finally {
     await cleanup(result);
