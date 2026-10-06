@@ -1,0 +1,102 @@
+{
+  "schema": "forgedock.qualification-preflight/v1",
+  "result": "passed",
+  "noModelRequests": true,
+  "candidateCommit": "4a36725a5f4ccd53e573549a167c1ac91b53f025",
+  "piVersion": "1.0.2",
+  "piSubagentsCommit": "0931cbbb98ab253177b181bd334fe02dd919dca5",
+  "model": "openai-codex/gpt-6-luna",
+  "thinking": "max",
+  "configuredOwnerConcurrency": 2,
+  "fixtureContract": {
+    "revision": "v2-disposable-only",
+    "issues": [
+      101,
+      102
+    ],
+    "dependency": {
+      "successor": 102,
+      "predecessor": 101
+    },
+    "examples": [
+      {
+        "input": "{ id: \"User-7\", name: \"  ALICE  \", teamLabel: \"Platform\" }",
+        "output": "User-7:alice:Platform"
+      },
+      {
+        "input": "{ id: \"User-7\", name: \"  ALICE  \" }",
+        "output": "User-7:alice"
+      }
+    ],
+    "verificationCommands": {
+      "producer": "npm test",
+      "consumer": "npm run test:display",
+      "full": "npm run test:all"
+    },
+    "seed": "both issue behaviors remain unimplemented"
+  },
+  "baselineTests": {
+    "producer": {
+      "command": "npm test",
+      "exitCode": 1,
+      "expectedFailure": true
+    },
+    "consumer": {
+      "command": "npm run test:display",
+      "exitCode": 1,
+      "expectedFailure": true
+    },
+    "full": {
+      "command": "npm run test:all",
+      "exitCode": 1,
+      "expectedFailure": true
+    },
+    "marker": "display normalization is not implemented"
+  },
+  "localGitHub": {
+    "identityRead": "passed",
+    "writeAttempt": "rejected-by-local-only-transport"
+  },
+  "dispatch": {
+    "result": "passed",
+    "deliveryMode": "local-replay",
+    "issueOrder": [
+      101,
+      102
+    ],
+    "dependency": {
+      "successor": 102,
+      "predecessor": 101
+    },
+    "targetBase": {
+      "branch": "integration",
+      "targetSha": "bdeda88466290319f33ab19dc8b3642a78dd8b24",
+      "headSha": "bdeda88466290319f33ab19dc8b3642a78dd8b24"
+    },
+    "ownerConcurrency": 2
+  },
+  "preparedWorkflow": "/tmp/forgedock-gpt6-orchestration-4a36725a5f4ccd53e573549a167c1ac91b53f025-20261006T062907Z/preflight-dispatch/request.json",
+  "localDelivery": {
+    "pushReadback": "e45709c398be97c0bd3d49bb7e7f9fbc6d5df577",
+    "successorFastForward": "e45709c398be97c0bd3d49bb7e7f9fbc6d5df577",
+    "worktreeClean": true
+  },
+  "doctor": {
+    "readiness": "ready-with-live-write-limitation",
+    "providerAuth": {
+      "provider": "openai-codex",
+      "status": "ready"
+    },
+    "loadedCommands": 31
+  },
+  "auth": "isolated symlink to existing operator auth; file contents not read",
+  "restoredFixtureHead": "bdeda88466290319f33ab19dc8b3642a78dd8b24",
+  "timing": {
+    "setupStartedAt": "2026-10-06T06:29:08.037Z",
+    "setupFinishedAt": "2026-10-06T06:29:08.724Z",
+    "setupElapsedMs": 686,
+    "startedAt": "2026-10-06T06:29:08.724Z",
+    "finishedAt": "2026-10-06T06:29:27.006Z",
+    "elapsedMs": 18282
+  }
+}

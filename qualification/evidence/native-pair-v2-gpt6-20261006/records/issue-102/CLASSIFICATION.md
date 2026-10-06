@@ -1,0 +1,3 @@
+# CLASSIFICATION — Issue #102
+
+This is a bounded consumer feature/integration defect in `src/render.mjs`, with behavioral regression coverage in `test/display.test.mjs`. The producer prerequisite (#101) is already delivered. The observable omission is confined to optional presentation formatting: preserve the existing two-segment form when there is no nonempty team label, and append a supplied nonempty string verbatim when present. No dependency, data migration, identifier normalization, or source-object mutation is needed. No separate security or performance boundary is implicated.

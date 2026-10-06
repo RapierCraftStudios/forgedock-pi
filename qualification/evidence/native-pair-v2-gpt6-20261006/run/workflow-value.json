@@ -1,0 +1,40 @@
+[
+  {
+    "key": "issue-101",
+    "issue": 101,
+    "repository": "example/product",
+    "target": "integration",
+    "ok": true,
+    "status": "DONE",
+    "nativeStatus": "completed",
+    "nativeAcceptanceStatus": "checked",
+    "dependency": "SATISFIED",
+    "runId": "6f75ede6-25d6-4ad3-8118-cba6606f7039",
+    "output": "FORGE_WORK_ON_RESULT status=DONE issue=101 pr=none dependency=SATISFIED",
+    "blockedBy": [],
+    "waitingFor": [],
+    "detached": false,
+    "nativeStatusRef": null,
+    "recoverySource": null,
+    "error": null
+  },
+  {
+    "key": "issue-102",
+    "issue": 102,
+    "repository": "example/product",
+    "target": "integration",
+    "ok": true,
+    "status": "DONE",
+    "nativeStatus": "completed",
+    "nativeAcceptanceStatus": "checked",
+    "dependency": "SATISFIED",
+    "runId": "adfb3e2c-7b8e-4444-b9a8-a317c2a2ccda",
+    "output": "FORGE_WORK_ON_RESULT status=DONE issue=102 pr=none dependency=SATISFIED",
+    "blockedBy": [],
+    "waitingFor": [],
+    "detached": false,
+    "nativeStatusRef": null,
+    "recoverySource": null,
+    "error": null
+  }
+]

@@ -1,0 +1,17 @@
+{
+  "schema": "forgedock.candidate-install/v1",
+  "candidateCommit": "4a36725a5f4ccd53e573549a167c1ac91b53f025",
+  "piSubagentsCommit": "0931cbbb98ab253177b181bd334fe02dd919dca5",
+  "packageDigest": "a71112815edd7bcd45108bb0934a54d943ac7f0d7f08ca12f1d43d8ca99f6868",
+  "piSubagentsDigest": "d920744c4fa7d160fd860d802b978db37c3ef392fa2f2604567276b03d706c91",
+  "piVersion": "1.0.2",
+  "requiredPiVersion": "1.0.2",
+  "installRoot": "/home/dev/.cache/forgedock-pi-candidate/4a36725a5f4ccd53e573549a167c1ac91b53f025",
+  "packageRoot": "/home/dev/.cache/forgedock-pi-candidate/4a36725a5f4ccd53e573549a167c1ac91b53f025/package",
+  "piSubagentsRoot": "/home/dev/.cache/forgedock-pi-candidate/4a36725a5f4ccd53e573549a167c1ac91b53f025/pi-subagents",
+  "piConfigRoot": "/home/dev/.cache/forgedock-pi-candidate/4a36725a5f4ccd53e573549a167c1ac91b53f025/pi-agent",
+  "sessionRoot": "/home/dev/.cache/forgedock-pi-candidate/4a36725a5f4ccd53e573549a167c1ac91b53f025/sessions",
+  "targetSettingsPolicy": "--no-approve; target-local project settings are ignored",
+  "authPolicy": "symlinked-existing-auth",
+  "sourceWorktree": "/home/dev/Projects/forgedock-pi-auto20-repair-20261005"
+}
