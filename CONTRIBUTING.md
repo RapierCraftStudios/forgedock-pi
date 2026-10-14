@@ -11,13 +11,9 @@ npm run check
 
 ## Principles
 
-- Keep workflow authority deterministic and testable without an LLM.
-- Use `pi-subagents` public APIs before considering a fork.
-- Preserve canonical ForgeDock GitHub artifact formats.
-- Keep one writer per worktree.
-- Fail closed for identity, lease, verification, review, audit, and merge ambiguity.
-- Never add domain-specific bypasses to satisfy one production ticket.
-- Add regression tests for every safety or recovery fix.
+- This package starts ForgeDock runs and shows them; it owns no workflow logic. Workflow, prompt, review and merge changes go to ForgeDock (`bin/lean/`), so every harness runs one spec.
+- Keep the extension small, argv-only (no shell), and testable without a model.
+- Add a regression test for every fix.
 
 ## Pull requests
 
