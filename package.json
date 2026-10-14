@@ -1,15 +1,14 @@
 {
   "name": "forgedock-pi",
-  "version": "0.2.0-candidate.1",
-  "description": "Thin Pi-native ForgeDock issue owner, dispatcher, and independent review routes",
+  "version": "0.3.0",
+  "description": "ForgeDock for Pi: /work-on and /orchestrate run the ForgeDock engine with every session on the Pi harness, any model",
   "type": "module",
   "keywords": [
     "pi-package",
     "pi",
     "github",
-    "subagents",
     "forgedock",
-    "code-review"
+    "orchestration"
   ],
   "author": "RapierCraft Studios",
   "license": "AGPL-3.0-or-later",
@@ -22,25 +21,10 @@
     "url": "https://github.com/RapierCraftStudios/forgedock-pi/issues"
   },
   "exports": {
-    ".": "./candidate/extension.ts"
-  },
-  "bin": {
-    "forgedock-candidate": "./bin/forgedock-candidate.mjs"
+    ".": "./src/extension.ts"
   },
   "files": [
-    "bin/",
-    "candidate/",
-    "scripts/doctor-candidate.sh",
-    "scripts/install-candidate.sh",
-    "scripts/launch-candidate.sh",
-    "scripts/native-smoke.sh",
-    "scripts/prepare-integration-checkout.sh",
-    "scripts/replace-candidate.sh",
-    "scripts/rollback-candidate.sh",
-    "templates/forge.yaml",
-    "docs/candidate.md",
-    "docs/qualification-results.md",
-    "qualification/",
+    "src/",
     "README.md",
     "CHANGELOG.md",
     "SECURITY.md",
@@ -54,50 +38,24 @@
   },
   "pi": {
     "extensions": [
-      "./candidate/extension.ts"
-    ],
-    "prompts": [
-      "./candidate/prompts"
-    ],
-    "skills": [
-      "./candidate/skills"
-    ],
-    "subagents": {
-      "agents": [
-        "./candidate/agents"
-      ]
-    }
+      "./src/extension.ts"
+    ]
   },
   "peerDependencies": {
-    "@earendil-works/pi-ai": "*",
-    "@earendil-works/pi-coding-agent": "*",
-    "@earendil-works/pi-tui": "*",
-    "pi-subagents": "0.60.0",
-    "typebox": "*"
+    "@earendil-works/pi-coding-agent": "*"
   },
   "peerDependenciesMeta": {
-    "@earendil-works/pi-ai": {
-      "optional": true
-    },
     "@earendil-works/pi-coding-agent": {
-      "optional": true
-    },
-    "@earendil-works/pi-tui": {
       "optional": true
     }
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "0.85.1",
     "@types/node": "24.13.3",
-    "pi-subagents": "0.60.0",
     "tsx": "4.23.12",
-    "typebox": "1.3.18",
     "typescript": "5.9.3"
   },
   "engines": {
     "node": ">=22"
-  },
-  "dependencies": {
-    "yaml": "2.9.0"
   }
 }

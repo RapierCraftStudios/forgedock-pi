@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 — Thin package over ForgeDock core work-on
+
+- `/work-on` and `/orchestrate` now run ForgeDock's core engine (`forgedock run-issue` / `forgedock orchestrate`) with every builder and reviewer session on the Pi harness (`FORGEDOCK_LEAN_RUNTIME=pi`, bare `pi -p`, any model Pi can reach). `/forge-runs` lists runs started from the session.
+- Runs are detached with logs under `~/.forge/pi-runs/`; they survive Pi exiting and stay lease-held and resumable.
+- Removed the prompt-spec workflow: candidate package, skills, prompt templates, subagent profiles, `specs/`, the dormant `src/` controller runtime, qualification fixtures and candidate scripts (all in git history). On the same one-line issue it took 19 minutes and ~6.8M tokens without producing a PR; ForgeDock's core prompts on the same harness and model produced the correct PR in ~6 minutes.
+- No dependency on `pi-subagents`; peer dependency is only `@earendil-works/pi-coding-agent`.
+- Requires a ForgeDock release with `engine.lean_runtime` (RapierCraftStudios/ForgeDock#4146).
+
 ## Unreleased — Individual review reports and bounded panel recovery
 
 - Restore complete per-reviewer PR conversation reports with stable PR/head/base/role/round
