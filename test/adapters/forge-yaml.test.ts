@@ -20,10 +20,10 @@ test("forge.yaml reader accepts multiline scalars and absolute configured paths"
 });
 
 test("forge.yaml reader fails closed for missing required fields and malformed YAML", async () => {
-  await assert.rejects(loadForgeYaml("/tmp"), ForgeYamlError);
   assert.throws(() => parseForgeYaml("project: [unterminated"), ForgeYamlError);
   const root = await mkdtemp(join(tmpdir(), "forgedock-yaml-"));
   try {
+    await assert.rejects(loadForgeYaml(root), ForgeYamlError);
     await writeFile(
       join(root, "forge.yaml"),
       `project:\n  name: demo\n  owner: acme\n  repo: app\npaths:\n  root: .\n  worktree_base: .forge/worktrees\nbranches:\n  staging: staging\n  default: main\nagents:\n  default_model: model/a\n  subagent_model: model/b\norchestration:\n  max_concurrent: 0\n`,
